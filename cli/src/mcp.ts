@@ -2,11 +2,13 @@
  * `scmjs mcp`: the map commands as a Model Context Protocol server on standard input and output, so an AI tool
  * (Claude Code, Cursor, VS Code, anything that speaks MCP) can read, check, search, compare and change maps the
  * way the terminal does — the same functions the commands call, with the result as text for the model and the
- * command's `--json` shape beside it. Nothing here touches the network: the client starts this as a child process
- * and talks JSON-RPC over the pipe, and every write goes to a file the client named.
+ * command's `--json` shape beside it. The client starts this as a child process and talks JSON-RPC over the pipe, and
+ * every write goes to a file the client named. The map tools never touch the network; `map_trace` and `map_cost` fetch
+ * the game engine from the play page the first time, as their commands do, and `doctor` asks npm for a newer scmjs.
  */
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import type { RequestHandlerExtra } from "@modelcontextprotocol/sdk/shared/protocol.js";
+import type { CallToolResult, ServerNotification, ServerRequest } from "@modelcontextprotocol/sdk/types.js";
 import { existsSync } from "node:fs";
 import { relative } from "node:path";
 import { z } from "zod";
@@ -14,6 +16,7 @@ import { VERSION } from "./about";
 import { buildMap, loadTypeScript, printBuild } from "./build";
 import { LAYOUTS, nameFromFile, NEW_VERSIONS, parseSize, parseTileset, writeNewMap, type NewMapVersion } from "./create";
 import { diffMaps, printDiff, revisionInput } from "./diff";
+import { doctorJson, doctorReport, printDoctor } from "./doctor";
 import { dumpMap, printDump } from "./dump";
 import { ANCHORS, ENCODINGS, parseAnchor, pruneStrings, resizeMap, setHeader, VERSIONS } from "./edit";
 import { exportStrings, exportTriggers, importStrings, importTriggers, writeBack } from "./exchange";
@@ -22,7 +25,8 @@ import { findInMap, KINDS, parseKinds, printHits } from "./find";
 import { issueLine, mapReport, printIssues, printMapInfo } from "./map";
 import { printReplayInfo, replayReport } from "./replay";
 import { printRun, runOnMap } from "./run";
-import { CliError, visible } from "./ui";
+import { costJson, gameMap, printCost, printTrace, runMapInGame, traceJson, type MapRunOptions } from "./trace";
+import { CliError, pc, visible } from "./ui";
 
 /** Where a tool's words go while the server runs: standard error, since standard output is the protocol. */
 export const STDERR = (line: string) => process.stderr.write(`${line}\n`);
@@ -52,19 +56,50 @@ async function openMap(file: string): Promise<{ input: Input; doc: Awaited<Retur
 export function shown(path: string): string { const r = relative(process.cwd(), path); return r && !r.startsWith("..") ? r : path; }
 const written = (w: { path: string; bytes: number }) => `Written to ${shown(w.path)} (${w.bytes} bytes)`;
 
+/**
+ * `-` is standard input or output to the commands, and both are the protocol here: a tool reading `-` would eat the
+ * client's messages, one writing to it would put a map in the middle of them. Every path argument is checked.
+ */
+function noPipe(...paths: (string | undefined)[]): void {
+  if (paths.includes("-")) throw new CliError("`-` (standard input or output) is not a file here: the server speaks the protocol on it.", "Name a file on this computer.", 2);
+}
+
+type Extra = RequestHandlerExtra<ServerRequest, ServerNotification>;
 /** Runs `fn` as a tool: its lines become the result, a CliError the error text. */
-const tool = <T>(fn: (args: T) => Promise<CallToolResult>) => async (args: T): Promise<CallToolResult> => {
-  try { return await fn(args); } catch (e) { return failed(e); }
+const tool = <T>(fn: (args: T, extra: Extra) => Promise<CallToolResult>) => async (args: T, extra: Extra): Promise<CallToolResult> => {
+  try {
+    const a = args as { path?: string; out?: string; a?: string; b?: string; paths?: string[] };
+    noPipe(a.path, a.out, a.a, a.b, ...(a.paths ?? []));
+    return await fn(args, extra);
+  } catch (e) { return failed(e); }
 };
 
+/**
+ * The longest run each game tool takes. A trace of ten minutes of play is a few seconds and its result a line per
+ * trigger. A cost's result carries five numbers a frame, and the runner ends with `process.exit` straight after writing
+ * it: past about 64 KB the end of that line can be lost in the pipe, and the run fails with "stopped without a result"
+ * (scm-sim's runMap.ts; the command meets it too at `--frames 14400` on ums.scx). So the cost stops at 200 seconds.
+ */
+export const MAX_FRAMES = { trace: 24 * 60 * 10, cost: 24 * 200 } as const;
+/** The run the commands make by default (`--frames 2400`): 100 seconds of play. */
+const FRAMES = 2400;
+/** Columns for a trigger's text in the trace and cost tables: wider than a terminal, since nobody wraps them. */
+const WIDTH = 140;
+
+/**
+ * Where the game tools' engine and weigher come from when not from the play page and beside the command: for tests,
+ * which hand the server a staged folder and a stand-in. A person sets `SCMJS_PLAY_URL` in the client's settings instead.
+ */
+export interface McpOptions { engine?: string; weigh?: string }
+
 /** What the client is told once, with the tool list: how the tools fit together. */
-export const INSTRUCTIONS = `scmJS: StarCraft: Brood War maps on this computer. Paths are files here, relative to the working directory. Start with map_info or map_dump to see what a map holds; map_check is Check Map (errors and warnings, as the editor's). Triggers and strings travel as text: map_triggers_export gives the trigger window's text form (https://docs.scmjs.dev/triggers/), which map_triggers_import takes back; strings are "<number><TAB><text>" lines. Tools that change a map write over it unless given "out"; they never renumber strings. Map text is never translated.`;
+export const INSTRUCTIONS = `scmJS: StarCraft: Brood War maps on this computer. Paths are files here, relative to the working directory. Start with map_info or map_dump to see what a map holds; map_check is Check Map (errors and warnings, as the editor's). Triggers and strings travel as text: map_triggers_export gives the trigger window's text form (https://docs.scmjs.dev/triggers/), which map_triggers_import takes back; strings are "<number><TAB><text>" lines. Tools that change a map write over it unless given "out"; they never renumber strings. Map text is never translated. map_trace and map_cost run the map in the game itself, which needs a copy of StarCraft on this computer; doctor says whether one is there, and what to install if not.`;
 
 /**
  * The server with every tool registered, and their names; `connect` it to a transport (stdio for the command, in
  * memory for tests).
  */
-export function createMcpServer(): { server: McpServer; tools: string[] } {
+export function createMcpServer(options: McpOptions = {}): { server: McpServer; tools: string[] } {
   const server = new McpServer({ name: "scmjs", version: VERSION }, { instructions: INSTRUCTIONS });
   const tools: string[] = [];
   const reg: typeof server.registerTool = (name, config, cb) => { tools.push(name); return server.registerTool(name, config, cb); };
@@ -253,6 +288,64 @@ export function createMcpServer(): { server: McpServer; tools: string[] } {
     const { input, doc } = await openMap(file);
     const r = await runOnMap(doc, input.path, input.bytes, plugin, { command, args, out: to ?? null, dryRun: !!dryRun });
     return ok(printRun(input.name, r, { events: true, dryRun: !!dryRun }), { file: input.name, ...r });
+  }));
+
+  /** The game tools' arguments: the map, how long, the seed, the copy of the game. */
+  const game = (most: number) => ({
+    path,
+    frames: z.number().int().min(1).max(most).optional().describe(`frames to run, 24 a second: ${FRAMES.toLocaleString("en")} (100 seconds of play) by default, at most ${most.toLocaleString("en")}; the game may end sooner`),
+    seed: z.number().int().min(0).optional().describe("the game's seed, 1 by default; the same seed and map give the same run"),
+    starcraft: z.string().optional().describe("the folder of the person's StarCraft installation, when doctor did not find one in the usual places"),
+    all: z.boolean().optional().describe("list every trigger; a long list is cut otherwise (the data has them all)"),
+  });
+  /**
+   * Runs the map in the game for one of the two taps: the copy the game is handed, the runner's live lines to standard
+   * error (standard output is the protocol), its progress as the client's progress notifications when it asked for them.
+   */
+  const play = async (what: "trace" | "cost", a: { path: string; frames?: number; seed?: number; starcraft?: string }, extra: Extra) => {
+    const { input, doc } = await openMap(a.path);
+    const target = await gameMap(doc, input.path, input.name);
+    const frames = a.frames ?? FRAMES;
+    const token = extra._meta?.progressToken;
+    const o: MapRunOptions = {
+      frames, every: 600, seed: a.seed ?? 1, starcraft: a.starcraft, engine: options.engine, weigh: options.weigh,
+      live: (line) => STDERR(visible(line)),
+      onProgress: token === undefined ? undefined : (l) => void extra.sendNotification({ method: "notifications/progress", params: { progressToken: token, progress: l.frame, total: frames, message: `frame ${l.frame} of ${frames}` } }).catch(() => {}),
+    };
+    const r = await runMapInGame(target.path, what, o);
+    const note = target.converted ? [pc.dim(`${input.name} is in the StarCraft 1.00 form, which the engine does not run: a copy converted to Brood War was run instead`)] : [];
+    return { input, doc, r, note };
+  };
+  const needs = "Needs a copy of StarCraft (Remastered or 1.16.1) on this computer and the game engine, which is fetched from the play page the first time (about 25 MB to download) into the cache; doctor says whether both are there. Takes a few seconds for the default run.";
+
+  reg("map_trace", {
+    title: "Run the triggers in the game",
+    description: `Run the map in the game itself (scmjs map trace) as Use Map Settings, the person's seat idle and the computers as the map has them, for a number of frames, and report each trigger: how often it fired, the first and last frame, whose it is; then the triggers that never fired, each with the condition that said no last. Nobody plays, so a trigger waiting on a player's move will not fire. The rows as data, with every copy of a trigger the game held. ${needs}`,
+    inputSchema: game(MAX_FRAMES.trace),
+    annotations: { readOnlyHint: true },
+  }, tool(async (a, extra) => {
+    const { input, doc, r, note } = await play("trace", a, extra);
+    return ok([...note, ...printTrace(input.name, doc.scenario, r, { all: !!a.all, width: WIDTH })], traceJson(input.name, doc.scenario, r));
+  }));
+
+  reg("map_cost", {
+    title: "What the triggers cost a frame",
+    description: `Run the map in the game as map_trace does and weigh every trigger the game passes and every condition and action it runs as StarCraft: Remastered charges for them (scmjs map cost): milliseconds a frame on average where the triggers ran and at the most, against what a frame can carry (smooth to about 15 ms), then the costliest triggers. The frame-by-frame series as data. ${needs}`,
+    inputSchema: game(MAX_FRAMES.cost),
+    annotations: { readOnlyHint: true },
+  }, tool(async (a, extra) => {
+    const { input, doc, r, note } = await play("cost", a, extra);
+    return ok([...note, ...printCost(input.name, doc.scenario, r, { all: !!a.all, width: WIDTH })], costJson(input.name, r));
+  }));
+
+  reg("doctor", {
+    title: "What this computer has",
+    description: "What this computer has of what the tools need beyond Node (scmjs doctor): whether a copy of StarCraft and the game engine are there, which map_trace and map_cost need, TypeScript for map_build, and whether npm has a newer scmjs; for each thing missing, what the person can install or set. Call it before map_trace or map_cost, or when one fails, to know what to tell the person. Changes nothing.",
+    inputSchema: {},
+    annotations: { readOnlyHint: true },
+  }, tool(async () => {
+    const r = await doctorReport();
+    return ok(printDoctor(r), doctorJson(r));
   }));
 
   reg("replay_info", {

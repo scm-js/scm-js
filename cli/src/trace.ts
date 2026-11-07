@@ -46,6 +46,8 @@ export interface MapRunOptions {
   weigh?: string;
   /** Each line as it comes, already worded; absent, nothing is printed as it goes. */
   live?: (line: string) => void;
+  /** Each progress line as it comes, unworded (the MCP server's progress notifications). */
+  onProgress?: (line: TraceProgressLine) => void;
   node?: string;
 }
 
@@ -115,7 +117,7 @@ export async function runMapInGame(map: string, what: "trace" | "cost", o: MapRu
     let l: MapRunnerLine;
     try { l = JSON.parse(raw) as MapRunnerLine; } catch { continue; }
     if (l.kind === "start") { start = l; o.live?.(wordStart(l)); }
-    else if (l.kind === "progress") { progress.push(l); o.live?.(`  ${pc.dim(`frame ${String(l.frame).padStart(6)}  ${plural(l.passes, "pass", "passes")} of the triggers`)}`); }
+    else if (l.kind === "progress") { progress.push(l); o.onProgress?.(l); o.live?.(`  ${pc.dim(`frame ${String(l.frame).padStart(6)}  ${plural(l.passes, "pass", "passes")} of the triggers`)}`); }
     else if (l.kind === "end") end = l;
     else if (l.kind === "error") error = l.message;
   }
@@ -196,6 +198,11 @@ export function traceReport(file: string, scn: Scenario, r: MapRunOutcome): Trac
   return { file, rows: summarizeRows(r.end.trace ?? [], rows), passes: r.end.passes, frame: r.end.frame, ended: r.end.ended, reason: r.end.reason };
 }
 
+/** `map trace --json`: the report, with where the engine and the game came from, every copy's line and the run's times. */
+export function traceJson(file: string, scn: Scenario, r: MapRunOutcome) {
+  return { ...traceReport(file, scn, r), engine: r.engine, game: r.game, copies: r.end.trace, ms: r.end.ms };
+}
+
 /** The trace's lines: the run in one, a table of the triggers, then the ones that never fired and why. */
 export function printTrace(file: string, scn: Scenario, r: MapRunOutcome, { all = false, width = process.stdout.columns || 100 } = {}): string[] {
   const rep = traceReport(file, scn, r);
@@ -252,6 +259,11 @@ export function costReport(file: string, r: MapRunOutcome): CostReport {
     peakMs: peak[0] / 1e6, peakFrame: peak[1] >= 0 ? peak[1] + c.from : -1, peakRecords: peak[1] >= 0 ? c.records[peak[1]] : 0, peakTriggers: peak[1] >= 0 ? c.triggers[peak[1]] : 0,
     limits: c.limits, ungrouped: { records: c.ungroupedRecords.reduce((n, x) => n + x, 0), ms: c.ungroupedNs.reduce((n, x) => n + x, 0) / 1e6 }, rows,
   };
+}
+
+/** `map cost --json`: the report, with where the engine and the game came from, the frame-by-frame series and the run's times. */
+export function costJson(file: string, r: MapRunOutcome) {
+  return { ...costReport(file, r), engine: r.engine, game: r.game, series: r.end.cost, ms: r.end.ms };
 }
 
 /** Milliseconds, with the digits a small number needs (a trigger of three records is a hundredth of a microsecond). */

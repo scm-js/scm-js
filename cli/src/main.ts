@@ -16,6 +16,7 @@ import { buildMap, loadTypeScript, printBuild } from "./build";
 import { completionScript, SHELLS, type Shell } from "./completion";
 import { LAYOUTS, nameFromFile, NEW_VERSIONS, parseSize, parseTileset, writeNewMap, type NewMapVersion } from "./create";
 import { doctorJson, doctorReport, printDoctor } from "./doctor";
+import { initFolder, printInit, printRecipe } from "./init";
 import { diffMaps, printDiff, revisionInput } from "./diff";
 import { dumpMap, printDump } from "./dump";
 import { ANCHORS, parseAnchor, pruneStrings, resizeMap, setHeader, VERSIONS, ENCODINGS } from "./edit";
@@ -221,7 +222,7 @@ Everything the map holds, in one stable text form: the header, players, every un
 trigger window's text, the strings, the archive's other files and the sections. To have git show a map's changes as
 this text (git diff, git log -p, git show), once in the repository:
   git config diff.scmjs.textconv "scmjs map dump"
-  git config diff.scmjs.xfuncname "^## "
+  git config diff.scmjs.xfuncname "^## .*"
   printf '*.scx diff=scmjs\\n*.scm diff=scmjs\\n*.chk diff=scmjs\\n' >> .gitattributes`)
   .action(async (file: string, o: { json?: boolean }) => {
     const { input, doc } = await openForEdit(file);
@@ -676,6 +677,32 @@ program.command("completion", { hidden: true }).description("a completion script
     if (!(SHELLS as readonly string[]).includes(shell)) throw new CliError(`${shell} is not a shell this knows`, `One of ${SHELLS.join(", ")}.`, 2);
     process.stdout.write(completionScript(program, shell as Shell));
   });
+
+// Hidden from the overview, which holds 23 lines (banner.ts); `scmjs help init`, `map --help` and docs/cli.md name it.
+program.command("init", { hidden: true }).description("a folder of maps set up for git and GitHub: maps diff as text, a check on each push, a README")
+  .argument("[folder]", "the folder the maps are in", ".").addOption(json)
+  .option("--print", "print what would be written, to paste by hand, and write nothing")
+  .option("--git", "git init the folder when it is in no git repository (never done without it)")
+  .option("--force", "replace a README.md or workflow that is there, and set a git setting that holds another value")
+  .addHelpText("after", `
+Writes what is not there yet:
+  .gitattributes              *.scx, *.scm and *.chk read through scmjs map dump by git diff
+  .gitignore                  *.bak, the copy the desktop app's Save keeps
+  .github/workflows/maps.yml  map check on every push and pull request (and map build --check for maps with a
+                              TrigScript script), with this version of scmjs pinned
+  README.md                   the maps, and the commands to check, dump and diff them
+and, in the git repository, git config diff.scmjs.textconv, .xfuncname and .cachetextconv, which are per clone.
+.gitattributes and .gitignore get only the lines they lack; nothing else that is there is changed without --force.
+Exits 2 when there is no such folder.`)
+  .action(async (folder: string, o: { json?: boolean; print?: boolean; git?: boolean; force?: boolean }) => {
+    const r = await initFolder(folder, { print: !!o.print, git: !!o.git, force: !!o.force });
+    if (o.json) print(JSON.stringify({ ...r, files: r.files.map(({ content, ...f }) => (o.print ? { ...f, content } : f)) }, null, 2));
+    else if (o.print) process.stdout.write(printRecipe(r));
+    else print(...printInit(r));
+  });
+map.addHelpText("after", `
+scmjs init [folder] sets a folder of maps up for git and GitHub: git diff shows a map's changes as text, a workflow
+checks the maps on every push, and a README lists them (scmjs help init).`);
 
 program.command("doctor").description("what this computer has for each command").helpGroup("This tool:").addOption(json)
   .addHelpText("after", `

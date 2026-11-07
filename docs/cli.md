@@ -56,6 +56,7 @@ when there is a newer version.
 | `scmjs map cost <map>` | What the map's triggers cost Remastered each frame, in milliseconds, and the costliest triggers |
 | `scmjs map rush <map>` | How far apart the start locations are by ground: a unit walked by the game from each to every other, timed |
 | `scmjs map preview <map>` | A picture of the map, drawn with your copy of the game's graphics: in the terminal, or as a PNG with `--out` |
+| `scmjs map play <map>` | A lobby on the play page with the map, and the invite link to send around |
 | `scmjs replay info <replays…>` | Who played, on which map, for how long and at what APM |
 | `scmjs replay map <replay>` | The map the replay was played on, written out as a map file |
 | `scmjs replay open <replay>` | Opens the replay in scmJS, to watch and analyse |
@@ -754,6 +755,25 @@ scmjs map new - --tileset ice --players 4 | scmjs map preview - --out - > new.pn
 the copy of the game it came from, and how many start locations, units, buildings, mineral
 fields and geysers are on it.
 
+## A game on the map, with other people
+
+`scmjs map play ridge.scx` opens scmjs.dev/play in your browser with the map and asks it
+for a lobby. The page is the host, as it is when you press Invite Players there, and the
+link it makes is printed in the terminal for you to send around:
+
+```
+ℹ Opening ridge.scx in the play page in your browser
+✔ Lobby open: send this link to the people you want to play with
+  https://scmjs.dev/play/?game=invite1x4hunfg
+✔ Handed to the play page
+```
+
+Opening a lobby needs a scmjs.dev account, so the page asks you to sign in when you are
+not, and opens the lobby once you have; the first time, it asks for the game's files too,
+as the play page always does. The people you send the link to need their own StarCraft
+files and no account. The command waits up to five minutes for the page, and `--json`
+prints the link, the invite code and what the page said on the way.
+
 ## Replays
 
 `scmjs replay info` reads a replay from any version, from 1.16 to Remastered. It shows the
@@ -1061,7 +1081,7 @@ from a clone with `npm run cli -- <command>`, or build it with `npm run build:cl
 | `cli/src/mcp.ts` | The MCP server: each tool a command's functions, its text and JSON as the result |
 | `cli/src/replaymap.ts` | The replay's scenario written out as a map file |
 | `cli/src/scmscx.ts`, `cli/src/fetch.ts` | scmscx.com's routes in one place, with the timeout and the errors; the search table, the file name made safe, the download opened before it is written |
-| `cli/src/open.ts` | Finding the desktop app, and handing a file to the editor in a browser |
+| `cli/src/open.ts` | Finding the desktop app, handing a file to the editor in a browser, and a lobby asked of the play page the same way |
 | `cli/src/bot.ts` | Running the bot toolchain's image in the bot's folder |
 | `cli/src/engine.ts` | The game engine the playing commands share: the play page's current build fetched into the cache with its runners, the copy of the game found, a runner started |
 | `cli/src/botrun.ts` | A bot's game with no page: scm-sim's bot runner run and its lines worded |

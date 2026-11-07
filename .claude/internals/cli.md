@@ -738,6 +738,30 @@ line. A fork built both ends (scm-sim branch `map-rush`).
   a real one is on the machine, `describe.skipIf`), `map_preview` against the copy of the game (`skipIf(!findGameCopy)`),
   the no-copy failure as `isError`. `tests/cli-replaymap.test.ts` covers `writeReplayMap` with a stub replay.
 
+## `map play`: a lobby from a map (`cli/src/open.ts`) — 2026-11-07
+
+- **The same hand-over as `map open`, to the play page.** `handOver(input, url, {lobby, onMessage, onAddress, timeout,
+  what})`: the loopback page posts `scmjs.open {files, lobby: true}` on `scmjs.ready`, and **forwards every other
+  `scmjs.*` message** the opened page posts to `POST /<token>/message` (string fields only); `scmjs.taken` ends the
+  wait, the rest go to `onMessage`. The old `/taken` route went; `map open` goes through the same path. The play
+  page's half is scm-sim's `web/handoff.ts` (jeany55/scm-sim#44): `scmjs.waiting {reason: "files" | "sign-in",
+  message}`, `scmjs.invite {link, invite, name}` as soon as `POST /v1/games` answered, `scmjs.error {message}`
+  (with `lobby`, the page keeps the problem on screen and a later Invite Players there still sends `invite` +
+  `taken`, so the command keeps waiting rather than exits), then `scmjs.taken`. Origin rule as the editor's:
+  loopback or the page's own origin; **scmjs.dev/play must send no Cross-Origin-Opener-Policy header** (it does not).
+- `playInLobby(input, {play, live, onAddress, timeout})` → `LobbyOutcome {link, invite, name, waited[], error}`;
+  the command prints the link with `live`, exits 1 with the page's error when no link came. Default page
+  `PLAY_PAGE_URL` = scmjs.dev/play, `SCMJS_PLAY_URL`/hidden `--play` for a dev server. Five-minute wait (a sign-in
+  and a game-files download may be on the way). Needs no `scmjs login`: the page signs in itself.
+- **Verified by hand** against scm-sim's `play-handoff` branch: vite on 5312 (`?relay=http://localhost:8799&setup=` —
+  a page a script drives seats nobody without `setup`), `scripts/relay.ts --port 8799`, headless Chromium
+  (`~/.cache/scmjs-headless-libs`) opening the command's loopback page: ready → invite
+  (`http://localhost:5312/?relay=…&game=invite1x4hunfg`) → taken, the relay listing the game in `lobby` state.
+  **Trap:** a python `str.replace` of the page's script with no `assert` silently left the old page in — the symptom
+  was the old "Opened in the editor" text and a 404 on `/taken`; check the replacement applied.
+- `tests/cli-play.test.ts` (3): a stand-in page reads the loopback page and posts the messages; the error-then-retry
+  path; the timeout.
+
 ## Maps from scmscx.com: `map fetch` (`cli/src/scmscx.ts`, `fetch.ts`) — 2026-11-07
 
 `scmjs map fetch <words…> [--limit n] [--json]` lists the best matches; `--id <id|scmscx.com/map/<id>>` or `<words…>

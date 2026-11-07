@@ -131,6 +131,15 @@ the community's disassemblers, none of whose code is included:
 - [IceCC](https://github.com/andreas-volz/icecc), by Jeff Pang (2000-2002) with
   modifications by ShadowFlare (2006-2007), GPL-2.0. A reference only.
 
+### QR Code generator
+
+`cli/src/qr.ts`, the encoder behind the command's `--qr`, follows the structure of
+[Project Nayuki's QR Code generator library](https://www.nayuki.io/page/qr-code-generator-library),
+MIT-licensed, copyright Project Nayuki: its count of data modules, alignment pattern
+spacing, Reed–Solomon divisor and block interleaving. It is cut down to byte mode and two
+error-correction levels; the penalty rules are written from the QR Code standard
+(ISO/IEC 18004). The file carries a provenance comment.
+
 ### Format references
 
 The file formats are decoded independently in `src/formats/`, from these public
@@ -300,6 +309,7 @@ The copyright holders of each MIT-licensed project are named above. The shipped 
 adapted material under this notice carry these copyrights:
 
 - Copyright (c) 2015-2026 Justin Forsberg (Chkdraft)
+- Copyright (c) Project Nayuki (QR Code generator library, adapted in the `scmjs` command)
 - Copyright (c) Meta Platforms, Inc. and affiliates (React and React DOM)
 - Copyright (c) 2020 Poimandres (Jotai)
 - Copyright (c) 2022 WorkOS (Radix UI)

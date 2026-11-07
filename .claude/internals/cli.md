@@ -156,6 +156,13 @@ native/ — see scm-sim's docs/own-bots.md. Added 2026-11-06 with "Made by Jeany
 
 ## Plugins over a map (`cli/src/run.ts`) — 2026-11-06, third slice
 
+- **Flaky CI fixed 2026-11-07 (run 42333075108 on #137; main's run after #134 failed the same way):** the log wakes
+  listeners on a `setTimeout` (coalesced), so whether the host's `logInfo(info.name, "Update: Rename")` records
+  reached the sink before `dispose()` was timing — 4 events locally, 6 on CI. Two changes: `attachSinks`'s detach
+  **flushes** the log first (deterministic, tested with a `logWarn` before detach), and `run.ts` prints only
+  `warn`/`error` entries — the info tier is the host's own trace (edit records, command timing), which the status line
+  already said; `api.log` is `console.log`, so a plugin's own output reaches the terminal regardless.
+
 - `scmjs map run <plugin> <map> [--command id] [--arg v...] [--out] [--dry-run] [--json]`: `runHeadless` from
   `src/plugins/headless.ts` (design and traps in `plugins-host.md`, "The host without the editor"); the Node half
   (`nodeLoaderDeps`, `sourceFor`) is in `run.ts`, since the editor's tree has no Node types. The target is
@@ -242,9 +249,10 @@ slice proposed: four thin layers on existing library code, plus a git recipe.
   `limit: Infinity`; exit 1 when nothing matched in any map (grep's rule — docs say so under exit codes). A map with
   no hit returns `lines: []`, and **`eachFile` now prints no separator for a file that printed nothing** (`printed`
   replaces `first`) — the only change to the shared loop. Sprites/doodads match ids only here (no game data names).
-- **`map new <map>`**: `newScenario` = the editor's `newMapInto` without the store: `flatTerrain(baseTerrain(null,
-  terrain ?? defaultIsom), null, seeded(1), era)` — **the fill is seeded** (mulberry32) so the same arguments give the
-  same bytes (tested), unlike the editor's `Math.random`; `createScenario`; `setMapVersion` for `--version
+- **`map new <map>`**: `newScenario` = the editor's `newMapInto` without the store: `flatTerrain(baseTerrain(null), null, seeded(1), era)` — **the fill is seeded** (mulberry32) so the same
+  arguments give the same bytes (tested), unlike the editor's `Math.random`; **no `--terrain`**: `baseTerrain(null,
+  id)` returns `DIRT` whatever the id (a terrain's tiles need the tileset's groups), so the option the first commit
+  had was a silent no-op and went (CI-review fix); `createScenario`; `setMapVersion` for `--version
   remastered`; `--players n` = `placeStartLocations(scn, null, null, {…DEFAULT_START_PLACEMENT, replace: false,
   placement: DEFAULT_PLACEMENT})` **and slots n..7 set Inactive** via read/applyPlayerSettings — the editor leaves
   eight Human slots, but a Human slot without a start location is a Check Map error in melee, and a terminal scaffold

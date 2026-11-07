@@ -109,10 +109,9 @@ them; `--tileset` one of badlands, platform, install, ashworld, jungle, desert, 
 twilight; `--name` the map's name, the file's without its extension by default, and
 `--description` its description. `--players 2` lays down start locations for players 1 and
 2 as Tools ▸ Auto-place would, in a ring (`--layout corners` puts them in the corners) and
-closes the other slots, so the map passes Check Map as it is. `--terrain` fills with
-another of the tileset's terrains, by its ISOM id; `--version remastered` writes a
-Remastered revision. A `.chk` name writes the bare scenario. The command refuses to write
-over a file that is there unless you pass `--force`.
+closes the other slots, so the map passes Check Map as it is. `--version remastered`
+writes a Remastered revision. A `.chk` name writes the bare scenario. The command refuses
+to write over a file that is there unless you pass `--force`.
 
 Without the game's graphics the ground is written by its ids, as the editor does when it
 has no game data; the map opens as it should and the editor fills the tiles' looks in when
@@ -323,14 +322,14 @@ scmjs map run ../plugin-repair maps/ridge.scx --command repair --dry-run
 ```
 
 What the plugin would have shown is printed as it happens: its status line, its toasts and
-what it logged. Dialogs and panels register and show nothing, and asking for a file
-answers none. `--command <id>` runs one of the commands the plugin registered after it
-started, with `--arg` values as its arguments; what the command returned is in `--json`.
-The map is written back only when the plugin changed it (`--out` writes it elsewhere, and
-writes even an unchanged map), and the closing line says what changed in the terms of
-`map diff`. `--dry-run` prints that comparison in full and writes nothing. A plugin that
-is TypeScript source needs TypeScript installed, as `map build` does; a built plugin or a
-JavaScript script needs nothing more.
+the warnings and errors in its log. Dialogs and panels register and show nothing, and
+asking for a file answers none. `--command <id>` runs one of the commands the plugin
+registered after it started, with `--arg` values as its arguments; what the command
+returned is in `--json`. The map is written back only when the plugin changed it (`--out`
+writes it elsewhere, and writes even an unchanged map), and the closing line says what
+changed in the terms of `map diff`. `--dry-run` prints that comparison in full and writes
+nothing. A plugin that is TypeScript source needs TypeScript installed, as `map build`
+does; a built plugin or a JavaScript script needs nothing more.
 
 This is the editor's own plugin host, so a plugin's logic runs here exactly as it does in
 the editor and a plugin can be tried from a terminal, or run over many maps from a shell

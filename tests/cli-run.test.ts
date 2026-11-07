@@ -9,6 +9,8 @@ import { describe, expect, it } from "vitest";
 import { openMapBytes } from "../src/editor/mapFile";
 import { scenarioName } from "../src/formats/chk/scenario";
 import { printRun, runOnMap, sourceFor, summarizeDiff } from "../cli/src/run";
+import { attachSinks, headlessStore, type LogEntry } from "../src/plugins/headless";
+import { logWarn } from "../src/editor/log";
 import { CliError, visible } from "../cli/src/ui";
 import { testMap } from "./support/maps";
 
@@ -36,6 +38,14 @@ export default function activate(api) {
 `;
 
 describe("scmjs map run", () => {
+  it("hands the sinks a log entry written just before the plugin is disposed, whatever the log's timer does", async () => {
+    const seen: LogEntry[] = [];
+    const detach = attachSinks(headlessStore(await open()), { log: (e) => seen.push(e) });
+    logWarn("Late Plugin", "written after the last wake");
+    detach();
+    expect(seen.map((e) => `${e.source}: ${e.message}`)).toEqual(["Late Plugin: written after the last wake"]);
+  });
+
   it("names what a path is: a folder, a manifest, a script, or the editor's specs", () => {
     const dir = plugin({ "plugin.js": EDITING });
     expect(sourceFor(dir)).toMatchObject({ kind: "remote", manifestUrl: expect.stringMatching(/plugin\.json$/), entryUrl: null });
@@ -53,7 +63,7 @@ describe("scmjs map run", () => {
     expect(r.plugin).toEqual({ id: "test", name: "Test Plugin", version: "1.2.3" });
     expect(r.result).toBeNull();
     expect(r.modified).toBe(true);
-    // The status line follows each edit too, as it does in the editor.
+    // The status line follows each edit too, as it does in the editor; the host's own log of the edits is not repeated.
     expect(r.events.map((e) => e.text)).toEqual(["Renaming the map", "Rename", "Add a marine", "Done: one marine more"]);
     expect(lines).toHaveLength(4);
     expect(summarizeDiff(r.diff!)).toBe("1 setting changed, 1 unit added, 1 string changed");

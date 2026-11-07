@@ -74,11 +74,15 @@ export function attachSinks(store: Store, sinks: HeadlessSinks): () => void {
     const seen = new Set(store.get(toastsAtom).map((t) => t.id));
     stops.push(store.sub(toastsAtom, () => { for (const t of store.get(toastsAtom)) if (!seen.has(t.id)) { seen.add(t.id); sinks.toast!(t); } }));
   }
+  // The log wakes its listeners on a timer (a burst is one wake), so an entry written just before the plugin is
+  // disposed would reach the sink or not by timing alone: detaching reads what is left first.
+  let flush = () => {};
   if (sinks.log) {
     let count = logEntries().length;
-    stops.push(subscribeLog(() => { const all = logEntries(); for (const e of all.slice(count)) sinks.log!(e); count = all.length; }));
+    flush = () => { const all = logEntries(); for (const e of all.slice(count)) sinks.log!(e); count = all.length; };
+    stops.push(subscribeLog(flush));
   }
-  return () => { for (const stop of stops) stop(); };
+  return () => { flush(); for (const stop of stops) stop(); };
 }
 
 /**

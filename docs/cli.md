@@ -1162,8 +1162,11 @@ from a clone with `npm run cli -- <command>`, or build it with `npm run build:cl
 | `cli/src/replaymap.ts` | The replay's scenario written out as a map file |
 | `cli/src/scmscx.ts`, `cli/src/fetch.ts` | scmscx.com's routes in one place, with the timeout and the errors; the search table, the file name made safe, the download opened before it is written |
 | `cli/src/open.ts` | Finding the desktop app, handing a file to the editor in a browser, and a lobby asked of the play page the same way |
+<<<<<<< HEAD
 | `cli/src/replayshare.ts` | A replay stored on the account and linked, with the map's picture for the card |
 | `cli/src/open.ts` | Finding the desktop app, and handing a file to the editor in a browser |
+=======
+> > > > > > > cli-share
 | `cli/src/account.ts` | The scmjs.dev sign-in through a page on the loopback address, the session file, and the account |
 | `cli/src/share.ts` | A map saved to the account and linked, or opened for editing together, with its facts and picture |
 | `cli/src/bot.ts` | Running the bot toolchain's image in the bot's folder |

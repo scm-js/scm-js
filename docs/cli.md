@@ -46,6 +46,7 @@ when there is a newer version.
 | `scmjs map unpack <map>`, `scmjs map pack <folder>` | A map's archive as a folder of files, and back |
 | `scmjs map trace <map>` | Runs the map's triggers in the game with nobody playing: which fired, how often, which never did and what said no |
 | `scmjs map cost <map>` | What the map's triggers cost Remastered each frame, in milliseconds, and the costliest triggers |
+| `scmjs map preview <map>` | A picture of the map, drawn with your copy of the game's graphics: in the terminal, or as a PNG with `--out` |
 | `scmjs replay info <replays…>` | Who played, on which map, for how long and at what APM |
 | `scmjs replay open <replay>` | Opens the replay in scmJS, to watch and analyse |
 | `scmjs replay watch <replay>` | Plays the replay in the terminal: the minimap as the game goes, each player's figures, the chat |
@@ -500,6 +501,60 @@ map in the original StarCraft 1.00 form is run as Brood War, as the editor would
 it; the Blizzard campaign maps are not something the engine runs yet. Exits 2 when the
 game could not start.
 
+## A picture of a map
+
+`scmjs map preview` draws the map with the game's own tileset graphics, read from your
+copy of StarCraft, Remastered or 1.16.1, found in the usual places or named with
+`--starcraft` (or `SCMJS_STARCRAFT`). Only the map's own tileset is read, in a fraction of
+a second, and nothing of the game is fetched or kept. Without a copy there is no picture:
+the command says so, and how to name one.
+
+Over the terrain go the things the minimap shows: a box for each unit in its owner's
+colour, as big as the unit is when placed; mineral fields in blue and geysers in green;
+the start locations framed in their slot's colour. `--no-units` draws the terrain alone.
+
+In the terminal the picture is as wide as the terminal, at most two columns a tile, and a
+map taller than it is wide is drawn no more rows high than half the terminal's columns.
+`--width 60` sets the columns, or `--scale 0.5` half a column a tile. Each character is
+two pixels, one above the other, in 24-bit colour where the terminal says it has it
+(`COLORTERM=truecolor`) and in the nearest of 256 colours where it does not, and a start
+location is its player's number. A terminal with no colour, or one that cannot draw the
+block characters (the old Windows console), gets letters instead: shades for the ground,
+`#` for a building, `o` for a unit, `$` for a mineral field or geyser. kitty and iTerm2
+can show a picture themselves and are sent the PNG; `--blocks` asks for the characters
+there too. Without colour, a 96 × 96 ice map at `--width 56` looks like this:
+
+```
+Ice Floes  96 × 96 · ice · StarCraft: Remastered 1.23.10.13515
+%*%=:-.-++***-:+@$$$$$@@%==+.   o  ::.=*@@@@%@*@@@@@@@@@
+%+: .-==**+-+=%$$@@1=@@@@@+-+:.     .:.:+%@%@%%*%@%=@@@@
+%=-+==+=+=-%%@@@@@@==@@@@@@@@%+=-:    ..   ....:-*@@@@@@
+*=-++==-=-=@@@@@@@@@@@@@@@@@@@%.==.     .=***+.:--=%@@%@
+      .:..=%@@@@@@@@@@@@@@@@@%: :       ::-=+.    :..:--
+--=+=:..==:%@@@@@@@@@@@@@@%*+: +=-:==.              .:-=
+*$$$$$$+*+-:+*%@@@@@@@%%%: ===*****++:     -+=+===-
+  …
+                    ---+@%@@@@@@@@@@@@@@@@@@@@%=:+*+:=*@
+++=-. .o .-=++=-:-.      :++-*@@@@@@2-@@@@@@@@@+:.++=: +
+%%=+*****+*%@@%***==-  :=+**-+@@$$@@--@@@@@@@*-..*+:-+*@
+%+%%*%@%@@*@@*%%@@@===.  .+-.+%@@@@$$$@$@@@*= -+-+=:+@@@
+P1  P2  neutral  $ minerals  $ gas  numbers: start locations  # buildings, o units
+```
+
+`--out ridge.png` writes a PNG instead, at `--scale` pixels a tile: 1, 2, 4 (the default,
+so a 128 × 128 map is 512 pixels square), 8, 16, or 32, the game's own size. `--out -`
+writes the PNG to standard output, with what the command says going to standard error, and
+`-` as the map reads it from a pipe:
+
+```sh
+scmjs map preview ridge.scx --out ridge.png --scale 8
+scmjs map new - --tileset ice --players 4 | scmjs map preview - --out - > new.png
+```
+
+`--json` describes the picture without drawing it: its form, size and scale, the tileset,
+the copy of the game it came from, and how many start locations, units, buildings, mineral
+fields and geysers are on it.
+
 ## Replays
 
 `scmjs replay info` reads a replay from any version, from 1.16 to Remastered. It shows the
@@ -768,6 +823,9 @@ from a clone with `npm run cli -- <command>`, or build it with `npm run build:cl
 | `cli/src/botrun.ts` | A bot's game with no page: scm-sim's bot runner run and its lines worded |
 | `cli/src/watch.ts` | A replay in the terminal: the braille minimap, its colours and the lines around it, the replay's chat and APM, and the runner paced a picture at a time |
 | `cli/src/trace.ts` | A map's triggers run in the game: scm-sim's map runner run, its trace and cost worded against the map's own triggers |
+| `cli/src/preview.ts`, `cli/src/png.ts` | A map's picture: the terrain from the tileset, reduced to the scale asked, the units, resources and start locations over it, and the PNG written by hand |
+| `cli/src/paint.ts` | The picture in a terminal: colour half blocks, the 256-colour fallback, ASCII shades, kitty's and iTerm2's picture protocols |
+| `cli/src/gamefiles.ts` | Files out of your copy of the game: a Remastered installation's storage, a 1.16.1 copy's archives in the game's order |
 | `cli/src/weigh.ts` | The weigher `map cost` hands the game: TrigScript's model of what Remastered charges, built beside the command |
 | `cli/src/plugin.ts` | A new plugin's files, the plugin check, and the server `plugin dev` runs |
 | `src/plugins/devLink.ts` | The editor's half of `plugin dev`: only a plugin served on this computer is taken |

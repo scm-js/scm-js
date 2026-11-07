@@ -1,0 +1,107 @@
+/**
+ * Files out of the player's own copy of StarCraft, for the commands that draw with the game's graphics
+ * (`scmjs map preview`). A Remastered installation keeps them in CASC storage, read with kascade; a 1.16.1 one in
+ * StarDat.mpq, BrooDat.mpq and patch_rt.mpq, read with mopaq, the later archive winning as the game layers them.
+ * Nothing is kept on disk: a tileset is a few megabytes and comes out of either in well under a second.
+ */
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import { Archive } from "mopaq";
+import { decodeUnitsDat, type UnitsDat } from "../../src/formats/dat/dat";
+import { loadTileset, type Tileset } from "../../src/formats/tileset/decode";
+import { findGameCopy } from "./engine";
+import { CliError } from "./ui";
+
+/** An opened copy of the game: a member by its path (`tileset\jungle.cv5`), or null when the copy has none. */
+export interface GameFiles {
+  folder: string;
+  kind: "remastered" | "classic";
+  /** What the copy is, for a person: "StarCraft: Remastered 1.23.10.13515", "StarCraft 1.16.1 (3 archives)". */
+  label: string;
+  read(member: string): Promise<Uint8Array | null>;
+}
+
+/** The archives a 1.16.1 copy is read from, in the game's order: StarDat, BrooDat, then patch_rt (later wins). */
+const ARCHIVES = ["stardat.mpq", "broodat.mpq", "patch_rt.mpq"];
+
+/** The archives in `folder` the game reads, in its order, by their names on disk (any case). */
+export function classicArchives(folder: string): string[] {
+  let names: string[];
+  try { names = readdirSync(folder); } catch { return []; }
+  return ARCHIVES.map((want) => names.find((n) => n.toLowerCase() === want)).filter((n): n is string => !!n).map((n) => join(folder, n));
+}
+
+/** 1.16.1: each archive opened once; a member is read from the last archive that has it. */
+export function archiveFiles(folder: string, paths = classicArchives(folder)): GameFiles {
+  const archives: Archive[] = [];
+  for (const p of paths) {
+    try { archives.push(Archive.open(new Uint8Array(readFileSync(p)))); } catch (e) {
+      throw new CliError(`${p} could not be read as an archive (${e instanceof Error ? e.message : e}).`, "The copy's StarDat.mpq and BrooDat.mpq are read as they are; a damaged one needs the game repaired.");
+    }
+  }
+  return {
+    folder, kind: "classic", label: `StarCraft 1.16.1 (${archives.length} archive${archives.length === 1 ? "" : "s"})`,
+    read: async (member) => {
+      const name = member.replaceAll("/", "\\");
+      for (let i = archives.length - 1; i >= 0; i--) {
+        try { return archives[i].readFile(name); } catch { /* not in this one */ }
+      }
+      return null;
+    },
+  };
+}
+
+/** Remastered: the installation's CASC storage, opened with kascade (~0.2 s for its indices). */
+export async function storageFiles(folder: string): Promise<GameFiles> {
+  const { Storage } = await import("kascade");
+  const { nodeSource } = await import("kascade/node");
+  let storage: Awaited<ReturnType<typeof Storage.open>>;
+  try { storage = await Storage.open(nodeSource(folder)); } catch (e) {
+    throw new CliError(`${folder} could not be read as a StarCraft: Remastered installation (${e instanceof Error ? e.message : e}).`, "Name another copy with --starcraft, or let the Battle.net app repair this one.");
+  }
+  return {
+    folder, kind: "remastered", label: `StarCraft: Remastered ${storage.build.version}`.trim(),
+    read: async (member) => {
+      const name = member.replaceAll("\\", "/").toLowerCase();
+      const info = storage.fileInfo(name);
+      if (!info?.installed) return null;
+      return storage.readFile(name);
+    },
+  };
+}
+
+/**
+ * The copy named with `--starcraft` (or `SCMJS_STARCRAFT`), else the first in the usual places, opened. `why` is said in
+ * the hint when there is none: what the command wanted the game's files for.
+ */
+export async function openGameFiles(named: string | undefined, why = "The picture is drawn with your own installation's tileset graphics"): Promise<GameFiles> {
+  let copy: ReturnType<typeof findGameCopy>;
+  try { copy = findGameCopy(named); } catch (e) {
+    if (e instanceof CliError && !named) throw new CliError(e.message, `${why}: name its folder with --starcraft (or SCMJS_STARCRAFT).`);
+    throw e;
+  }
+  return copy.kind === "remastered" ? storageFiles(copy.folder) : archiveFiles(copy.folder);
+}
+
+/**
+ * One tileset's graphics: cv5, vf4, vr4, wpe and the megatile table — Remastered's `.vx4ex` where the copy has it (its
+ * 32-bit table; every 1.16.1 tile is in it unchanged), else the classic `.vx4`.
+ */
+export async function readTileset(files: GameFiles, name: string): Promise<Tileset> {
+  const part = async (ext: string) => files.read(`tileset\\${name}.${ext}`);
+  const [cv5, vf4, vr4, wpe, vx4ex] = await Promise.all(["cv5", "vf4", "vr4", "wpe", "vx4ex"].map(part));
+  const vx4 = vx4ex ?? await part("vx4");
+  const missing = Object.entries({ cv5, vf4, vr4, wpe, vx4 }).filter(([, v]) => !v).map(([k]) => `${name}.${k}`);
+  if (missing.length) throw new CliError(`${files.label} in ${files.folder} has no ${missing.join(", ")}.`, "The copy may be incomplete; name another with --starcraft.");
+  return loadTileset({ cv5: cv5!, vf4: vf4!, vr4: vr4!, wpe: wpe!, vx4: vx4!, vx4Extended: !!vx4ex });
+}
+
+/** units.dat, for the sizes units are drawn at; null when the copy's cannot be read (each unit is then a tile). */
+export async function readUnitsDat(files: GameFiles): Promise<UnitsDat | null> {
+  try {
+    const bytes = await files.read("arr\\units.dat");
+    return bytes ? decodeUnitsDat(bytes) : null;
+  } catch {
+    return null;
+  }
+}

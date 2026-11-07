@@ -62,6 +62,7 @@ terrain. Everything else is a function that reads or changes one.
 | Settings | `readPlayerSettings` / `applyPlayerSettings`, forces, unit, upgrade and tech settings, `changeMapVersion`, `changeTextEncoding` |
 | The map | `resizeScenario`, `placeStartLocations`, `setScenarioName`, `setScenarioDescription`; `flatTerrain` and `baseTerrain`, the flat ground a new map is filled with |
 | Names | `unitName`, `upgradeName`, `techName`, `TILESETS`, `PLAYER_TYPES`, `PLAYER_RACES`, `PLAYER_COLORS` |
+| The game's files | `loadTileset`, `megatileForTile` and `drawMegatile` for a tileset's graphics, `decodeUnitsDat` and `unitGeometry` for the units' sizes, `displayColorHex` for a player's colour — for files you read from your own copy of the game |
 | Plugins | `validateManifest`, `PLUGIN_API_VERSION` — what the editor checks a plugin's manifest for |
 
 The declarations file says the rest: every function is typed, and the types are the
@@ -117,7 +118,9 @@ Strings have the same pair, `formatStringTable` and `parseStringTable`.
 - **Nothing that needs the game data.** Terrain checks (a unit on ground it cannot stand
   on), building counts, map pictures and the terrain tools need the tilesets and unit
   tables that only the editor has. `mapStatistics` and `validateScenario` take `null` for
-  them and leave those parts out, as the command line does.
+  them and leave those parts out, as the command line does. The decoders are here, but no
+  game file is: `scmjs map preview` reads the tileset out of your copy of StarCraft and
+  draws with them.
 - **No plugin API.** The functions are the editor's, not `api.*`; a plugin's code does not
   run here. A plugin can share logic with a script by putting it in a module both import.
 - **One language.** The library's own text — a warning, an issue — is English.

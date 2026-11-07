@@ -30,6 +30,7 @@ import { printReplayInfo, replayReport } from "./replay";
 import { parseClock, watchReplay, watchSummary } from "./watch";
 import { FORMATS, githubAnnotations, junitXml, sarifJson, type CheckReport, type Format } from "./report";
 import { printRun, runOnMap } from "./run";
+import { previewMap, PNG_SCALES } from "./preview";
 import { CliError, dot, gameText, mark, num, pc, plural, print, rows, size, table } from "./ui";
 
 const json = new Option("--json", "print JSON instead of text, for scripts");
@@ -503,6 +504,30 @@ on average where the triggers ran and at the most, against what a frame can carr
     const r = await runMapInGame(game.path, "cost", { frames: whole(o.frames, "frames", 1), every: whole(o.every, "every"), seed: whole(o.seed, "seed"), starcraft: o.starcraft, engine: o.engine, weigh: o.weigh, live: o.json ? undefined : (line) => print(line) });
     if (o.json) print(JSON.stringify({ ...costReport(input.name, r), engine: r.engine, game: r.game, series: r.end.cost, ms: r.end.ms }, null, 2));
     else print("", ...printCost(input.name, doc.scenario, r, { all: !!o.all }));
+  });
+
+map.command("preview").description("a picture of the map in the terminal, or as a PNG, with your copy of the game's graphics").argument("<map>").addOption(json)
+  .option("--out <picture.png>", "write a PNG instead; - for standard output")
+  .option("--scale <n>", `pixels a tile: ${PNG_SCALES.join(", ")} in a PNG (4 by default); in the terminal a pixel is half a character`)
+  .option("--width <columns>", "the terminal picture's width in characters (as wide as the terminal by default)")
+  .option("--no-units", "the terrain alone: no units, resources or start locations")
+  .addOption(new Option("--units", "units, resources and start locations on the picture (the default)").hideHelp())
+  .option("--blocks", "colour blocks, even in kitty or iTerm2, which can show the picture itself")
+  .option("--starcraft <folder>", "your installation of StarCraft (SCMJS_STARCRAFT); found in the usual places otherwise")
+  .addHelpText("after", `
+The terrain is drawn with the map's tileset as your copy of StarCraft has it, Remastered or 1.16.1; nothing of the
+game is fetched or kept. Over it: a dot a unit in its owner's colour, sized as the unit is placed, mineral fields
+and geysers in their own colours, and start locations framed (numbered in the terminal). In the terminal each
+character is two pixels, in 24-bit colour where the terminal says it has it, else the nearest of 256.
+  scmjs map preview ridge.scx
+  scmjs map preview ridge.scx --out ridge.png --scale 8`)
+  .action(async (file: string, o: { json?: boolean; out?: string; scale?: string; width?: string; units?: boolean; blocks?: boolean; starcraft?: string }) => {
+    const piped = o.out === STDIO;
+    if (piped && o.json) throw new CliError("--json and the picture both want standard output", "Write the PNG to a file with --out, or leave --json off.", 2);
+    const { input, doc } = await openForEdit(file);
+    const { report, lines } = await previewMap(input, doc, o);
+    if (o.json) print(JSON.stringify(report, null, 2));
+    else say(piped, ...lines);
   });
 
 map.command("diff").description("what changed between two maps, or since a git revision").argument("<a>").argument("[b]", "the other map; none with --rev").addOption(json)

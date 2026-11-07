@@ -845,7 +845,8 @@ ladder's folder for scmjs replay watch. Exits 1 when a game could not be played 
     for (const m of o.maps) {
       const { input, doc } = await openForEdit(m);
       const game = await gameMap(doc, input.path, input.name);
-      if (game.converted) { play.set(m, game.path); say(pc.dim(`${input.name} is an original StarCraft map: it is played converted to Brood War.`)); }
+      if (game.path !== m) play.set(m, game.path);
+      if (game.converted) say(pc.dim(`${input.name} is an original StarCraft map: it is played converted to Brood War.`));
     }
     let r;
     try {

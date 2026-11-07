@@ -395,7 +395,7 @@ export async function playGame(runner: string, engine: Engine, copy: string, ent
 export async function runLadder(entrants: Entrant[], o: LadderOptions): Promise<LadderOutcome> {
   const t0 = performance.now();
   if (!o.maps.length) throw new CliError("A ladder needs a map", "Name them with --maps: --maps \"(2)Boxer.scm\" \"(4)Lost Temple.scm\".", 2);
-  for (const m of o.maps) if (!existsSync(m)) throw new CliError(`No file ${m}`, null, 2);
+  for (const m of o.maps) if (!existsSync(o.play?.get(m) ?? m)) throw new CliError(`No file ${m}`, null, 2);
   const races = o.races ?? ["r"];
   const seeds = o.seeds ?? [1];
   const games = schedule(entrants, o.maps, races, seeds);

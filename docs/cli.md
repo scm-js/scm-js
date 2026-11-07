@@ -42,6 +42,7 @@ when there is a newer version.
 | `scmjs map new <map>` | A new map: flat ground, start locations laid out, the file written |
 | `scmjs map dump <map>` | The whole map as text, for `git diff` and `grep` |
 | `scmjs map find <text> <maps…>` | Edit ▸ Find across maps: units, locations, strings, triggers |
+| `scmjs map fetch <words…>` | Searches scmscx.com, the community's map database, and downloads a map with `--id` or `--first` |
 | `scmjs map triggers export|import` | A map's triggers as a text or `.trg` file, and back |
 | `scmjs map strings export|import` | A map's strings as a text file, and back |
 | `scmjs map strings prune <map>` | Drops the strings nothing in the map refers to |
@@ -364,6 +365,67 @@ ums.scx  4 matches
 strings, triggers and briefing), and `--case` matches case. A map with no match prints
 nothing. The command exits with 1 when nothing matched in any map, like `grep`, so a
 script can ask whether any map still says something.
+
+## Maps from scmscx.com
+
+[scmscx.com](https://scmscx.com) is the community's map database: years of StarCraft maps
+that people have shared, searchable by name, description and file name. `scmjs map fetch`
+searches it and downloads from it. The maps are their makers', and the site's; scmJS only
+asks the site, the way its own pages do.
+
+```sh
+scmjs map fetch lost temple
+```
+
+```
+scmscx.com · 2,918 files match "lost temple" · the best 10 maps
+
+  Name                           Size       Tileset       Players  Downloads  Id
+  (The Lost Temple 8 Players)    128 × 128  Jungle World  8        246        GDj6p383
+  PGT - Lost Temple 2.4 [02]     128 × 128  Jungle World  4        170        B8V7fdyj
+  PGT - Lost Temple 2.35 [01]    128 × 128  Jungle World  4        35         jVYB3rBz
+  …
+```
+
+The list is the site's own order of best matches, a map once however many file names it
+was uploaded under. `--limit 25` lists more (up to 50), and `--json` gives the list to a
+script. When nothing matches, the command says so and exits with 1.
+
+To download one, give its id, or the map's address on the site, with `--id`; `--first`
+downloads the best match for the words instead:
+
+```sh
+scmjs map fetch --id B8V7fdyj
+scmjs map fetch lost temple --first --out maps/
+scmjs map fetch lost temple --first --open
+```
+
+The file is named as the site names it, with the characters Windows does not allow in a
+file name made `_`, and is written into this folder, or the file or folder `--out` names.
+A file that is there already is left alone unless you add `--force`. Before anything is
+written the map is opened as the editor opens it, and the command says what it is, as
+`map info` begins:
+
+```
+PGT - Lost Temple 2.4 [02]
+  Map   128 × 128 · Jungle World · StarCraft 1.00
+  File  (4)Lost Temple 2.4 PGT.scm · 172 KB
+  From  https://scmscx.com/map/B8V7fdyj · uploaded by anonymous · 170 downloads
+✔ Written to (4)Lost Temple 2.4 PGT.scm
+```
+
+What the site sends that is not a map is refused, and nothing is written. `--open` opens
+the map in scmJS once it is written, as `scmjs map open` does, and `--out -` sends it down
+a pipe instead of into a file:
+
+```sh
+scmjs map fetch lost temple --first --out - | scmjs map info -
+```
+
+The command waits ten seconds for the site at most, and says so when the site does not
+answer or turns the request down (exit 1). Nothing is kept between runs: each search asks
+the site again. A search asks the site once for the list and once more for each map's
+details, which is why the list stops at 50.
 
 ## Comparing two maps
 
@@ -944,6 +1006,7 @@ from a clone with `npm run cli -- <command>`, or build it with `npm run build:cl
 | `cli/src/completion.ts` | The bash, zsh and fish scripts, generated from the command tree |
 | `cli/src/mcp.ts` | The MCP server: each tool a command's functions, its text and JSON as the result |
 | `cli/src/replaymap.ts` | The replay's scenario written out as a map file |
+| `cli/src/scmscx.ts`, `cli/src/fetch.ts` | scmscx.com's routes in one place, with the timeout and the errors; the search table, the file name made safe, the download opened before it is written |
 | `cli/src/open.ts` | Finding the desktop app, and handing a file to the editor in a browser |
 | `cli/src/bot.ts` | Running the bot toolchain's image in the bot's folder |
 | `cli/src/engine.ts` | The game engine the playing commands share: the play page's current build fetched into the cache with its runners, the copy of the game found, a runner started |

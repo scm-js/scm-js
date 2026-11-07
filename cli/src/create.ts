@@ -30,8 +30,6 @@ export interface NewMapOptions {
   name: string;
   description: string;
   version: NewMapVersion;
-  /** ISOM id of the terrain to fill with; the tileset's default when omitted. */
-  terrain?: number;
   /** Start locations for players 1..N, the other slots closed; none when 0. */
   players: number;
   layout: StartLayout;
@@ -72,7 +70,9 @@ export interface NewMapResult { path: string; bytes: number; starts: number; wid
 export function newScenario(o: NewMapOptions) {
   const era = Math.max(0, TILESETS.findIndex((t) => t.id === o.tileset));
   const info = TILESETS[era];
-  const { tiles, isom } = flatTerrain(o.width, o.height, baseTerrain(null, o.terrain ?? info.defaultIsom), null, seeded(1), era);
+  // No tileset here, so the fill is the base ground (`DIRT`, the editor's own choice without game data); a terrain
+  // by id would need the tileset's groups to name its tiles, which is why there is no --terrain.
+  const { tiles, isom } = flatTerrain(o.width, o.height, baseTerrain(null), null, seeded(1), era);
   const scenario = createScenario({ width: o.width, height: o.height, era, name: o.name, description: o.description, tiles, isom });
   if (mapVersionOf(scenario.fileVersion) !== o.version) setMapVersion(scenario, o.version);
   let starts = 0;

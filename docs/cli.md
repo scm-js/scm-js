@@ -657,6 +657,17 @@ anything, and you can leave that one unapproved.
 
 - `--json` prints what a command found as JSON: one object for one file, a list for
   several. The text output may change between versions, so scripts should use `--json`.
+- `-` as a map's path is standard input, and `--out -` (or no `--out`, for a map that came
+  from `-`) is standard output, so the commands chain in a pipe:
+
+  ```sh
+  scmjs map new - --size 64x64 --players 2 | scmjs map set - --name "Ridge" | scmjs map check -
+  cat ridge.scx | scmjs map resize - --size 128x96 --out - > ridge-wide.scx
+  ```
+
+  What the command says goes to standard error while the map takes standard output, and
+  `--json` is refused there, since both want the pipe. A map from a pipe has no name: it
+  is `stdin.scx` or `stdin.chk` by its bytes, and is written back in the same form.
 - Exit codes: 0 when all went well, 1 when a map failed its check, two maps differed,
   nothing matched a search, a build did not go through or something went wrong, 2 when a
   file was missing or was the wrong kind for the command, or an option was not one.

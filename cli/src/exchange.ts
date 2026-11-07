@@ -5,12 +5,14 @@
  * `writeBack`, which keeps the archive's other members and how the scenario was compressed.
  */
 import { writeFile } from "node:fs/promises";
+import type { Writable } from "node:stream";
 import { TriggerTextError } from "../../src/formats/triggers/text";
 import type { OpenedMap } from "../../src/editor/mapFile";
 import { writeMapBytes } from "../../src/editor/mapFile";
 import { applyBriefing, applyTriggers, readBriefing, readTriggers } from "../../src/editor/triggers";
 import { applyStringImport, encodeTrg, formatStringTable, parseStringTable, readTriggerFile, triggerFormatOf, triggersToText } from "../../src/editor/exchange";
-import { defaultSaveOptions, formatOf } from "../../src/editor/save";
+import { defaultSaveOptions, formatOf, type MapFormat } from "../../src/editor/save";
+import { STDIO, toStdout } from "./files";
 import { CliError } from "./ui";
 
 export interface TriggerExport {
@@ -73,11 +75,31 @@ export function importStrings(doc: OpenedMap, fileName: string, text: string): S
  * when the name has none the editor writes); the archive's other members come along; the scenario is compressed
  * and encrypted as it was opened, as Save As would — the editor's own rule (`defaultSaveOptions`).
  */
-export async function writeBack(doc: OpenedMap, inputPath: string, outPath: string | null): Promise<{ path: string; bytes: number }> {
-  const path = outPath ?? inputPath;
-  const { format: _format, ...asOpened } = defaultSaveOptions(doc.scenario, doc.origin ?? null, path);
-  const format = formatOf(path) ?? formatOf(inputPath) ?? "scx";
+export async function writeBack(doc: OpenedMap, inputPath: string, outPath: string | null, stdout?: Writable): Promise<Written> {
+  const path = toStdout(inputPath, outPath) ? STDIO : outPath ?? inputPath;
+  const format = outputFormat(doc, inputPath, outPath);
+  const { format: _format, ...asOpened } = defaultSaveOptions(doc.scenario, doc.origin ?? null, path === STDIO ? doc.fileName : path);
   const bytes = await writeMapBytes(doc.scenario, { format, extras: doc.extras, stored: doc.stored ?? null, options: asOpened });
+  return writeOutput(bytes, path, stdout);
+}
+
+/** What was written: the path (`-` for standard output) and the size. */
+export interface Written { path: string; bytes: number }
+
+/**
+ * The form a map is written back in: the output name's extension, else the input's, else the form it came in (a map
+ * from a pipe is `stdin.scx` or `stdin.chk` by its bytes).
+ */
+export function outputFormat(doc: OpenedMap, inputPath: string, outPath: string | null): MapFormat {
+  return formatOf(outPath) ?? formatOf(inputPath) ?? formatOf(doc.fileName) ?? (doc.origin ? "scx" : "chk");
+}
+
+/** The bytes to the file, or to standard output for `-` (so a command can be one step of a pipe). */
+export async function writeOutput(bytes: Uint8Array, path: string, stdout: Writable = process.stdout): Promise<Written> {
+  if (path === STDIO) {
+    await new Promise<void>((resolve, reject) => stdout.write(bytes, (e) => (e ? reject(e) : resolve())));
+    return { path, bytes: bytes.length };
+  }
   try {
     await writeFile(path, bytes);
   } catch (e) {

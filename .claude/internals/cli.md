@@ -1,6 +1,6 @@
 # The `scmjs` command line
 
-`cli/` is the npm package **`@scm-js/cli`** (its command is `scmjs`): `scmjs about | doctor | info | map info|check|open|new|dump|find|set|resize|triggers|strings|diff|build|run|unpack|pack|trace|cost |
+`cli/` is the npm package **`@scm-js/cli`** (its command is `scmjs`): `scmjs about | doctor | info | map info|check|open|new|dump|find|fetch|set|resize|triggers|strings|diff|build|run|unpack|pack|trace|cost|rush |
 replay info|open|watch | plugin new|check|dev | bot new|init|build|update|run`, or `npx @scm-js/cli …`. npm refused the plain name `scmjs` on the first publish (2026-11-06,
 E403 "too similar to scss, sockjs"), so the user chose the scope beside @scm-js/replay and @scm-js/plugin-api. The reader's page is `docs/cli.md`. The shape was the user's (2026-11-05): one command, a noun for
 each kind of thing (`map`, `replay`, `plugin`, `bot`), "an impressive UX tool … not overly engineered".
@@ -50,7 +50,8 @@ each kind of thing (`map`, `replay`, `plugin`, `bot`), "an impressive UX tool �
   the old Examples block went (docs/cli.md has examples). main.ts exports `program` and skips running it under
   `VITEST`, so tests/cli.test.ts reads the real help.
 
-`about` asks `registry.npmjs.org/@scm-js/cli/latest` (2 s timeout, nothing else in the CLI touches the network) and
+`about` asks `registry.npmjs.org/@scm-js/cli/latest` (2 s timeout; besides it only `doctor` (the same call), the engine
+fetch of the game commands and `map fetch` (scmscx.com, below) touch the network) and
 shows **Newest**: the install line when this is older (`olderThan`, numeric x.y.z), "this one", "<v> on npm" for a
 build from a clone, or "could not ask npm". Only `about` asks, so no command is slowed or nags (the user's ask,
 2026-11-06, after "how do they update").
@@ -307,8 +308,9 @@ slice proposed: four thin layers on existing library code, plus a git recipe.
   sections as they would be written (`sectionBytes`, the same gather `diff.ts` uses — moved here, exported). Every
   part is printed even when empty (`(none)`) so two dumps line up. No colour ever (it is for files and git), first
   line `# <file> — scmjs map dump 1` (`DUMP_FORMAT`, bump when the form changes incompatibly). **The git recipe**
-  (docs/cli.md "A map as text, and in git"): `diff.scmjs.textconv "scmjs map dump"`, `diff.scmjs.xfuncname "^## "`
-  (hunk headers name the part), `.gitattributes` `*.scx diff=scmjs`. Verified in a scratch repo: `git diff` and
+  (docs/cli.md "A map as text, and in git"): `diff.scmjs.textconv "scmjs map dump"`, `diff.scmjs.xfuncname "^## .*"`
+  (hunk headers name the part; **0.9.0 shipped `"^## "`**, and git puts what the expression *matched* in the header,
+  so it showed a bare `##` — found by `scmjs init`'s demo, 2026-11-07), `.gitattributes` `*.scx diff=scmjs`. Verified in a scratch repo: `git diff` and
   `git log -p` show a string change as text; git's temp blob keeps the basename so `kindOf` sees the bytes anyway.
 - **`map find <text> <maps…> [--in kinds] [--case] [--json]`**: `findInScenario` per kind in `FIND_KINDS` order with
   `limit: Infinity`; exit 1 when nothing matched in any map (grep's rule — docs say so under exit codes). A map with
@@ -374,6 +376,49 @@ slice proposed: four thin layers on existing library code, plus a git recipe.
   gets a dim `·`, not a tick. Notes/fixes only under a row that is not ok (Claude Code: the add line alone). The
   summary: one line when all ready, else `Not ready` + a line per group with `lackLine` (a few words; the fixes are in
   the rows above). `readyLines(ready, checks)` and `printDoctor(r, width)` take what tests need.
+
+## `scmjs init` (`cli/src/init.ts`) — 2026-11-07, after 0.9.0
+
+`scmjs init [folder] [--print] [--git] [--force] [--json]`: a folder of maps made a project git and GitHub look after.
+`initFolder` does everything (and with `print` computes it all and writes nothing); `printInit` is the one-line-each
+report, `printRecipe` the paste-able text. Writes:
+
+- **`.gitattributes`** (`ATTRIBUTE_LINES`) and **`.gitignore`** (`IGNORE_LINES` = `*.bak` only — checked what is left
+  beside a map: the CLI writes in place or to `--out`, `map unpack`'s folder is meant to be kept (no `*-unpacked/`
+  except for stdin), `map preview` writes only to a named `--out`, `trace` copies go to the temp dir; the desktop
+  app's Save writes `<map>.bak`, `desktop/backup.ts`). Line files get **only the lines they lack**, appended under a
+  comment (`missingLines`); a `.gitattributes` pattern that already names a diff driver (`*.scm diff=mine`) is left
+  alone. `--force` never removes lines. This bends "write only files that are not there" deliberately: both files
+  are common in an existing repository and appending is not overwriting.
+- **`.github/workflows/maps.yml`** (`workflowText`) **at the repository's top** (`git rev-parse --show-toplevel`),
+  not in the folder — GitHub reads workflows only there; map globs are then `maps/*.scx` from the top (`mapGlobs`,
+  one per extension *as written*, since globs are case-sensitive on the runner; quoted dir when it has shell
+  characters; `*.scx` with a note when the folder has no maps). Check: `npx -y @scm-js/cli@<VERSION> map check …
+  --strict --format github`, `run: |` block scalars so no path can break the YAML (validated with js-yaml once).
+  **Build step only for maps that keep a script**, listed by name: `map build` on a map without one is a CliError
+  (exit 1) and loads TypeScript first, so "run it on every map" was not an option, and `map info --json` says nothing
+  about scripts. Detection is `hasScript(extras)` (new in build.ts: the plugin's `readFiles`, dynamic import, null
+  when not vendored). A map that gains a script later needs the line added by hand (the comment in the file says
+  how). The build line is `npx -y -p @scm-js/cli@<v> -p typescript@6 scmjs map build --check <map>`: two `-p` put
+  TypeScript in the same npx folder, where `findTypeScript`'s "beside the command" `createRequire` finds it —
+  **verified against the published 0.9.0** (compiled, TypeScript 6.0.3). `TYPESCRIPT` is held to package.json's
+  major by the test.
+- **`README.md`** (`readmeText`): a table of the maps (name via `gameText` + `visible`, colour bytes gone, `|`
+  escaped, link URL-encoded with `(`/`)`), the three commands with the folder's own globs and first map, and the git
+  lines a fresh clone needs (git config is per clone; "run `scmjs init` again" is the answer since it writes nothing).
+- **git config** `diff.scmjs.textconv/xfuncname/cachetextconv` (`GIT_SETTINGS`) in the repository via `git -C top
+  config`; compared with `git config --get` (any scope); another value is `other` (▲, left alone) unless `--force`;
+  `OLD_SETTINGS` (the 0.9.0 `^## `) is replaced without `--force`. **Trap: never `.trim()` git's output** — the old
+  value ends in a space and compared unequal. No repository: nothing set, a note; `--git` runs `git init` (never
+  otherwise). A note when `scmjs` is not on PATH (`onPath`, PATHEXT on Windows), since git runs it by name.
+
+Paths in the report (and `--json`'s `files[].path`) are **from the folder** — from the cwd they were
+`../../../../tmp/…` in the tests. Exit 2 for a missing folder or a file.
+
+**Hidden from the overview** (`{ hidden: true }`, as `completion`): the root help was already at 23 lines and a
+top-level row would make 24; the user asked for `scmjs init`, not `map init`. Found by `scmjs help init`, the `map`
+noun's help (`map.addHelpText("after", …)` names it) and docs/cli.md. Being hidden it is also **not in the shell
+completions** (`commandTree` skips hidden). `doctor`'s Ready table unchanged (init needs nothing beyond git, optional).
 
 ## CI slice: check formats, info --table, diff --rev, set, resize, strings prune (`report.ts`, `edit.ts`) — 2026-11-07
 
@@ -570,6 +615,51 @@ The user took the parent's first-slice proposal ("`map trace` and `map cost` sec
   takes a map named `slow.scx`: it writes its pid beside the map (`slow.scx.pid`) and waits to be killed — no `--sleep`
   flag, since `runMapInGame` passes no free arguments to the runner.
 
+## Start to start: `map rush` (`cli/src/rush.ts`) — 2026-11-07
+
+`scmjs map rush <map> [--unit <name>] [--seed n] [--json]`: the ground distance between every pair of start locations
+by the game's own pathing — a unit walked from each start to every other, frames, pixels, outcome, beside the straight
+line. A fork built both ends (scm-sim branch `map-rush`).
+
+- **The runner is the map runner's `--rush` mode, not a fourth bundle.** scm-sim's `src/exact/mapGame.ts` is
+  `runMap.ts`'s start (mapBytes → the copy's files → install → `applyInputs`/`runStart` → `attach`) as a module, with an
+  `edit(chk, files)` hook; `runMap.ts` uses it for trace/cost and dispatches `--rush` (`--unit <id>`, `--limit
+  <frames>`, `--seed`, default `ANALYSIS_SEED` 12345) to `src/exact/mapRush.ts`. Why one runner: the start is the same
+  code (the zlib/pkware rewrite, the file-search stand-ins, the terrain check), no `current.json` key, no `RUNNERS` kind
+  and no `doctor` line. The price: **a runner from before ignores `--rush` and runs the triggers**, so its `start` has no
+  `mode` — `rush.ts` kills it and says "a map runner from before map rush" (tested with the trace's stand-in, which is
+  exactly such a runner). `RUNNER_COMMANDS.map` still reads "map trace|cost" (cli-doctor and cli-mcp tests pin the
+  wording; doctor cannot tell a runner's modes apart anyway).
+- **One game for every start** (one game a process; `scripts/pathing.ts` needed a process per start). The walks are
+  `src/analysis/pathing.ts`'s: `pathingScenario` (neutral Nexus on every start, Create Unit for P1 at location 1 =
+  `testPoint`, five tiles toward the middle), `walkUnits` (its own StateKeeper moment once the unit exists, a restore
+  before each walk). `mapRush.ts` takes a `StateKeeper` moment **before the first turn**; for each later start it
+  restores it and moves location 1 in the game's own table (`0x58DC60`, left/top/right/bottom) to that start's point
+  before the trigger has run. Measured identical to a game started for that start alone, to the frame and pixel
+  (Fighting Spirit, Crescent Moon; scm-sim `tests/exact-map-rush-fresh.test.ts` pins the numbers a fresh game gives, and
+  `exact-map-rush.test.ts` the rush's). OWNR slot 1 is made Human in the copy (the unit is P1's; a map giving slot 1 to a
+  computer would seat the person elsewhere) and the runner fails if the person is not in slot 1. `WalkHooks.walked` now
+  gets the walk as a third argument (additive) so a `walk` line goes out as each ends. units.dat's flags are read from
+  the copy before the game starts, so a flyer/building is refused in ~1.3 s.
+- **Protocol**: `start` {mode: "rush", map, copy, seed, unit, starts [{owner, x, y}], walks, ms}, `walk` {from, to
+  (slots 0–7), unit, outcome, frames, travelled, off (px from the start walked to at the end), regions, air (start to
+  start), at (where it set out), ms}, `end` {mode, walks, ms {load, start, walk, total}}, `error`.
+- **The CLI**: `unitByName` (an id; the editor's name or without "Terran/Zerg/Protoss", case and spaces folded; else a
+  unique prefix; else CliError listing up to six, exit 2 — "Siege Tank" is four). The map goes through `trace.ts#gameMap`
+  (a 1.00 map such as Lost Temple is converted; `removeGameMap` is now exported for `runRush`'s `finally`). Report:
+  starts labelled by player and `clockOf` (the angle from the middle as a clock hour — geometric, so Lost Temple's
+  left base reads 8, not the 9 people may call it), matrix cells "px, s" right-aligned, split into a seconds and a
+  pixels table when wider than the terminal (8 starts at 100 columns); shortest/longest of the arrived by frames, with
+  air and the ratio; `apart` pairs merged both ways ("No ground joins 1 ↔ 3"), every pair apart → "an island map" and
+  the straight lines; other outcomes one line each. Seconds = frames × 42 ms. The runner's "does not walk" becomes
+  "The Mutalisk does not walk", exit 2.
+- **Measured** (Remastered copy, staged deploy over `python3 -m http.server`, fresh cache): Lost Temple (1.00, converted)
+  SCV 12 walks 3.9 s, shortest 3 → 4 30.5 s, longest 1 → 4 53.8 s; Destination Zergling 41.9 / 42.9 s, 2.8 s; Fighting
+  Spirit Zergling 37.0–45.9 s, 4.2 s; Octopus (8 starts, 256 × 256) 56 walks 15.9 s; Sapphire Isles and Archipelago
+  every pair apart, ~3 s.
+- **Not built**: an MCP tool (`map_rush`); the path itself (the runner keeps a point every 64 frames and does not send
+  it); several units in one run; the editor's own Walkability numbers are the same code but not compared here.
+
 ## A map's picture: `map preview` (`cli/src/preview.ts`, `paint.ts`, `png.ts`, `gamefiles.ts`) — 2026-11-07
 
 `scmjs map preview <map> [--out p.png|-] [--scale n] [--width cols] [--no-units] [--blocks] [--starcraft] [--json]`.
@@ -693,6 +783,81 @@ is the comparison's (1 when different), picture or not. Overview unchanged.
   must see a replay: the stub file is written with a real header? no — the test calls through a temp `.rep` only where
   a real one is on the machine, `describe.skipIf`), `map_preview` against the copy of the game (`skipIf(!findGameCopy)`),
   the no-copy failure as `isError`. `tests/cli-replaymap.test.ts` covers `writeReplayMap` with a stub replay.
+
+## `map play`: a lobby from a map (`cli/src/open.ts`) — 2026-11-07
+
+- **The same hand-over as `map open`, to the play page.** `handOver(input, url, {lobby, onMessage, onAddress, timeout,
+  what})`: the loopback page posts `scmjs.open {files, lobby: true}` on `scmjs.ready`, and **forwards every other
+  `scmjs.*` message** the opened page posts to `POST /<token>/message` (string fields only); `scmjs.taken` ends the
+  wait, the rest go to `onMessage`. The old `/taken` route went; `map open` goes through the same path. The play
+  page's half is scm-sim's `web/handoff.ts` (jeany55/scm-sim#44): `scmjs.waiting {reason: "files" | "sign-in",
+  message}`, `scmjs.invite {link, invite, name}` as soon as `POST /v1/games` answered, `scmjs.error {message}`
+  (with `lobby`, the page keeps the problem on screen and a later Invite Players there still sends `invite` +
+  `taken`, so the command keeps waiting rather than exits), then `scmjs.taken`. Origin rule as the editor's:
+  loopback or the page's own origin; **scmjs.dev/play must send no Cross-Origin-Opener-Policy header** (it does not).
+- `playInLobby(input, {play, live, onAddress, timeout})` → `LobbyOutcome {link, invite, name, waited[], error}`;
+  the command prints the link with `live`, exits 1 with the page's error when no link came. Default page
+  `PLAY_PAGE_URL` = scmjs.dev/play, `SCMJS_PLAY_URL`/hidden `--play` for a dev server. Five-minute wait (a sign-in
+  and a game-files download may be on the way). Needs no `scmjs login`: the page signs in itself.
+- **Verified by hand** against scm-sim's `play-handoff` branch: vite on 5312 (`?relay=http://localhost:8799&setup=` —
+  a page a script drives seats nobody without `setup`), `scripts/relay.ts --port 8799`, headless Chromium
+  (`~/.cache/scmjs-headless-libs`) opening the command's loopback page: ready → invite
+  (`http://localhost:5312/?relay=…&game=invite1x4hunfg`) → taken, the relay listing the game in `lobby` state.
+  **Trap:** a python `str.replace` of the page's script with no `assert` silently left the old page in — the symptom
+  was the old "Opened in the editor" text and a 404 on `/taken`; check the replacement applied.
+- `tests/cli-play.test.ts` (3): a stand-in page reads the loopback page and posts the messages; the error-then-retry
+  path; the timeout.
+
+## Maps from scmscx.com: `map fetch` (`cli/src/scmscx.ts`, `fetch.ts`) — 2026-11-07
+
+`scmjs map fetch <words…> [--limit n] [--json]` lists the best matches; `--id <id|scmscx.com/map/<id>>` or `<words…>
+--first` downloads one `[--out file|folder|-] [--force] [--open]`. **The fourth network call** (with `about`/`doctor`'s
+npm ask and the engine fetch), only when the command is run; nothing cached.
+
+- **The site has no documented API.** These are the routes its own pages use; the editor's plugin
+  (`~/github/plugin-scm-scx/client.ts`, through a Cloudflare forwarder for want of CORS) and scm-server
+  (`src/scmscx.ts`) use the same. Node calls `https://scmscx.com` directly. **Verified with curl on 2026-11-07:**
+  - `GET /api/uiv2/search/{words}` (words `encodeURIComponent`ed in the path; `?offset=N` pages, `sort=` defaults to
+    relevancy) → 200 `{ maps: [{ id, filename, scenario_name, last_modified, uploaded_time }], total_results }`, **a
+    row per file name** (the same id repeats), 300 a page; "lost temple" → 2,918 rows. No match → `{maps: [],
+    total_results: 0}`. The rows have no size, tileset or players.
+  - `GET /api/uiv2/map_info/{id}` → `{ scenario, scenario_description, player_owners[12] (6 human, 5 computer),
+    player_side, forces, wavs, processing, internal_id, meta: { mpq_hash, mpq_size, chk_size, chkhash, downloads, views,
+    uploaded_by, uploaded_time, last_downloaded, last_viewed }, properties: { width, height, tileset (ERA), ver,
+    triggers, units, doodads, … } }` (~0.27 s). **An unknown or malformed id is 500** "Something went wrong :)", not 404.
+  - `GET /api/uiv2/filenames2/{id}` → `[{ filename, modified_time }]`, oldest first, names repeat per time.
+  - `GET /api/uiv2/minimap/{id}` → PNG bytes (served as `application/octet-stream`); not used here.
+  - `GET /api/maps/{mpq_hash}` → the archive, `application/octet-stream`, `cache-control: no-store`, no
+    content-length over HTTP/2; size = `meta.mpq_size` (175,785 for B8V7fdyj). Unknown hash → 404, empty body.
+- **`scmscx.ts` is the only file that knows the site** (`ROUTES`, one line each with its shape): `get` = fetch with
+  `user-agent: scmjs/<version> (+https://docs.scmjs.dev/cli/)` and an AbortController whose 10 s timer is **reset on
+  each body chunk** (a slow line downloading a big map is not cut off; a stalled one is). Errors are CliError exit 1:
+  "<host> did not answer within 10 seconds", "could not be reached (ECONNREFUSED|ENOTFOUND…)" (undici's `cause.code`),
+  "answered 503 Service Unavailable", "has no such map" (404, and 500 on map_info), "not JSON". `base`/`timeout`/
+  `fetch` are options for the tests only — no environment variable points it elsewhere.
+- **The search** merges rows by id (name = control bytes stripped, else the file name) and asks `map_info` for the
+  first `--limit` (default 10, max 50 — one page of 300 rows always covers it; no paging), **four at a time**; a row
+  whose details fail stays, blank. Table: Name (cut to fit, 24–48 columns), Size, Tileset (`TILESETS[era & 7]`),
+  Players (humans, `+ n computer`), Downloads (`meta.downloads`; "uploaded N times" is not something the site counts —
+  filenames2's length is names × times seen, not uploads), Id. No match → exit 1, as `map find`.
+- **The download** (`fetchMap`): `map_info` + filenames2 → the name = **the first file name the site lists** (oldest,
+  usually the original), else the scenario name, else the id, through `safeFileName` (controls dropped, `<>:"/\|?*`
+  → `_`, leading dots and trailing dots/spaces off — so `../x` is `_x` —, Windows device names prefixed `_`, 120
+  characters, `.scm`/`.scx` added by VER ≥ 205 when missing). `--out`: `-`, an existing folder or one ending in `/`
+  (joined with the name), else the file. **The exists check comes before the bytes are fetched** (exit 2, `--force`).
+  Bytes without the MPQ magic → "not a map (n B, no archive header)"; then `loadMapInput` (`openMapBytes`) — a
+  failure is "not a map this can read"; nothing is written either way. Then `writeOutput` (the pipes' writer), and
+  the lines are `map info`'s first ones (title, Map, File) + From (page, uploader, downloads) + "Written to", via
+  `say` (stderr when `--out -`). `--json` with `--out -` and `--open` with `--out -` are refused (exit 2); `--out`,
+  `--force`, `--open` without `--id`/`--first` too. `--open` = `openInScmjs` on the written file.
+- **Measured** by hand: the search with ten details 0.6 s from WSL; four maps downloaded in all while building it.
+- `tests/cli-fetch.test.ts` (11 + 1 live): a `http.createServer` stand-in (search JSON with repeated ids, map_info,
+  filenames2, ums.scx's bytes, HTML, an MPQ magic with nothing behind it, 500, 503, a route that never answers, a
+  download that stalls after 100 bytes, a closed port), the user agent, naming, `-` to a `PassThrough`, refusals.
+  `SCMJS_LIVE=1 npx vitest run tests/cli-fetch.test.ts` runs the live one (search 3 + one download).
+- Not built: sort orders and the site's filters (tileset, size, players — `searchPath` in the plugin has them all),
+  `/api/uiv2/random`, the minimap in the terminal (`map preview` needs the game's tileset; the site's PNG could be
+  shown with `paint.ts`), an MCP tool, a progress line for a big download, paging past the first 300 rows.
 
 ## Opening (`cli/src/open.ts`)
 

@@ -57,6 +57,7 @@ when there is a newer version.
 | `scmjs map share <map>` | A link to the map on scmjs.dev: a copy anyone can open, or with `--edit` a link to edit it together |
 | `scmjs replay info <replays…>` | Who played, on which map, for how long and at what APM |
 | `scmjs replay map <replay>` | The map the replay was played on, written out as a map file |
+| `scmjs replay share <replay>` | A link to the replay on scmjs.dev, which anyone opens to watch it in the editor |
 | `scmjs replay open <replay>` | Opens the replay in scmJS, to watch and analyse |
 | `scmjs replay watch <replay>` | Plays the replay in the terminal: the minimap as the game goes, each player's figures, the chat |
 | `scmjs plugin new <name>` | A plugin to start from, set up to type-check, test, build and publish |
@@ -701,6 +702,14 @@ scmjs.dev's own words. Nothing else of the command talks to scmjs.dev.
 | `SCMJS_SESSION` | Another file for the session |
 | `SCMJS_SERVER` | Another server than `https://api.scmjs.dev`, such as one of your own; its links carry its address for the editor |
 
+`scmjs replay share game.rep` does the same for a replay: it is stored on your account (My
+Maps ▸ Replays; up to 8 MB each, counted with your maps) and the command prints
+`https://scmjs.dev/editor/replay/<token>`, which anyone opens to watch it in the editor's
+replay viewer, with a card showing the map and the players where links get one. The map's
+picture on the card is drawn from the map the replay carries, when your copy of the game
+is here; `--note` adds a note, and the same replay shared again gives the link it has.
+
+
 ## For AI tools
 
 `scmjs mcp` speaks the [Model Context Protocol](https://modelcontextprotocol.io) on
@@ -953,6 +962,7 @@ from a clone with `npm run cli -- <command>`, or build it with `npm run build:cl
 | `cli/src/completion.ts` | The bash, zsh and fish scripts, generated from the command tree |
 | `cli/src/mcp.ts` | The MCP server: each tool a command's functions, its text and JSON as the result |
 | `cli/src/replaymap.ts` | The replay's scenario written out as a map file |
+| `cli/src/replayshare.ts` | A replay stored on the account and linked, with the map's picture for the card |
 | `cli/src/open.ts` | Finding the desktop app, and handing a file to the editor in a browser |
 | `cli/src/account.ts` | The scmjs.dev sign-in through a page on the loopback address, the session file, and the account |
 | `cli/src/share.ts` | A map saved to the account and linked, or opened for editing together, with its facts and picture |

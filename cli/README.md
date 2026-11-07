@@ -15,6 +15,7 @@ scmjs map share ridge.scx           # a scmjs.dev link anyone can open a copy wi
 scmjs replay info game.rep          # players, races, APM, map, length
 scmjs replay watch game.rep         # the replay played in the terminal
 scmjs replay map game.rep           # the map it was played on, written out beside it
+scmjs replay share game.rep         # a link anyone opens to watch it in the editor (scmjs login first)
 scmjs replay open game.rep          # watch it in scmJS: the desktop app, or the editor in your browser
 scmjs mcp                           # the map commands as an MCP server, for Claude Code and other AI tools
 scmjs doctor                        # what this computer has for each command

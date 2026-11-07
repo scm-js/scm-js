@@ -530,6 +530,63 @@ The user took the parent's first-slice proposal ("`map trace` and `map cost` sec
   cost: 0.025 ms a frame on average, 1.10 ms at frame 2 (83,787 records, 53,192 triggers, the program's start).
 - Not built: `--by-origin`/by-line cost for a TrigScript build (the editor has it); bot-run's `--every` wording reused as
   is; the campaign maps (engine). (The `doctor` line for the map runner came with `cli-doctor`.)
+
+## A map's picture: `map preview` (`cli/src/preview.ts`, `paint.ts`, `png.ts`, `gamefiles.ts`) — 2026-11-07
+
+`scmjs map preview <map> [--out p.png|-] [--scale n] [--width cols] [--no-units] [--blocks] [--starcraft] [--json]`.
+
+- **Split for reuse (the MCP server can return the PNG as image content):** `preview.ts`'s top half is pure —
+  `terrainPicture(scn, tileset, scale)` → RGBA, `resizePicture` (separable area average, fractional spans),
+  `placeMarks(scn, unitsDat, factor, w, h)` → `Mark[]` (boxes in picture pixels, kind start/building/unit/mineral/geyser,
+  colour, start label), `drawMarks`, and `mapPicture(map, {tileset, units}, {scale} | {width})` / `previewPng(...)` →
+  `{png, picture, marks, counts}`. `paint.ts` is the terminal (pure string functions of a picture + marks); `png.ts`
+  the encoder (RGB colour type 2 unless `alpha`, filter 0 every row, one IDAT from `deflateSync`, table CRC-32);
+  `gamefiles.ts` the copy: `openGameFiles(named)` → `GameFiles { read(member) }` over kascade (Remastered) or mopaq
+  (1.16.1: StarDat, BrooDat, patch_rt by name in any case, later wins), `readTileset` (`.vx4ex` first, else `.vx4`),
+  `readUnitsDat` (null on failure → each unit one tile). `previewMap(input, map, o, term, stdout)` is the command;
+  `term` (`terminalInfo()`: columns, depth truecolor/256/none, unicode, inline protocol) is a parameter so tests set it.
+- **Core exports added**: `loadTileset`, `megatileForTile`, `drawMegatile`, `MEGATILE_PX`, `Tileset`, `TilesetFiles`,
+  `decodeUnitsDat`, `UnitsDat`, `unitGeometry`, `UnitGeometry`, `displayColorHex` (COLR + Remastered CRGB, what the
+  editor's export uses rather than `PLAYER_COLORS` directly). docs/core.md has a row for them.
+- **Terrain**: each megatile is drawn once at 32 px into a scratch buffer and averaged to `scale × scale`
+  (`32/scale` px a side), cached by megatile id, then copied per tile — the editor's `FLAT_PX` mean colour is the
+  `scale 1` case. Id with no megatile (`megatileForTile` −1) is black as the editor draws it; megatile 0 is drawn
+  (black anyway). PNG scales are 1–32 powers of two; the terminal draws at the next one up from its pixels a tile and
+  reduces (`--scale` there may be a fraction: a column is one picture pixel, a row two).
+- **Marks** follow `mapImage.ts`'s minimap dots: units.dat placement box × factor, `max(1, round)`, centred with
+  `round(c − w/2)` (= `floor(c)` for a one-pixel dot, which the test pins), clamped inside; order resources →
+  buildings → units (bigger first) → start locations on top. Minerals `#5fd7ff` (the editor's), geysers `#3ddc84`.
+  A start location's box is its own placement size; framed (edge `round(min/8)`) with a 30% tint inside when ≥ 4 px
+  each way, solid below; in the terminal its number sits in the cell holding the box's middle (`labelCells`).
+- **Terminal**: width = `--width`, else `--scale × mapW`, else `min(columns − 1, 2 × mapW, (columns − 1) × mapW / mapH)`
+  — the last keeps a tall map within half the columns in rows. `▀` with fg = upper pixel, bg = lower; codes only when
+  they change; an odd last row has bg 49. 256: `ansi256` = nearer of the 6×6×6 cube (xterm's 0/95/135/…/255 steps)
+  and the 24 greys. **ASCII** (no colour, or `unicode` false): shades ` .:-=+*%@` stretched between the picture's 2nd
+  and 98th luma percentile (the first try used absolute luma and a jungle map was all dots), `#`/`o`/`$` marks, start
+  digits; coloured with fg codes where colour exists. kitty (`KITTY_WINDOW_ID`, `TERM=xterm-kitty`) / iTerm2
+  (`TERM_PROGRAM=iTerm.app`) on a TTY, not under `TMUX`/`STY`, get the PNG inline (kitty `f=100,a=T,q=2,c=cols` in
+  4096-byte base64 pieces; iTerm2 `]1337;File=inline=1;width=cols;preserveAspectRatio=1`), at the PNG scale ≥ 8 px a
+  column (cap 32); `--blocks` refuses it. **The inline path is tested by string only** — no kitty or iTerm2 here.
+- **Measured** (WSL, the Remastered copy on /mnt/c): kascade `Storage.open` ~190 ms, a tileset's five files ~50 ms
+  (vr4 3.5 MB the bulk), units.dat 3 ms; the copy opened and read ~230 ms in all; drawing a 128 × 128 map at 4 px + encoding the PNG ~22 ms. Whole command (node start
+  included) 0.43–0.50 s for the terminal and for a 512 px PNG; 0.83 s for 3072 px at scale 32 (3 MB PNG). So nothing is
+  cached on disk. A stand-in 1.16.1 copy (StarDat/BrooDat written with mopaq from the Remastered files) gave a PNG
+  **byte-identical** to the Remastered one, 0.23 s; a real 1.16.1 copy reads its archives whole (`readFileSync`, the
+  real StarDat is tens of MB) — not measured, there is none on this machine.
+- **Traps**: `tests/maps/*` have **no terrain** (MTXM all 0 = megatile 0, black) — their preview is black ground with
+  the marks, which is right; `map new` maps have DIRT ids and draw as ground. `gameCopyKind` wants `StarDat.mpq` /
+  `BrooDat.mpq` spelled so (existsSync is case-sensitive on Linux), while `classicArchives` takes any case — a copy
+  with capitals is not found by `findGameCopy` there (not changed here; engine.ts is shared). The `--units` option is
+  hidden beside `--no-units` (commander keeps `units` undefined unless one is given; `!== false` is the test).
+- Tests: `tests/cli-preview.test.ts` (14): PNG chunks/CRC/inflate both colour types; half blocks 24-bit and 256 from a
+  known picture; `ansi256` points; ASCII with marks and a number; the start number's cell; inline protocols; widths;
+  terrain at 1/4/32 from a made-up tileset; marks placed (unit at map px → pixel and cell); a PNG's IHDR; a stand-in
+  1.16.1 copy built with mopaq (order, case, later archive's palette wins, missing tileset) and the command end to end
+  through it; option refusals before the copy is looked for; and `describe.skipIf(!findGameCopy)` the real copy
+  (badlands megatiles, units.dat's command centre 128 wide, ums.scx in the terminal and as a PNG to a stream).
+- Not built: start-location numbers inside the PNG (no font), sprites/doodads' overlays, fog, locations, a `doctor`
+  line naming this command, the MCP tool (the pure functions are ready for it).
+
 ## Opening (`cli/src/open.ts`)
 
 - **Desktop app**: `SCMJS_APP`, else the installers' places (Windows `%LOCALAPPDATA%\Programs\scmJS\scmJS.exe` and

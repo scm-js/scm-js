@@ -69,6 +69,13 @@ export { DEFAULT_PLACEMENT, type PlacementOptions } from "../../src/editor/place
 // The flat ground a new map is filled with: the tileset's own tiles when it is loaded, the base-ground ids without it (as the editor does without game data).
 export { baseTerrain, flatTerrain, DIRT, type BaseTerrain, type TerrainFill } from "../../src/formats/tileset/terrain";
 
+// ── The game's own files, decoded ──
+// The library carries none of them: these read what a person brings from their own copy of the game (`scmjs map preview`).
+export { loadTileset, megatileForTile, drawMegatile, MEGATILE_PX, type Tileset, type TilesetFiles } from "../../src/formats/tileset/decode";
+export { decodeUnitsDat, type UnitsDat } from "../../src/formats/dat/dat";
+export { unitGeometry, type UnitGeometry } from "../../src/editor/units";
+export { displayColorHex } from "../../src/data/players";
+
 // ── Names and tables ──
 export { TILESETS, TILESET_BY_ID, MAP_SIZES, type TilesetId, type TilesetInfo } from "../../src/data/tilesets";
 export { UNIT_NAMES, UNIT_TYPE_COUNT, START_LOCATION, unitName, UPGRADE_NAMES, TECH_NAMES, upgradeName, techName, type RaceKey } from "../../src/data/units";

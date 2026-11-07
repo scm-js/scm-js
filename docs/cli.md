@@ -53,6 +53,7 @@ when there is a newer version.
 | `scmjs bot run <bot> <map>` | Plays the bot against the game's computers on the map, with no page |
 | `scmjs doctor` | What this computer has for each command: TypeScript, Docker, StarCraft, the desktop app, and the command for each thing missing |
 | `scmjs about` | This version and whether there is a newer one, who made it, the desktop app and Docker if they are installed, and where the docs and source are |
+| `scmjs mcp` | The map commands as an MCP server, for Claude Code and other AI tools on your computer |
 | `scmjs completion <shell>` | A completion script for bash, zsh or fish |
 
 Commands that take several files take a pattern too: `scmjs map check *.scx`. A file that
@@ -579,6 +580,38 @@ scmjs completion zsh > ~/.zsh/completions/_scmjs       # a folder on $fpath
 scmjs completion fish > ~/.config/fish/completions/scmjs.fish
 ```
 
+## For AI tools
+
+`scmjs mcp` speaks the [Model Context Protocol](https://modelcontextprotocol.io) on
+standard input and output, so an AI tool that runs on your computer, such as Claude Code,
+Cursor or VS Code, can work on your maps with the same code these commands use. It does
+not go on the network: the tool starts `scmjs mcp` as a child process in your maps folder
+and talks to it over the pipe, and the paths it gives are files in that folder.
+
+With Claude Code, once, in the folder your maps are in:
+
+```sh
+claude mcp add scmjs -- npx -y @scm-js/cli mcp
+```
+
+Other tools take the same thing as JSON in their MCP settings:
+
+```json
+{ "mcpServers": { "scmjs": { "command": "npx", "args": ["-y", "@scm-js/cli", "mcp"] } } }
+```
+
+The tool then has `map_info`, `map_check`, `map_dump`, `map_find`, `map_diff`,
+`map_triggers_export` and `map_triggers_import`, `map_strings_export`,
+`map_strings_import` and `map_strings_prune`, `map_set`, `map_resize`, `map_new`,
+`map_build`, `map_run` and `replay_info`: each the command of the same name, taking the
+same arguments by name and answering with the command's text and its `--json` data. A map
+reads as the editor reads it, so what the model is told is what the editor would show, and
+triggers travel as the [trigger window's text form](triggers.md), which the model can edit
+and import back. Tools that change a map write over it unless given `out`, the same as the
+commands, so keep your maps in git or hand the tool copies. `map_run` runs a plugin, which
+is code, with your privileges, as `scmjs map run` does; the tool asks you before it calls
+anything, and you can leave that one unapproved.
+
 ## In scripts
 
 - `--json` prints what a command found as JSON: one object for one file, a list for
@@ -612,6 +645,7 @@ from a clone with `npm run cli -- <command>`, or build it with `npm run build:cl
 | `cli/src/run.ts`, `src/plugins/headless.ts` | A plugin run over a map: the editor's plugin host with a store, a document and no page, its status, toasts and log reported instead of shown |
 | `cli/src/build.ts` | The TrigScript build: finding TypeScript, compiling against the map's names, applying the block, laying the programs in and packing the file |
 | `cli/src/completion.ts` | The bash, zsh and fish scripts, generated from the command tree |
+| `cli/src/mcp.ts` | The MCP server: each tool a command's functions, its text and JSON as the result |
 | `cli/src/open.ts` | Finding the desktop app, and handing a file to the editor in a browser |
 | `cli/src/bot.ts` | Running the bot toolchain's image in the bot's folder |
 | `cli/src/botrun.ts` | A bot's game with no page: the engine fetched into the cache, the copy of the game found, scm-sim's runner run and its lines worded |

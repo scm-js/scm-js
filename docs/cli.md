@@ -689,9 +689,11 @@ scmjs completion fish > ~/.config/fish/completions/scmjs.fish
 
 `scmjs mcp` speaks the [Model Context Protocol](https://modelcontextprotocol.io) on
 standard input and output, so an AI tool that runs on your computer, such as Claude Code,
-Cursor or VS Code, can work on your maps with the same code these commands use. It does
-not go on the network: the tool starts `scmjs mcp` as a child process in your maps folder
-and talks to it over the pipe, and the paths it gives are files in that folder.
+Cursor or VS Code, can work on your maps with the same code these commands use. The tool
+starts `scmjs mcp` as a child process in your maps folder and talks to it over the pipe,
+and the paths it gives are files in that folder. Nothing goes on the network except what
+the commands themselves fetch: the game engine the first time a map is run in the game,
+and npm's newest version for `doctor`.
 
 With Claude Code, once, in the folder your maps are in:
 
@@ -708,14 +710,23 @@ Other tools take the same thing as JSON in their MCP settings:
 The tool then has `map_info`, `map_check`, `map_dump`, `map_find`, `map_diff`,
 `map_triggers_export` and `map_triggers_import`, `map_strings_export`,
 `map_strings_import` and `map_strings_prune`, `map_set`, `map_resize`, `map_new`,
-`map_build`, `map_run` and `replay_info`: each the command of the same name, taking the
-same arguments by name and answering with the command's text and its `--json` data. A map
-reads as the editor reads it, so what the model is told is what the editor would show, and
-triggers travel as the [trigger window's text form](triggers.md), which the model can edit
-and import back. Tools that change a map write over it unless given `out`, the same as the
-commands, so keep your maps in git or hand the tool copies. `map_run` runs a plugin, which
-is code, with your privileges, as `scmjs map run` does; the tool asks you before it calls
-anything, and you can leave that one unapproved.
+`map_build`, `map_run`, `map_trace`, `map_cost`, `replay_info` and `doctor`: each the
+command of the same name, taking the same arguments by name and answering with the
+command's text and its `--json` data. A map reads as the editor reads it, so what the
+model is told is what the editor would show, and triggers travel as the [trigger window's
+text form](triggers.md), which the model can edit and import back. Tools that change a map
+write over it unless given `out`, the same as the commands, so keep your maps in git or
+hand the tool copies. `map_run` runs a plugin, which is code, with your privileges, as
+`scmjs map run` does; the tool asks you before it calls anything, and you can leave that
+one unapproved.
+
+`map_trace` and `map_cost` run the map in the game as `scmjs map trace` and `map cost` do,
+so they need your copy of StarCraft and fetch the engine the first time. A run takes a few
+seconds; a trace runs at most ten minutes of play, a cost at most 200 seconds. `doctor`
+tells the model whether the game and the engine are there and what you would need to
+install, so it can say so rather than fail. When the game is not in one of the usual
+places, the model can pass its folder as `starcraft`, or you can set `SCMJS_STARCRAFT` in
+the tool's MCP settings.
 
 ## In scripts
 

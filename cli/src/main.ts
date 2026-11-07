@@ -647,8 +647,9 @@ program.command("mcp").description("these commands as an MCP server, for AI tool
 Speaks the Model Context Protocol on standard input and output, so an AI tool that runs on this computer (Claude
 Code, Cursor, VS Code, …) can read, check, search, compare and change maps with the same code these commands use:
 map_info, map_check, map_dump, map_find, map_diff, map_triggers_export|import, map_strings_export|import|prune,
-map_set, map_resize, map_new, map_build, map_run and replay_info. Paths are files on this computer, relative to the
-folder the tool started it in. Claude Code, in your maps folder:
+map_set, map_resize, map_new, map_build, map_run, map_trace, map_cost, replay_info and doctor. map_trace and map_cost
+need a copy of StarCraft here, as the commands do; doctor says whether there is one. Paths are files on this
+computer, relative to the folder the tool started it in. Claude Code, in your maps folder:
   claude mcp add scmjs -- npx -y @scm-js/cli mcp
 Anything else takes the same thing as JSON:
   { "mcpServers": { "scmjs": { "command": "npx", "args": ["-y", "@scm-js/cli", "mcp"] } } }`)

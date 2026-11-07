@@ -1688,6 +1688,107 @@ say so rather than fail. When the game is not in one of the usual places, the mo
 pass its folder as `starcraft`, or you can set `SCMJS_STARCRAFT` in the tool's MCP
 settings.
 
+### TrigScript in your text editor
+
+`scmjs lsp` is a language server for [TrigScript](trigscript.md): it speaks the Language
+Server Protocol on standard input and output, so VS Code, Neovim, Helix or any editor with
+an LSP client can check a script as you type, outside the editor's TrigScript window. It
+gives what the window gives:
+
+- the errors `scmjs map build` would stop on, TypeScript's and TrigScript's own, checked
+  against the map's names, as you type and when you save;
+- completions: the script's own names, the standard library's, a library's exports,
+  keywords, and after `locations.`, `units.`, `switches.` or `players.` what the map has;
+- a hover with the signature and doc comment, what a program's variable holds, and which
+  of the map's things a name is (`locations.Nest` is location 2: 10 × 10 tiles at 48, 6);
+- go to definition, into the script's other files, a library's module and the standard
+  library's (`trigscript/fog`);
+- the outline of a file.
+
+A script is the `trigscript/` folder of a map unpacked with
+[`scmjs map unpack`](#the-archive-as-a-folder), where its files are kept at their paths in
+the archive. The map's locations, switches, unit names and sounds are read from
+`staredit/scenario.chk` beside it, and read again when it changes. The copies of other
+plugins' libraries the map keeps are in `trigscript/@libraries/`. So the round trip is:
+
+```sh
+scmjs map unpack ridge.scx            # ridge/trigscript/main.ts, ridge/staredit/scenario.chk, …
+# edit ridge/trigscript/*.ts in your editor
+scmjs map pack ridge                  # back into ridge.scx
+scmjs map build ridge.scx --test      # the triggers applied and the programs built, as Save does
+```
+
+Any other folder called `trigscript` is a script too, checked against the names every map
+has. For a script kept somewhere else, `--map` names the map whose names it uses: a map
+file, or an unpacked map's folder. With a map file, a `.ts` file belongs to the nearest
+folder above it with a `main.ts`. Files that are not part of a script get nothing from the
+server, so it can be on for every TypeScript file.
+
+The server needs TypeScript, as `map build` does: in the maps folder's project, or
+installed globally. Install the command once rather than running it through `npx`, so the
+editor starts it quickly:
+
+```sh
+npm install -g @scm-js/cli typescript
+```
+
+**VS Code.** TrigScript's repository has a small extension in
+[`editors/vscode/`](https://github.com/scm-js/plugin-trigscript/tree/main/editors/vscode)
+that starts the server for the files under a `trigscript/` folder; its README says how to
+install it. VS Code's own TypeScript checks the same files without TrigScript's names and
+marks `program`, `units` and the rest as unknown, so turn it off for the maps folder in
+`.vscode/settings.json`:
+
+```json
+{ "typescript.validate.enable": false }
+```
+
+**Neovim** (0.11 or later), in `init.lua`:
+
+```lua
+vim.lsp.config("scmjs", {
+  cmd = { "scmjs", "lsp" },
+  filetypes = { "typescript", "typescriptreact" },
+  root_markers = { "archive.json" },
+})
+vim.lsp.enable("scmjs")
+```
+
+On an older Neovim, `vim.lsp.start` does the same from an autocommand:
+
+```lua
+vim.api.nvim_create_autocmd("FileType", {
+  pattern = { "typescript", "typescriptreact" },
+  callback = function(args)
+    local root = vim.fs.root(args.buf, "archive.json")
+    if root then vim.lsp.start({ name = "scmjs", cmd = { "scmjs", "lsp" }, root_dir = root }) end
+  end,
+})
+```
+
+If `ts_ls` also runs on these files, it reports TrigScript's names as unknown; leave the
+maps folder out of its `root_dir`.
+
+**Helix**, in a `.helix/languages.toml` in the maps folder, so it applies there only:
+
+```toml
+[language-server.scmjs]
+command = "scmjs"
+args = ["lsp"]
+
+[[language]]
+name = "typescript"
+language-servers = ["scmjs"]
+```
+
+**Other editors** take the same three things: the command `scmjs lsp`, standard input and
+output, and the TypeScript file types. Zed starts language servers only from its
+extensions, and there is no TrigScript extension for it yet.
+
+What the server says about each check goes to standard error, which an editor shows as the
+server's log: the script and the map it found, and how long each check took (about half a
+second for a script that imports the standard library).
+
 ### In scripts and pipes
 
 `--json` prints what a command found as JSON: one object for one file, a list for several.
@@ -1798,6 +1899,7 @@ gives its options.
 | [`scmjs doctor`](#checking-your-setup) | What this computer has for each command, and what is missing |
 | [`scmjs about`](#updating) | This version, whether there is a newer one, and the links |
 | [`scmjs mcp`](#ai-tools) | The map commands as an MCP server for AI tools |
+| [`scmjs lsp`](#trigscript-in-your-text-editor) | A TrigScript language server for your text editor: errors, completions, hovers, go to definition |
 | [`scmjs completion <shell>`](#shell-completion) | A completion script for bash, zsh or fish |
 
 ### Cheat sheet
@@ -1850,6 +1952,7 @@ from a clone with `npm run cli -- <command>`, or build it with `npm run build:cl
 | `cli/src/build.ts` | The TrigScript build: finding TypeScript, compiling against the map's names, applying the block, laying the programs in and packing the file |
 | `cli/src/completion.ts` | The bash, zsh and fish scripts, generated from the command tree |
 | `cli/src/mcp.ts` | The MCP server: each tool a command's functions, its text and JSON as the result |
+| `cli/src/lsp.ts` | The language server: which files are a script and which map names them, the protocol round TrigScript's language service (`plugins/trigscript/language.ts`) |
 | `cli/src/replaymap.ts` | The replay's scenario written out as a map file |
 | `cli/src/scmscx.ts`, `cli/src/fetch.ts` | scmscx.com's routes in one place, with the timeout and the errors; the search table, the file name made safe, the download opened before it is written |
 | `cli/src/open.ts` | Finding the desktop app, handing a file to the editor in a browser, and a lobby asked of the play page the same way |

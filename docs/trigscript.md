@@ -1057,6 +1057,12 @@ compiles without writing, so a map kept in git can be built and checked where it
 requests are. The [command line guide](cli.md#building-a-trigscript-map) has the details,
 and what it needs installed.
 
+To write a script in VS Code, Neovim or another text editor, unpack the map with
+`scmjs map unpack` and run `scmjs lsp` as the editor's language server: the script's
+errors, completions of the map's names, hovers and go to definition are the ones this
+window has. The [command line guide](cli.md#trigscript-in-your-text-editor) has the setup
+for each editor.
+
 The script's files and a record of the last apply live in the map archive under
 `trigscript\` (`main.ts`, any other files, and `build.json`), so they travel with the
 `.scx`. The [Save dialog](guide.md#saving) lists them with the archive's other files, each

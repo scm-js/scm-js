@@ -221,6 +221,7 @@ packages:
 | [MCP TypeScript SDK](https://github.com/modelcontextprotocol/typescript-sdk) | `scmjs mcp`: the Model Context Protocol server | MIT, copyright 2024 Anthropic, PBC |
 | [Zod](https://github.com/colinhacks/zod) and [zod-to-json-schema](https://github.com/StefanTerdell/zod-to-json-schema) | the MCP tools' input schemas | MIT, copyright 2025 Colin McDonnell; ISC, copyright 2020 Stefan Terdell |
 | [Ajv](https://github.com/ajv-validator/ajv) with ajv-formats, fast-deep-equal, fast-uri and json-schema-traverse, through the SDK | JSON Schema validation | MIT, copyright 2015–2021 Evgeny Poberezkin; fast-uri BSD-3-Clause, copyright Gary Court and the Fastify team |
+| [vscode-languageserver](https://github.com/microsoft/vscode-languageserver-node) with vscode-languageserver-protocol, vscode-languageserver-types, vscode-jsonrpc and vscode-languageserver-textdocument | `scmjs lsp`: the Language Server Protocol server | MIT, copyright Microsoft Corporation |
 
 Its build (`scripts/build-cli.mjs`) writes their license texts into
 `cli/dist/THIRD-PARTY-NOTICES.txt`, which the published package carries. The list is read

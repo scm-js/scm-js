@@ -13,7 +13,7 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
-const LICENSE_NAMES = ["LICENSE", "LICENSE.txt", "LICENSE.md", "LICENCE", "LICENCE.txt", "license", "license.txt", "license.md"];
+const LICENSE_NAMES = ["LICENSE", "LICENSE.txt", "LICENSE.md", "LICENCE", "LICENCE.txt", "License.txt", "license", "license.txt", "license.md"];
 
 function licenseFileIn(dir) {
   for (const name of LICENSE_NAMES) {

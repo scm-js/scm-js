@@ -181,22 +181,22 @@ scmjs map generate "(4)Crossing.scx" --players 4 --tileset desert --seed 2026
 ```
 ✔ (4)Crossing.scx: 128 × 128 · Desert · 4 players · seed 2026 · 32 KB
   Laid out   mirrored both ways · open · 4 ramps · 2 free bases
-  Balance    walks the symmetry makes equal differ by 2.4% start to start, 1.8% to the free bases
+  Balance    walks the symmetry makes equal differ by 1.5% start to start, 5.0% to the free bases
   Check Map  no errors or warnings
-  Layout     the first layout tried · StarCraft: Remastered 1.23.10.13515
+  Layout     layout 2 of the 2 tried · StarCraft: Remastered 1.23.10.13515
 
     Player  Main                  Natural               Minerals  Gas     To the middle
-    1       9 × 1,500 + 1 geyser  7 × 1,500 + 1 geyser  24,000    10,000  72 tiles
+    1       9 × 1,500 + 1 geyser  7 × 1,500 + 1 geyser  24,000    10,000  70 tiles
     2       9 × 1,500 + 1 geyser  7 × 1,500 + 1 geyser  24,000    10,000  71 tiles
-    3       9 × 1,500 + 1 geyser  7 × 1,500 + 1 geyser  24,000    10,000  73 tiles
+    3       9 × 1,500 + 1 geyser  7 × 1,500 + 1 geyser  24,000    10,000  71 tiles
     4       9 × 1,500 + 1 geyser  7 × 1,500 + 1 geyser  24,000    10,000  70 tiles
 
   Ground distance start to start, in tiles (a straight line in brackets)
         P1         P2         P3         P4
-    P1  –          143 (120)  96 (88)    122 (82)
-    P2  143 (120)  –          123 (82)   93 (88)
-    P3  96 (88)    123 (82)   –          143 (120)
-    P4  122 (82)   93 (88)    143 (120)  –
+    P1  –          141 (119)  93 (88)    123 (80)
+    P2  141 (119)  –          124 (80)   92 (88)
+    P3  93 (88)    124 (80)   –          141 (119)
+    P4  123 (80)   92 (88)    141 (119)  –
 ```
 
 **It needs your copy of StarCraft**, Remastered or 1.16.1, found as `map preview` finds it

@@ -6,7 +6,7 @@ import { mkdirSync, mkdtempSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { doctorJson, engineCheck, mcpCheck, MCP_ADD, readiness, readyLines, runnersIn, type Check } from "../cli/src/doctor";
+import { doctorJson, engineCheck, mcpCheck, MCP_ADD, readiness, readyLines, runnersIn, shortPath, type Check } from "../cli/src/doctor";
 import type { RunnerKind } from "../cli/src/engine";
 import { columns, visible } from "../cli/src/ui";
 
@@ -89,12 +89,14 @@ describe("scmjs doctor: what is ready", () => {
     expect(Object.values(by([{ what: "Node", state: "bad", detail: "" }]))).toEqual(Array(9).fill("Node"));
   });
 
-  it("fits the summary in 80 columns, in the JSON too", () => {
-    const ready = readiness([{ what: "Docker", state: "warn", detail: "" }, { what: "TypeScript", state: "warn", detail: "" }, engine(["bot"])]);
-    const lines = readyLines(ready).map(visible);
-    expect(lines.length).toBeLessThanOrEqual(3);
+  it("lists only what is not ready, with the one thing it lacks, in 80 columns; the JSON has every group", () => {
+    const checks: Check[] = [{ what: "Docker", state: "warn", detail: "not found" }, { what: "TypeScript", state: "warn", detail: "not found" }, engine(["bot"])];
+    const lines = readyLines(readiness(checks), checks).map(visible);
+    expect(lines).toEqual(["  Not ready", "  ✖ map build       TypeScript not found", "  ✖ bot new|build   Docker not found", "  ✖ replay watch    no runner for it in the fetched engine", "  ✖ map trace|cost  no runner for it in the fetched engine"]);
     for (const l of lines) expect(columns(l), l).toBeLessThanOrEqual(80);
-    expect(lines.join(" ")).toContain("✖ bot new|build (Docker)");
+    expect(readyLines(readiness([engine(["bot", "replay", "map"])])).map(visible)).toEqual(["  ✔ Every command is ready on this computer."]);
+    expect(shortPath("/home/me/.cache/scmjs", 30, "/home/me")).toBe("~/.cache/scmjs");
+    expect(shortPath("/a/very/long/path/to/somewhere", 12, "/home/me")).toBe("…o/somewhere");
     const j = doctorJson({ checks: [engine(["bot"])], blocked: false });
     expect(j.ready.find((g) => g.commands === "replay watch")).toEqual({ commands: "replay watch", ok: false, lacks: "engine runner" });
     expect(j.checks[0].engine?.runners).toEqual(["bot"]);

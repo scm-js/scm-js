@@ -365,6 +365,16 @@ slice proposed: four thin layers on existing library code, plus a git recipe.
     (mtimes via `utimesSync`), a staged folder, the ready table from given checks, the 80-column fit, `~/.claude.json`
     variants in temp files.
 
+- **The look (2026-11-07, user: "it kinda just lists a whole bunch of stuff, hard to read")**: `printDoctor` is laid
+  out, the checks unchanged (`Check` gained `path`, additive). Node and scmjs are the **title line** when fine
+  (`scmjs 0.9.0 · the newest · Node v24 · linux x64`), rows only when not. Rows in two groups, `Tools` (TypeScript,
+  Docker, Desktop app, Claude Code) and `The game` (StarCraft, Game engine): mark, bold name, a short `valueOf` (the
+  detail without its path; the engine's build id; `scmJS.exe`), then the path dimmed via `shortPath` (home → `~`,
+  cut from the left to the terminal's columns). Fine-but-absent (`not installed`, `not found`, `scmjs mcp not added`)
+  gets a dim `·`, not a tick. Notes/fixes only under a row that is not ok (Claude Code: the add line alone). The
+  summary: one line when all ready, else `Not ready` + a line per group with `lackLine` (a few words; the fixes are in
+  the rows above). `readyLines(ready, checks)` and `printDoctor(r, width)` take what tests need.
+
 ## CI slice: check formats, info --table, diff --rev, set, resize, strings prune (`report.ts`, `edit.ts`) — 2026-11-07
 
 The second DX slice (the user's "go for it" on the second suggestion round), stacked on the first (#137's branch).

@@ -235,21 +235,24 @@ describe("scmjs doctor", () => {
     expect(visible(c.detail)).toBe("not fetched yet");
     expect(c.note).toContain("scmjs bot run");
   });
-  it("prints each check with its mark and fix, and the JSON without colour", () => {
+  it("prints the groups with a mark, a value and a fix where something is missing, and the JSON without colour", () => {
     const checks: Check[] = [
-      { what: "Node", state: "ok", detail: "v22.12.0" },
+      { what: "Node", state: "ok", detail: "v22.12.0 · linux x64" },
       { what: "TypeScript", state: "warn", detail: "not found", fix: "npm install typescript", note: "scmjs map build compiles with it." },
+      { what: "StarCraft", state: "ok", detail: "Remastered · /home/me/StarCraft", path: "/home/me/StarCraft" },
+      { what: "Desktop app", state: "ok", detail: "not installed", note: "the editor in your browser instead" },
     ];
-    const lines = plain(printDoctor({ checks, blocked: false }));
-    expect(lines[2]).toMatch(/^✔ Node +v22\.12\.0$/);
-    expect(lines[3]).toMatch(/^▲ TypeScript +not found$/);
-    expect(lines[4]).toBe("    scmjs map build compiles with it.");
-    expect(lines[5]).toBe("    npm install typescript");
-    // Nine groups wrap to three lines at 80 columns.
-    expect(lines.at(-4)).toBe("Ready on this computer");
-    expect(lines.at(-3)).toMatch(/^ {2}✔ map info\|check\|…/);
-    expect(lines.at(-1)).toMatch(/✔ map trace\|cost$/);
-    expect(plain(printDoctor({ checks: [{ what: "Node", state: "bad", detail: "v20" }], blocked: true }))).toContain("✖ Something blocks scmjs itself");
+    const lines = plain(printDoctor({ checks, blocked: false }, 100));
+    // Node and scmjs are the title when they are fine; a check that is fine but absent gets a quiet dot and no note.
+    expect(lines[0]).toBe("scmjs doctor · Node v22.12.0 · linux x64");
+    expect(lines.slice(1, 7)).toEqual(["", "  Tools", "  ▲ TypeScript   not found", "      scmjs map build compiles with it.", "      npm install typescript", "  · Desktop app  not installed"]);
+    expect(lines.slice(7, 10)).toEqual(["", "  The game", "  ✔ StarCraft    Remastered     /home/me/StarCraft"]);
+    expect(lines.slice(-2)).toEqual(["  Not ready", "  ✖ map build  TypeScript not found"]);
+    expect(plain(printDoctor({ checks: [{ what: "Node", state: "bad", detail: "v20" }], blocked: true }))).toContain("  ✖ Nothing runs until Node is updated.");
+    // Everything there: one line.
+    const all = plain(printDoctor({ checks: [{ what: "Node", state: "ok", detail: "v22" }, { what: "scmjs", state: "ok", detail: "1.0.0 · the newest" }], blocked: false }, 100));
+    expect(all[0]).toBe("scmjs 1.0.0 · the newest · Node v22");
+    expect(all.at(-1)).toBe("  ✔ Every command is ready on this computer.");
     const j = doctorJson({ checks: [{ what: "Node", state: "ok", detail: "\x1b[2mv22\x1b[0m" }], blocked: false });
     expect(j.checks[0].detail).toBe("v22");
   });

@@ -28,6 +28,8 @@ export interface Check {
   detail: string;
   fix?: string;
   note?: string;
+  /** Where the thing is (a folder or file), shown dimmed and shortened; `detail` carries it too for the JSON. */
+  path?: string;
   /** The game engine's check only: the folder looked in, the build found there (null: none fetched yet) and its runners. */
   engine?: { dir: string; build: string | null; runners: RunnerKind[] };
 }
@@ -58,7 +60,7 @@ export function typescriptCheck(cwd = process.cwd()): Check {
       if (pkg.name === "typescript") { version = pkg.version ?? ""; break; }
     } catch { /* not this folder */ }
   }
-  return { what: "TypeScript", state: "ok", detail: `${version || "found"}${pc.dim(` · ${path}`)}` };
+  return { what: "TypeScript", state: "ok", detail: `${version || "found"}${pc.dim(` · ${path}`)}`, path: dirname(dirname(path)) };
 }
 
 export function dockerCheck(): Check {
@@ -73,7 +75,7 @@ export function dockerCheck(): Check {
 export function starcraftCheck(): Check {
   try {
     const { folder, kind } = findGameCopy(undefined);
-    return { what: "StarCraft", state: "ok", detail: `${kind === "remastered" ? "Remastered" : "1.16.1"}${pc.dim(` · ${folder}`)}` };
+    return { what: "StarCraft", state: "ok", detail: `${kind === "remastered" ? "Remastered" : "1.16.1"}${pc.dim(` · ${folder}`)}`, path: folder };
   } catch (e) {
     if (!(e instanceof CliError)) throw e;
     return { what: "StarCraft", state: "warn", detail: "not found", fix: "scmjs bot run … --starcraft <folder>   (or SCMJS_STARCRAFT=<folder>)", note: "bot run, replay watch, map trace, map cost and map preview use your own installation's files." };
@@ -102,7 +104,7 @@ export function engineCheck(cache = cacheRoot(), at = process.env.SCMJS_PLAY_URL
     const runners = runnersIn(dir);
     const missing = KINDS.filter((k) => !runners.includes(k));
     return {
-      what, state: missing.length ? "warn" : "ok", detail: `the folder SCMJS_PLAY_URL names${pc.dim(` · ${dir}`)}`, engine: { dir, build: basename(dir), runners },
+      what, state: missing.length ? "warn" : "ok", detail: `the folder SCMJS_PLAY_URL names${pc.dim(` · ${dir}`)}`, path: dir, engine: { dir, build: basename(dir), runners },
       note: runnerNote(runners, missing),
       fix: missing.length ? `Stage a ${RUNNERS[missing[0]].file.source.split("(")[0].slice(1)}-<hash>.mjs there, or unset SCMJS_PLAY_URL to fetch from the play page` : undefined,
     };
@@ -119,7 +121,7 @@ export function engineCheck(cache = cacheRoot(), at = process.env.SCMJS_PLAY_URL
   return {
     what, state: missing.length ? "warn" : "ok",
     detail: `build ${build}${builds.length > 1 ? ` (the newest of ${builds.length})` : ""}${pc.dim(` · ${dir}`)}`,
-    engine: { dir: join(dir, build), build, runners },
+    path: dir, engine: { dir: join(dir, build), build, runners },
     note: runnerNote(runners, missing, true),
     fix: missing.length ? `${command} fetches ${missing.length > 1 ? "them" : "it"} once the play page has ${missing.length > 1 ? "them" : "one"}` : undefined,
   };
@@ -163,7 +165,7 @@ export function mcpCheck(config = join(homedir(), ".claude.json"), cwd = process
 export function desktopAppCheck(): Check {
   const app = findDesktopApp();
   return app
-    ? { what: "Desktop app", state: "ok", detail: app }
+    ? { what: "Desktop app", state: "ok", detail: app, path: app }
     : { what: "Desktop app", state: "ok", detail: pc.dim("not installed"), note: "scmjs map open and replay open use the editor in your browser instead; the app is at https://scmjs.dev/editor/#download" };
 }
 
@@ -220,27 +222,75 @@ export function doctorJson(r: { checks: Check[]; blocked: boolean }) {
   return { blocked: r.blocked, checks: r.checks.map((c) => ({ ...c, detail: visible(c.detail) })), ready: readiness(r.checks) };
 }
 
-/** The ready summary's lines: a mark and the commands each, as many to a line as fit in `width` columns. */
-export function readyLines(ready: Ready[], width = 80): string[] {
-  const items = ready.map((g) => (g.ok ? `${mark.ok} ${g.commands}` : `${mark.error} ${g.commands}${pc.dim(` (${g.lacks})`)}`));
-  const lines: string[] = [];
-  let line = "";
-  for (const item of items) {
-    if (line && columns(line) + 3 + columns(item) > width - 2) { lines.push(`  ${line}`); line = ""; }
-    line = line ? `${line}   ${item}` : item;
-  }
-  if (line) lines.push(`  ${line}`);
-  return lines;
+/** A path for the eye: the home folder as `~`, and cut from the left to `room` columns. */
+export function shortPath(path: string, room: number, home = homedir()): string {
+  let p = path.startsWith(home) ? `~${path.slice(home.length)}` : path;
+  if (columns(p) > room) p = `…${p.slice(Math.max(0, p.length - room + 1))}`;
+  return p;
 }
 
-export function printDoctor(r: { checks: Check[]; blocked: boolean }): string[] {
-  const lines = [`${pc.bold(pc.cyan("scmjs"))} ${pc.bold("doctor")}  ${pc.dim("what this computer has of what the commands need")}`, ""];
-  for (const c of r.checks) {
-    const m = c.state === "ok" ? mark.ok : c.state === "warn" ? mark.warn : mark.error;
-    lines.push(`${m} ${pc.bold(c.what.padEnd(12))} ${c.detail}`);
-    if (c.note) lines.push(pc.dim(`    ${c.note}`));
-    if (c.fix) lines.push(`    ${c.fix}`);
+/** What a not-ready group is missing, in a few words; the rows above carry what to do about it. */
+function lackLine(g: Ready, checks: Check[]): string {
+  if (g.lacks === "engine runner") return "no runner for it in the fetched engine";
+  const c = g.lacks ? checks.find((x) => x.what === g.lacks) : undefined;
+  return c ? `${c.what} ${visible(c.detail)}` : g.lacks ?? "";
+}
+
+/**
+ * The ready summary: one line when every command can run, else a line per group that cannot, with the one thing it
+ * lacks and what to do about it.
+ */
+export function readyLines(ready: Ready[], checks: Check[] = []): string[] {
+  const missing = ready.filter((g) => !g.ok);
+  if (!missing.length) return [`  ${mark.ok} ${pc.bold("Every command is ready on this computer.")}`];
+  const width = Math.max(...missing.map((g) => g.commands.length));
+  return [`  ${pc.bold("Not ready")}`, ...missing.map((g) => `  ${mark.error} ${g.commands.padEnd(width)}  ${pc.dim(lackLine(g, checks))}`)];
+}
+
+/** The groups the checks are shown in; a check that is fine and belongs in the title (Node, scmjs) is not a row. */
+const GROUPS: { title: string; whats: string[] }[] = [
+  { title: "Tools", whats: ["TypeScript", "Docker", "Desktop app", "MCP"] },
+  { title: "The game", whats: ["StarCraft", "Game engine"] },
+];
+/** The value column: the detail with its path taken out, in a few words. */
+function valueOf(c: Check): string {
+  if (c.what === "MCP") return c.detail.startsWith("registered") ? "scmjs mcp added" : visible(c.detail) === "not registered" ? "scmjs mcp not added" : visible(c.detail).replace(/^Claude Code /, "");
+  if (c.what === "Desktop app" && c.path) return basename(c.path);
+  if (c.what === "Game engine" && c.engine?.build) return c.engine.build;
+  const d = visible(c.detail);
+  return c.path && d.includes(" · ") ? d.slice(0, d.indexOf(" · ")) : d;
+}
+
+export function printDoctor(r: { checks: Check[]; blocked: boolean }, width = process.stdout.columns || 100): string[] {
+  const by = (what: string) => r.checks.find((c) => c.what === what);
+  const node = by("Node"), self = by("scmjs");
+  // The version and Node are the title when they are fine ("scmjs 0.9.0 · the newest · Node v24 · linux x64").
+  const [version, ...rest] = self ? visible(self.detail).split(" · ") : [];
+  const title = [self && self.state === "ok" ? `${pc.bold(pc.cyan("scmjs"))} ${pc.bold(version)}${rest.length ? pc.dim(` · ${rest.join(" · ")}`) : ""}` : pc.bold(pc.cyan("scmjs doctor")), node && node.state === "ok" ? pc.dim(`Node ${visible(node.detail)}`) : null].filter(Boolean).join(pc.dim(" · "));
+  const lines: string[] = [title, ""];
+  const marks: Record<CheckState, string> = { ok: mark.ok, warn: mark.warn, bad: mark.error };
+  const row = (c: Check) => {
+    // Fine, but not there (no desktop app, no Claude Code): a quiet dot rather than a tick.
+    const m = c.state === "ok" && /^not /.test(valueOf(c).replace(/^scmjs mcp /, "")) ? pc.dim("·") : marks[c.state];
+    const name = c.what === "MCP" ? "Claude Code" : c.what;
+    const head = `  ${m} ${pc.bold(name.padEnd(12))} ${valueOf(c).padEnd(14)}`;
+    const room = width - columns(head) - 2;
+    const tail = c.path && room > 12 ? pc.dim(shortPath(c.path, room)) : c.what === "Game engine" && c.engine?.runners.length ? pc.dim(`runners for ${joinAnd(c.engine.runners.map((k) => RUNNER_COMMANDS[k]))}`) : "";
+    lines.push(`${head}${tail ? ` ${tail}` : ""}`.trimEnd());
+    // What is wrong and what to do about it, under the row; Claude Code's "not added" is not wrong, so only the line to run.
+    if (c.state !== "ok") { if (c.note) lines.push(pc.dim(`      ${c.note}`)); if (c.fix) lines.push(`      ${c.fix}`); }
+    else if (c.what === "MCP" && c.fix) lines.push(`      ${pc.dim(c.fix)}`);
+  };
+  // Node and scmjs are rows only when something is wrong with them.
+  const first = [node, self].filter((c): c is Check => !!c && c.state !== "ok");
+  if (first.length) { for (const c of first) row(c); lines.push(""); }
+  for (const g of GROUPS) {
+    const rows = g.whats.map(by).filter((c): c is Check => !!c);
+    if (!rows.length) continue;
+    lines.push(`  ${pc.dim(g.title)}`);
+    for (const c of rows) row(c);
+    lines.push("");
   }
-  lines.push("", r.blocked ? `${mark.error} ${pc.bold("Something blocks scmjs itself")}` : pc.bold("Ready on this computer"), ...readyLines(readiness(r.checks)));
+  lines.push(...(r.blocked ? [`  ${mark.error} ${pc.bold("Nothing runs until Node is updated.")}`] : readyLines(readiness(r.checks), r.checks)));
   return lines;
 }

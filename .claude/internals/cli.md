@@ -630,6 +630,52 @@ The user took the parent's first-slice proposal ("`map trace` and `map cost` sec
 - Not built: start-location numbers inside the PNG (no font), sprites/doodads' overlays, fog, locations, a `doctor`
   line naming this command, the MCP tool (the pure functions are ready for it).
 
+## Where a map changed: `map diff --picture` (`cli/src/diffpicture.ts`) — 2026-11-07
+
+`scmjs map diff a b [--rev r] --picture [--out p.png|-] [--side-by-side] [--scale n] [--width cols] [--blocks]
+[--starcraft] [--json]`: options on the existing command, additive (no flag = the text form, unchanged). `--out` and
+`--side-by-side` imply `--picture`; `--scale/--width/--blocks/--starcraft` without it are refused (exit 2). Exit code
+is the comparison's (1 when different), picture or not. Overview unchanged.
+
+- **Pure top half, as preview.ts's**: `diffChanges(a, b)` (no graphics) → canvas = the larger map each way, a `TILE`
+  value per canvas tile (same / changed id / a only / b only / neither — **compared by position**, so a resize anchored
+  elsewhere than top-left shows everything changed), `unitChanges`, `locationChanges` by slot, counts, `bounds.tiles`
+  (changed ids only) and `bounds.all` (tiles + units + locations, in tiles). `changePicture(a, b, graphics, {scale |
+  width})` → `{picture, scale, marks, changes, diff}`; `sideBySide(a, b, {a, b graphics}, o)` → `a | changes | b`
+  (`a | b` for two tilesets) with the panels' marks offset, gap `GAP_COLOR` (`2 × scale` px, 4–32; 2 columns in the
+  terminal). `changePicture` **throws** on two tilesets; the command draws side by side then, with a note, and the
+  legend leaves the tiles out (ids of two tilesets mean nothing to each other; `--json` still has the count).
+- **Units**: `map diff`'s multiset (`unitKey`, now exported from diff.ts, the record minus `serial`), then each removed
+  unit paired with the nearest added one of the same `unitId` + `owner` within `MOVE_RADIUS` (4 tiles), nearest pairs
+  first (greedy over all candidates, sorted by distance then index): distance 0 = `changed` (edited in place), else
+  `moved`. So the legend's `+n −n` are smaller than the text diff's `Units +n −n`, which counts a move as both.
+  `diff.ts`'s `locations()` was split into the exported `locationChanges` (index + change) so the two agree.
+- **Drawing**: terrain at a whole PNG scale (`terrainPicture` of b, a's terrain for tiles only a has), unchanged tiles
+  darkened to `DIM` 0.6, changed tinted `TILE_COLOR` magenta at 0.6, one-side tiles striped (`band = max(2, s/2)` px
+  diagonals, white 0.55 / dimmed), `PAD_COLOR` where neither; fitted to a width by `resizePicture` like `mapPicture`.
+  Then landmarks = `placeMarks` over b's **kept** units filtered to start/mineral/geyser, with start locations and
+  geysers recoloured grey (`START_LANDMARK`, `GEYSER_LANDMARK`): the first PNG had preview's green geysers and red/green
+  slot frames, which read as added/removed. Changes on top: locations as outlines (`max(1, scale/8)`; changed = red
+  frame where it was if the box moved + yellow where it is; **Anywhere (63) never drawn**, though counted, since it
+  changes with every resize); units as filled boxes of the placement size but **at least two tiles** (`CHANGE_MIN`; at
+  one tile a marine was a 4 px dot on a 512 px PNG), a dark edge when ≥ 4 px, order removed → changed → moved → added;
+  a moved unit also gets a frame of its old box and a line between the boxes' middles.
+- **Terminal**: `halfBlocks` as preview; ASCII gets an **overlay** — `paint.ts#asciiShades` gained an optional
+  `overlay` map (cell → char + colour) applied last, and `sgr` is exported for the legend. Letters `A R M x / #`, none
+  of them a shade. `--side-by-side` in the terminal: three panels of `terminalWidth(W, H, room/3 + 1)` columns when ≥
+  `MIN_PANEL` (32), i.e. from ~101 columns; else the change picture alone and a dim line saying so; a header line names
+  the panels. kitty/iTerm2 get the PNG inline as preview does (`--blocks` refuses). `--json` = the `MapDiff` plus
+  `picture: DiffPictureReport` (counts, bounds, layout, size, copy, ms).
+- **Measured** (Crescent Moon 128 × 128, Remastered copy on /mnt/c): whole command 0.47–0.52 s (copy ~260 ms, drawing
+  ~40 ms) for the terminal, a 512 px PNG and the 1552 px side-by-side; the text diff alone 0.2 s.
+- Tests `tests/cli-diffpicture.test.ts` (12): pairing (nearest first, radius, owner, edited in place), tiles/bounds on a
+  resized canvas, the change picture at scale 1 and 4 from preview's made-up tileset (changed tile, the moved marine's
+  box, line and old frame, the dark edge, added/removed/location outline/stripes/pad), two tilesets refused + side by
+  side, ASCII overlay + legend, the command through a stand-in 1.16.1 copy with jungle and ice (option refusals, the
+  narrow fallback, three panels at 160 columns, the tileset note, a PNG to a stream), and the real copy (skipIf).
+- Not built: an MCP `map_diff` image (the pure functions are ready — `changePicture` + `encodePng`), labels inside the
+  PNG (no font), detecting a shifted resize (anchor) to compare tiles at the offset, sprites/doodads, a `doctor` row.
+
 ## `replay map`, and the picture over MCP (`cli/src/replaymap.ts`, `mcp.ts`) — 2026-11-07, before the release
 
 - **`scmjs replay map <rep> [--out map|-] [--force]`**: `rep.chk` (what `@scm-js/replay` parses out of the replay —

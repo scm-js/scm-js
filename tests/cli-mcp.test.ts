@@ -6,10 +6,11 @@
  */
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import { copyFileSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { copyFileSync, existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { findGameCopy } from "../cli/src/engine";
 import { createMcpServer, INSTRUCTIONS, MAX_FRAMES, type McpOptions } from "../cli/src/mcp";
 import { classicCopy, stagedEngine } from "./support/mapRunner";
 import { TEST_MAPS_DIR } from "./support/maps";
@@ -43,7 +44,7 @@ describe("scmjs mcp", () => {
   it("lists the tools with what each is for, and says how they fit together", async () => {
     const { tools } = await client.listTools();
     const names = tools.map((t) => t.name).sort();
-    expect(names).toEqual(["doctor", "map_build", "map_check", "map_cost", "map_diff", "map_dump", "map_find", "map_info", "map_new", "map_resize", "map_run", "map_set", "map_strings_export", "map_strings_import", "map_strings_prune", "map_trace", "map_triggers_export", "map_triggers_import", "replay_info"]);
+    expect(names).toEqual(["doctor", "map_build", "map_check", "map_cost", "map_diff", "map_dump", "map_find", "map_info", "map_new", "map_preview", "map_resize", "map_run", "map_set", "map_strings_export", "map_strings_import", "map_strings_prune", "map_trace", "map_triggers_export", "map_triggers_import", "replay_info", "replay_map"]);
     for (const t of tools) {
       expect(t.description?.length ?? 0, t.name).toBeGreaterThan(60);
       expect((t.inputSchema as { properties?: object }).properties, t.name).toBeDefined();
@@ -229,5 +230,58 @@ describe("scmjs mcp: the game tools", () => {
       const tooLong = await staged.call("map_trace", { path: ums, frames: MAX_FRAMES.trace + 1 });
       expect(tooLong.isError).toBe(true);
     } finally { stderr.mockRestore(); await staged.client.close(); await older.client.close(); }
+  });
+});
+
+const copy = (() => { try { return findGameCopy(process.env.SCMJS_STARCRAFT); } catch { return null; } })();
+/** A real replay, where one is at hand (none is committed): a path in SCMJS_TEST_REPLAY, else scm-sim's test replay beside this clone. */
+const REPLAY = process.env.SCMJS_TEST_REPLAY ?? join(homedir(), "github", "scm-sim", "data", "replays", "legacy_cp949.rep");
+
+describe("scmjs mcp: the picture and the replay's map", () => {
+  it("lists map_preview and replay_map with their annotations", async () => {
+    const { client } = await connected();
+    const { tools } = await client.listTools();
+    expect(tools.find((t) => t.name === "map_preview")?.annotations?.readOnlyHint).toBe(true);
+    expect(tools.find((t) => t.name === "replay_map")?.annotations?.destructiveHint).toBe(true);
+    expect((tools.find((t) => t.name === "map_preview")?.inputSchema as { properties: Record<string, { maximum?: number }> }).properties.scale.maximum).toBe(8);
+    await client.close();
+  });
+
+  it("map_preview without a copy of the game is a readable failure", async () => {
+    const { client, call } = await connected();
+    const r = await call("map_preview", { path: join(TEST_MAPS_DIR, "ums.scx"), starcraft: mkdtempSync(join(tmpdir(), "scmjs-no-game-")) });
+    expect(r.isError).toBe(true);
+    expect(r.content[0].text).toMatch(/StarCraft/);
+    const odd = await call("map_preview", { path: join(TEST_MAPS_DIR, "ums.scx"), scale: 3 });
+    expect(odd.isError).toBe(true);
+    expect(odd.content[0].text).toContain("scale takes 1, 2, 4 or 8");
+    await client.close();
+  });
+
+  it.skipIf(!copy)("map_preview answers with a PNG of the map and its facts", async () => {
+    const { client, call } = await connected();
+    const r = await call("map_preview", { path: join(TEST_MAPS_DIR, "ums.scx"), scale: 2 });
+    expect(r.isError).toBeFalsy();
+    const image = r.content.find((c) => c.type === "image") as { data: string; mimeType: string };
+    expect(image.mimeType).toBe("image/png");
+    const png = Buffer.from(image.data, "base64");
+    expect(png.subarray(0, 8)).toEqual(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+    expect(png.readUInt32BE(16)).toBe(128);
+    expect(r.structuredContent?.picture).toMatchObject({ width: 128, height: 128, scale: 2 });
+    expect(r.content.find((c) => c.type === "text")?.text).toMatch(/^ums\.scx: 64 × 64, badlands, drawn at 2 px a tile/);
+    await client.close();
+  });
+
+  it.skipIf(!existsSync(REPLAY))("replay_map writes the replay's map, and refuses a file that is there", async () => {
+    const { client, call } = await connected();
+    const out = join(mkdtempSync(join(tmpdir(), "scmjs-replay-map-")), "game.scx");
+    const r = await call("replay_map", { path: REPLAY, out });
+    expect(r.isError).toBeFalsy();
+    expect(r.content[0].text).toMatch(/: \d+ × \d+, from legacy_cp949\.rep\nWritten to /);
+    expect((await call("map_info", { path: out })).isError).toBeFalsy();
+    const again = await call("replay_map", { path: REPLAY, out });
+    expect(again.isError).toBe(true);
+    expect(again.content[0].text).toContain("is there already");
+    await client.close();
   });
 });

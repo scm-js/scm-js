@@ -27,6 +27,7 @@ import { serveStdio } from "./mcp";
 import { openInScmjs } from "./open";
 import { checkPlugin, devPlugin, newPlugin, printPluginCheck, type PluginCheck } from "./plugin";
 import { printReplayInfo, replayReport } from "./replay";
+import { mapFileFor, writeReplayMap } from "./replaymap";
 import { parseClock, watchReplay, watchSummary } from "./watch";
 import { FORMATS, githubAnnotations, junitXml, sarifJson, type CheckReport, type Format } from "./report";
 import { printRun, runOnMap } from "./run";
@@ -549,6 +550,25 @@ Exits 1 when the maps differ, 0 when they are the same, like diff.
 const replay = program.command("replay").description("read and open replays").helpGroup("Maps and replays:");
 replay.command("info").description("who played, on what map, for how long, at what APM").argument("<replays...>").addOption(json)
   .action(async (files: string[], o: { json?: boolean }) => void await eachFile(files, !!o.json, replayInfo));
+replay.command("map").description("the map the replay was played on, written out as a map file").argument("<replay>").addOption(json)
+  .option("--out <map>", "the file to write (.scx, .scm or .chk); the replay's name with .scx by default; - for standard output")
+  .option("--force", "overwrite a file that is there")
+  .addHelpText("after", `
+A replay carries the map the game loaded, so the map is there whole whether or not you still have the file. It is
+written as the game had it: a bare .chk, or an archive like a new map's. Opens in the editor like any map.
+  scmjs replay map game.rep                      # game.scx beside it
+  scmjs replay map game.rep --out - | scmjs map info -`)
+  .action(async (file: string, o: { json?: boolean; out?: string; force?: boolean }) => {
+    const input = await readInput(file);
+    expectKind(input, "replay");
+    const out = o.out ?? mapFileFor(input.path === STDIO ? "stdin.rep" : input.path);
+    const piped = out === STDIO;
+    if (piped && o.json) throw new CliError("--json and the map both want standard output", "Write the map to a file with --out, or leave --json off.", 2);
+    if (!piped && existsSync(out) && !o.force) throw new CliError(`${out} is there already`, "--force overwrites it, --out names another file.", 2);
+    const r = await writeReplayMap(await loadReplayInput(input), out);
+    if (o.json) { print(JSON.stringify({ file: input.name, ...r }, null, 2)); return; }
+    say(piped, `${mark.ok} ${pc.bold(gameText(r.name) || pc.italic("Untitled"))}: ${r.width} × ${r.height}${dot}from ${input.name}${dot}written to ${outName(r.written)}${dot}${size(r.written.bytes)}`);
+  });
 replay.command("open").description("watch a replay in the scmJS app, or the editor in your browser").argument("<replay>")
   .option("--browser", "the editor in the browser, even with the app installed")
   .addOption(new Option("--editor <url>", "the editor's address (SCMJS_EDITOR_URL)").hideHelp())
@@ -673,8 +693,9 @@ program.command("mcp").description("these commands as an MCP server, for AI tool
 Speaks the Model Context Protocol on standard input and output, so an AI tool that runs on this computer (Claude
 Code, Cursor, VS Code, …) can read, check, search, compare and change maps with the same code these commands use:
 map_info, map_check, map_dump, map_find, map_diff, map_triggers_export|import, map_strings_export|import|prune,
-map_set, map_resize, map_new, map_build, map_run, map_trace, map_cost, replay_info and doctor. map_trace and map_cost
-need a copy of StarCraft here, as the commands do; doctor says whether there is one. Paths are files on this
+map_set, map_resize, map_new, map_build, map_run, map_preview (the picture itself), map_trace, map_cost, replay_info,
+replay_map and doctor. map_preview, map_trace and map_cost need a copy of StarCraft here, as the commands do; doctor
+says whether there is one. Paths are files on this
 computer, relative to the folder the tool started it in. Claude Code, in your maps folder:
   claude mcp add scmjs -- npx -y @scm-js/cli mcp
 Anything else takes the same thing as JSON:

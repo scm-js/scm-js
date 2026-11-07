@@ -1051,6 +1051,12 @@ The file you get is the one to play and to share. It also holds the map as you s
 the editor, which is what comes back when you open it again, so the trigger list never
 fills up with what the build generated.
 
+The same build runs from a terminal: `scmjs map build map.scx` applies the script and
+builds the programs the way Save does, `--test` runs the tests first, and `--check`
+compiles without writing, so a map kept in git can be built and checked where its pull
+requests are. The [command line guide](cli.md#building-a-trigscript-map) has the details,
+and what it needs installed.
+
 The script's files and a record of the last apply live in the map archive under
 `trigscript\` (`main.ts`, any other files, and `build.json`), so they travel with the
 `.scx`. The [Save dialog](guide.md#saving) lists them with the archive's other files, each

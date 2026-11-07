@@ -109,6 +109,44 @@ native/ — see scm-sim's docs/own-bots.md. Added 2026-11-06 with "Made by Jeany
   description column stays beside it and the banner's 80×23 holds; the noun's own help lists all. The test in
   cli.test.ts skips hidden commands and asserts the ellipsis.
 
+## TrigScript build (`cli/src/build.ts`) — 2026-11-06, second slice
+
+- **The spike's answer: the plugin's compiler runs in Node as it is.** `plugins/trigscript/compiler/**` and `script.ts`
+  are DOM-free (the plugin's own `scripts/build-fixture.mts` builds probe maps under Node), so the CLI imports the
+  *vendored* source at the editor's pin (`plugins/trigscript/`, `vendored.json`) and Vite bundles it: `scmjs 0.8.x`
+  builds exactly what the editor 0.8.x builds. The bundle grew from ~750 KB to ~3.1 MB (the compiler is ~2.3 MB).
+- **TypeScript is not bundled** (10 MB; `npx @scm-js/cli info` must not download it): `loadTypeScript` resolves
+  `typescript` from the working directory's project, then from beside the command (`createRequire(import.meta.url)`
+  — a clone, or a global install beside a global TypeScript), then from `npm root -g`; missing → CliError with the
+  install line. The compiler takes `ts` as a parameter (`compileScript(ts, …)`) and imports it `import type` only,
+  so nothing in the bundle pulls it. The standard library text is built from the found TypeScript's `lib/` the way
+  `bundle/lib.mjs#defaultLib` does (`lib.es2023.d.ts` + references). The user chose this over fetching
+  `typescript.js` from jsDelivr (the editor's worker does that); add the fetch only if people ask.
+- **The editor's order, headless** (`buildMap`): `scriptState` (no files → CliError; stale block → CliError, the
+  editor's `bringUpToDate` refuses too); names from the scenario with core's `usedLocations`/`locationName`/
+  `forceName`/`readSwitchNames`/`unitCustomName`/`soundList` into `scriptNames` (what `service.ts#names()` reads off
+  the API); settings `readSettings(extras)`; libraries = the map's copies only (`readLibraries` + `libraryImports`;
+  an import with no copy → CliError: apply in the editor once); `compileScript(…, { lib, libraries, sounds: !check,
+  tests: --test || testsGuardBuild ? { world } : undefined })`; `testWorld` is a port of `service.ts#world()` with
+  unit stats only where UNIS/UNIx overrides (no units.dat here — documented); failing tests → `ok: false`;
+  `finishSounds` with `loadVorbis` (project's `wasm-media-encoders/wasm/ogg.wasm` by walking up from cwd, else the
+  plugin's `dist/vorbis.wasm` from jsDelivr at `VERSION`); `buildScript(list, extras, files, compiled, internString)`
+  → `applyTriggers` + `doc.extras = plan.extras` (the block, files, manifest, sounds — the editor's Apply);
+  no programs → `writeBack`; programs → `defaultSaveOptions` + `planSave` + `buildChk` → `buildOwnMap({ chk,
+  compiled: {ir, strings, input, triggers: []}, settings })` (refused → CliError) → `packBuiltMap({ sourceChk, extras:
+  keptExtras, stored, built, steps: [{ id: "trigscript/build", label: "TrigScript" }], options })`. A `.chk` output
+  with programs is refused as the editor refuses it. Magenta's member (`magenta\magenta.json`) → CliError: the
+  contributions API is the editor's; the CLI has no plugins running.
+- **Core exports added for it**: `readSwitchNames`, `soundList`/`SoundRow`, `buildChk`, `keptExtras`, `buildMapFile`,
+  `packBuiltMap`/`PackInput`. `tests/core.test.ts`'s CLI list now names every `cli/src` module (exchange, diff,
+  completion had been left off the list and were not being checked; all pass).
+- **Output**: `✔ name: N triggers → #a–#b · N programs (Remastered) · N sounds · N tests passed · written to … · size
+  TrigScript 4.1.0, TypeScript 6.0.3`; diagnostics as `main.ts:3:27 error …` (tsc's shape); failing tests with name
+  and line; exit 1 and nothing written on either. `--json` is the `BuildOutcome` plus `file` (the build log in
+  `log`). `tests/cli-build.test.ts` (7 tests, ~2 s): names/world, triggers + test + idempotence, error, failing test
+  + `--check`, programs (reopen: `builtBy` TrigScript, source restored, raw CHK has the payload's triggers), `.chk`
+  refusal, no script. E2E from `/tmp` with the dist worked first time.
+
 ## Opening (`cli/src/open.ts`)
 
 - **Desktop app**: `SCMJS_APP`, else the installers' places (Windows `%LOCALAPPDATA%\Programs\scmJS\scmJS.exe` and
@@ -136,8 +174,8 @@ native/ — see scm-sim's docs/own-bots.md. Added 2026-11-06 with "Made by Jeany
 
 ## Next (proposed to the user)
 
-Done 2026-11-06: triggers/strings export-import, diff, completions (above), on `@scm-js/core` (`core.md`). Still
-proposed: `map unpack|pack`, `map build` (TrigScript headless — a spike first), `map run` (the plugin API headless),
+Done 2026-11-06: triggers/strings export-import, diff, completions, `map build` (above), on `@scm-js/core`
+(`core.md`). Still proposed: `map unpack|pack`, `map run` (the plugin API headless),
 `map render`, `bot run` (a headless game through scm-sim), `setup --from` for the game files. **Publishing is CI's**
 (2026-11-06): `build.yml`'s `cli` job, stable channel only, `build:cli` (stamps the version), checks it equals the
 release's, skips a version npm has, `npm publish` by trusted publishing over OIDC with provenance, like `plugin-api`

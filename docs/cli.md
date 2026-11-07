@@ -2,9 +2,10 @@
 
 `scmjs` is scmJS on the command line. It tells you what a map or replay holds, runs Check
 Map on any number of maps, takes a map's triggers and strings out as text and puts them
-back, says what changed between two maps, opens a map or replay in scmJS from a terminal,
-helps you write a plugin, and builds a BWAPI bot of your own for the play page. It reads
-files the way the editor does, so the two agree about every map.
+back, says what changed between two maps, builds a TrigScript map the way Save does, opens
+a map or replay in scmJS from a terminal, helps you write a plugin, and builds a BWAPI bot
+of your own for the play page. It reads files the way the editor does, so the two agree
+about every map.
 
 You need Node.js 22.12 or newer. Install it once, and type `scmjs` from then on:
 
@@ -31,6 +32,7 @@ when there is a newer version.
 | `scmjs map triggers export|import` | A map's triggers as a text or `.trg` file, and back |
 | `scmjs map strings export|import` | A map's strings as a text file, and back |
 | `scmjs map diff <a> <b>` | What changed between two maps |
+| `scmjs map build <map>` | Applies the map's TrigScript script and builds its programs into the file, as Save does |
 | `scmjs replay info <replays…>` | Who played, on which map, for how long and at what APM |
 | `scmjs replay open <replay>` | Opens the replay in scmJS, to watch and analyse |
 | `scmjs plugin new <name>` | A plugin to start from, set up to type-check, test, build and publish |
@@ -144,6 +146,44 @@ cut at twenty; `--all` lists everything. The command exits with 1 when the maps 
 0 when they are the same, like `diff`, so a script can ask whether a step changed
 anything.
 
+## Building a TrigScript map
+
+A map with a [TrigScript](trigscript.md) script in it is built every time the editor saves
+it: the script's `trigger()` calls become triggers in the list, and its `program()`s are
+built into the file. `scmjs map build` does the same without the editor, so a map kept in
+git can be built where it is checked, and a script edited outside the editor can be
+applied from the terminal:
+
+```sh
+scmjs map build maps/ridge.scx --test
+```
+
+```
+✔ ridge.scx: 12 triggers → #4–#15 · 2 programs (Remastered) · 7 tests passed · written to maps/ridge.scx · 48 KB
+```
+
+The script is the one the map keeps, with the libraries the map keeps copies of; the map's
+names, settings and placed units are what the editor would compile against, and the built
+file opens in the editor as the map you were editing, with the build kept beside it,
+exactly as a saved one does. `--out` writes the built map to another file. `--test` runs
+the script's tests first, in the simulator, and a failing test refuses the build; a map
+whose script settings make tests guard the build runs them without the flag. `--check`
+compiles, and tests with `--test`, and writes nothing: the check for a pull request. An
+error in the script is printed as `main.ts:12:5 error …`, a failing test with its name and
+line, and the command exits with 1 with nothing written.
+
+The compiler is TrigScript's own, at the version the editor of this release ships, so the
+command and the editor build the same map. It compiles with TypeScript, which is not part
+of the command: install it in the map's project (`npm install typescript`) or globally
+(`npm install -g typescript`). A sound of two seconds or more is encoded as Ogg Vorbis
+with an encoder the command fetches once, unless the project has `wasm-media-encoders`
+installed. Two things the editor does that the command does not. The tests' world takes a
+unit type's hit points from the map's own settings; the game's unit data, which the editor
+reads for the types a map leaves alone, is not on the command line, so a test that counts
+on a Marine's forty should set them in the map. And the programs other plugins contribute
+to a build are not built here: a map with Magenta's triggers is refused, and is built by
+saving it in the editor.
+
 ## Replays
 
 `scmjs replay info` reads a replay from any version, from 1.16 to Remastered. It shows the
@@ -235,8 +275,9 @@ scmjs completion fish > ~/.config/fish/completions/scmjs.fish
 
 - `--json` prints what a command found as JSON: one object for one file, a list for
   several. The text output may change between versions, so scripts should use `--json`.
-- Exit codes: 0 when all went well, 1 when a map failed its check, two maps differed or
-  something went wrong, 2 when a file was missing or was the wrong kind for the command.
+- Exit codes: 0 when all went well, 1 when a map failed its check, two maps differed, a
+  build did not go through or something went wrong, 2 when a file was missing or was the
+  wrong kind for the command.
 - Colour is off when the output is not a terminal, with `NO_COLOR` set, or with
   `--no-color`.
 - For what the commands do not do — a script that edits maps, a check of your own — the
@@ -253,6 +294,7 @@ from a clone with `npm run cli -- <command>`, or build it with `npm run build:cl
 | `cli/src/map.ts`, `cli/src/replay.ts` | The map and replay reports, and how they are printed |
 | `cli/src/exchange.ts` | Triggers and strings out as files and back in, and writing a map back as it was opened |
 | `cli/src/diff.ts` | What changed between two maps, by group, and the section comparison underneath |
+| `cli/src/build.ts` | The TrigScript build: finding TypeScript, compiling against the map's names, applying the block, laying the programs in and packing the file |
 | `cli/src/completion.ts` | The bash, zsh and fish scripts, generated from the command tree |
 | `cli/src/open.ts` | Finding the desktop app, and handing a file to the editor in a browser |
 | `cli/src/bot.ts` | Running the bot toolchain's image in the bot's folder |

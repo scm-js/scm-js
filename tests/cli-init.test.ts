@@ -60,8 +60,8 @@ describe("scmjs init", () => {
     writeFileSync(join(dir, ".gitattributes"), "*.png binary\n*.scm diff=mine");
     await initFolder(dir);
     expect(read(dir, "README.md")).toBe("# Mine\n");
-    // The lines it lacked, at the end; a pattern with its own diff driver is left as it is.
-    expect(read(dir, ".gitattributes")).toBe("*.png binary\n*.scm diff=mine\n\n# Maps show in git diff as text, through scmjs map dump (scmjs init sets the git config)\n*.scx diff=scmjs\n*.chk diff=scmjs\n");
+    // The lines it lacked, at the end; a pattern with its own diff driver is left as it is (its merge driver is not one).
+    expect(read(dir, ".gitattributes")).toBe("*.png binary\n*.scm diff=mine\n\n# Maps show in git diff as text (scmjs map dump) and git merge merges them (scmjs map merge); scmjs init sets the git config\n*.scx diff=scmjs\n*.chk diff=scmjs\n*.scx merge=scmjs\n*.scm merge=scmjs\n*.chk merge=scmjs\n");
     const before = Object.fromEntries([".gitattributes", ".gitignore", WORKFLOW_PATH, "README.md"].map((f) => [f, read(dir, f)]));
     const again = await initFolder(dir);
     expect(again.files.map((f) => f.state)).toEqual(["kept", "kept", "kept", "kept"]);
@@ -76,7 +76,7 @@ describe("scmjs init", () => {
     const r = await initFolder(dir, { print: true });
     expect(readdirSync(dir).sort()).toEqual(MAPS);
     const text = printRecipe(r);
-    for (const line of [...ATTRIBUTE_LINES, ...IGNORE_LINES, 'git config diff.scmjs.textconv "scmjs map dump"', 'git config diff.scmjs.xfuncname "^## .*"', "git config diff.scmjs.cachetextconv true", "name: Maps", "| Test Scenario |"]) expect(text).toContain(line);
+    for (const line of [...ATTRIBUTE_LINES, ...IGNORE_LINES, 'git config diff.scmjs.textconv "scmjs map dump"', 'git config diff.scmjs.xfuncname "^## .*"', "git config diff.scmjs.cachetextconv true", 'git config merge.scmjs.driver "scmjs map merge %O %A %B --out %A --name %P"', "name: Maps", "| Test Scenario |"]) expect(text).toContain(line);
   });
 
   it("says there is no such folder, with exit code 2", async () => {
@@ -98,7 +98,7 @@ describe("scmjs init", () => {
     // The TypeScript the workflow installs is the major the compiler is built with.
     const major = String(JSON.parse(read(import.meta.dirname, "..", "package.json")).dependencies?.typescript ?? JSON.parse(read(import.meta.dirname, "..", "package.json")).devDependencies?.typescript).replace(/^[~^]/, "").split(".")[0];
     expect(TYPESCRIPT).toBe(`typescript@${major}`);
-    expect(missingLines("*.scx   diff=scmjs\n", ATTRIBUTE_LINES, true)).toEqual(["*.scm diff=scmjs", "*.chk diff=scmjs"]);
+    expect(missingLines("*.scx   diff=scmjs\n", ATTRIBUTE_LINES, true)).toEqual(["*.scm diff=scmjs", "*.chk diff=scmjs", "*.scx merge=scmjs", "*.scm merge=scmjs", "*.chk merge=scmjs"]);
     expect(missingLines("# *.bak\n", IGNORE_LINES)).toEqual(["*.bak"]);
     expect(readmeText("Maps", [{ file: "(2)a|b.scx", name: "A\x03|B", width: 64, height: 96, tileset: "Ice", players: 2, script: false }])).toContain("| A\\|B | [(2)a\\|b.scx](%282%29a%7Cb.scx) | 64 × 96 | Ice | 2 |");
   });
@@ -130,12 +130,13 @@ describe.skipIf(!hasGit)("scmjs init in a git repository", () => {
     git(dir, "config", "diff.scmjs.cachetextconv", "false"); // someone's own, left alone
     const r = await initFolder(dir);
     expect(r.repository).toBe(r.folder);
-    expect(r.git.map((g) => g.state)).toEqual(["set", "set", "other"]);
+    expect(r.git.map((g) => g.state)).toEqual(["set", "set", "other", "set", "set"]);
     for (const [key, value] of GIT_SETTINGS.slice(0, 2)) expect(git(dir, "config", "--get", key).stdout).toBe(`${value}\n`);
     expect(git(dir, "config", "--get", "diff.scmjs.cachetextconv").stdout).toBe("false\n");
     expect(printInit(r).map(visible).some((l) => /▲ git config diff\.scmjs\.cachetextconv +left alone: it is "false"/.test(l))).toBe(true);
-    expect((await initFolder(dir, { force: true })).git.map((g) => g.state)).toEqual(["kept", "kept", "set"]);
-    expect((await initFolder(dir)).git.map((g) => g.state)).toEqual(["kept", "kept", "kept"]);
+    expect(printInit(r).map(visible).some((l) => /✔ git config merge\.scmjs +set: name, driver$/.test(l))).toBe(true);
+    expect((await initFolder(dir, { force: true })).git.map((g) => g.state)).toEqual(["kept", "kept", "set", "kept", "kept"]);
+    expect((await initFolder(dir)).git.map((g) => g.state)).toEqual(["kept", "kept", "kept", "kept", "kept"]);
   });
 
   it("puts the workflow at the repository's top, checking the folder's maps from there", async () => {

@@ -19,6 +19,7 @@ import { LAYOUTS, nameFromFile, NEW_VERSIONS, parseSize, parseTileset, writeNewM
 import { doctorJson, doctorReport, printDoctor } from "./doctor";
 import { initFolder, printInit, printRecipe } from "./init";
 import { diffMaps, printDiff, revisionInput } from "./diff";
+import { asMap, printMerge, runMerge, stagedInputs, type Side } from "./merge";
 import { diffPicture } from "./diffpicture";
 import { dumpMap, printDump } from "./dump";
 import { ANCHORS, parseAnchor, pruneStrings, resizeMap, setHeader, VERSIONS, ENCODINGS } from "./edit";
@@ -682,6 +683,34 @@ Exits 1 when the maps differ, 0 when they are the same, like diff.
       else say(piped, ...lines);
     } else print(...(o.json ? [JSON.stringify(d, null, 2)] : printDiff(d, !!o.all)));
     if (!d.same) process.exitCode = 1;
+  });
+
+map.command("merge").description("merge two versions of a map with their common ancestor, as git's merge driver").argument("<base>", "the common ancestor; with no other map, the map git stopped on").argument("[ours]").argument("[theirs]").addOption(json)
+  .option("--out <map>", "write the merged map here instead of over <ours>; - for standard output")
+  .option("--ours", "settle each conflict with ours's version")
+  .option("--theirs", "settle each conflict with theirs's version")
+  .option("--name <path>", "the map's name in what is said (git gives it as %P)")
+  .option("--dry-run", "say what would merge, and write nothing")
+  .addHelpText("after", `
+Part by part: what one side changed is taken, what both changed is merged finer (terrain by tile, units by
+instance, triggers in order, settings by field) or is a conflict. With no conflicts the merged map is written over
+<ours> (or to --out); with conflicts nothing is written and the command exits 1, unless --ours or --theirs settles
+them. scmjs init sets it up as git's merge driver:
+  git config merge.scmjs.driver "scmjs map merge %O %A %B --out %A --name %P"
+  scmjs map merge base.scx mine.scx theirs.scx --out merged.scx
+  scmjs map merge maps/ridge.scx --ours     # after git merge stopped on it: the three versions from git`)
+  .action(async (a: string, b: string | undefined, c: string | undefined, o: { json?: boolean; out?: string; ours?: boolean; theirs?: boolean; name?: string; dryRun?: boolean }) => {
+    if (o.ours && o.theirs) throw new CliError("--ours or --theirs, not both", null, 2);
+    if (b !== undefined && c === undefined) throw new CliError("Three maps (base, ours, theirs), or one that git merge stopped on", null, 2);
+    const staged = b === undefined;
+    const inputs = staged ? stagedInputs(a) : { base: asMap(await readInput(a)), ours: asMap(await readInput(b!)), theirs: asMap(await readInput(c!)) };
+    const piped = o.out === STDIO && !o.dryRun;
+    if (piped && o.json) throw new CliError("--json and the map both want standard output", "Write the map to a file with --out, or leave --json off.", 2);
+    const prefer: Side | null = o.ours ? "ours" : o.theirs ? "theirs" : null;
+    const r = await runMerge(inputs, { prefer, name: o.name ?? null, out: o.out ?? null, dryRun: !!o.dryRun, staged });
+    if (o.json) print(JSON.stringify(r, null, 2));
+    else say(piped, ...printMerge(r));
+    if (r.conflicts.length && !r.settled) process.exitCode = 1;
   });
 
 map.command("fetch").description("search scmscx.com, the community's map database, and download a map").argument("[words...]", "what to search for: a map's name, words in its description, a file name").addOption(json)

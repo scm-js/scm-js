@@ -49,6 +49,7 @@ when there is a newer version.
 | `scmjs map set <map>` | The map's name, description, revision or text encoding |
 | `scmjs map resize <map>` | Scenario ▸ Resize: the map to another size, anchored |
 | `scmjs map diff <a> <b>` | What changed between two maps, or since a git revision with `--rev`; `--picture` draws where |
+| `scmjs map merge <base> <ours> <theirs>` | Two versions of a map merged with their common ancestor, part by part, as `git merge` does through it |
 | `scmjs map build <map>` | Applies the map's TrigScript script and builds its programs into the file, as Save does |
 | `scmjs map run <plugin> <map>` | Runs a plugin, or a script written like one, over the map with the plugin API |
 | `scmjs map unpack <map>`, `scmjs map pack <folder>` | A map's archive as a folder of files, and back |
@@ -326,11 +327,12 @@ command. Run it in the folder, or name the folder (the files' paths are from it)
 ```
 $ scmjs init maps
 maps · 5 maps · in the git repository ladder
-  ✔ .gitattributes                 written: maps diff as text
+  ✔ .gitattributes                 written: maps diff as text and merge part by part
   ✔ .gitignore                     written: the .bak files Save leaves
   ✔ ../.github/workflows/maps.yml  written: checks the 5 maps on push and pull request; scmjs 0.9.0
   ✔ README.md                      written: lists the 5 maps, and the commands
   ✔ git config diff.scmjs          set: textconv, xfuncname, cachetextconv
+  ✔ git config merge.scmjs         set: name, driver
 ℹ The workflow is at the repository's top, where GitHub reads it, and checks maps/ from there.
 ```
 
@@ -338,12 +340,15 @@ What each file does:
 
 - **`.gitattributes`** has git read `.scx`, `.scm` and `.chk` files through
   `scmjs map dump`, so `git diff` and `git log -p` show what changed inside a map (see
-  [the section above](#a-map-as-text-and-in-git)).
-- **The git settings** (`diff.scmjs.textconv`, `.xfuncname`, `.cachetextconv`) tell git
-  what that means. They belong to each clone rather than to the repository, so they are
-  set in the repository the folder is in; everyone who clones it runs `scmjs init` once
-  too, which writes nothing that is there already. `git diff` runs `scmjs`, so it has to
-  be installed (`npm install -g @scm-js/cli`); the command says so when it is not.
+  [the section above](#a-map-as-text-and-in-git)), and merge them through
+  `scmjs map merge`, so two branches that changed one map in different places merge (see
+  [Merging two versions of a map](#merging-two-versions-of-a-map)).
+- **The git settings** (`diff.scmjs.textconv`, `.xfuncname`, `.cachetextconv`, and
+  `merge.scmjs.name` and `.driver`) tell git what that means. They belong to each clone
+  rather than to the repository, so they are set in the repository the folder is in;
+  everyone who clones it runs `scmjs init` once too, which writes nothing that is there
+  already. `git diff` and `git merge` run `scmjs`, so it has to be installed
+  (`npm install -g @scm-js/cli`); the command says so when it is not.
 - **`.github/workflows/maps.yml`** runs `map check --strict --format github` over the maps
   on every push and pull request, so a map with errors or warnings fails the run and each
   finding shows on the pull request beside the map. A map that keeps a TrigScript script
@@ -353,8 +358,8 @@ What each file does:
   workflows only at a repository's top, so for a folder inside a repository the file goes
   there and names the folder's maps from it.
 - **`README.md`** lists the maps (name, file, size, tileset, players) and the commands
-  people reach for: `map check`, `map dump` and `map diff --rev HEAD`, and the git
-  settings a new clone needs.
+  people reach for: `map check`, `map dump`, `map diff --rev HEAD` and settling a merge
+  with `map merge`, and the git settings a new clone needs.
 - **`.gitignore`** has `*.bak`: the copy of a map the desktop app keeps when Save replaces
   it. The commands themselves write a map back in place or where `--out` says, so they
   leave nothing else behind.
@@ -373,8 +378,7 @@ pasting by hand or reading first. `--json` lists the files and what became of ea
 their text, given `--print` as well). The command exits with 2 when there is no such
 folder.
 
-`init` is left out of the list `scmjs` prints, which is kept to one screen;
-`scmjs help init` has its help.
+`scmjs help init` has the command's help.
 
 ## Searching maps
 
@@ -544,6 +548,120 @@ Tiles are compared by position, so a map resized with its content moved to anoth
 shows every tile as changed. Maps of two tilesets cannot be drawn as one picture: they are
 drawn side by side with nothing marked, and the command says so. The exit code is the
 comparison's, 1 when the maps differ, picture or not.
+
+## Merging two versions of a map
+
+When two people change copies of one map, `scmjs map merge` puts both sets of changes into
+one map, the way `git merge` puts two versions of a text file together. It takes three
+files: the version both started from (the common ancestor, or *base*), yours (*ours*) and
+the other one (*theirs*):
+
+```
+$ scmjs map merge ridge-base.scx ridge.scx ridge-alex.scx
+✔ ridge.scx merged: 3 changes from ours, 2 from theirs · written to ridge.scx
+  Units      2 from ours
+  Locations  1 from theirs
+  Triggers   1 from ours, 1 from theirs
+  Strings    1 string of theirs renumbered
+```
+
+Each part of the map is compared with the base on both sides. What only one side changed
+is taken from that side; what both changed the same way is taken once; what both changed
+differently is looked at more closely, and is a conflict only where the two changes really
+are to the same thing:
+
+| Part | Merged | A conflict when |
+| --- | --- | --- |
+| Terrain | Tile by tile (and the isometric record and fog of war the same way) | Both changed the same tile differently; the tiles are listed as rectangles |
+| Units, doodads, sprites | One by one. They have no names, so each is matched by what it is: its type, owner, place and properties. A unit removed and one of the same type and owner added within four tiles is one unit moved or edited | Both edited the same unit differently, or one side removed a unit the other edited |
+| Locations | By number, and the place, the elevation flags and the name each on their own | Both changed the same field of one location differently |
+| Triggers, briefing | As an ordered list: triggers either side added are kept (both, when both added at one place), and triggers either side changed or removed are changed or removed | Both changed the same trigger differently, or one side removed a trigger the other changed |
+| Players, forces, unit, upgrade and technology settings, unit properties, switch names, sounds | Field by field: one player's race, one unit's hit points, one force's name | Both changed the same field differently |
+| Name, description, revision, text encoding | Each on its own | Both changed it differently |
+| Size and tileset | When either side resized the map or changed its tileset, the terrain and everything on it come from that side | Both sides changed the terrain or what is on it, and one of them resized the map or changed its tileset |
+| The archive's other files (sounds, scripts) | File by file | Both changed the same file differently |
+| Sections the editor does not read | Section by section, compared as bytes | Both changed the same section |
+
+Triggers are matched by what they say, with their text read as text: two maps number their
+strings differently, and the same trigger still matches. A location is named in a trigger
+by its number, so renaming a location on one side does not count as changing every trigger
+that mentions it.
+
+Strings go where what uses them goes. A string theirs changed in place keeps its number in
+the merged map; a new string of theirs keeps its number unless ours put another string
+there, and then it takes a free one, and the trigger, location or setting that uses it is
+changed to match. That is the "renumbered" line above. Strings nothing in the map uses are
+merged by number.
+
+Everything the merge did not change is written exactly as it was in your version, and the
+file is written as your version was (compressed and encrypted the same way).
+
+### Conflicts
+
+When both sides changed one thing differently, the command says what each side did, writes
+nothing, and exits with 1:
+
+```
+$ scmjs map merge ridge-base.scx ridge.scx ridge-alex.scx
+✖ ridge.scx: 1 conflict; nothing written
+  Triggers  1 from ours, 1 from theirs
+
+Conflicts
+  Triggers · trigger 1 of the base
+      base   Player 1: Always() → Display Text Message(Always Display, "Hold the line.")
+      ours   Player 1: Always() → Display Text Message(Always Display, "Hold fast.")
+      theirs Player 1: Always() → Display Text Message(Always Display, "Stand firm.")
+
+Add --ours or --theirs to settle each with that side's version.
+```
+
+`--ours` or `--theirs` settles every conflict with that side's version and writes the map;
+everything that did not conflict is still merged from both. The conflicts are listed
+again, marked with the side taken. To settle some one way and some the other, merge with
+one of them and change the rest in the editor afterwards.
+
+The merged map is written over your version (the second file), as `git merge-file` does
+and as git expects of a merge driver; `--out` writes it somewhere else instead, and
+`--out -` to standard output. When only one side changed the map at all, that side's file
+is taken exactly as it is. `--dry-run` says what would happen and writes nothing. `--json`
+gives the result as JSON: each part's changes, and each conflict with what the base, ours
+and theirs had.
+
+### With git
+
+[`scmjs init`](#a-maps-folder-as-a-project) makes the command git's way of merging maps,
+or by hand, once in the repository:
+
+```sh
+git config merge.scmjs.name "StarCraft maps, part by part (scmjs map merge)"
+git config merge.scmjs.driver "scmjs map merge %O %A %B --out %A --name %P"
+printf '*.scx merge=scmjs\n*.scm merge=scmjs\n*.chk merge=scmjs\n' >> .gitattributes
+```
+
+After that, `git merge`, `git pull` and `git rebase` merge maps that both branches
+changed. A map with no conflicts is merged and the merge goes on. A map with a conflict
+stops the merge as a text file would: git says
+`CONFLICT (content): Merge conflict in ridge.scx`, the command's list says what clashed,
+and the file is left as your version. Settle it with the map's name alone, which reads the
+three versions git keeps during the merge, then carry on as usual:
+
+```sh
+scmjs map merge ridge.scx            # the conflicts again
+scmjs map merge ridge.scx --theirs   # settled, and written over ridge.scx
+git add ridge.scx
+git commit
+```
+
+Without the setting, git cannot merge a map at all, and a map both branches changed is
+always a conflict. Like `git diff`, `git merge` runs `scmjs` by name, so it has to be
+installed in each clone (`npm install -g @scm-js/cli`).
+
+What the merge does not do: it cannot lay one side's terrain over a map the other side
+resized, so both changing the ground of a map one of them resized is a conflict over the
+whole size. Triggers that a TrigScript script generates are merged as triggers; when both
+sides changed the script, its files conflict, and the map should be built again
+(`scmjs map build`) once the script is settled. A built map is merged as the map it was
+built from and written that way: build it again after merging.
 
 ## Building a TrigScript map
 
@@ -1231,9 +1349,10 @@ scmjs completion fish > ~/.config/fish/completions/scmjs.fish
   What the command says goes to standard error while the map takes standard output, and
   `--json` is refused there, since both want the pipe. A map from a pipe has no name: it
   is `stdin.scx` or `stdin.chk` by its bytes, and is written back in the same form.
-- Exit codes: 0 when all went well, 1 when a map failed its check, two maps differed,
-  nothing matched a search, a build did not go through or something went wrong, 2 when a
-  file was missing or was the wrong kind for the command, or an option was not one.
+- Exit codes: 0 when all went well, 1 when a map failed its check, two maps differed, a
+  merge had conflicts it was not told how to settle, nothing matched a search, a build did
+  not go through or something went wrong, 2 when a file was missing or was the wrong kind
+  for the command, or an option was not one.
 - Colour is off when the output is not a terminal, with `NO_COLOR` set, or with
   `--no-color`.
 - For what the commands do not do — a script that edits maps, a check of your own — the
@@ -1250,6 +1369,7 @@ from a clone with `npm run cli -- <command>`, or build it with `npm run build:cl
 | `cli/src/map.ts`, `cli/src/replay.ts` | The map and replay reports, and how they are printed |
 | `cli/src/exchange.ts` | Triggers and strings out as files and back in, and writing a map back as it was opened |
 | `cli/src/diff.ts` | What changed between two maps, by group, and the section comparison underneath; a map read from a git revision |
+| `cli/src/merge.ts` | The three-way merge: each part's rule, the ordered list merge for triggers, units matched without ids, the string table numbered again; git's three versions of a stopped file |
 | `cli/src/edit.ts` | The header set, the map resized and the unused strings dropped, over the open document |
 | `cli/src/report.ts` | Check Map's findings as GitHub annotations, JUnit XML and SARIF |
 | `cli/src/dump.ts` | The map as text: every part in file order, the triggers and strings in their text forms, members hashed, sections as they would be written |

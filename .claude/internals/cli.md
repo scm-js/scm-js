@@ -197,6 +197,32 @@ native/ — see scm-sim's docs/own-bots.md. Added 2026-11-06 with "Made by Jeany
   same), an added file + zlib, a protected map (no listfile, pkware+encrypted, one nameless member kept byte for
   byte, `files` null after pack), a built-shaped map, refusals.
 
+## Bots in a game (`cli/src/botrun.ts`) — 2026-11-06, fifth slice
+
+- `scmjs bot run <bot.scmbot> <map> [--race] [--opponents] [--seed] [--frames] [--every] [--data] [--starcraft]
+  [--engine] [--json]`. **The spike's answer:** scm-sim already played a `.scmbot` under Node (`src/bwapi/node.ts`),
+  but from the repository's private source and `data/`; what was missing was a runner that takes the *served*
+  engine files and a *copy of the game*. That is scm-sim's `src/bwapi/run.ts` (PR jeany55/scm-sim#38): the page's
+  `installed()` sequence in Node — `GameCore(generated)`, `parseImage(base-s1.bin)`, `installNamedFiles` with the
+  interface pack before the copy's files (Remastered via kascade, 1.16.1 via the three archives), the engine's own
+  data (`arr/*.dat`, iscript, tileset cv5/vf4) read from the same copy — then `Bwapi.load` in the person's seat as
+  `startBotGame` does. Bundled by `scripts/bundle-run.mjs` (esbuild, 233 KB, mopaq + kascade inside) and staged by
+  `deploy-play.mjs` as `play/engine/<build>/run-<hash>.mjs`, named with the build in **`play/engine/current.json`**
+  (never cached) — the one address the CLI asks. Same seed → same game (checked across both kinds of copy).
+- **The CLI's half**: `ensureEngine(at)`: a folder with `current.json` (a staged deploy, for tests and development)
+  or the page's URL (`SCMJS_PLAY_URL`, default scmjs.dev/play) → `<cache>/engine/<build>/` (`cacheRoot`: SCMJS_CACHE,
+  XDG_CACHE_HOME/scmjs, %LOCALAPPDATA%\scmjs\cache, ~/.cache/scmjs), each file written whole via `.part` + rename;
+  gzip bodies gunzipped if the server did not say so. `findGameCopy`: `--starcraft`/SCMJS_STARCRAFT, then the usual
+  folders (Program Files, /mnt/c under WSL, /Applications, wine). The runner runs as a child `node` process (one game
+  a process) and its JSON lines (`start`, `text`, `progress`, `end`, `error`) are worded by `wordLine` live and kept
+  for `--json`. Exit: runner's (0 ran, 1 the bot printed errors, 2 could not start); a loss is not a failure (a
+  `--expect` could be added). **Never runs in CI**: it needs the player's own game files.
+- `tests/cli-bot-run.test.ts` (4): cache/usual folders/copy kinds; a staged folder and a fetch from a local http
+  server (gzip bodies, cache hit second time, 404); a stand-in runner script (`.cjs`, prints the protocol) through
+  `runBotGame` with live lines; the failure paths. The real runner was exercised by hand (and scm-sim's own test).
+- Not in this slice: bot against bot (two processes synced through the relay — one BWAPI build fits a game's memory),
+  a replay of the game saved out (the engine records commands; a `--replay` is a natural next step).
+
 ## Opening (`cli/src/open.ts`)
 
 - **Desktop app**: `SCMJS_APP`, else the installers' places (Windows `%LOCALAPPDATA%\Programs\scmJS\scmJS.exe` and
@@ -226,7 +252,7 @@ native/ — see scm-sim's docs/own-bots.md. Added 2026-11-06 with "Made by Jeany
 ## Next (proposed to the user)
 
 Done 2026-11-06: triggers/strings export-import, diff, completions, `map build` (above), on `@scm-js/core`
-(`core.md`), `map run`, `map unpack|pack` (above). Still proposed:
+(`core.md`), `map run`, `map unpack|pack`, `bot run` (above). Still proposed:
 `map render`, `bot run` (a headless game through scm-sim), `setup --from` for the game files. **Publishing is CI's**
 (2026-11-06): `build.yml`'s `cli` job, stable channel only, `build:cli` (stamps the version), checks it equals the
 release's, skips a version npm has, `npm publish` by trusted publishing over OIDC with provenance, like `plugin-api`

@@ -43,6 +43,7 @@ when there is a newer version.
 | `scmjs plugin check` | What the editor would make of the plugin: its manifest, files and imports |
 | `scmjs bot new`, `init`, `build` | A BWAPI bot of your own, built into a `.scmbot` file for the play page |
 | `scmjs bot update` | The newest bot toolchain |
+| `scmjs bot run <bot> <map>` | Plays the bot against the game's computers on the map, with no page |
 | `scmjs about` | This version and whether there is a newer one, who made it, the desktop app and Docker if they are installed, and where the docs and source are |
 | `scmjs completion <shell>` | A completion script for bash, zsh or fish |
 
@@ -310,6 +311,36 @@ choose), since it goes into every build and is shown with the bot.
 to the toolchain, with what it does for code written for Visual Studio and the fields of
 `scmbot.json`, is at [github.com/scm-js/scmbot](https://github.com/scm-js/scmbot).
 
+### Playing a bot from the terminal
+
+`scmjs bot run out/mybot.scmbot "(2)Boxer.scm"` plays the bot against the game's own
+computers with no page open: the game is the play page's engine, and the bot sits in the
+player's seat.
+
+```
+MyBot on (2)Boxer.scm 96 × 96, platform · computer zerg vs bot protoss · seed 12345 · Remastered files
+  The map is Boxer!
+  frame   1000  P1 computer Z 18/0 8/9  |  P2 bot P 76/0 7/9
+  frame   2000  P1 computer Z 204/0 9/9  |  P2 bot P 296/0 9/9
+  …
+✖ the bot lost at frame 19919 · 41 KB of orders · 0.28 ms a frame game, 0.06 bot · 7.2 s
+```
+
+`--race` is the bot's race and `--opponents zerg,terran` the computers', one each;
+`--seed` fixes the game, and the same seed, bot and map give the same game; `--frames`
+stops a game nobody has won (24 frames a second: 50,000 is about 35 minutes of play);
+`--every` sets the frames between progress lines, 0 for none. `--data folder` keeps the
+files a bot writes between games (its `bwapi-data/write`), as the play page does. The
+bot's own text is printed as it comes, and `--json` keeps everything as data. The command
+exits with 1 when the bot printed errors, and 2 when the game could not start.
+
+Two things it needs on your computer. The engine, about 25 MB, is fetched from the play
+page the first time and kept in your cache folder; the game's own files come from your
+installation of StarCraft, Remastered or 1.16.1, which is looked for in the usual places
+or named with `--starcraft` (or `SCMJS_STARCRAFT`). Nothing of the game is fetched or
+carried, so this runs where the game is installed and not on a build server. One bot plays
+a game; bots against each other is not there yet.
+
 ## Opening files in scmJS
 
 `scmjs map open` and `scmjs replay open` open the file in the scmJS desktop app if it is
@@ -366,6 +397,7 @@ from a clone with `npm run cli -- <command>`, or build it with `npm run build:cl
 | `cli/src/completion.ts` | The bash, zsh and fish scripts, generated from the command tree |
 | `cli/src/open.ts` | Finding the desktop app, and handing a file to the editor in a browser |
 | `cli/src/bot.ts` | Running the bot toolchain's image in the bot's folder |
+| `cli/src/botrun.ts` | A bot's game with no page: the engine fetched into the cache, the copy of the game found, scm-sim's runner run and its lines worded |
 | `cli/src/plugin.ts` | A new plugin's files, the plugin check, and the server `plugin dev` runs |
 | `src/plugins/devLink.ts` | The editor's half of `plugin dev`: only a plugin served on this computer is taken |
 | `cli/src/ui.ts` | Colour, marks, aligned rows, and StarCraft's text colours in a terminal |

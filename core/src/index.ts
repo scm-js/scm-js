@@ -19,11 +19,14 @@ export { type MapFormat, type SaveOptions, DEFAULT_SAVE_OPTIONS, SAVE_PRESETS, f
 export { type BuiltBy, type BuildManifest, readBuildManifest, restoreBuiltMap, type Restored, packBuiltMap, type PackInput, BUILD_SOURCE_MEMBER, BUILD_MANIFEST_MEMBER } from "../../src/editor/mapBuild";
 
 // ── The scenario ──
+// `unitSettingsSections` and its kin: which of a revision pair (UNIS/UNIx, …) a change to that table marks dirty — what
+// the file has, or its revision needs (`scmjs map merge` writes the tables directly).
 export {
   parseScenario, serializeScenario, type Scenario, type SectionName, MODELLED_SECTIONS,
   scenarioName, scenarioDescription, setScenarioName, setScenarioDescription, markDirty,
   type MapVersion, MAP_VERSIONS, mapVersionOf, isExpansion, isRemasteredRevision, setMapVersion,
   type TilesetIndex, tilesetIndex, setTextEncoding, setExtendedStrings,
+  unitSettingsSections, upgradeSettingsSections, upgradeRestrictionSections, techSettingsSections, techRestrictionSections,
 } from "../../src/formats/chk/scenario";
 export { createScenario, type CreateScenarioOptions, type GameKind, requiredSections, REQUIRED_SECTIONS } from "../../src/formats/chk/create";
 export { parseChk, serializeChk, type ChkFile, type ChkSection } from "../../src/formats/chk/reader";
@@ -63,6 +66,7 @@ export {
 } from "../../src/editor/settings";
 export { readSwitchNames } from "../../src/editor/switches";
 export { soundList, type SoundRow } from "../../src/editor/sounds";
+export { parseWavHeader, wavDuration, wavFormatLabel, type WavInfo } from "../../src/formats/wav";
 export { resizeScenario, type ResizeOptions, type ResizeResult } from "../../src/editor/resize";
 export { placeStartLocations, idealStarts, playableCount, DEFAULT_START_PLACEMENT, type StartLayout, type StartPlacementOptions, type StartPlacementResult } from "../../src/editor/startLocations";
 export { DEFAULT_PLACEMENT, type PlacementOptions } from "../../src/editor/placement";

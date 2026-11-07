@@ -12,6 +12,7 @@ import { createServer, type IncomingMessage } from "node:http";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { openBrowser } from "./open";
+import { qrFor } from "./qr";
 import { CliError, dot, gameText, pc, plural, rows, size, table } from "./ui";
 
 /** The scmjs.dev service the editor's scmjs.dev plugin talks to. */
@@ -324,7 +325,7 @@ export function keepWords(keepDays: KeepDays | undefined): string {
 }
 
 /** `scmjs account`: who, the role, storage, and the maps being shared with their links. */
-export function printAccount(r: AccountReport, home = homedir()): string[] {
+export function printAccount(r: AccountReport, home = homedir(), { qr = false } = {}): string[] {
   const a = r.account;
   const st = a.storage;
   const file = r.file.startsWith(home) ? `~${r.file.slice(home.length)}` : r.file;
@@ -343,6 +344,8 @@ export function printAccount(r: AccountReport, home = homedir()): string[] {
       m.kind === "kept" ? `kept open ${keepWords(m.keepDays ?? null)}` : m.people.length ? `${plural(m.people.length, "person", "people")} in it` : "open, nobody in it",
       pc.cyan(linkTo("share", m.invite, r.server)),
     ]), 2));
+    // --qr: each link's code under its name, one after another.
+    if (qr) for (const m of r.shared.rooms) lines.push("", `  ${gameText(m.name)}`, ...qrFor(linkTo("share", m.invite, r.server)).map((l) => `  ${l}`));
   }
   return lines;
 }

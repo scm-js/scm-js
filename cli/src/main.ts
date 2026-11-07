@@ -20,6 +20,7 @@ import { LAYOUTS, nameFromFile, NEW_VERSIONS, parseSize, parseTileset, writeNewM
 import { doctorJson, doctorReport, printDoctor } from "./doctor";
 import { initFolder, printInit, printRecipe } from "./init";
 import { diffMaps, printDiff, revisionInput } from "./diff";
+import { asMap, printMerge, runMerge, stagedInputs, type Side } from "./merge";
 import { diffPicture } from "./diffpicture";
 import { dumpMap, printDump } from "./dump";
 import { ANCHORS, parseAnchor, pruneStrings, resizeMap, setHeader, VERSIONS, ENCODINGS } from "./edit";
@@ -41,6 +42,9 @@ import { printRun, runOnMap } from "./run";
 import { previewMap, PNG_SCALES } from "./preview";
 import { accountReport, login, logout, PROVIDERS, printAccount, serverLabel } from "./account";
 import { printShare, shareMap } from "./share";
+import { qrFor } from "./qr";
+import { exportSounds, printSounds, readSounds } from "./sounds";
+import { editInEditor, type EditKind, type EditOutcome } from "./texteditor";
 import { CliError, dot, gameText, mark, num, pc, plural, print, rows, size, table } from "./ui";
 
 const json = new Option("--json", "print JSON instead of text, for scripts");
@@ -122,10 +126,12 @@ export const program = new Command("scmjs")
       const subs = cmd.commands.map((c) => c.name()).filter((n) => n !== "help");
       if (!subs.length) return new Help().subcommandTerm(cmd).replace(" [options]", "");
       let term = cmd.name();
+      // A noun's own help (`scmjs map --help`) has two columns more, so `triggers export|import|edit` is there whole.
+      const width = cmd.parent?.parent ? TERM_WIDTH + 2 : TERM_WIDTH;
       for (const [i, sub] of subs.entries()) {
         const next = `${term}${i ? "|" : " "}${sub}`;
         // The last verb too: a term past the width widens the column and wraps every description.
-        if (next.length > TERM_WIDTH - 2 && i > 0) return `${term}|…`;
+        if (next.length > width - 2 && i > 0) return `${term}|…`;
         term = next;
       }
       return term;
@@ -288,6 +294,30 @@ async function emit(text: string, out: string | undefined, said: string): Promis
   print(`${mark.ok} ${said} ${pc.dim("→")} ${pc.cyan(out)}`);
 }
 
+/** A link's lines with its QR code under the first (the link alone stays the first line, for `| head -1`). */
+const withQr = (lines: string[], link: string, qr: boolean | undefined) => (qr ? [lines[0], "", ...qrFor(link), "", ...lines.slice(1)] : lines);
+const qrOption = () => new Option("--qr", "the link as a QR code under it too, for a phone");
+
+/**
+ * `map triggers edit` / `map strings edit`: the text in the editor, imported when it closes, the map written back as
+ * `import` writes it. Standard input cannot be edited: the editor needs the terminal.
+ */
+async function editCommand(kind: EditKind, file: string, o: { editor?: string; out?: string; briefing?: boolean }): Promise<void> {
+  if (file === STDIO) throw new CliError(`map ${kind} edit needs a map file, not standard input`, "The editor takes the terminal; name the file, or use export and import in a pipe.", 2);
+  if (o.out === STDIO) throw new CliError("--out - is for a pipe; edit writes a file", null, 2);
+  const { input, doc } = await openForEdit(file);
+  const r: EditOutcome = await editInEditor(doc, input.path, kind, {
+    editor: o.editor, briefing: o.briefing,
+    onWait: (path) => { if (process.stderr.isTTY) process.stderr.write(pc.dim(`Waiting for your editor to close ${path}…\n`)); },
+  });
+  if (!r.changed) { print(`${mark.info} ${pc.bold(input.name)}: nothing changed${o.out ? "; nothing written" : ""}`); return; }
+  const w = await writeBack(doc, input.path, o.out ?? null);
+  const what = r.kind === "triggers"
+    ? `${plural(r.triggers.before, o.briefing ? "briefing trigger" : "trigger")} ${pc.dim("→")} ${plural(r.triggers.after, o.briefing ? "briefing trigger" : "trigger")}`
+    : `${plural(r.strings.replaced, "string")} replaced, ${r.strings.added} added`;
+  print(`${mark.ok} ${pc.bold(input.name)}: ${what}${dot}written to ${outName(w)}${dot}${size(w.bytes)}`);
+}
+
 map.command("set").description("the map's name, description, revision or text encoding").argument("<map>").addOption(json)
   .option("--name <text>", "the map's name")
   .option("--description <text>", "the map's description")
@@ -354,6 +384,17 @@ triggers.command("import").description("replace the map's triggers with a text o
     const w = await writeBack(doc, input.path, o.out ?? null);
     say(piped, `${mark.ok} ${pc.bold(input.name)}: ${plural(r.before, "trigger")} ${pc.dim("→")} ${plural(r.after, "trigger")}${o.append ? pc.dim(` (${r.read} added)`) : ""}${dot}written to ${outName(w)}${dot}${size(w.bytes)}`);
   });
+const editorOption = () => new Option("--editor <command>", "the editor to open, such as \"code --wait\"; VISUAL or EDITOR otherwise, else vi (Notepad on Windows)");
+triggers.command("edit").description("the triggers as text in your editor, imported when you close it").argument("<map>")
+  .addOption(editorOption())
+  .option("--out <map>", "write the result here instead of over the map")
+  .option("--briefing", "the mission briefing's triggers instead")
+  .addHelpText("after", `
+Writes the text export to a file of its own, opens it in your editor and waits for the editor to close. Saved with
+changes, the text is imported as triggers import reads it and the map is written; unchanged, nothing is written.
+Text that does not read is kept, and the error says where, so the edit is not lost. A graphical editor has to wait
+for its window to close: code --wait, subl -w, gedit -s.`)
+  .action((file: string, o: { editor?: string; out?: string; briefing?: boolean }) => editCommand("triggers", file, o));
 
 const strings = map.command("strings").description("a map's strings as a text file, and back")
   .addHelpText("after", `
@@ -375,6 +416,13 @@ strings.command("import").description("set the map's strings from such a file").
     const w = await writeBack(doc, input.path, o.out ?? null);
     say(piped, `${mark.ok} ${pc.bold(input.name)}: ${plural(r.replaced, "string")} replaced, ${r.added} added, ${r.unchanged} unchanged${dot}written to ${outName(w)}${dot}${size(w.bytes)}`);
   });
+strings.command("edit").description("the strings in your editor, imported when you close it").argument("<map>")
+  .addOption(editorOption())
+  .option("--out <map>", "write the result here instead of over the map")
+  .addHelpText("after", `
+As strings import: a line changed sets that string, a line past the end adds one, and a line taken out leaves the
+string as it was (strings prune drops the unused ones).`)
+  .action((file: string, o: { editor?: string; out?: string }) => editCommand("strings", file, o));
 
 strings.command("prune").description("drop the strings nothing in the map refers to").argument("<map>").addOption(json)
   .option("--dry-run", "list them and write nothing")
@@ -432,6 +480,32 @@ when the map had none. The packed file is opened as a map before it is written.`
     const r = await packMap(dir, { out: o.out ?? null, compression: o.compression as "none" | "pkware" | "zlib" | undefined });
     if (o.json) { print(JSON.stringify(r, null, 2)); return; }
     print(`${mark.ok} ${pc.bold(relative(process.cwd(), r.path) || r.path)}: ${plural(r.members + 1, "member")}${r.stored ? pc.dim(` (${r.stored} without a name)`) : ""}${r.added.length ? `${dot}${plural(r.added.length, "file")} added: ${r.added.join(", ")}` : ""}${dot}${r.compression}${r.encrypted ? ", encrypted" : ""}${dot}${size(r.bytes)}`);
+  });
+
+const sounds = map.command("sounds").description("a map's sounds, listed or written out as files")
+  .addHelpText("after", `
+The sounds are the WAV table's entries (the Sound Editor's list) and any other file in the archive that is audio.
+They come out as the files that went in: a WAV plays as it is (the archive's own sound compression is undone on the
+way), an Ogg is written as it is. A name in the table that the map does not carry is listed, not an error: a path
+under sound\\ is one of the game's own sounds.`);
+sounds.command("list", { isDefault: true }).description("each sound: its slot, length, format, size and what plays it").argument("<map>").addOption(json)
+  .action(async (file: string, o: { json?: boolean }) => {
+    const input = await readInput(file);
+    expectKind(input, "map");
+    const { report } = await readSounds(input);
+    print(...(o.json ? [JSON.stringify(report, null, 2)] : printSounds(report)));
+  });
+sounds.command("export").description("the sounds as .wav and .ogg files in a folder").argument("<map>").addOption(json)
+  .option("--out <folder>", "the folder to write; by default one named after the map with -sounds, beside it")
+  .action(async (file: string, o: { json?: boolean; out?: string }) => {
+    const input = await readInput(file);
+    expectKind(input, "map");
+    const base = input.path === STDIO ? "stdin" : input.path.replace(/\.(scm|scx|chk)$/i, "");
+    const r = await exportSounds(input, o.out ?? `${base}-sounds`);
+    if (o.json) { print(JSON.stringify(r, null, 2)); return; }
+    const near = r.dir ? relative(process.cwd(), r.dir) : "";
+    const where = r.dir ? `${dot}${pc.dim("→")} ${pc.cyan(near.startsWith("..") ? r.dir : near || ".")}` : "";
+    print(...printSounds(r, (s) => ("file" in s && s.file ? relative(r.dir ?? "", s.file) : s.name)).map((l, i) => (i === 0 ? `${r.written ? mark.ok : mark.info} ${l}${where}` : l)));
   });
 
 map.command("build").description("apply the map's TrigScript script and build its programs, as Save does").argument("<map>").addOption(json)
@@ -565,15 +639,16 @@ character is two pixels, in 24-bit colour where the terminal says it has it, els
 
 map.command("play").description("a lobby on the play page with this map, and its invite link to send around").argument("<map>").addOption(json)
   .addOption(new Option("--play <url>", "the play page's address (SCMJS_PLAY_URL)").hideHelp())
+  .addOption(qrOption())
   .addHelpText("after", `
 Opens scmjs.dev/play in your browser with the map and asks it for a lobby; the page is the host, and the link it
 reports is printed here. The page asks you to sign in to scmjs.dev when you are not (opening a lobby needs an
 account; joining one does not), and for the game's files the first time. The people you send the link to need
 their own StarCraft files and no account. Waits up to five minutes for the page.`)
-  .action(async (file: string, o: { json?: boolean; play?: string }) => {
+  .action(async (file: string, o: { json?: boolean; play?: string; qr?: boolean }) => {
     const input = await readInput(file);
     expectKind(input, "map");
-    const r = await playInLobby(input, { play: o.play, live: o.json ? undefined : (line) => print(line) });
+    const r = await playInLobby(input, { play: o.play, qr: o.qr, live: o.json ? undefined : (line) => print(line) });
     if (o.json) { print(JSON.stringify({ file: input.name, ...r }, null, 2)); return; }
     if (!r.link) throw new CliError(r.error ?? "The page opened no lobby", "Invite Players on the play page opens one by hand.");
   });
@@ -609,6 +684,34 @@ Exits 1 when the maps differ, 0 when they are the same, like diff.
       else say(piped, ...lines);
     } else print(...(o.json ? [JSON.stringify(d, null, 2)] : printDiff(d, !!o.all)));
     if (!d.same) process.exitCode = 1;
+  });
+
+map.command("merge").description("merge two versions of a map with their common ancestor, as git's merge driver").argument("<base>", "the common ancestor; with no other map, the map git stopped on").argument("[ours]").argument("[theirs]").addOption(json)
+  .option("--out <map>", "write the merged map here instead of over <ours>; - for standard output")
+  .option("--ours", "settle each conflict with ours's version")
+  .option("--theirs", "settle each conflict with theirs's version")
+  .option("--name <path>", "the map's name in what is said (git gives it as %P)")
+  .option("--dry-run", "say what would merge, and write nothing")
+  .addHelpText("after", `
+Part by part: what one side changed is taken, what both changed is merged finer (terrain by tile, units by
+instance, triggers in order, settings by field) or is a conflict. With no conflicts the merged map is written over
+<ours> (or to --out); with conflicts nothing is written and the command exits 1, unless --ours or --theirs settles
+them. scmjs init sets it up as git's merge driver:
+  git config merge.scmjs.driver "scmjs map merge %O %A %B --out %A --name %P"
+  scmjs map merge base.scx mine.scx theirs.scx --out merged.scx
+  scmjs map merge maps/ridge.scx --ours     # after git merge stopped on it: the three versions from git`)
+  .action(async (a: string, b: string | undefined, c: string | undefined, o: { json?: boolean; out?: string; ours?: boolean; theirs?: boolean; name?: string; dryRun?: boolean }) => {
+    if (o.ours && o.theirs) throw new CliError("--ours or --theirs, not both", null, 2);
+    if (b !== undefined && c === undefined) throw new CliError("Three maps (base, ours, theirs), or one that git merge stopped on", null, 2);
+    const staged = b === undefined;
+    const inputs = staged ? stagedInputs(a) : { base: asMap(await readInput(a)), ours: asMap(await readInput(b!)), theirs: asMap(await readInput(c!)) };
+    const piped = o.out === STDIO && !o.dryRun;
+    if (piped && o.json) throw new CliError("--json and the map both want standard output", "Write the map to a file with --out, or leave --json off.", 2);
+    const prefer: Side | null = o.ours ? "ours" : o.theirs ? "theirs" : null;
+    const r = await runMerge(inputs, { prefer, name: o.name ?? null, out: o.out ?? null, dryRun: !!o.dryRun, staged });
+    if (o.json) print(JSON.stringify(r, null, 2));
+    else say(piped, ...printMerge(r));
+    if (r.conflicts.length && !r.settled) process.exitCode = 1;
   });
 
 map.command("fetch").description("search scmscx.com, the community's map database, and download a map").argument("[words...]", "what to search for: a map's name, words in its description, a file name").addOption(json)
@@ -663,17 +766,18 @@ map.command("share").description("a link to the map on scmjs.dev: a copy anyone 
   .option("--new", "store it as a new map even when your account has one with this file name")
   .option("--no-picture", "upload no picture for the link's card")
   .option("--starcraft <folder>", "your installation of StarCraft, for the picture (SCMJS_STARCRAFT); found in the usual places otherwise")
+  .addOption(qrOption())
   .addHelpText("after", `
 Needs a scmjs.dev account: scmjs login. A copy link stores the map on your account (My Maps) as a new map, or as a
 new revision of the map there with the same file name, and links that revision: whoever opens it gets a copy in
 their editor. --edit opens the map for editing together instead; whoever opens that link edits it with you.
   scmjs map share ridge.scx
   scmjs map share ridge.scx --edit --keep week`)
-  .action(async (path: string, o: { json?: boolean; name?: string; note?: string; edit?: boolean; keep?: string; new?: boolean; picture?: boolean; starcraft?: string }) => {
+  .action(async (path: string, o: { json?: boolean; name?: string; note?: string; edit?: boolean; keep?: string; new?: boolean; picture?: boolean; starcraft?: string; qr?: boolean }) => {
     const input = await readInput(path);
     expectKind(input, "map");
     const r = await shareMap(input, await loadMapInput(input), o);
-    print(...(o.json ? [JSON.stringify(r, null, 2)] : printShare(r)));
+    print(...(o.json ? [JSON.stringify(r, null, 2)] : withQr(printShare(r), r.link, o.qr)));
   });
 
 const replay = program.command("replay").description("read and open replays").helpGroup("Maps and replays:");
@@ -702,16 +806,17 @@ replay.command("share").description("a link to the replay on scmjs.dev, which an
   .option("--note <text>", "a note, as My Maps shows it")
   .option("--no-picture", "upload no map picture for the link's card")
   .option("--starcraft <folder>", "your installation of StarCraft, for the picture (SCMJS_STARCRAFT); found in the usual places otherwise")
+  .addOption(qrOption())
   .addHelpText("after", `
 Needs a scmjs.dev account: scmjs login. The replay is stored on your account (My Maps ▸ Replays, up to 8 MB each,
 counted with your maps) and linked; whoever opens the link watches it in the editor's replay viewer. The link's
 card shows the map's picture when your copy of the game is here to draw it.
   scmjs replay share game.rep`)
-  .action(async (path: string, o: { json?: boolean; note?: string; picture?: boolean; starcraft?: string }) => {
+  .action(async (path: string, o: { json?: boolean; note?: string; picture?: boolean; starcraft?: string; qr?: boolean }) => {
     const input = await readInput(path);
     expectKind(input, "replay");
     const r = await shareReplay(input, await loadReplayInput(input), o);
-    print(...(o.json ? [JSON.stringify(r, null, 2)] : printReplayShare(r)));
+    print(...(o.json ? [JSON.stringify(r, null, 2)] : withQr(printReplayShare(r), r.link, o.qr)));
   });
 replay.command("open").description("watch a replay in the scmJS app, or the editor in your browser").argument("<replay>")
   .option("--browser", "the editor in the browser, even with the app installed")
@@ -878,9 +983,10 @@ The sign-in opens Discord in your browser, as the editor's does (--provider goog
 session is kept in your configuration folder (~/.config/scmjs/session.json; SCMJS_SESSION names another file), and
 scmjs logout ends it. scmjs login and scmjs logout are the same as account login and account logout.`);
 account.command("show", { isDefault: true }).description("who you are, the storage you use and the maps you are sharing").addOption(json)
-  .action(async (o: { json?: boolean }) => {
+  .addOption(new Option("--qr", "each shared map's link as a QR code too, for a phone"))
+  .action(async (o: { json?: boolean; qr?: boolean }) => {
     const r = await accountReport();
-    print(...(o.json ? [JSON.stringify(r, null, 2)] : printAccount(r)));
+    print(...(o.json ? [JSON.stringify(r, null, 2)] : printAccount(r, undefined, { qr: o.qr })));
   });
 account.command("login").description("sign in to scmjs.dev in your browser").addOption(providerOption()).action(signIn);
 account.command("logout").description("end the session and delete its file").action(signOut);

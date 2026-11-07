@@ -1,6 +1,6 @@
 # The `scmjs` command line
 
-`cli/` is the npm package **`@scm-js/cli`** (its command is `scmjs`): `scmjs about | doctor | info | map info|check|open|new|dump|find|fetch|set|resize|triggers|strings|diff|build|run|unpack|pack|trace|cost|rush |
+`cli/` is the npm package **`@scm-js/cli`** (its command is `scmjs`): `scmjs about | doctor | info | map info|check|open|new|dump|find|fetch|set|resize|triggers|strings|sounds|diff|merge|build|run|unpack|pack|trace|cost|rush |
 replay info|open|watch | plugin new|check|dev | bot new|init|build|update|run|ladder`, or `npx @scm-js/cli …`. npm refused the plain name `scmjs` on the first publish (2026-11-06,
 E403 "too similar to scss, sockjs"), so the user chose the scope beside @scm-js/replay and @scm-js/plugin-api. The reader's page is `docs/cli.md`. The shape was the user's (2026-11-05): one command, a noun for
 each kind of thing (`map`, `replay`, `plugin`, `bot`), "an impressive UX tool … not overly engineered".
@@ -487,7 +487,8 @@ report, `printRecipe` the paste-able text. Writes:
 - **`README.md`** (`readmeText`): a table of the maps (name via `gameText` + `visible`, colour bytes gone, `|`
   escaped, link URL-encoded with `(`/`)`), the three commands with the folder's own globs and first map, and the git
   lines a fresh clone needs (git config is per clone; "run `scmjs init` again" is the answer since it writes nothing).
-- **git config** `diff.scmjs.textconv/xfuncname/cachetextconv` (`GIT_SETTINGS`) in the repository via `git -C top
+- **git config** `diff.scmjs.textconv/xfuncname/cachetextconv` and `merge.scmjs.name/driver` (`GIT_SETTINGS`; the merge
+  pair added with `map merge`, see "Merging maps") in the repository via `git -C top
   config`; compared with `git config --get` (any scope); another value is `other` (▲, left alone) unless `--force`;
   `OLD_SETTINGS` (the 0.9.0 `^## `) is replaced without `--force`. **Trap: never `.trim()` git's output** — the old
   value ends in a space and compared unequal. No repository: nothing set, a note; `--git` runs `git init` (never
@@ -500,6 +501,101 @@ Paths in the report (and `--json`'s `files[].path`) are **from the folder** — 
 first — the root help was at 23 lines — until the blank lines between the groups went (see "The overview's rows"
 below); the user asked for `scmjs init`, not `map init`. The `map` noun's help (`map.addHelpText("after", …)`) names
 it too. `doctor`'s Ready table unchanged (init needs nothing beyond git, optional).
+
+## Merging maps: `map merge` and git's merge driver (`cli/src/merge.ts`) — 2026-11-07
+
+`scmjs map merge <base> <ours> <theirs> [--out] [--ours|--theirs] [--name] [--dry-run] [--json]`, and `map merge <map>`
+alone during a stopped `git merge`. A verb under `map`, so **no overview row** (the `map` term already ends in `…`).
+
+- **Shape**: `runMerge` (command level: shortcuts, writing) → `mergeDocs(base, ours, theirs, out, prefer)` (pure, on
+  `OpenedMap`s). `out` is a **second opening of ours's bytes**, changed in place and written with `writeBack`; ours
+  itself is only read (the comparisons need it as it was). So the result is ours + theirs's
+  delta: every section the merge did not mark dirty is ours's bytes, byte for byte (tested on SIDE alone).
+- **Shortcuts first, by bytes** (as git): ours == theirs → `same`; base == theirs → `ours`; base == ours → `theirs`,
+  written exactly (no parse). Without `--out` and with ours as the result nothing is written — except in the staged
+  mode, where the target is the working-tree file, not stage 2's bytes.
+- **Order in `mergeDocs`**: header (revision via `changeMapVersion`, encoding via `changeTextEncoding`) first, since
+  the settings pairs and MRGN slots follow the revision; the frame; terrain and objects; locations; triggers;
+  briefing; settings; archive members; unmodelled sections; **strings last** (below).
+- **Frame** (`mergeFrame`): same width/height/era on all three → fine merge. Otherwise the grid group (DIM, ERA, MTXM,
+  TILE, ISOM, MASK, UNIT, THG2, DD2 and the locations' rects) comes whole from the side that changed geometry; both →
+  one "Size and tileset" conflict, `--theirs` takes theirs's group. Location names/flags still merge per field then.
+- **Terrain** per index on MTXM, TILE, MASK, ISOM (null on one side → whole-value rule). ISOM conflicts are shown at a
+  tile (`isomTile`: row = index / ((w/2+1)·4), col·2), so they join the tile rectangles. Conflicting tiles →
+  `tileRegions` (8-connected components → bounding boxes, `{x0,y0,x1,y1,count}`). `diffpicture.ts` does not group
+  regions (one bounding box); this is new.
+- **Units/doodads/sprites** (`instanceDelta` + `mergeInstances`): multiset match by key (units: record minus serial,
+  `unitKey`; doodads/sprites: whole record); unmatched base = removed, unmatched side = added; a removed+added pair is
+  an *edit* by **serial first** (units; the editor's `updateUnits` keeps it), else same group (unitId:owner,
+  doodadId, spriteId:flags) within `MOVE_RADIUS` 4 tiles, nearest first. Per base instance: theirs kept → nothing;
+  theirs removed + ours kept → remove; + ours edited → conflict; theirs edited + ours kept → replace; + ours removed →
+  conflict; both edited → same key fine, else conflict. Theirs's additions are appended minus ours's identical
+  additions (both adding the same unit = once). Serials: a unit in one of ours's slots keeps ours's serial (theirs's
+  edit included); an appended unit keeps its own unless taken, then max+1, and `relatedSerial` among appended units
+  follows the renumbering. Identical duplicates (two equal marines) are interchangeable, so which one "was removed" is
+  first-come; harmless.
+- **Locations** per slot, three fields each (rect atomic — a mix of two rects would be a box neither drew — elevation
+  flags, name as text). A rename on one side and a move on the other both land.
+- **Triggers/briefing**: `triggerKey` = JSON of the record with each `text`/`wav` arg (per `actionDef`'s arg kinds)
+  replaced by its **text**, locations **by number**. Not the text form (`formatTrigger`): it names locations, so a
+  rename on one side changed every trigger mentioning it (found while designing; the task suggested the text form).
+  `mergeList` = diff3 (`lcsMatch`: prefix/suffix trim + DP, a middle over 16M cells counts as one change; `diff3Chunks`)
+  then, in a chunk both changed: both inserted at one place (empty base) → ours then theirs minus duplicates; same
+  length on all three → item by item; one side only inserted (base a subsequence of it) and the other changed items
+  in place (same length) or only deleted → combined; else one conflict for the chunk. Git conflicts on adjacent
+  lines; this does not, which is the point for triggers. Conflicts show `summarizeTrigger` lines whole in the data;
+  `printMerge` cuts each around the first character where ours and theirs part (`around`, 100 columns).
+- **Settings** (`settingsView`): one object per scenario with string references as text (name, description, force
+  names, unit names, switch names, WAV paths), merged per top-level key by `mergeValue` (recurses into same-length
+  lists/typed arrays and same-key objects; a leaf both changed is a conflict, worded by `describe`). Installed by
+  setting fields + `markDirty`; the revision pairs through `unitSettingsSections` & co (new core exports), COLR only
+  when the file has it or VER ≥ 205, IOWN with OWNR when there is no separate `editorPlayerTypes`.
+- **Strings** (`mergeStrings`), the trap of the design: the table is index-addressed and must not be renumbered (raw
+  sections, the editor's rule). Every reference site of `out` is walked (`stringSites`: SPRP, FORC, MRGN, UNIS/x
+  names, SWNM, WAV, TRIG/MBRF text+wav). Sites from ours keep their numbers and claim them. A site from theirs (a
+  location name taken from theirs, a trigger record from theirs — `foreign`/`foreignActions`) wants theirs's text and
+  prefers theirs's number: kept if ours's table has that text there; written there if the number is unclaimed and
+  empty, past the end, or referenced in ours only by what was replaced (**an edit in place stays in place** — the test
+  checks "Hold the base." is gone); else shares a slot with that text; else the lowest empty slot no version refers
+  to; else appended. **Blizzard's maps have all 1024 STR slots** (unused = "" at one offset), so appending overflowed
+  the first time the every-map loop ran; the free-slot step came from that. A table pushed over `stringCapacity` by
+  the merge is a CliError (ours's own overflow is allowed: the editor's `internString` does it too). Then strings no
+  version refers to merge by number (theirs's prune lands; a clash puts theirs's text in a free slot). `renumbered`
+  counts theirs's sites that did not get their number — the "Strings N renumbered" line. Both sides appending a
+  string at the same new number is the common case (two people each add a trigger).
+- **Archive members** by normalised name, bytes; **unmodelled sections** by name, all copies compared as bytes;
+  theirs's copies replace ours's at ours's first position, or go after the section theirs had before them.
+- **Stored (unnamed) members** are ours's, always — they are pinned blobs; not merged. **Built maps** open restored,
+  so the merge is of the sources and the result is written unbuilt (`writeBack` writes the restored map, as for every
+  writing command): build again.
+- **Output**: `writeBack(out, inputPath, target)` with `inputPath` = `--name` when ours's path has no map extension
+  (git's `.merge_file_XXXXXX`), so the format comes from the real name; `out.fileName` set likewise. **Default target
+  is ours** (git merge-file and the driver contract agree; the command is the same by hand and under git). With
+  `--name` and target = ours, `written.path` is reported as the name (the first run said "written to
+  /tmp/…/.merge_file_EE7k6Y").
+- **Git driver** (`init.ts` `GIT_SETTINGS`): `merge.scmjs.driver = scmjs map merge %O %A %B --out %A --name %P`,
+  `merge.scmjs.name`. git runs it from the repository's top with **relative** temp names (`.merge_file_…`, no
+  extension → `asMap` accepts a bare chk by `looksLikeChk`, now exported from files.ts) and quotes the placeholders
+  (checked with a space in the map's name). Exit 0 = merged; non-zero = conflict, and git keeps %A as left (ours),
+  index stages 1–3 for the path. `.gitattributes` gains `*.scx|scm|chk merge=scmjs` as separate lines;
+  `missingLines` now treats a pattern naming its own driver *for the same attribute* as there (diff or merge).
+  `printInit` groups the settings rows by prefix (`git config diff.scmjs`, `git config merge.scmjs`).
+- **Staged mode** (`stagedInputs`): `git show :1:/:2:/:3:<path from top>`; a missing stage → exit 2 "is it in a merge
+  that stopped on it?". The hint after a driver conflict names the map (`--name`), so it reads
+  `scmjs map merge "ridge map.scx" --ours (or --theirs) …; then git add …`.
+- **Tests** (`tests/cli-map-merge.test.ts`, 23): lcs/diff3/mergeList cases, regions, `around`; ums.scx versions made
+  with the editor's functions (units + trigger vs location rename + string edit; both appending a string; byte for
+  byte; trigger conflict ± rules; adjacent trigger edits; terrain rectangles; unit edit/remove conflicts; settings
+  fields; an unmodelled section); every map in `mapFiles()` (committed + fixtures); shortcuts and the no-write
+  conflict path; init's lines. **The git test** runs real `git merge` with the driver, but `scmjs` is not on PATH in
+  a test, so the driver is a stand-in `node driver.mjs <url> %O %A %B --out %A --name %P` that POSTs `{cwd, args}`
+  to an HTTP server in the test process, which calls `runMerge` — so git must be run with async `execFile` (a
+  `spawnSync` would block the server). Checked by hand with the built CLI on PATH and the exact line `init` writes:
+  clean merge, conflict, `map merge <map>` / `--theirs`, `git add`, commit.
+- **Not done**: an MCP tool (`map_merge`); a picture of terrain conflicts (`diffpicture` could draw `tileRegions`);
+  per-conflict choices (only one rule for all; the editor is the place for mixing); merging two resized maps tile by
+  tile under an anchor; merging the TrigScript source text inside its member (it is bytes here); `doctor`'s Ready
+  table does not name merge (needs nothing beyond git).
 
 ## CI slice: check formats, info --table, diff --rev, set, resize, strings prune (`report.ts`, `edit.ts`) — 2026-11-07
 
@@ -1048,6 +1144,66 @@ Phase one of "share links from files on disk". Server half: ai-server 0.36.0 (`P
 - Checked 2026-11-05 against `npx vite` with headless Chromium: `ums.scx` opened ("Opened ums.scx — 64×64, 21
   units"), `legacy_cp949.rep` opened in Aftermath (view-only, timeline, APM 276/227). The desktop launch from WSL
   was not run (it would open the app on the user's screen).
+
+## Cheap wins: `triggers|strings edit`, `--qr`, `map sounds` (`texteditor.ts`, `qr.ts`, `sounds.ts`) — 2026-11-07
+
+- **`map triggers edit` / `map strings edit [--editor] [--out] [--briefing]`** (`editInEditor`): the export written to
+  `<tmpdir>/scmjs-edit-XXXX/<map>.triggers.txt` (`.briefing.txt`, `.strings.txt`), the editor run with stdio
+  inherited, then `importTriggers`/`importStrings` — the same parser and errors as `import` — and `writeBack` in
+  place (`--out` for elsewhere; `-` refused both ways, the editor needs the terminal). **Editor choice** (`editorCommand`):
+  `--editor`, `VISUAL`, `EDITOR` (git's order), else `notepad` / `vi`. **Spawn** (`editorSpawn`): an existing path or a
+  bare word (`/^[\w@%+=:,./\\-]+$/`) runs as is; anything else (`code --wait`, a quoted path) runs as git does,
+  `sh -c '<editor> "$@"' <editor> <file>`, so the file stays one argument; **on Windows always `shell: true`** (unless
+  an existing `.exe`), since `code` is `code.cmd` and Node refuses a `.cmd` without a shell. SIGINT is ignored while
+  the editor runs (git's habit: Ctrl-C in vi must not kill the command and strand the file). **"Nothing changed"**:
+  the text equal after CRLF→LF and `trimEnd` (vi adds a final newline, Notepad may write CRLF), *or* the import gives
+  the same triggers (`sameTriggers`; a comment-only edit) / no string replaced or added — the map is then not
+  written. **Kept file**: a parse error (exit 1) or an editor that exits non-zero keeps the file and the hint says
+  `The map is unchanged; your text is kept in <path>. Fix it there, then: scmjs map triggers import "<map>"
+  "<path>"`; an editor that never started (ENOENT, exit 2) removes it. The error message names the file by its base
+  name (`ums.triggers.txt, line 3: …`), the hint by its path. Tests (`tests/cli-edit.test.ts`, 8) use a stand-in Node
+  script given as `--editor '"<node>" "<script>" <mode>'`, which goes through the `sh -c` path; they pass `dir` so
+  kept files land in the test's folder. Tried by hand on a copy of ums.scx: same/comment → nothing changed, drop a
+  trigger → 3 → 2 written, broken text → kept + exit 1, `EDITOR=nonexistent` → exit 2, `--editor false` → exit 1.
+- **`--qr`** on `map share`, `replay share`, `map play` (after the "Lobby open" line, through `playInLobby`'s `qr`)
+  and `account [show]` (each shared room's name, then its code). **Own encoder, no package**: an npm QR package
+  would have meant a devDependency in the shared node_modules, a notices entry and an ATTRIBUTION row for ~250 lines
+  of well-known algorithm; `qr.ts` is adapted from Project Nayuki's library (MIT, credited in ATTRIBUTION.md under
+  "Adapted code", its copyright in the MIT notice list) — byte mode, L/M, versions 1–40, mask by the standard's four
+  penalty rules. **Checked once by hand** (scratchpad, not in the repo): module-for-module equal to `qrcode@1.5.4`
+  for every mask × both levels × eight texts of 11 to 2,300 bytes, up to version 40 (byte mode forced), its automatic mask choice equal too, and jsQR
+  1.4.0 decoding both the matrix and the *terminal lines read back into pixels* (colour, plain and ASCII). The test
+  pins the `https://scmjs.dev` matrix, capacities (M v1–10 = 14…213, v40 = 2331; L v40 = 2953), the "HELLO WORLD"
+  1-M Reed–Solomon codewords, format bits M0/L0, version bits 7, and that the half blocks read back to the modules.
+  **Drawing** (`qrLines`): two rows a line with `▀▄█`, a quiet zone of 2 (4 is the standard's; phones read 2 and the
+  width matters); with colour the line is wrapped in `ESC[30;107m` (black on bright white) so a dark theme does not
+  invert it; without colour the *light* modules are the marks, i.e. drawn for a dark terminal (qrencode's UTF8
+  convention; phones read the inverted code). ASCII fallback (`unicode` false): `##` per module, one line a row —
+  74 columns for a plain share link, 90 for one with `?scmjs-server=`. Under the first line, so `| head -1` is
+  still the link; `--json` ignores `--qr`. **Not run against scmjs.dev**: no session on this machine; the share,
+  play and account tests check the lines.
+- **`map sounds [list] <map>` and `map sounds export <map> [--out]`** (`readSounds`/`exportSounds`): `readArchive`
+  (not `openMapBytes`: a built map's sounds are the archive's as is) + `parseScenario(chk)` + `soundList` joined
+  with `stored.unreadable`; then every other member that is audio by extension (`.wav/.ogg/.mp3`) or magic (RIFF…
+  WAVE, OggS, ID3/MPEG sync). **mopaq does the decoding inside `readMembers`** (1.6.x: Huffman + IMA ADPCM sectors),
+  so "decoded through mopaq" needs no code here; the campaign fixtures prove it — StarCraft Fortress's
+  `1assualt.wav` is 62,416 bytes stored in 19,143 (3.3:1, the ADPCM path; the first sector is plain or PKWARE) and
+  comes out a 16-bit PCM WAV of 1.4 s. Lengths: `parseWavHeader`+`wavDuration` (+`wavFormatLabel`, now on core's
+  entry), Ogg from the last page's granule over the Vorbis rate (Opus: 48 kHz less pre-skip). A WAV-table name the
+  archive lacks is `missing` (`stock` when under `sound\`: the game's own), one it holds but could not decode is
+  `unreadable`; neither is fatal. Files: `fileFor(basename)`, the extension the bytes call for when the name has
+  none, `-2`/`-3` on a clash (case-insensitive); the folder is made only when something is written (default
+  `<map>-sounds` beside it). Seven of the 22 fixture maps carry sounds (15 in StarCraft Fortress); all came out
+  playable (`file`: Microsoft PCM). Tests: `tests/cli-sounds.test.ts` (5) on ums.scx's tone and a map made from it
+  with an Ogg, a second `tone.wav`, a missing entry and a stock path.
+- **Rows.** The root overview is unchanged at 23 lines: all three live under `map …`, `replay …` and `account …`,
+  which the overview already shows as one row each. In `scmjs map --help` the term width for a noun's own help is
+  `TERM_WIDTH + 2` (`subcommandTerm` checks `cmd.parent?.parent`), so `triggers export|import|edit` is whole beside
+  `strings export|import|edit|…` and the column did not widen. In docs/cli.md's Commands table `strings prune` was
+  folded into the strings row (`export|import|edit|prune`) and that row went to `map sounds`.
+- `@scm-js/core` gained `parseWavHeader`, `wavDuration`, `wavFormatLabel`, `WavInfo` (`core.md`).
+- Not built: an MCP tool for sounds or edit (edit needs a terminal; sounds export would want a folder), sounds
+  *import* (the Sound Editor's conversion needs Web Audio), re-edit on a parse error (`crontab -e`'s "try again?").
 
 ## Next (proposed to the user)
 

@@ -60,6 +60,16 @@ passes Check Map (a fresh map has eight Human slots and fails on start locations
 
 ## Next
 
+Done 2026-11-07 (`map merge`, `cli.md` "Merging maps"): `unitSettingsSections`, `upgradeSettingsSections`,
+`upgradeRestrictionSections`, `techSettingsSections`, `techRestrictionSections` exported — which of a revision pair a
+direct write to the table marks dirty; docs/core.md "How an edit works" has a "By hand" paragraph for them. The
+export list's parser in `tests/core.test.ts` reads names between the braces, so **a comment inside an `export { … }`
+list hides the next name** (the first try put one there and the test said the name was not exported); comments go
+above the statement.
+
+Done 2026-11-07 (`map sounds`): `parseWavHeader`, `wavDuration`, `wavFormatLabel` and `WavInfo` from
+`formats/wav.ts` (pure; its one import is `t` for the format label's words). `cli.md` "Cheap wins".
+
 Done 2026-11-07 (the DX slice: `map new|dump|find`, `doctor`): added `flatTerrain`/`baseTerrain`/`DIRT`
 (`formats/tileset/terrain.ts` — works with a null tileset, dirt ids, so it is not "needs the tileset"),
 `DEFAULT_START_PLACEMENT` + its types, `DEFAULT_PLACEMENT`/`PlacementOptions` (placement.ts was already in the walk

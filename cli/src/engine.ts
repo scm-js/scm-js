@@ -1,16 +1,15 @@
 /**
- * The game engine from the terminal, shared by `scmjs bot run`, `scmjs map trace` and `scmjs map cost`: scm-sim's
- * lifted game, the one the play page runs. Its files (the module, the base image, the interface pack) and the runners
- * that drive a game with no page are fetched once from the play page's address — `play/engine/current.json` names the
- * current build and its runners — and kept under the user's cache folder. The game's own files come from the player's
- * installation of StarCraft, Remastered or 1.16.1, found in the usual places or named; nothing of the game is fetched
- * or carried.
+ * The game engine for the commands that play: `scmjs bot run`, `scmjs replay watch`, `scmjs map trace` and `map cost`. The engine is scm-sim's
+ * lifted game, the one the play page runs; its files (the module, the base image, the interface pack) and the
+ * runners that drive a game from a terminal are fetched once from the play page's address — `play/engine/current.json`
+ * names the current build and its runners — and kept under the user's cache folder. The game's own files come from the
+ * player's installation of StarCraft, Remastered or 1.16.1, found in the usual places or named with `--starcraft`;
+ * nothing of the game is fetched or carried.
  *
  * A runner is run in a process of its own (one game a process: the lifted game takes its memory when its module is
- * first imported) and speaks JSON lines, which `runRunner` hands over one by one.
+ * first imported) and speaks JSON lines, which each command turns into the terminal's.
  */
-import { spawn } from "node:child_process";
-import { createInterface } from "node:readline";
+import { spawn, type ChildProcess } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, join, resolve } from "node:path";
@@ -20,14 +19,25 @@ import { CliError, pc } from "./ui";
 /** Where the play page is, and so where the engine's files are (`SCMJS_PLAY_URL` for another). */
 export const PLAY_URL = "https://scmjs.dev/play";
 
+/** The runners a deploy may name in `current.json`, by what they run, and the file name each goes by. */
+export const RUNNERS = {
+  bot: { key: "runner", file: /^run(-[0-9a-f]+)?\.(mjs|cjs)$/, command: "scmjs bot run" },
+  replay: { key: "replayRunner", file: /^replay(-[0-9a-f]+)?\.(mjs|cjs)$/, command: "scmjs replay watch" },
+  map: { key: "mapRunner", file: /^map(-[0-9a-f]+)?\.(mjs|cjs)$/, command: "scmjs map trace (and map cost)" },
+} as const;
+export type RunnerKind = keyof typeof RUNNERS;
+
 /** What `play/engine/current.json` says (scm-sim's `scripts/deploy-play.mjs` writes it). */
 export interface EngineCurrent {
   build: string;
   files: string[];
-  /** The bot runner (`scmjs bot run`). */
+  /** The bot runner. */
   runner: string;
   runnerBytes?: number;
-  /** The map runner (`scmjs map trace|cost`); a deploy before it has none. */
+  /** The replay runner, in a deploy that has one. */
+  replayRunner?: string;
+  replayRunnerBytes?: number;
+  /** The map runner (`scmjs map trace|cost`), in a deploy that has one. */
   mapRunner?: string;
   mapRunnerBytes?: number;
 }
@@ -60,15 +70,16 @@ export interface Engine {
   build: string;
   /** The bot runner's file in `dir`. */
   runner: string;
-  /** The map runner's file in `dir`, when the build has one. */
-  mapRunner: string | null;
+  /** Every runner's file in `dir`, by what it runs; a deploy older than a runner has not got it. */
+  runners: Partial<Record<RunnerKind, string>>;
   /** Bytes fetched this time; 0 when everything was cached. */
   fetched: number;
 }
 
 /**
- * The engine's folder: `at` is a folder that already holds the files (a staged deploy, a clone's `data/lifted` with a
- * runner beside), else the play page's address, whose `engine/current.json` names the build to fetch into the cache.
+ * The engine's folder: `at` is a folder that already holds the files (a staged deploy, a clone's `data/lifted` with
+ * the runners beside), else the play page's address, whose `engine/current.json` names the build to fetch into the
+ * cache, runners and all.
  */
 export async function ensureEngine(at: string = process.env.SCMJS_PLAY_URL || PLAY_URL, cache = cacheRoot(), say: (line: string) => void = () => {}): Promise<Engine> {
   if (!/^https?:\/\//.test(at)) {
@@ -77,12 +88,13 @@ export async function ensureEngine(at: string = process.env.SCMJS_PLAY_URL || PL
     if (existsSync(current)) {
       const c = JSON.parse(readFileSync(current, "utf8")) as EngineCurrent;
       const sub = existsSync(join(dir, c.build)) ? join(dir, c.build) : dir;
-      return { dir: sub, build: c.build, runner: c.runner, mapRunner: c.mapRunner ?? null, fetched: 0 };
+      return { dir: sub, build: c.build, runner: c.runner, runners: runnersNamed(c), fetched: 0 };
     }
-    const names = existsSync(dir) ? readdirSafe(dir) : [];
-    const runner = names.find((f) => /^run(-[0-9a-f]+)?\.mjs$/.test(f)) ?? null;
-    if (!runner) throw new CliError(`${at} holds no engine: no current.json and no run-<hash>.mjs beside the engine's files.`, "Name the play page's address, or a folder scm-sim's deploy-play.mjs staged.");
-    return { dir, build: basename(dir), runner, mapRunner: names.find((f) => /^map(-[0-9a-f]+)?\.mjs$/.test(f)) ?? null, fetched: 0 };
+    const files = existsSync(dir) ? readdirSafe(dir) : [];
+    const runners: Engine["runners"] = {};
+    for (const kind of Object.keys(RUNNERS) as RunnerKind[]) { const f = files.find((n) => RUNNERS[kind].file.test(n)); if (f) runners[kind] = f; }
+    if (!Object.keys(runners).length) throw new CliError(`${at} holds no engine: no current.json and no run-<hash>.mjs beside the engine's files.`, "Name the play page's address, or a folder scm-sim's deploy-play.mjs staged.");
+    return { dir, build: basename(dir), runner: runners.bot ?? "", runners, fetched: 0 };
   }
   const base = at.replace(/\/+$/, "");
   const current = JSON.parse(new TextDecoder().decode(await fetchBytes(`${base}/engine/current.json`))) as EngineCurrent;
@@ -90,7 +102,8 @@ export async function ensureEngine(at: string = process.env.SCMJS_PLAY_URL || PL
   const dir = join(cache, "engine", current.build);
   mkdirSync(dir, { recursive: true });
   let fetched = 0;
-  const wanted = [...current.files, current.runner, ...(current.mapRunner ? [current.mapRunner] : [])];
+  const runners = runnersNamed(current);
+  const wanted = [...current.files, ...Object.values(runners)];
   const missing = wanted.filter((f) => !existsSync(join(dir, f)));
   if (missing.length) say(`${pc.dim(`Fetching the game engine from ${base} (about 25 MB, once) → ${dir}`)}`);
   for (const name of missing) {
@@ -101,7 +114,21 @@ export async function ensureEngine(at: string = process.env.SCMJS_PLAY_URL || PL
     renameSync(part, join(dir, name));
     fetched += bytes.length;
   }
-  return { dir, build: current.build, runner: current.runner, mapRunner: current.mapRunner ?? null, fetched };
+  return { dir, build: current.build, runner: current.runner, runners, fetched };
+}
+
+/** The runners `current.json` names, by kind. */
+function runnersNamed(c: EngineCurrent): Engine["runners"] {
+  const out: Engine["runners"] = {};
+  for (const kind of Object.keys(RUNNERS) as RunnerKind[]) { const f = c[RUNNERS[kind].key]; if (typeof f === "string" && f) out[kind] = f; }
+  return out;
+}
+
+/** The path of the engine's runner for `kind`, or a CliError when the deploy the engine came from had none. */
+export function runnerFor(engine: Engine, kind: RunnerKind): string {
+  const file = engine.runners[kind];
+  if (!file) throw new CliError(`The engine at ${engine.dir} has no ${kind} runner.`, `${RUNNERS[kind].command} needs a play page deployed with one; a folder named with --engine must hold a ${RUNNERS[kind].file.source.split("(")[0]}-<hash>.mjs.`);
+  return join(engine.dir, file);
 }
 
 /** The folder's entries, none for a folder that is not there. */
@@ -141,19 +168,9 @@ export function findGameCopy(named: string | undefined): { folder: string; kind:
 }
 
 /**
- * Runs a runner script as a child process and hands each JSON line it prints to `onLine` as it comes. Resolves to the
- * exit code and what the runner wrote on stderr (its last lines, for an error nobody worded).
+ * A runner started as a process of its own: `runner` is its file, `args` what follows it. Its standard output is a
+ * pipe of JSON lines; its standard input a pipe too when `stdin` is asked for (a paced runner reads it), else closed.
  */
-export async function runRunner(script: string, args: string[], onLine: (line: Record<string, unknown>) => void, node = process.execPath): Promise<{ exitCode: number; stderr: string }> {
-  const child = spawn(node, [script, ...args], { stdio: ["ignore", "pipe", "pipe"] });
-  let stderr = "";
-  child.stderr.on("data", (d) => { stderr += d; });
-  const lines = createInterface({ input: child.stdout });
-  for await (const raw of lines) {
-    let l: Record<string, unknown>;
-    try { l = JSON.parse(raw) as Record<string, unknown>; } catch { continue; }
-    onLine(l);
-  }
-  const exitCode = await new Promise<number>((done) => { child.on("error", () => done(2)); child.on("close", (c) => done(c ?? 2)); });
-  return { exitCode, stderr: stderr.trim() };
+export function startRunner(runner: string, args: string[], { node = process.execPath, stdin = false } = {}): ChildProcess {
+  return spawn(node, [runner, ...args], { stdio: [stdin ? "pipe" : "ignore", "pipe", "pipe"] });
 }

@@ -1,7 +1,7 @@
 # The `scmjs` command line
 
 `cli/` is the npm package **`@scm-js/cli`** (its command is `scmjs`): `scmjs about | doctor | info | map info|check|open|new|dump|find|set|resize|triggers|strings|diff|build|run|unpack|pack|trace|cost |
-replay info|open | plugin new|check|dev | bot new|init|build|update|run`, or `npx @scm-js/cli …`. npm refused the plain name `scmjs` on the first publish (2026-11-06,
+replay info|open|watch | plugin new|check|dev | bot new|init|build|update|run`, or `npx @scm-js/cli …`. npm refused the plain name `scmjs` on the first publish (2026-11-06,
 E403 "too similar to scss, sockjs"), so the user chose the scope beside @scm-js/replay and @scm-js/plugin-api. The reader's page is `docs/cli.md`. The shape was the user's (2026-11-05): one command, a noun for
 each kind of thing (`map`, `replay`, `plugin`, `bot`), "an impressive UX tool … not overly engineered".
 
@@ -230,6 +230,57 @@ native/ — see scm-sim's docs/own-bots.md. Added 2026-11-06 with "Made by Jeany
 - Not in this slice: bot against bot (two processes synced through the relay — one BWAPI build fits a game's memory),
   a replay of the game saved out (the engine records commands; a `--replay` is a natural next step).
 
+## Replays in the terminal (`cli/src/watch.ts`, `engine.ts`) — 2026-11-06
+
+`scmjs replay watch <rep> [--speed x] [--from m:ss] [--size WxH] [--every n] [--json] [--starcraft] [--engine]`: the
+first of the "things people can see" slice (the user: "replay watch first"), the demo that gets screenshotted.
+
+- **The engine's half is scm-sim's `src/exact/runReplay.ts`** (PR jeany55/scm-sim, branch `replay-runner`), modelled on
+  the bot runner: the served engine files + the player's copy of the game (`src/exact/gameCopy.ts`, the copy-reading
+  helpers run.ts had, as a module; run.ts keeps its own copy because its program block runs when its module is the
+  entry — importing run.ts into another bundle would run *both* programs), `applyInputs({ replay })` + `runStart({})`
+  as `web.ts#startExactReplayInPage` does, `ExactReplayEngine` + `ReplayWatch`. JSON lines: `start` (map, frames,
+  players, copy, **terrain** = a char a tile from the game's tile flags, `0` unwalkable / `1` low / `2` middle / `3` high
+  — OpenBW's `tile_t::flags` in the high half of each dword at `ADDR.tileFlags`), `frame` (per player minerals, gas,
+  supply used/available, units alive; `units` = x, y in map pixels, owner, class 0 other/1 worker/2 army/3 building/4
+  resource, four numbers a unit, the visible list only, subunits skipped), `end` (frame, ended, check from
+  `ReplayWatch`). **Paced by standard input**: with no `--every`, each line read is a number of frames to step before
+  the next `frame`; EOF or anything else ends it. So the terminal asks for exactly what the next picture needs and the
+  game never runs ahead (Linux pipes would block a free runner anyway, Windows pipes would not). `--every N` runs free
+  for a dump. Bundled by `scripts/bundle-replay-run.mjs` (esbuild, ~210 KB), staged by `deploy-play.mjs` as
+  `play/engine/<build>/replay-<hash>.mjs` and named `replayRunner` (+ `replayRunnerBytes`) in `current.json`; `runner`
+  stays the bot's. Measured: load 1.5 s + start 0.4 s, ~3,700 frames/s stepping with no snapshot; legacy_cp949.rep
+  (10:08) end to end in 5.6 s free. `tests/exact-replay-run.test.ts` plays 1,000 frames of it (skips without the engine
+  or a copy).
+- **`cli/src/engine.ts`** is what `botrun.ts` had for the engine and the copy of the game, shared: `cacheRoot`,
+  `ensureEngine` (now fetches **every** runner `current.json` names — `RUNNERS` maps kind → key + file pattern + command;
+  a folder without current.json is searched for `run-*`/`replay-*`), `runnerFor(engine, kind)` (a CliError naming the
+  command when the deploy had none), `findGameCopy`, `startRunner` (the child process, stdin a pipe when paced).
+  botrun.ts re-exports the old names so doctor.ts and the tests are untouched. A sibling slice (`map trace|cost`) adds
+  its `mapRunner` the same way.
+- **The picture (`watch.ts`)**: `fitPicture` keeps the map's shape, ≤ 2 dots a tile, within the terminal less the
+  lines around it (title, blank, a line per player, three of chat). `drawMinimap` lights dots at `floor(tile × scale)`,
+  a 2 × 2 block for a building when scale ≥ 1, weighs owners per cell (building 3, army 2, worker 1, resources 0.5 in
+  their own bucket) and colours the cell by the heaviest: 24-bit via the replay's `#rrggbb` where `COLORTERM` says so,
+  else `nearestAnsi` of xterm's sixteen; resources grey `#6f7a86`; the **ground as a background shade** by level
+  (truecolor only), none where unwalkable. Empty cells are spaces, not U+2800 (as the banner). ASCII where ui.ts's
+  `unicode` is false: `#` building, `o` unit, `.` resource. `pictureLines` is always the same height so the redraw
+  (`\x1b[nA` + `\x1b[2K` a line) lands; the cursor is hidden while drawing. Keys in raw mode: q/Esc/Ctrl-C stop, space
+  pauses, +/- double/halve the speed (0.25–64). Pacing: `fps` 12 pictures a second, `round(24 × speed / fps)` frames
+  a step. **The replay's own part** comes from `@scm-js/replay` as `replay info`'s does: `sidesOf` joins the runner's
+  slots to the replay's names and colours; `Tally` walks the commands up to the frame for chat (by `player` id) and APM
+  (Aftermath's rule, not chat/leave/system, until the player left). Not a TTY: `summaryLine` every `--every` frames
+  (1,440 = a minute) with chat lines between, or `--json` lines (start with the sides, frames with `units`, end).
+- `tests/cli-watch.test.ts` (14): the geometry (a 64 × 64 map at one dot a tile, dot by dot), colours (24-bit, sixteen,
+  none, ASCII), the layout's height and text, the clock, `Tally`, `ensureEngine`'s runners, and the driver over a
+  stand-in runner speaking the protocol: pipe, JSON, and the terminal path with a `PassThrough` as the keys (`+` then
+  `q`, the frame count checks the pacing). Verified for real: the built CLI over a staged folder (symlinks to
+  data/lifted + the bundled runner + a current.json) in a `script(1)` pseudo-terminal at 100 × 44 — 72 × 36 cells, 30
+  redraws from 7:30 to the end at 64×, blue/brown/grey dots and 1,116 background shades in the capture.
+- **Not in this slice**: the replay runner does not report who left or won (the CLI shows 0/0 for a player who left);
+  no terrain in a terminal without 24-bit colour; `--view` (whose fog) is in the runner but not the command (the
+  picture shows everyone); one dot per unit whatever its size.
+
 ## New, dump, find, doctor (`cli/src/create.ts`, `dump.ts`, `find.ts`, `doctor.ts`) — 2026-11-07, the DX slice
 
 The user asked for "suggestions on how to improve our cli tool … for DX and technical people" and took the first
@@ -304,6 +355,60 @@ The second DX slice (the user's "go for it" on the second suggestion round), sta
   the end), then `applyStrings(deleteUnused(…))`. `--dry-run` lists and writes nothing; lists cut at 20 unless `--all`.
 - `tests/core.test.ts` cli list: + `edit`, `report`. Overview unchanged (23 lines; the new verbs are under `map`'s `…`).
 
+## Pipes: `-` for standard input and output (`files.ts`, `exchange.ts`) — 2026-11-06
+
+- **`readInput("-")`** reads all of stdin (a `Readable` parameter for tests); empty → CliError exit 2. A pipe has no
+  name, so the kind is from the bytes alone: `kindOf("", bytes)` (MPQ magic, replay, `SCMBOT1`) else `looksLikeChk`
+  (four bytes of `A-Z0-9 ` — a section name, `VER `/`TYPE`/`MTXM`) → `map`. The input is `{ path: "-", name:
+  "stdin.scx" | "stdin.chk" | "stdin.rep" }`; the **name carries the form** so `writeBack` can write it back as it came.
+- **`toStdout(inputPath, out)`** = `out === "-"` or (no `out` and input `-`): a filter writes where it read. `writeBack`
+  takes an optional `Writable`; `writeOutput(bytes, path, stdout?)` is the one writer (file, or the stream for `-`),
+  used by `writeBack`, `build.ts`'s packed map and `create.ts` (`map new -`). `outputFormat(doc, inputPath, out)` =
+  `formatOf(out) ?? formatOf(inputPath) ?? formatOf(doc.fileName) ?? (origin ? "scx" : "chk")` — the last two are the
+  pipe's cases; `defaultSaveOptions` gets `doc.fileName` in place of `-` so a bare chk keeps StarEdit's layout rule.
+- **main.ts**: `piping(input, o)` says whether the map takes stdout (not with `--dry-run`) and **refuses `--json`**
+  there (exit 2: both want the pipe); `say(piped, …lines)` sends a writing command's words to **stderr** while the map
+  has stdout (`run`'s live lines too); `outName(w)` prints "standard output" for `-`. `map set` and `strings prune`
+  **always write when piped**, changed or not — the next step needs a map. `map new -` skips the exists check and
+  names the map "Untitled Scenario". `unpack -` defaults its folder to `stdin`. Text exports treat `--out -` as none.
+- Verified by hand with the built file: `cat ums.scx | map set - | map resize - | map strings prune - | map info -`,
+  a bare chk through `info -`, `map new - | map check -`, the `--json` refusal and the empty pipe.
+  `tests/cli-pipes.test.ts` (4) covers the readers/writers with streams.
+
+## MCP server (`cli/src/mcp.ts`) — 2026-11-06, the user's pick from the "wow" list
+
+- **`scmjs mcp`** = the map commands as Model Context Protocol tools on stdio, built on the official
+  `@modelcontextprotocol/sdk` (`McpServer` + `StdioServerTransport`, zod schemas → JSON Schema) rather than a
+  hand-written JSON-RPC loop: protocol negotiation, `ping`, errors and the client for the tests come with it. Cost:
+  the bundle 3.66 → 4.49 MB (SDK, zod 4, zod-to-json-schema, ajv with its four helpers — all MIT/ISC/BSD, in
+  ATTRIBUTION.md's CLI table and the notices). `createMcpServer()` returns `{ server, tools }` so the start line and
+  the test know the count without reaching into the SDK's privates.
+- **One tool per command, the command's functions underneath**: `map_info|check|dump|find|diff`, `map_triggers_export|
+  import`, `map_strings_export|import|prune`, `map_set|resize|new|build|run`, `replay_info` — each calls the same
+  module the commander action does (`mapReport`, `dumpMap`, `importTriggers`, `writeBack`, …), never main.ts, so the
+  two cannot drift in what they do, only in how they print. A result is `content: [{text}]` = the command's lines
+  with `visible()` stripping colour (picocolors is on when the client's pipe looks like a TTY to nobody, but strip
+  anyway), plus `structuredContent` = the `--json` shape (`toJson`: Uint8Array → array, Map → object). No
+  `outputSchema`s: the shapes are the command's TypeScript types and would be a second copy to keep. Triggers and
+  strings go **inline as text** (`text` argument; `.trg` bytes are not offered) — that is the point: the model edits
+  the trigger window's text and imports it. `annotations`: `readOnlyHint` on the readers, `destructiveHint` on the
+  writers, `openWorldHint` on `map_run` (it loads code from github:/URLs). `instructions` (exported `INSTRUCTIONS`)
+  tell the client how the tools fit; docs/cli.md "For AI tools" says the same for people.
+- **Failures are results, not protocol errors**: a `CliError` → `isError: true` with message + hint, so the model
+  can act on "No file x / Check the name"; an SDK-level error would only say the tool failed. `map_build` with
+  `ok: false` is also `isError` (compile errors as text).
+- **stdout is the protocol.** `serveStdio` points `console.log|info|debug|warn|error` at stderr before serving
+  (the headless plugin host's `api.log` is `console.log`; a plugin's print would otherwise corrupt the stream), and
+  the modules called never `print()` themselves (main.ts does the printing — the reason the split existed).
+  `StdioServerTransport` does not close on stdin's end, so `serveStdio` waits on `process.stdin` `end` (or the
+  server's `onclose`) and closes the server; without it Node exited with 13 "unsettled top-level await".
+- **Overview**: `mcp` took a line in "This tool:", so the `help [command]` row is hidden (`program.createCommand("help")`
+  + `_hidden`, `addHelpCommand`) — `scmjs help map` still works and `-h, --help` is on the same screen; 23 lines held.
+- `tests/cli-mcp.test.ts` (7): the SDK `Client` over `InMemoryTransport.createLinkedPair()` — tool list with
+  descriptions, annotations and instructions; info/dump; check; triggers export → import `--append` to `out` → diff;
+  strings by number + header in place; find + new; failures as text. A stdio smoke (initialize, tools/list, two
+  calls) was run by hand against the built file.
+
 ## Triggers in the game: `map trace`, `map cost` (`cli/src/trace.ts`, `engine.ts`, `weigh.ts`) — 2026-11-07
 
 The user took the parent's first-slice proposal ("`map trace` and `map cost` second"); a fork built both ends.
@@ -338,10 +443,10 @@ The user took the parent's first-slice proposal ("`map trace` and `map cost` sec
   whether `classicScenario` changed bytes (a hybrid map changes too). (4) A TrigScript/eudplib program's records are in
   no map row: `passes` is counted as "a state or anything noted" (such a program leaves the pass countdown alone, so
   `passRan` was never true and the count read 0), and the cost report says how many records ran in no trigger of the map.
-- **The CLI half**: `cli/src/engine.ts` is the shared part factored out of botrun.ts (`cacheRoot`, `ensureEngine`,
-  `findGameCopy`, `usualGameFolders`, `gameCopyKind`, and `runRunner` = spawn + JSON lines); botrun.ts re-exports them so
-  tests and doctor.ts are unchanged. Trap: `let error = null` assigned inside the line callback is narrowed to `null`
-  by TypeScript (the old loop assigned it in the same function) → an object holder. `trace.ts`: `runMapInGame(map,
+- **The CLI half**: on main's `cli/src/engine.ts` (from `replay watch`, #141): `RUNNERS` gained `map: { key:
+  "mapRunner", file: /^map(-hash)?\.(mjs|cjs)$/ }`, `EngineCurrent` the two keys, and the staged-folder check takes any
+  runner; `trace.ts` uses `runnerFor(engine, "map")` + `startRunner` with its own line loop (the fork had written a
+  second engine.ts first — merged away). `trace.ts`: `runMapInGame(map,
   "trace"|"cost", o)`, `summarizeRows` (copies → one summary per map row: players, fired/continued/failed, first/last,
   lastFail, done), `printTrace` (a `ui.table` with the row text from core's `summarizeTrigger` cut to the terminal's
   width, then "Never fired" with `conditionDef(type).name` and the slot), `costReport`/`printCost` (average and peak ms
@@ -354,7 +459,6 @@ The user took the parent's first-slice proposal ("`map trace` and `map cost` sec
   cost: 0.025 ms a frame on average, 1.10 ms at frame 2 (83,787 records, 53,192 triggers, the program's start).
 - Not built: `--by-origin`/by-line cost for a TrigScript build (the editor has it); bot-run's `--every` wording reused as
   is; the campaign maps (engine); a `doctor` line for the map runner.
-
 ## Opening (`cli/src/open.ts`)
 
 - **Desktop app**: `SCMJS_APP`, else the installers' places (Windows `%LOCALAPPDATA%\Programs\scmJS\scmJS.exe` and

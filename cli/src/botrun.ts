@@ -1,16 +1,17 @@
 /**
  * `scmjs bot run <bot.scmbot> <map>`: a BWAPI bot plays a melee game against the game's own computers, with no page
- * and no editor. The game is scm-sim's lifted engine, the one the play page runs, fetched and found as `engine.ts`
- * says; the bot runner it stages speaks JSON lines — start, text, progress, end — which this turns into the terminal's
- * lines.
+ * and no editor. The game is scm-sim's lifted engine, fetched once and kept, and the player's own copy of the game
+ * (`engine.ts`); the bot runner is run in a process of its own and speaks JSON lines — start, text, progress, end —
+ * which this turns into the terminal's lines.
  */
+import { createInterface } from "node:readline";
 import { existsSync } from "node:fs";
-import { join, resolve } from "node:path";
-import { ensureEngine, findGameCopy, runRunner } from "./engine";
+import { resolve } from "node:path";
+import { ensureEngine, findGameCopy, runnerFor, startRunner } from "./engine";
 import { CliError, dot, mark, pc, plural, print, size } from "./ui";
 
-// The engine, the cache and the copy of the game are `engine.ts`'s, shared with `scmjs map trace|cost`; re-exported
-// here for what imports them from the bot run.
+// The engine, the cache and the copy of the game are `engine.ts`'s, shared with `scmjs replay watch`; named here still
+// for what imports them from here (doctor.ts, the tests).
 export { cacheRoot, ensureEngine, findGameCopy, gameCopyKind, PLAY_URL, usualGameFolders, type Engine, type EngineCurrent } from "./engine";
 
 /* ── The runner's lines ───────────────────────────────────── */
@@ -84,20 +85,25 @@ export async function runBotGame(bot: string, map: string, o: BotRunOptions = {}
   if (o.every !== undefined) args.push("--every", String(o.every));
   if (o.data) args.push("--data", resolve(o.data));
   const outcome: BotRunOutcome = { engine: { build: engine.build, dir: engine.dir, fetched: engine.fetched }, game, start: null, texts: [], progress: [], end: null, exitCode: 0 };
-  const failed = { message: null as string | null };
-  const { exitCode, stderr } = await runRunner(join(engine.dir, engine.runner), args, (raw) => {
-    const l = raw as unknown as RunnerLine;
+  const child = startRunner(runnerFor(engine, "bot"), args, { node: o.node });
+  let stderr = "";
+  child.stderr!.on("data", (d) => { stderr += d; });
+  let error: string | null = null;
+  const lines = createInterface({ input: child.stdout! });
+  for await (const raw of lines) {
+    let l: RunnerLine;
+    try { l = JSON.parse(raw) as RunnerLine; } catch { continue; }
     if (l.kind === "start") outcome.start = l;
     else if (l.kind === "text") outcome.texts.push(l.text);
     else if (l.kind === "progress") outcome.progress.push(l);
     else if (l.kind === "end") outcome.end = l;
-    else if (l.kind === "error") failed.message = l.message;
+    else if (l.kind === "error") error = l.message;
     const worded = wordLine(l);
     if (worded && l.kind !== "error") o.live?.(worded);
-  }, o.node);
-  outcome.exitCode = exitCode;
-  if (failed.message) throw new CliError(failed.message, "The runner is scm-sim's; a map StarCraft itself opens, a .scmbot the toolchain built, and your own copy of the game are what it needs.");
-  if (!outcome.end) throw new CliError(`The game did not finish: the runner stopped without a result (exit ${outcome.exitCode}).${stderr ? `\n${stderr.split("\n").slice(-6).join("\n")}` : ""}`);
+  }
+  outcome.exitCode = await new Promise<number>((done) => { child.on("error", () => done(2)); child.on("close", (c) => done(c ?? 2)); });
+  if (error) throw new CliError(error, "The runner is scm-sim's; a map StarCraft itself opens, a .scmbot the toolchain built, and your own copy of the game are what it needs.");
+  if (!outcome.end) throw new CliError(`The game did not finish: the runner stopped without a result (exit ${outcome.exitCode}).${stderr.trim() ? `\n${stderr.trim().split("\n").slice(-6).join("\n")}` : ""}`);
   return outcome;
 }
 

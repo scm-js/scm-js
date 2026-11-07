@@ -57,7 +57,7 @@ export function starcraftCheck(): Check {
     return { what: "StarCraft", state: "ok", detail: `${kind === "remastered" ? "Remastered" : "1.16.1"}${pc.dim(` · ${folder}`)}` };
   } catch (e) {
     if (!(e instanceof CliError)) throw e;
-    return { what: "StarCraft", state: "warn", detail: "not found", fix: "scmjs bot run … --starcraft <folder>   (or SCMJS_STARCRAFT=<folder>)", note: "scmjs bot run plays with your own installation's files." };
+    return { what: "StarCraft", state: "warn", detail: "not found", fix: "scmjs bot run … --starcraft <folder>   (or SCMJS_STARCRAFT=<folder>)", note: "scmjs bot run and replay watch play with your own installation's files." };
   }
 }
 
@@ -67,7 +67,7 @@ export function engineCheck(cache = cacheRoot()): Check {
   const builds = existsSync(dir) ? readdirSync(dir).filter((d) => isDir(join(dir, d)) && readdirSync(join(dir, d)).length > 0) : [];
   return builds.length
     ? { what: "Game engine", state: "ok", detail: `${builds.length === 1 ? "fetched" : `${builds.length} builds fetched`}${pc.dim(` · ${dir}`)}` }
-    : { what: "Game engine", state: "ok", detail: pc.dim("not fetched yet"), note: "The first scmjs bot run fetches it from the play page (about 25 MB) into " + dir };
+    : { what: "Game engine", state: "ok", detail: pc.dim("not fetched yet"), note: "The first scmjs bot run or replay watch fetches it from the play page (about 25 MB) into " + dir };
 }
 
 export function desktopAppCheck(): Check {

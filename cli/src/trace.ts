@@ -21,7 +21,8 @@ import { changeMapVersion } from "../../src/editor/settings";
 import { readTriggers, triggerNames } from "../../src/editor/triggers";
 import { summarizeTrigger } from "../../src/formats/triggers/text";
 import { conditionDef } from "../../src/data/triggerDefs";
-import { ensureEngine, findGameCopy, runRunner } from "./engine";
+import { createInterface } from "node:readline";
+import { ensureEngine, findGameCopy, runnerFor, startRunner } from "./engine";
 import { CliError, columns, dot, duration, mark, num, pc, plural, table } from "./ui";
 
 /* ── The runner's lines (scm-sim's src/exact/runMap.ts) ──────── */
@@ -95,7 +96,7 @@ export async function runMapInGame(map: string, what: "trace" | "cost", o: MapRu
   const weigh = what === "cost" ? weighModule(o.weigh) : null;
   const game = findGameCopy(o.starcraft);
   const engine = await ensureEngine(o.engine, undefined, o.live ?? (() => {}));
-  if (!engine.mapRunner) throw new CliError("The game engine has no map runner yet.", "The play page's current build is older than this command; a newer deploy of scmjs.dev/play adds it. A folder with map-<hash>.mjs beside the engine's files can be named with --engine.");
+  const runner = runnerFor(engine, "map");
   const args = [resolve(map), "--engine", engine.dir, "--starcraft", game.folder];
   if (o.frames !== undefined) args.push("--frames", String(o.frames));
   if (o.every !== undefined) args.push("--every", String(o.every));
@@ -104,16 +105,21 @@ export async function runMapInGame(map: string, what: "trace" | "cost", o: MapRu
   else args.push("--no-trace", "--weigh", weigh!);
   let start: TraceStartLine | null = null, end: TraceEndLine | null = null;
   const progress: TraceProgressLine[] = [];
-  const failed = { message: null as string | null };
-  const { exitCode, stderr } = await runRunner(join(engine.dir, engine.mapRunner), args, (raw) => {
-    const l = raw as unknown as MapRunnerLine;
+  let error: string | null = null;
+  const child = startRunner(runner, args, { node: o.node });
+  let stderr = "";
+  child.stderr!.on("data", (d) => { stderr += d; });
+  for await (const raw of createInterface({ input: child.stdout! })) {
+    let l: MapRunnerLine;
+    try { l = JSON.parse(raw) as MapRunnerLine; } catch { continue; }
     if (l.kind === "start") { start = l; o.live?.(wordStart(l)); }
     else if (l.kind === "progress") { progress.push(l); o.live?.(`  ${pc.dim(`frame ${String(l.frame).padStart(6)}  ${plural(l.passes, "pass", "passes")} of the triggers`)}`); }
     else if (l.kind === "end") end = l;
-    else if (l.kind === "error") failed.message = l.message;
-  }, o.node);
-  if (failed.message) throw new CliError(failed.message, "The runner is scm-sim's; a map StarCraft itself opens, with a slot for a person, and your own copy of the game are what it needs.");
-  if (!end) throw new CliError(`The game did not finish: the runner stopped without a result (exit ${exitCode}).${stderr ? `\n${stderr.split("\n").slice(-6).join("\n")}` : ""}`);
+    else if (l.kind === "error") error = l.message;
+  }
+  const exitCode = await new Promise<number>((done) => { child.on("error", () => done(2)); child.on("close", (c) => done(c ?? 2)); });
+  if (error) throw new CliError(error, "The runner is scm-sim's; a map StarCraft itself opens, with a slot for a person, and your own copy of the game are what it needs.");
+  if (!end) throw new CliError(`The game did not finish: the runner stopped without a result (exit ${exitCode}).${stderr.trim() ? `\n${stderr.trim().split("\n").slice(-6).join("\n")}` : ""}`);
   return { engine: { build: engine.build, dir: engine.dir, fetched: engine.fetched }, game, start, progress, end };
 }
 

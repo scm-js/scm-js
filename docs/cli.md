@@ -48,6 +48,7 @@ when there is a newer version.
 | `scmjs map cost <map>` | What the map's triggers cost Remastered each frame, in milliseconds, and the costliest triggers |
 | `scmjs replay info <replays…>` | Who played, on which map, for how long and at what APM |
 | `scmjs replay open <replay>` | Opens the replay in scmJS, to watch and analyse |
+| `scmjs replay watch <replay>` | Plays the replay in the terminal: the minimap as the game goes, each player's figures, the chat |
 | `scmjs plugin new <name>` | A plugin to start from, set up to type-check, test, build and publish |
 | `scmjs plugin dev` | Opens the editor with your plugin, and reloads it each time you save |
 | `scmjs plugin check` | What the editor would make of the plugin: its manifest, files and imports |
@@ -56,6 +57,7 @@ when there is a newer version.
 | `scmjs bot run <bot> <map>` | Plays the bot against the game's computers on the map, with no page |
 | `scmjs doctor` | What this computer has for each command: TypeScript, Docker, StarCraft, the desktop app, and the command for each thing missing |
 | `scmjs about` | This version and whether there is a newer one, who made it, the desktop app and Docker if they are installed, and where the docs and source are |
+| `scmjs mcp` | The map commands as an MCP server, for Claude Code and other AI tools on your computer |
 | `scmjs completion <shell>` | A completion script for bash, zsh or fish |
 
 Commands that take several files take a pattern too: `scmjs map check *.scx`. A file that
@@ -505,6 +507,46 @@ players in their colours with race, APM and team, the map, the game's length and
 when it was played, and how much chat there was. APM is counted the way the replay viewer
 counts it: everything a player did except chat, until they left.
 
+### Watching a replay
+
+`scmjs replay watch game.rep` plays the replay in the terminal. The game is the play
+page's engine, and the replay plays in it as the game itself plays it; what you see is a
+minimap redrawn as it goes, a dot for every unit in its player's colour, buildings as
+blocks, mineral fields and geysers dim, and the ground shaded where the terminal has
+24-bit colour. Under it: the clock and frame, a line per player with minerals, gas,
+supply, units alive and APM so far, and the last three lines of chat as they were said.
+Space pauses, `+` and `-` double and halve the speed, `q` stops and leaves the last
+picture on screen.
+
+```
+legacy_cp949.rep 128 × 128 · jungle                  8:09 frame 11,643  8×
+ ⡀ ⠐             ⠐  ⡠⠐⠔⠐⠄⠡                       ⠄⡀⠈⠄
+⠨⡂                ⠄      ⠈            ⢀          ⡁⡀ ⡈⡐⣸⡂
+⠈⠦                                  ⢴⡇⡄          ⠄  ⢨ ⡾⠂
+                                    ⠱⠄⡠⠁
+  …
+⠰⡣⠲⠠⠂  ⡠          ⢀⠞                                  ⠰⡂
+⠈⢯⠈⢀⠂⡀           ⠁                  ⠠                 ⢨⠂
+
+■ Question  P  270/211  78/98  75 units  293 APM
+■ Drywater  T  273/308  38/58  51 units  237 APM
+```
+
+`--speed 4` plays at four times the game's Fastest (8 by default; the engine runs a
+ten-minute game in a few seconds, so any speed holds), `--from 6:30` starts there, and
+`--size 80x30` sets the picture's size in characters, where by default it fills as much of
+the terminal as the map's shape allows. Into a pipe or a file there is no picture: a line
+per player every minute of game (`--every` sets the frames between lines), the chat
+between them, and with `--json` a line of JSON per frame with every unit's place, for a
+script or a plot. The players' names, colours, chat and APM come from the replay file
+itself, read as `replay info` reads it; the figures and the picture from the game.
+
+What it needs is what `bot run` needs: the engine, about 25 MB, fetched from the play page
+the first time and kept in your cache folder, and your own installation of StarCraft,
+Remastered or 1.16.1, found in the usual places or named with `--starcraft`. A replay from
+any version plays; one from a game that held more units at once than 1.16.1 allows is
+refused, as the play page refuses it.
+
 ## Plugins
 
 `scmjs plugin new "Base Check"` writes a plugin to start from in `plugin-base-check/`: its
@@ -643,10 +685,53 @@ scmjs completion zsh > ~/.zsh/completions/_scmjs       # a folder on $fpath
 scmjs completion fish > ~/.config/fish/completions/scmjs.fish
 ```
 
+## For AI tools
+
+`scmjs mcp` speaks the [Model Context Protocol](https://modelcontextprotocol.io) on
+standard input and output, so an AI tool that runs on your computer, such as Claude Code,
+Cursor or VS Code, can work on your maps with the same code these commands use. It does
+not go on the network: the tool starts `scmjs mcp` as a child process in your maps folder
+and talks to it over the pipe, and the paths it gives are files in that folder.
+
+With Claude Code, once, in the folder your maps are in:
+
+```sh
+claude mcp add scmjs -- npx -y @scm-js/cli mcp
+```
+
+Other tools take the same thing as JSON in their MCP settings:
+
+```json
+{ "mcpServers": { "scmjs": { "command": "npx", "args": ["-y", "@scm-js/cli", "mcp"] } } }
+```
+
+The tool then has `map_info`, `map_check`, `map_dump`, `map_find`, `map_diff`,
+`map_triggers_export` and `map_triggers_import`, `map_strings_export`,
+`map_strings_import` and `map_strings_prune`, `map_set`, `map_resize`, `map_new`,
+`map_build`, `map_run` and `replay_info`: each the command of the same name, taking the
+same arguments by name and answering with the command's text and its `--json` data. A map
+reads as the editor reads it, so what the model is told is what the editor would show, and
+triggers travel as the [trigger window's text form](triggers.md), which the model can edit
+and import back. Tools that change a map write over it unless given `out`, the same as the
+commands, so keep your maps in git or hand the tool copies. `map_run` runs a plugin, which
+is code, with your privileges, as `scmjs map run` does; the tool asks you before it calls
+anything, and you can leave that one unapproved.
+
 ## In scripts
 
 - `--json` prints what a command found as JSON: one object for one file, a list for
   several. The text output may change between versions, so scripts should use `--json`.
+- `-` as a map's path is standard input, and `--out -` (or no `--out`, for a map that came
+  from `-`) is standard output, so the commands chain in a pipe:
+
+  ```sh
+  scmjs map new - --size 64x64 --players 2 | scmjs map set - --name "Ridge" | scmjs map check -
+  cat ridge.scx | scmjs map resize - --size 128x96 --out - > ridge-wide.scx
+  ```
+
+  What the command says goes to standard error while the map takes standard output, and
+  `--json` is refused there, since both want the pipe. A map from a pipe has no name: it
+  is `stdin.scx` or `stdin.chk` by its bytes, and is written back in the same form.
 - Exit codes: 0 when all went well, 1 when a map failed its check, two maps differed,
   nothing matched a search, a build did not go through or something went wrong, 2 when a
   file was missing or was the wrong kind for the command, or an option was not one.
@@ -676,10 +761,12 @@ from a clone with `npm run cli -- <command>`, or build it with `npm run build:cl
 | `cli/src/run.ts`, `src/plugins/headless.ts` | A plugin run over a map: the editor's plugin host with a store, a document and no page, its status, toasts and log reported instead of shown |
 | `cli/src/build.ts` | The TrigScript build: finding TypeScript, compiling against the map's names, applying the block, laying the programs in and packing the file |
 | `cli/src/completion.ts` | The bash, zsh and fish scripts, generated from the command tree |
+| `cli/src/mcp.ts` | The MCP server: each tool a command's functions, its text and JSON as the result |
 | `cli/src/open.ts` | Finding the desktop app, and handing a file to the editor in a browser |
 | `cli/src/bot.ts` | Running the bot toolchain's image in the bot's folder |
-| `cli/src/engine.ts` | The game engine from the terminal: fetched into the cache from the play page's `current.json`, the copy of the game found, a runner run as a process and its lines read |
+| `cli/src/engine.ts` | The game engine the playing commands share: the play page's current build fetched into the cache with its runners, the copy of the game found, a runner started |
 | `cli/src/botrun.ts` | A bot's game with no page: scm-sim's bot runner run and its lines worded |
+| `cli/src/watch.ts` | A replay in the terminal: the braille minimap, its colours and the lines around it, the replay's chat and APM, and the runner paced a picture at a time |
 | `cli/src/trace.ts` | A map's triggers run in the game: scm-sim's map runner run, its trace and cost worded against the map's own triggers |
 | `cli/src/weigh.ts` | The weigher `map cost` hands the game: TrigScript's model of what Remastered charges, built beside the command |
 | `cli/src/plugin.ts` | A new plugin's files, the plugin check, and the server `plugin dev` runs |

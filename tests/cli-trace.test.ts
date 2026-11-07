@@ -74,12 +74,12 @@ const ums = async () => (await openMapBytes(new Uint8Array(readFileSync(testMap(
 describe("scmjs map trace | cost: the runner", () => {
   it("finds the map runner in current.json, and says when a build has none", async () => {
     const staged = stagedEngine(tmp());
-    expect((await ensureEngine(staged.dir)).mapRunner).toBe("map-cafe0000.cjs");
-    expect((await ensureEngine(stagedEngine(tmp(), false).dir)).mapRunner).toBeNull();
+    expect((await ensureEngine(staged.dir)).runners.map).toBe("map-cafe0000.cjs");
+    expect((await ensureEngine(stagedEngine(tmp(), false).dir)).runners.map).toBeUndefined();
     const copy = classicCopy(tmp());
     const dir = tmp();
     writeFileSync(join(dir, "m.scx"), "MPQ");
-    await expect(runMapInGame(join(dir, "m.scx"), "trace", { engine: stagedEngine(tmp(), false).dir, starcraft: copy })).rejects.toThrow(/no map runner yet/);
+    await expect(runMapInGame(join(dir, "m.scx"), "trace", { engine: stagedEngine(tmp(), false).dir, starcraft: copy })).rejects.toThrow(/has no map runner/);
     await expect(runMapInGame(join(dir, "nowhere.scx"), "trace", { engine: staged.dir, starcraft: copy })).rejects.toThrow(/No file/);
     writeFileSync(join(dir, "bad.scx"), "MPQ");
     await expect(runMapInGame(join(dir, "bad.scx"), "trace", { engine: staged.dir, starcraft: copy })).rejects.toThrow(/did not take this map/);

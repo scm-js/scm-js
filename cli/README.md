@@ -11,6 +11,7 @@ scmjs map dump ridge.scx            # the whole map as text: git's textconv for 
 scmjs map find "Marine" maps/*.scx  # Edit ▸ Find across maps
 scmjs replay info game.rep          # players, races, APM, map, length
 scmjs replay open game.rep          # watch it in scmJS: the desktop app, or the editor in your browser
+scmjs mcp                           # the map commands as an MCP server, for Claude Code and other AI tools
 scmjs about
 ```
 

@@ -147,7 +147,7 @@ function serverError(res: Response, data: unknown): CliError {
 export const serverLabel = (server: string): string => (server === DEFAULT_SERVER ? "scmjs.dev" : server);
 
 /** The editor's address for a link: `<editor>map/<token>` or `share/<invite>`, carrying a server that is not scmjs.dev's. */
-export function linkTo(kind: "map" | "share", token: string, server = serverUrl()): string {
+export function linkTo(kind: "map" | "share" | "replay", token: string, server = serverUrl()): string {
   const query = server !== DEFAULT_SERVER ? `?${new URLSearchParams({ [SERVER_QUERY]: server }).toString()}` : "";
   return `${WEB_EDITOR}${kind}/${token}${query}`;
 }

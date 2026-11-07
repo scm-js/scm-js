@@ -1,10 +1,10 @@
 /**
- * The game engine for the commands that play: `scmjs bot run`, `scmjs replay watch`, `scmjs map trace` and `map cost`. The engine is scm-sim's
- * lifted game, the one the play page runs; its files (the module, the base image, the interface pack) and the
- * runners that drive a game from a terminal are fetched once from the play page's address — `play/engine/current.json`
- * names the current build and its runners — and kept under the user's cache folder. The game's own files come from the
- * player's installation of StarCraft, Remastered or 1.16.1, found in the usual places or named with `--starcraft`;
- * nothing of the game is fetched or carried.
+ * The game engine for the commands that play: `scmjs bot run`, `scmjs replay watch`, `scmjs map trace`, `map cost`,
+ * `map rush` and `map test`. The engine is scm-sim's lifted game, the one the play page runs; its files (the module,
+ * the base image, the interface pack) and the runners that drive a game from a terminal are fetched once from the play
+ * page's address — `play/engine/current.json` names the current build and its runners — and kept under the user's cache
+ * folder. The game's own files come from the player's installation of StarCraft, Remastered or 1.16.1, found in the
+ * usual places or named with `--starcraft`; nothing of the game is fetched or carried.
  *
  * A runner is run in a process of its own (one game a process: the lifted game takes its memory when its module is
  * first imported) and speaks JSON lines, which each command turns into the terminal's.
@@ -23,7 +23,7 @@ export const PLAY_URL = "https://scmjs.dev/play";
 export const RUNNERS = {
   bot: { key: "runner", file: /^run(-[0-9a-f]+)?\.(mjs|cjs)$/, command: "scmjs bot run" },
   replay: { key: "replayRunner", file: /^replay(-[0-9a-f]+)?\.(mjs|cjs)$/, command: "scmjs replay watch" },
-  map: { key: "mapRunner", file: /^map(-[0-9a-f]+)?\.(mjs|cjs)$/, command: "scmjs map trace (and map cost)" },
+  map: { key: "mapRunner", file: /^map(-[0-9a-f]+)?\.(mjs|cjs)$/, command: "scmjs map trace (and map cost, rush and test)" },
 } as const;
 export type RunnerKind = keyof typeof RUNNERS;
 

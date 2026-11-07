@@ -3,9 +3,10 @@
  * and `git config` settings that make `git diff` read maps through `scmjs map dump` and `git merge` merge them through
  * `scmjs map merge`, a workflow that runs Check Map
  * (and the TrigScript build, for maps with a script) on every push and pull request, a README listing the maps, and a
- * `.gitignore` for the `.bak` files the desktop app's Save leaves beside a map. Nothing that is there is overwritten:
- * the line files get only the lines they lack, the README and the workflow are written only when absent (or with
- * `--force`), and a git setting that holds another value is left alone (or set, with `--force`).
+ * `.gitignore` for the `.bak` files the desktop app's Save leaves beside a map and the replays `map test` keeps.
+ * Nothing that is there is overwritten: the line files get only the lines they lack, the README and the workflow are
+ * written only when absent (or with `--force`), and a git setting that holds another value is left alone (or set, with
+ * `--force`).
  */
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs";
@@ -45,10 +46,10 @@ const ATTRIBUTE_COMMENT = "# Maps show in git diff as text (scmjs map dump) and 
 /**
  * `.gitignore`: only what is left beside a map without being asked for by name. The commands write a map back in place
  * or where `--out` says, and `map unpack`'s folder is meant to be kept; the desktop app's Save copies the file it
- * replaces to `<map>.bak`.
+ * replaces to `<map>.bak`, and `map test` keeps the replays of the scenarios that failed in `<map>.tests/`.
  */
-export const IGNORE_LINES = ["*.bak"];
-const IGNORE_COMMENT = "# The desktop app's Save keeps the file it replaced as <map>.bak";
+export const IGNORE_LINES = ["*.bak", "*.tests/"];
+const IGNORE_COMMENT = "# Left beside a map: the file the desktop app's Save replaced (<map>.bak), the replays of failed map tests (<map>.tests/)";
 
 /**
  * The TypeScript the workflow installs beside the command for `map build`: the major the TrigScript compiler is built
@@ -191,6 +192,10 @@ export function workflowText(o: { version: string; globs: string[]; scripted: st
     "        run: |",
     `          npx -y ${cli} map check ${o.globs.join(" ")} --strict --format github`,
     ...build,
+    "      # scmjs map test plays a map's tests in the game itself, which needs a copy of StarCraft: GitHub's runners",
+    "      # have none, so it has no step here. Run it on your computer, or on a runner of your own with the game",
+    "      # installed (runs-on: self-hosted), as:",
+    `      # - run: npx -y ${cli} map test <map> --format github`,
     "",
   ].join("\n");
 }
@@ -337,7 +342,7 @@ export async function initFolder(folder: string, o: InitOptions = {}): Promise<I
     const path = join(dir, name);
     const text = existsSync(path) ? readFileSync(path, "utf8") : null;
     const lack = missingLines(text ?? "", want, attributes);
-    const what = attributes ? "maps diff as text and merge part by part" : "the .bak files Save leaves";
+    const what = attributes ? "maps diff as text and merge part by part" : "the .bak files Save leaves, map test's replays";
     if (!lack.length) { files.push({ path: show(path), state: "kept", detail: "has the lines already", content: want.join("\n") + "\n" }); continue; }
     const content = appendLines(text ?? "", lack, comment);
     if (!o.print) writeFileSync(path, content);

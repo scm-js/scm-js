@@ -56,6 +56,7 @@ when there is a newer version.
 | `scmjs map trace <map>` | Runs the map's triggers in the game with nobody playing: which fired, how often, which never did and what said no |
 | `scmjs map cost <map>` | What the map's triggers cost Remastered each frame, in milliseconds, and the costliest triggers |
 | `scmjs map rush <map>` | How far apart the start locations are by ground: a unit walked by the game from each to every other, timed |
+| `scmjs map test <map> [tests…]` | Plays the map's tests in the game: scenarios set up, run and checked, with a replay of each one that fails |
 | `scmjs map preview <map>` | A picture of the map, drawn with your copy of the game's graphics: in the terminal, or as a PNG with `--out` |
 | `scmjs map play <map>` | A lobby on the play page with the map, and the invite link to send around |
 | `scmjs map share <map>` | A link to the map on scmjs.dev: a copy anyone can open, or with `--edit` a link to edit it together |
@@ -328,7 +329,7 @@ command. Run it in the folder, or name the folder (the files' paths are from it)
 $ scmjs init maps
 maps · 5 maps · in the git repository ladder
   ✔ .gitattributes                 written: maps diff as text and merge part by part
-  ✔ .gitignore                     written: the .bak files Save leaves
+  ✔ .gitignore                     written: the .bak files Save leaves, map test's replays
   ✔ ../.github/workflows/maps.yml  written: checks the 5 maps on push and pull request; scmjs 0.9.0
   ✔ README.md                      written: lists the 5 maps, and the commands
   ✔ git config diff.scmjs          set: textconv, xfuncname, cachetextconv
@@ -360,9 +361,11 @@ What each file does:
 - **`README.md`** lists the maps (name, file, size, tileset, players) and the commands
   people reach for: `map check`, `map dump`, `map diff --rev HEAD` and settling a merge
   with `map merge`, and the git settings a new clone needs.
-- **`.gitignore`** has `*.bak`: the copy of a map the desktop app keeps when Save replaces
-  it. The commands themselves write a map back in place or where `--out` says, so they
-  leave nothing else behind.
+- **`.gitignore`** has `*.bak`, the copy of a map the desktop app keeps when Save replaces
+  it, and `*.tests/`, the folders where `scmjs map test` keeps the replays of failed
+  scenarios. The commands themselves write a map back in place or where `--out` says, so
+  they leave nothing else behind. The workflow has no `map test` step: it needs a copy of
+  StarCraft, which GitHub's runners do not have.
 
 Nothing is overwritten. `.gitattributes` and `.gitignore` get only the lines they lack, at
 the end; a `README.md` or workflow that is there is left as it is, and so is a git setting
@@ -792,9 +795,9 @@ for `export` the file each sound went to.
 
 ## Playing the game: what those commands need
 
-`map trace`, `map cost`, `map rush`, `replay watch` and `bot run` run the game itself, and
-`map preview` draws with its graphics. They need two things on your computer, and nothing
-on a build server:
+`map trace`, `map cost`, `map rush`, `map test`, `replay watch` and `bot run` run the game
+itself, and `map preview` draws with its graphics. They need two things on your computer,
+and nothing on a build server:
 
 - **The game engine**, the play page's, about 25 MB, fetched from scmjs.dev the first time
   a command needs it and kept in your cache folder (`~/.cache/scmjs` on Linux, the
@@ -864,6 +867,160 @@ shows a program's cost line by line.
 A map in the original StarCraft 1.00 form is run as Brood War, as the editor would convert
 it; the Blizzard campaign maps are not something the engine runs yet. Exits 2 when the
 game could not start.
+
+## Testing a map's triggers
+
+`scmjs map test` checks that a map's triggers do what you meant, in the game itself. You
+write scenarios in a tests file: what the game starts with, what happens at a given time,
+how long to play, and what must be true at the end. Each scenario is one game. A scenario
+that fails says what did not hold and what was there instead, and keeps the game's replay
+so you can watch what happened.
+
+```
+$ scmjs map test ums.scx
+ums.scx 64 × 64, badlands · 3 triggers · 3 scenarios (ums.tests.json) · Remastered files
+  ✔ the alarm wins the game  1.8 s · 8 of 8 expectations held
+  ✔ the carrier flies to the middle, which is not a Marine  1.9 s · 4 of 4 expectations held
+  ✖ a Marine brought to the middle raises the alarm  1.7 s · 0 of 5 expectations held
+      ✖ Player 1 has at least 1 Terran Marine in Middle — it has 0
+      ✖ trigger #2 fired — it never fired: Bring (condition 1) said no last, at frame 591
+      ✖ Player 1 has at least 2 Terran Ghost in Base — it has 0
+      ✖ switch "Alarm raised" is set — it is clear
+      ✖ Player 1's game ended in victory — it has none: the game was still going at frame 600
+      the game said: WARNING: Unit unplaceable! (Terran Marine) (1040,976)
+      replay: ums.tests/a-marine-brought-to-the-middle-raises-the-alarm.rep, open it with scmjs replay open …
+
+✖ 1 of 3 scenarios failed (5.6 s)
+```
+
+Here the third scenario found something real: the test map has no ground a Marine can
+stand on, so the Marine never appeared and the trigger waiting for it never fired. The
+game's own warnings at the start are shown under a failed scenario for that reason.
+
+### The tests file
+
+The tests are read from `<map>.tests.json` beside the map (`ums.tests.json` for
+`ums.scx`), or from the files named after the map. The file is JSON:
+
+```json
+{
+  "scenarios": [
+    {
+      "name": "the alarm wins the game",
+      "frames": "0:20",
+      "steps": [
+        { "at": 24, "chat": "glhf" },
+        { "at": "0:02", "create": "Terran Wraith", "player": 1, "location": "Middle" },
+        { "at": "0:05", "switch": "Alarm raised", "state": "set" }
+      ],
+      "expect": [
+        { "trigger": "Opening", "fired": 1 },
+        { "text": "Hold the base." },
+        { "units": "Terran Wraith", "player": 1, "location": "Middle", "is": 1 },
+        { "switch": "Alarm raised", "is": "set" },
+        { "outcome": "victory", "player": 1 },
+        { "ended": true }
+      ]
+    },
+    {
+      "name": "a Marine brought to the middle raises the alarm",
+      "frames": "0:25",
+      "setup": [
+        { "create": "Terran Marine", "player": 1, "location": "Middle" }
+      ],
+      "expect": [
+        { "trigger": 2 },
+        { "switch": "Alarm raised", "is": "set" }
+      ]
+    }
+  ]
+}
+```
+
+A scenario has a `name`, and may have `frames` (how long to play: frames, 24 to a second
+at Fastest, or `"m:ss"`; 2,400 unless the file or `--frames` says otherwise), `seed`,
+`setup`, `steps` and `expect`. `frames` and `seed` at the top of the file apply to every
+scenario that does not set its own.
+
+Things are named the way the trigger window names them. A player is a number from 1 to 12
+or `"Player 1"`; where a trigger would take a group, `"All Players"`, `"Force 1"`,
+`"Foes"` and `"Allies"` work too. A unit is its name (`"Terran Marine"`, or `"Marine"`
+without the race when that is clear), a class (`"Any unit"`, `"Men"`, `"Buildings"`,
+`"Factories"`), or a number from units.dat. A location is its name, `"Anywhere"`, or its
+number. A switch is its name, `"Switch 3"`, or a number from 1 to 256. A trigger is the
+number `scmjs map trace` prints for it, or the text of its Comment action. A name the map
+does not have is an error that lists the names it does have.
+
+**`setup`** is what the game starts with. Each entry does one thing:
+
+| Entry | Does |
+| --- | --- |
+| `{ "create": unit, "player": p, "count": n, "location": l }` | Creates the units (one unless `count` says) |
+| `{ "kill": unit, "player": p, "count": n, "location": l }` | Kills the units (all of them unless `count` says) |
+| `{ "remove": unit, "player": p, "count": n, "location": l }` | Removes the units, as Remove Unit does |
+| `{ "give": unit, "player": p, "to": q, "count": n, "location": l }` | Gives the units to player `q` |
+| `{ "switch": s, "state": "set" }` | Sets the switch (`"clear"` and `"toggle"` too) |
+| `{ "minerals": n, "player": p }`, `{ "gas": n, "player": p }` | Sets the player's minerals or gas; `"+100"` adds, `"-100"` takes away |
+| `{ "deaths": unit, "player": p, "count": n }` | Sets the death count, with the same `+` and `-` |
+| `{ "action": "Set Countdown Timer(Set To, 60)" }` | Any action, written as the trigger window's text form writes it; a list of them works too |
+
+`location` is Anywhere when it is left out.
+
+**`steps`** happen during the game. Each has `at` (a frame, or `"m:ss"`) and one of the
+entries above, or one of these, which are your own commands as a player would give them:
+
+| Entry | Does |
+| --- | --- |
+| `{ "at": t, "order": "move", "unit": u, "location": l, "to": m }` | Orders your units of that type in location `l` to location `m`: `"move"`, `"attack"` (attack-move) or `"patrol"`; `"stop"` and `"hold"` need no `to`. `unit` is Any unit and `location` Anywhere when left out |
+| `{ "at": t, "chat": "text" }` | Sends a chat line, which shows on screen like any other |
+
+You play the map's first slot open to a person, as when you start the map alone, and the
+computers play as the map has them. Your commands reach the game at the frame given. The
+other steps are carried out by the game's triggers, which run in passes about every 31
+frames (1.3 seconds), so they happen at the first pass once the game's clock has reached
+their time.
+
+**`expect`** is what must be true when the scenario ends:
+
+| Entry | Holds when |
+| --- | --- |
+| `{ "trigger": t, "fired": n }` | The trigger fired that many times; `true` (the default) is at least once, `false` is never |
+| `{ "switch": s, "is": "set" }` | The switch is set, or `"clear"` |
+| `{ "deaths": unit, "player": p, "is": n }` | The player's death count for that unit |
+| `{ "minerals": n, "player": p }`, `{ "gas": n, "player": p }` | The player's minerals or gas |
+| `{ "units": unit, "player": p, "location": l, "is": n }` | How many of the units the player has there, counted as the map's own Bring condition counts them (as Command counts them when there is no `location`; `player` is All Players when left out) |
+| `{ "text": "words" }` | The words were on your screen at some point: trigger text, transmissions, chat; `"shown": false` for words that must not appear |
+| `{ "outcome": "victory", "player": p }` | The player's game ended in victory (`"defeat"`, `"draw"`, or `"none"` for no outcome yet) |
+| `{ "ended": true }` | The game ended before the scenario's frames ran out (`false`: it was still going) |
+
+A count is a number, meaning exactly that many, or a comparison such as `">= 2"`, `"< 5"`
+or `"!= 0"`.
+
+### How it works, and the replays
+
+The setup and the timed steps become triggers in a copy of the map: the setup is one
+trigger placed before the map's own, owned by the first player in the game and with the
+condition Always, so it runs first in the first pass; each step is a trigger placed after
+the map's own with an Elapsed Time condition. Your map file is not changed. Because these
+triggers are part of the copy, the replay holds them: a failed scenario's replay, kept in
+`<map>.tests/` beside the map (or where `--out` says), plays back the scenario exactly as
+it ran, and `scmjs replay open` opens it in the editor, where the map's triggers show the
+test's own first and last. The trigger numbers in the report are the map's own.
+
+`--seed` picks the game's random seed for scenarios that do not set one; the same map,
+scenario and seed give the same game every time. `--json` prints every scenario with each
+expectation, whether it held and what the game had. `--format github`, `junit` or `sarif`
+give the failures in the forms CI tools read, as for `scmjs map check`, each placed on the
+scenario's line in the tests file.
+
+Exits 1 when a scenario fails, and 2 when the tests file or the map cannot be read or the
+game could not start. Like `map trace`, it needs the game engine and your copy of
+StarCraft, so it does not run on GitHub's own runners; the workflow `scmjs init` writes
+leaves it out and says how to run it on a runner of your own that has the game.
+
+What it cannot do yet: a player leaving (you are the only person in the game) and the
+computers' own commands. The text shown and how often a trigger fired cover the whole
+game; everything else is read when the scenario ends.
 
 ## How far apart the start locations are
 
@@ -1351,8 +1508,8 @@ scmjs completion fish > ~/.config/fish/completions/scmjs.fish
   is `stdin.scx` or `stdin.chk` by its bytes, and is written back in the same form.
 - Exit codes: 0 when all went well, 1 when a map failed its check, two maps differed, a
   merge had conflicts it was not told how to settle, nothing matched a search, a build did
-  not go through or something went wrong, 2 when a file was missing or was the wrong kind
-  for the command, or an option was not one.
+  not go through, a map test failed or something went wrong, 2 when a file was missing or
+  was the wrong kind for the command, or an option was not one.
 - Colour is off when the output is not a terminal, with `NO_COLOR` set, or with
   `--no-color`.
 - For what the commands do not do — a script that edits maps, a check of your own — the
@@ -1371,7 +1528,7 @@ from a clone with `npm run cli -- <command>`, or build it with `npm run build:cl
 | `cli/src/diff.ts` | What changed between two maps, by group, and the section comparison underneath; a map read from a git revision |
 | `cli/src/merge.ts` | The three-way merge: each part's rule, the ordered list merge for triggers, units matched without ids, the string table numbered again; git's three versions of a stopped file |
 | `cli/src/edit.ts` | The header set, the map resized and the unused strings dropped, over the open document |
-| `cli/src/report.ts` | Check Map's findings as GitHub annotations, JUnit XML and SARIF |
+| `cli/src/report.ts` | Check Map's findings, and a map test's failures, as GitHub annotations, JUnit XML and SARIF |
 | `cli/src/dump.ts` | The map as text: every part in file order, the triggers and strings in their text forms, members hashed, sections as they would be written |
 | `cli/src/find.ts` | Edit ▸ Find over a map from the terminal: the kinds, the hits and their lines |
 | `cli/src/create.ts` | A new map as File ▸ New makes it: the flat fill with a seeded variation, the start locations, the slots closed, the file written as a new map is saved |
@@ -1396,6 +1553,7 @@ from a clone with `npm run cli -- <command>`, or build it with `npm run build:cl
 | `cli/src/botrun.ts` | A bot's game with no page: scm-sim's bot runner run and its lines worded |
 | `cli/src/watch.ts` | A replay in the terminal: the braille minimap, its colours and the lines around it, the replay's chat and APM, and the runner paced a picture at a time |
 | `cli/src/trace.ts` | A map's triggers run in the game: scm-sim's map runner run, its trace and cost worded against the map's own triggers |
+| `cli/src/maptest.ts` | A map's tests: the tests file read and resolved against the map's names, the setup and timed steps made triggers of a copy, the map runner run in its test mode for each scenario, the end judged and the failed scenarios' replays kept |
 | `cli/src/rush.ts` | The walks between the start locations: the unit found by name, the map runner run in its rush mode, the table of the starts |
 | `cli/src/preview.ts`, `cli/src/png.ts` | A map's picture: the terrain from the tileset, reduced to the scale asked, the units, resources and start locations over it, and the PNG written by hand |
 | `cli/src/paint.ts` | The picture in a terminal: colour half blocks, the 256-colour fallback, ASCII shades, kitty's and iTerm2's picture protocols |

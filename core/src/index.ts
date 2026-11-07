@@ -35,6 +35,8 @@ export { type TextEncoding, TEXT_ENCODINGS, DEFAULT_TEXT_ENCODING } from "../../
 // Section records, as `Scenario` holds them.
 export type { UnitRecord, SpriteRecord, DoodadRecord, LocationRecord } from "../../src/formats/chk/sections/objects";
 export type { ConditionRecord, ActionRecord, TriggerRecord, ReadonlyTrigger } from "../../src/formats/chk/sections/triggers";
+// The numbers a condition or action record holds, by name.
+export { ConditionType, ActionType, PlayerGroup, Comparison, SwitchState, SwitchAction, SetModifier, ResourceType, UnitClass } from "../../src/formats/chk/sections/triggers";
 export { PlayerType, PlayerRace, ColorMode, ForceFlag, PLAYER_SLOTS, FORCE_SLOTS, type Forces, type PlayerRgb } from "../../src/formats/chk/sections/players";
 export type { UnitSettings, UnitAvailability, UpgradeSettings, UpgradeRestrictions, TechSettings, TechRestrictions } from "../../src/formats/chk/sections/settings";
 export type { StringTable } from "../../src/formats/chk/sections/strings";
@@ -48,7 +50,7 @@ export { findInScenario, FIND_KINDS, type FindKind, type FindOptions, type FindR
 // ── Triggers and the briefing ──
 export { readTriggers, applyTriggers, readBriefing, applyBriefing, newTrigger, newCondition, newAction, triggerNames, triggerUsage, isPreserved, setPreserved, fingerprintTrigger, sameTriggers, TRIGGER_OWNERS } from "../../src/editor/triggers";
 export { triggersToText, triggersFromText, readTriggerFile, triggerFormatOf, type TriggerFileFormat, encodeTrg, decodeTrg } from "../../src/editor/exchange";
-export { formatTrigger, formatTriggers, parseTriggers, summarizeTrigger, TriggerTextError, type TriggerNames, type TextTrigger } from "../../src/formats/triggers/text";
+export { formatTrigger, formatTriggers, parseTriggers, summarizeTrigger, triggerComment, TriggerTextError, type TriggerNames, type TextTrigger } from "../../src/formats/triggers/text";
 export { CONDITION_DEFS, ACTION_DEFS, BRIEFING_ACTION_DEFS, conditionDef, conditionDefByName, actionDef, actionDefByName, type ConditionDef, type ActionDef, type ArgDef, type ArgKind, CHOICES, choiceLabel, choiceValue, AI_SCRIPT_NAMES, aiScriptName, aiScriptByName } from "../../src/data/triggerDefs";
 
 // ── Strings and text ──

@@ -137,6 +137,13 @@ native/ — see scm-sim's docs/own-bots.md. Added 2026-11-06 with "Made by Jeany
   keptExtras, stored, built, steps: [{ id: "trigscript/build", label: "TrigScript" }], options })`. A `.chk` output
   with programs is refused as the editor refuses it. Magenta's member (`magenta\magenta.json`) → CliError: the
   contributions API is the editor's; the CLI has no plugins running.
+- **Trap (CI failed first, run 42320575013): `plugins/` is gitignored and vendored by predev/prebuild**, so a plain
+  `npm test` on a clone has no compiler. Fixes: `build.ts` loads the plugin's value modules lazily in one
+  `trigscript()` (`import()`s, inlined by the bundle's `codeSplitting: false`; `import type` stays static), so
+  `main.ts` and the other CLI suites load without them and a missing module is a CliError naming `npm run
+  vendor:plugins`; `tests/cli-build.test.ts` is `describe.skipIf(!have)` like the game-data suites; the `web` job
+  runs `npm run vendor:plugins` before `npm test` (so CI does run them); `build-cli.mjs` vendors when
+  `plugins/trigscript/vendored.json` is missing, and the `cli` job passes `GITHUB_TOKEN` to it.
 - **Core exports added for it**: `readSwitchNames`, `soundList`/`SoundRow`, `buildChk`, `keptExtras`, `buildMapFile`,
   `packBuiltMap`/`PackInput`. `tests/core.test.ts`'s CLI list now names every `cli/src` module (exchange, diff,
   completion had been left off the list and were not being checked; all pass).

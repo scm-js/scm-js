@@ -11,10 +11,13 @@ import { openMapBytes } from "../src/editor/mapFile";
 import { readTriggers } from "../src/editor/triggers";
 import { loadMap } from "../src/formats/mpq/scm";
 import { parseScenario } from "../src/formats/chk/scenario";
-import { scriptState } from "../plugins/trigscript/script";
 import { buildMap, loadTypeScript, mapNames, printBuild, testWorld, type TypeScriptModule } from "../cli/src/build";
 import { CliError, visible } from "../cli/src/ui";
 import { testMap } from "./support/maps";
+
+/** The plugin's source is vendored (`npm run vendor:plugins`), not in the repository: without it the build has no compiler. */
+const have = existsSync(join(import.meta.dirname, "..", "plugins", "trigscript", "script.ts"));
+const scriptState = async (...args: Parameters<typeof import("../plugins/trigscript/script").scriptState>) => (await import("../plugins/trigscript/script")).scriptState(...args);
 
 const encoder = new TextEncoder();
 const tmp = () => mkdtempSync(join(tmpdir(), "scmjs-build-"));
@@ -43,7 +46,7 @@ test("a marine in the middle brings two to the base", (sim) => {
 let typescript: Promise<TypeScriptModule> | null = null;
 const ts = () => (typescript ??= loadTypeScript());
 
-describe("scmjs map build", () => {
+describe.skipIf(!have)("scmjs map build", () => {
   it("finds the repository's TypeScript and its standard library", async () => {
     const t = await ts();
     expect(t.version).toBe(JSON.parse(readFileSync("node_modules/typescript/package.json", "utf8")).version);
@@ -53,7 +56,7 @@ describe("scmjs map build", () => {
 
   it("reads the map's names and world as the plugin does", async () => {
     const doc = await withScript("");
-    const names = mapNames(doc.scenario, doc.extras);
+    const names = await mapNames(doc.scenario, doc.extras);
     expect(names.locations.entries.map((e) => e.keys[0])).toEqual(["NoLocation", "Base", "Nest", "Middle", "Anywhere"]);
     expect(names.players.entries.find((e) => e.keys.includes("Defenders"))?.value).toBe(18);
     const world = testWorld(doc.scenario, { heapCells: 1, stackDepth: 2, testsGuardBuild: false });
@@ -79,7 +82,7 @@ describe("scmjs map build", () => {
     const again = await openMapBytes(new Uint8Array(readFileSync(out)), "built.scx");
     expect(again.builtBy).toBeNull();
     expect(readTriggers(again.scenario)).toHaveLength(5);
-    const state = scriptState(readTriggers(again.scenario), again.extras);
+    const state = await scriptState(readTriggers(again.scenario), again.extras);
     expect(state.unbuilt).toBe(false);
     expect(state.stale).toBe(false);
     expect(state.block).toMatchObject({ start: 3, count: 2 });

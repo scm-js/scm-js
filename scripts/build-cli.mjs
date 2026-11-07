@@ -1,17 +1,22 @@
 // Builds the `scmjs` command (cli/, docs/cli.md) into one file, cli/dist/scmjs.mjs: its code, the editor's code it
-// reads maps and replays with, and its two libraries, so `npx @scm-js/cli` downloads nothing more. Its version is the
+// reads maps and replays with, its two libraries and the TrigScript compiler (`plugins/trigscript`, vendored at the
+// editor's pin), so `npx @scm-js/cli` downloads nothing more — TypeScript apart, which `map build` finds installed. Its version is the
 // editor's (package.json), written into cli/package.json too. Beside it, THIRD-PARTY-NOTICES.txt carries the license
 // of every package compiled in (scripts/lib/notices.mjs).
 //   npm run build:cli                   then: node cli/dist/scmjs.mjs --help
 //   npm run cli -- map info a.scx       built and run in one step (--quiet: no line about the build)
 import { execFileSync } from "node:child_process";
-import { chmodSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { build } from "vite";
 import { cliNotices } from "./lib/notices.mjs";
 
 const version = JSON.parse(readFileSync("package.json", "utf8")).version;
 let commit = "";
 try { commit = execFileSync("git", ["rev-parse", "--short", "HEAD"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim(); } catch { /* not a clone */ }
+
+// `map build` bundles the TrigScript compiler from the vendored plugin source (`plugins/`, fetched by
+// scripts/vendor-plugins.mjs and not in the repository): fetch it when it is not here yet, as `prebuild` would.
+if (!existsSync("plugins/trigscript/vendored.json")) execFileSync("node", ["scripts/vendor-plugins.mjs"], { stdio: "inherit" });
 
 const cliPackage = JSON.parse(readFileSync("cli/package.json", "utf8"));
 if (cliPackage.version !== version) {

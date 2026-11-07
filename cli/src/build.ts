@@ -31,18 +31,37 @@ import { readSwitchNames } from "../../src/editor/switches";
 import { soundList } from "../../src/editor/sounds";
 import { buildChk, defaultSaveOptions, formatOf, keptExtras, planSave } from "../../src/editor/save";
 import { packBuiltMap } from "../../src/editor/mapBuild";
-import { compileScript, type CompileResult, type ScriptDiagnostic } from "../../plugins/trigscript/compiler/compiler";
-import { scriptNames, type ScriptNames } from "../../plugins/trigscript/compiler/names";
-import { libraryImports } from "../../plugins/trigscript/compiler/libraries";
-import { buildOwnMap, isRefused } from "../../plugins/trigscript/compiler/backend/build";
-import { finishSounds, vorbisEncoder, type VorbisEncoder } from "../../plugins/trigscript/compiler/vorbis";
+import type { CompileResult, ScriptDiagnostic } from "../../plugins/trigscript/compiler/compiler";
+import type { ScriptNames } from "../../plugins/trigscript/compiler/names";
+import type { VorbisEncoder } from "../../plugins/trigscript/compiler/vorbis";
 import type { TestWorld } from "../../plugins/trigscript/compiler/testing";
-import { buildScript, librarySources, readLibraries, readSettings, scriptState, type ScriptSettings } from "../../plugins/trigscript/script";
-import { VERSION as TRIGSCRIPT_VERSION } from "../../plugins/trigscript/version";
+import type { ScriptSettings } from "../../plugins/trigscript/script";
 import { writeBack } from "./exchange";
 import { CliError, dot, mark, pc, plural, size } from "./ui";
 
-export { TRIGSCRIPT_VERSION };
+/**
+ * The plugin's modules, loaded when a build asks for them. `plugins/` is vendored by `npm run vendor:plugins`
+ * (predev, prebuild, and `scripts/build-cli.mjs`) and is not in the repository, so the rest of the command — and
+ * the tests of it — load without them; the bundle inlines these imports.
+ */
+async function trigscript() {
+  try {
+    const [compiler, names, libraries, backend, vorbis, script, version] = await Promise.all([
+      import("../../plugins/trigscript/compiler/compiler"),
+      import("../../plugins/trigscript/compiler/names"),
+      import("../../plugins/trigscript/compiler/libraries"),
+      import("../../plugins/trigscript/compiler/backend/build"),
+      import("../../plugins/trigscript/compiler/vorbis"),
+      import("../../plugins/trigscript/script"),
+      import("../../plugins/trigscript/version"),
+    ]);
+    return { ...compiler, ...names, ...libraries, ...backend, ...vorbis, ...script, TRIGSCRIPT_VERSION: version.VERSION };
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException)?.code !== "ERR_MODULE_NOT_FOUND") throw e;
+    throw new CliError("The TrigScript compiler is not in this build of scmjs.", "In a clone, npm run vendor:plugins fetches the plugins the editor ships, then build the command again.");
+  }
+}
+type TrigScript = Awaited<ReturnType<typeof trigscript>>;
 
 /** TypeScript, found on this computer. */
 export interface TypeScriptModule {
@@ -108,6 +127,7 @@ function libText(dir: string): string {
  * wasm-media-encoders when it has one, else this TrigScript release's `dist/vorbis.wasm` from the CDN.
  */
 export async function loadVorbis(from = process.cwd()): Promise<VorbisEncoder> {
+  const { vorbisEncoder, TRIGSCRIPT_VERSION } = await trigscript();
   for (let dir = resolve(from); ; dir = dirname(dir)) {
     const wasm = join(dir, "node_modules", "wasm-media-encoders", "wasm", "ogg.wasm");
     if (existsSync(wasm)) return vorbisEncoder(readFileSync(wasm));
@@ -130,7 +150,8 @@ const MAGENTA_MEMBER = "magenta\\magenta.json";
 const memberKey = (name: string) => name.replace(/\//g, "\\").toLowerCase();
 
 /** The identifiers the script uses for the map's things, from the scenario — what the plugin reads off the editor's API. */
-export function mapNames(scn: Scenario, extras: ReadonlyMap<string, Uint8Array>): ScriptNames {
+export async function mapNames(scn: Scenario, extras: ReadonlyMap<string, Uint8Array>): Promise<ScriptNames> {
+  const { scriptNames } = await trigscript();
   return scriptNames({
     forceNames: Array.from({ length: FORCE_SLOTS }, (_, f) => forceName(scn, f) || null),
     locations: usedLocations(scn).map((index) => ({ index, name: locationName(scn, index) })),
@@ -223,6 +244,7 @@ export interface BuildOutcome {
  * compile or whose tests fail is an outcome with `ok: false`, not an error, so the caller prints the lines.
  */
 export async function buildMap(doc: OpenedMap, inputPath: string, typescript: TypeScriptModule, options: BuildOptions = {}): Promise<BuildOutcome> {
+  const { compileScript, libraryImports, buildOwnMap, isRefused, finishSounds, buildScript, librarySources, readLibraries, readSettings, scriptState, TRIGSCRIPT_VERSION }: TrigScript = await trigscript();
   const scn = doc.scenario;
   const extras: ReadonlyMap<string, Uint8Array> = doc.extras;
   const list = readTriggers(scn);
@@ -243,7 +265,7 @@ export async function buildMap(doc: OpenedMap, inputPath: string, typescript: Ty
   if (missing.length) throw new CliError(`The script imports the ${missing.length === 1 ? "library" : "libraries"} ${missing.join(", ")}, and the map keeps no copy.`, "Apply the script in the editor once, with the plugin that provides it running: the map then keeps a copy.");
 
   const runTests = !!options.test || settings.testsGuardBuild;
-  const compiled = compileScript(typescript.ts, state.files, mapNames(scn, extras), {
+  const compiled = compileScript(typescript.ts, state.files, await mapNames(scn, extras), {
     lib: typescript.lib,
     ...(Object.keys(libraries).length ? { libraries: librarySources(libraries) } : {}),
     sounds: !options.check,

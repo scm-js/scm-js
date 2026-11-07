@@ -130,7 +130,8 @@ that code disagree — `npm run test:maps`, then commit. A suite that holds for 
 `mapFiles()` (`tests/support/maps.ts`: the committed maps plus `fixtures/maps/` where present).
 **Only generated maps go in `tests/maps/` — never a Blizzard or community map.** Suites needing
 `fixtures/maps/*.scx` or `public/tileset/*.cv5` use `describe.skipIf(...)` and skip silently when the
-files are absent — **a green run does not mean the terrain, doodad and StarEdit-layout suites ran.** vitest still *runs* a
+files are absent — **a green run does not mean the terrain, doodad and StarEdit-layout suites ran.** The
+same goes for `tests/cli-build.test.ts`, which needs the vendored plugins (`npm run vendor:plugins`; CI fetches them before `npm test`). vitest still *runs* a
 skipped describe's body to collect it, so a suite that reads those files in the body (not inside
 `it` / `beforeAll`) must be guarded with `if (have) describe(...)` instead, or CI — which has no
 game data — crashes on the read.

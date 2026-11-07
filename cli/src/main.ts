@@ -634,8 +634,9 @@ program.command("completion", { hidden: true }).description("a completion script
 
 program.command("doctor").description("what this computer has for each command").helpGroup("This tool:").addOption(json)
   .addHelpText("after", `
-TypeScript (map build, a .ts plugin), Docker (bot new|build), a copy of StarCraft and the game engine (bot run), the
-desktop app (map open), and whether npm has a newer scmjs. Nothing is changed. Exits 1 only when Node is too old.`)
+TypeScript (map build, a .ts plugin), Docker (bot new|build), a copy of StarCraft and the game engine's runners (bot
+run, replay watch, map trace|cost), the desktop app (map open), whether Claude Code has scmjs mcp, and whether npm has
+a newer scmjs; then the commands this computer can run now. Nothing is changed. Exits 1 only when Node is too old.`)
   .action(async (o: { json?: boolean }) => {
     const r = await doctorReport();
     print(...(o.json ? [JSON.stringify(doctorJson(r), null, 2)] : printDoctor(r)));

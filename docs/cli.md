@@ -55,7 +55,7 @@ when there is a newer version.
 | `scmjs bot new`, `init`, `build` | A BWAPI bot of your own, built into a `.scmbot` file for the play page |
 | `scmjs bot update` | The newest bot toolchain |
 | `scmjs bot run <bot> <map>` | Plays the bot against the game's computers on the map, with no page |
-| `scmjs doctor` | What this computer has for each command: TypeScript, Docker, StarCraft, the desktop app, and the command for each thing missing |
+| `scmjs doctor` | What this computer has for each command: TypeScript, Docker, StarCraft, the game engine, the desktop app, Claude Code, the command for each thing missing, and which commands are ready |
 | `scmjs about` | This version and whether there is a newer one, who made it, the desktop app and Docker if they are installed, and where the docs and source are |
 | `scmjs mcp` | The map commands as an MCP server, for Claude Code and other AI tools on your computer |
 | `scmjs completion <shell>` | A completion script for bash, zsh or fish |
@@ -650,26 +650,45 @@ when the app is installed.
 
 `scmjs doctor` says what is on this computer of what the commands need beyond Node, and
 the command for each thing missing: TypeScript for `map build` and a plugin written in
-TypeScript, Docker for `bot new|build`, a copy of StarCraft and the fetched engine for
-`bot run`, the desktop app for `map open`, and whether npm has a newer scmjs.
+TypeScript, Docker for `bot new|build`, a copy of StarCraft for the commands that play the
+game (`bot run`, `replay watch`, `map trace`, `map cost` and `map preview`), the game
+engine those commands use, the desktop app for `map open`, whether Claude Code has been
+given `scmjs mcp`, and whether npm has a newer scmjs. It ends with the commands this
+computer can run now, and for each one that cannot, the one thing it lacks.
 
 ```
-scmjs doctor  what this computer has for each command
+scmjs doctor  what this computer has of what the commands need
 
 ✔ Node         v24.13.0 · linux x64
-✔ scmjs        0.8.12 · the newest
-▲ TypeScript   not found
-    scmjs map build and a .ts plugin under scmjs map run compile with it.
-    npm install typescript   (in the map's project, or npm install -g typescript)
+✔ scmjs        0.8.11 · the newest
+✔ TypeScript   6.0.3 · ~/maps/node_modules/typescript/lib/typescript.js
 ✔ Docker       29.1.3
-▲ StarCraft    not found
-    scmjs bot run plays with your own installation's files.
-    scmjs bot run … --starcraft <folder>   (or SCMJS_STARCRAFT=<folder>)
-✔ Game engine  not fetched yet
-✔ Desktop app  not installed
+✔ StarCraft    Remastered · /mnt/c/Program Files (x86)/StarCraft
+▲ Game engine  build 1248410ad2a0 · ~/.cache/scmjs/engine
+    Runners for bot run; none for replay watch and map trace|cost in this build.
+    scmjs replay watch <replay> fetches them once the play page has them
+✔ Desktop app  /mnt/c/Users/you/AppData/Local/Programs/scmJS/scmJS.exe
+✔ MCP          not registered
+    scmjs mcp lets Claude Code read, check and change maps with these commands.
+    claude mcp add scmjs -- npx -y @scm-js/cli mcp
 
-✔ scmjs info, check, dump, diff and the rest need nothing more; the rest is for the commands named
+Ready on this computer
+  ✔ map info|check|…   ✔ replay info|open   ✔ mcp   ✔ map build
+  ✔ bot new|build   ✔ bot run   ✖ replay watch (engine runner)
+  ✖ map trace|cost (engine runner)
 ```
+
+The game engine is fetched from the play page the first time a command needs it, and kept.
+Each command that plays drives it with a runner of its own, and a copy fetched before the
+play page had a runner lacks that one; the doctor names the runners the copy holds. The
+next command that needs a missing runner fetches it, as long as the play page has it by
+then. Until anything is fetched the line says "not fetched yet", and nothing waits on it.
+
+The MCP line only looks for `scmjs mcp` among the servers Claude Code was told about, for
+every folder or for the folder you run the doctor in. Not having it is not a problem, and
+if Claude Code is not on this computer the line just says so.
+
+`--json` prints the same checks and the ready list as JSON.
 
 Nothing is changed. The command exits with 1 only when Node itself is older than the
 command needs.

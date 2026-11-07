@@ -322,6 +322,34 @@ slice proposed: four thin layers on existing library code, plus a git recipe.
   (banner.ts; the globe's bottom row, which carries no text, separates them). Its description had to fit one line
   (col width ≈ 47): "what this computer has for each command". The `map` term is now `map info|check|open|new|…`;
   the test takes any verbs before the ellipsis. `tests/core.test.ts`'s list of cli modules has the four new names.
+- **Doctor brought up to date (2026-11-07, branch `cli-doctor`)** after `replay watch`, `map trace|cost`, `mcp` and pipes:
+  - **Engine runners.** `engineCheck(cache, at = SCMJS_PLAY_URL)`: a folder in `SCMJS_PLAY_URL` is looked at as
+    `--engine` would (current.json's build subfolder, else the files beside); otherwise the **newest build by folder
+    mtime** under `<cache>/engine/` (there is no local "current": `ensureEngine` asks the page each run, and writing a
+    file into a build touches its folder). `runnersIn(dir)` matches the files against `RUNNERS[kind].file`, the same
+    patterns `ensureEngine` uses, so a new kind in `RUNNERS` needs only a name in `RUNNER_COMMANDS`. A build lacking a
+    runner is `warn`, with the fix "`scmjs replay watch <replay>` fetches them once the play page has them" — **not**
+    "fetches the newest build": on 2026-11-07 the live `play/engine/current.json` (build 1248410ad2a0) named only the
+    bot runner, so a fetch would not have helped, and runnerFor's error says the same. Nothing fetched stays `ok`
+    "not fetched yet". The check carries `engine: { dir, build|null, runners }` (in `--json` too).
+  - **Ready summary** (`readiness(checks)` → `Ready { commands, ok, lacks? }[]`, `readyLines` wraps at 80 columns,
+    three lines today): a fixed table `READY` of groups → needs, read **off the checks by `what`** ("TypeScript",
+    "Docker", "StarCraft" warn/bad; a runner kind missing from a fetched build) — no probe of its own; Node `bad`
+    blocks every group with "Node"; a check absent from the list blocks nothing (the tests hand it partial lists).
+    The copy of the game is named before the runner (the user must supply it; the runner comes by itself). An engine
+    never fetched blocks nothing (the first run fetches it). It replaced the old last line ("need nothing more");
+    blocked still prints "Something blocks scmjs itself" above it. `map preview` is **not** in `READY` yet (the
+    command was being added in parallel) — add its row with its needs; the StarCraft note already names it.
+  - **MCP** (`mcpCheck(config = ~/.claude.json, cwd)`): `mcpServers` at the top (every folder) and
+    `projects[cwd].mcpServers`, then any other project's; an entry counts when one of `[command, ...args]` matches
+    `@scm-js/cli|scmjs` and another is exactly `mcp` (npx, a global `scmjs`, `node …/scmjs.mjs`). Always `ok`; the
+    fix `claude mcp add scmjs -- npx -y @scm-js/cli mcp` (`MCP_ADD`) when not registered here; a missing or
+    unparsable file is a quiet dim "Claude Code not found". Nothing else in the file is read out. The project-scoped
+    `.mcp.json` is not looked at.
+  - `doctorReport`/`doctorJson`/`printDoctor` keep their names and shapes (the MCP server's `doctor` tool calls them);
+    JSON gained `ready` and the engine check's `engine`. `tests/cli-doctor.test.ts`: runners in fake cache folders
+    (mtimes via `utimesSync`), a staged folder, the ready table from given checks, the 80-column fit, `~/.claude.json`
+    variants in temp files.
 
 ## CI slice: check formats, info --table, diff --rev, set, resize, strings prune (`report.ts`, `edit.ts`) — 2026-11-07
 
@@ -458,7 +486,7 @@ The user took the parent's first-slice proposal ("`map trace` and `map cost` sec
   served by `python3 -m http.server` over dist-play: ums.scx trace 2,400 frames in ~3 s; `trigscript-frame-cost.scx`
   cost: 0.025 ms a frame on average, 1.10 ms at frame 2 (83,787 records, 53,192 triggers, the program's start).
 - Not built: `--by-origin`/by-line cost for a TrigScript build (the editor has it); bot-run's `--every` wording reused as
-  is; the campaign maps (engine); a `doctor` line for the map runner.
+  is; the campaign maps (engine). (The `doctor` line for the map runner came with `cli-doctor`.)
 ## Opening (`cli/src/open.ts`)
 
 - **Desktop app**: `SCMJS_APP`, else the installers' places (Windows `%LOCALAPPDATA%\Programs\scmJS\scmJS.exe` and

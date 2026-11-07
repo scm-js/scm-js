@@ -175,6 +175,27 @@ native/ — see scm-sim's docs/own-bots.md. Added 2026-11-06 with "Made by Jeany
   `hooks/useDoodadTools|useSpriteTools|useMapFileActions`, which import React and jotai's hooks, so aliasing `jotai`
   to `jotai/vanilla` breaks the build (tried) — moving those helpers out of the hook files would take it out. `tests/cli-run.test.ts` (5 tests): sources, a JS plugin folder (events, diff, written, reopen), `--command` +
   `--dry-run` + unknown command, an unchanged map and a `.ts` script through TypeScript, and the failure messages.
+## The archive as a folder (`cli/src/archive.ts`) — 2026-11-06
+
+- `map unpack <map> [--out dir] [--list]` / `map pack <dir> [--out map] [--compression m]`, on two new core exports
+  split out of `openMapBytes`: **`readArchive(bytes)`** (the archive as it is — chk, extras by name, stored, origin,
+  files, problems; `openMapBytes` = `readArchive` + `restoreBuiltMap` + parse) and **`writeArchiveBytes(chk, {extras,
+  stored, compression, encrypt, listfile})`** (`saveMap` with the editor's sector rule). Raw on purpose: a built map
+  unpacks into its built scenario + `scmjs\` members and packs back to the same built file; nothing is parsed, so
+  the folder *is* the file.
+- Member → file: `fileFor` turns `\` into folders and percent-encodes `<>:"|?*`, control characters and `%` itself
+  (so `memberFor` can decode without ambiguity); `.`/`..` segments become `%2E…`. Two members differing only in case
+  get `.2`, `.3` suffixes (the manifest holds the real name). `archive.json` (`ArchiveManifest` v1): fileName,
+  scenario {compression, encrypted, sectorSize}, listfile (false = protected map, written without one), members
+  [{name, file}], stored {hashTable, sectorSize, unreadable, members[{slot, hash, block, sectorSize, file}]} with
+  the bytes in `stored/NNN.bin`, problems. Pack: manifest members + stored + **every other file** in the folder
+  (dotfiles skipped) as a member at `memberFor(path)`; `staredit/scenario.chk` required; `.chk` output refused with
+  members; the packed bytes are opened with `openMapBytes` before writing (a folder whose scenario is garbage is
+  refused). Default output: the manifest's `fileName` beside the folder, else `<folder>.scx`. Compression: manifest's,
+  "other" → pkware, none → none; `--compression` overrides; encryption as the manifest says.
+- `tests/cli-archive.test.ts` (7): names, list, ums round trip (chk bytes equal, extras equal, origin equal, diff
+  same), an added file + zlib, a protected map (no listfile, pkware+encrypted, one nameless member kept byte for
+  byte, `files` null after pack), a built-shaped map, refusals.
 
 ## Opening (`cli/src/open.ts`)
 
@@ -205,7 +226,7 @@ native/ — see scm-sim's docs/own-bots.md. Added 2026-11-06 with "Made by Jeany
 ## Next (proposed to the user)
 
 Done 2026-11-06: triggers/strings export-import, diff, completions, `map build` (above), on `@scm-js/core`
-(`core.md`), `map run` (above). Still proposed: `map unpack|pack`,
+(`core.md`), `map run`, `map unpack|pack` (above). Still proposed:
 `map render`, `bot run` (a headless game through scm-sim), `setup --from` for the game files. **Publishing is CI's**
 (2026-11-06): `build.yml`'s `cli` job, stable channel only, `build:cli` (stamps the version), checks it equals the
 release's, skips a version npm has, `npm publish` by trusted publishing over OIDC with provenance, like `plugin-api`

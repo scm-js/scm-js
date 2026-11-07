@@ -4,7 +4,8 @@ This guide is for map makers. It starts with getting the editor running, walks t
 first map, and then goes through each layer and dialog in turn. TrigScript, triggers
 written as code, has [a guide of its own](trigscript.md); the technical side — file
 formats, game data, writing plugins, building from source — has documents of its own,
-listed in the [README](../README.md#documentation).
+listed in the [README](../README.md#documentation). Several tasks here also have a
+terminal form, in the [command line guide](cli.md).
 
 > **Beta.** This editor needs to be extensively tested. Keep backups of maps you care about,
 > and check anything important in-game before you rely on it.
@@ -670,7 +671,9 @@ StarCraft: Remastered only.
 **File ▸ Import** and **File ▸ Export** (also Triggers ▸ Import Triggers… and Export
 Triggers…) carry triggers as `.trg` files, SCMDraft's format, or as text. An import can be
 added to the map's triggers or replace them. A `.trg` holds string numbers rather than
-text, so it fits only a copy of the same map; text works between maps.
+text, so it fits only a copy of the same map; text works between maps. From a terminal,
+`scmjs map triggers export` and `import` do the same ([Triggers and strings as
+text](cli.md#triggers-and-strings-as-text)).
 
 **Triggers ▸ Validate Triggers** is [Check Map](#check-map) limited to the triggers.
 
@@ -892,6 +895,9 @@ A map with triggers gets three more checks:
 
 Double-click an issue to go to it. The same check runs inside the Save dialog.
 
+From a terminal, `scmjs map check` runs the same check over any number of maps, and can
+fail a CI build on it ([Checking a map](cli.md#checking-a-map)).
+
 ### Test Map
 
 ![The Test Map dialog](images/test-map.webp)
@@ -962,6 +968,10 @@ Run the command again to rebuild the map and start over in the same panel.
 > only in the editor at scmjs.dev, not in the desktop app or an editor hosted elsewhere.
 > There, Test Map goes to StarCraft and Preferences ▸ Testing has no choice to make.
 
+From a terminal, `scmjs map trace` runs a map's triggers in the game and lists which
+fired, and `scmjs map test` plays scenarios you write and checks how each ended ([Running
+a map in the game](cli.md#running-a-map-in-the-game)).
+
 ### Saving
 
 Ctrl+S writes the map back where it came from.
@@ -1026,6 +1036,10 @@ until a later save succeeds. Test Map builds the same way, and stops on a failur
 **Save to scmjs.dev…**, under File and under Account, keeps a copy of the map on your
 scmjs.dev account as a numbered revision with a note. It does not change where Ctrl+S
 writes. See [Keeping maps on scmjs.dev](#keeping-maps-on-scmjsdev).
+
+To see what changed between two saved versions of a map, `scmjs map diff` compares them
+from a terminal and `--picture` draws where; [Maps in git](cli.md#maps-in-git) covers
+keeping maps in git.
 
 ### Recovery copies
 
@@ -1257,8 +1271,7 @@ nothing to scmjs.dev until you use one of these features; there is no request at
 unless you are already signed in.
 
 The `scmjs` command line can sign in too, and make a copy link or an edit link from a map
-file on your computer ([Sharing a map from the
-terminal](cli.md#sharing-a-map-from-the-terminal)).
+file on your computer ([Sharing from the terminal](cli.md#sharing-from-the-terminal)).
 
 All of it lives in the scmjs.dev plugin, which is installed and on from the start. If you
 would rather not see the Account menu at all, turn the plugin off in Plugins ▸ Manage

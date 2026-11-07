@@ -5,6 +5,14 @@ replay info|open|watch | plugin new|check|dev | bot new|init|build|update|run|la
 E403 "too similar to scss, sockjs"), so the user chose the scope beside @scm-js/replay and @scm-js/plugin-api. The reader's page is `docs/cli.md`. The shape was the user's (2026-11-05): one command, a noun for
 each kind of thing (`map`, `replay`, `plugin`, `bot`), "an impressive UX tool … not overly engineered".
 
+**The reader's guide is organised by task** (2026-11-07 rewrite, branch `cli-docs`): `docs/cli.md`'s `##` pages are
+Getting started, Looking inside a map, Making a map, Changing a map, Maps in git, Running a map in the game, Replays,
+Sharing from the terminal, Bots, For developers, Command reference (every command linked to its section, a cheat
+sheet), then In the source. The old build-order pages' addresses are forwarded by `MOVED` in
+`scripts/lib/docs/site.mjs`. A new command gets a `###` on the page of its task and a row in the reference. Its
+pictures (`docs/images/cli-*.webp`) are made by `scripts/cli-screenshots.mjs` (see `docs-site.md`); re-run it when a
+command's output changes, with `--play-url` at a staged scm-sim deploy when the play page lacks the newest runner.
+
 ## Design
 
 - **The editor's code, not a copy.** Maps are read with `openMapFile` (`services/mapIo.ts`): built maps restored,

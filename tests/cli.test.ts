@@ -245,8 +245,9 @@ describe("scmjs doctor", () => {
     expect(lines[3]).toMatch(/^▲ TypeScript +not found$/);
     expect(lines[4]).toBe("    scmjs map build compiles with it.");
     expect(lines[5]).toBe("    npm install typescript");
-    expect(lines.at(-3)).toBe("Ready on this computer");
-    expect(lines.at(-2)).toMatch(/^ {2}✔ map info\|check\|…/);
+    // Nine groups wrap to three lines at 80 columns.
+    expect(lines.at(-4)).toBe("Ready on this computer");
+    expect(lines.at(-3)).toMatch(/^ {2}✔ map info\|check\|…/);
     expect(lines.at(-1)).toMatch(/✔ map trace\|cost$/);
     expect(plain(printDoctor({ checks: [{ what: "Node", state: "bad", detail: "v20" }], blocked: true }))).toContain("✖ Something blocks scmjs itself");
     const j = doctorJson({ checks: [{ what: "Node", state: "ok", detail: "\x1b[2mv22\x1b[0m" }], blocked: false });

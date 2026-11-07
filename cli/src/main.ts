@@ -24,7 +24,7 @@ import { expectKind, loadMapInput, loadReplayInput, readInput, STDIO, toStdout, 
 import { findInMap, KINDS, parseKinds, printHits } from "./find";
 import { issueLine, mapReport, printIssues, printMapInfo, type MapReport } from "./map";
 import { serveStdio } from "./mcp";
-import { openInScmjs } from "./open";
+import { openInScmjs, playInLobby } from "./open";
 import { checkPlugin, devPlugin, newPlugin, printPluginCheck, type PluginCheck } from "./plugin";
 import { printReplayInfo, replayReport } from "./replay";
 import { mapFileFor, writeReplayMap } from "./replaymap";
@@ -529,6 +529,21 @@ character is two pixels, in 24-bit colour where the terminal says it has it, els
     const { report, lines } = await previewMap(input, doc, o);
     if (o.json) print(JSON.stringify(report, null, 2));
     else say(piped, ...lines);
+  });
+
+map.command("play").description("a lobby on the play page with this map, and its invite link to send around").argument("<map>").addOption(json)
+  .addOption(new Option("--play <url>", "the play page's address (SCMJS_PLAY_URL)").hideHelp())
+  .addHelpText("after", `
+Opens scmjs.dev/play in your browser with the map and asks it for a lobby; the page is the host, and the link it
+reports is printed here. The page asks you to sign in to scmjs.dev when you are not (opening a lobby needs an
+account; joining one does not), and for the game's files the first time. The people you send the link to need
+their own StarCraft files and no account. Waits up to five minutes for the page.`)
+  .action(async (file: string, o: { json?: boolean; play?: string }) => {
+    const input = await readInput(file);
+    expectKind(input, "map");
+    const r = await playInLobby(input, { play: o.play, live: o.json ? undefined : (line) => print(line) });
+    if (o.json) { print(JSON.stringify({ file: input.name, ...r }, null, 2)); return; }
+    if (!r.link) throw new CliError(r.error ?? "The page opened no lobby", "Invite Players on the play page opens one by hand.");
   });
 
 map.command("diff").description("what changed between two maps, or since a git revision").argument("<a>").argument("[b]", "the other map; none with --rev").addOption(json)

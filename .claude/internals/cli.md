@@ -1,6 +1,6 @@
 # The `scmjs` command line
 
-`cli/` is the npm package **`@scm-js/cli`** (its command is `scmjs`): `scmjs about | doctor | info | map info|check|open|new|generate|dump|find|fetch|set|resize|triggers|strings|sounds|diff|merge|build|run|unpack|pack|trace|cost|rush|test|preview |
+`cli/` is the npm package **`@scm-js/cli`** (its command is `scmjs`): `scmjs about | doctor | info | map info|check|open|new|generate|dump|find|fetch|set|resize|triggers|strings|sounds|diff|merge|build|run|unpack|pack|trace|cost|rush|test|preview|heatmap |
 replay info|open|watch | plugin new|check|dev | bot new|init|build|update|run|ladder`, or `npx @scm-js/cli …`. npm refused the plain name `scmjs` on the first publish (2026-11-06,
 E403 "too similar to scss, sockjs"), so the user chose the scope beside @scm-js/replay and @scm-js/plugin-api. The reader's page is `docs/cli.md`. The shape was the user's (2026-11-05): one command, a noun for
 each kind of thing (`map`, `replay`, `plugin`, `bot`), "an impressive UX tool … not overly engineered".
@@ -1409,3 +1409,70 @@ freed two of the 23 rows (a 24-row terminal keeps the globe on screen; `tests/cl
 `init [folder]` and `account show|login|logout` took. A new top-level row now needs a line freed again: a one-line
 description is the first rule (commander wraps a long one onto a second row, which the count sees), and a hidden
 command (`{ hidden: true }`: `completion`, `login`, `logout`, `help`) is the fallback.
+
+## Where things happened: `map heatmap` (`cli/src/heatmap.ts`, `heat.ts`) — 2026-11-07
+
+`scmjs map heatmap <map> <replays…|folders> [--what deaths|kills|buildings|paths] [--player n|name] [--until m:ss]
+[--out p.png|-] [--side-by-side] [--scale n] [--width cols] [--blocks] [--force] [--parallel n] [--starcraft] [--json]`.
+A fork built both ends (scm-sim branch `heatmap`, scm-js `cli-map-heatmap`).
+
+- **The runner is the replay runner's `--events` mode, not a new bundle** (as rush is the map runner's): no
+  `current.json` key, no `RUNNERS` kind, no doctor row (`RUNNERS.replay.command` now names map heatmap for the
+  missing-runner hint). scm-sim's `src/exact/replayEvents.ts` (`ReplayEvents.after(frame)` after every `engine.step`)
+  and `runReplay.ts`: `--events` (a bare flag, special-cased in `parseArgs` so it never eats the next argument) runs
+  free to the end with no `frame` lines and no stdin; `start` gains `events: 1` (`EVENTS_VERSION`), then `death`
+  {frame, unit, player, x, y, by}, `built` {frame, unit, player, x, y}, `walk` {frame, units: x, y, owner, class …}
+  every `--sample` (24) frames, and `end` gains `events` {deaths, built, walks, unmatched}. `replay watch` never passes
+  the flag, so its lines are unchanged. **An older runner** ignores the flag, sends a `start` without `events` and waits
+  on stdin (closed: `startRunner` without `stdin`); `playForEvents` kills it and the command says "a replay runner from
+  before map heatmap" (exit 1). The CLI passes the replay path first, before the flags.
+- **Deaths are the game's own count**, not "a unit left the lists" (loading, Archon merges and removals also do that):
+  after each frame the deaths table (0x58A364, 228 × 12 dwords) is diffed with the frame before; each rise is matched
+  to a unit of that type and owner that left the visible/hidden lists (or whose slot came back with another
+  uniqueness byte, +0xA5) within `PATIENCE` (8) frames either way, and placed where it last stood. Killer = +0x90 of the
+  record (`lastAttackingPlayer`), read after the death when the slot was not reused, < 8 else null. Measured on
+  1547.rep (35 min ZvP): 821 deaths placed, 4 rises unmatched, 8 with no killer; legacy_cp949: 89, 0 unmatched,
+  75 + 12 by the two players, 2 none. **A Drone into an Extractor is not a death** in the table (checked: 10
+  extractors, no drone death near any) — a special case written for it was removed. Buildings: a building type owned
+  0–7 that is a new unit, or whose type was not a building the frame before (a Drone), or whose owner was neutral
+  (a geyser becomes the Refinery/Extractor/Assimilator **in the same slot**: the first build counted none of them).
+  Lair/Hive and Sunken are the same building. What stood at frame 0 is not counted. Walks: units not buildings or
+  resources whose tile changed since their last sample, so idle units add nothing. Cost: none measurable (1547.rep's
+  game 23.9 s with the tracker, 28.1 s without in a run beside it; the machine's noise is larger).
+- **The CLI's pure half (`heat.ts`)**: `GameEvents` (flat number lists: deaths 6 a death with killer −1 for none,
+  built 5, walks `frame, n, n × 4`), `takeEvent`, `matchReplay` (sha256 of the map's `readArchive().chk` — or the bytes
+  for a bare `.chk` — against the replay's `chk`: "same"; else `sameName` (plainText, spaces folded, case) + width and
+  height: "name"; else `--force` "forced", else the reason "played on X (w × h)[, another size]"), `heatPoints`
+  (deaths skip `NOT_A_LOSS` = Scarab 85, Nuclear Missile 14, Disruption Web 105, Dark Swarm 202; kills need a killer
+  other than the owner; `--player` a number = slot n−1, a name per game through the runner's players; paths take
+  class 2 army only — workers' mining lit every mineral line), `tileCounts`, `heatField` (a quarter-tile grid, i.e.
+  512 × 512 for 128 × 128 whatever the picture's size, Gaussian blur σ = `SPREAD` tiles: 1.5 deaths/kills, 1
+  buildings/paths; `top` = the 99.5th percentile of warm cells so one hot spot does not darken the rest), `fieldAt`
+  (bilinear), `heatColor` (magma's five stops; alpha 0 under `HEAT_FLOOR` 0.03, then 0.35 + 0.65√t, ≤ 0.92),
+  `greyGround` (luma × 0.5: a tileset colour must not read as heat), `drawHeat`. The first picture took √t on top of the
+  alpha's √ and was a wall of orange; linear t reads. `heatmap.ts`: `heatPicture` (grey terrain at a PNG scale,
+  minerals/geysers in `GEYSER_LANDMARK` under the heat, start locations framed in `START_LANDMARK` over it, then
+  `resizePicture` for a width), `besideEachOther` (preview | gap | heat), `replayFiles` (folders → their `.rep`, numeric
+  sort), the cache, `playForEvents`, `heatmapMap`.
+- **The cache**: `cacheRoot()/heatmap/v1/<sha256 of the replay>.json.gz` (`.part` then rename), written only when the
+  runner reached the end. Duplicates by hash are skipped ("the same replay as one before it"). Every filter runs from
+  the cache, so only new replays are played. Sizes: ~1 MB for a 46-minute game, 57–143 KB for 10–15 minutes; the
+  walks are most of it (140,626 sampled positions in 1547.rep).
+- **Parallel**: `defaultParallel` = min(4, cpus/2, GB of memory); a runner peaks at ~750 MB resident (`/usr/bin/time`,
+  the same for a 10- and a 62-minute game). A line per replay as it is done (`replayLine`: `k/n ✔ file  races · length ·
+  n deaths · s` or `cached`); `--json`/`--out -` send them to stderr. Exit 2 when no replay matched or `--player` is in
+  none, 1 when the game could not play one (the rest still drawn).
+- **Measured** (built CLI, scm-sim `heatmap`'s runner bundled and staged with core.js/game.js/base-s1.bin/interface.bin
+  and a `current.json` under `python3 -m http.server`, `SCMJS_PLAY_URL`/`SCMJS_CACHE` at it, the Remastered copy; the
+  42 replays in scm-sim's `data/replays*`, maps from `replay map`): Fighting Spirit 1.3 — 16 replays (about 9 hours of games,
+  15 the same scenario, 1603.rep matched by name), 26 left out by map; 13,417 deaths; 115 s at 4 at a time, 102 s at 8
+  (the 62-minute 1600.rep alone is 44 s); 투혼 1.3 — 5 replays, 2,967 deaths, 41 s. Each replay 2,000–2,400 frames a
+  second (legacy_cp949, 10 min, 6.7 s). From the cache: 0.7–1.1 s for any `--what` (16 replays, 946,770 army positions
+  for paths). `tests/cli-heatmap.test.ts` (19): matching, filters, tiles, blur, field, ramp, picture over the made-up
+  tileset, cache, lines, and the command over a stand-in runner (`.cjs`, `played.txt` proves the second run plays
+  nothing), replays written with `@scm-js/replay/write`, a stand-in 1.16.1 copy; scm-sim `tests/exact-replay-events.test.ts`
+  (a made-up memory: deaths, waiting, reused slots, buildings, walks; and legacy_cp949 pinned: 89 deaths, 40 buildings).
+- **Not built**: an MCP tool; a legend inside the PNG (no font); per-race or per-matchup filters; the `--view` of a
+  player's fog; a `doctor` line that knows whether the fetched replay runner has `--events` (doctor cannot tell a
+  runner's modes apart, as with rush).
+

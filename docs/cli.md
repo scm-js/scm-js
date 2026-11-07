@@ -107,8 +107,9 @@ nothing, and exits with 1 only when Node itself is too old.
 ### Commands that need StarCraft
 
 `map preview` draws a map with the game's graphics and `map generate` lays its ground with
-the game's tilesets. `map trace`, `map cost`, `map rush`, `map test`, `replay watch`,
-`bot run` and `bot ladder` run the game itself. They need two things on your computer:
+the game's tilesets. `map trace`, `map cost`, `map rush`, `map test`, `map heatmap`,
+`replay watch`, `bot run` and `bot ladder` run the game itself. They need two things on
+your computer:
 
 - Your copy of StarCraft, Remastered or 1.16.1. It is found in the usual places; otherwise
   name its folder with `--starcraft <folder>` or the `SCMJS_STARCRAFT` setting. Nothing of
@@ -288,6 +289,9 @@ scmjs map new - --tileset ice --players 4 | scmjs map preview - --out - > new.pn
 `--json` describes the picture without drawing it: its form, size and scale, the tileset,
 the copy of the game it came from, and how many start locations, units, buildings, mineral
 fields and geysers are on it.
+
+To see where things happened on the map in real games, where units died or where buildings
+went up, draw a [heatmap from replays](#where-things-happened-across-many-games).
 
 ### A map's sounds
 
@@ -1341,6 +1345,55 @@ by then. A replay from any version plays, except one from a game that held more 
 once than 1.16.1 allows, which is refused as the play page refuses it. It needs [your copy
 of StarCraft and the engine](#commands-that-need-starcraft).
 
+### Where things happened across many games
+
+`scmjs map heatmap map.scx replays/` plays every replay on that map in the game and draws
+where things happened as heat over the map's picture: where units died by default, or
+where they were killed, where buildings went up, or where the armies walked. Name the
+replays one by one or give folders; the `.rep` files in a folder are taken.
+
+```sh
+scmjs map heatmap "Fighting Spirit.scx" replays/
+scmjs map heatmap fs.scx replays/ --what buildings --out buildings.png
+scmjs map heatmap fs.scx replays/*.rep --what kills --player 1 --until 10:00
+```
+
+Only replays played on this map count. A replay carries the map the game loaded, so it
+counts when that is the same map as the file, or a map with the same name and size (an
+earlier version of it, say); the others are listed as left out, with the map they were
+played on. `--force` takes them anyway. [`replay map`](#the-map-a-replay-was-played-on)
+gets you the map from one of the replays when you do not have the file.
+
+Each replay is played to its end, as [`replay watch`](#watching-a-replay-in-the-terminal)
+plays it, a few at once. A line says each one as it is done, with its races, its length
+and what it gave. A 35-minute game takes about 25 seconds. What each replay gave is kept
+in your cache folder by the replay's contents, so the next run plays only replays it has
+not seen; the other options (`--what`, `--player`, `--until`) need nothing played again.
+
+| Option | What it does |
+| --- | --- |
+| `--what deaths` | Where units died (the default). Every unit the game counts as killed, placed where it last stood, except a Reaver's Scarabs and spells running out |
+| `--what kills` | The same places, counted for the player who killed the unit; deaths with no killer are left out |
+| `--what buildings` | Where buildings were placed, a Drone's buildings and refineries on geysers included; what stood at the start is not |
+| `--what paths` | Where the armies walked: every second, each army unit that has moved to another tile. Workers are left out, or their mining would outshine everything |
+| `--player 2` | One player's: their number as the map's slots, or their name as the replays have it (`--player Flash`). For kills, the killer |
+| `--until 8:00` | Only what happened by then in each game |
+| `--out heat.png` | Writes a PNG at `--scale` pixels a tile, 4 by default, as `map preview` does; `--out -` to standard output |
+| `--side-by-side` | The map as `map preview` draws it beside the heat |
+| `--parallel 2` | Replays played at once; by default half your processors, at most 4. Each takes about 750 MB of memory |
+| `--json` | The counts per tile, the busiest first, and per unit type, with the replays taken and left out |
+
+The ground is drawn in grey so that no colour of the tileset reads as heat, with the
+mineral fields and geysers in grey and the start locations framed in white. The heat
+spreads each event over a tile or two and goes from dark violet where little happened to
+pale yellow where the most did. Under the picture is the count, the busiest tile and the
+units most counted. The terminal draws it as `map preview` does; `--width` sets its
+columns.
+
+A replay the game cannot play is listed with the reason and the others still count; the
+command then exits with 1. It needs [your copy of StarCraft and the
+engine](#commands-that-need-starcraft).
+
 ### Opening a replay in scmJS
 
 `scmjs replay open game.rep` opens the replay in the replay viewer of the scmJS desktop
@@ -1758,6 +1811,7 @@ gives its options.
 | [`scmjs map cost <map>`](#what-the-triggers-cost) | What the triggers cost Remastered each frame, and the costliest |
 | [`scmjs map test <map> [tests…]`](#testing-a-maps-triggers) | Plays the map's test scenarios in the game, with a replay of each that fails |
 | [`scmjs map rush <map>`](#rush-distances) | The time to walk between the start locations, by the game's own pathing |
+| [`scmjs map heatmap <map> <replays…>`](#where-things-happened-across-many-games) | Where units died, buildings went up or armies walked in many replays, as heat over the map |
 | [`scmjs map share <map>`](#a-link-to-a-map) | A link to the map on scmjs.dev; `--edit` to edit it together |
 | [`scmjs map play <map>`](#a-game-with-other-people) | A lobby on the play page with the map, and its invite link |
 
@@ -1813,6 +1867,7 @@ scmjs map generate "(2)Duel.scx" --seed 7       # a melee map to play
 scmjs map trace map.scx                         # which triggers fire in the game
 scmjs map test map.scx                          # run map.tests.json in the game
 scmjs replay watch game.rep                     # a replay in the terminal
+scmjs map heatmap map.scx replays/ --out h.png  # where units died in those games
 scmjs map share map.scx --qr                    # a link, and a code for a phone
 scmjs init                                      # this folder of maps, ready for git
 ```
@@ -1863,6 +1918,7 @@ from a clone with `npm run cli -- <command>`, or build it with `npm run build:cl
 | `cli/src/watch.ts` | A replay in the terminal: the braille minimap, its colours and the lines around it, the replay's chat and APM, and the runner paced a picture at a time |
 | `cli/src/trace.ts` | A map's triggers run in the game: scm-sim's map runner run, its trace and cost worded against the map's own triggers |
 | `cli/src/maptest.ts` | A map's tests: the tests file read and resolved against the map's names, the setup and timed steps made triggers of a copy, the map runner run in its test mode for each scenario, the end judged and the failed scenarios' replays kept |
+| `cli/src/heatmap.ts`, `cli/src/heat.ts` | A heatmap from replays: the replays matched to the map, played a few at once by the replay runner's event mode and kept in the cache, the events chosen, counted per tile, spread and drawn as a heat ramp |
 | `cli/src/rush.ts` | The walks between the start locations: the unit found by name, the map runner run in its rush mode, the table of the starts |
 | `cli/src/preview.ts`, `cli/src/png.ts` | A map's picture: the terrain from the tileset, reduced to the scale asked, the units, resources and start locations over it, and the PNG written by hand |
 | `cli/src/paint.ts` | The picture in a terminal: colour half blocks, the 256-colour fallback, ASCII shades, kitty's and iTerm2's picture protocols |

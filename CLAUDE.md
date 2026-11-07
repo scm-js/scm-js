@@ -38,7 +38,7 @@ reach, and the traps in them are not visible from the code.
 | `src/editor/{resize,validate,find,exchange,statistics,startLocations,sections}.ts`; adding an `atomWithStorage` | `editor-operations.md` |
 | `src/editor/{log,diagnostics}.ts`, `DebugConsole`, `useErrorCapture`, adding a log line anywhere | `logging.md` |
 | `src/i18n/**`, `scripts/i18n.mjs`, `ko.json`, any user-visible string through `t()`, `api.i18n` | `i18n.md` |
-| `src/plugins/{host,api}.ts`, `atoms/pluginAtoms.ts` — the contract, transactions, events, UI surfaces | `plugins-host.md` |
+| `src/plugins/{host,api,headless}.ts`, `atoms/pluginAtoms.ts` — the contract, transactions, events, UI surfaces, the host without the editor | `plugins-host.md` |
 | `src/plugins/{loader,builtin,defaults,registry,updates}.ts`, `vendor-plugins.mjs`, `*-plugin-types.mjs` | `plugins-loading.md` |
 | A specific plugin repository, or which plugin is the worked example for an API | `plugins-catalogue.md` |
 | `src/gamedata/**`, `scripts/extract-*.mjs`, data sets, `data/gameNames.ts` | `gamedata.md` |

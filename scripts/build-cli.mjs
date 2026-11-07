@@ -7,6 +7,7 @@
 //   npm run cli -- map info a.scx       built and run in one step (--quiet: no line about the build)
 import { execFileSync } from "node:child_process";
 import { chmodSync, existsSync, readFileSync, writeFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { build } from "vite";
 import { cliNotices } from "./lib/notices.mjs";
 
@@ -34,6 +35,27 @@ await build({
     __SCMJS_BUILT__: JSON.stringify(new Date().toISOString().slice(0, 10)),
   },
   plugins: [{
+    // Two modules of the editor's the command has no use for, replaced by empty ones. The Korean catalogue
+    // (`src/i18n/ko.json`, 200 KB): the command prints English. The built-in plugins (`src/plugins/builtin.ts`): its
+    // `import.meta.glob` of every vendored plugin's entry would be inlined whole into this one file by `map run`'s
+    // host — TrigScript's workspace, Aftermath, React among them, 3 MB — and the command never loads a built-in.
+    name: "scmjs-cli-leave-out",
+    enforce: "pre",
+    async resolveId(source, importer) {
+      if (!importer) return null;
+      if (!source.endsWith("ko.json") && !/\/builtin(?:\.ts)?$/.test(source)) return null;
+      const resolved = await this.resolve(source, importer, { skipSelf: true });
+      if (!resolved) return null;
+      if (resolve(resolved.id) === resolve("src/i18n/ko.json")) return "\0scmjs-cli-empty-catalogue";
+      if (resolve(resolved.id) === resolve("src/plugins/builtin.ts")) return "\0scmjs-cli-no-builtins";
+      return null;
+    },
+    load(id) {
+      if (id === "\0scmjs-cli-empty-catalogue") return "export default {};";
+      if (id === "\0scmjs-cli-no-builtins") return "export const BUILTIN_PLUGINS = {}; export const BUILTIN_REPLACES = {};";
+      return null;
+    },
+  }, {
     // The packages the bundle holds, from its modules' paths: node_modules/<name> or node_modules/@scope/<name>.
     name: "scmjs-cli-notices",
     generateBundle(_, bundle) {

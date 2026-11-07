@@ -2,10 +2,10 @@
 
 `scmjs` is scmJS on the command line. It tells you what a map or replay holds, runs Check
 Map on any number of maps, takes a map's triggers and strings out as text and puts them
-back, says what changed between two maps, builds a TrigScript map the way Save does, opens
-a map or replay in scmJS from a terminal, helps you write a plugin, and builds a BWAPI bot
-of your own for the play page. It reads files the way the editor does, so the two agree
-about every map.
+back, says what changed between two maps, builds a TrigScript map the way Save does, runs
+a plugin over a map, opens a map or replay in scmJS from a terminal, helps you write a
+plugin, and builds a BWAPI bot of your own for the play page. It reads files the way the
+editor does, so the two agree about every map.
 
 You need Node.js 22.12 or newer. Install it once, and type `scmjs` from then on:
 
@@ -33,6 +33,7 @@ when there is a newer version.
 | `scmjs map strings export|import` | A map's strings as a text file, and back |
 | `scmjs map diff <a> <b>` | What changed between two maps |
 | `scmjs map build <map>` | Applies the map's TrigScript script and builds its programs into the file, as Save does |
+| `scmjs map run <plugin> <map>` | Runs a plugin, or a script written like one, over the map with the plugin API |
 | `scmjs replay info <replays…>` | Who played, on which map, for how long and at what APM |
 | `scmjs replay open <replay>` | Opens the replay in scmJS, to watch and analyse |
 | `scmjs plugin new <name>` | A plugin to start from, set up to type-check, test, build and publish |
@@ -184,6 +185,42 @@ on a Marine's forty should set them in the map. And the programs other plugins c
 to a build are not built here: a map with Magenta's triggers is refused, and is built by
 saving it in the editor.
 
+## Running a plugin over a map
+
+`scmjs map run` gives a plugin the editor's [plugin API](plugins.md) with a map open and
+no editor around it. The plugin is a folder with a `plugin.json`, the manifest itself, a
+single script file, `github:owner/repo`, or a URL — whatever Plugins ▸ Add takes, and a
+file on your disk too. A script is a file exporting `activate(api)`, like a plugin's
+entry, so a few lines that read or change a map need no plugin around them:
+
+```js
+// starts.mjs
+export default (api) => {
+  const starts = api.document.scenario().units.filter((u) => u.unitId === 214);
+  api.ui.status(`${api.document.info().name}: ${starts.length} start locations`);
+};
+```
+
+```sh
+scmjs map run starts.mjs "(4)Fighting Spirit.scx"
+scmjs map run ../plugin-repair maps/ridge.scx --command repair --dry-run
+```
+
+What the plugin would have shown is printed as it happens: its status line, its toasts and
+what it logged. Dialogs and panels register and show nothing, and asking for a file
+answers none. `--command <id>` runs one of the commands the plugin registered after it
+started, with `--arg` values as its arguments; what the command returned is in `--json`.
+The map is written back only when the plugin changed it (`--out` writes it elsewhere, and
+writes even an unchanged map), and the closing line says what changed in the terms of
+`map diff`. `--dry-run` prints that comparison in full and writes nothing. A plugin that
+is TypeScript source needs TypeScript installed, as `map build` does; a built plugin or a
+JavaScript script needs nothing more.
+
+This is the editor's own plugin host, so a plugin's logic runs here exactly as it does in
+the editor and a plugin can be tried from a terminal, or run over many maps from a shell
+loop, before anyone installs it. Saving is the command's job rather than the plugin's:
+`api.document.save()` has no file picker to open here.
+
 ## Replays
 
 `scmjs replay info` reads a replay from any version, from 1.16 to Remastered. It shows the
@@ -294,6 +331,7 @@ from a clone with `npm run cli -- <command>`, or build it with `npm run build:cl
 | `cli/src/map.ts`, `cli/src/replay.ts` | The map and replay reports, and how they are printed |
 | `cli/src/exchange.ts` | Triggers and strings out as files and back in, and writing a map back as it was opened |
 | `cli/src/diff.ts` | What changed between two maps, by group, and the section comparison underneath |
+| `cli/src/run.ts`, `src/plugins/headless.ts` | A plugin run over a map: the editor's plugin host with a store, a document and no page, its status, toasts and log reported instead of shown |
 | `cli/src/build.ts` | The TrigScript build: finding TypeScript, compiling against the map's names, applying the block, laying the programs in and packing the file |
 | `cli/src/completion.ts` | The bash, zsh and fish scripts, generated from the command tree |
 | `cli/src/open.ts` | Finding the desktop app, and handing a file to the editor in a browser |

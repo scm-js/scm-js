@@ -407,8 +407,9 @@ export interface LoadedPlugin {
   module: unknown;
 }
 
-export async function loadPlugin(spec: string, deps: LoaderDeps, opts: { accept?: (manifest: PluginManifest) => void } = {}): Promise<LoadedPlugin> {
-  const source = parseSpec(spec);
+export async function loadPlugin(spec: string | PluginSource, deps: LoaderDeps, opts: { accept?: (manifest: PluginManifest) => void } = {}): Promise<LoadedPlugin> {
+  // A source already parsed is one `parseSpec` has no words for: a folder on disk (`headless.ts`).
+  const source = typeof spec === "string" ? parseSpec(spec) : spec;
   const { manifest, entryUrl, icon } = await resolvePlugin(source, deps);
   // The host's compatibility check sits here, between reading the manifest and importing the
   // module, so a plugin that will be refused never has its top-level code run.

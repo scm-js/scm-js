@@ -454,6 +454,10 @@ piece in turn.
 
 ### Trying the API first
 
+From a terminal, `scmjs map run script.mjs map.scx` runs a file exporting `activate(api)`
+over a map with the same API and no editor, and writes the map back if it changed; the
+[command line guide](cli.md#running-a-plugin-over-a-map) has the details. In the editor:
+
 The [API Playground](https://github.com/scm-js/plugin-api-playground) plugin lets you call
 the API before setting anything up. Install it from Plugins ▸ Browse Plugins… and open
 Tools ▸ API Playground. Its panel has a code editor where `api` is already defined. Write
@@ -684,9 +688,14 @@ keeps `ko.ts` complete.
 
 ### Testing
 
-The project's plugins keep their logic in files that take plain data and never touch
-`api`, and test those files alone. `plugin.ts` is then a thin layer that reads from the
-API, calls the logic and writes the result back. Paint's geometry, Terrain from Image's
+`scmjs map run <folder> map.scx` runs the plugin as it is on your disk over a map, with
+the editor's API and nothing to click: `--command <id>` runs one of its commands,
+`--dry-run` says what it would change. It is a quick check, and a way to run a plugin over
+a folder of maps from a shell loop; the [command line
+guide](cli.md#running-a-plugin-over-a-map) has it. For tests that run on every change, the
+project's plugins keep their logic in files that take plain data and never touch `api`,
+and test those files alone. `plugin.ts` is then a thin layer that reads from the API,
+calls the logic and writes the result back. Paint's geometry, Terrain from Image's
 conversion and Stamp Library's storage format are all tested this way.
 
 For Base Check that means moving the counting into a file of its own:

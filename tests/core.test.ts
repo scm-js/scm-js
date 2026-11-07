@@ -108,14 +108,19 @@ describe("@scm-js/core: the scmjs command is a thin layer over it", () => {
     return byModule;
   }
 
+  // `map run` is the plugin host without the editor — the editor's own code, which the library does not promise
+  // (it runs on atoms). `run.ts` may take that one module, and nothing else beyond the entry.
+  const HOST_EXCEPTION = { from: "run.ts", module: "src/plugins/headless.ts" };
+
   it("imports from the editor only what the entry exports", () => {
     const api = exported();
     const strays: string[] = [];
     const cli = join(root, "cli/src");
-    for (const name of ["about", "bot", "build", "completion", "diff", "exchange", "files", "main", "map", "open", "plugin", "replay", "ui"].map((n) => join(cli, `${n}.ts`))) {
+    for (const name of ["about", "bot", "build", "completion", "diff", "exchange", "files", "main", "map", "open", "plugin", "replay", "run", "ui"].map((n) => join(cli, `${n}.ts`))) {
       const text = readFileSync(name, "utf8");
       for (const m of text.matchAll(/import\s+(?:type\s+)?\{([^}]*)\}\s*from\s*["'](\.\.\/\.\.\/src\/[^"']+)["']/g)) {
         const file = resolveModule(name, m[2]);
+        if (name.endsWith(HOST_EXCEPTION.from) && file === join(root, HOST_EXCEPTION.module)) continue;
         const names = file ? api.get(file) : undefined;
         for (const spec of m[1].split(",")) {
           const imported = spec.trim().replace(/^type\s+/, "").split(/\s+as\s+/)[0];

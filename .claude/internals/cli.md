@@ -322,6 +322,34 @@ slice proposed: four thin layers on existing library code, plus a git recipe.
   (banner.ts; the globe's bottom row, which carries no text, separates them). Its description had to fit one line
   (col width ≈ 47): "what this computer has for each command". The `map` term is now `map info|check|open|new|…`;
   the test takes any verbs before the ellipsis. `tests/core.test.ts`'s list of cli modules has the four new names.
+- **Doctor brought up to date (2026-11-07, branch `cli-doctor`)** after `replay watch`, `map trace|cost`, `mcp` and pipes:
+  - **Engine runners.** `engineCheck(cache, at = SCMJS_PLAY_URL)`: a folder in `SCMJS_PLAY_URL` is looked at as
+    `--engine` would (current.json's build subfolder, else the files beside); otherwise the **newest build by folder
+    mtime** under `<cache>/engine/` (there is no local "current": `ensureEngine` asks the page each run, and writing a
+    file into a build touches its folder). `runnersIn(dir)` matches the files against `RUNNERS[kind].file`, the same
+    patterns `ensureEngine` uses, so a new kind in `RUNNERS` needs only a name in `RUNNER_COMMANDS`. A build lacking a
+    runner is `warn`, with the fix "`scmjs replay watch <replay>` fetches them once the play page has them" — **not**
+    "fetches the newest build": on 2026-11-07 the live `play/engine/current.json` (build 1248410ad2a0) named only the
+    bot runner, so a fetch would not have helped, and runnerFor's error says the same. Nothing fetched stays `ok`
+    "not fetched yet". The check carries `engine: { dir, build|null, runners }` (in `--json` too).
+  - **Ready summary** (`readiness(checks)` → `Ready { commands, ok, lacks? }[]`, `readyLines` wraps at 80 columns,
+    three lines today): a fixed table `READY` of groups → needs, read **off the checks by `what`** ("TypeScript",
+    "Docker", "StarCraft" warn/bad; a runner kind missing from a fetched build) — no probe of its own; Node `bad`
+    blocks every group with "Node"; a check absent from the list blocks nothing (the tests hand it partial lists).
+    The copy of the game is named before the runner (the user must supply it; the runner comes by itself). An engine
+    never fetched blocks nothing (the first run fetches it). It replaced the old last line ("need nothing more");
+    blocked still prints "Something blocks scmjs itself" above it. `map preview` is **not** in `READY` yet (the
+    command was being added in parallel) — add its row with its needs; the StarCraft note already names it.
+  - **MCP** (`mcpCheck(config = ~/.claude.json, cwd)`): `mcpServers` at the top (every folder) and
+    `projects[cwd].mcpServers`, then any other project's; an entry counts when one of `[command, ...args]` matches
+    `@scm-js/cli|scmjs` and another is exactly `mcp` (npx, a global `scmjs`, `node …/scmjs.mjs`). Always `ok`; the
+    fix `claude mcp add scmjs -- npx -y @scm-js/cli mcp` (`MCP_ADD`) when not registered here; a missing or
+    unparsable file is a quiet dim "Claude Code not found". Nothing else in the file is read out. The project-scoped
+    `.mcp.json` is not looked at.
+  - `doctorReport`/`doctorJson`/`printDoctor` keep their names and shapes (the MCP server's `doctor` tool calls them);
+    JSON gained `ready` and the engine check's `engine`. `tests/cli-doctor.test.ts`: runners in fake cache folders
+    (mtimes via `utimesSync`), a staged folder, the ready table from given checks, the 80-column fit, `~/.claude.json`
+    variants in temp files.
 
 ## CI slice: check formats, info --table, diff --rev, set, resize, strings prune (`report.ts`, `edit.ts`) — 2026-11-07
 
@@ -408,6 +436,49 @@ The second DX slice (the user's "go for it" on the second suggestion round), sta
   descriptions, annotations and instructions; info/dump; check; triggers export → import `--append` to `out` → diff;
   strings by number + header in place; find + new; failures as text. A stdio smoke (initialize, tools/list, two
   calls) was run by hand against the built file.
+- **The game tools (2026-11-07): `map_trace`, `map_cost`, `doctor`** — 19 tools. Each calls the command's functions:
+  `gameMap` + `runMapInGame` + `printTrace|printCost`, and for the data `traceJson`/`costJson`, which trace.ts now
+  exports with the `--json` shape (main.ts still builds the same objects inline — additive-only edits there while
+  other slices were open; switch it to the two functions when convenient, so the shapes cannot drift); `doctor` is
+  `doctorReport` → `printDoctor` + `doctorJson`. Arguments `path`, `frames`, `seed`, `starcraft`, `all`; no `every`
+  (fixed 600) and no `engine`: a person sets `SCMJS_PLAY_URL` / `SCMJS_STARCRAFT` in the client's server settings,
+  and tests hand `createMcpServer({ engine, weigh })` a staged folder and a stand-in weigher (the options exist for
+  that). `readOnlyHint` on all three. The runner's **live lines go to stderr** (`STDERR(visible(line))` as `live`,
+  including ensureEngine's "Fetching the game engine" line), and when the request carries `_meta.progressToken` each
+  runner `progress` line becomes a `notifications/progress` (frame of frames) through `trace.ts`'s new `onProgress`
+  option — no stdout write anywhere (the test spies `process.stdout.write`). A 1.00 map's "converted to Brood War"
+  note leads the text. Rows are cut by the command's own limits (40 rows, 20 never-fired; `all` lifts them), table
+  width 140 (`process.stdout.columns` is undefined on the pipe).
+- **`-` is refused** on `path`, `out`, `a`, `b` and `paths` by the `tool()` wrapper: to the commands it is
+  stdin/stdout, which are the protocol here — `map_info` on `-` would have read the client's messages as a map and
+  hung, `out: "-"` would have written a map into the stream. Found while adding the game tools; applies to every tool.
+- **Trap: the map runner loses a big result.** scm-sim's `runMap.ts` writes the `end` line and calls `process.exit(0)`
+  at once; a write to a pipe past ~64 KB is still queued then and is dropped, so the CLI sees no `end` ("the runner
+  stopped without a result (exit 0)"). The trace's end is small (a line per copy); the cost's carries five numbers a
+  frame. On ums.scx through the server: 9,600 frames (98 KB) came through, 14,400 failed three times out of three;
+  `scmjs map cost --frames 14400` fails the same way, and a trigger-heavy map would fail sooner. Hence
+  `MAX_FRAMES = { trace: 14400, cost: 4800 }`. The fix is the runner's: `process.stdout.write(line, () =>
+  process.exit(0))` (or set `exitCode` and return); then raise the cost cap.
+- **Trap: a `deploy-play.mjs` staging folder is gzipped** (`dist-play/play/engine/<build>/*` are .gz bytes under plain
+  names, for the host to serve with Content-Encoding). `--engine <that folder>` / `SCMJS_PLAY_URL=<folder>` hands the
+  runner gzip and it dies with "SyntaxError: Invalid or unexpected token" (shown as "stopped without a result (exit
+  1)"). Serve it instead — `python3 -m http.server` in `dist-play`, `SCMJS_PLAY_URL=http://127.0.0.1:8765/play` —
+  `fetchBytes` gunzips. A folder of plain files (data/lifted + a bundled runner) works as a folder.
+- Measured 2026-11-07 by hand, the built `scmjs.mjs mcp` driven over stdio (initialize, initialized, tools/list,
+  tools/call), the user's Remastered copy, scm-sim-map-run's staged deploy served locally, a fresh `SCMJS_CACHE`:
+  first `map_trace` ums.scx 600 frames 2.2 s with the engine fetch (107,618,906 bytes unpacked in the cache — "about
+  25 MB" is the download) — 20 passes, #1 fired once at frame 2, #2 (Bring) and #3 (Switch) never, said no last at
+  frame 591; 2,400 frames 1.8 s (78 passes, frame 2,389); 43,200 frames 2.8 s. `map_cost` 600 frames 1.8 s: 0.00003
+  ms a frame on average (20 of 600 frames), 0.00006 ms at most (frame 2: 7 records, 3 triggers). `doctor` 0.3 s.
+  Against scmjs.dev (no `mapRunner` in its current.json yet, build 1248410ad2a0): the tool fetches the whole engine
+  **first** and only then says "has no map runner" — ensureEngine does not know which runner the caller needs; a
+  `need` argument checked against current.json before fetching would save the 25 MB. The doctor's "Game engine ✔
+  fetched" says nothing of the map runner either.
+- Tests (`tests/cli-mcp.test.ts`, now 12): the stand-in runner, `stagedEngine` and `classicCopy` moved from
+  cli-trace.test.ts to `tests/support/mapRunner.ts` for both; trace (text, data, progress notifications, stderr
+  lines, nothing on stdout), cost with a stand-in weigher, and the failures as text (not a copy of the game, a deploy
+  without a map runner, no weigher beside the source, a map the game refused, frames past the cap), `-` refused,
+  `doctor` with `fetch` stubbed (npm offline).
 
 ## Triggers in the game: `map trace`, `map cost` (`cli/src/trace.ts`, `engine.ts`, `weigh.ts`) — 2026-11-07
 
@@ -458,7 +529,7 @@ The user took the parent's first-slice proposal ("`map trace` and `map cost` sec
   served by `python3 -m http.server` over dist-play: ums.scx trace 2,400 frames in ~3 s; `trigscript-frame-cost.scx`
   cost: 0.025 ms a frame on average, 1.10 ms at frame 2 (83,787 records, 53,192 triggers, the program's start).
 - Not built: `--by-origin`/by-line cost for a TrigScript build (the editor has it); bot-run's `--every` wording reused as
-  is; the campaign maps (engine); a `doctor` line for the map runner.
+  is; the campaign maps (engine). (The `doctor` line for the map runner came with `cli-doctor`.)
 ## A map's picture: `map preview` (`cli/src/preview.ts`, `paint.ts`, `png.ts`, `gamefiles.ts`) — 2026-11-07
 
 `scmjs map preview <map> [--out p.png|-] [--scale n] [--width cols] [--no-units] [--blocks] [--starcraft] [--json]`.

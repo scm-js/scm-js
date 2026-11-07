@@ -56,7 +56,7 @@ when there is a newer version.
 | `scmjs bot new`, `init`, `build` | A BWAPI bot of your own, built into a `.scmbot` file for the play page |
 | `scmjs bot update` | The newest bot toolchain |
 | `scmjs bot run <bot> <map>` | Plays the bot against the game's computers on the map, with no page |
-| `scmjs doctor` | What this computer has for each command: TypeScript, Docker, StarCraft, the desktop app, and the command for each thing missing |
+| `scmjs doctor` | What this computer has for each command: TypeScript, Docker, StarCraft, the game engine, the desktop app, Claude Code, the command for each thing missing, and which commands are ready |
 | `scmjs about` | This version and whether there is a newer one, who made it, the desktop app and Docker if they are installed, and where the docs and source are |
 | `scmjs mcp` | The map commands as an MCP server, for Claude Code and other AI tools on your computer |
 | `scmjs completion <shell>` | A completion script for bash, zsh or fish |
@@ -705,26 +705,45 @@ when the app is installed.
 
 `scmjs doctor` says what is on this computer of what the commands need beyond Node, and
 the command for each thing missing: TypeScript for `map build` and a plugin written in
-TypeScript, Docker for `bot new|build`, a copy of StarCraft and the fetched engine for
-`bot run`, the desktop app for `map open`, and whether npm has a newer scmjs.
+TypeScript, Docker for `bot new|build`, a copy of StarCraft for the commands that play the
+game (`bot run`, `replay watch`, `map trace`, `map cost` and `map preview`), the game
+engine those commands use, the desktop app for `map open`, whether Claude Code has been
+given `scmjs mcp`, and whether npm has a newer scmjs. It ends with the commands this
+computer can run now, and for each one that cannot, the one thing it lacks.
 
 ```
-scmjs doctor  what this computer has for each command
+scmjs doctor  what this computer has of what the commands need
 
 ✔ Node         v24.13.0 · linux x64
-✔ scmjs        0.8.12 · the newest
-▲ TypeScript   not found
-    scmjs map build and a .ts plugin under scmjs map run compile with it.
-    npm install typescript   (in the map's project, or npm install -g typescript)
+✔ scmjs        0.8.11 · the newest
+✔ TypeScript   6.0.3 · ~/maps/node_modules/typescript/lib/typescript.js
 ✔ Docker       29.1.3
-▲ StarCraft    not found
-    scmjs bot run plays with your own installation's files.
-    scmjs bot run … --starcraft <folder>   (or SCMJS_STARCRAFT=<folder>)
-✔ Game engine  not fetched yet
-✔ Desktop app  not installed
+✔ StarCraft    Remastered · /mnt/c/Program Files (x86)/StarCraft
+▲ Game engine  build 1248410ad2a0 · ~/.cache/scmjs/engine
+    Runners for bot run; none for replay watch and map trace|cost in this build.
+    scmjs replay watch <replay> fetches them once the play page has them
+✔ Desktop app  /mnt/c/Users/you/AppData/Local/Programs/scmJS/scmJS.exe
+✔ MCP          not registered
+    scmjs mcp lets Claude Code read, check and change maps with these commands.
+    claude mcp add scmjs -- npx -y @scm-js/cli mcp
 
-✔ scmjs info, check, dump, diff and the rest need nothing more; the rest is for the commands named
+Ready on this computer
+  ✔ map info|check|…   ✔ replay info|open   ✔ mcp   ✔ map build
+  ✔ bot new|build   ✔ bot run   ✖ replay watch (engine runner)
+  ✖ map trace|cost (engine runner)
 ```
+
+The game engine is fetched from the play page the first time a command needs it, and kept.
+Each command that plays drives it with a runner of its own, and a copy fetched before the
+play page had a runner lacks that one; the doctor names the runners the copy holds. The
+next command that needs a missing runner fetches it, as long as the play page has it by
+then. Until anything is fetched the line says "not fetched yet", and nothing waits on it.
+
+The MCP line only looks for `scmjs mcp` among the servers Claude Code was told about, for
+every folder or for the folder you run the doctor in. Not having it is not a problem, and
+if Claude Code is not on this computer the line just says so.
+
+`--json` prints the same checks and the ready list as JSON.
 
 Nothing is changed. The command exits with 1 only when Node itself is older than the
 command needs.
@@ -744,9 +763,11 @@ scmjs completion fish > ~/.config/fish/completions/scmjs.fish
 
 `scmjs mcp` speaks the [Model Context Protocol](https://modelcontextprotocol.io) on
 standard input and output, so an AI tool that runs on your computer, such as Claude Code,
-Cursor or VS Code, can work on your maps with the same code these commands use. It does
-not go on the network: the tool starts `scmjs mcp` as a child process in your maps folder
-and talks to it over the pipe, and the paths it gives are files in that folder.
+Cursor or VS Code, can work on your maps with the same code these commands use. The tool
+starts `scmjs mcp` as a child process in your maps folder and talks to it over the pipe,
+and the paths it gives are files in that folder. Nothing goes on the network except what
+the commands themselves fetch: the game engine the first time a map is run in the game,
+and npm's newest version for `doctor`.
 
 With Claude Code, once, in the folder your maps are in:
 
@@ -763,14 +784,23 @@ Other tools take the same thing as JSON in their MCP settings:
 The tool then has `map_info`, `map_check`, `map_dump`, `map_find`, `map_diff`,
 `map_triggers_export` and `map_triggers_import`, `map_strings_export`,
 `map_strings_import` and `map_strings_prune`, `map_set`, `map_resize`, `map_new`,
-`map_build`, `map_run` and `replay_info`: each the command of the same name, taking the
-same arguments by name and answering with the command's text and its `--json` data. A map
-reads as the editor reads it, so what the model is told is what the editor would show, and
-triggers travel as the [trigger window's text form](triggers.md), which the model can edit
-and import back. Tools that change a map write over it unless given `out`, the same as the
-commands, so keep your maps in git or hand the tool copies. `map_run` runs a plugin, which
-is code, with your privileges, as `scmjs map run` does; the tool asks you before it calls
-anything, and you can leave that one unapproved.
+`map_build`, `map_run`, `map_trace`, `map_cost`, `replay_info` and `doctor`: each the
+command of the same name, taking the same arguments by name and answering with the
+command's text and its `--json` data. A map reads as the editor reads it, so what the
+model is told is what the editor would show, and triggers travel as the [trigger window's
+text form](triggers.md), which the model can edit and import back. Tools that change a map
+write over it unless given `out`, the same as the commands, so keep your maps in git or
+hand the tool copies. `map_run` runs a plugin, which is code, with your privileges, as
+`scmjs map run` does; the tool asks you before it calls anything, and you can leave that
+one unapproved.
+
+`map_trace` and `map_cost` run the map in the game as `scmjs map trace` and `map cost` do,
+so they need your copy of StarCraft and fetch the engine the first time. A run takes a few
+seconds; a trace runs at most ten minutes of play, a cost at most 200 seconds. `doctor`
+tells the model whether the game and the engine are there and what you would need to
+install, so it can say so rather than fail. When the game is not in one of the usual
+places, the model can pass its folder as `starcraft`, or you can set `SCMJS_STARCRAFT` in
+the tool's MCP settings.
 
 ## In scripts
 

@@ -127,7 +127,7 @@ function runnersNamed(c: EngineCurrent): Engine["runners"] {
 /** The path of the engine's runner for `kind`, or a CliError when the deploy the engine came from had none. */
 export function runnerFor(engine: Engine, kind: RunnerKind): string {
   const file = engine.runners[kind];
-  if (!file) throw new CliError(`The engine at ${engine.dir} has no ${kind} runner.`, `${RUNNERS[kind].command} needs a play page deployed with one; a folder named with --engine must hold a ${RUNNERS[kind].file.source.split("(")[0]}-<hash>.mjs.`);
+  if (!file) throw new CliError(`The engine at ${engine.dir} has no ${kind} runner.`, `${RUNNERS[kind].command} needs a play page deployed with one; a folder named with --engine must hold a ${RUNNERS[kind].file.source.split("(")[0].replace(/^\^/, "")}-<hash>.mjs.`);
   return join(engine.dir, file);
 }
 

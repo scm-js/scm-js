@@ -1,24 +1,43 @@
 /**
  * `scmjs doctor`: what this computer has of what the commands need beyond Node — TypeScript for `map build` and a
- * `.ts` plugin, Docker for `bot new|build`, a copy of StarCraft and the fetched engine for `bot run`, the desktop app
- * for `map open` — and the command for each thing missing. Nothing is changed. Everything here is optional (`info`
- * and `check` need none of it), so the exit code is 0 unless Node itself is too old.
+ * `.ts` plugin, Docker for `bot new|build`, a copy of StarCraft and the fetched engine's runners for `bot run`,
+ * `replay watch` and `map trace|cost`, the desktop app for `map open`, whether Claude Code knows `scmjs mcp` — and the
+ * command for each thing missing, then which commands are ready (`readiness`, read off the same checks). Nothing is
+ * changed. Everything here is optional (`info` and `check` need none of it), so the exit code is 0 unless Node itself
+ * is too old.
  */
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { homedir } from "node:os";
+import { basename, dirname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { newestVersion, olderThan, PACKAGE, VERSION } from "./about";
 import { dockerVersion } from "./bot";
 import { cacheRoot, findGameCopy } from "./botrun";
 import { findTypeScript } from "./build";
+import { RUNNERS, type RunnerKind } from "./engine";
 import { findDesktopApp } from "./open";
-import { CliError, mark, pc, visible } from "./ui";
+import { CliError, columns, mark, pc, visible } from "./ui";
 
 /** The Node this package's `engines` asks for (cli/package.json). */
 export const NODE_MIN = "22.12.0";
 
 export type CheckState = "ok" | "warn" | "bad";
-export interface Check { what: string; state: CheckState; detail: string; fix?: string; note?: string }
+export interface Check {
+  what: string;
+  state: CheckState;
+  detail: string;
+  fix?: string;
+  note?: string;
+  /** The game engine's check only: the folder looked in, the build found there (null: none fetched yet) and its runners. */
+  engine?: { dir: string; build: string | null; runners: RunnerKind[] };
+}
+
+/** The commands each runner plays, as the doctor names them. */
+export const RUNNER_COMMANDS: Record<RunnerKind, string> = { bot: "bot run", replay: "replay watch", map: "map trace|cost" };
+const KINDS = Object.keys(RUNNERS) as RunnerKind[];
+
+/** "a", "a and b", "a, b and c". */
+const joinAnd = (xs: string[]) => (xs.length < 2 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs.at(-1)}`);
 
 /** Is Node older than `engines` says. */
 export function nodeCheck(version = process.version): Check {
@@ -57,17 +76,88 @@ export function starcraftCheck(): Check {
     return { what: "StarCraft", state: "ok", detail: `${kind === "remastered" ? "Remastered" : "1.16.1"}${pc.dim(` · ${folder}`)}` };
   } catch (e) {
     if (!(e instanceof CliError)) throw e;
-    return { what: "StarCraft", state: "warn", detail: "not found", fix: "scmjs bot run … --starcraft <folder>   (or SCMJS_STARCRAFT=<folder>)", note: "scmjs bot run and replay watch play with your own installation's files." };
+    return { what: "StarCraft", state: "warn", detail: "not found", fix: "scmjs bot run … --starcraft <folder>   (or SCMJS_STARCRAFT=<folder>)", note: "bot run, replay watch, map trace, map cost and map preview use your own installation's files." };
   }
 }
 
-export function engineCheck(cache = cacheRoot()): Check {
-  const dir = join(cache, "engine");
+/** The runners an engine folder holds, by the file names `ensureEngine` knows them by. */
+export function runnersIn(dir: string): RunnerKind[] {
+  let files: string[];
+  try { files = readdirSync(dir); } catch { return []; }
+  return KINDS.filter((k) => files.some((f) => RUNNERS[k].file.test(f)));
+}
+
+/**
+ * The engine the playing commands would use: a folder `SCMJS_PLAY_URL` names (as `--engine` takes one), else the
+ * newest build fetched into the cache — `ensureEngine` asks the play page each time and fetches what the current build
+ * lacks, so a build fetched before a runner was deployed is brought up to date by the next command that needs it.
+ */
+export function engineCheck(cache = cacheRoot(), at = process.env.SCMJS_PLAY_URL): Check {
   const isDir = (p: string) => { try { return statSync(p).isDirectory(); } catch { return false; } };
-  const builds = existsSync(dir) ? readdirSync(dir).filter((d) => isDir(join(dir, d)) && readdirSync(join(dir, d)).length > 0) : [];
-  return builds.length
-    ? { what: "Game engine", state: "ok", detail: `${builds.length === 1 ? "fetched" : `${builds.length} builds fetched`}${pc.dim(` · ${dir}`)}` }
-    : { what: "Game engine", state: "ok", detail: pc.dim("not fetched yet"), note: "The first scmjs bot run or replay watch fetches it from the play page (about 25 MB) into " + dir };
+  const what = "Game engine";
+  if (at && !/^https?:\/\//.test(at)) {
+    // A staged folder: its current.json names a build folder inside it, or the files are beside.
+    let dir = resolve(at);
+    try { const b = (JSON.parse(readFileSync(join(dir, "current.json"), "utf8")) as { build?: string }).build; if (b && isDir(join(dir, b))) dir = join(dir, b); } catch { /* the files are beside */ }
+    const runners = runnersIn(dir);
+    const missing = KINDS.filter((k) => !runners.includes(k));
+    return {
+      what, state: missing.length ? "warn" : "ok", detail: `the folder SCMJS_PLAY_URL names${pc.dim(` · ${dir}`)}`, engine: { dir, build: basename(dir), runners },
+      note: runnerNote(runners, missing),
+      fix: missing.length ? `Stage a ${RUNNERS[missing[0]].file.source.split("(")[0].slice(1)}-<hash>.mjs there, or unset SCMJS_PLAY_URL to fetch from the play page` : undefined,
+    };
+  }
+  const dir = join(cache, "engine");
+  const mtime = (p: string) => { try { return statSync(p).mtimeMs; } catch { return 0; } };
+  const builds = (existsSync(dir) ? readdirSync(dir) : []).filter((d) => isDir(join(dir, d)) && readdirSync(join(dir, d)).length > 0)
+    .sort((a, b) => mtime(join(dir, b)) - mtime(join(dir, a)));
+  if (!builds.length) return { what, state: "ok", detail: pc.dim("not fetched yet"), engine: { dir, build: null, runners: [] }, note: `The first scmjs bot run, replay watch or map trace fetches it from the play page (about 25 MB) into ${dir}` };
+  const build = builds[0];
+  const runners = runnersIn(join(dir, build));
+  const missing = KINDS.filter((k) => !runners.includes(k));
+  const command = missing.includes("replay") ? "scmjs replay watch <replay>" : missing.includes("map") ? "scmjs map trace <map>" : "scmjs bot run <bot> <map>";
+  return {
+    what, state: missing.length ? "warn" : "ok",
+    detail: `build ${build}${builds.length > 1 ? ` (the newest of ${builds.length})` : ""}${pc.dim(` · ${dir}`)}`,
+    engine: { dir: join(dir, build), build, runners },
+    note: runnerNote(runners, missing, true),
+    fix: missing.length ? `${command} fetches ${missing.length > 1 ? "them" : "it"} once the play page has ${missing.length > 1 ? "them" : "one"}` : undefined,
+  };
+}
+
+function runnerNote(runners: RunnerKind[], missing: RunnerKind[], fetched = false): string {
+  const has = runners.length ? `Runners for ${joinAnd(runners.map((k) => RUNNER_COMMANDS[k]))}` : "No runners";
+  if (!missing.length) return `${has}.`;
+  return `${has}; none for ${joinAnd(missing.map((k) => RUNNER_COMMANDS[k]))}${fetched ? " in this build" : ""}.`;
+}
+
+/** Does an `mcpServers` entry start `scmjs mcp` (by the package, the command, or a path to the built file). */
+function startsScmjsMcp(entry: unknown): boolean {
+  if (!entry || typeof entry !== "object") return false;
+  const { command, args } = entry as { command?: unknown; args?: unknown };
+  const words = [command, ...(Array.isArray(args) ? args : [])].filter((w): w is string => typeof w === "string");
+  return words.some((w) => /@scm-js\/cli|scmjs/.test(w)) && words.includes("mcp");
+}
+
+export const MCP_ADD = "claude mcp add scmjs -- npx -y @scm-js/cli mcp";
+
+/**
+ * Whether Claude Code starts `scmjs mcp`: its `~/.claude.json` keeps `mcpServers` for every folder and, under
+ * `projects`, for each folder. Only those entries are looked at; nothing else in the file is read out or printed.
+ * Not having it is no problem, so the state is `ok` either way.
+ */
+export function mcpCheck(config = join(homedir(), ".claude.json"), cwd = process.cwd()): Check {
+  const what = "MCP";
+  let cfg: { mcpServers?: Record<string, unknown>; projects?: Record<string, { mcpServers?: Record<string, unknown> } | null> };
+  try { cfg = JSON.parse(readFileSync(config, "utf8")); } catch { return { what, state: "ok", detail: pc.dim("Claude Code not found") }; }
+  const has = (servers: Record<string, unknown> | undefined) => !!servers && typeof servers === "object" && Object.values(servers).some(startsScmjsMcp);
+  const why = "scmjs mcp lets Claude Code read, check and change maps with these commands.";
+  if (has(cfg?.mcpServers)) return { what, state: "ok", detail: `registered with Claude Code${pc.dim(" · every folder")}` };
+  const projects = cfg?.projects && typeof cfg.projects === "object" ? cfg.projects : {};
+  if (has(projects[resolve(cwd)]?.mcpServers ?? undefined)) return { what, state: "ok", detail: `registered with Claude Code${pc.dim(" · this folder")}` };
+  const others = Object.values(projects).filter((p) => has(p?.mcpServers ?? undefined)).length;
+  if (others) return { what, state: "ok", detail: `registered with Claude Code${pc.dim(` · ${others === 1 ? "another folder" : `${others} other folders`}`)}`, note: "Claude Code starts it only in the folders it was added in; in your maps folder:", fix: MCP_ADD };
+  return { what, state: "ok", detail: "not registered", note: why, fix: MCP_ADD };
 }
 
 export function desktopAppCheck(): Check {
@@ -85,13 +175,61 @@ export async function versionCheck(): Promise<Check> {
 }
 
 export async function doctorReport(): Promise<{ checks: Check[]; blocked: boolean }> {
-  const checks = [nodeCheck(), await versionCheck(), typescriptCheck(), dockerCheck(), starcraftCheck(), engineCheck(), desktopAppCheck()];
+  const checks = [nodeCheck(), await versionCheck(), typescriptCheck(), dockerCheck(), starcraftCheck(), engineCheck(), desktopAppCheck(), mcpCheck()];
   return { checks, blocked: checks.some((c) => c.state === "bad") };
 }
 
-/** What the report says, in JSON: the same checks without colour. */
+/** A group of commands and whether this computer can run them now; `lacks` names the one thing missing. */
+export interface Ready { commands: string; ok: boolean; lacks?: string }
+
+/** What each group needs: a check by its name (ready unless it warns), or the engine runner of a kind. */
+type Need = "TypeScript" | "Docker" | "StarCraft" | RunnerKind;
+const READY: { commands: string; needs: Need[] }[] = [
+  { commands: "map info|check|…", needs: [] },
+  { commands: "replay info|open", needs: [] },
+  { commands: "mcp", needs: [] },
+  { commands: "map build", needs: ["TypeScript"] },
+  { commands: "bot new|build", needs: ["Docker"] },
+  { commands: RUNNER_COMMANDS.bot, needs: ["StarCraft", "bot"] },
+  { commands: RUNNER_COMMANDS.replay, needs: ["StarCraft", "replay"] },
+  { commands: RUNNER_COMMANDS.map, needs: ["StarCraft", "map"] },
+];
+
+/**
+ * Which commands can run now, read off the checks (no probe of its own): a check that warns blocks the commands that
+ * need it; a fetched engine build without a kind's runner blocks that kind's commands (none fetched yet blocks
+ * nothing: the first run fetches it); Node too old blocks everything. A check that is not there blocks nothing.
+ */
+export function readiness(checks: Check[]): Ready[] {
+  const by = (what: string) => checks.find((c) => c.what === what);
+  const nodeBad = by("Node")?.state === "bad";
+  const engine = by("Game engine")?.engine;
+  const lacking = (n: Need): string | null => {
+    if (n === "TypeScript" || n === "Docker" || n === "StarCraft") return by(n)?.state === "warn" || by(n)?.state === "bad" ? n : null;
+    return engine?.build && !engine.runners.includes(n) ? "engine runner" : null;
+  };
+  return READY.map(({ commands, needs }) => {
+    const lacks = nodeBad ? "Node" : needs.map(lacking).find((l) => l !== null);
+    return lacks ? { commands, ok: false, lacks } : { commands, ok: true };
+  });
+}
+
+/** What the report says, in JSON: the same checks without colour, and what is ready. */
 export function doctorJson(r: { checks: Check[]; blocked: boolean }) {
-  return { blocked: r.blocked, checks: r.checks.map((c) => ({ ...c, detail: visible(c.detail) })) };
+  return { blocked: r.blocked, checks: r.checks.map((c) => ({ ...c, detail: visible(c.detail) })), ready: readiness(r.checks) };
+}
+
+/** The ready summary's lines: a mark and the commands each, as many to a line as fit in `width` columns. */
+export function readyLines(ready: Ready[], width = 80): string[] {
+  const items = ready.map((g) => (g.ok ? `${mark.ok} ${g.commands}` : `${mark.error} ${g.commands}${pc.dim(` (${g.lacks})`)}`));
+  const lines: string[] = [];
+  let line = "";
+  for (const item of items) {
+    if (line && columns(line) + 3 + columns(item) > width - 2) { lines.push(`  ${line}`); line = ""; }
+    line = line ? `${line}   ${item}` : item;
+  }
+  if (line) lines.push(`  ${line}`);
+  return lines;
 }
 
 export function printDoctor(r: { checks: Check[]; blocked: boolean }): string[] {
@@ -102,6 +240,6 @@ export function printDoctor(r: { checks: Check[]; blocked: boolean }): string[] 
     if (c.note) lines.push(pc.dim(`    ${c.note}`));
     if (c.fix) lines.push(`    ${c.fix}`);
   }
-  lines.push("", r.blocked ? `${mark.error} Something blocks scmjs itself` : `${mark.ok} scmjs info, check, dump, diff and the rest need nothing more${r.checks.some((c) => c.state === "warn") ? pc.dim("; the rest is for the commands named") : ""}`);
+  lines.push("", r.blocked ? `${mark.error} ${pc.bold("Something blocks scmjs itself")}` : pc.bold("Ready on this computer"), ...readyLines(readiness(r.checks)));
   return lines;
 }

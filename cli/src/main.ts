@@ -659,8 +659,9 @@ program.command("completion", { hidden: true }).description("a completion script
 
 program.command("doctor").description("what this computer has for each command").helpGroup("This tool:").addOption(json)
   .addHelpText("after", `
-TypeScript (map build, a .ts plugin), Docker (bot new|build), a copy of StarCraft and the game engine (bot run), the
-desktop app (map open), and whether npm has a newer scmjs. Nothing is changed. Exits 1 only when Node is too old.`)
+TypeScript (map build, a .ts plugin), Docker (bot new|build), a copy of StarCraft and the game engine's runners (bot
+run, replay watch, map trace|cost), the desktop app (map open), whether Claude Code has scmjs mcp, and whether npm has
+a newer scmjs; then the commands this computer can run now. Nothing is changed. Exits 1 only when Node is too old.`)
   .action(async (o: { json?: boolean }) => {
     const r = await doctorReport();
     print(...(o.json ? [JSON.stringify(doctorJson(r), null, 2)] : printDoctor(r)));
@@ -672,8 +673,9 @@ program.command("mcp").description("these commands as an MCP server, for AI tool
 Speaks the Model Context Protocol on standard input and output, so an AI tool that runs on this computer (Claude
 Code, Cursor, VS Code, …) can read, check, search, compare and change maps with the same code these commands use:
 map_info, map_check, map_dump, map_find, map_diff, map_triggers_export|import, map_strings_export|import|prune,
-map_set, map_resize, map_new, map_build, map_run and replay_info. Paths are files on this computer, relative to the
-folder the tool started it in. Claude Code, in your maps folder:
+map_set, map_resize, map_new, map_build, map_run, map_trace, map_cost, replay_info and doctor. map_trace and map_cost
+need a copy of StarCraft here, as the commands do; doctor says whether there is one. Paths are files on this
+computer, relative to the folder the tool started it in. Claude Code, in your maps folder:
   claude mcp add scmjs -- npx -y @scm-js/cli mcp
 Anything else takes the same thing as JSON:
   { "mcpServers": { "scmjs": { "command": "npx", "args": ["-y", "@scm-js/cli", "mcp"] } } }`)

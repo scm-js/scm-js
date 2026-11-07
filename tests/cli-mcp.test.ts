@@ -1,46 +1,62 @@
 /**
  * `scmjs mcp`: the map commands as an MCP server, driven here by the SDK's own client over an in-memory transport —
  * the tool list a client sees, a read, a round trip of triggers and strings as text, a change written to another
- * file, and a failure that comes back as text the model can act on.
+ * file, a failure that comes back as text the model can act on, and the game tools over a stand-in for the engine's map
+ * runner (tests/support/mapRunner.ts; the real one needs the lifted game and a copy of StarCraft, which CI has not got).
  */
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import { copyFileSync, mkdtempSync, readFileSync } from "node:fs";
+import { copyFileSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createMcpServer, INSTRUCTIONS } from "../cli/src/mcp";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { createMcpServer, INSTRUCTIONS, MAX_FRAMES, type McpOptions } from "../cli/src/mcp";
+import { classicCopy, stagedEngine } from "./support/mapRunner";
 import { TEST_MAPS_DIR } from "./support/maps";
 
 type Result = { content: { type: string; text?: string }[]; structuredContent?: Record<string, unknown>; isError?: boolean };
 
-describe("scmjs mcp", () => {
+const text = (r: Result) => r.content.filter((c) => c.type === "text").map((c) => c.text ?? "").join("\n");
+const tmp = () => mkdtempSync(join(tmpdir(), "scmjs-mcp-"));
+
+/** A server and the SDK's client, linked in memory. */
+async function connected(options?: McpOptions) {
   const client = new Client({ name: "test", version: "0" });
+  const { server } = createMcpServer(options);
+  const [a, b] = InMemoryTransport.createLinkedPair();
+  await Promise.all([server.connect(a), client.connect(b)]);
+  const call = async (name: string, args: Record<string, unknown>, extra?: Parameters<Client["callTool"]>[2]) => (await client.callTool({ name, arguments: args }, undefined, extra)) as Result;
+  return { client, call };
+}
+
+describe("scmjs mcp", () => {
+  let client: Client, call: Awaited<ReturnType<typeof connected>>["call"];
   let dir: string, ums: string;
   beforeAll(async () => {
-    const { server } = createMcpServer();
-    const [a, b] = InMemoryTransport.createLinkedPair();
-    await Promise.all([server.connect(a), client.connect(b)]);
-    dir = mkdtempSync(join(tmpdir(), "scmjs-mcp-"));
+    ({ client, call } = await connected());
+    dir = tmp();
     ums = join(dir, "ums.scx");
     copyFileSync(join(TEST_MAPS_DIR, "ums.scx"), ums);
   });
   afterAll(async () => { await client.close(); });
 
-  const call = async (name: string, args: Record<string, unknown>) => (await client.callTool({ name, arguments: args })) as Result;
-  const text = (r: Result) => r.content.filter((c) => c.type === "text").map((c) => c.text ?? "").join("\n");
-
   it("lists the tools with what each is for, and says how they fit together", async () => {
     const { tools } = await client.listTools();
     const names = tools.map((t) => t.name).sort();
-    expect(names).toEqual(["map_build", "map_check", "map_diff", "map_dump", "map_find", "map_info", "map_new", "map_resize", "map_run", "map_set", "map_strings_export", "map_strings_import", "map_strings_prune", "map_triggers_export", "map_triggers_import", "replay_info"]);
+    expect(names).toEqual(["doctor", "map_build", "map_check", "map_cost", "map_diff", "map_dump", "map_find", "map_info", "map_new", "map_resize", "map_run", "map_set", "map_strings_export", "map_strings_import", "map_strings_prune", "map_trace", "map_triggers_export", "map_triggers_import", "replay_info"]);
     for (const t of tools) {
       expect(t.description?.length ?? 0, t.name).toBeGreaterThan(60);
       expect((t.inputSchema as { properties?: object }).properties, t.name).toBeDefined();
     }
     expect(tools.find((t) => t.name === "map_info")?.annotations?.readOnlyHint).toBe(true);
     expect(tools.find((t) => t.name === "map_set")?.annotations?.destructiveHint).toBe(true);
+    for (const name of ["map_trace", "map_cost", "doctor"]) expect(tools.find((t) => t.name === name)?.annotations?.readOnlyHint, name).toBe(true);
+    const trace = tools.find((t) => t.name === "map_trace")!;
+    expect(trace.description).toMatch(/copy of StarCraft.*about 25 MB.*doctor/);
+    const most = (name: string) => (tools.find((t) => t.name === name)!.inputSchema.properties as Record<string, { maximum?: number }>).frames.maximum;
+    expect([most("map_trace"), most("map_cost")]).toEqual([MAX_FRAMES.trace, MAX_FRAMES.cost]);
     expect(client.getInstructions()).toBe(INSTRUCTIONS);
+    expect(INSTRUCTIONS).toMatch(/map_trace and map_cost .* copy of StarCraft .* doctor says whether/);
   });
 
   it("reads a map: the info lines without colour, and the report as structured data", async () => {
@@ -114,5 +130,104 @@ describe("scmjs mcp", () => {
     const nothing = await call("map_set", { path: ums });
     expect(nothing.isError).toBe(true);
     expect(text(nothing)).toContain("Nothing to set");
+  });
+
+  it("refuses `-`, which is the protocol here, not standard input or output", async () => {
+    for (const [name, args] of [["map_info", { path: "-" }], ["map_strings_prune", { path: ums, out: "-" }], ["map_diff", { a: "-", b: ums }], ["map_find", { text: "x", paths: [ums, "-"] }]] as const) {
+      const r = await call(name, args);
+      expect(r.isError, name).toBe(true);
+      expect(text(r), name).toMatch(/^`-` \(standard input or output\) is not a file here/);
+    }
+  });
+
+  it("doctor says what this computer has, as text and as checks", async () => {
+    // newestVersion asks npm; offline it says it could not.
+    vi.stubGlobal("fetch", async () => { throw new Error("offline"); });
+    try {
+      const r = await call("doctor", {});
+      expect(r.isError).toBeFalsy();
+      expect(text(r)).toMatch(/^scmjs doctor /);
+      expect(text(r)).not.toMatch(/\x1b\[/);
+      const checks = r.structuredContent?.checks as { what: string; state: string; detail: string }[];
+      expect(checks.map((c) => c.what)).toEqual(expect.arrayContaining(["Node", "StarCraft", "Game engine"]));
+      expect(typeof r.structuredContent?.blocked).toBe("boolean");
+    } finally { vi.unstubAllGlobals(); }
+  });
+});
+
+describe("scmjs mcp: the game tools", () => {
+  const ums = join(TEST_MAPS_DIR, "ums.scx");
+  let weigh: string;
+  beforeAll(() => {
+    weigh = join(tmp(), "weigh.mjs");
+    writeFileSync(weigh, "export const weigher = () => ({ trigger: () => 0, record: () => 0 });\n");
+  });
+
+  it("map_trace runs the map: the command's lines, its --json data, progress to the client and nothing on standard output", async () => {
+    const { client, call } = await connected({ engine: stagedEngine(tmp()).dir });
+    const copy = classicCopy(tmp());
+    const progress: number[] = [];
+    const stdout = vi.spyOn(process.stdout, "write");
+    const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    try {
+      const r = await call("map_trace", { path: ums, frames: 1300, seed: 5, starcraft: copy }, { onprogress: (p) => progress.push(p.progress) });
+      expect(r.isError).toBeFalsy();
+      expect(stdout).not.toHaveBeenCalled();
+      // The runner's live lines (the start, a progress line each 600 frames) went to standard error.
+      expect(stderr.mock.calls.map((c) => String(c[0]))).toEqual(expect.arrayContaining([expect.stringMatching(/^ums\.scx 64 × 64, badlands · 3 triggers · seed 5/), expect.stringMatching(/frame +600 +19 passes/)]));
+      expect(progress).toEqual([600, 1200]);
+      const lines = text(r).split("\n");
+      expect(lines[0]).toMatch(/^✔ ums\.scx: 3 triggers · 1,300 frames \(0:54 of play\) · 41 passes · 2 fired · 1 never/);
+      expect(lines).toContain("  Never fired (1 of 3)");
+      expect(text(r)).toMatch(/Bring \(condition 1\) said no last, at frame 1,242/);
+      expect(text(r)).not.toMatch(/\x1b\[/);
+      const data = r.structuredContent as { file: string; rows: { fired: number }[]; copies: unknown[]; engine: { build: string }; game: { kind: string }; frame: number };
+      expect(data.file).toBe("ums.scx");
+      expect(data.rows.map((x) => x.fired)).toEqual([41, 1, 0]);
+      expect(data.copies).toHaveLength(3);
+      expect(data.engine.build).toBe("abcdef123456");
+      expect(data.game.kind).toBe("classic");
+    } finally { stdout.mockRestore(); stderr.mockRestore(); await client.close(); }
+  });
+
+  it("map_cost weighs it, the frame-by-frame series as data", async () => {
+    const { client, call } = await connected({ engine: stagedEngine(tmp()).dir, weigh });
+    const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    try {
+      const r = await call("map_cost", { path: ums, frames: 310, starcraft: classicCopy(tmp()) });
+      expect(r.isError).toBeFalsy();
+      expect(text(r)).toMatch(/^✔ ums\.scx: triggers cost 0\.024 ms a frame on average where they ran \(10 of 308 frames\)/);
+      expect(text(r)).toContain("Costliest triggers, a frame they ran in");
+      const data = r.structuredContent as { averageMs: number; rows: unknown[]; series: { ns: number[]; weighed: boolean } };
+      expect(data.averageMs).toBeCloseTo(0.024, 5);
+      expect(data.rows).toHaveLength(2);
+      expect(data.series.ns).toHaveLength(308);
+      expect(data.series.weighed).toBe(true);
+    } finally { stderr.mockRestore(); await client.close(); }
+  });
+
+  it("no copy of the game, no map runner, no weigher, a map the game refused: text the model can act on", async () => {
+    const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    const staged = await connected({ engine: stagedEngine(tmp()).dir });
+    const older = await connected({ engine: stagedEngine(tmp(), false).dir });
+    try {
+      const noCopy = await staged.call("map_trace", { path: ums, starcraft: tmp() });
+      expect(noCopy.isError).toBe(true);
+      expect(text(noCopy)).toMatch(/is not a copy of StarCraft\.\nA Remastered installation/);
+      const noRunner = await older.call("map_trace", { path: ums, starcraft: classicCopy(tmp()) });
+      expect(noRunner.isError).toBe(true);
+      expect(text(noRunner)).toMatch(/has no map runner\.\nscmjs map trace \(and map cost\) needs a play page deployed with one; .* must hold a map-<hash>\.mjs\.$/);
+      // The weigher is built beside the command; the source tree has none.
+      const noWeigher = await staged.call("map_cost", { path: ums, starcraft: classicCopy(tmp()) });
+      expect(noWeigher.isError).toBe(true);
+      expect(text(noWeigher)).toContain("The weigher is not beside the command");
+      const bad = join(tmp(), "bad.scx");
+      copyFileSync(ums, bad);
+      const refused = await staged.call("map_trace", { path: bad, starcraft: classicCopy(tmp()) });
+      expect(refused.isError).toBe(true);
+      expect(text(refused)).toMatch(/^the game did not take this map\n/);
+      const tooLong = await staged.call("map_trace", { path: ums, frames: MAX_FRAMES.trace + 1 });
+      expect(tooLong.isError).toBe(true);
+    } finally { stderr.mockRestore(); await staged.client.close(); await older.client.close(); }
   });
 });

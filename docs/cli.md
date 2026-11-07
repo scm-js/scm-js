@@ -4,10 +4,11 @@
 Map on any number of maps, makes a new map, searches maps, writes a map out as text so git
 can show its changes, takes a map's triggers and strings out as text and puts them back,
 says what changed between two maps, builds a TrigScript map the way Save does, runs a
-plugin over a map, takes a map's archive apart into a folder and puts it back, opens a map
-or replay in scmJS from a terminal, helps you write a plugin, builds a BWAPI bot of your
-own for the play page, and says what your computer has for each of those. It reads files
-the way the editor does, so the two agree about every map.
+plugin over a map, takes a map's archive apart into a folder and puts it back, runs a
+map's triggers in the game to see which fire and what they cost, opens a map or replay in
+scmJS from a terminal, helps you write a plugin, builds a BWAPI bot of your own for the
+play page, and says what your computer has for each of those. It reads files the way the
+editor does, so the two agree about every map.
 
 You need Node.js 22.12 or newer. Install it once, and type `scmjs` from then on:
 
@@ -43,6 +44,8 @@ when there is a newer version.
 | `scmjs map build <map>` | Applies the map's TrigScript script and builds its programs into the file, as Save does |
 | `scmjs map run <plugin> <map>` | Runs a plugin, or a script written like one, over the map with the plugin API |
 | `scmjs map unpack <map>`, `scmjs map pack <folder>` | A map's archive as a folder of files, and back |
+| `scmjs map trace <map>` | Runs the map's triggers in the game with nobody playing: which fired, how often, which never did and what said no |
+| `scmjs map cost <map>` | What the map's triggers cost Remastered each frame, in milliseconds, and the costliest triggers |
 | `scmjs replay info <replays…>` | Who played, on which map, for how long and at what APM |
 | `scmjs replay open <replay>` | Opens the replay in scmJS, to watch and analyse |
 | `scmjs replay watch <replay>` | Plays the replay in the terminal: the minimap as the game goes, each player's figures, the chat |
@@ -436,6 +439,67 @@ the `scmjs/` members holding the source, and packs back into the same built map.
 packed file is opened as a map before it is written, so a folder whose scenario is not one
 is refused rather than written.
 
+## Running a map's triggers in the game
+
+`scmjs map trace` starts the map in the game itself, as a Use Map Settings game with your
+seat left idle and the computers as the map has them, runs it for a number of frames, and
+notes every condition the game asks and every action it runs. The report is one line per
+trigger — how often it fired, when first and last, whose it is — then the triggers that
+never fired, each with the condition that said no last:
+
+```
+ums.scx 64 × 64, badlands · 3 triggers · seed 1 · Remastered files
+  frame    600  20 passes of the triggers
+  …
+
+✔ ums.scx: 3 triggers · 2,400 frames (1:40 of play) · 78 passes · 1 fired · 2 never · 1.9 s
+
+  #  Fired  First  Last  Players  Trigger
+  1  1      2      2     P1       Always() → Display Text Message(Always Display, "Hold the base."); Play WAV("st…
+  2  0      –      –     P1       Bring("Player 1", "Terran Marine", "Middle", At least, 1) → Create Unit with Pr…
+  3  0      –      –     P1       Switch("Alarm raised", set) → Victory()
+
+  Never fired (2 of 3)
+  ▸ #2  Bring("Player 1", "Terran Marine", "Middle", At least, 1) → Create Unit with Properties("…
+      Bring (condition 1) said no last, at frame 2,389
+  ▸ #3  Switch("Alarm raised", set) → Victory()
+      Switch (condition 1) said no last, at frame 2,389
+```
+
+The game runs the triggers once every two seconds or so (a pass), and a trigger that runs
+every pass is a preserved one. A count with `+n` after it is a trigger whose Wait held it
+and let it go on `n` times. `--frames` is how long to run (24 frames a second; the default
+2,400 is 100 seconds of play, and the game may end sooner if a trigger ends it); `--seed`
+fixes the game, so the same map and seed give the same run; `--all` lists every trigger
+when the map has more than forty. `--json` has the same per trigger as data. Nobody plays,
+so what a player would do never happens: a trigger waiting for a unit to be brought
+somewhere will say so, which is the point.
+
+`scmjs map cost` runs the map the same way and weighs every trigger the game passes and
+every condition and action it runs, as StarCraft: Remastered charges for them — the model
+TrigScript's editor uses, measured on the real game, where a Deaths condition costs about
+five nanoseconds and the game stays smooth up to about fifteen milliseconds of triggers a
+frame. It says what a frame costs on average where the triggers ran and at the most, how
+that sits against what a frame can carry, and which triggers cost the most:
+
+```
+✔ trigscript-frame-cost.scx: triggers cost 0.025 ms a frame on average where they ran (599 of 601 frames), 1.10 ms at the most (frame 2: 83,787 records, 53,192 triggers)
+  Remastered on a fast computer: smooth to about 15 ms of triggers a frame, slows past 37 ms
+  83,787 of the records ran in no trigger of the map — a program's own (TrigScript, eudplib), 1.10 ms in all
+```
+
+A TrigScript or eudplib program runs its own records through the EUD trigger chain rather
+than through the map's trigger list, so for such a map the cost is in the first lines and
+the triggers listed are only the ones that start the program; TrigScript's own editor
+shows a program's cost line by line.
+
+Both need what `scmjs bot run` needs: the game engine, fetched from the play page the
+first time (about 25 MB) and kept in your cache folder, and your own installation of
+StarCraft, Remastered or 1.16.1, found in the usual places or named with `--starcraft`. A
+map in the original StarCraft 1.00 form is run as Brood War, as the editor would convert
+it; the Blizzard campaign maps are not something the engine runs yet. Exits 2 when the
+game could not start.
+
 ## Replays
 
 `scmjs replay info` reads a replay from any version, from 1.16 to Remastered. It shows the
@@ -703,6 +767,8 @@ from a clone with `npm run cli -- <command>`, or build it with `npm run build:cl
 | `cli/src/engine.ts` | The game engine the playing commands share: the play page's current build fetched into the cache with its runners, the copy of the game found, a runner started |
 | `cli/src/botrun.ts` | A bot's game with no page: scm-sim's bot runner run and its lines worded |
 | `cli/src/watch.ts` | A replay in the terminal: the braille minimap, its colours and the lines around it, the replay's chat and APM, and the runner paced a picture at a time |
+| `cli/src/trace.ts` | A map's triggers run in the game: scm-sim's map runner run, its trace and cost worded against the map's own triggers |
+| `cli/src/weigh.ts` | The weigher `map cost` hands the game: TrigScript's model of what Remastered charges, built beside the command |
 | `cli/src/plugin.ts` | A new plugin's files, the plugin check, and the server `plugin dev` runs |
 | `src/plugins/devLink.ts` | The editor's half of `plugin dev`: only a plugin served on this computer is taken |
 | `cli/src/ui.ts` | Colour, marks, aligned rows, and StarCraft's text colours in a terminal |

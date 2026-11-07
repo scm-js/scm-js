@@ -1,5 +1,5 @@
 /**
- * The game engine for the commands that play: `scmjs bot run` and `scmjs replay watch`. The engine is scm-sim's
+ * The game engine for the commands that play: `scmjs bot run`, `scmjs replay watch`, `scmjs map trace` and `map cost`. The engine is scm-sim's
  * lifted game, the one the play page runs; its files (the module, the base image, the interface pack) and the
  * runners that drive a game from a terminal are fetched once from the play page's address — `play/engine/current.json`
  * names the current build and its runners — and kept under the user's cache folder. The game's own files come from the
@@ -20,7 +20,11 @@ import { CliError, pc } from "./ui";
 export const PLAY_URL = "https://scmjs.dev/play";
 
 /** The runners a deploy may name in `current.json`, by what they run, and the file name each goes by. */
-export const RUNNERS = { bot: { key: "runner", file: /^run(-[0-9a-f]+)?\.(mjs|cjs)$/, command: "scmjs bot run" }, replay: { key: "replayRunner", file: /^replay(-[0-9a-f]+)?\.(mjs|cjs)$/, command: "scmjs replay watch" } } as const;
+export const RUNNERS = {
+  bot: { key: "runner", file: /^run(-[0-9a-f]+)?\.(mjs|cjs)$/, command: "scmjs bot run" },
+  replay: { key: "replayRunner", file: /^replay(-[0-9a-f]+)?\.(mjs|cjs)$/, command: "scmjs replay watch" },
+  map: { key: "mapRunner", file: /^map(-[0-9a-f]+)?\.(mjs|cjs)$/, command: "scmjs map trace (and map cost)" },
+} as const;
 export type RunnerKind = keyof typeof RUNNERS;
 
 /** What `play/engine/current.json` says (scm-sim's `scripts/deploy-play.mjs` writes it). */
@@ -33,6 +37,9 @@ export interface EngineCurrent {
   /** The replay runner, in a deploy that has one. */
   replayRunner?: string;
   replayRunnerBytes?: number;
+  /** The map runner (`scmjs map trace|cost`), in a deploy that has one. */
+  mapRunner?: string;
+  mapRunnerBytes?: number;
 }
 
 /** The user's cache folder for scmjs: XDG's, Windows's local app data, else `~/.cache`. */
@@ -86,7 +93,7 @@ export async function ensureEngine(at: string = process.env.SCMJS_PLAY_URL || PL
     const files = existsSync(dir) ? readdirSafe(dir) : [];
     const runners: Engine["runners"] = {};
     for (const kind of Object.keys(RUNNERS) as RunnerKind[]) { const f = files.find((n) => RUNNERS[kind].file.test(n)); if (f) runners[kind] = f; }
-    if (!runners.bot && !runners.replay) throw new CliError(`${at} holds no engine: no current.json and no run-<hash>.mjs beside the engine's files.`, "Name the play page's address, or a folder scm-sim's deploy-play.mjs staged.");
+    if (!Object.keys(runners).length) throw new CliError(`${at} holds no engine: no current.json and no run-<hash>.mjs beside the engine's files.`, "Name the play page's address, or a folder scm-sim's deploy-play.mjs staged.");
     return { dir, build: basename(dir), runner: runners.bot ?? "", runners, fetched: 0 };
   }
   const base = at.replace(/\/+$/, "");

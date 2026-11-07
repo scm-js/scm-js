@@ -1,6 +1,7 @@
 // Builds the `scmjs` command (cli/, docs/cli.md) into one file, cli/dist/scmjs.mjs: its code, the editor's code it
 // reads maps and replays with, its two libraries and the TrigScript compiler (`plugins/trigscript`, vendored at the
-// editor's pin), so `npx @scm-js/cli` downloads nothing more — TypeScript apart, which `map build` finds installed. Its version is the
+// editor's pin), so `npx @scm-js/cli` downloads nothing more — TypeScript apart, which `map build` finds installed; and
+// beside it cli/dist/weigh.mjs, the weigher `map cost` hands the game (cli/src/weigh.ts). Its version is the
 // editor's (package.json), written into cli/package.json too. Beside it, THIRD-PARTY-NOTICES.txt carries the license
 // of every package compiled in (scripts/lib/notices.mjs).
 //   npm run build:cli                   then: node cli/dist/scmjs.mjs --help
@@ -82,4 +83,22 @@ await build({
   },
 });
 chmodSync("cli/dist/scmjs.mjs", 0o755);
+
+// The weigher `scmjs map cost` hands the game's map runner (cli/src/weigh.ts): TrigScript's `RemasteredWeigh` and its
+// limits, built on its own beside the command, since the runner is another process that imports it by path.
+await build({
+  configFile: false,
+  logLevel: "warn",
+  publicDir: false,
+  ssr: { noExternal: true, target: "node" },
+  build: {
+    ssr: "cli/src/weigh.ts",
+    outDir: "cli/dist",
+    emptyOutDir: false,
+    target: "node22",
+    minify: false,
+    reportCompressedSize: false,
+    rollupOptions: { output: { entryFileNames: "weigh.mjs", format: "es", codeSplitting: false } },
+  },
+});
 if (!process.argv.includes("--quiet")) console.log(`cli/dist/scmjs.mjs: scmjs ${version}${commit ? ` (${commit})` : ""}`);

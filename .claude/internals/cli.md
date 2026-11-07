@@ -1,6 +1,6 @@
 # The `scmjs` command line
 
-`cli/` is the npm package **`@scm-js/cli`** (its command is `scmjs`): `scmjs about | doctor | info | map info|check|open|new|dump|find|set|resize|triggers|strings|diff|build|run|unpack|pack |
+`cli/` is the npm package **`@scm-js/cli`** (its command is `scmjs`): `scmjs about | doctor | info | map info|check|open|new|dump|find|set|resize|triggers|strings|diff|build|run|unpack|pack|trace|cost |
 replay info|open|watch | plugin new|check|dev | bot new|init|build|update|run`, or `npx @scm-js/cli …`. npm refused the plain name `scmjs` on the first publish (2026-11-06,
 E403 "too similar to scss, sockjs"), so the user chose the scope beside @scm-js/replay and @scm-js/plugin-api. The reader's page is `docs/cli.md`. The shape was the user's (2026-11-05): one command, a noun for
 each kind of thing (`map`, `replay`, `plugin`, `bot`), "an impressive UX tool … not overly engineered".
@@ -409,6 +409,56 @@ The second DX slice (the user's "go for it" on the second suggestion round), sta
   strings by number + header in place; find + new; failures as text. A stdio smoke (initialize, tools/list, two
   calls) was run by hand against the built file.
 
+## Triggers in the game: `map trace`, `map cost` (`cli/src/trace.ts`, `engine.ts`, `weigh.ts`) — 2026-11-07
+
+The user took the parent's first-slice proposal ("`map trace` and `map cost` second"); a fork built both ends.
+
+- **The runner is scm-sim's `src/exact/runMap.ts`** (PR on jeany55/scm-sim, branch `map-runner`), modelled on the bot
+  runner: the served engine files + the player's copy of the game (`src/exact/gameCopy.ts`, the helpers the bot runner
+  had inline, written as a shared module — the sibling fork for `replay watch` wrote the identical file, so both PRs add
+  it; `run.ts` still keeps its own copies), the map started as `game: "ums"` with the person's seat idle, `installEud`
+  (strings placed when the scenario has `STRx`) → `installCost` → `engine.traceTriggers()` at the gate of frame 0. The
+  trace is **folded as it goes** (`foldTrace`: a pass per copy is fired / continued (first record an action with the
+  running flag, slot > 0: a Wait let go) / failed (a condition answered 0, the last such kept as `lastFail`), then
+  `forgetAfter(-1)`), so a long run holds one line per copy. The cost tap groups records by map row (`rowOf`: the copy
+  whose node + 8 + 2400 holds the record) and takes a **weigher by module path** (`--weigh`): the model is the plugin's
+  (`remasteredCost.ts`) and the runner is another process, so `cli/src/weigh.ts` re-exports `RemasteredWeigh` as
+  `weigher(memory)` + `SMOOTH_MS`/`MOST_MS`, and `build-cli.mjs` builds it **on its own into `cli/dist/weigh.mjs`**
+  (a second Vite SSR build, 34 KB; `trace.ts#weighModule` finds it beside the command, or `--weigh`, hidden). Bundled by
+  `scripts/bundle-map-run.mjs` → `dist-run/map.mjs` (242 KB), staged by `deploy-play.mjs` as `map-<hash>.mjs` and named
+  in `current.json` as **`mapRunner`/`mapRunnerBytes`** (`runner` stays the bot's; `ensureEngine` fetches both, and a
+  deploy before this has `mapRunner: null` → CliError "no map runner yet"). Protocol: JSON lines `start` {map, copy,
+  seed, rows, copies, remastered, ms}, `progress` {frame, passes, ms}, `end` {frame, ended, reason, passes, trace:
+  CopyReport[] | null, cost: CostSeries | null, ms}, `error`. Flags `--no-trace` / `--no-cost` pick the tap.
+- **Traps found by running it (each cost a sitting):** (1) **the 1.16.1 game's storm reads no zlib** — tests/maps/ums.scx
+  is zlib-compressed (melee.scx pkware) and the game went down storm's error path (`FindFirstFileA` on the executable,
+  `FormatMessageA`, `LoadStringA`, `OutputDebugStringA`, `LoadLibraryA`: "no stand-in for …" one after another); the
+  runner now writes the archive it hands the game afresh with mopaq's `Creator` (scenario pkware, members as they are,
+  nameless members dropped), which also covers `.chk` and Remastered scenarios in one place. The stand-ins added on the
+  way (`standInFileSearch`: the Find*/FormatMessage/LoadString/OutputDebugString imports answered "nothing", set on
+  **every** slot with the key — the game and storm each import them) are kept, harmless. (2) **Original StarCraft 1.00
+  maps (VER 59) reach code the engine has not lifted** (`0x1D007C20` from storm `0x1503AAE8`), the Blizzard campaign
+  maps among them; `trace.ts#gameMap` converts such a map to Brood War into a temp copy as Map Properties would, and
+  the start line says so. (3) `placeStrings` throws without `STRx`, so "remastered" is decided by that section, not by
+  whether `classicScenario` changed bytes (a hybrid map changes too). (4) A TrigScript/eudplib program's records are in
+  no map row: `passes` is counted as "a state or anything noted" (such a program leaves the pass countdown alone, so
+  `passRan` was never true and the count read 0), and the cost report says how many records ran in no trigger of the map.
+- **The CLI half**: on main's `cli/src/engine.ts` (from `replay watch`, #141): `RUNNERS` gained `map: { key:
+  "mapRunner", file: /^map(-hash)?\.(mjs|cjs)$/ }`, `EngineCurrent` the two keys, and the staged-folder check takes any
+  runner; `trace.ts` uses `runnerFor(engine, "map")` + `startRunner` with its own line loop (the fork had written a
+  second engine.ts first — merged away). `trace.ts`: `runMapInGame(map,
+  "trace"|"cost", o)`, `summarizeRows` (copies → one summary per map row: players, fired/continued/failed, first/last,
+  lastFail, done), `printTrace` (a `ui.table` with the row text from core's `summarizeTrigger` cut to the terminal's
+  width, then "Never fired" with `conditionDef(type).name` and the slot), `costReport`/`printCost` (average and peak ms
+  where anything ran, the limits line, the ungrouped line, costliest rows by ms a frame they ran in; tiny numbers get
+  more digits). Both commands open the map first (`openForEdit`) for the row text; `--frames 2400`, `--every 600`,
+  `--seed 1`, `--all`, `--starcraft`, hidden `--engine`. Overview unchanged (23 lines; the verbs are under `map …`).
+  `tests/cli-trace.test.ts` (stand-in runner, as cli-bot-run), the weigher checked where plugins/ is vendored;
+  `tests/core.test.ts` cli list + `engine`, `trace`, `weigh`. Measured on the user's Remastered copy with a staged deploy
+  served by `python3 -m http.server` over dist-play: ums.scx trace 2,400 frames in ~3 s; `trigscript-frame-cost.scx`
+  cost: 0.025 ms a frame on average, 1.10 ms at frame 2 (83,787 records, 53,192 triggers, the program's start).
+- Not built: `--by-origin`/by-line cost for a TrigScript build (the editor has it); bot-run's `--every` wording reused as
+  is; the campaign maps (engine); a `doctor` line for the map runner.
 ## Opening (`cli/src/open.ts`)
 
 - **Desktop app**: `SCMJS_APP`, else the installers' places (Windows `%LOCALAPPDATA%\Programs\scmJS\scmJS.exe` and

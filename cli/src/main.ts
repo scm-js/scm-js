@@ -28,6 +28,7 @@ import { openInScmjs } from "./open";
 import { checkPlugin, devPlugin, newPlugin, printPluginCheck, type PluginCheck } from "./plugin";
 import { printReplayInfo, replayReport } from "./replay";
 import { mapFileFor, writeReplayMap } from "./replaymap";
+import { printReplayShare, shareReplay } from "./replayshare";
 import { parseClock, watchReplay, watchSummary } from "./watch";
 import { FORMATS, githubAnnotations, junitXml, sarifJson, type CheckReport, type Format } from "./report";
 import { printRun, runOnMap } from "./run";
@@ -591,6 +592,21 @@ written as the game had it: a bare .chk, or an archive like a new map's. Opens i
     const r = await writeReplayMap(await loadReplayInput(input), out);
     if (o.json) { print(JSON.stringify({ file: input.name, ...r }, null, 2)); return; }
     say(piped, `${mark.ok} ${pc.bold(gameText(r.name) || pc.italic("Untitled"))}: ${r.width} × ${r.height}${dot}from ${input.name}${dot}written to ${outName(r.written)}${dot}${size(r.written.bytes)}`);
+  });
+replay.command("share").description("a link to the replay on scmjs.dev, which anyone opens to watch it in the editor").argument("<replay>", "the replay, or - for standard input").addOption(json)
+  .option("--note <text>", "a note, as My Maps shows it")
+  .option("--no-picture", "upload no map picture for the link's card")
+  .option("--starcraft <folder>", "your installation of StarCraft, for the picture (SCMJS_STARCRAFT); found in the usual places otherwise")
+  .addHelpText("after", `
+Needs a scmjs.dev account: scmjs login. The replay is stored on your account (My Maps ▸ Replays, up to 8 MB each,
+counted with your maps) and linked; whoever opens the link watches it in the editor's replay viewer. The link's
+card shows the map's picture when your copy of the game is here to draw it.
+  scmjs replay share game.rep`)
+  .action(async (path: string, o: { json?: boolean; note?: string; picture?: boolean; starcraft?: string }) => {
+    const input = await readInput(path);
+    expectKind(input, "replay");
+    const r = await shareReplay(input, await loadReplayInput(input), o);
+    print(...(o.json ? [JSON.stringify(r, null, 2)] : printReplayShare(r)));
   });
 replay.command("open").description("watch a replay in the scmJS app, or the editor in your browser").argument("<replay>")
   .option("--browser", "the editor in the browser, even with the app installed")

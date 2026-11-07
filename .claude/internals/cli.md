@@ -717,6 +717,20 @@ Phase one of "share links from files on disk". Server half: ai-server 0.36.0 (`P
   against an `http.createServer` stand-in. Not built: an MCP tool for sharing, a `--follow` link (the newest
   revision), listing or removing links and maps (`account maps`), ending a shared room from the terminal.
 
+## `replay share` (`cli/src/replayshare.ts`) — 2026-11-07, on the sign-in branch
+
+- One request: `POST /v1/replays` multipart `file` + `fileName` + `note?` + `picture?` + `link=1`, which answers
+  the stored replay's facts (`ReplayView`: map, players, matchup, frames, game type, when) **and its first link**
+  (ai-server #18 made `link=1` for this); the same bytes again answer 200 `existing: true` with the link that is
+  there. `linkTo("replay", token)` → `https://scmjs.dev/editor/replay/<token>` (the editor's scmjs.dev plugin v1.40.0
+  opens it in Aftermath by a synthetic drop; the Worker's card from `/v1/previews/replay/:token`). Limits are the
+  server's (8 MB a replay, 500 replays, the account's storage cap): their messages are printed as they come.
+- **The map's picture for the card** is drawn here, not on the server (it has no game graphics): `parseScenario(rep.chk)`
+  → `previewPng(scn, graphics, {width})` under 900 KB, as `share.ts#picturesOf` does for a map; none without a copy
+  of the game, `--no-picture` to skip. A replay from `-` is named `replay.rep`.
+- `tests/cli-replay-share.test.ts` (3) against a stand-in server parsing the multipart with `Request.formData()`.
+  Not run against the real server here (ai-server #18 was open); the agent that built #18 drove the editor end.
+
 ## Opening (`cli/src/open.ts`)
 
 - **Desktop app**: `SCMJS_APP`, else the installers' places (Windows `%LOCALAPPDATA%\Programs\scmJS\scmJS.exe` and

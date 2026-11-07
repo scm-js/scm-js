@@ -41,6 +41,8 @@ import { FORMATS, githubAnnotations, githubTestAnnotations, junitTestXml, junitX
 import { defaultOut, defaultTests, readMapForTests, readTests, runTests, testHeader, testJson, testSummary, type PlannedScenario } from "./maptest";
 import { printRun, runOnMap } from "./run";
 import { previewMap, PNG_SCALES } from "./preview";
+import { printGenerated, runGenerate, type GenerateFlags } from "./generatecmd";
+import { GEN_PLAYERS, GEN_STYLES, GEN_SYMMETRIES } from "./generate";
 import { accountReport, login, logout, PROVIDERS, printAccount, serverLabel } from "./account";
 import { printShare, shareMap } from "./share";
 import { qrFor } from "./qr";
@@ -230,6 +232,44 @@ arguments give the same file. Exits 2 when the file is there (--force overwrites
     const r = await writeNewMap(file, { width, height, tileset, name: o.name ?? (piped ? "Untitled Scenario" : nameFromFile(file)), description: o.description, version: o.revision as NewMapVersion, players, layout: o.layout as (typeof LAYOUTS)[number] });
     if (o.json) { print(JSON.stringify(r, null, 2)); return; }
     say(piped, `${mark.ok} ${pc.bold(piped ? "standard output" : relative(process.cwd(), r.path) || r.path)}: ${r.width} × ${r.height}${dot}${r.tileset}${dot}${r.version}${r.starts ? `${dot}${plural(r.starts, "start location")}` : ""}${dot}${size(r.bytes)}`);
+  });
+
+map.command("generate").description("a symmetric melee map from a seed, laid with your copy of the game's tileset").argument("<map>", "the file to write: .scx, .scm or .chk").addOption(json)
+  .option("--players <n>", `${GEN_PLAYERS.join(", ")}`, "2")
+  .option("--size <WxH>", "width and height, each 96, 128, 192 or 256 (128x128; 192x192 for 8 players)")
+  .option("--tileset <name>", "badlands, platform, ashworld, jungle, desert, ice or twilight", "jungle")
+  .option("--seed <n>", "the same seed and options give the same map (a new one each time without)")
+  .option("--symmetry <how>", `${GEN_SYMMETRIES.join(", ")}`)
+  .option("--style <how>", `${GEN_STYLES.join(" or ")}: an open middle, or one narrowed by more high ground`, "open")
+  .option("--name <text>", "the map's name; the file's by default")
+  .option("--rush", "then walk a unit between the starts in the game, as scmjs map rush does")
+  .option("--starcraft <folder>", "your installation of StarCraft (SCMJS_STARCRAFT); found in the usual places otherwise")
+  .option("--force", "overwrite a file that is there")
+  .addOption(new Option("--tilesets <folder>", "a folder of extracted tilesets (<name>.cv5, <name>.dddata.bin, …) instead of the game").hideHelp())
+  .addOption(new Option("--engine <where>", "the play page's address, or a folder holding the engine (SCMJS_PLAY_URL)").hideHelp())
+  .addHelpText("after", `
+A main on high ground for each player with one ramp down to a natural, free bases where there is room, and a middle of
+low ground with mesas, lakes and patches of the tileset's other ground. Every player's bases are the same, mirrored or
+turned with the map. The ground is laid with the editor's isometric brush and the ramps are the tileset's own, so the
+graphics come from your copy of StarCraft (Remastered or 1.16.1), as for scmjs map preview. Before the file is written
+the map passes Check Map and every start is walked to every other over the walkable ground; a layout that fails is
+thrown away and the next one tried. Exits 1 when none passes, 2 when an option is not one.
+  scmjs map generate duel.scx --seed 7
+  scmjs map generate four.scx --players 4 --tileset badlands --style chokes`)
+  .action(async (file: string, o: GenerateFlags & { json?: boolean; rush?: boolean; force?: boolean; engine?: string }) => {
+    const piped = file === STDIO;
+    if (piped && o.json) throw new CliError("--json and the map both want standard output", "Name a file to write, or leave --json off.", 2);
+    if (piped && o.rush) throw new CliError("--rush walks the map in the game, which needs it in a file", "Name a file to write.", 2);
+    if (!piped && existsSync(file) && !o.force) throw new CliError(`${file} is there already`, "--force overwrites it.", 2);
+    const name = o.name ?? (piped ? "Generated" : nameFromFile(file));
+    const { report } = await runGenerate(file, o, name);
+    const near = relative(process.cwd(), report.path);
+    if (!o.json) say(piped, ...printGenerated(report, piped ? "standard output" : near && !near.startsWith("..") ? near : report.path));
+    if (!o.rush) { if (o.json) print(JSON.stringify(report, null, 2)); return; }
+    if (!o.json) print("");
+    const rush = await runRush(file, { starcraft: o.starcraft, engine: o.engine, live: o.json ? undefined : (line) => print(line) });
+    if (o.json) print(JSON.stringify({ ...report, rush: rushJson(file, rush) }, null, 2));
+    else print("", ...printRush(relative(process.cwd(), file) || file, rush));
   });
 
 map.command("dump").description("the whole map as text, for git diff and grep").argument("<map>").addOption(json)

@@ -63,6 +63,7 @@ terrain. Everything else is a function that reads or changes one.
 | The map | `resizeScenario`, `placeStartLocations`, `setScenarioName`, `setScenarioDescription`; `flatTerrain` and `baseTerrain`, the flat ground a new map is filled with |
 | Names | `unitName`, `upgradeName`, `techName`, `TILESETS`, `PLAYER_TYPES`, `PLAYER_RACES`, `PLAYER_COLORS` |
 | The game's files | `loadTileset`, `megatileForTile` and `drawMegatile` for a tileset's graphics, `decodeUnitsDat` and `unitGeometry` for the units' sizes, `displayColorHex` for a player's colour — for files you read from your own copy of the game |
+| Terrain and doodads | `paintIsom` and `paintIsomDiamonds`, the isometric brush (one diamond, or any set of them in one stroke), `checkIsom`; `buildDoodadCatalogue`, `checkDoodadPlacement` and `placeDoodad` for a doodad placed as StarEdit allows; `symmetryImages` for the editor's symmetry modes — these need a tileset you read from your own copy of the game |
 | Plugins | `validateManifest`, `PLUGIN_API_VERSION` — what the editor checks a plugin's manifest for |
 
 The declarations file says the rest: every function is typed, and the types are the

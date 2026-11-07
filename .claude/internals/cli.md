@@ -1,6 +1,6 @@
 # The `scmjs` command line
 
-`cli/` is the npm package **`@scm-js/cli`** (its command is `scmjs`): `scmjs about | doctor | info | map info|check|open|new|dump|find|fetch|set|resize|triggers|strings|sounds|diff|merge|build|run|unpack|pack|trace|cost|rush|test |
+`cli/` is the npm package **`@scm-js/cli`** (its command is `scmjs`): `scmjs about | doctor | info | map info|check|open|new|generate|dump|find|fetch|set|resize|triggers|strings|sounds|diff|merge|build|run|unpack|pack|trace|cost|rush|test|preview |
 replay info|open|watch | plugin new|check|dev | bot new|init|build|update|run|ladder`, or `npx @scm-js/cli …`. npm refused the plain name `scmjs` on the first publish (2026-11-06,
 E403 "too similar to scss, sockjs"), so the user chose the scope beside @scm-js/replay and @scm-js/plugin-api. The reader's page is `docs/cli.md`. The shape was the user's (2026-11-05): one command, a noun for
 each kind of thing (`map`, `replay`, `plugin`, `bot`), "an impressive UX tool … not overly engineered".
@@ -1042,6 +1042,104 @@ is the comparison's (1 when different), picture or not. Overview unchanged.
   must see a replay: the stub file is written with a real header? no — the test calls through a temp `.rep` only where
   a real one is on the machine, `describe.skipIf`), `map_preview` against the copy of the game (`skipIf(!findGameCopy)`),
   the no-copy failure as `isError`. `tests/cli-replaymap.test.ts` covers `writeReplayMap` with a stub replay.
+
+## A map from a seed: `map generate` (`cli/src/generate.ts`, `generatecmd.ts`, `bases.ts`) — 2026-11-07
+
+`scmjs map generate <out> [--players 2|3|4|6|8] [--size WxH] [--tileset] [--seed n] [--symmetry rotational|mirror-x|mirror-y|diagonal]
+[--style open|chokes] [--name] [--rush] [--starcraft] [--force] [--json]` (hidden: `--tilesets <folder>` = a folder laid out
+like `public/tileset`, used by the tests; `--engine` for `--rush`). The showpiece of the CLI round; branch `cli-map-generate`.
+
+- **Needs the game's files, by design.** `paintIsom` resolves every rect to a tile through `isomTables(tileset)` — the
+  shape-link table is *built from the CV5* (`buildLinks`), only the numbering/adjacency is in `data/isomTables.ts` — and the
+  ramps are doodads whose placement rule is `dddata.bin`. So there is no game-data-free mode: `readGraphics` reads
+  cv5/vf4/vr4/wpe/vx4(ex) through `gamefiles.ts#readTileset` and `tileset\<name>\dddata.bin` from the copy, as `map preview`
+  does, and `openGameFiles`' hint says why. ~0.3 s for a 128 map with the copy (kascade open ~0.2 s), ~25–80 ms the ground,
+  ~30–70 ms the walks; 8 players on 256 ~1.5 s.
+- **Three pure steps.** `planMap(options, innerSeed)` → `Plan` (a `Lattice`: class LOW/HIGH/WATER per diamond, `locked`
+  low ground for bases/aprons, `deco` for the second look, `complex` = the players' template footprint; the complexes;
+  free bases; `images` = for every group element, which complex each lands on). `buildScenario` = `layGround` (flat fill of
+  the recipe's low terrain, then **one `paintIsomDiamonds` stroke per terrain**: water, high, low deco, high deco; then the
+  ramps) + `placeBases` (halls, Melee Wizard lines, start locations, slots n..7 Inactive). `measureMap` = `walkGrid` (VF4
+  walkable minitiles, eroded 3 × 3 so a corridor is a unit wide, resource footprints cut out) + `groundFrom` (Dial's
+  algorithm, 5/7 steps) per start + `validateScenario(scn, { tileset })` + `spread`. `generateMap` tries `innerSeed(seed, k)`
+  for k < 12 (k = 0 is the seed itself), keeps the first within `BALANCE_TOLERANCE` (8%), else the least spread that passes;
+  none passing → `LayoutError` → CliError exit 1. Final sweep, 364 option sets (jungle, badlands, ice, ashworld, platform;
+  every player count, symmetry, size and style; two seeds): all laid out, 243 on the first inner seed; median spread 3.5%,
+  start-to-start never over 6.1%; 18 kept over 8% (worst 16%), nearly all two players `mirror-y` and Ice.
+- **`paintIsomDiamonds` (new, `editor/isom.ts`)** is `paintIsom` with a footprint of any shape: every listed diamond set at
+  once (`IsomPass.placeMany`), their neighbours queued, one `propagate`, one `updateTiles`. Painting a terrain in one stroke
+  is what makes the result independent of diamond order; painting diamond by diamond would ripple each time.
+- **Ramps only face south.** Every ramp doodad in every tileset (jungle 12/13, badlands 77/78, ice 0/1, ashworld 45/46,
+  platform 156–159) fits only the south-west or south-east cliff edge — measured by scanning `checkDoodadPlacement` round a
+  painted plateau. So a complex can never be turned upside down, and **the symmetry acts on positions, not on the bases**:
+  `makeTemplate` builds one complex (an isometric-rectangle core plus lobes, the ramp on the core's SE edge toward its east
+  corner, an apron, the natural's disc 11–13 tiles down-right of the ramp, a low lane between) for a natural to the right,
+  and each player's copy is that template x-flipped when it lies left of centre (`sx`). **What the symmetry places is the
+  ramp's foot** (`Template.foot`, the apron's middle): the layout is drawn as fundamental naturals (`fundamentalNaturals`),
+  converted to the fundamental foot, snapped to the lattice *before* mapping (so mirrors are exact), and imaged. Every walk
+  out of a main is main → ramp → foot → …, so with the feet exact the start-to-start walks match to a percent or two. The
+  first version imaged the naturals instead: the naturals matched but a bottom player's walk from its ramp to the middle cut
+  the corner past its natural, and single-attempt spreads ran 10–60%. A bottom player's main stands above its ramp,
+  toward the centre — it looks odd at first. It also stands between its ramp and anything up the map's side, so the
+  free-base candidates keep off the sides (a side base was 6–14% farther for the bottom players).
+  For the same reason **`rotational` with 4 or 8 players is the four-way mirror (hv)**: a quarter turn would put a natural on
+  a side where its main has no room, and rot90/diag do not map the 2:1 diamond lattice to itself anyway. `diagonal` exists for
+  two players on a square map, with the natural on the corner's diagonal; obstacles under it are rasterised approximately.
+- **Remastered files cliff pieces with the VF4 ramp bit** (badlands 331–394, jungle 272+, ice 236+, ashworld 143+, …:
+  2 × 5 … 8 × 5 pieces); `checkDoodadPlacement` takes them at a ramp's place. Two traps found in turn: (1) nearest-first
+  picked them and some do not walk at all, so every fit within 7 tiles is tried and kept only when `walksBetween(top of
+  plateau, apron)` holds in a 24-tile window (`walkGrid` takes a window); (2) a 2 × 5 piece passed that walk and
+  `map rush` still found **no way out of player 1's main in the game** (Desert, seed 2026, 4 players; the other three
+  mains, with the same piece, walked). So the candidates are ordered **first run of ids first** (sorted ids, cut at a gap
+  > 20: jungle 12/13, badlands 77/78, ice 0/1, ashworld 45/46, platform 156–159, twilight 0/1 — the ramps every version
+  has), the Remastered pieces only when none of those fits. That also makes Remastered and 1.16.1 pick the same ramps.
+  The ramp candidates are the `ramp` doodads requiring a group of the recipe's `cliff` edge set (34 jungle family and
+  badlands, 16 ashworld, 21 platform); Ice's ramp 0 also requires index 24 and still fits a plain cliff, so the filter is
+  "needs the cliff", not "needs only the cliff". All ten sample maps were then walked with `map rush` (SCV): every start
+  reaches every other; on the 8-player 192 map one walk of 56 (1 → 2, the longest, 253 tiles) "stopped short", the
+  game's own pathing giving up on a long walk, while 2 → 1 arrived.
+- **What the brush cannot join** (found as black `tile 0` rects, the `holes` check): two bodies of one class whose tips face
+  each other across one diamond — not only across an edge (dx ± 1, dy ± 1) but edge-to-corner, e.g. (0, −2) and (1, +1).
+  `squeezed()` fills a diamond with two same-class neighbours more than 120° apart *on the lattice* (u = (dx+dy)/2,
+  v = (dx−dy)/2; in tile space the angles are wrong). `settle` applies it to HIGH and WATER, and to each level's deco, plus
+  spur removal (< 2 same edge-neighbours), water ≥ 4 steps from high and ≥ 3 from a base, deco only with 3 steps of its own
+  level all round. With those, `checkIsom(...).mismatched` is 0 and no tile is 0 on every layout swept.
+- **Recipes** (`RECIPES`, CV5 indices): jungle/desert/ice/twilight low 2, high 3, cliff 34, water 5, deco 8/10; badlands
+  2/3/34/5, deco grass 6/7; platform 3 (Platform)/5 (High Platform)/21, Space 2 as the water, plating 4/6; ashworld 2/4/16,
+  magma 8, shale 6/7 **unbuildable** (`decoBuilds: false` keeps it out of the mains). **Installation has no recipe**: no
+  terrain group in its CV5 is buildable (only doodad and unused groups), so it has no melee; refused with exit 2. The
+  levels' heights are read off the tileset (`megatileHeight` of the terrain's first megatile): Jungle's High Dirt is the
+  middle level, Platform's High Platform the top, so a hard-coded 2 was wrong.
+- **Resources** are the Melee Wizard's `layoutBase` (copied into `bases.ts`; the plugin is not in the bundle) with `fits` =
+  every tile buildable, all walkable, no ramp minitile, the hall's height, clear of other footprints and ≥ 3 from a ramp.
+  Main 9 × 1500 + 5000 gas, line away from the ramp; natural 7, direction the one of 24 farthest from both the ramp and the
+  middle, slightly outward; free bases 6, outward. A hall needs its level one tile all round it. The free-base candidates are
+  fixed fractions of the map, imaged; images within 8 tiles are one base (a point on an axis), images closer than 30 drop
+  the candidate (the diagonal put two side by side before).
+- **Balance numbers**: `startSpread` = for every element of the symmetry and every pair of starts whose images are starts,
+  the relative difference of their ground distances (always 0 for two players: the one pair is its own image);
+  `freeSpread` = each start's walks to the free bases, sorted, against its image's; `spread` = the larger, which the
+  retries and `balanced` go by. The walk to the middle (`toMiddle`) is reported but not compared: with a mesa or lake on
+  the centre, "the nearest walkable minitile to the centre" depends on the side you come from (90 vs 62 tiles once). With
+  three players the fourth complex has no start and its pairs are skipped (`compared` counts both; the summary leaves a part
+  out when it compared nothing, so two players read "x% to the free bases" only). Checked against the game (`map rush`,
+  SCV): Jungle Duel 1207, own walk 138 tiles, the game 4,468 / 4,486 px (140 tiles); Desert Crossing 2026 (4 players), own
+  start-to-start spread 1.5%, the game's diagonals 4,394 vs 4,597 px (4.6%), adjacent pairs within 2%. The maps run in
+  scm-sim, so they load.
+- **Determinism**: no `Math.random` below `generateOptions` (which picks a seed when none is given and prints it). The same
+  seed and options give the same bytes with the same game files (tested with `public/tileset`); the variation of each tile
+  comes from the seeded rng, and Remastered and 1.16.1 lay the same tiles where their CV5s agree (the Remastered CV5 has 314
+  more groups, the shared ones identical), but that was not compared byte for byte.
+- **Overview**: `generate` is a verb under `map`, so no row; doctor's READY row is now `map preview|generate`.
+- Tests: `tests/cli-map-generate.test.ts` — options and refusals, inner seeds, the plan's determinism, the middle its own
+  image under h/v/rot180/hv (the complexes' footprint + 3 excluded), one template for every player, 3 players' spare
+  complex, settle's invariants, the base layout; `describe.skipIf(!public/tileset)`: four maps (no tile 0, `checkIsom` 0,
+  Check Map with the tileset, ramps, resources, connected, spread), the ramps as the only way up (`editorTiles` = the map
+  without its doodads), same bytes for the same seed, the command end to end with `--tilesets`.
+- **Not done**: no trees/rocks/doodads besides ramps, no third level (the tilesets' "high" terrains of the deco kind are
+  only looks here), no bridges, no neutral buildings/critters, no back-door paths or island bases; the natural sits at a
+  fixed place relative to the ramp (no choice of a wall-off); 4 players on a non-square map use the same corners; no MCP
+  tool (`generateMap` is pure and ready for one); `--revision remastered` not offered (always Brood War 1.04).
 
 ## `map play`: a lobby from a map (`cli/src/open.ts`) — 2026-11-07
 

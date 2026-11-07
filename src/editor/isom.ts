@@ -633,6 +633,28 @@ class IsomPass {
     return true;
   }
 
+  /**
+   * Set every diamond of `diamonds` to the terrain at once and let the change ripple out
+   * from all of them — the brush with a footprint of any shape. False when the terrain
+   * cannot be painted (nothing is set then).
+   */
+  placeMany(diamonds: readonly Diamond[], terrainType: number): boolean {
+    const { links, terrainTypes } = this.tables;
+    const value = terrainTypes[terrainType]?.isomValue ?? 0;
+    if (value === 0 || value >= links.length || links[value].terrainType === 0) return false;
+    const set = diamonds.filter((d) => isDiamond(d) && this.inBounds(d));
+    for (const d of set) this.setDiamond(d, value);
+    const queue: Diamond[] = [];
+    for (const d of set) {
+      for (const q of QUADRANTS) {
+        const nb = neighbourOf(d, q);
+        if (this.needsUpdate(nb)) queue.push(nb);
+      }
+    }
+    this.propagate(queue);
+    return true;
+  }
+
   /* — tiles — */
 
   private tile(x: number, y: number) { return this.scn.tiles[y * this.scn.width + x]; }
@@ -777,6 +799,29 @@ export function paintIsom(
 ): IsomEdit | null {
   const pass = new IsomPass(scn, tileset, isomTables(tileset, tilesetIndex(scn)), random);
   if (!pass.place(d, terrainType, extent)) return null;
+  pass.updateTiles();
+  const edit = pass.finish();
+  mirrorEditorTiles(scn, edit.tiles);
+  return edit;
+}
+
+/**
+ * Paint `terrainType` (a CV5 index) over any set of diamonds in one stroke: each is set to
+ * the terrain, the neighbours they leave are re-picked as `paintIsom` re-picks the edge of
+ * its brush, and the tiles follow. What `scmjs map generate` lays its ground with, a whole
+ * plateau or lake at a time, so the result does not depend on the order of the diamonds.
+ * Diamonds off the lattice or off the map are skipped; null when the terrain is not one
+ * the tileset paints isometrically.
+ */
+export function paintIsomDiamonds(
+  scn: Scenario & { isom: Uint16Array },
+  tileset: Tileset,
+  diamonds: readonly Diamond[],
+  terrainType: number,
+  random: () => number = Math.random,
+): IsomEdit | null {
+  const pass = new IsomPass(scn, tileset, isomTables(tileset, tilesetIndex(scn)), random);
+  if (!pass.placeMany(diamonds, terrainType)) return null;
   pass.updateTiles();
   const edit = pass.finish();
   mirrorEditorTiles(scn, edit.tiles);

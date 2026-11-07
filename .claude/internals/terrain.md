@@ -100,3 +100,13 @@ Tile height for the far-zoom overlay and the panel is `megatileHeight` (VF4: ≥
 high+mid ≥12 → mid); the CV5 height bits are masked off by the game (0xD8FA) and differ on 19–48%
 of megatiles. Check Map counts creep tiles (info) and groups past the CV5 (warn: Remastered draws
 tile 0x20, 1.16.1 reads past the table).
+
+`paintIsomDiamonds(scn, tileset, diamonds, terrain)` (2026-11-07, for `scmjs map generate`) is the brush with a footprint of
+any shape: `IsomPass.placeMany` sets every listed diamond at once and propagates from all of them, so a plateau or a lake
+painted as one stroke does not depend on the order of its diamonds. What the generator learned about the brush (details in
+`cli.md` "A map from a seed"): **two bodies of one terrain whose tips face each other across a single diamond** — across an
+edge, or edge-to-corner such as (0, −2) and (1, +1) — leave a rect whose links hash to no CV5 group, which `updateTile`
+writes as tile 0 (black); fill such a diamond first (the generator's `squeezed`, angles measured on the lattice's u/v
+axes). A water diamond needs four steps to high ground (shore, ground, cliff). And every ramp doodad in every tileset
+fits only a south-west or south-east cliff edge; Remastered's CV5 adds cliff pieces with the VF4 ramp bit that StarEdit's
+placement rule accepts at a ramp's place but that do not walk.

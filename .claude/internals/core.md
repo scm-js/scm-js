@@ -60,6 +60,13 @@ passes Check Map (a fresh map has eight Human slots and fails on start locations
 
 ## Next
 
+Done 2026-11-07 (`map generate`, `cli.md` "A map from a seed"): the first exports that need a tileset to do anything —
+`paintIsom`/`paintIsomDiamonds`/`checkIsom`/`hasIsom`/`isomTables`/`diamondAt` (`editor/isom.ts`), `applyChanges`
+(`editor/terrain.ts`), `buildDoodadCatalogue` (`formats/tileset/doodads.ts`), `checkDoodadPlacement`/`placeDoodad`/
+`applyDoodadChanges`/`DEFAULT_DOODAD_PLACEMENT` (`editor/doodads.ts`), `symmetryImages`/`mirroredOwner` (`editor/symmetry.ts`),
+and `megatileHeight`/`groupBuildable`/`TileFlag` beside `loadTileset`. The walk stayed clean (doodads.ts reaches
+editor/sprites.ts; symmetry.ts reaches i18n, which the entry had already). docs/core.md has a "Terrain and doodads" row.
+
 Done 2026-11-07 (`map merge`, `cli.md` "Merging maps"): `unitSettingsSections`, `upgradeSettingsSections`,
 `upgradeRestrictionSections`, `techSettingsSections`, `techRestrictionSections` exported — which of a revision pair a
 direct write to the table marks dirty; docs/core.md "How an edit works" has a "By hand" paragraph for them. The

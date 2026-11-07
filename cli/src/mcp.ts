@@ -24,6 +24,9 @@ import { expectKind, loadMapInput, loadReplayInput, readInput, type Input } from
 import { findInMap, KINDS, parseKinds, printHits } from "./find";
 import { issueLine, mapReport, printIssues, printMapInfo } from "./map";
 import { printReplayInfo, replayReport } from "./replay";
+import { mapFileFor, writeReplayMap } from "./replaymap";
+import { openGameFiles } from "./gamefiles";
+import { DEFAULT_PNG_SCALE, loadGraphics, previewPng, tilesetOf } from "./preview";
 import { printRun, runOnMap } from "./run";
 import { costJson, gameMap, printCost, printTrace, runMapInGame, traceJson, type MapRunOptions } from "./trace";
 import { CliError, pc, visible } from "./ui";
@@ -92,7 +95,7 @@ const WIDTH = 140;
 export interface McpOptions { engine?: string; weigh?: string }
 
 /** What the client is told once, with the tool list: how the tools fit together. */
-export const INSTRUCTIONS = `scmJS: StarCraft: Brood War maps on this computer. Paths are files here, relative to the working directory. Start with map_info or map_dump to see what a map holds; map_check is Check Map (errors and warnings, as the editor's). Triggers and strings travel as text: map_triggers_export gives the trigger window's text form (https://docs.scmjs.dev/triggers/), which map_triggers_import takes back; strings are "<number><TAB><text>" lines. Tools that change a map write over it unless given "out"; they never renumber strings. Map text is never translated. map_trace and map_cost run the map in the game itself, which needs a copy of StarCraft on this computer; doctor says whether one is there, and what to install if not.`;
+export const INSTRUCTIONS = `scmJS: StarCraft: Brood War maps on this computer. Paths are files here, relative to the working directory. Start with map_info or map_dump to see what a map holds; map_check is Check Map (errors and warnings, as the editor's). Triggers and strings travel as text: map_triggers_export gives the trigger window's text form (https://docs.scmjs.dev/triggers/), which map_triggers_import takes back; strings are "<number><TAB><text>" lines. Tools that change a map write over it unless given "out"; they never renumber strings. Map text is never translated. map_preview shows the map as a picture, and map_trace and map_cost run it in the game itself; all three need a copy of StarCraft on this computer, and doctor says whether one is there and what to install if not. replay_map writes the map a replay was played on.`;
 
 /**
  * The server with every tool registered, and their names; `connect` it to a transport (stdio for the command, in
@@ -357,6 +360,43 @@ export function createMcpServer(options: McpOptions = {}): { server: McpServer; 
     expectKind(input, "replay");
     const r = replayReport(input, await loadReplayInput(input));
     return ok(printReplayInfo(r), r);
+  }));
+
+  reg("map_preview", {
+    title: "A picture of the map",
+    description: "The map as a picture (scmjs map preview): the terrain drawn with the game's own tileset graphics, read from the person's copy of StarCraft, with a dot for every unit in its owner's colour, mineral fields and geysers in theirs, and the start locations framed. The result is a PNG image, plus the picture's facts as text and data. `scale` is pixels a tile, 1 to 8 (4 by default: a 128 × 128 map is 512 px); `marks: false` draws the terrain alone. Needs a copy of StarCraft (Remastered or 1.16.1) on this computer; doctor says whether one is there.",
+    inputSchema: {
+      path,
+      scale: z.number().int().min(1).max(8).optional().describe("pixels a tile: 1, 2, 4 or 8 (4 by default)"),
+      marks: z.boolean().optional().describe("units, resources and start locations over the terrain (the default); false for the terrain alone"),
+      starcraft: z.string().optional().describe("the folder of the person's StarCraft installation, when doctor did not find one in the usual places"),
+    },
+    annotations: { readOnlyHint: true },
+  }, tool(async ({ path: file, scale, marks, starcraft }) => {
+    const s = scale ?? DEFAULT_PNG_SCALE;
+    if (![1, 2, 4, 8].includes(s)) throw new CliError(`scale takes 1, 2, 4 or 8, not ${s}`, null, 2);
+    const { input, doc } = await openMap(file);
+    const t0 = performance.now();
+    const files = await openGameFiles(starcraft);
+    const graphics = await loadGraphics(doc.scenario, files);
+    const drawn = previewPng(doc, graphics, { scale: s, marks: marks !== false });
+    const facts = { file: input.name, name: mapReport(input, doc).name, size: { width: doc.scenario.width, height: doc.scenario.height }, tileset: tilesetOf(doc.scenario), picture: { width: drawn.picture.width, height: drawn.picture.height, scale: s, bytes: drawn.png.length }, drawn: drawn.counts, ms: Math.round(performance.now() - t0) };
+    const text = `${input.name}: ${facts.size.width} × ${facts.size.height}, ${facts.tileset}, drawn at ${s} px a tile (${facts.picture.width} × ${facts.picture.height}); ${facts.drawn.starts} start locations, ${facts.drawn.units} units, ${facts.drawn.buildings} buildings, ${facts.drawn.minerals} mineral fields, ${facts.drawn.geysers} geysers`;
+    return { content: [{ type: "image", data: Buffer.from(drawn.png).toString("base64"), mimeType: "image/png" }, { type: "text", text }], structuredContent: facts };
+  }));
+
+  reg("replay_map", {
+    title: "The map a replay was played on",
+    description: "Write out the map a replay (.rep) was played on, which the replay carries whole (scmjs replay map): to `out` (.scx, .scm or .chk), or beside the replay with its name and .scx. The map's sounds and other files are not in a replay, only the scenario. Refuses a file that is there unless `force`.",
+    inputSchema: { path: z.string().describe("the replay file (.rep)"), out: z.string().optional().describe("the map file to write; the replay's name with .scx, beside it, by default"), force: z.boolean().optional() },
+    annotations: { destructiveHint: true },
+  }, tool(async ({ path: file, out: to, force }) => {
+    const input = await readInput(file);
+    expectKind(input, "replay");
+    const out = to ?? mapFileFor(input.path);
+    if (existsSync(out) && !force) throw new CliError(`${out} is there already`, "force overwrites it, out names another file.", 2);
+    const r = await writeReplayMap(await loadReplayInput(input), out);
+    return ok([`${r.name || "Untitled"}: ${r.width} × ${r.height}, from ${input.name}`, written(r.written)], { file: input.name, ...r });
   }));
 
   return { server, tools };

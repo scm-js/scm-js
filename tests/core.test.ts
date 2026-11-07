@@ -116,7 +116,7 @@ describe("@scm-js/core: the scmjs command is a thin layer over it", () => {
     const api = exported();
     const strays: string[] = [];
     const cli = join(root, "cli/src");
-    for (const name of ["about", "archive", "bot", "botrun", "build", "completion", "create", "diff", "doctor", "dump", "edit", "engine", "exchange", "files", "find", "gamefiles", "main", "map", "mcp", "open", "paint", "plugin", "png", "preview", "replay", "report", "run", "trace", "ui", "watch", "weigh"].map((n) => join(cli, `${n}.ts`))) {
+    for (const name of ["about", "archive", "bot", "botrun", "build", "completion", "create", "diff", "doctor", "dump", "edit", "engine", "exchange", "files", "find", "gamefiles", "main", "map", "mcp", "open", "paint", "plugin", "png", "preview", "replay", "replaymap", "report", "run", "trace", "ui", "watch", "weigh"].map((n) => join(cli, `${n}.ts`))) {
       const text = readFileSync(name, "utf8");
       for (const m of text.matchAll(/import\s+(?:type\s+)?\{([^}]*)\}\s*from\s*["'](\.\.\/\.\.\/src\/[^"']+)["']/g)) {
         const file = resolveModule(name, m[2]);

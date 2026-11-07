@@ -1,0 +1,50 @@
+{
+  "scenarios": [
+    {
+      "name": "the alarm wins the game",
+      "frames": "0:20",
+      "steps": [
+        { "at": 24, "chat": "glhf" },
+        { "at": "0:02", "create": "Terran Wraith", "player": 1, "location": "Middle" },
+        { "at": "0:05", "switch": "Alarm raised", "state": "set" }
+      ],
+      "expect": [
+        { "trigger": "Opening", "fired": 1 },
+        { "text": "Hold the base." },
+        { "text": "glhf" },
+        { "units": "Terran Wraith", "player": 1, "location": "Middle", "is": 1 },
+        { "trigger": 3 },
+        { "switch": "Alarm raised", "is": "set" },
+        { "outcome": "victory", "player": 1 },
+        { "ended": true }
+      ]
+    },
+    {
+      "name": "the carrier flies to the middle, which is not a Marine",
+      "frames": "0:40",
+      "steps": [
+        { "at": 24, "order": "move", "unit": "Protoss Carrier", "to": "Middle" }
+      ],
+      "expect": [
+        { "units": "Protoss Carrier", "player": 1, "location": "Middle", "is": 1 },
+        { "trigger": 2, "fired": false },
+        { "switch": "Alarm raised", "is": "clear" },
+        { "outcome": "none", "player": 1 }
+      ]
+    },
+    {
+      "name": "a Marine brought to the middle raises the alarm",
+      "frames": "0:25",
+      "setup": [
+        { "create": "Terran Marine", "player": 1, "location": "Middle" }
+      ],
+      "expect": [
+        { "units": "Terran Marine", "player": 1, "location": "Middle", "is": ">= 1" },
+        { "trigger": 2 },
+        { "units": "Terran Ghost", "player": 1, "location": "Base", "is": ">= 2" },
+        { "switch": "Alarm raised", "is": "set" },
+        { "outcome": "victory", "player": 1 }
+      ]
+    }
+  ]
+}

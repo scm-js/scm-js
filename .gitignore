@@ -38,3 +38,6 @@ fixtures/
 
 # The demo video's recordings and cuts (scripts/trailer.mjs, scripts/trailer-cut.mjs): gigabytes of frames.
 /trailer/build/
+
+# Replays of failed `scmjs map test` scenarios, kept beside the map they tested
+*.tests/

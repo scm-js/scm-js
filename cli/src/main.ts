@@ -22,11 +22,13 @@ import { ANCHORS, parseAnchor, pruneStrings, resizeMap, setHeader, VERSIONS, ENC
 import { exportStrings, exportTriggers, importStrings, importTriggers, writeBack } from "./exchange";
 import { expectKind, loadMapInput, loadReplayInput, readInput, STDIO, toStdout, type Input } from "./files";
 import { findInMap, KINDS, parseKinds, printHits } from "./find";
+import { DEFAULT_LIMIT, fetchJson, fetchMap, mapIdFrom, MAX_LIMIT, parseLimit, printFetched, printSearch, searchJson, searchMaps } from "./fetch";
 import { issueLine, mapReport, printIssues, printMapInfo, type MapReport } from "./map";
 import { serveStdio } from "./mcp";
 import { openInScmjs } from "./open";
 import { checkPlugin, devPlugin, newPlugin, printPluginCheck, type PluginCheck } from "./plugin";
 import { printReplayInfo, replayReport } from "./replay";
+import { SCMSCX, scmscx } from "./scmscx";
 import { mapFileFor, writeReplayMap } from "./replaymap";
 import { parseClock, watchReplay, watchSummary } from "./watch";
 import { FORMATS, githubAnnotations, junitXml, sarifJson, type CheckReport, type Format } from "./report";
@@ -545,6 +547,51 @@ Exits 1 when the maps differ, 0 when they are the same, like diff.
     const d = diffMaps({ name: x.input.name, doc: x.doc }, { name: y.input.name, doc: y.doc });
     print(...(o.json ? [JSON.stringify(d, null, 2)] : printDiff(d, !!o.all)));
     if (!d.same) process.exitCode = 1;
+  });
+
+map.command("fetch").description("search scmscx.com, the community's map database, and download a map").argument("[words...]", "what to search for: a map's name, words in its description, a file name").addOption(json)
+  .option("--limit <n>", `how many of the best matches to list, 1 to ${MAX_LIMIT}`, String(DEFAULT_LIMIT))
+  .option("--id <id>", "download this map: its id from the list, or its address on the site")
+  .option("--first", "download the best match for the words")
+  .option("--out <path>", "the file to write, or a folder to write it in (the site's file name); - for standard output")
+  .option("--force", "overwrite a file that is there")
+  .option("--open", "open the map in scmJS once it is downloaded, as scmjs map open does")
+  .addHelpText("after", `
+The maps come from scmscx.com (${SCMSCX}), where people have shared StarCraft maps for years; they are their
+makers', and the site's. The list shows the best matches with their size, tileset, players, downloads and id; --id
+or --first downloads one, named as the site names the file, into this folder or --out. The file is opened as the
+editor opens it before it is written, so what arrives is a map. Exits 1 when nothing matched or the site did not
+answer (within 10 seconds), 2 when the file is there already (--force overwrites it).
+  scmjs map fetch lost temple
+  scmjs map fetch --id B8V7fdyj --out maps/
+  scmjs map fetch lost temple --first --open
+  scmjs map fetch fastest --first --out - | scmjs map info -`)
+  .action(async (words: string[], o: { json?: boolean; limit?: string; id?: string; first?: boolean; out?: string; force?: boolean; open?: boolean }) => {
+    const text = words.join(" ").trim();
+    if (o.id && text) throw new CliError("--id downloads one map: give the id or the words, not both", null, 2);
+    if (!o.id && !text) throw new CliError("What to search for, or --id <id>", "scmjs map fetch lost temple", 2);
+    const download = !!(o.id || o.first);
+    if (!download && (o.out || o.force || o.open)) throw new CliError("--out, --force and --open are for a download", "Add --first for the best match, or --id <id> from the list.", 2);
+    const piped = download && o.out === STDIO;
+    if (piped && o.json) throw new CliError("--json and the map both want standard output", "Write the map to a file with --out, or leave --json off.", 2);
+    if (piped && o.open) throw new CliError("--open needs the map in a file", "Leave --out - off, or name a file or folder.", 2);
+    const site = scmscx();
+    if (!download) {
+      const r = await searchMaps(site, text, parseLimit(o.limit));
+      print(...(o.json ? [JSON.stringify(searchJson(r), null, 2)] : printSearch(r)));
+      if (!r.maps.length) process.exitCode = 1;
+      return;
+    }
+    let id = o.id ? mapIdFrom(o.id) : null;
+    if (!id) {
+      const best = (await site.search(text)).rows[0];
+      if (!best) { if (!o.json) say(piped, pc.dim(`Nothing on scmscx.com matches "${text}"`)); process.exitCode = 1; return; }
+      id = best.id;
+    }
+    const r = await fetchMap(site, id, { out: o.out, force: o.force });
+    if (o.json) print(JSON.stringify(fetchJson(r), null, 2));
+    else say(piped, ...printFetched(r));
+    if (o.open) await openInScmjs({ path: r.written.path, name: r.report.file.name, bytes: new Uint8Array(await readFile(r.written.path)), kind: "map" }, {});
   });
 
 const replay = program.command("replay").description("read and open replays").helpGroup("Maps and replays:");

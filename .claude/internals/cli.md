@@ -1,6 +1,6 @@
 # The `scmjs` command line
 
-`cli/` is the npm package **`@scm-js/cli`** (its command is `scmjs`): `scmjs about | doctor | info | map info|check|open|new|dump|find|set|resize|triggers|strings|diff|build|run|unpack|pack|trace|cost |
+`cli/` is the npm package **`@scm-js/cli`** (its command is `scmjs`): `scmjs about | doctor | info | map info|check|open|new|dump|find|fetch|set|resize|triggers|strings|diff|build|run|unpack|pack|trace|cost |
 replay info|open|watch | plugin new|check|dev | bot new|init|build|update|run`, or `npx @scm-js/cli …`. npm refused the plain name `scmjs` on the first publish (2026-11-06,
 E403 "too similar to scss, sockjs"), so the user chose the scope beside @scm-js/replay and @scm-js/plugin-api. The reader's page is `docs/cli.md`. The shape was the user's (2026-11-05): one command, a noun for
 each kind of thing (`map`, `replay`, `plugin`, `bot`), "an impressive UX tool … not overly engineered".
@@ -50,7 +50,8 @@ each kind of thing (`map`, `replay`, `plugin`, `bot`), "an impressive UX tool �
   the old Examples block went (docs/cli.md has examples). main.ts exports `program` and skips running it under
   `VITEST`, so tests/cli.test.ts reads the real help.
 
-`about` asks `registry.npmjs.org/@scm-js/cli/latest` (2 s timeout, nothing else in the CLI touches the network) and
+`about` asks `registry.npmjs.org/@scm-js/cli/latest` (2 s timeout; besides it only `doctor` (the same call), the engine
+fetch of the game commands and `map fetch` (scmscx.com, below) touch the network) and
 shows **Newest**: the install line when this is older (`olderThan`, numeric x.y.z), "this one", "<v> on npm" for a
 build from a clone, or "could not ask npm". Only `about` asks, so no command is slowed or nags (the user's ask,
 2026-11-06, after "how do they update").
@@ -647,6 +648,57 @@ The user took the parent's first-slice proposal ("`map trace` and `map cost` sec
   must see a replay: the stub file is written with a real header? no — the test calls through a temp `.rep` only where
   a real one is on the machine, `describe.skipIf`), `map_preview` against the copy of the game (`skipIf(!findGameCopy)`),
   the no-copy failure as `isError`. `tests/cli-replaymap.test.ts` covers `writeReplayMap` with a stub replay.
+
+## Maps from scmscx.com: `map fetch` (`cli/src/scmscx.ts`, `fetch.ts`) — 2026-11-07
+
+`scmjs map fetch <words…> [--limit n] [--json]` lists the best matches; `--id <id|scmscx.com/map/<id>>` or `<words…>
+--first` downloads one `[--out file|folder|-] [--force] [--open]`. **The fourth network call** (with `about`/`doctor`'s
+npm ask and the engine fetch), only when the command is run; nothing cached.
+
+- **The site has no documented API.** These are the routes its own pages use; the editor's plugin
+  (`~/github/plugin-scm-scx/client.ts`, through a Cloudflare forwarder for want of CORS) and scm-server
+  (`src/scmscx.ts`) use the same. Node calls `https://scmscx.com` directly. **Verified with curl on 2026-11-07:**
+  - `GET /api/uiv2/search/{words}` (words `encodeURIComponent`ed in the path; `?offset=N` pages, `sort=` defaults to
+    relevancy) → 200 `{ maps: [{ id, filename, scenario_name, last_modified, uploaded_time }], total_results }`, **a
+    row per file name** (the same id repeats), 300 a page; "lost temple" → 2,918 rows. No match → `{maps: [],
+    total_results: 0}`. The rows have no size, tileset or players.
+  - `GET /api/uiv2/map_info/{id}` → `{ scenario, scenario_description, player_owners[12] (6 human, 5 computer),
+    player_side, forces, wavs, processing, internal_id, meta: { mpq_hash, mpq_size, chk_size, chkhash, downloads, views,
+    uploaded_by, uploaded_time, last_downloaded, last_viewed }, properties: { width, height, tileset (ERA), ver,
+    triggers, units, doodads, … } }` (~0.27 s). **An unknown or malformed id is 500** "Something went wrong :)", not 404.
+  - `GET /api/uiv2/filenames2/{id}` → `[{ filename, modified_time }]`, oldest first, names repeat per time.
+  - `GET /api/uiv2/minimap/{id}` → PNG bytes (served as `application/octet-stream`); not used here.
+  - `GET /api/maps/{mpq_hash}` → the archive, `application/octet-stream`, `cache-control: no-store`, no
+    content-length over HTTP/2; size = `meta.mpq_size` (175,785 for B8V7fdyj). Unknown hash → 404, empty body.
+- **`scmscx.ts` is the only file that knows the site** (`ROUTES`, one line each with its shape): `get` = fetch with
+  `user-agent: scmjs/<version> (+https://docs.scmjs.dev/cli/)` and an AbortController whose 10 s timer is **reset on
+  each body chunk** (a slow line downloading a big map is not cut off; a stalled one is). Errors are CliError exit 1:
+  "<host> did not answer within 10 seconds", "could not be reached (ECONNREFUSED|ENOTFOUND…)" (undici's `cause.code`),
+  "answered 503 Service Unavailable", "has no such map" (404, and 500 on map_info), "not JSON". `base`/`timeout`/
+  `fetch` are options for the tests only — no environment variable points it elsewhere.
+- **The search** merges rows by id (name = control bytes stripped, else the file name) and asks `map_info` for the
+  first `--limit` (default 10, max 50 — one page of 300 rows always covers it; no paging), **four at a time**; a row
+  whose details fail stays, blank. Table: Name (cut to fit, 24–48 columns), Size, Tileset (`TILESETS[era & 7]`),
+  Players (humans, `+ n computer`), Downloads (`meta.downloads`; "uploaded N times" is not something the site counts —
+  filenames2's length is names × times seen, not uploads), Id. No match → exit 1, as `map find`.
+- **The download** (`fetchMap`): `map_info` + filenames2 → the name = **the first file name the site lists** (oldest,
+  usually the original), else the scenario name, else the id, through `safeFileName` (controls dropped, `<>:"/\|?*`
+  → `_`, leading dots and trailing dots/spaces off — so `../x` is `_x` —, Windows device names prefixed `_`, 120
+  characters, `.scm`/`.scx` added by VER ≥ 205 when missing). `--out`: `-`, an existing folder or one ending in `/`
+  (joined with the name), else the file. **The exists check comes before the bytes are fetched** (exit 2, `--force`).
+  Bytes without the MPQ magic → "not a map (n B, no archive header)"; then `loadMapInput` (`openMapBytes`) — a
+  failure is "not a map this can read"; nothing is written either way. Then `writeOutput` (the pipes' writer), and
+  the lines are `map info`'s first ones (title, Map, File) + From (page, uploader, downloads) + "Written to", via
+  `say` (stderr when `--out -`). `--json` with `--out -` and `--open` with `--out -` are refused (exit 2); `--out`,
+  `--force`, `--open` without `--id`/`--first` too. `--open` = `openInScmjs` on the written file.
+- **Measured** by hand: the search with ten details 0.6 s from WSL; four maps downloaded in all while building it.
+- `tests/cli-fetch.test.ts` (11 + 1 live): a `http.createServer` stand-in (search JSON with repeated ids, map_info,
+  filenames2, ums.scx's bytes, HTML, an MPQ magic with nothing behind it, 500, 503, a route that never answers, a
+  download that stalls after 100 bytes, a closed port), the user agent, naming, `-` to a `PassThrough`, refusals.
+  `SCMJS_LIVE=1 npx vitest run tests/cli-fetch.test.ts` runs the live one (search 3 + one download).
+- Not built: sort orders and the site's filters (tileset, size, players — `searchPath` in the plugin has them all),
+  `/api/uiv2/random`, the minimap in the terminal (`map preview` needs the game's tileset; the site's PNG could be
+  shown with `paint.ts`), an MCP tool, a progress line for a big download, paging past the first 300 rows.
 
 ## Opening (`cli/src/open.ts`)
 

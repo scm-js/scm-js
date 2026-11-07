@@ -9,6 +9,7 @@ import { aboutReport, printAbout, VERSION } from "./about";
 import { listMembers, MANIFEST_FILE, packMap, unpackMap } from "./archive";
 import { rootHelp } from "./banner";
 import { BOT_GUIDE, runBot, updateBot } from "./bot";
+import { runBotGame } from "./botrun";
 import { buildMap, loadTypeScript, printBuild } from "./build";
 import { completionScript, SHELLS, type Shell } from "./completion";
 import { diffMaps, printDiff } from "./diff";
@@ -335,6 +336,27 @@ bot.command("build").description("out/<key>.scmbot, to add on the play page")
   .action(async () => { await runBot(["build"]); });
 bot.command("update").description("the newest toolchain, the one the play page expects")
   .action(async () => { await updateBot(); });
+bot.command("run").description("play the bot against the game's computers on a map, with no page").argument("<bot>", "a .scmbot file").argument("<map>").addOption(json)
+  .option("--race <race>", "the bot's race: zerg, terran, protoss or random", "random")
+  .option("--opponents <races>", "the game's computers, a race each (zerg,terran)", "zerg")
+  .option("--seed <n>", "the game's seed; the same seed, bot and map give the same game")
+  .option("--frames <n>", "stop after this many frames when nobody has won (24 a second)", "50000")
+  .option("--every <n>", "frames between progress lines; 0 for none", "1000")
+  .option("--data <folder>", "a folder the bot keeps its files in between games")
+  .option("--starcraft <folder>", "your installation of StarCraft (SCMJS_STARCRAFT); found in the usual places otherwise")
+  .addOption(new Option("--engine <where>", "the play page's address, or a folder holding the engine (SCMJS_PLAY_URL)").hideHelp())
+  .addHelpText("after", `
+The game is the play page's engine, fetched once (about 25 MB) and kept; the game's own files come from your copy
+of StarCraft, Remastered or 1.16.1. Prints what the bot says and each side's purse and supply as it plays, then who
+won. Exits 1 when the bot printed errors, 2 when the game could not start.`)
+  .action(async (botFile: string, map: string, o: { json?: boolean; race: string; opponents: string; seed?: string; frames: string; every: string; data?: string; starcraft?: string; engine?: string }) => {
+    const r = await runBotGame(botFile, map, {
+      race: o.race, opponents: o.opponents.split(",").map((s) => s.trim()).filter(Boolean), seed: o.seed === undefined ? undefined : Number(o.seed), frames: Number(o.frames), every: Number(o.every),
+      data: o.data, starcraft: o.starcraft, engine: o.engine, live: o.json ? undefined : (line) => print(line),
+    });
+    if (o.json) print(JSON.stringify({ bot: botFile, map, ...r }, null, 2));
+    if (r.exitCode) process.exitCode = r.exitCode;
+  });
 
 program.command("completion", { hidden: true }).description("a completion script for your shell").argument("<shell>", SHELLS.join("|"))
   .addHelpText("after", `

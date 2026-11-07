@@ -280,6 +280,20 @@ first of the "things people can see" slice (the user: "replay watch first"), the
 - **Not in this slice**: the replay runner does not report who left or won (the CLI shows 0/0 for a player who left);
   no terrain in a terminal without 24-bit colour; `--view` (whose fog) is in the runner but not the command (the
   picture shows everyone); one dot per unit whatever its size.
+- **Who left and who won (2026-11-07, `cli-polish` + scm-sim `replay-runner-ends`)**: the runner reads the game's own
+  player records after every frame (type at `0x57EEE0 + 36 × slot + 8` turns 10 PlayerLeft / 11 ComputerLeft) and adds
+  `left` (per player in `players` order, the frame they left or null) to each `frame` line **once someone has left**
+  (absent before, so lines stay as they were), and to `end` always, with `outcomes` (`live.ts#outcomeOf`, the bytes at
+  0x58D700) and `by` ("victory" when anyone's outcome is a victory, "replay" when the replay ran out, null when stopped).
+  Fields, not event lines: the picture wants the state at a frame, and an older CLI ignores unknown fields. legacy_cp949:
+  the leave lands at 14,402, the leave command's own frame; Question "victory", Drywater "defeat", `by` "victory";
+  scr_mapname32 and things.rep end `by` "replay" with no outcomes. **The CLI takes both runners**: `view()` uses the
+  frame's `left[k]`, else `Tally.leftBy()` (the replay's own leave commands, the same frame) — so an old deploy shows
+  the leave too; only the winner needs the new runner. `pictureLines` spans the three figure columns with
+  `left at m:ss` (widths from the players still in), `summaryLine` likewise; `--json` frames add `left` to that
+  player's object; `watchSummary` adds "· <names> won" or "· ended at the replay's end" after a run to the end
+  (`WatchOutcome.sides` for the replay's names). Trap met in the test: 1,990 and 2,000 frames are both "1:24" (`duration`
+  rounds), so the stand-in's game leave is at 1,900 to tell it from the replay command at 2,000.
 
 ## New, dump, find, doctor (`cli/src/create.ts`, `dump.ts`, `find.ts`, `doctor.ts`) — 2026-11-07, the DX slice
 
@@ -477,6 +491,12 @@ The second DX slice (the user's "go for it" on the second suggestion round), sta
   lines, nothing on stdout), cost with a stand-in weigher, and the failures as text (not a copy of the game, a deploy
   without a map runner, no weigher beside the source, a map the game refused, frames past the cap), `-` refused,
   `doctor` with `fetch` stubbed (npm offline).
+- **A cancelled request stops the game (2026-11-07, `cli-polish`)**: `play` hands `extra.signal` to `runMapInGame`
+  as `signal`; on `notifications/cancelled` the SDK aborts it, the runner is killed and the tool returns `isError`
+  "The run was cancelled" — which the SDK then **drops** (`Protocol._onrequest` sends nothing for an aborted request;
+  the client's `callTool` has already rejected). So the test checks what can be seen: the client's call rejects, the
+  stand-in's pid is gone within a moment (the kill follows the cancellation over the transport), and the server answers
+  the next call. The message itself is tested in cli-trace.test.ts. Without the line the test times out (checked).
 
 ## Triggers in the game: `map trace`, `map cost` (`cli/src/trace.ts`, `engine.ts`, `weigh.ts`) — 2026-11-07
 
@@ -528,6 +548,17 @@ The user took the parent's first-slice proposal ("`map trace` and `map cost` sec
   cost: 0.025 ms a frame on average, 1.10 ms at frame 2 (83,787 records, 53,192 triggers, the program's start).
 - Not built: `--by-origin`/by-line cost for a TrigScript build (the editor has it); bot-run's `--every` wording reused as
   is; the campaign maps (engine). (The `doctor` line for the map runner came with `cli-doctor`.)
+- **Temporary copies and cancelling (2026-11-07, `cli-polish`)**: `gameMap`'s copies (a map from `-`, a 1.00 map
+  converted) went into `mkdtemp` folders nobody deleted — invisible for a command, a leak for the MCP server. `gameMap`
+  now records each path in a module `Set`; `runMapInGame` is a `try/finally` around the old body (`runMap`) that removes
+  the map's folder if (and only if) the set has the path, so neither caller changed and a person's own map is never
+  touched — success, a refused map, or a failure before the runner started (no copy of the game) alike. A copy written
+  but never run (a bad `--frames` between `gameMap` and the run in main.ts) still stays; the command exits anyway.
+  `MapRunOptions.signal`: aborted before the start → no runner; during → `child.kill()` (SIGTERM), the line loop ends
+  with stdout, then CliError "The run was cancelled: …". The exit promise is now made right after `spawn` (it was made
+  after the loop, which could miss a `close` that came first). The stand-in runner (`tests/support/mapRunner.ts`)
+  takes a map named `slow.scx`: it writes its pid beside the map (`slow.scx.pid`) and waits to be killed — no `--sleep`
+  flag, since `runMapInGame` passes no free arguments to the runner.
 
 ## A map's picture: `map preview` (`cli/src/preview.ts`, `paint.ts`, `png.ts`, `gamefiles.ts`) — 2026-11-07
 
@@ -574,7 +605,11 @@ The user took the parent's first-slice proposal ("`map trace` and `map cost` sec
 - **Traps**: `tests/maps/*` have **no terrain** (MTXM all 0 = megatile 0, black) — their preview is black ground with
   the marks, which is right; `map new` maps have DIRT ids and draw as ground. `gameCopyKind` wants `StarDat.mpq` /
   `BrooDat.mpq` spelled so (existsSync is case-sensitive on Linux), while `classicArchives` takes any case — a copy
-  with capitals is not found by `findGameCopy` there (not changed here; engine.ts is shared). The `--units` option is
+  with capitals is not found by `findGameCopy` there (not changed here; engine.ts is shared). **Fixed 2026-11-07
+  (`cli-polish`)**: `gameCopyKind` lists the folder once (`readdirSafe`) and takes both names in any case; Remastered
+  detection is unchanged. scm-sim's runners had the same rule (`gameCopy.ts`, `bwapi/run.ts`: `existsSync` of the exact
+  names, archives opened by them) and would have refused the copy the CLI now finds — fixed there in the same round
+  (`replay-runner-ends`), so a lower-case copy plays only with a deploy from after it. The `--units` option is
   hidden beside `--no-units` (commander keeps `units` undefined unless one is given; `!== false` is the test).
 - Tests: `tests/cli-preview.test.ts` (14): PNG chunks/CRC/inflate both colour types; half blocks 24-bit and 256 from a
   known picture; `ansi256` points; ASCII with marks and a number; the start number's cell; inline protocols; widths;

@@ -113,6 +113,16 @@ describe("scmjs replay watch: the picture", () => {
     expect(plainPicture(pictureLines({ ...view, paused: true }, { size, color: false }))[0]).toMatch(/paused$/);
     expect(visible(summaryLine(view))).toBe(" 0:50  A T 150/20 10/18 3u 120 APM  |  B Z 60/0 9/17 1u 95 APM");
   });
+  it("shows a player who left as when they left, not as the zeros the game keeps for them", () => {
+    const size = fitPicture(64, 64, 64, 16);
+    const gone: WatchFrame = { ...frame, players: [frame.players[0], [0, 0, 0, 0, 0]] };
+    const view = { start, frame: gone, sides, apm: [120, 95], chat: [], speed: 8, paused: false, left: [null, 1000] };
+    const lines = plainPicture(pictureLines(view, { size, color: false }));
+    expect(lines).toHaveLength(1 + 16 + 1 + 2 + 3);
+    expect(lines[18]).toBe("■ A  T  150/20  10/18  3 units  120 APM");
+    expect(lines[19]).toBe("■ B  Z  left at 0:42            95 APM");
+    expect(visible(summaryLine(view))).toBe(" 0:50  A T 150/20 10/18 3u 120 APM  |  B Z left at 0:42 95 APM");
+  });
   it("reads a clock", () => {
     expect(clock(1440)).toBe("1:00");
     expect(parseClock("1:00")).toBe(1429);
@@ -142,8 +152,12 @@ describe("scmjs replay watch: the replay's part", () => {
   });
 });
 
-/** A runner that speaks scm-sim's protocol: paced from standard input, or free with --every. */
+/**
+ * A runner that speaks scm-sim's protocol: paced from standard input, or free with --every. As deployed before the
+ * runner said who left and who won; `ENDS_RUNNER` is the one that does (B leaves at frame 1,900, A wins).
+ */
 const FAKE_RUNNER = `
+const ENDS = false;
 const fs = require("node:fs");
 const args = process.argv.slice(2);
 const flag = (n) => { const i = args.indexOf("--" + n); return i >= 0 ? args[i + 1] : undefined; };
@@ -152,8 +166,8 @@ if (!fs.existsSync(flag("engine") + "/core.js")) { say({ kind: "error", message:
 const terrain = "1".repeat(64 * 64);
 say({ kind: "start", map: { name: require("node:path").basename(args[0]), width: 64, height: 64, tileset: "jungle" }, frames: 2400, players: [{ slot: 0, name: "A", race: "terran", type: 2 }, { slot: 1, name: "B", race: "zerg", type: 2 }], copy: "classic", terrain, ms: { load: 1, start: 1 } });
 let frame = Number(flag("from") ?? 0);
-const line = () => say({ kind: "frame", frame, players: [[50 + frame, 0, 4, 9, 4], [50, 0, 4, 9, 4]], units: [512, 512, 0, 3, 1536, 1536, 1, 3, 600 + frame, 540, 0, 1] });
-const end = (ended) => { say({ kind: "end", frame, ended, reason: null, check: { named: 1, gone: 0, ahead: 0, parted: null }, ms: { game: 1, load: 1, start: 1, total: 3 } }); process.exit(0); };
+const line = () => say({ kind: "frame", frame, players: [[50 + frame, 0, 4, 9, 4], [50, 0, 4, 9, 4]], units: [512, 512, 0, 3, 1536, 1536, 1, 3, 600 + frame, 540, 0, 1], ...(ENDS && frame >= 1900 ? { left: [null, 1900] } : {}) });
+const end = (ended) => { say({ kind: "end", frame, ended, reason: null, check: { named: 1, gone: 0, ahead: 0, parted: null }, ms: { game: 1, load: 1, start: 1, total: 3 }, ...(ENDS ? { left: [null, frame >= 1900 ? 1900 : null], outcomes: ended ? ["victory", "defeat"] : [null, null], by: ended ? "victory" : null } : {}) }); process.exit(0); };
 line();
 const every = flag("every");
 if (every !== undefined) { while (frame < 2400) { frame = Math.min(2400, frame + Number(every)); line(); } end(true); }
@@ -162,11 +176,13 @@ process.stdin.on("data", (d) => { buf += d; let i; while ((i = buf.indexOf("\\n"
 process.stdin.on("end", () => end(false));
 `;
 
-function staged(): { dir: string; replay: Input; copy: string } {
+const ENDS_RUNNER = FAKE_RUNNER.replace("const ENDS = false;", "const ENDS = true;");
+
+function staged(runner = FAKE_RUNNER): { dir: string; replay: Input; copy: string } {
   const dir = tmp(), build = "abcdef123456", sub = join(dir, build);
   mkdirSync(sub);
   for (const f of ["core.js", "game.js", "base-s1.bin", "interface.bin"]) writeFileSync(join(sub, f), `// ${f}\n`);
-  writeFileSync(join(sub, "replay-feedface.cjs"), FAKE_RUNNER);
+  writeFileSync(join(sub, "replay-feedface.cjs"), runner);
   writeFileSync(join(dir, "current.json"), JSON.stringify({ build, files: ["core.js", "game.js", "base-s1.bin", "interface.bin"], runner: "run-feedface.cjs", replayRunner: "replay-feedface.cjs" }));
   const copy = join(dir, "sc");
   mkdirSync(copy);
@@ -202,6 +218,30 @@ describe("scmjs replay watch: the runner", () => {
     expect(text).toContain(" 0:04  Beta: glhf\n 0:50  Alpha T 1250/0");
     expect(text).toMatch(/1:41 {2}Alpha T 2450\/0 4\/9 4u 2 APM/);
     expect(visible(watchSummary(s.replay, r))).toBe("✔ g.rep: watched to the end, 1:41 (frame 2,400 of 2,400) · 0.0 s");
+    // This runner does not say who left: the replay's own leave command does (B at frame 2,000).
+    expect(text).toMatch(/1:41 {2}Alpha T 2450\/0 4\/9 4u 2 APM {2}\| {2}Beta Z left at 1:24 1 APM\n/);
+  });
+
+  it("a runner that says who left and who won: the leave as the game saw it, the winner in the summary", async () => {
+    const s = staged(ENDS_RUNNER);
+    const out: string[] = [];
+    const r = await watchReplay(s.replay, replay, { engine: s.dir, starcraft: s.copy, tty: false, every: 1200, out: (t) => out.push(visible(t)) });
+    const text = out.join("");
+    expect(text).toMatch(/0:50 {2}Alpha T 1250\/0 4\/9 4u 2 APM {2}\| {2}Beta Z 50\/0 4\/9 4u 1 APM\n/);
+    expect(text).toMatch(/1:41 {2}Alpha T 2450\/0 4\/9 4u 2 APM {2}\| {2}Beta Z left at 1:20 1 APM\n/);
+    expect(r.end).toMatchObject({ left: [null, 1900], outcomes: ["victory", "defeat"], by: "victory" });
+    expect(visible(watchSummary(s.replay, r))).toBe("✔ g.rep: watched to the end, 1:41 (frame 2,400 of 2,400) · Alpha won · 0.0 s");
+    // The replay running out with nobody's victory, and a run stopped before the end, which says neither.
+    const ranOut = { ...r, end: { ...r.end!, outcomes: [null, null], by: "replay" as const } };
+    expect(visible(watchSummary(s.replay, ranOut))).toBe("✔ g.rep: watched to the end, 1:41 (frame 2,400 of 2,400) · ended at the replay's end · 0.0 s");
+    expect(visible(watchSummary(s.replay, { ...r, stopped: true }))).not.toMatch(/won|replay's end/);
+    // As JSON: the player who left says when; the end line is the runner's.
+    const json: string[] = [];
+    await watchReplay(s.replay, replay, { engine: s.dir, starcraft: s.copy, tty: false, every: 2400, json: true, out: (t) => json.push(t) });
+    const lines = json.join("").trim().split("\n").map((l) => JSON.parse(l));
+    expect(lines[2].players[1]).toMatchObject({ name: "Beta", left: 1900 });
+    expect(lines[2].players[0].left).toBeUndefined();
+    expect(lines[3]).toMatchObject({ kind: "end", outcomes: ["victory", "defeat"], by: "victory" });
   });
 
   it("as JSON: the start, a frame a line with the replay's names, the end", async () => {

@@ -604,6 +604,11 @@ between them, and with `--json` a line of JSON per frame with every unit's place
 script or a plot. The players' names, colours, chat and APM come from the replay file
 itself, read as `replay info` reads it; the figures and the picture from the game.
 
+A player who leaves the game shows as `left at 10:05` on their line from then on, instead
+of the zeros the game keeps for them. When the replay has played to its end, the last line
+says who won (`Question won`), or, when nobody had won by the time the recording stopped,
+that the game ended at the replay's end.
+
 What it needs is what `bot run` needs: the engine, about 25 MB, fetched from the play page
 the first time and kept in your cache folder, and your own installation of StarCraft,
 Remastered or 1.16.1, found in the usual places or named with `--starcraft`. A replay from

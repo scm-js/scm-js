@@ -313,6 +313,8 @@ export function createMcpServer(options: McpOptions = {}): { server: McpServer; 
       frames, every: 600, seed: a.seed ?? 1, starcraft: a.starcraft, engine: options.engine, weigh: options.weigh,
       live: (line) => STDERR(visible(line)),
       onProgress: token === undefined ? undefined : (l) => void extra.sendNotification({ method: "notifications/progress", params: { progressToken: token, progress: l.frame, total: frames, message: `frame ${l.frame} of ${frames}` } }).catch(() => {}),
+      // The client cancelling the request stops the game, rather than leaving the runner to play on unheard.
+      signal: extra.signal,
     };
     const r = await runMapInGame(target.path, what, o);
     const note = target.converted ? [pc.dim(`${input.name} is in the StarCraft 1.00 form, which the engine does not run: a copy converted to Brood War was run instead`)] : [];

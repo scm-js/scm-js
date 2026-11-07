@@ -202,7 +202,7 @@ async function locate(): Promise<DesktopLocateResult> {
 
 /** Where each StarCraft build keeps its executable, relative to the install folder. */
 const EXE_CANDIDATES = process.platform === "darwin"
-  ? ["StarCraft.app", "StarCraft/StarCraft.app"]
+  ? ["x86_64/StarCraft.app", "StarCraft.app", "StarCraft/StarCraft.app"]
   : ["x86_64/StarCraft.exe", "x86/StarCraft.exe", "StarCraft.exe"];
 /** The folder Test Map writes into, under Maps, so the game lists it and nothing of the user's is touched. */
 const TEST_FOLDER = "scmJS";

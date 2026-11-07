@@ -2,10 +2,10 @@
 
 `scmjs` is scmJS on the command line. It tells you what a map or replay holds, runs Check
 Map on any number of maps, takes a map's triggers and strings out as text and puts them
-back, says what changed between two maps, builds a TrigScript map the way Save does, opens
-a map or replay in scmJS from a terminal, helps you write a plugin, and builds a BWAPI bot
-of your own for the play page. It reads files the way the editor does, so the two agree
-about every map.
+back, says what changed between two maps, builds a TrigScript map the way Save does, takes
+a map's archive apart into a folder and puts it back, opens a map or replay in scmJS from
+a terminal, helps you write a plugin, and builds a BWAPI bot of your own for the play
+page. It reads files the way the editor does, so the two agree about every map.
 
 You need Node.js 22.12 or newer. Install it once, and type `scmjs` from then on:
 
@@ -33,6 +33,7 @@ when there is a newer version.
 | `scmjs map strings export|import` | A map's strings as a text file, and back |
 | `scmjs map diff <a> <b>` | What changed between two maps |
 | `scmjs map build <map>` | Applies the map's TrigScript script and builds its programs into the file, as Save does |
+| `scmjs map unpack <map>`, `scmjs map pack <folder>` | A map's archive as a folder of files, and back |
 | `scmjs replay info <replays…>` | Who played, on which map, for how long and at what APM |
 | `scmjs replay open <replay>` | Opens the replay in scmJS, to watch and analyse |
 | `scmjs plugin new <name>` | A plugin to start from, set up to type-check, test, build and publish |
@@ -184,6 +185,34 @@ on a Marine's forty should set them in the map. And the programs other plugins c
 to a build are not built here: a map with Magenta's triggers is refused, and is built by
 saving it in the editor.
 
+## A map as a folder
+
+A map file is an archive: the scenario, `staredit\scenario.chk`, beside its sounds, a
+TrigScript script's files and whatever else was put in. `scmjs map unpack` writes those
+members into a folder at their archive paths, and `scmjs map pack` puts the folder back
+together:
+
+```sh
+scmjs map unpack ridge.scx            # → ridge/staredit/scenario.chk, ridge/staredit/wav/…, ridge/archive.json
+scmjs map unpack ridge.scx --list     # the members and their sizes, nothing written
+scmjs map pack ridge                  # → ridge.scx again, beside the folder
+```
+
+`archive.json` in the folder records what the files cannot: the map's name, how the
+scenario was compressed and whether it was encrypted, whether the archive carried a file
+list, and the members a protected map keeps without a name, which go under `stored/` byte
+for byte. Pack writes the archive as the manifest says, so an unpacked and repacked map
+reads the same in the editor and the game. A file you add to the folder goes in as a
+member at its path — a sound dropped into `staredit/wav/`, a script's file under
+`trigscript/` — and `--compression none|pkware|zlib` changes how every member is stored.
+`--out` names the folder, or the file, to write.
+
+Nothing is parsed or restored on the way, which is the point: the folder is the file as it
+is. A map the editor built from a TrigScript script unpacks into its built scenario and
+the `scmjs/` members holding the source, and packs back into the same built map. The
+packed file is opened as a map before it is written, so a folder whose scenario is not one
+is refused rather than written.
+
 ## Replays
 
 `scmjs replay info` reads a replay from any version, from 1.16 to Remastered. It shows the
@@ -294,6 +323,7 @@ from a clone with `npm run cli -- <command>`, or build it with `npm run build:cl
 | `cli/src/map.ts`, `cli/src/replay.ts` | The map and replay reports, and how they are printed |
 | `cli/src/exchange.ts` | Triggers and strings out as files and back in, and writing a map back as it was opened |
 | `cli/src/diff.ts` | What changed between two maps, by group, and the section comparison underneath |
+| `cli/src/archive.ts` | The archive as a folder and back: member names as file names, the manifest, the members without a name |
 | `cli/src/build.ts` | The TrigScript build: finding TypeScript, compiling against the map's names, applying the block, laying the programs in and packing the file |
 | `cli/src/completion.ts` | The bash, zsh and fish scripts, generated from the command tree |
 | `cli/src/open.ts` | Finding the desktop app, and handing a file to the editor in a browser |

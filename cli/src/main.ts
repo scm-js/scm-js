@@ -6,6 +6,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { relative } from "node:path";
 import { Command, Help, Option } from "commander";
 import { aboutReport, printAbout, VERSION } from "./about";
+import { listMembers, MANIFEST_FILE, packMap, unpackMap } from "./archive";
 import { rootHelp } from "./banner";
 import { BOT_GUIDE, runBot, updateBot } from "./bot";
 import { buildMap, loadTypeScript, printBuild } from "./build";
@@ -195,6 +196,42 @@ strings.command("import").description("set the map's strings from such a file").
     const r = importStrings(doc, from, await readFile(from, "utf8"));
     const w = await writeBack(doc, input.path, o.out ?? null);
     print(`${mark.ok} ${pc.bold(input.name)}: ${plural(r.replaced, "string")} replaced, ${r.added} added, ${r.unchanged} unchanged${dot}written to ${pc.cyan(w.path)}${dot}${size(w.bytes)}`);
+  });
+
+map.command("unpack").description("a map's archive as a folder: the scenario, its sounds, scripts and other files").argument("<map>").addOption(json)
+  .option("--out <folder>", "the folder to write; by default one named after the map, beside it")
+  .option("--list", "list the archive's members and write nothing")
+  .addHelpText("after", `
+Each member becomes a file at its archive path (staredit/scenario.chk, staredit/wav/…, trigscript/…), and
+${MANIFEST_FILE} records the map's name, how it was stored and the members without a name, so that scmjs map pack
+puts the archive back together as it was.`)
+  .action(async (file: string, o: { json?: boolean; out?: string; list?: boolean }) => {
+    const input = await readInput(file);
+    expectKind(input, "map");
+    if (o.list) {
+      const r = await listMembers(input.bytes);
+      if (o.json) { print(JSON.stringify({ file: input.name, ...r }, null, 2)); return; }
+      const width = Math.max(...r.members.map((m) => m.name.length));
+      print(`${pc.bold(input.name)}${dot}${plural(r.members.length, "member")}${r.listfile ? "" : dot + pc.yellow("no file list")}`, ...r.members.map((m) => `  ${(m.kind === "stored" ? pc.dim(m.name) : m.name).padEnd(width + (m.kind === "stored" ? 9 : 0))}  ${pc.dim(size(m.bytes).padStart(8))}`), ...r.problems.map((p) => `${mark.warn} ${p}`));
+      return;
+    }
+    const dir = o.out ?? input.path.replace(/\.(scm|scx|chk)$/i, "") + (/\.(scm|scx|chk)$/i.test(input.path) ? "" : "-unpacked");
+    const r = await unpackMap(input.bytes, input.name, dir);
+    if (o.json) { print(JSON.stringify({ file: input.name, dir: r.dir, files: r.files, bytes: r.bytes, stored: r.stored, manifest: r.manifest }, null, 2)); return; }
+    print(`${mark.ok} ${pc.bold(input.name)}: ${plural(r.files, "file")}${r.stored ? pc.dim(` (${r.stored} without a name)`) : ""}${dot}${size(r.bytes)}${dot}${pc.dim("→")} ${pc.cyan(relative(process.cwd(), r.dir) || ".")}`, ...r.manifest.problems.map((p) => `${mark.warn} ${p}`));
+  });
+map.command("pack").description("the folder scmjs map unpack wrote, back into a map file").argument("<folder>").addOption(json)
+  .option("--out <map>", `the file to write; by default the name ${MANIFEST_FILE} records, beside the folder`)
+  .option("--compression <method>", "none, pkware or zlib for every member, instead of how the map was stored")
+  .addHelpText("after", `
+Every file in the folder goes in: the ones ${MANIFEST_FILE} names at their archive paths, and any added since at the
+path they have in the folder. The archive is compressed and encrypted as the map was, and written without a file list
+when the map had none. The packed file is opened as a map before it is written.`)
+  .action(async (dir: string, o: { json?: boolean; out?: string; compression?: string }) => {
+    if (o.compression && !["none", "pkware", "zlib"].includes(o.compression)) throw new CliError(`--compression takes none, pkware or zlib, not "${o.compression}"`, null, 2);
+    const r = await packMap(dir, { out: o.out ?? null, compression: o.compression as "none" | "pkware" | "zlib" | undefined });
+    if (o.json) { print(JSON.stringify(r, null, 2)); return; }
+    print(`${mark.ok} ${pc.bold(relative(process.cwd(), r.path) || r.path)}: ${plural(r.members + 1, "member")}${r.stored ? pc.dim(` (${r.stored} without a name)`) : ""}${r.added.length ? `${dot}${plural(r.added.length, "file")} added: ${r.added.join(", ")}` : ""}${dot}${r.compression}${r.encrypted ? ", encrypted" : ""}${dot}${size(r.bytes)}`);
   });
 
 map.command("build").description("apply the map's TrigScript script and build its programs, as Save does").argument("<map>").addOption(json)

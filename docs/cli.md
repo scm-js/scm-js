@@ -65,6 +65,7 @@ when there is a newer version.
 | `scmjs bot new`, `init`, `build` | A BWAPI bot of your own, built into a `.scmbot` file for the play page |
 | `scmjs bot update` | The newest bot toolchain |
 | `scmjs bot run <bot> <map>` | Plays the bot against the game's computers on the map, with no page |
+| `scmjs init [folder]` | Sets a folder of maps up for git and GitHub: `git diff` reads maps as text, a workflow checks them on every push, a README lists them |
 | `scmjs doctor` | What this computer has for each command: TypeScript, Docker, StarCraft, the game engine, the desktop app, Claude Code, the command for each thing missing, and which commands are ready |
 | `scmjs about` | This version and whether there is a newer one, who made it, the desktop app and Docker if they are installed, and where the docs and source are |
 | `scmjs mcp` | The map commands as an MCP server, for Claude Code and other AI tools on your computer |
@@ -255,12 +256,13 @@ Conditions:
 
 A map file is binary, so `git diff` says only that it changed. Told to read maps through
 this command, git shows what changed in them instead, in `git diff`, `git log -p`,
-`git show` and the pull requests of tools that honour `.gitattributes`. Once, in the
+`git show` and the pull requests of tools that honour `.gitattributes`.
+[`scmjs init`](#a-maps-folder-as-a-project) sets this up, or by hand, once in the
 repository:
 
 ```sh
 git config diff.scmjs.textconv "scmjs map dump"
-git config diff.scmjs.xfuncname "^## "
+git config diff.scmjs.xfuncname "^## .*"
 printf '*.scx diff=scmjs\n*.scm diff=scmjs\n*.chk diff=scmjs\n' >> .gitattributes
 ```
 
@@ -275,12 +277,71 @@ $ git diff
    4	Force 2
 ```
 
-The second line makes each hunk's heading the part of the map it is in.
-`git config diff.scmjs.cachetextconv true` keeps the text of each version so a long
+The second line makes each hunk's heading the part of the map it is in. Earlier versions
+of this page gave it as `"^## "`, which puts a bare `##` there; `scmjs init` replaces that
+value. `git config diff.scmjs.cachetextconv true` keeps the text of each version so a long
 `git log -p` does not read every map again. The `.gitattributes` lines are committed, so
 everyone who clones gets them; the two `git config` lines are per clone (`--global` sets
 them for every repository on your computer). `--json` gives the same data as JSON, with
 the units and triggers as the records the editor holds.
+
+## A maps folder as a project
+
+`scmjs init` sets a folder of maps up so that git and GitHub look after it, in one
+command. Run it in the folder, or name the folder (the files' paths are from it):
+
+```
+$ scmjs init maps
+maps · 5 maps · in the git repository ladder
+  ✔ .gitattributes                 written: maps diff as text
+  ✔ .gitignore                     written: the .bak files Save leaves
+  ✔ ../.github/workflows/maps.yml  written: checks the 5 maps on push and pull request; scmjs 0.9.0
+  ✔ README.md                      written: lists the 5 maps, and the commands
+  ✔ git config diff.scmjs          set: textconv, xfuncname, cachetextconv
+ℹ The workflow is at the repository's top, where GitHub reads it, and checks maps/ from there.
+```
+
+What each file does:
+
+- **`.gitattributes`** has git read `.scx`, `.scm` and `.chk` files through
+  `scmjs map dump`, so `git diff` and `git log -p` show what changed inside a map (see
+  [the section above](#a-map-as-text-and-in-git)).
+- **The git settings** (`diff.scmjs.textconv`, `.xfuncname`, `.cachetextconv`) tell git
+  what that means. They belong to each clone rather than to the repository, so they are
+  set in the repository the folder is in; everyone who clones it runs `scmjs init` once
+  too, which writes nothing that is there already. `git diff` runs `scmjs`, so it has to
+  be installed (`npm install -g @scm-js/cli`); the command says so when it is not.
+- **`.github/workflows/maps.yml`** runs `map check --strict --format github` over the maps
+  on every push and pull request, so a map with errors or warnings fails the run and each
+  finding shows on the pull request beside the map. A map that keeps a TrigScript script
+  also gets `map build --check`, which compiles the script against the map and writes
+  nothing. The workflow names this version of `@scm-js/cli`, so a run gives the same
+  answer until you change the version in the file, as its first lines say. GitHub reads
+  workflows only at a repository's top, so for a folder inside a repository the file goes
+  there and names the folder's maps from it.
+- **`README.md`** lists the maps (name, file, size, tileset, players) and the commands
+  people reach for: `map check`, `map dump` and `map diff --rev HEAD`, and the git
+  settings a new clone needs.
+- **`.gitignore`** has `*.bak`: the copy of a map the desktop app keeps when Save replaces
+  it. The commands themselves write a map back in place or where `--out` says, so they
+  leave nothing else behind.
+
+Nothing is overwritten. `.gitattributes` and `.gitignore` get only the lines they lack, at
+the end; a `README.md` or workflow that is there is left as it is, and so is a git setting
+that holds another value. Each is said on its own line. `--force` replaces the README and
+the workflow and sets the git settings; it never takes a line out of the other two files.
+
+In a folder that is not in a git repository, the files are written and the git settings
+are not: run `scmjs init` again after `git init`, or give `--git` to have the command run
+`git init` there first. It never runs `git init` without being asked.
+
+`--print` writes nothing and prints every file and the `git config` lines instead, for
+pasting by hand or reading first. `--json` lists the files and what became of each (with
+their text, given `--print` as well). The command exits with 2 when there is no such
+folder.
+
+`init` is left out of the list `scmjs` prints, which is kept to one screen;
+`scmjs help init` has its help.
 
 ## Searching maps
 
@@ -937,6 +998,7 @@ from a clone with `npm run cli -- <command>`, or build it with `npm run build:cl
 | `cli/src/dump.ts` | The map as text: every part in file order, the triggers and strings in their text forms, members hashed, sections as they would be written |
 | `cli/src/find.ts` | Edit ▸ Find over a map from the terminal: the kinds, the hits and their lines |
 | `cli/src/create.ts` | A new map as File ▸ New makes it: the flat fill with a seeded variation, the start locations, the slots closed, the file written as a new map is saved |
+| `cli/src/init.ts` | A folder of maps set up for git and GitHub: the lines and files it lacks, the workflow and README made from the maps, the git settings |
 | `cli/src/doctor.ts` | The checks: Node, npm's newest, TypeScript, Docker, StarCraft, the engine cache, the desktop app, and what each one is for |
 | `cli/src/archive.ts` | The archive as a folder and back: member names as file names, the manifest, the members without a name |
 | `cli/src/run.ts`, `src/plugins/headless.ts` | A plugin run over a map: the editor's plugin host with a store, a document and no page, its status, toasts and log reported instead of shown |

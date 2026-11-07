@@ -308,8 +308,9 @@ slice proposed: four thin layers on existing library code, plus a git recipe.
   sections as they would be written (`sectionBytes`, the same gather `diff.ts` uses — moved here, exported). Every
   part is printed even when empty (`(none)`) so two dumps line up. No colour ever (it is for files and git), first
   line `# <file> — scmjs map dump 1` (`DUMP_FORMAT`, bump when the form changes incompatibly). **The git recipe**
-  (docs/cli.md "A map as text, and in git"): `diff.scmjs.textconv "scmjs map dump"`, `diff.scmjs.xfuncname "^## "`
-  (hunk headers name the part), `.gitattributes` `*.scx diff=scmjs`. Verified in a scratch repo: `git diff` and
+  (docs/cli.md "A map as text, and in git"): `diff.scmjs.textconv "scmjs map dump"`, `diff.scmjs.xfuncname "^## .*"`
+  (hunk headers name the part; **0.9.0 shipped `"^## "`**, and git puts what the expression *matched* in the header,
+  so it showed a bare `##` — found by `scmjs init`'s demo, 2026-11-07), `.gitattributes` `*.scx diff=scmjs`. Verified in a scratch repo: `git diff` and
   `git log -p` show a string change as text; git's temp blob keeps the basename so `kindOf` sees the bytes anyway.
 - **`map find <text> <maps…> [--in kinds] [--case] [--json]`**: `findInScenario` per kind in `FIND_KINDS` order with
   `limit: Infinity`; exit 1 when nothing matched in any map (grep's rule — docs say so under exit codes). A map with
@@ -375,6 +376,49 @@ slice proposed: four thin layers on existing library code, plus a git recipe.
   gets a dim `·`, not a tick. Notes/fixes only under a row that is not ok (Claude Code: the add line alone). The
   summary: one line when all ready, else `Not ready` + a line per group with `lackLine` (a few words; the fixes are in
   the rows above). `readyLines(ready, checks)` and `printDoctor(r, width)` take what tests need.
+
+## `scmjs init` (`cli/src/init.ts`) — 2026-11-07, after 0.9.0
+
+`scmjs init [folder] [--print] [--git] [--force] [--json]`: a folder of maps made a project git and GitHub look after.
+`initFolder` does everything (and with `print` computes it all and writes nothing); `printInit` is the one-line-each
+report, `printRecipe` the paste-able text. Writes:
+
+- **`.gitattributes`** (`ATTRIBUTE_LINES`) and **`.gitignore`** (`IGNORE_LINES` = `*.bak` only — checked what is left
+  beside a map: the CLI writes in place or to `--out`, `map unpack`'s folder is meant to be kept (no `*-unpacked/`
+  except for stdin), `map preview` writes only to a named `--out`, `trace` copies go to the temp dir; the desktop
+  app's Save writes `<map>.bak`, `desktop/backup.ts`). Line files get **only the lines they lack**, appended under a
+  comment (`missingLines`); a `.gitattributes` pattern that already names a diff driver (`*.scm diff=mine`) is left
+  alone. `--force` never removes lines. This bends "write only files that are not there" deliberately: both files
+  are common in an existing repository and appending is not overwriting.
+- **`.github/workflows/maps.yml`** (`workflowText`) **at the repository's top** (`git rev-parse --show-toplevel`),
+  not in the folder — GitHub reads workflows only there; map globs are then `maps/*.scx` from the top (`mapGlobs`,
+  one per extension *as written*, since globs are case-sensitive on the runner; quoted dir when it has shell
+  characters; `*.scx` with a note when the folder has no maps). Check: `npx -y @scm-js/cli@<VERSION> map check …
+  --strict --format github`, `run: |` block scalars so no path can break the YAML (validated with js-yaml once).
+  **Build step only for maps that keep a script**, listed by name: `map build` on a map without one is a CliError
+  (exit 1) and loads TypeScript first, so "run it on every map" was not an option, and `map info --json` says nothing
+  about scripts. Detection is `hasScript(extras)` (new in build.ts: the plugin's `readFiles`, dynamic import, null
+  when not vendored). A map that gains a script later needs the line added by hand (the comment in the file says
+  how). The build line is `npx -y -p @scm-js/cli@<v> -p typescript@6 scmjs map build --check <map>`: two `-p` put
+  TypeScript in the same npx folder, where `findTypeScript`'s "beside the command" `createRequire` finds it —
+  **verified against the published 0.9.0** (compiled, TypeScript 6.0.3). `TYPESCRIPT` is held to package.json's
+  major by the test.
+- **`README.md`** (`readmeText`): a table of the maps (name via `gameText` + `visible`, colour bytes gone, `|`
+  escaped, link URL-encoded with `(`/`)`), the three commands with the folder's own globs and first map, and the git
+  lines a fresh clone needs (git config is per clone; "run `scmjs init` again" is the answer since it writes nothing).
+- **git config** `diff.scmjs.textconv/xfuncname/cachetextconv` (`GIT_SETTINGS`) in the repository via `git -C top
+  config`; compared with `git config --get` (any scope); another value is `other` (▲, left alone) unless `--force`;
+  `OLD_SETTINGS` (the 0.9.0 `^## `) is replaced without `--force`. **Trap: never `.trim()` git's output** — the old
+  value ends in a space and compared unequal. No repository: nothing set, a note; `--git` runs `git init` (never
+  otherwise). A note when `scmjs` is not on PATH (`onPath`, PATHEXT on Windows), since git runs it by name.
+
+Paths in the report (and `--json`'s `files[].path`) are **from the folder** — from the cwd they were
+`../../../../tmp/…` in the tests. Exit 2 for a missing folder or a file.
+
+**Hidden from the overview** (`{ hidden: true }`, as `completion`): the root help was already at 23 lines and a
+top-level row would make 24; the user asked for `scmjs init`, not `map init`. Found by `scmjs help init`, the `map`
+noun's help (`map.addHelpText("after", …)` names it) and docs/cli.md. Being hidden it is also **not in the shell
+completions** (`commandTree` skips hidden). `doctor`'s Ready table unchanged (init needs nothing beyond git, optional).
 
 ## CI slice: check formats, info --table, diff --rev, set, resize, strings prune (`report.ts`, `edit.ts`) — 2026-11-07
 

@@ -244,7 +244,7 @@ describe("scmjs mcp: the game tools", () => {
       expect(text(noCopy)).toMatch(/is not a copy of StarCraft\.\nA Remastered installation/);
       const noRunner = await older.call("map_trace", { path: ums, starcraft: classicCopy(tmp()) });
       expect(noRunner.isError).toBe(true);
-      expect(text(noRunner)).toMatch(/has no map runner\.\nscmjs map trace \(and map cost\) needs a play page deployed with one; .* must hold a map-<hash>\.mjs\.$/);
+      expect(text(noRunner)).toMatch(/has no map runner\.\nscmjs map trace \(and map cost, rush and test\) needs a play page deployed with one; .* must hold a map-<hash>\.mjs\.$/);
       // The weigher is built beside the command; the source tree has none.
       const noWeigher = await staged.call("map_cost", { path: ums, starcraft: classicCopy(tmp()) });
       expect(noWeigher.isError).toBe(true);

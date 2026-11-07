@@ -41,15 +41,42 @@ say({ kind: "end", frame: frames, ended: false, reason: null, passes, trace, cos
 process.exit(0);
 `;
 
-/** A folder shaped like a staged engine: the four files, both runners and current.json; `withMap` false leaves the map runner out, as an older deploy would. */
-export function stagedEngine(dir: string, withMap = true): { dir: string; build: string } {
+/**
+ * A stand-in for the map runner's test mode (`runMap.ts --test <spec> --replay <file>`, scm-sim's `src/exact/mapTest.ts`):
+ * a start with `mode: "test"`, then an end that is the JSON file `SCMJS_TEST_ANSWER` names (frame, ended, trace,
+ * observed), or an empty game of the spec's frames; the spec it was handed is appended as a line to `SCMJS_TEST_SPECS`
+ * when that is set, and a replay of a few bytes is written where `--replay` says. A map named `bad.scx` is refused.
+ */
+export const FAKE_TEST_RUNNER = `
+const fs = require("node:fs"), path = require("node:path");
+const args = process.argv.slice(2);
+const flag = (n) => { const i = args.indexOf("--" + n); return i >= 0 ? args[i + 1] : undefined; };
+const say = (o) => process.stdout.write(JSON.stringify(o) + "\\n");
+if (!fs.existsSync(flag("engine") + "/core.js")) { say({ kind: "error", message: "no engine at " + flag("engine") }); process.exit(2); }
+if (path.basename(args[0]) === "bad.scx") { say({ kind: "error", message: "the game did not take this map" }); process.exit(2); }
+const spec = JSON.parse(fs.readFileSync(flag("test"), "utf8"));
+if (process.env.SCMJS_TEST_SPECS) fs.appendFileSync(process.env.SCMJS_TEST_SPECS, JSON.stringify({ map: path.basename(args[0]), seed: Number(flag("seed")), spec, bytes: fs.statSync(args[0]).size }) + "\\n");
+say({ kind: "start", mode: "test", map: { name: path.basename(args[0]), width: 64, height: 64, tileset: "badlands" }, copy: "classic", seed: Number(flag("seed") ?? 1), rows: 3, copies: 3, remastered: false, localPlayer: 0, ms: { load: 1, start: 2 } });
+const answer = process.env.SCMJS_TEST_ANSWER ? JSON.parse(fs.readFileSync(process.env.SCMJS_TEST_ANSWER, "utf8")) : {};
+const observed = { switches: [], deaths: [], resources: Array.from({ length: 12 }, () => [0, 0]), counts: spec.counts.map(() => 0), texts: [], outcomes: Array(8).fill(null), steps: spec.steps.map((s) => ({ frame: s.frame, kind: s.kind })), ...answer.observed };
+if (flag("replay")) fs.writeFileSync(flag("replay"), "a replay");
+say({ kind: "end", mode: "test", frame: answer.frame ?? spec.frames, ended: answer.ended ?? false, reason: null, passes: 3, trace: answer.trace ?? [], observed, replay: flag("replay") ?? null, ms: { load: 1, start: 2, game: 3, total: 6 } });
+process.exit(0);
+`;
+
+/**
+ * A folder shaped like a staged engine: the four files, both runners and current.json; `withMap` false leaves the map
+ * runner out, as an older deploy would. `mapRunner` is the map runner's text: the trace's stand-in by default (which is
+ * also a runner from before map test), or `FAKE_TEST_RUNNER`.
+ */
+export function stagedEngine(dir: string, withMap = true, mapRunner = FAKE_RUNNER): { dir: string; build: string } {
   const build = "abcdef123456";
   const sub = join(dir, build);
   mkdirSync(sub, { recursive: true });
   for (const f of ["core.js", "game.js", "base-s1.bin", "interface.bin"]) writeFileSync(join(sub, f), `// ${f}\n`);
   writeFileSync(join(sub, "run-feedface.cjs"), "// the bot runner\n");
-  writeFileSync(join(sub, "map-cafe0000.cjs"), FAKE_RUNNER);
-  writeFileSync(join(dir, "current.json"), JSON.stringify({ build, files: ["core.js", "game.js", "base-s1.bin", "interface.bin"], runner: "run-feedface.cjs", ...(withMap ? { mapRunner: "map-cafe0000.cjs", mapRunnerBytes: FAKE_RUNNER.length } : {}) }));
+  writeFileSync(join(sub, "map-cafe0000.cjs"), mapRunner);
+  writeFileSync(join(dir, "current.json"), JSON.stringify({ build, files: ["core.js", "game.js", "base-s1.bin", "interface.bin"], runner: "run-feedface.cjs", ...(withMap ? { mapRunner: "map-cafe0000.cjs", mapRunnerBytes: mapRunner.length } : {}) }));
   return { dir, build };
 }
 

@@ -37,7 +37,8 @@ import { SCMSCX, scmscx } from "./scmscx";
 import { mapFileFor, writeReplayMap } from "./replaymap";
 import { printReplayShare, shareReplay } from "./replayshare";
 import { parseClock, watchReplay, watchSummary } from "./watch";
-import { FORMATS, githubAnnotations, junitXml, sarifJson, type CheckReport, type Format } from "./report";
+import { FORMATS, githubAnnotations, githubTestAnnotations, junitTestXml, junitXml, sarifJson, sarifTestJson, type CheckReport, type Format, type TestReport } from "./report";
+import { defaultOut, defaultTests, readMapForTests, readTests, runTests, testHeader, testJson, testSummary, type PlannedScenario } from "./maptest";
 import { printRun, runOnMap } from "./run";
 import { previewMap, PNG_SCALES } from "./preview";
 import { accountReport, login, logout, PROVIDERS, printAccount, serverLabel } from "./account";
@@ -611,6 +612,50 @@ Exits 2 when the game could not start.`)
     const r = await runRush(game.path, { unit, seed: whole(o.seed, "seed"), limit: whole(o.limit, "limit", 1), starcraft: o.starcraft, engine: o.engine, live: o.json ? undefined : (line) => print(line) });
     if (o.json) print(JSON.stringify(rushJson(input.name, r), null, 2));
     else print("", ...printRush(input.name, r));
+  });
+
+map.command("test").description("runs the map's tests in the game: each scenario set up, played and checked, a replay of each that failed").argument("<map>").argument("[tests...]", "tests files (JSON); <map>.tests.json beside the map by default").addOption(json)
+  .option("--format <kind>", `${FORMATS.join(", ")}: github is workflow annotations, junit and sarif the files CI tools read`, "text")
+  .option("--out <folder>", "where the replays of failing scenarios go (<map>.tests/ beside the map)")
+  .option("--frames <n>", "frames a scenario runs when it does not say (24 a second)", "2400")
+  .option("--seed <n>", "the game's seed when a scenario does not say; the same seed and map give the same game", "1")
+  .option("--starcraft <folder>", "your installation of StarCraft (SCMJS_STARCRAFT); found in the usual places otherwise")
+  .addOption(new Option("--engine <where>", "the play page's address, or a folder holding the engine (SCMJS_PLAY_URL)").hideHelp())
+  .addHelpText("after", `
+A tests file holds scenarios: what the game starts with (units made, switches set, resources), what happens at a
+frame (units killed, a switch flipped, your units ordered somewhere, a chat line), how long it runs, and what must
+hold at the end (a trigger fired or never did, a switch, a death count, units in a location, a line shown, who won).
+Each scenario is one game with nobody playing but the steps; one that fails says what did not hold and keeps its
+replay. Exits 1 when a scenario fails, 2 when the tests or the map cannot be read or the game could not start.
+The engine and your copy of StarCraft are needed, as for scmjs map trace. docs.scmjs.dev/cli/ has the file's form.`)
+  .action(async (file: string, testFiles: string[], o: { json?: boolean; format: string; out?: string; frames: string; seed: string; starcraft?: string; engine?: string }) => {
+    if (!(FORMATS as readonly string[]).includes(o.format)) throw new CliError(`--format takes ${FORMATS.join(", ")}, not "${o.format}"`, null, 2);
+    const format: Format = o.json ? "json" : (o.format as Format);
+    const defaults = { frames: whole(o.frames, "frames", 1), seed: whole(o.seed, "seed") };
+    const input = await readInput(file);
+    expectKind(input, "map");
+    if (input.path === STDIO && !testFiles.length) throw new CliError("A map read from standard input has no tests beside it: name the tests file.", null, 2);
+    const files = testFiles.length ? testFiles : [defaultTests(input.path)];
+    const map = await readMapForTests(input.bytes);
+    const scenarios: PlannedScenario[] = [];
+    for (const f of files) {
+      if (!existsSync(f)) throw new CliError(`No tests file ${f}`, testFiles.length ? null : `A map's tests are in ${relative(process.cwd(), f) || f} beside it, or name the file: scmjs map test ${file} <tests.json>. docs.scmjs.dev/cli/ has the file's form.`, 2);
+      scenarios.push(...readTests(f, await readFile(f, "utf8"), map.chk, defaults));
+    }
+    if (!scenarios.length) throw new CliError(`${files.join(", ")} ${files.length === 1 ? "has" : "have"} no scenarios.`, null, 2);
+    const text = format === "text";
+    if (text && scenarios[0].converted) print(pc.dim(`${input.name} is in the StarCraft 1.00 form, which the engine does not run: each scenario runs a copy converted to Brood War`));
+    const run = await runTests(input.name, scenarios, map, {
+      out: o.out ?? defaultOut(input.path === STDIO ? input.name : input.path), starcraft: o.starcraft, engine: o.engine,
+      live: text ? (line) => print(line) : undefined, onStart: text ? (start) => print(testHeader(input.name, scenarios[0].rows, scenarios, start)) : undefined,
+    });
+    if (run.scenarios.some((s) => !s.ok)) process.exitCode = Math.max(Number(process.exitCode ?? 0), 1);
+    const report: TestReport = { map: input.path, name: input.name, cases: run.scenarios.map((s) => ({ name: s.name, file: s.file, line: s.line, ok: s.ok, ms: s.ms, failures: s.results.filter((x) => !x.ok), replay: s.replay })) };
+    if (format === "json") print(JSON.stringify(testJson(input.name, run), null, 2));
+    else if (format === "github") print(...githubTestAnnotations([report]));
+    else if (format === "junit") process.stdout.write(junitTestXml([report]));
+    else if (format === "sarif") process.stdout.write(sarifTestJson([report], VERSION));
+    else print("", testSummary(run));
   });
 
 map.command("preview").description("a picture of the map in the terminal, or as a PNG, with your copy of the game's graphics").argument("<map>").addOption(json)

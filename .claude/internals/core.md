@@ -37,7 +37,7 @@ command and other people's tools sit on it.
   node_modules module is actually in the bundle (`coreNotices`), which today is never.
 - **Version = the editor's**, like the CLI and unlike `@scm-js/replay` (1.x) and `@scm-js/plugin-api`
   (`PLUGIN_API_VERSION.minor`). Same source, same release, no second ceremony; semver's reading of 0.x is accepted.
-  `build:core` stamps `package.json`'s version into `core/package.json`.
+  `build:core` stamps `package.json`'s version into `core/package.json`, and the release commit (`release.yml`) writes it there too, so the committed file says the last release.
 - **Publishing**: `build.yml`'s `core` job, a copy of `cli`'s — stable channel, version checked against the release,
   a version npm already has skipped, a Node import smoke of `dist/index.mjs`, trusted publishing over OIDC. **Needs a
   trusted publisher on npmjs.com for `@scm-js/core`** (scm-js/scm-js, `build.yml`, no environment, direct publish

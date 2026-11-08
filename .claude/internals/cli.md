@@ -32,7 +32,7 @@ command's output changes, with `--play-url` at a staged scm-sim deploy when the 
 - **One file.** `scripts/build-cli.mjs` is a Vite SSR build with `ssr.noExternal: true` and `codeSplitting: false`
   (rolldown's name for inlineDynamicImports) → `cli/dist/scmjs.mjs` (~670 KB, shebang). commander, picocolors and
   @scm-js/replay are devDependencies of the root bundled in, so the published package has no dependencies and `npx` fetches one file.
-  The version is the editor's (`package.json`), written into `cli/package.json` by the build; commit and build date
+  The version is the editor's (`package.json`), written into `cli/package.json` by the build and by the release commit (`release.yml`); commit and build date
   are `define`d. **Licences**: the build's `scmjs-cli-notices` plugin reads the bundle's module ids for
   `node_modules/<pkg>` and writes `cli/dist/THIRD-PARTY-NOTICES.txt` with `cliNotices` (`scripts/lib/notices.mjs`,
   throws on a package with no licence file); `cli/LICENSE` is a copy of the root one. Today: @scm-js/replay,

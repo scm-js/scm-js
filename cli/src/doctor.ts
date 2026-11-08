@@ -1,7 +1,7 @@
 /**
  * `scmjs doctor`: what this computer has of what the commands need beyond Node — TypeScript for `map build` and a
  * `.ts` plugin, Docker for `bot new|build`, a copy of StarCraft and the fetched engine's runners for `bot run`,
- * `replay watch` and `map trace|cost`, the desktop app for `map open`, whether Claude Code knows `scmjs mcp` — and the
+ * `replay watch` and `map trace|cost`, a browser and ffmpeg for `replay export`, the desktop app for `map open`, whether Claude Code knows `scmjs mcp` — and the
  * command for each thing missing, then which commands are ready (`readiness`, read off the same checks). Nothing is
  * changed. Everything here is optional (`info` and `check` need none of it), so the exit code is 0 unless Node itself
  * is too old.
@@ -16,6 +16,8 @@ import { cacheRoot, findGameCopy } from "./botrun";
 import { findTypeScript } from "./build";
 import { RUNNERS, type RunnerKind } from "./engine";
 import { findDesktopApp } from "./open";
+import { findBrowser, NO_BROWSER } from "./browser";
+import { findFfmpeg } from "./export";
 import { readSession, serverLabel, serverUrl, sessionPath } from "./account";
 import { CliError, columns, mark, pc, visible } from "./ui";
 
@@ -79,7 +81,7 @@ export function starcraftCheck(): Check {
     return { what: "StarCraft", state: "ok", detail: `${kind === "remastered" ? "Remastered" : "1.16.1"}${pc.dim(` · ${folder}`)}`, path: folder };
   } catch (e) {
     if (!(e instanceof CliError)) throw e;
-    return { what: "StarCraft", state: "warn", detail: "not found", fix: "scmjs bot run … --starcraft <folder>   (or SCMJS_STARCRAFT=<folder>)", note: "bot run, replay watch, map trace, map cost, map preview and map generate use your own installation's files." };
+    return { what: "StarCraft", state: "warn", detail: "not found", fix: "scmjs bot run … --starcraft <folder>   (or SCMJS_STARCRAFT=<folder>)", note: "bot run, replay watch, replay export, map trace, map cost, map preview and map generate use your own installation's files." };
   }
 }
 
@@ -163,6 +165,20 @@ export function mcpCheck(config = join(homedir(), ".claude.json"), cwd = process
   return { what, state: "ok", detail: "not registered", note: why, fix: MCP_ADD };
 }
 
+/** A browser `replay export` can draw with: Chrome, Chromium, Edge (or one named with SCMJS_BROWSER). */
+export function browserCheck(found = findBrowser()): Check {
+  return found
+    ? { what: "Browser", state: "ok", detail: `found${pc.dim(` · ${found}`)}`, path: found }
+    : { what: "Browser", state: "warn", detail: "not found", fix: NO_BROWSER, note: "scmjs replay export draws its clips in one, started without a window." };
+}
+
+/** ffmpeg, optional: `replay export` makes .mp4 files with it. */
+export function ffmpegCheck(found = findFfmpeg()): Check {
+  return found
+    ? { what: "ffmpeg", state: "ok", detail: `${found.version}${pc.dim(` · ${found.path}`)}` }
+    : { what: "ffmpeg", state: "ok", detail: pc.dim("not installed"), note: "scmjs replay export makes .webm and .gif clips without it; an .mp4 needs it.", fix: "https://ffmpeg.org/download.html (winget install ffmpeg, brew install ffmpeg, apt install ffmpeg)" };
+}
+
 export function desktopAppCheck(): Check {
   const app = findDesktopApp();
   return app
@@ -189,7 +205,7 @@ export async function versionCheck(): Promise<Check> {
 }
 
 export async function doctorReport(): Promise<{ checks: Check[]; blocked: boolean }> {
-  const checks = [nodeCheck(), await versionCheck(), typescriptCheck(), dockerCheck(), starcraftCheck(), engineCheck(), desktopAppCheck(), mcpCheck(), scmjsDevCheck()];
+  const checks = [nodeCheck(), await versionCheck(), typescriptCheck(), dockerCheck(), starcraftCheck(), engineCheck(), browserCheck(), ffmpegCheck(), desktopAppCheck(), mcpCheck(), scmjsDevCheck()];
   return { checks, blocked: checks.some((c) => c.state === "bad") };
 }
 
@@ -197,7 +213,7 @@ export async function doctorReport(): Promise<{ checks: Check[]; blocked: boolea
 export interface Ready { commands: string; ok: boolean; lacks?: string }
 
 /** What each group needs: a check by its name (ready unless it warns), or the engine runner of a kind. */
-type Need = "TypeScript" | "Docker" | "StarCraft" | RunnerKind;
+type Need = "TypeScript" | "Docker" | "StarCraft" | "Browser" | RunnerKind;
 const READY: { commands: string; needs: Need[] }[] = [
   { commands: "map info|check|…", needs: [] },
   { commands: "replay info|open", needs: [] },
@@ -207,6 +223,7 @@ const READY: { commands: string; needs: Need[] }[] = [
   { commands: "bot new|build", needs: ["Docker"] },
   { commands: RUNNER_COMMANDS.bot, needs: ["StarCraft", "bot"] },
   { commands: RUNNER_COMMANDS.replay, needs: ["StarCraft", "replay"] },
+  { commands: "replay export", needs: ["StarCraft", "Browser"] },
   { commands: RUNNER_COMMANDS.map, needs: ["StarCraft", "map"] },
   { commands: RUNNER_COMMANDS.match, needs: ["StarCraft", "match"] },
 ];
@@ -221,7 +238,7 @@ export function readiness(checks: Check[]): Ready[] {
   const nodeBad = by("Node")?.state === "bad";
   const engine = by("Game engine")?.engine;
   const lacking = (n: Need): string | null => {
-    if (n === "TypeScript" || n === "Docker" || n === "StarCraft") return by(n)?.state === "warn" || by(n)?.state === "bad" ? n : null;
+    if (n === "TypeScript" || n === "Docker" || n === "StarCraft" || n === "Browser") return by(n)?.state === "warn" || by(n)?.state === "bad" ? n : null;
     return engine?.build && !engine.runners.includes(n) ? "engine runner" : null;
   };
   return READY.map(({ commands, needs }) => {
@@ -262,13 +279,13 @@ export function readyLines(ready: Ready[], checks: Check[] = []): string[] {
 
 /** The groups the checks are shown in; a check that is fine and belongs in the title (Node, scmjs) is not a row. */
 const GROUPS: { title: string; whats: string[] }[] = [
-  { title: "Tools", whats: ["TypeScript", "Docker", "Desktop app", "MCP", "scmjs.dev"] },
+  { title: "Tools", whats: ["TypeScript", "Docker", "Browser", "ffmpeg", "Desktop app", "MCP", "scmjs.dev"] },
   { title: "The game", whats: ["StarCraft", "Game engine"] },
 ];
 /** The value column: the detail with its path taken out, in a few words. */
 function valueOf(c: Check): string {
   if (c.what === "MCP") return c.detail.startsWith("registered") ? "scmjs mcp added" : visible(c.detail) === "not registered" ? "scmjs mcp not added" : visible(c.detail).replace(/^Claude Code /, "");
-  if (c.what === "Desktop app" && c.path) return basename(c.path);
+  if ((c.what === "Desktop app" || c.what === "Browser") && c.path) return basename(c.path);
   if (c.what === "Game engine" && c.engine?.build) return c.engine.build;
   const d = visible(c.detail);
   return c.path && d.includes(" · ") ? d.slice(0, d.indexOf(" · ")) : d;
@@ -292,7 +309,7 @@ export function printDoctor(r: { checks: Check[]; blocked: boolean }, width = pr
     lines.push(`${head}${tail ? ` ${tail}` : ""}`.trimEnd());
     // What is wrong and what to do about it, under the row; Claude Code's "not added" is not wrong, so only the line to run.
     if (c.state !== "ok") { if (c.note) lines.push(pc.dim(`      ${c.note}`)); if (c.fix) lines.push(`      ${c.fix}`); }
-    else if ((c.what === "MCP" || c.what === "scmjs.dev") && c.fix) lines.push(`      ${pc.dim(c.fix)}`);
+    else if ((c.what === "MCP" || c.what === "scmjs.dev" || c.what === "ffmpeg") && c.fix) lines.push(`      ${pc.dim(c.fix)}`);
   };
   // Node and scmjs are rows only when something is wrong with them.
   const first = [node, self].filter((c): c is Check => !!c && c.state !== "ok");

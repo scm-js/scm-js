@@ -36,6 +36,7 @@ import { printReplayInfo, replayReport } from "./replay";
 import { SCMSCX, scmscx } from "./scmscx";
 import { mapFileFor, writeReplayMap } from "./replaymap";
 import { printReplayShare, shareReplay } from "./replayshare";
+import { exportReplay, exportSummary, type ExportOptions } from "./export";
 import { parseClock, watchReplay, watchSummary } from "./watch";
 import { FORMATS, githubAnnotations, githubTestAnnotations, junitTestXml, junitXml, sarifJson, sarifTestJson, type CheckReport, type Format, type TestReport } from "./report";
 import { defaultOut, defaultTests, readMapForTests, readTests, runTests, testHeader, testJson, testSummary, type PlannedScenario } from "./maptest";
@@ -48,7 +49,7 @@ import { printShare, shareMap } from "./share";
 import { qrFor } from "./qr";
 import { exportSounds, printSounds, readSounds } from "./sounds";
 import { editInEditor, type EditKind, type EditOutcome } from "./texteditor";
-import { CliError, dot, gameText, mark, num, pc, plural, print, rows, size, table } from "./ui";
+import { CliError, dot, gameText, mark, num, pc, plural, print, rows, size, table, visible } from "./ui";
 
 const json = new Option("--json", "print JSON instead of text, for scripts");
 /** The widest a command's term in the overview may be, so its description stays beside it (banner.ts fits 80 columns). */
@@ -931,6 +932,43 @@ pipe or a file it prints a line per minute of game instead (--every), or JSON li
     if (o.size) { const m = /^(\d+)x(\d+)$/i.exec(o.size); if (!m || Number(m[1]) < 8 || Number(m[2]) < 4) throw new CliError(`--size takes WxH in characters, 8x4 or more, not "${o.size}"`, null, 2); size = { cols: Number(m[1]), rows: Number(m[2]) }; }
     const r = await watchReplay(input, replay, { speed, from: o.from ? parseClock(o.from) : undefined, size, every, json: !!o.json, starcraft: o.starcraft, engine: o.engine });
     if (!o.json) print(watchSummary(input, r));
+  });
+
+replay.command("export").description("the replay as a video or GIF with the game's own pictures, for sharing").argument("<replay>").addOption(json)
+  .option("--out <file>", "the clip: .webm, .mp4 or .gif (the replay's name with .webm beside it by default)")
+  .option("--from <m:ss>", "where the clip starts in the game (its start by default)")
+  .option("--to <m:ss>", "where it ends (the game's end by default)")
+  .option("--follow <player>", "keep the camera on a player's play: a name, or a number as replay info lists them (the first person by default)")
+  .option("--at <x,y>", "hold the camera on this tile")
+  .option("--all", "show the whole map, scaled to fit")
+  .option("--speed <x>", "game speed against Fastest (1 is the game's own pace)", "1")
+  .option("--size <WxH>", "the clip's size in pixels (1280x720; a GIF 640x360)")
+  .option("--fps <n>", "pictures a second (24; a GIF 12)")
+  .option("--starcraft <folder>", "your installation of StarCraft (SCMJS_STARCRAFT); found in the usual places otherwise")
+  .option("--browser <path>", "the browser to draw with (SCMJS_BROWSER); Chrome, Chromium or Edge, found in the usual places otherwise")
+  .addOption(new Option("--play <url>", "the play page's address (SCMJS_PLAY_URL)").hideHelp())
+  .addHelpText("after", `
+The clip is drawn by the play page's replay viewer, in a browser already on this computer (Chrome, Chromium or Edge,
+started without a window), with the pictures of your own copy of StarCraft. The game is stepped picture by picture,
+so the clip plays at the speed asked whatever the computer's pace. A .webm or a .gif needs nothing more; an .mp4 is
+made from the .webm with ffmpeg, when it is installed. The camera follows where the player's army is and fights.
+  scmjs replay export game.rep --from 4:30 --to 5:00
+  scmjs replay export game.rep --out fight.mp4 --follow 2 --from 12:10 --to 12:40
+  scmjs replay export game.rep --out game.gif --all --speed 16`)
+  .action(async (file: string, o: ExportOptions & { json?: boolean }) => {
+    const input = await readInput(file);
+    expectKind(input, "replay");
+    const replay = await loadReplayInput(input);
+    const tty = !!process.stderr.isTTY && !o.json;
+    let shown = 0;
+    const r = await exportReplay(input, replay, o, (line, done) => {
+      if (tty) process.stderr.write(`\r\x1b[2K${line}${done ? "\n" : ""}`);
+      // (Into a file or a pipe, a line every ten seconds or so, not a line a picture.)
+      else if (!o.json && (done || Date.now() - shown > 10_000)) { shown = Date.now(); process.stderr.write(`${visible(line)}\n`); }
+    });
+    if (tty) process.stderr.write("\r\x1b[2K");
+    if (o.json) print(JSON.stringify(r, null, 2));
+    else print(exportSummary(r));
   });
 
 const plugin = program.command("plugin").description("start, check and run a plugin for the editor").helpGroup("Plugins and bots:");

@@ -61,6 +61,68 @@ export interface HistoryEdit {
    * redo atoms apply it with `applyTables`.
    */
   tables?: TablesEdit;
+  /**
+   * A change to the whole map — Resize / Crop, Change Tileset: the map as it stands on the
+   * other side of the step (`WholeState`). Undo and redo swap it with the scenario's own and
+   * keep what they took out here, so the entry always holds the side it is not on. An entry
+   * with this part has no other: `applyEntry` leaves it alone, and the undo and redo atoms
+   * apply it with `swapWholeState`.
+   */
+  whole?: WholeState;
+}
+
+/**
+ * What a whole-map change replaces: the size, the tileset and every list or grid that is
+ * laid out by the map's size. Held by reference, not copied — Resize and Change Tileset
+ * build new arrays rather than writing into the old ones, and every later in-place edit is
+ * on the undo stack above the entry, so by the time the entry is undone the arrays it took
+ * out are exactly as it left them.
+ */
+export interface WholeState {
+  width: number;
+  height: number;
+  era: number;
+  tiles: Uint16Array;
+  editorTiles: Uint16Array;
+  isom: Uint16Array | null;
+  mask: Uint8Array | null;
+  units: Scenario["units"];
+  sprites: Scenario["sprites"];
+  doodads: Scenario["doodads"];
+  locations: Scenario["locations"];
+}
+
+/** The scenario's `WholeState` as it stands, taken before a whole-map change. */
+export function takeWholeState(scn: Scenario): WholeState {
+  return {
+    width: scn.width, height: scn.height, era: scn.era,
+    tiles: scn.tiles, editorTiles: scn.editorTiles, isom: scn.isom, mask: scn.mask,
+    units: scn.units, sprites: scn.sprites, doodads: scn.doodads, locations: scn.locations,
+  };
+}
+
+/**
+ * Put `state` into the scenario and answer the state it replaced. Every section the two
+ * may differ in is marked dirty (a section is never un-dirtied: encoding it again is always
+ * safe, emitting the file's bytes for it is only safe while nothing has changed it).
+ */
+export function swapWholeState(scn: Scenario, state: WholeState): WholeState {
+  const out = takeWholeState(scn);
+  scn.width = state.width;
+  scn.height = state.height;
+  scn.era = state.era;
+  scn.tiles = state.tiles;
+  scn.editorTiles = state.editorTiles;
+  scn.isom = state.isom;
+  scn.mask = state.mask;
+  scn.units = state.units;
+  scn.sprites = state.sprites;
+  scn.doodads = state.doodads;
+  scn.locations = state.locations;
+  markDirty(scn, "DIM ", "ERA ", "MTXM", "TILE", "UNIT", "THG2", "DD2 ", "MRGN");
+  if (scn.isom) markDirty(scn, "ISOM");
+  if (scn.mask) markDirty(scn, "MASK");
+  return out;
 }
 
 export interface HistoryEntry extends HistoryEdit {
@@ -160,6 +222,8 @@ export const ALL_PARTS: CommitParts = {
 
 /** Which parts an entry's lists touch. */
 export function entryParts(entry: HistoryEdit): CommitParts {
+  // The size and tileset are settings; triggers are the one part a whole-map change leaves.
+  if (entry.whole) return { ...ALL_PARTS, triggers: false };
   return {
     ...NO_PARTS,
     terrain: entry.changes.length > 0 || (entry.doodadTiles?.length ?? 0) > 0,
@@ -181,6 +245,7 @@ export function entryParts(entry: HistoryEdit): CommitParts {
  * the whole map, since it is not listed cell by cell.
  */
 export function entryArea(entry: HistoryEdit, width: number, height: number): Rect | null {
+  if (entry.whole) return null;
   if (entry.createdIsom !== undefined || entry.rebuiltIsom || entry.createdMask !== undefined) return { x0: 0, y0: 0, x1: width, y1: height };
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
   const tile = (x: number, y: number) => {

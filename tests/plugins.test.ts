@@ -959,7 +959,7 @@ describe("plugin settings", () => {
     expect(api.document.update("same", (tx) => { tx.setVersion("remastered"); }).changed).toBe(false);
   });
 
-  it("resizes the map as a transaction that drops the history", () => {
+  it("resizes the map as one undo step", () => {
     const { store, scn } = blankStore(8, 6);
     const api = apiOf(store);
     api.document.edit("unit", (tx) => { tx.addUnits([tx.makeUnit(0, 0, 7 * 32 + 16, 5 * 32 + 16)]); });
@@ -968,8 +968,13 @@ describe("plugin settings", () => {
     expect(r).toMatchObject({ dx: 0, dy: 0, unitsDropped: 1 });
     expect(scn.width).toBe(6);
     expect(api.document.info()?.width).toBe(6);
-    expect(api.document.history()).toEqual({ undo: null, redo: null, undoDepth: 0, redoDepth: 0 });
+    expect(api.document.history()).toEqual({ undo: "Resize map", redo: null, undoDepth: 2, redoDepth: 0 });
     expect(store.get(mapModifiedAtom)).toBe(true);
+    api.document.undo();
+    expect(scn.width).toBe(8);
+    expect(scn.units).toHaveLength(1);
+    api.document.redo();
+    expect(scn.width).toBe(6);
     expect(createPluginApi(createStore(), { id: "t", name: "T", source: "s" }, new Contributions()).document.resize({ width: 4, height: 4 })).toBeNull();
     expect(api.settings.version()).not.toBeNull();
   });

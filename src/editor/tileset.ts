@@ -8,8 +8,9 @@
  * `keepTiles` leaves the tile numbers in place instead — what SCMDraft's tileset switch
  * does — for the author who wants to see what those numbers draw in the new tileset.
  *
- * Not an undoable edit: like Resize it is a transaction applied through
- * `changeTilesetAtom`, which drops the history and bumps every revision.
+ * A whole-map change like Resize, applied through `changeTilesetAtom`, which records the map
+ * as it was as one undo step (`WholeState`) — so the new grids and lists are built, never
+ * written into the old ones — and bumps every revision.
  */
 import { markDirty, tilesetIndex, type Scenario } from "../formats/chk/scenario";
 import type { Tileset } from "../formats/tileset/decode";

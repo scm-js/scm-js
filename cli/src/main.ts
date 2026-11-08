@@ -15,7 +15,7 @@ import { ladderJson, parseEntrants, parseRaces, printLadder, runLadder } from ".
 import { costReport, gameMap, printCost, printTrace, removeGameMap, replayRun, runMapInGame, traceReport } from "./trace";
 import { printRush, runRush, rushJson, unitByName } from "./rush";
 import { balanceJson, printBalance, runBalance } from "./balance";
-import { buildMap, loadTypeScript, printBuild } from "./build";
+import { buildMap, hasScript, loadTypeScript, printBuild } from "./build";
 import { completionScript, SHELLS, type Shell } from "./completion";
 import { LAYOUTS, nameFromFile, NEW_VERSIONS, parseSize, parseTileset, writeNewMap, type NewMapVersion } from "./create";
 import { doctorJson, doctorReport, printDoctor } from "./doctor";
@@ -96,7 +96,8 @@ function fail(e: CliError): void {
 
 async function mapInfo(input: Input) {
   expectKind(input, "map");
-  const data = mapReport(input, await loadMapInput(input));
+  const doc = await loadMapInput(input);
+  const data: MapReport = { ...mapReport(input, doc), script: await hasScript(doc.extras) };
   return { data, lines: printMapInfo(data) };
 }
 async function replayInfo(input: Input) {

@@ -23,7 +23,7 @@ import { MEGATILE_PX } from "../../src/formats/tileset/decode";
 import { locationChanges, unitKey, type Change } from "./diff";
 import { writeOutput, type Written } from "./exchange";
 import { STDIO, type Input } from "./files";
-import { openGameFiles } from "./gamefiles";
+import { openGameFiles, type GameFiles } from "./gamefiles";
 import { asciiShades, halfBlocks, inlineImage, sgr, type Depth, type InlineProtocol } from "./paint";
 import { encodePng } from "./png";
 import {
@@ -543,7 +543,8 @@ export interface DiffPictureReport {
   counts: DiffCounts;
   /** In tiles: the tiles whose ids differ, and everything marked. */
   bounds: { tiles: TileBox | null; all: TileBox | null };
-  copy: { folder: string; kind: "remastered" | "classic"; label: string };
+  /** The copy of the game the ground was drawn with; null when there was none and it was drawn plain. */
+  copy: { folder: string; kind: "remastered" | "classic"; label: string } | null;
   note?: string;
   out?: Written;
   ms: { copy: number; draw: number; total: number };
@@ -562,7 +563,22 @@ const number = (value: string | undefined, name: string, ok: (n: number) => bool
 };
 
 /**
- * `scmjs map diff a b --picture`: the copy of the game opened, the tilesets read, the change picture (or the three
+ * The copy of the game, or null when none is named and none is found: the picture is then drawn with plain ground
+ * (`plainShade`), so a computer without the game — a CI runner — still shows where a map changed.
+ */
+async function gameFilesOrNone(named: string | undefined): Promise<GameFiles | null> {
+  if (named) return openGameFiles(named);
+  try { return await openGameFiles(undefined); } catch (e) {
+    if (e instanceof CliError && e.message.startsWith("No copy of StarCraft")) return null;
+    throw e;
+  }
+}
+
+/** The ground's words when no copy of the game was found. */
+export const PLAIN_GROUND = "no copy of StarCraft here, so the ground is plain greys";
+
+/**
+ * `scmjs map diff a b --picture`: the copy of the game opened (plain ground without one), the tilesets read, the change picture (or the three
  * side by side) drawn and written as a PNG (`--out`), sent to the terminal, or described (`--json`).
  */
 export async function diffPicture(
@@ -577,10 +593,11 @@ export async function diffPicture(
   const scale = number(o.scale, "scale", png ? (n) => (PNG_SCALES as readonly number[]).includes(n) : (n) => n > 0 && n <= 32, png ? PNG_SCALES.join(", ") : "a number of pixels a tile, above 0 and up to 32");
   const width = number(o.width, "width", (n) => Number.isInteger(n) && n >= 8, "a number of columns, 8 or more");
 
-  const files = await openGameFiles(o.starcraft);
+  const files = await gameFilesOrNone(o.starcraft);
   const same = tilesetIndex(sa) === tilesetIndex(sb);
-  const ga = await loadGraphics(sa, files);
-  const gb = same ? ga : await loadGraphics(sb, files);
+  const plain: GameGraphics = { tileset: null, units: null };
+  const ga = files ? await loadGraphics(sa, files) : plain;
+  const gb = !files ? plain : same ? ga : await loadGraphics(sb, files);
   const t1 = performance.now();
 
   const W = Math.max(sa.width, sb.width), H = Math.max(sa.height, sb.height);
@@ -588,12 +605,14 @@ export async function diffPicture(
   const note = same ? undefined : `The maps' tilesets differ (${tilesetOf(sa)}, ${tilesetOf(sb)}): drawn side by side, with nothing marked`;
   const base = {
     a: x.input.name, b: y.input.name, size: { width: W, height: H }, tilesets: { a: tilesetOf(sa), b: tilesetOf(sb) },
-    counts: d.counts, bounds: d.bounds, copy: { folder: files.folder, kind: files.kind, label: files.label }, ...(note ? { note } : {}),
+    counts: d.counts, bounds: d.bounds, copy: files ? { folder: files.folder, kind: files.kind, label: files.label } : null, ...(note ? { note } : {}),
   };
   const ms = () => ({ copy: Math.round(t1 - t0), draw: Math.round(performance.now() - t1), total: Math.round(performance.now() - t0) });
   const arrow = term.unicode ? "→" : "->";
-  const title = `${pc.bold(x.input.name)} ${pc.dim(arrow)} ${pc.bold(y.input.name)}  ${pc.dim(`${num(W)} × ${num(H)}${dot}${same ? tilesetOf(sb) : `${tilesetOf(sa)}, ${tilesetOf(sb)}`}${dot}${files.label}`)}`;
+  const title = `${pc.bold(x.input.name)} ${pc.dim(arrow)} ${pc.bold(y.input.name)}  ${pc.dim(`${num(W)} × ${num(H)}${dot}${same ? tilesetOf(sb) : `${tilesetOf(sa)}, ${tilesetOf(sb)}`}${dot}${files ? files.label : "plain ground"}`)}`;
   const noteLines = note ? [pc.yellow(note)] : [];
+  // (The PNG's closing line says it; the terminal's pictures say it under the title.)
+  const plainLines = files ? [] : [pc.dim(`${PLAIN_GROUND[0].toUpperCase()}${PLAIN_GROUND.slice(1)}: --starcraft names a copy`)];
 
   if (png) {
     const s = scale ?? DEFAULT_PNG_SCALE;
@@ -606,7 +625,7 @@ export async function diffPicture(
       `${mark.ok} ${pc.bold(x.input.name)} ${pc.dim(arrow)} ${pc.bold(y.input.name)}: ${pic.width} × ${pic.height} PNG, ${plural(s, "pixel")} a tile${layout === "side-by-side" ? `, ${same ? "a | changes | b" : "a | b"}` : ""}${dot}written to ${out.path === STDIO ? "standard output" : pc.cyan(out.path)}${dot}${size(out.bytes)}`,
       ...noteLines,
       diffLegend(d.counts, term.depth, term.unicode, false, same),
-      pc.dim(`  drawn from ${files.label} in ${files.folder}${dot}${(report.ms.total / 1000).toFixed(1)} s`),
+      pc.dim(`  ${files ? `drawn from ${files.label} in ${files.folder}` : `drawn without the game: ${PLAIN_GROUND}`}${dot}${(report.ms.total / 1000).toFixed(1)} s`),
     ] };
   }
 
@@ -625,7 +644,7 @@ export async function diffPicture(
     const s = scale && (PNG_SCALES as readonly number[]).includes(scale) ? scale : scaleFor((columns * 8) / (W * (wide ? panels : 1)));
     const pic = wide ? sideBySide(sa, sb, { a: ga, b: gb }, { scale: s }).picture : changePicture(sa, sb, gb, { scale: s }).picture;
     const report: DiffPictureReport = { ...base, layout: wide ? "side-by-side" : "changes", picture: { form: inline, width: pic.width, height: pic.height, scale: s, columns }, ms: ms() };
-    return { report, lines: [title, ...noteLines, inlineImage(encodePng(pic.pixels, pic.width, pic.height), inline, columns), legend(false)] };
+    return { report, lines: [title, ...noteLines, ...plainLines, inlineImage(encodePng(pic.pixels, pic.width, pic.height), inline, columns), legend(false)] };
   }
 
   const form: DiffPictureForm = term.unicode && term.depth !== "none" ? "blocks" : "ascii";
@@ -651,5 +670,5 @@ export async function diffPicture(
     ...base, layout: wide ? "side-by-side" : "changes",
     picture: { form, width: pic.width, height: pic.height, scale: Number(picScale.toFixed(3)), columns: pic.width, rows: drawn.length, depth: term.depth }, ms: ms(),
   };
-  return { report, lines: o.json ? [] : [title, ...noteLines, ...narrowNote, ...header, ...drawn, legend(form === "ascii")] };
+  return { report, lines: o.json ? [] : [title, ...noteLines, ...plainLines, ...narrowNote, ...header, ...drawn, legend(form === "ascii")] };
 }

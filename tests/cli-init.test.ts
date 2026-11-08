@@ -40,8 +40,9 @@ describe("scmjs init", () => {
     for (const line of ATTRIBUTE_LINES) expect(read(dir, ".gitattributes").split("\n")).toContain(line);
     expect(read(dir, ".gitignore").split("\n")).toContain("*.bak");
     const workflow = read(dir, WORKFLOW_PATH);
-    expect(workflow).toContain(`npx -y @scm-js/cli@${VERSION} map check *.scm *.scx --strict --format github`);
-    expect(workflow).toContain("node-version: 22");
+    // The scmjs action, pinned with the command to this version, over the folder's maps.
+    expect(workflow).toContain(`      - uses: scm-js/scm-js/action@v${VERSION}\n        with:\n          version: ${VERSION}\n          maps: |\n            *.scm\n            *.scx\n          strict: true\n          pictures: true\n`);
+    expect(workflow).toContain("  pull-requests: write");
     expect(workflow).toMatch(/^on:\n {2}push:\n {2}pull_request:$/m);
     const readme = read(dir, "README.md");
     for (const m of r.maps) expect(readme).toContain(`| ${m.name} | [${m.file}](${m.file}) | ${m.width} × ${m.height} | ${m.tileset} | ${m.players} |`);
@@ -92,17 +93,21 @@ describe("scmjs init", () => {
     expect(mapGlobs("maps", ["a.scx"])).toEqual(["maps/*.scx"]);
     expect(mapGlobs("my maps", ["a.scx"])).toEqual(["'my maps/'*.scx"]);
     expect(mapGlobs("", [])).toEqual(["*.scx"]);
+    expect(mapGlobs("my maps", ["a.scx"], false)).toEqual(["my maps/*.scx"]);
     const scripted = workflowText({ version: "1.2.3", globs: ["*.scx"], scripted: ["maps/(2)Ridge.scx"] });
-    expect(scripted).toContain("npx -y -p @scm-js/cli@1.2.3 -p typescript@6 scmjs map build --check 'maps/(2)Ridge.scx'");
-    expect(workflowText({ version: "1.2.3", globs: ["*.scx"], scripted: [] })).toContain("# - run: npx -y -p @scm-js/cli@1.2.3");
-    // The TypeScript the workflow installs is the major the compiler is built with.
+    // One glob is on the line, quoted since a plain YAML value may not start with `*`.
+    expect(scripted).toContain('          maps: "*.scx"\n');
+    expect(scripted).toMatch(/^ {10}build: true$/m);
+    expect(workflowText({ version: "1.2.3", globs: ["maps/*.scx"], scripted: [] })).toMatch(/^ {10}maps: maps\/\*\.scx\n[^]*^ {10}# build: true$/m);
+    // The TypeScript the action installs for the build is the major the compiler is built with.
     const major = String(JSON.parse(read(import.meta.dirname, "..", "package.json")).dependencies?.typescript ?? JSON.parse(read(import.meta.dirname, "..", "package.json")).devDependencies?.typescript).replace(/^[~^]/, "").split(".")[0];
     expect(TYPESCRIPT).toBe(`typescript@${major}`);
+    for (const f of ["install.sh", "run.sh"]) expect(read(import.meta.dirname, "..", "action", "scripts", f)).toContain(` ${TYPESCRIPT}`);
     expect(missingLines("*.scx   diff=scmjs\n", ATTRIBUTE_LINES, true)).toEqual(["*.scm diff=scmjs", "*.chk diff=scmjs", "*.scx merge=scmjs", "*.scm merge=scmjs", "*.chk merge=scmjs"]);
     expect(missingLines("# *.bak\n", IGNORE_LINES)).toEqual(["*.bak", "*.tests/"]);
     expect(missingLines("*.bak\n", IGNORE_LINES)).toEqual(["*.tests/"]);
     // map test needs a copy of the game, which GitHub's runners have not got: a note, not a step.
-    expect(workflowText({ version: "1.2.3", globs: ["*.scx"], scripted: [] })).toContain("      # - run: npx -y @scm-js/cli@1.2.3 map test <map> --format github");
+    expect(workflowText({ version: "1.2.3", globs: ["*.scx"], scripted: [] })).toContain("      # - run: scmjs map test <map> --format github --clips");
     expect(readmeText("Maps", [{ file: "(2)a|b.scx", name: "A\x03|B", width: 64, height: 96, tileset: "Ice", players: 2, script: false }])).toContain("| A\\|B | [(2)a\\|b.scx](%282%29a%7Cb.scx) | 64 × 96 | Ice | 2 |");
   });
 
@@ -121,7 +126,7 @@ describe("scmjs init", () => {
     writeFileSync(join(dir, "ums.scx"), await writeMapBytes(doc.scenario, { format: "scx", extras: doc.extras }));
     const r = await initFolder(dir);
     expect(r.maps.filter((m) => m.script).map((m) => m.file)).toEqual(["ums.scx"]);
-    expect(read(dir, WORKFLOW_PATH)).toContain(`scmjs map build --check ums.scx`);
+    expect(read(dir, WORKFLOW_PATH)).toMatch(/^ {10}build: true$/m);
   });
 });
 
@@ -148,7 +153,7 @@ describe.skipIf(!hasGit)("scmjs init in a git repository", () => {
     const r = await initFolder(dir);
     expect(existsSync(join(root, WORKFLOW_PATH))).toBe(true);
     expect(existsSync(join(dir, ".github"))).toBe(false);
-    expect(read(root, WORKFLOW_PATH)).toContain("map check maps/*.scm maps/*.scx --strict");
+    expect(read(root, WORKFLOW_PATH)).toContain("          maps: |\n            maps/*.scm\n            maps/*.scx\n");
     expect(existsSync(join(dir, ".gitattributes")) && existsSync(join(dir, "README.md"))).toBe(true);
     expect(r.notes.some((n) => n.includes("repository's top"))).toBe(true);
   });

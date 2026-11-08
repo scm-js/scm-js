@@ -68,6 +68,7 @@ import { diffModSources, printModDiff } from "./mod/diff";
 import { modInfo, printModInfo } from "./mod/info";
 import { newMod } from "./mod/new";
 import { gameFilesOrNull, openMod } from "./mod/open";
+import { sourceHash } from "./mod/hash";
 import { modOverlay } from "./mod/overlay";
 import { modWords } from "./engine";
 import { MOD_COMPRESSIONS, packMod, readModFolder, type ModCompression } from "./mod/pack";
@@ -1462,7 +1463,7 @@ play page. docs.scmjs.dev/mods has the folder's form.`));
     .addOption(starcraftOption())
     .action(async (paths: string[], o: { json?: boolean; starcraft?: string }) => {
       const base = await gameFilesOrNull(o.starcraft);
-      await eachMod(paths, !!o.json, async (path) => { const r = modInfo(await openMod(path, base)); return { data: r, lines: printModInfo(r) }; });
+      await eachMod(paths, !!o.json, async (path) => { const source = await openMod(path, base); const r = modInfo(source, await sourceHash(source)); return { data: r, lines: printModInfo(r) }; });
     });
 
   modCmd.command("unpack").description(t("a mod as a folder of text and pictures, to edit and keep in git")).argument("<mod>", t("a folder, an .mpq, a mod's .exe or a .zip")).argument("<folder>", t("the folder to write")).addOption(json)
@@ -1583,17 +1584,18 @@ Exits 1 when there is an error.`))
     .option("--map <file>", t("start this map with the mod (otherwise the page offers its maps)"))
     .addOption(starcraftOption())
     .addOption(new Option("--play <url>", t("the play page's address (SCMJS_PLAY_URL)")).hideHelp())
-    .addHelpText("after", "\n" + t(`Opens scmjs.dev/play in your browser and hands it the mod's files that differ from your own copy of the game (all of
-them when no copy is found here), with a hash the page knows the mod by. Nothing is uploaded: the page keeps the mod
-in your browser. Waits up to five minutes for the page.`))
+    .addHelpText("after", "\n" + t(`Opens scmjs.dev/play in your browser and hands it every file of the mod, its plugins and FireGraft files with them,
+and the mod's hash, which the page works out again from the same files. The page keeps the files that differ from
+your copy of the game. Nothing is uploaded: the page keeps the mod in your browser. Waits up to five minutes for the
+page.`))
     .action(async (path: string, o: { json?: boolean; map?: string; starcraft?: string; play?: string }) => {
       const base = await gameFilesOrNull(o.starcraft);
-      const set = await playSet(await openMod(path, base), base);
+      const set = await playSet(await openMod(path, base));
       const map = o.map ? await readInput(o.map) : null;
       if (map) expectKind(map, "map");
-      if (!o.json) print(`${pc.bold(set.name)}: ${t("{n, plural, one {# file} other {# files}} to hand over", { n: set.files.length })}${set.against ? pc.dim(` ${t("({n} the same as {game})", { n: num(set.same), game: set.against })}`) : pc.dim(` ${t("(no copy of the game here to compare with: all of them)")}`)}${dot}${pc.dim(t("hash {hash}", { hash: set.hash }))}`);
+      if (!o.json) print(`${pc.bold(set.name)}: ${t("{n, plural, one {# file} other {# files}} to hand over", { n: set.total.files })}${set.plugins + set.firegraft ? pc.dim(` ${t("(and {n, plural, one {# plugin or FireGraft file} other {# plugins and FireGraft files}})", { n: set.plugins + set.firegraft })}`) : ""}${dot}${size(set.total.bytes)}${dot}${pc.dim(t("hash {hash}", { hash: set.hash }))}`);
       const r = await playOnPage(set, { map: map && { name: map.name, bytes: map.bytes }, play: o.play, live: o.json ? undefined : (line) => print(line) });
-      if (o.json) { print(JSON.stringify({ name: set.name, hash: set.hash, files: set.files.map((f) => ({ path: f.path, bytes: f.bytes.length })), against: set.against, ...r }, null, 2)); }
+      if (o.json) { print(JSON.stringify({ name: set.name, hash: set.hash, withoutPlugins: set.withoutPlugins, files: set.files.map((f) => ({ path: f.path, bytes: f.bytes.length })), ...r }, null, 2)); }
       else if (r.error) throw new CliError(t("The play page said: {error}", { error: r.error }), null, 1);
       else print(`${mark.ok} ${r.shown ? t("On the play page's setup screen") : t("Playing on the play page")}`);
       if (r.error) process.exitCode = 1;

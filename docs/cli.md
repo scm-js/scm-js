@@ -2255,9 +2255,11 @@ $ scmjs replay info game.rep --builds
 A mod's replay names its units by the mod, so `--builds` on one shows ids (`unit 7`) until
 `--mod` names the mod: a folder, an `.mpq`, a mod's `.exe` or a `.zip`, as `scmjs mod`
 reads them. The names and costs then come from the mod's tables. The mod is checked first:
-its data set's hash, worked out as [`mod play`](#playing-a-mod-on-the-play-page) works it
-out, must be the one the replay names, or the command stops and says both. With a replay
-that names no mod, `--mod` warns that the names may not be the game's and uses them.
+[its hash](mods.md#the-mods-hash), with its plugins or without them, must be the one the
+replay names, or the command stops and says both. A replay tagged before the hash had
+lines for the plugins and the FireGraft project is matched by the hash of the game files
+alone, or of those that differ from your copy of the game. With a replay that names no
+mod, `--mod` warns that the names may not be the game's and uses them.
 
 ```sh
 scmjs replay info game.rep --builds --mod "Cosmonarchy BW"
@@ -2447,10 +2449,11 @@ scmjs mod info MyMod.mpq "My Mod.exe" mymod.zip
 
 says what a mod is: its files and their sizes by kind, its tables and which are wider than
 the game's (DatExtend's expanded `.dat`, GPTP's `.datex`), its scripts, the plugins and
-FireGraft files it carries (kept, never run), a self-executing exe's archive and the game
-it is for. It reads a folder (the game's paths at its root or a folder down), an `.mpq`, a
-self-executing `.exe` (MPQDraft's or FireGraft's patcher, read and never run) or a `.zip`.
-`--json` prints the same as data.
+FireGraft files it carries (kept, never run), a self-executing exe's archive, the game it
+is for, and [the mod's hash](mods.md#the-mods-hash) with the hash without its plugins
+beside it. It reads a folder (the game's paths at its root or in a folder under it), an
+`.mpq`, a self-executing `.exe` (MPQDraft's or FireGraft's patcher, read and never run) or
+a `.zip`. `--json` prints the same as data.
 
 ### A mod as a folder of text
 
@@ -2497,10 +2500,10 @@ scmjs mod play mymod
 scmjs mod play MyMod.mpq --map "(2)Ridge.scx"
 ```
 
-opens scmjs.dev/play in your browser and hands it the mod's files that differ from your
-copy of the game (all of them when none is found here). Nothing is uploaded: the page
-keeps the mod in your browser. The play page's support for mods arrives with its next
-release.
+opens scmjs.dev/play in your browser and hands it every file of the mod, with its plugins
+and FireGraft files, and the mod's hash. The page keeps the files that differ from your
+copy of the game. Nothing is uploaded: the page keeps the mod in your browser. The play
+page's support for mods arrives with its next release.
 
 The hand-over is the one `map play` uses: the command serves a page on 127.0.0.1, which
 opens the play page with `?handoff=1` and, each time that page says `scmjs.ready` or
@@ -2512,21 +2515,32 @@ opens the play page with `?handoff=1` and, each time that page says `scmjs.ready
   dataSet: {
     name: "My Mod",
     hash: "3f9a0c2e5b7d1146",          // 16 hex digits
-    files: [{ path: "arr/weapons.dat", file: File }, …],
+    files: [{ path: "arr/weapons.dat", file: File }, …, { path: "plugins/gptp.qdp", file: File }],
   },
   map: Uint8Array,                      // with --map: the map's bytes
   name: "(2)Ridge.scx",                 // and its file name
 }
 ```
 
-`path` is the game's path in lower case with forward slashes. `hash` is SHA-256 over a
-line `path<TAB>sha256 of the file` for each file handed over, the game's names with
-backslashes, sorted and joined with newlines; its first sixteen hex digits. A page that
-already keeps a mod with that hash can skip storing it again. The editor records the same
-hash for a data set made from the same files (see [Game
-data](game-data.md#a-map-remembers-its-data-set)). The page answers with
-`scmjs.play.started`, `scmjs.play.shown` or `scmjs.taken`, which end the wait, or
-`scmjs.play.error` with a `message`, which the command prints before it exits 1;
+`path` is the game's path in lower case with forward slashes; a plugin the mod carries is
+under `plugins/` and a FireGraft file under `firegraft/`. A game file the page would not
+take as a loose file — one beside the game's folders or under `plugins\` or `firegraft\`,
+as the members of Cosmonarchy's loader archive `plugins\apply` and `firegraft\reqlist.txt`
+are — goes in a small MPQ, `scmjs-members.mpq`, which the page opens as it opens a mod's
+own.
+
+`hash` is [the mod's hash](mods.md#the-mods-hash), which the page works out again from the
+same files and arrives at. It is SHA-256 over one line `name<TAB>sha256 of the file` a
+file, sorted by name and joined with newlines; its first sixteen hex digits. A game file's
+name is the game's, lower case with backslashes (`arr\weapons.dat`); a plugin's is
+`plugins\` and its file name, lower case (`plugins\gptp.qdp`); the FireGraft project's is
+its file name, lower case (`cosmonarchy bw.fgp`). FireGraft's database has no line, nor a
+plugin inside the mod's archive, which the page does not load. Without the plugins' lines
+it is the hash a page that runs none of them presents. A page that already keeps a mod
+with that hash can skip storing it again. The editor records the same hash for a data set
+made from the same files (see [Game data](game-data.md#a-map-remembers-its-data-set)). The
+page answers with `scmjs.play.started`, `scmjs.play.shown` or `scmjs.taken`, which end the
+wait, or `scmjs.play.error` with a `message`, which the command prints before it exits 1;
 `scmjs.waiting` messages are printed as they come. The command waits five minutes.
 
 ### A mod in the game engine
@@ -3102,14 +3116,14 @@ gives its options.
 
 | Command | What it does |
 | --- | --- |
-| [`scmjs mod info <mods…>`](#what-a-mod-holds) | What a mod is: files by kind, tables and their layouts, plugins and FireGraft files, the game it is for |
+| [`scmjs mod info <mods…>`](#what-a-mod-holds) | What a mod is: files by kind, tables and their layouts, plugins and FireGraft files, the game it is for, its hash |
 | [`scmjs mod unpack <mod> <folder>`](#a-mod-as-a-folder-of-text) | The mod as a folder of text and PNG sheets; what would not come back the same is kept as bytes |
 | [`scmjs mod pack <folder>`](#a-mod-as-a-folder-of-text) | The folder back into an MPQ, or `--folder` loose files in the game's paths |
 | [`scmjs mod new <folder>`](#a-mod-as-a-folder-of-text) | An empty mod folder: `mod.json` and a README |
 | [`scmjs mod check <mods…>`](#checking-and-comparing-mods) | Mistakes across the tables: references, pictures, scripts, sounds, buttons, requirements |
 | [`scmjs mod diff <a> [b]`](#checking-and-comparing-mods) | A changelog between two mods, or what one changes in the game |
 | [`scmjs mod build <folder>`](#checking-and-comparing-mods) | Check, then pack; stops on an error unless `--force` |
-| [`scmjs mod play <mod>`](#playing-a-mod-on-the-play-page) | The mod's changed files handed to the play page; `--map` starts a map with it |
+| [`scmjs mod play <mod>`](#playing-a-mod-on-the-play-page) | Every file of the mod handed to the play page with its hash; `--map` starts a map with it |
 | [`scmjs mod test <mod> <map> [tests…]`](#a-mod-in-the-game-engine) | `map test` with the mod laid over the game; `map test`, `trace` and `cost` take `--mod` |
 
 ### `scmjs plugin` and `scmjs bot`

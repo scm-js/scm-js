@@ -13,6 +13,7 @@ import { dirname, join, resolve } from "node:path";
 import { Creator } from "mopaq";
 import { DEFAULT_PALETTE, MOD_MANIFEST, ModFolderError, packFile, readManifest, type ModManifest, type PackContext } from "../../../src/formats/mod/folder";
 import { gameName } from "../../../src/formats/mod/sources";
+import { isModCode } from "../../../src/formats/mod/hash";
 import { loadModData } from "../../../src/formats/mod/data";
 import type { NamedPalette, QuantiseReport } from "../../../src/formats/dat/grpPng";
 import type { GameFiles } from "../gamefiles";
@@ -36,10 +37,13 @@ export interface FolderPacked {
   converted: string[];
 }
 
-/** Every file under `dir` (forward slashes), dotfiles left out, in name order. */
+/**
+ * Every file under `dir` (forward slashes), in name order. A dot folder (git's, an editor's) is left out; a dot file is
+ * not, as it may be one of the mod's (`files/lua/.gitignore`: the mod's hash counts it, so it must pack back).
+ */
 async function folderFiles(dir: string, prefix = ""): Promise<string[]> {
   const out: string[] = [];
-  const entries = (await readdir(join(dir, prefix), { withFileTypes: true })).filter((e) => !e.name.startsWith("."));
+  const entries = (await readdir(join(dir, prefix), { withFileTypes: true })).filter((e) => !(e.isDirectory() && e.name.startsWith(".")));
   entries.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
   for (const e of entries) {
     const path = prefix ? `${prefix}/${e.name}` : e.name;
@@ -75,7 +79,7 @@ export async function packFolder(dir: string, manifest: ModManifest, options: Pa
   const left: string[] = [], quantised: FolderPacked["quantised"] = [], converted: string[] = [];
   const base = options.base ?? null;
   const put = (file: string, list: { member: string; data: Uint8Array }[]) => {
-    if (!list.length && file !== "mod.json" && !/^readme(\.\w+)?$/i.test(file)) left.push(file);
+    if (!list.length && file !== "mod.json" && !/^readme(\.\w+)?$/i.test(file) && !/^\.[^/]*$/.test(file)) left.push(file);
     for (const m of list) {
       const key = gameName(m.member);
       if (out.has(key)) throw new CliError(t("{file} and {other} are both {member}.", { file, other: out.get(key)!.file, member: m.member }), t("Keep one of them: a mod has one file at each of the game's paths."), 1);
@@ -124,7 +128,8 @@ export async function packFolder(dir: string, manifest: ModManifest, options: Pa
   const source = emptySource(dir, "mod folder", manifest.name || dir.replace(/[\\/]+$/, "").split(/[\\/]/).pop()!);
   source.manifest = manifest;
   source.layers.push(...manifest.layers);
-  for (const m of members) source.files.set(gameName(m.member), { name: m.member, size: m.data.length, read: async () => m.data, layer: m.file });
+  // (A plugin or FireGraft file that was in the mod's archive goes back in as a member, and is the mod's code, not a game file.)
+  for (const m of members) if (!isModCode(m.member)) source.files.set(gameName(m.member), { name: m.member, size: m.data.length, read: async () => m.data, layer: m.file });
   for (const p of [...manifest.plugins, ...manifest.firegraft]) {
     const path = join(dir, p.file);
     const carried = { name: p.name, bytes: p.bytes, read: async () => new Uint8Array(await readFile(path)), member: p.member, layer: p.file };

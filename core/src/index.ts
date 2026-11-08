@@ -133,6 +133,7 @@ export { grpToPng, pngToGrp, sheetColumns, type GrpToPngOptions, type NamedPalet
 // What a mod comes in (a folder, an MPQ, a self-executing exe, a zip), the folder's form both ways with the check that
 // keeps a text only when it packs back to the same bytes, the lints across tables, and a changelog between two mods.
 export { GAME_FOLDERS, gameName, modRoot, programEnd, exeArchive, isMpq, isZip, isExe, readZip, dataSetHash, fileDigest, dataSetHashOfDigests, ModSourceError, type ExeArchive, type ZipMember } from "../../src/formats/mod/sources";
+export { modHash, modHashOfDigests, hashLines, gameLine, pluginLine, firegraftLine, isPluginFile, isFiregraftProject, isModCode, probeNames, type ModHash, type ModHashInput, type Digest } from "../../src/formats/mod/hash";
 export {
   MOD_MANIFEST, MOD_FORMAT, MOD_FOLDERS, DEFAULT_PALETTE, emptyManifest, readManifest, folderPath, memberPath, placeOf, memberOf, aiNames, renderMember, renderAiScripts, packFile,
   recordRendered, tidyManifest, ModFolderError,

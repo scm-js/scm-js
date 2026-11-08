@@ -2266,8 +2266,10 @@ Help ▸ Game Data…. The `"gameData"` event fires on every change.
   `read` answers which tables are in GPTP's `.datex` layout and whether the set brings
   unit names and command card pictures.
 - **The hash.** `hash` is what a map saved with the set records and what Test Map hands
-  on. When it is worked out after the files are attached or redrawn, `rehash(hash)` gives
-  it to the set in use without reading anything again.
+  on: [the mod's hash](mods.md#the-mods-hash), over every file of the set, its plugins and
+  its FireGraft project, never compared with the game's (`@scm-js/core`'s `modHash` works
+  it out). When it is worked out after the files are attached or redrawn, `rehash(hash)`
+  gives it to the set in use without reading anything again.
 - **Reading files.** `read(path)` hands over one of the extracted files as bytes, for a
   plugin that reads the game's formats itself: `arr/units.dat`, `tileset/jungle.cv5`,
   `unit/zerg/drone.grp`. Paths are the archive's, in lower case with forward slashes, and
@@ -2298,7 +2300,7 @@ const edited = new Map<string, Uint8Array>(); // by the game's names, as a mod k
 await api.gameData.attach({ id: "draft", name: "Draft" }, (path, file) => (file.member && edited.get(file.member)) ?? null);
 // … after an edit:
 api.gameData.reload();
-api.gameData.rehash(await hashOfChanges(edited)); // your digest of the files that differ from the game's
+api.gameData.rehash(await hashOfMod(edited)); // the mod's hash over every file of the set (core's modHash)
 ```
 
 ### `api.consts`

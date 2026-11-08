@@ -24,8 +24,9 @@ import { msg } from "../i18n";
 import { copyPlaySet } from "./play";
 import { DEFAULT_PROFILE, type GameDataProfile } from "./profiles";
 import { extractRemastered, pickedFilesSource, type PickedFile } from "./remastered";
-import { readStored, storedCopy, writeStoredCopy, type StoredStamp } from "./store";
-import { changedFiles, extractOverCopy, firstOf, hdOffImages, storedPathOf, type CopyReader } from "./overCopy";
+import { readStored, writeStoredCopy, type StoredStamp } from "./store";
+import { dataSetHashOf, extractOverCopy, hdOffImages, type CopyReader } from "./overCopy";
+import { probeNames } from "../formats/mod/hash";
 import type { ReadMember } from "./extract";
 
 /** The copy a data set is laid over, read a file at a time: from this browser's storage, or from the build's own files. */
@@ -42,26 +43,6 @@ function copyReader(base: NonNullable<ExtractRequest["base"]>): CopyReader {
     if (!res?.ok || res.headers.get("content-type")?.startsWith("text/html")) return null;
     return new Uint8Array(await res.arrayBuffer());
   };
-}
-
-/** How many copies laid over copies the hash looks down through before the game's archives. */
-const MAX_CHAIN = 4;
-
-/**
- * The copy a data set is laid over, then the one that copy was itself laid over (its
- * stamp's `base`), and so on: what the hash compares a file with, nearest first.
- */
-async function copyChain(base: NonNullable<ExtractRequest["base"]>): Promise<CopyReader[]> {
-  const out = [copyReader(base)];
-  if (!("profile" in base)) return out;
-  const seen = new Set([base.profile]);
-  let below = (await storedCopy(base.profile).catch(() => null))?.base;
-  while (below && !seen.has(below) && out.length < MAX_CHAIN) {
-    seen.add(below);
-    out.push(copyReader({ profile: below }));
-    below = (await storedCopy(below).catch(() => null))?.base;
-  }
-  return out;
 }
 
 export interface ExtractRequest {
@@ -85,9 +66,11 @@ export interface ExtractRequest {
   base?: { profile: string } | { url: string };
   /**
    * The set's other files in the game's folders (`sound\…`, `font\…`): the extraction does
-   * not read them, but they are the mod's, so its hash covers them as `scmjs mod play`'s does.
+   * not read them, but they are the mod's, so its hash covers them as the play page's does.
    */
   hashOnly?: { path: string; data: Blob | ArrayBuffer }[];
+  /** The plugins (`.qdp`, `.bwl`) and FireGraft files the set carries as files: never run, only hashed. */
+  code?: { path: string; data: Blob | ArrayBuffer }[];
 }
 
 export type ExtractResponse =
@@ -115,8 +98,6 @@ self.onmessage = async (e: MessageEvent<ExtractRequest>) => {
     /** Images to draw from their GRP with the 2x sprites on: the data set changed them against the copy underneath. */
     let hdOff: number[] = [];
     let overCopy = false;
-    /** The set's files the hash counted as new because nothing underneath had them. */
-    let unbased: string[] = [];
     if (req.remastered) {
       reportStep(progressOver(0, 1), 0, msg("Opening the installation"));
       const { Storage, directoryHandleSource } = await import("kascade");
@@ -138,13 +119,7 @@ self.onmessage = async (e: MessageEvent<ExtractRequest>) => {
 
       const overlay = new Map<string, Uint8Array>();
       for (const { path, bytes } of req.overlay ?? []) overlay.set(memberKey(path), new Uint8Array(bytes));
-      // What the extraction reads, noted: an archive's list of its files may be partial or absent.
-      const asked = new Set<string>();
-      const layered = readerFor(opened.archives, overlay.size ? overlay : undefined);
-      const reader: ReadMember = (name) => {
-        asked.add(memberKey(name));
-        return layered(name);
-      };
+      const reader: ReadMember = readerFor(opened.archives, overlay.size ? overlay : undefined);
 
       // Extraction is 0–80% of the bar, the write the rest.
       if (req.base) {
@@ -157,28 +132,28 @@ self.onmessage = async (e: MessageEvent<ExtractRequest>) => {
         overCopy = true;
       } else {
         result = extractGameData(reader, progressOver(0, 0.8));
-        member = async (name) => layered(name);
+        member = async (name) => reader(name);
       }
 
-      // The set's hash (core's `dataSetHash`, as the command line and the play page have it): its own files — loose,
-      // and in its own archives — that differ from what they are laid over.
+      // The set's hash (core's `modHashOfDigests`, as the play page and the command line have it): every file of its
+      // own — loose, and in its own archives — and the plugins and FireGraft files it carries; never what it is laid over.
       const own = opened.archives.filter((a) => !isGameArchive(a.name));
       const ownRead = readerFor(own, overlay.size ? overlay : undefined);
       const more = new Map((req.hashOnly ?? []).map((f) => [memberKey(f.path), f.data]));
-      const names = [...overlay.keys(), ...asked, ...more.keys(), ...own.flatMap((a) => (a.archive.files() ?? []).filter((n) => !n.startsWith("(")))];
-      // The base: the copy underneath (and the copies it was itself laid over), then the game's archives when the install
-      // was handed them — a copy laid over another keeps only the editor's files, so a sound or a font the mod replaces
-      // is compared with the game's where the game's is at hand, and counted as new (and listed) only where it is not.
-      const gameArchives = opened.archives.filter((a) => isGameArchive(a.name));
-      const gameRead = gameArchives.length > 0 ? readerFor(gameArchives) : null;
-      const baseRead = req.base ? firstOf(...(await copyChain(req.base)).map((copy) => (name: string) => copy(storedPathOf(name))), gameRead) : gameRead ?? (() => null);
-      const changed = await changedFiles(names, async (name) => {
+      const bytesOf = async (data: Blob | ArrayBuffer) => new Uint8Array(data instanceof Blob ? await data.arrayBuffer() : data);
+      // An archive's list of its files is its files, as the play page reads it; one with no list is looked into by name.
+      const members = own.flatMap((a) => {
+        const listed = (a.archive.files() ?? []).filter((n) => !n.startsWith("("));
+        return listed.length ? listed : probeNames((n) => { try { return a.archive.readFile(n); } catch { return null; } });
+      });
+      const code: { name: string; bytes: Uint8Array }[] = [];
+      for (const f of req.code ?? []) code.push({ name: f.path, bytes: await bytesOf(f.data) });
+      const set = await dataSetHashOf([...overlay.keys(), ...more.keys(), ...members], async (name) => {
         const extra = more.get(name);
-        if (extra) return new Uint8Array(extra instanceof Blob ? await extra.arrayBuffer() : extra);
+        if (extra) return bytesOf(extra);
         return ownRead(name);
-      }, baseRead);
-      hash = changed.hash ?? undefined;
-      unbased = changed.unbased;
+      }, code);
+      hash = set?.hash;
     }
     const stamp: StoredStamp = {
       from,
@@ -190,7 +165,6 @@ self.onmessage = async (e: MessageEvent<ExtractRequest>) => {
       ...(staredit ? { staredit: true } : {}),
       ...(req.base ? { base: "profile" in req.base ? req.base.profile : DEFAULT_PROFILE.id } : {}),
       ...(hash ? { hash } : {}),
-      ...(hash && unbased.length > 0 ? { hashUnbased: unbased } : {}),
       ...(hdOff.length > 0 ? { hdOff } : {}),
     };
 

@@ -188,6 +188,8 @@ MyMod/
   BrooDat.mpq
   patch_rt.mpq         applied over the two, if present
   mymod.mpq            a mod's own archive
+  My Mod.exe           a mod's self-executing loader: its archive is read, nothing is run
+  plugins/gptp.qdp     its plugins and FireGraft project: never run, part of its hash
   arr/units.dat        loose files, by the game's paths
   unit/terran/marine.grp
   rez/…
@@ -195,8 +197,9 @@ MyMod/
 
 Where several sources have the same file, the later one wins, as in the game:
 `StarDat.mpq`, then `BrooDat.mpq`, then the other archives in name order, and loose files
-under `arr`, `unit`, `tileset`, `game`, `scripts` or `rez` over all of them. Anything else
-in the folder is ignored.
+under `arr`, `unit`, `tileset`, `game`, `scripts` or `rez` over all of them. The mod's
+other files in the game's folders (its sounds, say) are not drawn with but count for [its
+hash](#a-map-remembers-its-data-set). Anything else in the folder is ignored.
 
 The data set is stored under its own name beside the game's copy, so removing one leaves
 the others alone. The *Data sets* list appears in Help ▸ Game Data… once there is a second
@@ -270,20 +273,16 @@ says where its makers publish it and offers Help ▸ Game Data…. Nothing is do
 Test Map passes the data set on in the same way, so a test target that plays the map, such
 as the play page, knows which files the map was made for.
 
-The hash covers the data set's own files that differ from the files they are laid over — a
-file the same as the game's is not part of the mod — and is worked out the same way as
-`scmjs mod play` works it out for the play page (see [Playing a mod on the play
-page](cli.md#playing-a-mod-on-the-play-page)), so the editor, the command line and the
-play page give one mod the same hash. Files of the mod in the game's folders that the
-editor does not read, such as its sounds, count too.
-
-A file is compared with the copy the data set is laid over, then with the copy that one
-was laid over in turn, and then with the game's archives, when they are among the files
-installed. A file none of them has counts as the mod's own. So when the editor's hash and
-the command line's differ for the same mod, the usual cause is a copy made before the
-editor kept every table under `arr` (before November 2026): it lacks `portdata` and
-`mapdata`, and a mod that ships them unchanged has them counted. Installing the game's
-copy again fixes that.
+The hash is [the mod's hash](mods.md#the-mods-hash): it covers every file of the data
+set's own — its loose files, the members of its archives (a loader `.exe` in the folder is
+read for its archive), the plugins and the FireGraft project it carries — and is worked
+out the same way as the play page and `scmjs mod info` work it out, so the editor, the
+command line and the play page give one mod the same hash. Files of the mod in the game's
+folders that the editor does not read, such as its sounds, count too. Nothing is compared
+with the copy the data set is laid over, so the hash does not depend on which copy that
+is. A data set made before November 2026 keeps the hash it was made with, which counted
+only the files that differ from the copy underneath; installing it again gives the hash by
+this rule.
 
 ### Names
 

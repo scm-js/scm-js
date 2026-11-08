@@ -55,19 +55,18 @@ export interface StoredStamp {
    */
   base?: string;
   /**
-   * The data set's hash (`overCopy.ts#changedFilesHash`: core's `dataSetHash` over its own
-   * files that differ from the base's, sixteen hex digits, as `scmjs mod play` and the play
-   * page compute it): what a map made with this data set records, so that the same files can
-   * be recognised elsewhere. Absent when none of its files differs (the game's own copy).
+   * The data set's hash (`overCopy.ts#dataSetHashOf`: core's `modHashOfDigests` over every file
+   * the set provides — its loose files, its own archives' members, the plugins and FireGraft
+   * project it carries — sixteen hex digits, as the play page and the command line compute it):
+   * what a map made with this data set records, so that the same files can be recognised
+   * elsewhere. Never compared with the copy underneath. Absent for a copy of the game itself
+   * (a set with no files of its own).
    */
   hash?: string;
   /**
-   * The data set's files the hash counted as its own because nothing underneath had them to
-   * compare with — neither the copy it was laid over (nor the copies under that) nor the
-   * game's archives, when the install was handed them. Members as the game names them,
-   * sorted. A mod's genuinely new files are here; so is a file of the game's that the base
-   * lacked (a copy made before the extraction kept it), which is then in the hash although
-   * it is the game's. Absent when every file the hash covers had something to compare with.
+   * Written by copies made before the hash covered every file (it then left out the files the
+   * copy underneath had the same, and listed here the ones it had nothing to compare with). No
+   * longer written; kept so such a stamp still reads.
    */
   hashUnbased?: string[];
   /**

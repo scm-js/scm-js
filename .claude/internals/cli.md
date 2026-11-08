@@ -2459,11 +2459,12 @@ handed to it; it reads the four sections and nothing after.
   Probe ×186 is spam) and `--mod <mod>` (names + costs via `openMod` → `loadModData` → `namesOf`, the mod's tables
   over the person's copy). Vanilla names are the editor's `gameUnitName` etc. (translated); costs from the copy's
   tables when one is found, else left out. **A tagged replay with no `--mod` shows ids, never the game's names.**
-- The check (`checkReplayMod`): `sourceHashes` = core's `dataSetHashOfDigests` over the files differing from the
-  person's copy (`mod play`'s rule) AND over all files; the tag's hash must equal either (no copy here → only "all"
-  exists). Mismatch → CliError, one sentence naming both hashes, hint = the makers' link. Untagged + `--mod` → a
-  warning on stderr, then the mod's names. Opened and hashed once per (path, starcraft) per process (Cosmonarchy's
-  release: ~8 s, 7,767 files; its hash over a copy here is `66603a7f4e9c78b7`).
+- The check (`checkReplayMod`): `sourceHashes` → `ModHashes {hash, withoutPlugins, all, changed}`; `isTaggedMod`
+  accepts any of the four. `hash`/`withoutPlugins` = the one rule (`mods.md` "The mod hash, one rule"); `all` (game
+  files alone) and `changed` (those differing from the person's copy; null without one) are the forms R1 tagged with,
+  kept so replays tagged before 2026-11-08 still match. Mismatch → CliError naming `hash` and the tag's, hint = the
+  makers' link. Untagged + `--mod` → a warning on stderr, then the mod's names. Opened and hashed once per (path,
+  starcraft) per process (Cosmonarchy's release: ~5 s, 7,769 files; `ac3f86533e4b5a31`).
 - `refuseModReplay`: `replay watch`, `replay export`, `map test record`; `modReplayReason` makes `map heatmap` and
   `map coverage` skip one. `checkPlayedMod` for `map trace|cost --replay`: tag needs `--mod`, same hash, and no
   plugins (`!noplugins && plugins.length` refused: the runners lay files, run no plugin). Untagged replays: unchanged.

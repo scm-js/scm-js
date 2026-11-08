@@ -1,8 +1,9 @@
 /**
  * A replay's mod. A replay records commands, not the files the game read, so scm-sim and the editor's tools add an
  * `SCMJ` section that names the mod a game was played with (`@scm-js/replay`'s `mod`: the data set's hash, name and
- * link, the plugins that ran). Here: the mod named with `--mod` checked against it by that hash (`mod play`'s rule,
- * core's `dataSetHash` over the files that differ from the person's game, or over all of them), the names and costs of
+ * link, the plugins that ran). Here: the mod named with `--mod` checked against it by that hash (the play page's rule,
+ * core's `modHashOfDigests` over every file the mod provides, with its plugins or without them; and, for a replay
+ * tagged before that rule, the older forms: the game files alone, or those that differ from the person's game), the names and costs of
  * units, upgrades and technologies from the mod's tables (the game's for a replay of the game itself, and bare ids for
  * a mod's replay with no mod named: never the game's name for a mod's id), and the refusal of the commands that play a
  * replay, which would play another game with other files.
@@ -12,6 +13,7 @@ import { techName, unitName, upgradeName } from "../../src/data/units";
 import type { DatFile } from "../../src/formats/dat/table";
 import { loadModData, type ModData } from "../../src/formats/mod/data";
 import { dataSetHashOfDigests, fileDigest } from "../../src/formats/mod/sources";
+import { sourceHash } from "./mod/hash";
 import type { GameFiles } from "./gamefiles";
 import { t, translate } from "./i18n";
 import { iscriptMembers, modTables } from "./mod/check";
@@ -19,19 +21,36 @@ import { gameFilesOrNull, openMod } from "./mod/open";
 import { reader, type ModSource } from "./mod/source";
 import { CliError, dot, duration, mark, num, pc, table } from "./ui";
 
-/** The mod's data-set hash over the files that differ from the person's game (null without a copy), and over all its files. */
-export async function sourceHashes(source: ModSource, base: GameFiles | null): Promise<{ changed: string | null; all: string }> {
-  const changed: { name: string; sha256: string }[] = [], all: { name: string; sha256: string }[] = [];
-  for (const f of source.files.values()) {
-    const data = await f.read();
-    const digest = { name: f.name, sha256: await fileDigest(data) };
-    all.push(digest);
-    if (!base) continue;
-    const theirs = await base.read(f.name);
-    if (!(theirs && theirs.length === data.length && theirs.every((b, i) => b === data[i]))) changed.push(digest);
-  }
-  return { changed: base ? await dataSetHashOfDigests(changed) : null, all: await dataSetHashOfDigests(all) };
+/** The hashes a replay may name the mod by. */
+export interface ModHashes {
+  /** The mod's hash (the play page's rule: every file it provides, its plugins and its FireGraft project). */
+  hash: string;
+  /** The same without the plugins' lines: a page that ran none of them. */
+  withoutPlugins: string;
+  /** Older forms, for replays tagged before the rule: over the game files alone, and over those that differ from the person's game (null without a copy). */
+  all: string;
+  changed: string | null;
 }
+
+/** Every hash the mod may be named by in a replay's tag. */
+export async function sourceHashes(source: ModSource, base: GameFiles | null): Promise<ModHashes> {
+  const h = await sourceHash(source);
+  let changed: string | null = null;
+  if (base) {
+    const differ: { name: string; sha256: string }[] = [];
+    for (const f of source.files.values()) {
+      let data: Uint8Array;
+      try { data = await f.read(); } catch { continue; }
+      const theirs = await base.read(f.name);
+      if (!(theirs && theirs.length === data.length && theirs.every((b, i) => b === data[i]))) differ.push({ name: f.name, sha256: await fileDigest(data) });
+    }
+    changed = await dataSetHashOfDigests(differ);
+  }
+  return { hash: h.hash, withoutPlugins: h.withoutPlugins, all: h.gameFilesOnly, changed };
+}
+
+/** Whether a replay's data set is the mod, by any of the forms it may be named by. */
+export const isTaggedMod = (wanted: string, h: ModHashes): boolean => [h.hash, h.withoutPlugins, h.all, h.changed].includes(wanted);
 
 /** The mod a replay says it was played with, in one line: "Cosmonarchy BW · 1f2e3d4c5b6a7980". */
 export const modWords = (tag: ModTag) => `${tag.dataSet.name || t("a mod")}${dot}${tag.dataSet.hash}`;
@@ -45,7 +64,7 @@ export function refuseModReplay(rep: Replay, file: string, command: string): voi
   throw new CliError(t("{file} was played with {mod}, and {command} cannot play a mod's replay yet: with the game's own files it would play another game.", { file, mod: modWords(rep.mod), command }), rep.mod.dataSet.url ? t("The mod's makers: {url}", { url: rep.mod.dataSet.url }) : null);
 }
 
-const opened = new Map<string, Promise<{ source: ModSource; base: GameFiles | null; hashes: { changed: string | null; all: string } }>>();
+const opened = new Map<string, Promise<{ source: ModSource; base: GameFiles | null; hashes: ModHashes }>>();
 
 /** Why a list of replays to play leaves a mod's replay out, or null for a replay of the game itself. */
 export const modReplayReason = (rep: Replay): string | null => (rep.mod ? t("played with {mod}, which this cannot lay over the game yet", { mod: modWords(rep.mod) }) : null);
@@ -75,13 +94,13 @@ export async function checkReplayMod(rep: Replay, file: string, path: string, st
     opened.set(key, open);
   }
   const { source, base, hashes } = await open;
-  const hash = hashes.changed ?? hashes.all;
+  const hash = hashes.hash;
   const tag = rep.mod;
   if (!tag) {
     warn(t("{file} does not say which mod it was played with: the names are {mod}'s, which may not be the game's.", { file, mod: source.name }));
     return { source, base, hash };
   }
-  if (tag.dataSet.hash === hashes.changed || tag.dataSet.hash === hashes.all) return { source, base, hash: tag.dataSet.hash };
+  if (isTaggedMod(tag.dataSet.hash, hashes)) return { source, base, hash: tag.dataSet.hash };
   throw new CliError(
     t("{mod} is not the mod {file} was played with: its data set is {hash}, the replay's is {wanted} ({name}).", { mod: source.name, file, hash, wanted: tag.dataSet.hash, name: tag.dataSet.name }),
     tag.dataSet.url ? t("The mod's makers: {url}", { url: tag.dataSet.url }) : null, 1);

@@ -146,7 +146,7 @@ What it looks for:
 | Browser | `replay export`, which draws its clips in Chrome, Chromium or Edge |
 | ffmpeg | `replay export` to an `.mp4`; a `.webm` or a `.gif` does without it |
 | StarCraft | `map preview`, `map generate` and every command that runs the game |
-| Game engine | `map trace`, `map cost`, `map rush`, `map test`, `replay watch`, `replay export`, `bot run`, `bot ladder` |
+| Game engine | `map trace`, `map cost`, `map rush`, `map test`, `map balance`, `replay watch`, `replay export`, `bot run`, `bot ladder` |
 
 A dot instead of a tick means the thing is not there and nothing is wrong: ffmpeg, the
 desktop app, Claude Code and a scmjs.dev sign-in are all optional. Only a missing thing
@@ -169,8 +169,8 @@ program carries its own).
 
 `map preview` draws a map with the game's graphics and `map generate` lays its ground with
 the game's tilesets. `map trace`, `map cost`, `map coverage`, `map rush`, `map test`,
-`map heatmap`, `replay watch`, `replay export`, `bot run` and `bot ladder` run the game
-itself. They need two things on your computer:
+`map heatmap`, `map balance`, `replay watch`, `replay export`, `bot run` and `bot ladder`
+run the game itself. They need two things on your computer:
 
 - Your copy of StarCraft, Remastered or 1.16.1. It is found in the usual places; otherwise
   name its folder with `--starcraft <folder>` or the `SCMJS_STARCRAFT` setting. Nothing of
@@ -734,6 +734,67 @@ wait for it to close, or the command sees the file unchanged straight away: `cod
 trigger, location, name, force, sound or setting refers to is blanked, and the blank slots
 at the end of the table are dropped. Nothing is renumbered, so the triggers still point at
 the right strings. `--dry-run` lists what would go and writes nothing.
+
+### Making a map smaller
+
+`scmjs map optimize` takes out of a map what the game never uses and stores the rest as
+small as the game still reads it. It writes over the map unless `--out` names another
+file; `--dry-run` says what would go and writes nothing. A table says what each step
+saved:
+
+```
+$ scmjs map optimize "(3)Defenders of the Galaxy.scm"
+✔ (3)Defenders of the Galaxy.scm: 44 KB → 36 KB (−17.7%) · written to (3)Defenders of the Galaxy.scm
+
+  Step                                           Saved
+  Unused sounds    none                          -
+  Other files      none                          -
+  Unused strings   23 strings                    243 B
+  Editor sections  skipped: with --strip-editor  -
+  Compression      PKWARE, rewritten             7.5 KB
+
+Removed
+  string    21 - Defend your Nexus at all costs.  nothing in the map refers to it
+  …
+```
+
+In order, the steps are:
+
+- Sounds that no trigger or briefing plays and the sound list does not name, and the sound
+  list's entries for files the map does not hold. A sound only the list names stays: it is
+  in the Sound Editor, waiting for a trigger.
+- Any other file in the archive that nothing in the map names, listed one by one.
+- The strings nothing refers to, as [`strings prune`](#removing-unused-strings) drops
+  them.
+- With `--strip-editor`, the sections only editors read (below).
+- Every file compressed again. PKWARE is the default, since every version of the game
+  reads it. A map that was already in zlib, which only Remastered reads, gets the smaller
+  of the two. `--compression zlib` or `--compression pkware` chooses.
+
+Some files stay whatever refers to them. The game itself opens a few files by name:
+`(attributes)`, `(signature)` and the marks Blizzard's own maps and the ladder maps carry,
+such as `blizzard_2.cnd`. TrigScript's, Magenta's and the editor's build files stay
+(`trigscript\`, `magenta\`, `scmjs\`), as do files the archive holds without a name. A
+sound StarEdit imported is stored with the game's own sound compression, which loses a
+little quality to be about four times smaller; the editor reads it but cannot write it,
+and writing it any other way would make the map larger, so such a file is kept exactly as
+it is stored. `--keep` names other files to keep: `--keep "notes\"` keeps a folder.
+
+A map built from a TrigScript script keeps its scenario as it was built, so the editor
+still opens the map you were editing; only its stray files and its compression change. A
+map whose triggers write to the game's memory (an EUD map) keeps every string, since such
+a map can reach a string by its place in the table.
+
+`--strip-editor` also drops `ISOM`, `TILE`, `DD2`, `IVER`, `IVE2`, `IOWN`, `UPUS`, `SWNM`
+and `WAV`, the sections the [CHK reference](chk-format.md) marks as read by editors only,
+with the strings and sounds only they named. The map plays the same, but an editor that
+opens it has no isometric terrain to paint, no doodads to select, no sound list and no
+switch names. It is the Save dialog's *Smallest that plays* for these sections; keep the
+original to go on editing.
+
+The result is opened again as the editor opens a map before anything is written, and when
+the editor cannot write the map any smaller, nothing is written. `scmjs map diff` between
+the two shows only what went.
 
 ### The archive as a folder
 
@@ -1827,6 +1888,75 @@ as a unit stepping round another; the default is the one the editor's Walkabilit
 uses, so the two agree. `--json` gives every walk and the table as data. A building or a
 flyer is refused (exit 2), as is a map with fewer than two start locations.
 
+### Is the map fair to every start
+
+`scmjs map balance` is a melee map's report card. The same two sides play game after game
+on the map, and the report has a row for each start location: how often the side that
+started there won, how long its games lasted and how soon it met the enemy, beside the
+numbers that need no game. The sides are your [bots](#bots): one bot plays the game's own
+computer, or two bots play each other, as [`bot ladder`](#a-ladder-for-bots) plays them.
+
+```sh
+scmjs map balance "(4)Crossing.scx" --bots out/mybot.scmbot:p --races p --games 12 --parallel 4
+scmjs map balance "(4)Crossing.scx" --bots mybot.scmbot,mybot.scmbot --games 12
+```
+
+```
+$ scmjs map balance "(4)Test4.scx" --bots ualbertabot.scmbot:p,ualbertabot.scmbot:p --games 12 --parallel 4
+12 games · UAlbertaBot vs UAlbertaBot (ualbertabot-2) · 4 start locations · 1248410ad2a0 · 4 at once
+ 2/12 ✔ UAlbertaBot (ualbertabot-2) P (start 4, 8 o'clock) beat UAlbertaBot P (start 3, 1 o'clock) · 9:39 · first contact 2:32 · seed 2
+ …
+
+(4)Test4.scx 128 × 128 · 12 games played · UAlbertaBot 8-4 vs UAlbertaBot (ualbertabot-2) 4-8 · 176 s
+
+  Start              Games  Won  Lost  Win rate  Expected  Length  Contact  Rush    Minerals           Gas
+  1      11 o'clock  8      1    7     13%       50%       8:10    2:22     32.0 s  9 × 1,500 · 6.4 t  1 × 5,000 · 7.8 t
+  2      4 o'clock   3      2    1     67%       33%       11:05   2:16     32.7 s  9 × 1,500 · 6.4 t  1 × 5,000 · 7.8 t
+  3      1 o'clock   9      7    2     78%       59%       7:40    2:26     32.0 s  9 × 1,500 · 6.4 t  1 × 5,000 · 7.8 t
+  4      8 o'clock   4      2    2     50%       42%       9:13    2:27     32.8 s  9 × 1,500 · 6.4 t  1 × 5,000 · 7.8 t
+
+  Pairs met: 1–2 ×3, 1–3 ×5, 3–4 ×4 · never: 1–4, 2–3, 2–4
+
+▲ Start 1 (11 o'clock) wins only 13% where 50% was expected — its resources and distances are within 10% of the others', so the difference is in the ground or in how the games went.
+```
+
+The map above was made by `map generate` with its four quarters mirrored, so its starts
+differ only in where they face. Twelve games of one bot against itself are enough to see
+that this bot does worse from the top left; they are not enough to say why. A verdict to
+act on wants more games, and more than one bot.
+
+| Column | Means |
+| --- | --- |
+| Games, Won, Lost | The games a side started at this start location, and how they went. A game stopped at `--frames` is counted in Games only |
+| Win rate | Won out of won and lost |
+| Expected | What the two sides' own records predict for those games. With two sides of a strength it is 50%; when one side is stronger, a start it was dealt more often is expected to win more |
+| Length, Contact | The average game, and the average time the first unit was lost to the other side |
+| Rush | The average walk to the other starts, as [`map rush`](#rush-distances) measures it; `--no-rush` leaves it out |
+| Minerals, Gas | The main's fields and geysers: those nearest this start and within 12 tiles of it, the amount each holds and their average distance in tiles |
+
+The verdict compares each start's win rate with what was expected. Within 10 points
+everywhere, the map is called balanced within the largest difference. A start further off
+is named, with the number that sets it apart from the others when one does (less gas, a
+mineral line further away, shorter walks to the enemy, earlier fights). When the games are
+too few to tell the difference from chance, the verdict says so and how far chance alone
+would move that start. When one side won every game, the games say nothing about the
+starts, and the verdict asks for two sides of a strength: the same bot twice does that.
+
+The game deals the start locations itself, as it does in any melee game, and there is no
+way yet to ask for a particular one. So each game's replay is played back afterwards to
+see which start each side was dealt, and the rows are filled from those. Enough games give
+every start its turn; the line under the table lists the pairs of starts that met and
+those that never did. A bot playing itself plays each seed once, since the other lobby
+order deals the same starts and gives nearly the same game.
+
+A game takes from ten seconds to a minute or so, depending on the bots and how long it
+lasts; `--parallel` plays several at once (by default up to four, as the computer's cores
+and memory allow; a game takes about 1.5 GB for each bot in it). The replays are deleted
+afterwards unless `--out` names a folder to keep them in, for `scmjs replay watch`.
+`--json` gives every row, every game with the starts dealt, and the verdict as data. The
+command exits with 1 when a game could not be played, and with 2 for a map with fewer than
+two start locations.
+
 ## Replays
 
 `scmjs replay` reads replays from any version, from 1.16 to Remastered. To see which of
@@ -2343,8 +2473,10 @@ with the command's text and its `--json` data:
 | `map_info`, `map_check`, `map_dump`, `map_find`, `map_diff` | Reading, checking, searching and comparing maps. `map_check` takes a `baseline` file and lists only the findings it does not hold |
 | `map_triggers_export`, `map_triggers_import`, `map_strings_export`, `map_strings_import`, `map_strings_prune` | The triggers and strings as text, in and out. The text is passed inline, so the model edits triggers in the [trigger window's text form](triggers.md) |
 | `map_set`, `map_resize`, `map_new`, `map_build`, `map_run` | The Scenario menu's edits, a new map, the TrigScript build, a plugin run over the map |
+| `map_optimize` | The map made smaller; a dry run unless the model asks to write |
 | `map_preview` | The answer is the picture itself, so a model that can see images sees the map |
 | `map_trace`, `map_cost`, `map_coverage` | The triggers run in the game, what they cost, and which fired across many replays |
+| `map_balance` | Games played on a melee map with your bots, to see whether its starts are fair; it takes minutes |
 | `replay_info`, `replay_map` | What a replay holds, and its map written out |
 | `doctor` | What this computer has, so the model knows what it can call |
 
@@ -2526,6 +2658,7 @@ gives its options.
 | [`scmjs map resize <map>`](#resizing) | Scenario ▸ Resize: another size, anchored |
 | [`scmjs map triggers export\|import\|edit`](#triggers-and-strings-as-text) | The triggers as a text or `.trg` file and back; `edit` opens them in your editor |
 | [`scmjs map strings export\|import\|edit\|prune`](#triggers-and-strings-as-text) | The strings as a text file and back; `prune` removes the unused ones |
+| [`scmjs map optimize <map>`](#making-a-map-smaller) | The map made smaller: unused sounds, files and strings out, compressed again; `--strip-editor` drops the editor-only sections too |
 | [`scmjs map unpack <map>`, `scmjs map pack <folder>`](#the-archive-as-a-folder) | The map's archive as a folder of files, and back |
 | [`scmjs map unpack <map> --text`](#a-map-as-a-folder-of-text) | The scenario as text files to keep in git; `map pack` builds the map from them |
 | [`scmjs map build <map>`](#building-a-trigscript-map) | Builds the map's TrigScript script into it, as Save does |
@@ -2541,6 +2674,7 @@ gives its options.
 | [`scmjs map test record <map> <rep>`](#a-test-from-a-replay) | A test scenario from a replay, its expectations taken from the end of the game |
 | [`scmjs map coverage <map> <replays…>`](#which-triggers-fired-across-many-games) | Plays many replays on the map: which triggers fired in how many games, and which never did |
 | [`scmjs map rush <map>`](#rush-distances) | The time to walk between the start locations, by the game's own pathing |
+| [`scmjs map balance <map> --bots <bots…>`](#is-the-map-fair-to-every-start) | Games played on the map with your bots, a row a start location: win rate, length, first contact, rush distance, resources, and a verdict |
 | [`scmjs map heatmap <map> <replays…>`](#where-things-happened-across-many-games) | Where units died, buildings went up or armies walked in many replays, as heat over the map |
 | [`scmjs map share <map>`](#a-link-to-a-map) | A link to the map on scmjs.dev; `--edit` to edit it together |
 | [`scmjs map play <map>`](#a-game-with-other-people) | A lobby on the play page with the map, and its invite link |
@@ -2599,6 +2733,8 @@ scmjs map diff --rev HEAD~1 map.scx --picture   # what the last commit changed, 
 scmjs map log map.scx                           # the map's history, in the map's terms
 scmjs map blame map.scx                         # who last changed each trigger
 scmjs map generate "(2)Duel.scx" --seed 7       # a melee map to play
+scmjs map balance map.scx --bots mybot.scmbot   # is every start fair? games from each
+scmjs map optimize map.scx --dry-run            # what would make the map smaller
 scmjs map trace map.scx                         # which triggers fire in the game
 scmjs map test map.scx                          # run map.tests.json in the game
 scmjs map trace --replay bug.rep --order        # which triggers fired in a played game, and when
@@ -2629,6 +2765,7 @@ from a clone with `npm run cli -- <command>`, or build it with `npm run build:cl
 | `cli/src/blame.ts` | `map blame`: the items of each kind, matched between versions as `map diff` matches them, and git blame's walk from the newest version back |
 | `cli/src/merge.ts` | The three-way merge: each part's rule, the ordered list merge for triggers, units matched without ids, the string table numbered again; git's three versions of a stopped file |
 | `cli/src/edit.ts` | The header set, the map resized and the unused strings dropped, over the open document |
+| `cli/src/optimize.ts`, `cli/src/relocate.ts` | `map optimize`: what refers to each member, the steps each measured as the file it leaves, the compression chosen; a member kept as stored moved to the archive's start, its key changed with its place |
 | `cli/src/report.ts` | Check Map's findings, a map test's failures and the triggers `map coverage` never saw fire, as GitHub annotations, JUnit XML and SARIF |
 | `cli/src/baseline.ts` | `map check --baseline`: a finding's identity (a trigger by its text, counts left out), the known findings matched one for one, the file read and written |
 | `cli/src/dump.ts` | The map as text: every part in file order, the triggers and strings in their text forms, members hashed, sections as they would be written |
@@ -2669,6 +2806,7 @@ from a clone with `npm run cli -- <command>`, or build it with `npm run build:cl
 | `cli/src/maptest.ts` | A map's tests: the tests file read and resolved against the map's names, the setup and timed steps made triggers of a copy, the map runner run in its test mode for each scenario, the end judged and the failed scenarios' replays kept; scenarios that play a replay, recorded from one and rewritten with `-u` |
 | `cli/src/coverage.ts` | `map coverage`: the replays matched to the map, played a few at once by the map runner's replay mode, each game's trace folded per trigger (to the parting, from the firings in order), the tests' scenarios as games, the totals and the report |
 | `cli/src/heatmap.ts`, `cli/src/heat.ts` | A heatmap from replays: the replays matched to the map, played a few at once by the replay runner's event mode and kept in the cache, the events chosen, counted per tile, spread and drawn as a heat ramp |
+| `cli/src/balance.ts` | `map balance`: the games played on the match runner, each replay's events read for the starts dealt and the first contact, the main's resources, the rows and the verdict |
 | `cli/src/rush.ts` | The walks between the start locations: the unit found by name, the map runner run in its rush mode, the table of the starts |
 | `cli/src/preview.ts`, `cli/src/png.ts` | A map's picture: the terrain from the tileset, reduced to the scale asked, the units, resources and start locations over it, and the PNG written by hand |
 | `cli/src/paint.ts` | The picture in a terminal: colour half blocks, the 256-colour fallback, ASCII shades, kitty's and iTerm2's picture protocols |

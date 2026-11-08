@@ -52,7 +52,7 @@ describe("scmjs mcp", () => {
   it("lists the tools with what each is for, and says how they fit together", async () => {
     const { tools } = await client.listTools();
     const names = tools.map((t) => t.name).sort();
-    expect(names).toEqual(["doctor", "map_build", "map_check", "map_cost", "map_coverage", "map_diff", "map_dump", "map_find", "map_info", "map_new", "map_preview", "map_resize", "map_run", "map_set", "map_strings_export", "map_strings_import", "map_strings_prune", "map_trace", "map_triggers_export", "map_triggers_import", "replay_info", "replay_map"]);
+    expect(names).toEqual(["doctor", "map_balance", "map_build", "map_check", "map_cost", "map_coverage", "map_diff", "map_dump", "map_find", "map_info", "map_new", "map_optimize", "map_preview", "map_resize", "map_run", "map_set", "map_strings_export", "map_strings_import", "map_strings_prune", "map_trace", "map_triggers_export", "map_triggers_import", "replay_info", "replay_map"]);
     for (const t of tools) {
       expect(t.description?.length ?? 0, t.name).toBeGreaterThan(60);
       expect((t.inputSchema as { properties?: object }).properties, t.name).toBeDefined();
@@ -127,6 +127,19 @@ describe("scmjs mcp", () => {
     const made = await call("map_new", { path: fresh, size: "64x64", players: 2 });
     expect(text(made)).toContain("64 × 64");
     expect((await call("map_check", { path: fresh })).structuredContent?.failed).toBe(false);
+  });
+
+  it("says what map_optimize would drop, and writes only when asked", async () => {
+    const copy = join(dir, "optimize.scx");
+    copyFileSync(ums, copy);
+    const before = readFileSync(copy);
+    const dry = await call("map_optimize", { path: copy });
+    expect(text(dry)).toMatch(/^ℹ optimize\.scx: .* if written \(--dry-run: nothing written\)/);
+    expect(dry.structuredContent?.dryRun).toBe(true);
+    expect(readFileSync(copy)).toEqual(before);
+    const done = await call("map_optimize", { path: copy, write: true });
+    expect(text(done)).toMatch(/Written to /);
+    expect(readFileSync(copy).length).toBeLessThan(before.length);
   });
 
   it("a failure is a result the model can read, with the hint", async () => {

@@ -242,6 +242,7 @@ const READY: { commands: string; needs: Need[] }[] = [
   { commands: "replay export", needs: ["StarCraft", "Browser"] },
   { commands: RUNNER_COMMANDS.map, needs: ["StarCraft", "map"] },
   { commands: RUNNER_COMMANDS.match, needs: ["StarCraft", "match"] },
+  { commands: "map balance", needs: ["StarCraft", "match", "replay"] },
 ];
 
 /**

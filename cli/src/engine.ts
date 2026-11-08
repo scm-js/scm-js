@@ -25,7 +25,7 @@ export const RUNNERS = {
   bot: { key: "runner", file: /^run(-[0-9a-f]+)?\.(mjs|cjs)$/, command: "scmjs bot run" },
   replay: { key: "replayRunner", file: /^replay(-[0-9a-f]+)?\.(mjs|cjs)$/, command: "scmjs replay watch (and map heatmap)" },
   map: { key: "mapRunner", file: /^map(-[0-9a-f]+)?\.(mjs|cjs)$/, command: "scmjs map trace (and map cost, rush and test)" },
-  match: { key: "matchRunner", file: /^match(-[0-9a-f]+)?\.(mjs|cjs)$/, command: "scmjs bot ladder" },
+  match: { key: "matchRunner", file: /^match(-[0-9a-f]+)?\.(mjs|cjs)$/, command: "scmjs bot ladder (and map balance)" },
 } as const;
 export type RunnerKind = keyof typeof RUNNERS;
 

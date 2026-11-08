@@ -134,9 +134,10 @@ await check("mcp answers initialize and lists its tools", () => new Promise((don
     const list = lines.find((m) => m?.id === 2);
     if (!list) return;
     clearTimeout(timer);
+    child.stdin.end();
     child.kill();
     const n = list.result?.tools?.length ?? 0;
-    if (n < 10) failNow(new Error(`${n} tools`)); else done();
+    child.once("exit", () => (n < 10 ? failNow(new Error(`${n} tools`)) : done()));
   });
   const send = (m) => child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", ...m })}\n`);
   send({ id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "check", version: "1" } } });
@@ -154,6 +155,7 @@ if (game) {
   await check("map cost, the weigher from inside the executable", () => expectRun(scmjs(["map", "cost", "ums.scx", "--frames", "120"]), { out: /Costliest/ }));
 }
 
-rmSync(work, { recursive: true, force: true });
+// Windows holds a folder a process just killed was started in for a moment longer (EPERM): retried, then left.
+try { rmSync(work, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 }); } catch (e) { console.log(`  (could not remove ${work}: ${e.code ?? e})`); }
 console.log(failed ? `${failed} failed` : "all passed");
 process.exit(failed ? 1 : 0);

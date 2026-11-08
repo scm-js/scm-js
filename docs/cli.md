@@ -11,26 +11,63 @@ map, keep a mod as text, and build plugins and bots.
 
 ## Getting started
 
-With Node.js 22.12 or newer, install the command once with npm:
+There are three ways to install `scmjs`. Each gives you the same command at the same
+version, so pick the one that suits your computer:
+
+- **A package manager**: Homebrew, Scoop or winget. Nothing else needs installing, and it
+  updates with the rest of your software.
+- **npm**, if you already have Node.js 22.12 or newer.
+- **A download** from the releases page, if you use neither.
+
+### Installing
+
+With Homebrew, on macOS or Linux:
+
+```sh
+brew install scm-js/tap/scmjs
+```
+
+With Scoop or winget, on Windows:
+
+```sh
+scoop bucket add scm-js https://github.com/scm-js/scoop-bucket
+scoop install scmjs
+```
+
+```sh
+winget install scm-js.scmjs
+```
+
+With npm:
 
 ```sh
 npm install -g @scm-js/cli
-scmjs info "(2)Ridge.scx"
 ```
 
-Or run it without installing. `npx` fetches it the first time:
+To try it without installing anything, run it through `npx`, which fetches it the first
+time. Every command in this guide then starts with `npx @scm-js/cli` instead of `scmjs`:
 
 ```sh
 npx @scm-js/cli info "(2)Ridge.scx"
 ```
 
-Without Node, download the command as a single program instead: see [Without
-Node](#without-node).
+Without a package manager or Node, [download the program](#downloading-the-program).
 
-### Without Node
+Then check it works. `scmjs about` prints the version and how this copy was installed:
 
-Each release also carries `scmjs` as one program with Node inside it, for Windows, macOS
-and Linux. It runs every command the npm package runs, and nothing else needs installing.
+```sh
+scmjs about
+```
+
+However it is installed, `scmjs` runs every command, and the package manager and download
+versions bring their own copy of Node. The one thing they leave out is TypeScript, which
+`map build` and plugins written in TypeScript need. Install it with npm, in the map's
+project (`npm install typescript`) or globally; `scmjs` looks in both places, and
+[`scmjs doctor`](#checking-your-setup) says whether it found it.
+
+### Downloading the program
+
+Each release has `scmjs` as a single program with Node inside it:
 
 | System | Download |
 | --- | --- |
@@ -39,45 +76,34 @@ and Linux. It runs every command the npm package runs, and nothing else needs in
 | macOS (Intel) | [scmjs-cli-macos-x64.tar.gz](https://github.com/scm-js/scm-js/releases/latest/download/scmjs-cli-macos-x64.tar.gz) |
 | Linux (x64) | [scmjs-cli-linux-x64.tar.gz](https://github.com/scm-js/scm-js/releases/latest/download/scmjs-cli-linux-x64.tar.gz) |
 
-Each holds `scmjs` (`scmjs.exe` on Windows), its licence and the licences of what is
-inside it, Node's among them. Put the program in a folder on your PATH so that `scmjs`
-works from any folder. On Windows, make a folder such as `C:\Tools`, unpack `scmjs.exe`
-into it, and add the folder under Settings ▸ System ▸ About ▸ Advanced system settings ▸
-Environment Variables ▸ Path. On macOS and Linux:
+Each archive holds `scmjs` (`scmjs.exe` on Windows) and the licences of what is inside it.
+Put the program in a folder on your PATH so that `scmjs` works from any folder.
+
+On Windows, make a folder such as `C:\Tools`, unpack `scmjs.exe` into it, and add the
+folder to your Path under Settings ▸ System ▸ About ▸ Advanced system settings ▸
+Environment Variables.
+
+On macOS and Linux, download and unpack it in one step, using the file name for your
+system from the table:
 
 ```sh
 curl -L https://github.com/scm-js/scm-js/releases/latest/download/scmjs-cli-linux-x64.tar.gz | tar -xz scmjs
 sudo mv scmjs /usr/local/bin/
 ```
 
-The programs are not code-signed. The first time, Windows may show SmartScreen's "Windows
-protected your PC": choose **More info**, then **Run anyway**. macOS refuses a program
-downloaded in a browser because "the developer cannot be verified"; clear the quarantine
-flag once in Terminal, or allow it under System Settings ▸ Privacy & Security:
+The programs are not code-signed yet, so the first run of a copy downloaded in a browser
+may be stopped:
 
-```sh
-xattr -d com.apple.quarantine scmjs
-```
+- Windows shows SmartScreen's "Windows protected your PC". Choose **More info**, then
+  **Run anyway**.
+- macOS says "the developer cannot be verified". Allow it under System Settings ▸ Privacy
+  & Security, or clear the flag once in Terminal with
+  `xattr -d com.apple.quarantine scmjs`. A copy fetched with `curl`, as above, is not
+  stopped.
 
-A file fetched with `curl` carries no quarantine flag. The release's `SHA256SUMS` lists
-each file's checksum; `sha256sum -c SHA256SUMS --ignore-missing` (`shasum -a 256 -c` on
-macOS) checks the files you downloaded.
-
-A package manager installs the same program and updates it with the rest of your software:
-
-```sh
-scoop bucket add scm-js https://github.com/scm-js/scoop-bucket
-scoop install scmjs                  # Windows, Scoop
-winget install scm-js.scmjs          # Windows, winget
-brew install scm-js/tap/scmjs        # macOS and Linux, Homebrew
-```
-
-One thing still needs Node: `map build`, and a plugin written in TypeScript, compile with
-TypeScript, which is installed with npm. The program looks for it in the map's project
-(`npm install typescript` there) and in npm's global folder. Everything else is the same
-as the npm package: the same cache folder, the same copy of StarCraft, the same Docker for
-bots. For Claude Code, register the program itself: `claude mcp add scmjs -- scmjs mcp`
-(`scmjs doctor` prints the line for your copy).
+To check a download, the release's `SHA256SUMS` file lists each file's checksum.
+`sha256sum -c SHA256SUMS --ignore-missing` (`shasum -a 256 -c SHA256SUMS` on macOS) checks
+the files you downloaded against it.
 
 ### The commands
 
@@ -189,23 +215,18 @@ when it does not, so it runs there too.
 
 `scmjs about` prints this version, whether a newer one is out and the line that installs
 it, how this copy was installed, the desktop app and Docker if they are installed, and the
-addresses of the editor, the docs and the source. To update the npm package:
+addresses of the editor, the docs and the source. Update the way you installed:
 
 ```sh
-npm install -g @scm-js/cli@latest
+brew upgrade scmjs                   # Homebrew
+scoop update scmjs                   # Scoop
+winget upgrade scm-js.scmjs          # winget
+npm install -g @scm-js/cli@latest    # npm
 ```
 
-The single program updates through the package manager that installed it:
-
-```sh
-scoop update scmjs
-winget upgrade scm-js.scmjs
-brew upgrade scmjs
-```
-
-A downloaded one is replaced by downloading the newer file from the [releases
-page](https://github.com/scm-js/scm-js/releases/latest) over it. Both kinds are released
-together, with the same version.
+For a downloaded program, download the newer file from the [releases
+page](https://github.com/scm-js/scm-js/releases/latest) and put it over the old one. Every
+way of installing gets each version on the same day.
 
 ### Shell completion
 
@@ -2811,6 +2832,10 @@ With Claude Code, once, in the folder your maps are in:
 ```sh
 claude mcp add scmjs -- npx -y @scm-js/cli mcp
 ```
+
+If `scmjs` is installed, from a package manager, a download or `npm install -g`, name it
+directly instead: `claude mcp add scmjs -- scmjs mcp`. `scmjs doctor` prints the line for
+your copy.
 
 Other tools take the same thing as JSON in their MCP settings:
 

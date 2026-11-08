@@ -71,7 +71,7 @@ installers on ONE rolling prerelease whose `nightly` tag is force-moved and whos
 replaced with `gh release upload --clobber`, never deleted and recreated) and `v*` tags (permanent
 numbered releases, the only ones that accumulate).
 The `cli` job publishes `@scm-js/cli` to npm on `v*` tags only (its version is the editor's; see `cli.md`).
-**The command as single executables** (2026-11-07, branch `cli-binary`; `cli.md` "Without Node"): the
+**The command as single executables** (2026-11-07, branch `cli-binary`; `cli.md` "Installing" + "Downloading the program"): the
 `cli-binary` matrix (ubuntu-latest → linux-x64, windows-latest → win-x64, macos-latest → darwin-arm64
 *and* darwin-x64, the Intel one's Node run under Rosetta) runs `scripts/build-cli-binary.mjs --archive
 --check` on Node 24 (`SEA_NODE_VERSION`) on the nightly and stable channels **and on pull requests**

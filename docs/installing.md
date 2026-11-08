@@ -128,26 +128,21 @@ root of any static web server.
 ## On the command line
 
 `scmjs` is scmJS in a terminal: it reads, checks, changes and shares maps and replays
-without the editor's window. It needs Node.js 22.12 or newer. Run it without installing:
+without the editor's window. Install it with a package manager:
 
 ```sh
-npx @scm-js/cli info "(2)Ridge.scx"
+brew install scm-js/tap/scmjs        # macOS and Linux
+winget install scm-js.scmjs          # Windows
 ```
 
-or install it once with `npm install -g @scm-js/cli` and type `scmjs` from then on. The
-commands that draw a map or run the game read your StarCraft folder directly, so they need
-no extracted graphics. The [command line guide](cli.md) has the rest.
+or with Scoop (`scoop bucket add scm-js https://github.com/scm-js/scoop-bucket`, then
+`scoop install scmjs`), or with npm on Node.js 22.12 or newer
+(`npm install -g @scm-js/cli`). Without either, download it from the [releases
+page](https://github.com/scm-js/scm-js/releases/latest). [Installing](cli.md#installing)
+in the command line guide has each way in full.
 
-Without Node, each release also has `scmjs` as a single program with Node inside it:
-`scmjs-cli-windows-x64.zip`, `scmjs-cli-macos-arm64.tar.gz`, `scmjs-cli-macos-x64.tar.gz`
-and `scmjs-cli-linux-x64.tar.gz` on the [releases
-page](https://github.com/scm-js/scm-js/releases/latest). Unpack it and put `scmjs`
-(`scmjs.exe` on Windows) in a folder on your PATH, or install it with
-`scoop install scmjs` (after
-`scoop bucket add scm-js https://github.com/scm-js/scoop-bucket`),
-`winget install scm-js.scmjs` or `brew install scm-js/tap/scmjs`. Like the app it is not
-code-signed, so Windows and macOS ask once before running it: see [Without
-Node](cli.md#without-node).
+The commands that draw a map or run the game read your StarCraft folder directly, so they
+need no extracted graphics. The [command line guide](cli.md) has the rest.
 
 ## The graphics
 

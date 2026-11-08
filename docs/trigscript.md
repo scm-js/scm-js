@@ -1058,7 +1058,7 @@ requests are. The [command line guide](cli.md#building-a-trigscript-map) has the
 and what it needs installed.
 
 To write a script in VS Code, Neovim or another text editor, unpack the map with
-`scmjs map unpack` and run `scmjs lsp` as the editor's language server: the script's
+`scmjs map unpack` and run `scmjs lsp` as the editor's language server. The script's
 errors, completions of the map's names, hovers and go to definition are the ones this
 window has. The [command line guide](cli.md#trigscript-in-your-text-editor) has the setup
 for each editor.

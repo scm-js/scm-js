@@ -1690,26 +1690,27 @@ settings.
 
 ### TrigScript in your text editor
 
-`scmjs lsp` is a language server for [TrigScript](trigscript.md): it speaks the Language
+`scmjs lsp` is a language server for [TrigScript](trigscript.md). It speaks the Language
 Server Protocol on standard input and output, so VS Code, Neovim, Helix or any editor with
-an LSP client can check a script as you type, outside the editor's TrigScript window. It
-gives what the window gives:
+an LSP client can check a script as you type, outside scmJS's TrigScript window. It gives
+what that window gives:
 
-- the errors `scmjs map build` would stop on, TypeScript's and TrigScript's own, checked
-  against the map's names, as you type and when you save;
-- completions: the script's own names, the standard library's, a library's exports,
-  keywords, and after `locations.`, `units.`, `switches.` or `players.` what the map has;
-- a hover with the signature and doc comment, what a program's variable holds, and which
-  of the map's things a name is (`locations.Nest` is location 2: 10 × 10 tiles at 48, 6);
-- go to definition, into the script's other files, a library's module and the standard
-  library's (`trigscript/fog`);
-- the outline of a file.
+- The errors `scmjs map build` would stop on, TypeScript's and TrigScript's own, checked
+  against the map's names, as you type and when you save.
+- Completions: the script's own names, the standard library's, a library's exports,
+  keywords, and after `locations.`, `units.`, `switches.` or `players.` what the map has.
+- A hover with the signature and doc comment, what a program's variable holds, and which
+  of the map's things a name is (`locations.Nest` is location 2: 10 × 10 tiles at 48, 6).
+- Go to definition, into the script's other files, a library's module and the standard
+  library's (`trigscript/fog`).
+- The outline of a file.
 
 A script is the `trigscript/` folder of a map unpacked with
 [`scmjs map unpack`](#the-archive-as-a-folder), where its files are kept at their paths in
 the archive. The map's locations, switches, unit names and sounds are read from
-`staredit/scenario.chk` beside it, and read again when it changes. The copies of other
-plugins' libraries the map keeps are in `trigscript/@libraries/`. So the round trip is:
+`staredit/scenario.chk` beside that folder, and read again when the file changes. The
+copies of other plugins' libraries that the map keeps are in `trigscript/@libraries/`. The
+round trip is:
 
 ```sh
 scmjs map unpack ridge.scx            # ridge/trigscript/main.ts, ridge/staredit/scenario.chk, …
@@ -1719,12 +1720,12 @@ scmjs map build ridge.scx --test      # the triggers applied and the programs bu
 ```
 
 Any other folder called `trigscript` is a script too, checked against the names every map
-has. For a script kept somewhere else, `--map` names the map whose names it uses: a map
-file, or an unpacked map's folder. With a map file, a `.ts` file belongs to the nearest
-folder above it with a `main.ts`. Files that are not part of a script get nothing from the
-server, so it can be on for every TypeScript file.
+has. For a script kept somewhere else, `--map` names the map whose names it uses, as a map
+file or an unpacked map's folder. With a map file, a `.ts` file belongs to the nearest
+folder above it that has a `main.ts`. Files that are not part of a script get nothing from
+the server, so the server can be on for every TypeScript file.
 
-The server needs TypeScript, as `map build` does: in the maps folder's project, or
+The server needs TypeScript, as `map build` does, either in the maps folder's project or
 installed globally. Install the command once rather than running it through `npx`, so the
 editor starts it quickly:
 
@@ -1734,10 +1735,10 @@ npm install -g @scm-js/cli typescript
 
 **VS Code.** TrigScript's repository has a small extension in
 [`editors/vscode/`](https://github.com/scm-js/plugin-trigscript/tree/main/editors/vscode)
-that starts the server for the files under a `trigscript/` folder; its README says how to
+that starts the server for the files under a `trigscript/` folder. Its README says how to
 install it. VS Code's own TypeScript checks the same files without TrigScript's names and
-marks `program`, `units` and the rest as unknown, so turn it off for the maps folder in
-`.vscode/settings.json`:
+marks `program`, `units` and the rest as unknown, so turn that check off for the maps
+folder in `.vscode/settings.json`:
 
 ```json
 { "typescript.validate.enable": false }
@@ -1766,7 +1767,7 @@ vim.api.nvim_create_autocmd("FileType", {
 })
 ```
 
-If `ts_ls` also runs on these files, it reports TrigScript's names as unknown; leave the
+If `ts_ls` also runs on these files, it reports TrigScript's names as unknown. Leave the
 maps folder out of its `root_dir`.
 
 **Helix**, in a `.helix/languages.toml` in the maps folder, so it applies there only:
@@ -1786,8 +1787,8 @@ output, and the TypeScript file types. Zed starts language servers only from its
 extensions, and there is no TrigScript extension for it yet.
 
 What the server says about each check goes to standard error, which an editor shows as the
-server's log: the script and the map it found, and how long each check took (about half a
-second for a script that imports the standard library).
+server's log. It names the script and the map it found, and how long each check took,
+about half a second for a script that imports the standard library.
 
 ### In scripts and pipes
 

@@ -652,6 +652,85 @@ volume down, so the game's own music does not play over the song.
 Touhou Project by ZUN; the shadow-art video is by Anira. Neither comes with the editor or
 the plugin.
 
+### Korobeiniki
+
+[![Korobeiniki on the minimap: a well of coloured blocks, the falling piece and its grey
+ghost, the next piece, and a bar for each layer of the
+music](images/showcase-korobeiniki.webp)](https://www.youtube.com/watch?v=RQ6CvRq9bMA)
+
+[Watch it on YouTube](https://www.youtube.com/watch?v=RQ6CvRq9bMA) · [Download the
+map](images/showcase-korobeiniki.scx) (7.9 MB) · [The whole
+script](https://github.com/scm-js/plugin-trigscript/blob/main/probes/blocks.tsx)
+
+A falling-block game on the minimap, played with the keyboard, and a band that follows it.
+The song is Korobeiniki, and its form is decided by the game as it is played: verse and
+break take turns, a new level brings the build and then the drop, four lines at once bring
+the drop straight away, a stack grown past two thirds of the well keeps the build going
+until it is dug down, and from level 4 the last verse, a tone up, takes the verse's place.
+The pieces fall on the beat, so a piece lands, and its lines go, on the music.
+
+**The screen** is units. Each cell of the well is an Overlord, and the minimap draws it in
+its owner's colour, so each piece belongs to a player of its own, given a colour in the
+map (red, white, green, blue, yellow, teal, purple). The [`trigscript/screen`
+library](trigscript-library.md#screen) keeps the picture: drawing sets cells, and
+`present()` takes away and makes only the Overlords whose cell changed. The grey ghost
+under the piece is the computer's: Remastered's minimap shows no units of Players 9 to 12,
+and the computer is the one slot that owns no piece. Because a computer moves its own
+units, and an air unit on the move pushes its neighbours aside, the ghost is taken away
+before each picture is shown and made again after it, so it never moves.
+
+**The music** is a [`trigscript/music`](trigscript-library.md#music) song in four layers
+(drums, bass, harmony, melody), cut into half bars when the script is built. In the game a
+`Band` plays the sections, and the script tells it where to go next:
+
+```js
+function direct() {
+  const s = band.section;
+  const base = hud.level >= TONE_UP ? LAST : VERSE;
+  if (hud.mode !== PLAYING) {
+    // The outro rings out, then the intro, again and again.
+    band.loop = s === INTRO;
+    if (s === OUTRO) band.queue(INTRO);
+    else if (s !== INTRO && band.next !== OUTRO && band.next !== INTRO) band.go(INTRO);
+  } else {
+    // What the game did, at the next half bar: four lines, the drop; a level, or a
+    // stack grown high, the build (and after it, as the song goes, the drop).
+    if (tetris && s !== DROP) band.go(DROP);
+    else if ((leveled || (high && s !== BUILD)) && s !== DROP && s !== BUILD && band.next !== DROP) band.go(BUILD);
+    tetris = false;
+    leveled = false;
+    // While the stack stays high the build plays again; else each section goes on.
+    band.loop = s === BUILD && high;
+    if (!(band.now && band.next >= 0)) {
+      if (s === INTRO || s === OUTRO) band.go(base);
+      else if (s === VERSE || s === LAST || s === DROP) band.queue(BREAK);
+      else if (s === BUILD) band.queue(DROP);
+      else band.queue(base);
+    }
+  }
+  // No drums in the first verse.
+  band.on[DRUMS] = !(hud.mode === PLAYING && hud.level === 0 && s === VERSE);
+  hud.music = s;
+}
+```
+
+Gravity counts in eighths of a beat from the band's own clock, so a row falls on the beat:
+every beat and a half at level 1, every eighth of a beat at level 10. One, two or three
+lines ring a chime of as many notes. The bars right of the well jump on each beat for the
+layers that begin a note in that half bar.
+
+**The map.** 64 × 64 Space Platform: the well and the boxes are framed in Platform, the
+rest is Space, so the minimap shows grey frames on black. Player 1 is the human, Player 2
+the computer that owns the ghost, and Players 3 to 8 own the pieces. The script reads the
+keys through the game itself, so it plays the same alone or hosted.
+
+**Playing it.** Host a multiplayer game alone and turn the game's music off. A D move, W
+and Q turn, S drops a row, Space drops all the way, E holds the piece for later. Both
+graphics modes work; the video is in Remastered.
+
+Korobeiniki is a Russian folk song from the 19th century; the arrangement was made for
+this map.
+
 ## Coming from eudplib
 
 This page is for map makers who already write EUD maps with eudplib, in Python or in

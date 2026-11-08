@@ -5,6 +5,7 @@
  */
 import { spawnSync } from "node:child_process";
 import { readdirSync, readFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { workflowText } from "../cli/src/init";
@@ -13,6 +14,8 @@ const root = join(import.meta.dirname, "..");
 const action = join(root, "action");
 const read = (...p: string[]) => readFileSync(join(...p), "utf8");
 const hasBash = spawnSync("bash", ["--version"]).status === 0;
+/** js-yaml where node_modules has it (it comes with the tools, not as a dependency of ours): the YAML read as GitHub reads it. */
+const yaml = (() => { try { return createRequire(import.meta.url)("js-yaml") as { load(text: string): unknown }; } catch { return null; } })();
 
 /** The keys of a top-level YAML mapping's block (`inputs:`), read by indentation: no YAML parser is a dependency. */
 function keysUnder(text: string, block: string): string[] {
@@ -51,6 +54,18 @@ describe("the scmjs action", () => {
       const uses = [...read(file).matchAll(/uses: (\S+)(.*)/g)].filter((m) => !m[1].startsWith("./"));
       expect(uses.length).toBeGreaterThan(0);
       for (const [, ref, comment] of uses) expect(`${ref}${comment}`, file).toMatch(/^[\w-]+\/[\w/-]+@[0-9a-f]{40} # v\d+\.\d+\.\d+$/);
+    }
+  });
+
+  it.skipIf(!yaml)("is YAML, as are the workflow that tests it and the one scmjs init writes", () => {
+    const manifest = yaml!.load(yml) as { inputs: Record<string, { description: string }>; runs: { using: string } };
+    expect(Object.keys(manifest.inputs)).toEqual(inputs);
+    for (const [k, v] of Object.entries(manifest.inputs)) expect(typeof v.description, k).toBe("string");
+    expect(manifest.runs.using).toBe("composite");
+    yaml!.load(read(root, ".github", "workflows", "action-test.yml"));
+    for (const globs of [["*.scx"], ["maps/*.scm", "maps/*.scx"], ["my maps/*.scx"]]) {
+      const w = yaml!.load(workflowText({ version: "1.2.3", globs, scripted: [] })) as { jobs: { maps: { steps: { with?: { maps: string } }[] } } };
+      expect(w.jobs.maps.steps[1].with!.maps.trim().split("\n")).toEqual(globs);
     }
   });
 

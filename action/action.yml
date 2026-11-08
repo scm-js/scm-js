@@ -41,7 +41,8 @@ inputs:
     description: On a pull request (or a push), compare each changed map with the base and say what changed.
     default: "true"
   base:
-    description: The revision to compare with. Empty: the pull request's base, or on a push the commit before it.
+    description: >-
+      The revision to compare with. Empty: the pull request's base, or on a push the commit before it.
     default: ""
   pictures:
     description: Draw where each changed map changed (scmjs map diff --picture) and attach the PNGs as an artifact.
@@ -55,7 +56,8 @@ inputs:
       repository's own TypeScript when node_modules has it, else installs typescript@6 with npm.
     default: "false"
   artifact:
-    description: The pictures' artifact name. Empty: map-pictures-<job>. Give each use its own name when one run uses the action twice.
+    description: >-
+      The pictures' artifact name. Empty: map-pictures-<job>. Give each use its own name when one run uses the action twice.
     default: ""
   token:
     description: The token for the release download and the comment.

@@ -25,6 +25,7 @@ import { mapLog, printLog } from "./maplog";
 import { BLAME_KINDS, blameMap, printBlame, printBlameItem, type BlameKind } from "./blame";
 import { asMap, printMerge, runMerge, stagedInputs, type Side } from "./merge";
 import { diffPicture } from "./diffpicture";
+import { CLIP_KINDS, clipsDir, clipsSummary, makeClips, type ClipKind, type ClipRun } from "./clips";
 import { dumpMap, printDump } from "./dump";
 import { ANCHORS, parseAnchor, pruneStrings, resizeMap, setHeader, VERSIONS, ENCODINGS } from "./edit";
 import { exportStrings, exportTriggers, importStrings, importTriggers, writeBack, writeOutput } from "./exchange";
@@ -842,6 +843,8 @@ const test = map.command("test").description("runs the map's tests in the game: 
   .option("--frames <n>", "frames a scenario runs when it does not say (24 a second)", "2400")
   .option("--seed <n>", "the game's seed when a scenario does not say; the same seed and map give the same game", "1")
   .option("-u, --update", "a scenario driven by a replay: write what the game gives now into the expectations that no longer hold")
+  .option("--clips [folder]", "a clip of the last seconds of each failed scenario's game, drawn in a browser (<map>.clips/ beside the map)")
+  .addOption(new Option("--clips-format <kind>", "the clips' kind").choices(CLIP_KINDS).default("gif"))
   .option("--starcraft <folder>", "your installation of StarCraft (SCMJS_STARCRAFT); found in the usual places otherwise")
   .addOption(new Option("--engine <where>", "the play page's address, or a folder holding the engine (SCMJS_PLAY_URL)").hideHelp())
   .addHelpText("after", `
@@ -851,9 +854,13 @@ hold at the end (a trigger fired or never did, a switch, a death count, units in
 Each scenario is one game with nobody playing but the steps; one that fails says what did not hold and keeps its
 replay. A scenario may name a replay instead ("replay": "game.rep"): its players' commands are the game, played on
 this map; scmjs map test record makes one from a replay, and -u writes in what such a scenario's game gives now.
+--clips keeps a GIF (or a WebM) of each failed scenario: the 8 seconds of its game before the frame it ended on and 2
+after, drawn as scmjs replay export draws a replay, so it needs a browser too; without one the tests still run.
 Exits 1 when a scenario fails, 2 when the tests or the map cannot be read or the game could not start.
 The engine and your copy of StarCraft are needed, as for scmjs map trace. docs.scmjs.dev/cli/ has the file's form.`)
-  .action(async (file: string, testFiles: string[], o: { json?: boolean; format: string; out?: string; frames: string; seed: string; update?: boolean; starcraft?: string; engine?: string }) => {
+  .action(async (file: string, testFiles: string[], o: { json?: boolean; format: string; out?: string; frames: string; seed: string; update?: boolean; clips?: string | true; clipsFormat: ClipKind; starcraft?: string; engine?: string }) => {
+    // An optional value takes the next word, so `--clips ums.tests.json` would read the tests file as the folder.
+    if (typeof o.clips === "string" && /\.json$/i.test(o.clips)) { testFiles.push(o.clips); o.clips = true; }
     if (!(FORMATS as readonly string[]).includes(o.format)) throw new CliError(`--format takes ${FORMATS.join(", ")}, not "${o.format}"`, null, 2);
     const format: Format = o.json ? "json" : (o.format as Format);
     const defaults = { frames: whole(o.frames, "frames", 1), seed: whole(o.seed, "seed") };
@@ -877,12 +884,24 @@ The engine and your copy of StarCraft are needed, as for scmjs map trace. docs.s
     const written = o.update ? updateTests(run.scenarios) : [];
     if (text) for (const w of written) print(`${pc.cyan("✎")} ${plural(w.expectations, "expectation")} written into ${relative(process.cwd(), w.file) || w.file}`);
     if (run.scenarios.some((s) => !s.ok)) process.exitCode = Math.max(Number(process.exitCode ?? 0), 1);
-    const report: TestReport = { map: input.path, name: input.name, cases: run.scenarios.map((s) => ({ name: s.name, file: s.file, line: s.line, ok: s.ok, ms: s.ms, failures: s.results.filter((x) => !x.ok), replay: s.replay })) };
-    if (format === "json") print(JSON.stringify(testJson(input.name, run), null, 2));
+    if (text) print("", testSummary(run));
+    // The clips come after the verdict: they take longer, and a want of a browser leaves the result as it is.
+    let clips: ClipRun | null = null;
+    if (o.clips !== undefined && run.scenarios.some((s) => !s.ok)) {
+      const engine = o.engine ?? "";
+      clips = await makeClips(run.scenarios, {
+        dir: clipsDir(input.path, input.name, o.clips), kind: o.clipsFormat, starcraft: o.starcraft, play: /^https?:/.test(engine) ? engine : undefined,
+        live: text ? (line) => print(line) : undefined,
+      });
+      if (text) print(...clipsSummary(clips));
+      else if (clips.missing) process.stderr.write(`${clips.missing}\n`);
+    }
+    const clipOf = (s: (typeof run.scenarios)[number]) => clips?.clips.find((c) => c.scenario === s.name && c.tests === s.file)?.file ?? null;
+    const report: TestReport = { map: input.path, name: input.name, cases: run.scenarios.map((s) => ({ name: s.name, file: s.file, line: s.line, ok: s.ok, ms: s.ms, failures: s.results.filter((x) => !x.ok), replay: s.replay, clip: clipOf(s) })) };
+    if (format === "json") print(JSON.stringify({ ...testJson(input.name, run), ...(clips ? { clips: clips.clips, clipsMissing: clips.missing } : {}) }, null, 2));
     else if (format === "github") print(...githubTestAnnotations([report]));
     else if (format === "junit") process.stdout.write(junitTestXml([report]));
     else if (format === "sarif") process.stdout.write(sarifTestJson([report], VERSION));
-    else print("", testSummary(run));
   });
 
 test.command("record").description("a scenario from a replay: the game played on the map, its end written as expectations to trim").argument("<map>").argument("<replay>").addOption(json)

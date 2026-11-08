@@ -6,6 +6,8 @@
 #
 # Runs on bash 3.2 (a Mac's own) as well: no mapfile, no globstar, no associative arrays.
 set -uo pipefail
+# Plain text throughout: what scmjs prints goes into the comment and the summary as well as the log.
+export NO_COLOR=1
 
 work="$RUNNER_TEMP/scmjs-action"
 pictures="$work/pictures"

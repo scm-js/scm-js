@@ -104,8 +104,8 @@ describe("scmjs init", () => {
     expect(TYPESCRIPT).toBe(`typescript@${major}`);
     for (const f of ["install.sh", "run.sh"]) expect(read(import.meta.dirname, "..", "action", "scripts", f)).toContain(` ${TYPESCRIPT}`);
     expect(missingLines("*.scx   diff=scmjs\n", ATTRIBUTE_LINES, true)).toEqual(["*.scm diff=scmjs", "*.chk diff=scmjs", "*.scx merge=scmjs", "*.scm merge=scmjs", "*.chk merge=scmjs"]);
-    expect(missingLines("# *.bak\n", IGNORE_LINES)).toEqual(["*.bak", "*.tests/"]);
-    expect(missingLines("*.bak\n", IGNORE_LINES)).toEqual(["*.tests/"]);
+    expect(missingLines("# *.bak\n", IGNORE_LINES)).toEqual(["*.bak", "*.tests/", "*.clips/"]);
+    expect(missingLines("*.bak\n", IGNORE_LINES)).toEqual(["*.tests/", "*.clips/"]);
     // map test needs a copy of the game, which GitHub's runners have not got: a note, not a step.
     expect(workflowText({ version: "1.2.3", globs: ["*.scx"], scripted: [] })).toContain("      # - run: scmjs map test <map> --format github --clips");
     expect(readmeText("Maps", [{ file: "(2)a|b.scx", name: "A\x03|B", width: 64, height: 96, tileset: "Ice", players: 2, script: false }])).toContain("| A\\|B | [(2)a\\|b.scx](%282%29a%7Cb.scx) | 64 × 96 | Ice | 2 |");

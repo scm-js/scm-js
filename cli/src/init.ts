@@ -46,10 +46,11 @@ const ATTRIBUTE_COMMENT = "# Maps show in git diff as text (scmjs map dump) and 
 /**
  * `.gitignore`: only what is left beside a map without being asked for by name. The commands write a map back in place
  * or where `--out` says, and `map unpack`'s folder is meant to be kept; the desktop app's Save copies the file it
- * replaces to `<map>.bak`, and `map test` keeps the replays of the scenarios that failed in `<map>.tests/`.
+ * replaces to `<map>.bak`, and `map test` keeps the replays of the scenarios that failed in `<map>.tests/` and, with
+ * `--clips`, their clips in `<map>.clips/`.
  */
-export const IGNORE_LINES = ["*.bak", "*.tests/"];
-const IGNORE_COMMENT = "# Left beside a map: the file the desktop app's Save replaced (<map>.bak), the replays of failed map tests (<map>.tests/)";
+export const IGNORE_LINES = ["*.bak", "*.tests/", "*.clips/"];
+const IGNORE_COMMENT = "# Left beside a map: the file the desktop app's Save replaced (<map>.bak), the replays and clips of failed map tests (<map>.tests/, <map>.clips/)";
 
 /**
  * The TypeScript the action installs for `map build` when the repository has none of its own: the major the TrigScript
@@ -344,7 +345,7 @@ export async function initFolder(folder: string, o: InitOptions = {}): Promise<I
     const path = join(dir, name);
     const text = existsSync(path) ? readFileSync(path, "utf8") : null;
     const lack = missingLines(text ?? "", want, attributes);
-    const what = attributes ? "maps diff as text and merge part by part" : "the .bak files Save leaves, map test's replays";
+    const what = attributes ? "maps diff as text and merge part by part" : "the .bak files Save leaves, map test's replays and clips";
     if (!lack.length) { files.push({ path: show(path), state: "kept", detail: "has the lines already", content: want.join("\n") + "\n" }); continue; }
     const content = appendLines(text ?? "", lack, comment);
     if (!o.print) writeFileSync(path, content);

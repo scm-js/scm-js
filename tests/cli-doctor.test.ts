@@ -80,14 +80,14 @@ describe("scmjs doctor: what is ready", () => {
       { what: "Browser", state: "warn", detail: "not found" },
       engine(["bot", "replay"]),
     ])).toEqual({
-      "map info|check|…": "ok", "replay info|open": "ok", mcp: "ok", "map build": "ok", "map preview|generate": "ok", "bot new|build": "Docker",
+      "map info|check|…": "ok", "replay info|open": "ok", mcp: "ok", "map build": "ok", "map preview|generate|analyze": "ok", "bot new|build": "Docker",
       "bot run": "ok", "replay watch": "ok", "replay export": "Browser", "map trace|cost": "engine runner", "bot ladder": "engine runner", "map balance": "engine runner",
     });
   });
 
   it("names the copy of the game before the runner, waits for no engine never fetched, and blocks all on Node", () => {
     const r = by([{ what: "StarCraft", state: "warn", detail: "not found" }, engine([], null)]);
-    expect([r["bot run"], r["map trace|cost"], r["bot ladder"], r["map preview|generate"], r["map build"]]).toEqual(["StarCraft", "StarCraft", "StarCraft", "StarCraft", "ok"]);
+    expect([r["bot run"], r["map trace|cost"], r["bot ladder"], r["map preview|generate|analyze"], r["map build"]]).toEqual(["StarCraft", "StarCraft", "StarCraft", "StarCraft", "ok"]);
     expect(by([engine([], null)])["map trace|cost"]).toBe("ok");
     expect(Object.values(by([{ what: "Node", state: "bad", detail: "" }]))).toEqual(Array(12).fill("Node"));
   });

@@ -46,14 +46,14 @@ export interface MainResources {
 }
 
 /** The map's start locations, by player (1–8), and where each is as a clock face from the middle. */
-export function startPlaces(doc: OpenedMap): StartPlace[] {
+export function startPlaces(doc: Pick<OpenedMap, "scenario">): StartPlace[] {
   const scn = doc.scenario;
   return scn.units.filter((u) => u.unitId === START_LOCATION && u.owner < 8).sort((a, b) => a.owner - b.owner)
     .map((u) => ({ player: u.owner + 1, x: u.x, y: u.y, clock: clockOf(u.x, u.y, scn.width, scn.height) }));
 }
 
 /** The resources of each start's main: every field and geyser nearest that start and within `MAIN_RADIUS` of it. */
-export function mainResources(doc: OpenedMap, starts: readonly StartPlace[]): MainResources[] {
+export function mainResources(doc: Pick<OpenedMap, "scenario">, starts: readonly StartPlace[]): MainResources[] {
   const out = starts.map((): MainResources & { fd: number[]; gd: number[] } => ({ fields: 0, minerals: 0, geysers: 0, gas: 0, fieldTiles: null, geyserTiles: null, fd: [], gd: [] }));
   const minerals = new Set<number>(MINERAL_FIELD_IDS);
   for (const u of doc.scenario.units) {

@@ -1,5 +1,5 @@
 import type { Anim } from "../dat/anim";
-import { DrawFunction, NO_UNIT, RANDOM_DIRECTION } from "../dat/dat";
+import { datCount, DrawFunction, NO_UNIT, RANDOM_DIRECTION } from "../dat/dat";
 import { drawGrpFrame, facingFrame } from "../dat/grp";
 import { decodeDxtRect, parseDds, type DdsImage } from "../dds";
 import { animImage, hdSprites, imageGrpPath, imageLoPath, requestAnim, requestGrp, requestLo, requestRemap, unitImageId, type UnitAssets } from "./load";
@@ -345,7 +345,7 @@ export function getImageFrame(assets: UnitAssets, imageId: number, frame: number
 
 /** The unit type's main graphic in its editor pose — what previews and the placement ghost show. */
 export function getUnitSprite(assets: UnitAssets, unitId: number, team: TeamColorSpec, palette: Uint8Array, paletteKey: string, hd: boolean = hdSprites()): UnitSprite | null {
-  if (unitId < 0 || unitId >= NO_UNIT) return null;
+  if (unitId < 0 || unitId >= datCount(assets.units.flingy)) return null;
   const imageId = unitImageId(assets, unitId);
   const { frame, flip } = editorFrame(assets, unitId, imageId);
   return getImageFrame(assets, imageId, frame, flip, team, palette, paletteKey, hd);
@@ -368,7 +368,8 @@ export function turretOffset(assets: UnitAssets, unitId: number): { x: number; y
 }
 const NO_OFFSET = { x: 0, y: 0 };
 
-/** The turret (or other subunit) drawn on top of a unit, or NO_UNIT. */
+/** The turret (or other subunit) drawn on top of a unit, or NO_UNIT — also for an id past the data set's types. */
 export function subunitOf(assets: UnitAssets, unitId: number): number {
-  return assets.units.subunit[unitId] ?? NO_UNIT;
+  const sub = assets.units.subunit[unitId] ?? NO_UNIT;
+  return sub < datCount(assets.units.flingy) ? sub : NO_UNIT;
 }

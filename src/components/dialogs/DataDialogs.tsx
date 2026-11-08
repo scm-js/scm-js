@@ -4,17 +4,18 @@ import { FlaskConical, RotateCcw, Search, Swords, TrendingUp } from "lucide-reac
 import { commitSettingsAtom, scenarioAtom, settingsRevisionAtom } from "../../atoms/documentAtoms";
 import { displayColorHex } from "../../data/players";
 import {
-  RACE_LABEL, TECH_NAMES, TECH_RACE, techLabel, UNIT_GROUPS, unitLabel, UPGRADE_NAMES, UPGRADE_RACE, upgradeLabel, type RaceKey,
+  RACE_LABEL, shownUnitGroups, TECH_NAMES, TECH_RACE, techLabel, unitLabel, UPGRADE_NAMES, UPGRADE_RACE, upgradeLabel, type RaceKey,
 } from "../../data/units";
 import { weaponName } from "../../data/weapons";
 import { NO_UNIT, NO_WEAPON } from "../../formats/dat/dat";
+import { gameDataSourceAtom } from "../../atoms/gameDataAtoms";
 import {
   techRestrictionSections, techSettingsSections, unitSettingsSections, upgradeRestrictionSections, upgradeSettingsSections, type Scenario,
 } from "../../formats/chk/scenario";
 import {
   cloneTechRestrictions, cloneTechSettings, cloneUnitAvailability, cloneUnitSettings, cloneUpgradeRestrictions, cloneUpgradeSettings,
   defaultTechRestrictions, defaultTechSettings, defaultUnitAvailability, defaultUnitSettings, defaultUpgradeRestrictions, defaultUpgradeSettings,
-  PLAYER_SLOTS, puniIndex, techIndex, techState, TECHS_ORIGINAL, upgradeIndex, upgradeLevels, UPGRADES_ORIGINAL,
+  PLAYER_SLOTS, puniIndex, techIndex, techState, TECHS_ORIGINAL, UNIT_TYPES, upgradeIndex, upgradeLevels, UPGRADES_ORIGINAL,
 } from "../../formats/chk/sections/settings";
 import {
   applyTechSettings, applyUnitSettings, applyUpgradeSettings, readTechSettings, readUnitSettings, readUpgradeSettings, unitCustomName,
@@ -92,20 +93,21 @@ const FRAMES_HINT = msg("Game frames: about 24 per second on Fastest, 15 on Norm
 
 /* ── Unit Settings ──────────────────────────────────────── */
 
-interface UnitItem { id: number; name: string; group: string }
+interface UnitItem { id: number; name: string; group: string; race: RaceKey }
 
 /**
- * Every unit type in palette order, with its group for the list's section labels. Built
- * when asked rather than once at import, because the names follow the loaded data set.
+ * Every unit type in palette order, with its group for the list's section labels — the
+ * data set's own types past 228 last. Built when asked rather than once at import, because
+ * the names follow the loaded data set.
  */
-const unitItems = (): UnitItem[] => UNIT_GROUPS.flatMap((g) => g.units.map((id) => ({ id, name: unitLabel(id), group: g.label })));
+const unitItems = (dataSet: string): UnitItem[] => shownUnitGroups(dataSet).flatMap((g) => g.units.map((id) => ({ id, name: unitLabel(id), group: g.key, race: g.race })));
 
-function UnitList({ selected, onSelect }: { selected: number; onSelect: (id: number) => void }) {
+function UnitList({ selected, onSelect, dataSet }: { selected: number; onSelect: (id: number) => void; dataSet: string }) {
   const [q, setQ] = useState("");
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    return unitItems().filter((u) => !needle || u.name.toLowerCase().includes(needle) || String(u.id) === needle);
-  }, [q]);
+    return unitItems(dataSet).filter((u) => !needle || u.name.toLowerCase().includes(needle) || String(u.id) === needle);
+  }, [q, dataSet]);
   return (
     <div className="col" style={{ minHeight: 0, height: "100%" }}>
       <div className="row">
@@ -136,6 +138,7 @@ export function UnitSettingsDialog({ entry }: DialogProps) {
   useAtomValue(settingsRevisionAtom);
   const commit = useSetAtom(commitSettingsAtom);
   const { loaded: assets } = useUnitAssets();
+  const dataSet = useAtomValue(gameDataSourceAtom)?.profile.name ?? "";
   const [sel, setSel] = useState(0);
   const [state, setState, guard] = useScenarioForm(scenario, (scn) => ({ ...readUnitSettings(scn), names: new Map<number, string>() }));
   const [, bump] = useState(0); // the copies are typed arrays edited in place
@@ -216,8 +219,9 @@ export function UnitSettingsDialog({ entry }: DialogProps) {
     commit();
   };
 
-  const item = unitItems().find((u) => u.id === sel);
-  const race = UNIT_GROUPS.find((g) => g.label === item?.group)?.race;
+  const race = unitItems(dataSet).find((u) => u.id === sel)?.race;
+  // A type past the game's 228 is placed like any other, but the CHK's settings sections hold 228 rows.
+  const unsettable = sel >= UNIT_TYPES;
   const sections = [...unitSettingsSections(scenario), "PUNI"].map((n) => n.trim()).join(" + ");
 
   return (
@@ -233,7 +237,7 @@ export function UnitSettingsDialog({ entry }: DialogProps) {
       footerLeft={<div className="row"><Button size="sm" onClick={resetAll} title={t("Every type back to its dat defaults, every player back to the global availability")}><RotateCcw size={11} /> {" "}{t("Reset all to defaults")}</Button><span className="mono hint">{t("writes {sections}", { sections })}</span></div>}
     >
       <div className="split" style={{ ["--split" as string]: "260px" }}>
-        <UnitList selected={sel} onSelect={setSel} />
+        <UnitList selected={sel} onSelect={setSel} dataSet={dataSet} />
         <div className="col" style={{ gap: 12, overflow: "auto" }}>
           <div className="unit-header">
             <div className="unit-frame" title={t("Drawn in Player 1's colour")}>
@@ -244,8 +248,9 @@ export function UnitSettingsDialog({ entry }: DialogProps) {
               <span className="title"><InlineString text={customName || unitLabel(sel)} /></span>
               <span className="hint">{t("{unitName} · id {sel}", { unitName: unitLabel(sel), sel })}{race ? ` · ${translate(RACE_LABEL[race])}` : ""}{customName ? t(" · custom name") : ""}</span>
             </div>
-            <Check label={t("Use default unit settings")} checked={useDefault} onChange={(e) => setDefault(e.target.checked)} />
+            {!unsettable && <Check label={t("Use default unit settings")} checked={useDefault} onChange={(e) => setDefault(e.target.checked)} />}
           </div>
+          {unsettable ? <p className="hint">{t("No per-map settings for this unit: a map's settings cover the game's 228 unit types.")}</p> : <>
           <div className="split" style={{ ["--split" as string]: "1fr", flex: "none" }}>
             <Group title={t("Vitals")}>
               <div className="form">
@@ -301,6 +306,7 @@ export function UnitSettingsDialog({ entry }: DialogProps) {
               </table>
             </div>
           </Group>
+          </>}
         </div>
       </div>
     </DialogFrame>

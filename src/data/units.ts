@@ -72,10 +72,65 @@ export interface LoadedNames {
 
 let loadedNames: LoadedNames | null = null;
 
-/** Put the names the data gives in front of the tables here (`null` goes back to the tables alone). */
-export function installNames(names: LoadedNames | null): void {
-  loadedNames = names;
+/**
+ * What the loaded data set has beyond the game's unit types: how many types its units.dat
+ * holds, and the ones past the game's 228 that the palette lists, each with the race its
+ * group flags give and whether it is a building. A data set made from the game's own
+ * files has none.
+ */
+export interface UnitCatalogue {
+  count: number;
+  extended: readonly { id: number; race: RaceKey; building: boolean }[];
 }
+
+let loadedCatalogue: UnitCatalogue | null = null;
+
+/** Put the names the data gives in front of the tables here (`null` goes back to the tables alone), with what the data has past the game's types. */
+export function installNames(names: LoadedNames | null, catalogue: UnitCatalogue | null = null): void {
+  loadedNames = names;
+  loadedCatalogue = catalogue;
+}
+
+/**
+ * How many unit types the loaded data set has: 228 for the game's own files (and when
+ * nothing is loaded), more for a data set whose units.dat is wider. Ids from 228 on have
+ * no per-map settings — the CHK format's settings sections hold 228 — but can be placed.
+ */
+export function unitTypeCount(): number {
+  return Math.max(UNIT_NAMES.length, loadedCatalogue?.count ?? 0);
+}
+
+/** The palette groups for the types past the game's 228, by race and building, in id order; empty for the game's own data. */
+export function dataSetUnitGroups(): UnitGroup[] {
+  const extended = loadedCatalogue?.extended ?? [];
+  const out: UnitGroup[] = [];
+  for (const race of ["terran", "zerg", "protoss", "neutral"] as const) {
+    for (const building of [false, true]) {
+      const units = extended.filter((u) => u.race === race && u.building === building).map((u) => u.id);
+      if (units.length > 0) out.push({ race, label: DATA_SET_GROUP_LABELS[race][building ? 1 : 0], units });
+    }
+  }
+  return out;
+}
+
+/**
+ * Every group a unit list shows, as shown: the game's, then the data set's own past 228
+ * with its name in front (`dataSet`, the data set's name). Built per call: the names and
+ * the data set's types follow what is loaded.
+ */
+export function shownUnitGroups(dataSet: string): { key: string; label: string; race: RaceKey; units: number[] }[] {
+  return [
+    ...UNIT_GROUPS.map((g) => ({ key: g.label, label: translate(g.label), race: g.race, units: g.units })),
+    ...dataSetUnitGroups().map((g) => ({ key: `dataset:${g.label}`, label: `${dataSet} · ${translate(g.label)}`, race: g.race, units: g.units })),
+  ];
+}
+
+const DATA_SET_GROUP_LABELS: Record<RaceKey, readonly [string, string]> = {
+  terran: [msg("Terran Units"), msg("Terran Buildings")],
+  zerg: [msg("Zerg Units"), msg("Zerg Buildings")],
+  protoss: [msg("Protoss Units"), msg("Protoss Buildings")],
+  neutral: [msg("Neutral Units"), msg("Neutral Buildings")],
+};
 
 /** The names currently in front of the tables, or null when the data's are the game's own or nothing is loaded. */
 export function currentLoadedNames(): LoadedNames | null {

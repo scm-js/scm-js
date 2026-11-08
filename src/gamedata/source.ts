@@ -31,7 +31,22 @@ import { activeProfileId, DEFAULT_PROFILE, isDefaultProfile, type GameDataProfil
 import { profileOf, readStored, storedCopy, type StoredCopy } from "./store";
 import { t, translate } from "../i18n";
 
-export type SourceKind = "bundled" | "stored" | "none";
+export type SourceKind = "bundled" | "stored" | "reader" | "none";
+
+/**
+ * A data set that is a function rather than a copy (`reader` sources): every file the
+ * editor asks for is asked of `read` first, and what it does not have (null or undefined)
+ * comes from `base`, the source in use when it was attached. Nothing is written to
+ * storage, which is what makes it the edit-and-see loop of a table or picture editor: change
+ * a file, `reloadDataSet`, see it drawn.
+ */
+export interface DataSetReader {
+  read(path: string): Promise<Uint8Array | null | undefined> | Uint8Array | null | undefined;
+  /** The source under it, for every file `read` leaves alone. */
+  base: AssetSource | null;
+  /** A digest of its files, when the caller knows one: what a map saved with it records. */
+  hash?: string;
+}
 
 export interface AssetSource {
   kind: SourceKind;
@@ -45,6 +60,8 @@ export interface AssetSource {
   tried: string[];
   /** The stored copy's stamp, when that is what answers. */
   stored?: StoredCopy;
+  /** The function a `reader` source asks first. */
+  reader?: DataSetReader;
   /** Set when the desktop app extracted the files into its own data folder (served as bundled). */
   desktop?: true;
   /**
@@ -236,13 +253,23 @@ export class GameDataUnavailableError extends Error {
 
 /** Fetch one game-data file (`tileset/badlands.cv5`, `unit/…`) from wherever this session's source is. */
 export async function fetchAsset(path: string, init?: RequestInit): Promise<Response> {
-  const source = await resolveAssetSource();
+  return fetchFrom(await resolveAssetSource(), path, init);
+}
+
+const notThere = () => new Response(null, { status: 404, statusText: "Not in the stored copy" });
+
+async function fetchFrom(source: AssetSource, path: string, init?: RequestInit): Promise<Response> {
   switch (source.kind) {
+    case "reader": {
+      const data = await source.reader?.read(path);
+      if (data) return new Response(data as Uint8Array<ArrayBuffer>, { status: 200, headers: { "content-length": String(data.length) } });
+      return source.reader?.base ? fetchFrom(source.reader.base, path, init) : notThere();
+    }
     case "bundled":
       return fetch(source.base + path, init);
     case "stored": {
       const blob = await readStored(path, source.profile.id);
-      if (!blob) return new Response(null, { status: 404, statusText: "Not in the stored copy" });
+      if (!blob) return notThere();
       return new Response(blob, { status: 200, headers: { "content-length": String(blob.size) } });
     }
     case "none":

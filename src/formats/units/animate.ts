@@ -19,7 +19,7 @@
  * only mean something in a running game — sounds, attacks, orders, projectile sprites —
  * are skipped; jumps that depend on game state take the "no" branch.
  */
-import { UnitFlag, NO_UNIT, RANDOM_DIRECTION } from "../dat/dat";
+import { datCount, UnitFlag, NO_UNIT, RANDOM_DIRECTION } from "../dat/dat";
 import { facingFrame } from "../dat/grp";
 import { Anim, animOffset, Op, readInstruction } from "../dat/iscript";
 import { loOffset, loUsedSlots } from "../dat/lo";
@@ -228,7 +228,7 @@ export class UnitAnimator {
       if (imageId === undefined) return null;
       s = this.createFromImage(null, NO_UNIT, imageId, 0, false, false);
     } else {
-      if (r.spriteId < 0 || r.spriteId >= NO_UNIT) return null;
+      if (r.spriteId < 0 || r.spriteId >= datCount(this.assets.units.flingy)) return null;
       s = this.createSprite(null, r.spriteId, true);
     }
     s.spriteRecord = r;
@@ -279,8 +279,10 @@ export class UnitAnimator {
     const hasStarEditInit = this.hasAnim(main, Anim.StarEditInit);
     if (hasStarEditInit) this.play(s, main, Anim.StarEditInit);
     else if (building) this.play(s, main, Anim.Built);
-    const sub = withSubunit && unitId < NO_UNIT ? this.assets.units.subunit[unitId] : NO_UNIT;
-    if (sub !== NO_UNIT && sub < NO_UNIT) {
+    const count = datCount(this.assets.units.flingy);
+    const sub = withSubunit && unitId < count ? this.assets.units.subunit[unitId] : NO_UNIT;
+    // 228 means "none" in a subunit column at any width (DatExtend keeps the game's sentinel).
+    if (sub !== NO_UNIT && sub < count) {
       // The game stands a turret where the body's special overlay file says, by the body's
       // frame (a Siege Tank's is some way behind the middle of the hull and above it). The
       // editor pose draws the turret as an overlay of the body, at no offset of its own.

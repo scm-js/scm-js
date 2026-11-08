@@ -147,3 +147,13 @@ The page at the root base was 8,704 bytes = 136 records, so with no `.vx4ex` ext
 as the Remastered tile table and every tile drew black (under `/editor/` the page is 8,755 bytes and
 the bug hid). `fetchPart` now refuses a `text/html` response, which `fetchOptional` turns into
 "absent" and the classic `.vx4` is fetched. `tests/tileset-fetch.test.ts`.
+
+### Extended tilesets (M4, 2026-11-08)
+
+A mod's tilesets can be far larger than the game's (Cosmonarchy's Badlands: 4,094 CV5 groups, 39,851 megatiles in a
+`.vx4ex`). The readers already took any size; what changed is the group in an MTXM value: `decode.ts#tileGroupOf(id,
+groupCount)` is `(id >> 4) & 0xFFF` when the tileset has more than `CLASSIC_GROUP_LIMIT` (2,048) groups — bit 15 is
+then part of the group — and `& 0x7FF` otherwise, where bit 15 stays Remastered's creep flag (`hasCreepFlag`). Every
+site that turns a tile into a group passes `tileset.groups.length`. The atlas for 40k megatiles is ~2,176 × 21,300 px;
+it drew in headless Chromium, and a lazy atlas (like `hd.ts`'s pages) is the way out if a browser refuses the size.
+See `gamedata.md` "Data sets widened".

@@ -474,7 +474,10 @@ same at placement, for ramps and cliff pieces you mean to work over by hand.
 
 The Units layer places everything the game has a unit for: the three races' units and
 buildings, heroes, critters, resources, start locations, beacons and powerups. The palette
-groups them by race, and the search box takes a name or an id.
+groups them by race, and the search box takes a name or an id. With a data set made from a
+mod that has more unit types than the game, the extra types appear under a heading named
+for the data set, by race and buildings; see [Data sets made from a
+mod](game-data.md#data-sets-made-from-a-mod).
 
 ![The Units layer: marines placed, and a tank refused because it overlaps them](images/units.webp)
 
@@ -832,6 +835,11 @@ availability tables:
 
 A row on *use default* shows the game's own numbers greyed out, and starts from them when
 you untick it.
+
+A map's settings cover the game's 228 unit types, 61 upgrades and 44 technologies; that
+size is fixed by the map format. A unit type a mod's data set adds past those is listed in
+Unit Settings, which says it has no per-map settings ([Data sets made from a
+mod](game-data.md#data-sets-made-from-a-mod)).
 
 ### Strings
 

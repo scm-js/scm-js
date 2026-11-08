@@ -229,7 +229,7 @@ export function paintGround(v: PaintView, cache: { current: GroundLayer | null }
         }
       }
       if (g.buildability) {
-        const group = ts.groups[tileGroupOf(id)];
+        const group = ts.groups[tileGroupOf(id, ts.groups.length)];
         if (group && !groupBuildable(group)) {
           lc.fillStyle = UNBUILDABLE;
           lc.fillRect(px, py, pw, ph);

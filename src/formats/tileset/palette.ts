@@ -128,7 +128,7 @@ export function heightLabel(height: 0 | 1 | 2): string {
 
 /** Everything the properties panel shows about one MTXM id. */
 export function tileInfo(tileset: Tileset, names: readonly TerrainName[], id: number): TileInfo {
-  const group = tileGroupOf(id);
+  const group = tileGroupOf(id, tileset.groups.length);
   const slot = id & 0xf;
   const cv5 = tileset.groups[group];
   // Megatile 0 is the null megatile: it "resolves", but there is nothing there.

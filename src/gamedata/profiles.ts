@@ -6,9 +6,9 @@
  * (`atoms/gameDataAtoms.ts#gameDataProfileAtom` is the atom over that key; the resolver reads
  * the key itself, since it runs outside the store).
  *
- * A profile is only a name over a set of files: the formats, the table sizes and the ids
- * are the game's, and nothing in the editor knows which set is loaded beyond the names it
- * shows (`data/gameNames.ts`) and this label. A mod that extends the tables is not covered.
+ * A profile is only a name over a set of files in the game's formats — its tables at any
+ * width (`formats/dat/table.ts`), its tilesets at any size — and nothing in the editor knows
+ * which set is loaded beyond what the files say (names, types, pictures) and this label.
  */
 import { browserStorage } from "../atoms/storage";
 
@@ -17,6 +17,12 @@ export interface GameDataProfile {
   id: string;
   /** What the dialog and the status line call it. */
   name: string;
+  /**
+   * Where the data set's makers publish it (an `http(s)` address), when known. A map made
+   * with the data set records it, so that someone who opens the map without the data set
+   * is told where to get it. The editor never fetches it.
+   */
+  url?: string;
 }
 
 export const DEFAULT_PROFILE: GameDataProfile = { id: "starcraft", name: "StarCraft: Brood War" };
@@ -57,7 +63,8 @@ export function profileIdFrom(name: string): string {
 export function normalizeProfile(profile: GameDataProfile): GameDataProfile | null {
   if (!isProfileId(profile.id)) return null;
   const name = profile.name.trim();
-  return { id: profile.id, name: name || profile.id };
+  const url = typeof profile.url === "string" && /^https?:\/\/\S+$/i.test(profile.url.trim()) ? profile.url.trim() : undefined;
+  return { id: profile.id, name: name || profile.id, ...(url ? { url } : {}) };
 }
 
 /** The id the user chose, read straight from storage; the default when none or unusable. */

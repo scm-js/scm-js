@@ -17,7 +17,7 @@ import {
   type ReadonlyTrigger,
 } from "../formats/chk/sections/triggers";
 import { actionDef, conditionDef, DEATHS_TABLE_ADDRESS, UNIT_CLASS_CHOICES, type ActionDef, type ArgKind, type ConditionDef } from "../data/triggerDefs";
-import { UNIT_NAMES, UNIT_TYPE_COUNT, unitName } from "../data/units";
+import { UNIT_NAMES, UNIT_TYPE_COUNT, unitName, unitTypeCount } from "../data/units";
 import { PALETTE_AVAILABILITY, type UnitsDat } from "../formats/dat/dat";
 import { locationName } from "./locations";
 import { internString, unitCustomName } from "./settings";
@@ -62,7 +62,7 @@ export function triggerNames(scn: Scenario): TriggerNames {
       const byDefault = UNIT_NAMES.findIndex((n) => lower(n) === key);
       if (byDefault >= 0) return byDefault;
       // The loaded data set's own names (a mod's): what `unit` printed, so text round-trips.
-      for (let id = 0; id < UNIT_NAMES.length; id++) if (lower(unitName(id)) === key) return id;
+      for (let id = 0; id < unitTypeCount(); id++) if (lower(unitName(id)) === key) return id;
       if (scn.unitSettings) {
         for (let id = 0; id < UNIT_NAMES.length; id++) {
           const custom = unitCustomName(scn, id);
@@ -238,7 +238,8 @@ export const CREATING_ACTIONS: ReadonlySet<number> = new Set([ActionType.CreateU
  * doors, turrets on tanks …). Without units.dat only the id range is known.
  */
 export function triggerCanCreate(units: UnitsDat | null, unitId: number): boolean {
-  if (unitId < 0 || unitId >= UNIT_TYPE_COUNT) return false;
+  // 228 is the game's None and 229–232 its classes, at any width of units.dat.
+  if (unitId < 0 || unitId >= unitTypeCount() || (unitId >= UNIT_TYPE_COUNT && unitId <= 232)) return false;
   // The pre-Brood War layout has no availability words at all.
   if (!units || !units.availability.some((v) => v !== 0)) return true;
   return (units.availability[unitId] & PALETTE_AVAILABILITY) !== 0;

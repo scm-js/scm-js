@@ -1917,8 +1917,10 @@ export interface GraphicsApi {
    * The game's own button picture for a unit type, an upgrade or a technology — the icon
    * its command card shows — 36 × 34 at most and transparent round the edges. `look`
    * colours it as the game does: `"normal"` yellow (the default), `"disabled"` grey,
-   * `"selected"` white. It does not depend on the map or its tileset. Null for an id with
-   * no picture (a unit type past 227, a turret) and until `requestIcons` has the pictures;
+   * `"selected"` white. It does not depend on the map or its tileset. A unit type past 227
+   * has a picture only where the data set carries a sheet for every type
+   * (`unit\cmdbtns\uniticons.grp`). Null for an id with no picture (a turret, a type past
+   * 227 without that sheet) and until `requestIcons` has the pictures;
    * null for good from a game data copy made before the editor kept them (installing the
    * game data again brings them). The canvas is the editor's own cached one: draw from it.
    *
@@ -1984,26 +1986,40 @@ export interface DataApi {
 
 /**
  * A data set: one set of game files the editor draws from. The default is the game's
- * own; any other is a mod's, installed under an id of its own, the same formats and
- * table sizes with some of the files replaced.
+ * own; any other is installed under an id of its own, the same formats with some of the
+ * files replaced — its tables at any width (the game's, DatExtend's expanded layout or
+ * GPTP's `.datex`), its tilesets at any size.
  */
 export interface GameDataProfile {
   /** Lower-case letters, digits and hyphens, up to 40 characters. */
   id: string;
   /** What the dialog and the status line call it. */
   name: string;
+  /**
+   * Where the data set's makers publish it, an `http(s)` address. A map saved with the data
+   * set records it, and someone who opens that map without the data set is told it. The
+   * editor never fetches it.
+   */
+  url?: string;
 }
 
 /** Where the session's game data comes from. */
 export interface GameDataSource {
-  /** `bundled` (this build's own files, or the desktop app's extraction), `stored` (a copy kept in the browser), or `none`. */
-  kind: "bundled" | "stored" | "none";
+  /**
+   * `bundled` (this build's own files, or the desktop app's extraction), `stored` (a copy kept in the browser),
+   * `reader` (a data set read through a function in memory, `gameData.attach`), or `none`.
+   */
+  kind: "bundled" | "stored" | "reader" | "none";
   /** One line, as Help ▸ Game Data… shows it. */
   label: string;
   /** The data set the files belong to. */
   profile: GameDataProfile;
   /** Set when the desktop app extracted the files from a StarCraft installation. */
   desktop: boolean;
+  /** A digest of the data set's own files, where one is known: what a map saved with it records. */
+  hash?: string;
+  /** The data set this one was laid over (`GameDataFiles.base`), when it was. */
+  base?: string;
 }
 
 /** Bytes for an install: a `File` / `Blob`, or already an array. */
@@ -2017,9 +2033,23 @@ export interface GameDataFiles {
    * given, later ones winning as in the game.
    */
   archives: readonly { name: string; data: GameDataBytes }[];
-  /** Loose files by member path (`arr/units.dat`, `unit/terran/marine.grp`), read before any archive. */
+  /** Loose files by member path (`arr/units.dat`, `arr/units.datex`, `unit/terran/marine.grp`), read before any archive. */
   files?: readonly { path: string; data: GameDataBytes }[];
+  /**
+   * Lay the files over the copy of this data set (an id from `profiles()`; the game's own is
+   * `"starcraft"`) instead of over the game's archives, which `archives` then need not hold.
+   * A copy the play page has used (one made with the game's files for playing) has every
+   * picture the tables name; an older one has only what its own units show.
+   */
+  base?: string;
 }
+
+/**
+ * A data set that is a function in memory (`gameData.attach`): asked for a file by its path
+ * in the extracted copy (`arr/units.dat`, `unit/zerg/drone.grp`), it answers the bytes, or
+ * null to leave the file to the data set underneath. It may answer at once or with a promise.
+ */
+export type GameDataReader = (path: string) => Uint8Array | null | undefined | Promise<Uint8Array | null | undefined>;
 
 /**
  * The game data as a whole: which set of files the editor draws from, and installing,
@@ -2028,9 +2058,11 @@ export interface GameDataFiles {
  * `names` (the labels, which follow the loaded set: a unit, weapon, upgrade or
  * technology a mod renamed shows its new name, and the rest keep StarEdit's).
  *
- * A data set is a name over files in the game's own formats; a mod that extends the
- * tables past the game's sizes is not covered. Installing needs the game's two archives
- * every time, since a mod's files are laid over them the way its loader lays them.
+ * A data set is a name over files in the game's own formats, at whatever width they
+ * have: a units.dat of more than 228 types gives the palette more types (named by
+ * `rez\unitnames.tbl` and pictured by `unit\cmdbtns\uniticons.grp` where the data set has
+ * them), a tileset of more than 2,048 groups draws its extended tiles. Installing lays the
+ * files over the game's two archives, as a loader does, or over a copy already here (`base`).
  *
  * @example
  * // A mod plugin: install its files once, then draw with them.
@@ -2069,6 +2101,27 @@ export interface GameDataApi {
    * extracted. Null when the copy has no such file, or there is no game data.
    */
   read(path: string): Promise<Uint8Array | null>;
+  /**
+   * Draw from a data set that is a function in memory: every file is asked of `read` first,
+   * and what it leaves (null) comes from the data set in use now. Nothing is stored and the
+   * choice is not remembered — `select`, `install` or a reload leave it. The table and
+   * picture editor's loop: change a file, `reload()`, see the map drawn with it. Units'
+   * Remastered pictures are not drawn from such a data set (what it changed is not known).
+   * Resolves with the source in use afterwards.
+   *
+   * @example
+   * // Try a units.dat edit on the open map without installing anything.
+   * const edited = new Map<string, Uint8Array>([["arr/units.dat", myUnitsDat]]);
+   * await api.gameData.attach({ id: "draft", name: "Draft" }, (path) => edited.get(path) ?? null);
+   * // … later, after changing the bytes in `edited`:
+   * api.gameData.reload();
+   */
+  attach(profile: GameDataProfile, read: GameDataReader, options?: { hash?: string }): Promise<GameDataSource>;
+  /**
+   * Read the data set in use afresh: everything decoded from it (tables, tilesets, pictures,
+   * names) is dropped and the map is drawn again — after the files behind `attach` changed.
+   */
+  reload(): void;
 }
 
 /* ── The numbers a record is written in ─────────────────── */
@@ -3238,6 +3291,13 @@ export interface TestMapFile {
   bytes: Uint8Array;
   /** The file name the game would list, `.scx` or `.scm`. */
   name: string;
+  /**
+   * The data set the map is being made with, when it is not the game's own: its id and
+   * name as `gameData.profile()` gives them, and the digest of its files (empty when none
+   * is known). A target that plays the map should play it with those files — the site's
+   * play page is handed it as `dataSet` in its `scmjs.play` message.
+   */
+  dataSet?: { id: string; name: string; hash: string };
 }
 
 /** What a preferences page's `mount` is handed. */

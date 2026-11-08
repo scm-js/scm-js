@@ -6,7 +6,7 @@
  *
  * The older `dat.ts` decodes the handful of columns the editor draws with and stays as it is; this is the whole table.
  */
-import { DAT_SCHEMAS, type DatField, type DatSchema, type DatTableName, type DatValueType } from "./schema";
+import { DAT_SCHEMAS, type DatField, type DatSchema, type DatTableName, type DatValueType } from "./schema.ts";
 
 export type DatLayout = "dat" | "expanded" | "datex";
 

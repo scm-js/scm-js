@@ -2233,7 +2233,13 @@ Help ▸ Game Data…. The `"gameData"` event fires on every change.
   set they belong to, and `profiles()` lists every set with a copy here.
 - **Managing sets.** `install(profile, files, progress)` extracts a set from its archives
   and switches to it, `select(id)` switches, and `remove(id)` deletes a set's copy. The
-  game's own archives must be among a mod's files, since a mod only replaces files.
+  game's own archives must be among a mod's files, since a mod only replaces files, unless
+  `files.base` names a set whose copy the files are laid over instead. `profile.url` says
+  where the set's makers publish it; a map saved with the set records it.
+- **A set in memory.** `attach(profile, read)` draws from a function: every file is asked
+  of `read` first, and what it answers null for comes from the set in use. Nothing is
+  stored. After changing what `read` answers, `reload()` drops everything decoded and
+  draws the map again — the loop for a plugin that edits the tables or pictures.
 - **Reading files.** `read(path)` hands over one of the extracted files as bytes, for a
   plugin that reads the game's formats itself: `arr/units.dat`, `tileset/jungle.cv5`,
   `unit/zerg/drone.grp`. Paths are the archive's, in lower case with forward slashes, and
@@ -2241,9 +2247,11 @@ Help ▸ Game Data…. The `"gameData"` event fires on every change.
   null for a file the copy does not have.
 
 A mod's files replace the game's in the same formats, so `data`, `tileset`, `graphics` and
-`names` follow them automatically. Mods that extend the game's table sizes are not
-covered. A plugin written only for the game's own data can check `profile().id`
-(`"starcraft"`) and turn itself off for anything else.
+`names` follow them automatically, at whatever width the mod's tables have: `data.units()`
+can hold more than 228 types, `names.unitGroups()` then ends with the set's own groups,
+and `graphics.icon` pictures the new types where the set has a sheet for them. A plugin
+written only for the game's own data can check `profile().id` (`"starcraft"`) and turn
+itself off for anything else.
 
 ```ts
 const source = api.gameData.source();

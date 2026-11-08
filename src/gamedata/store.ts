@@ -48,6 +48,23 @@ export interface StoredStamp {
    * page shows replays from it and starts no game.
    */
   staredit?: true;
+  /**
+   * The data set whose copy this one was laid over (`install.ts#installDataSet` with
+   * `base`), instead of the game's archives. Such a copy has the editor's files only; the
+   * game's own files for playing stay in the copy underneath.
+   */
+  base?: string;
+  /**
+   * A digest of the data set's own files (`overCopy.ts#filesHash`): what a map made with
+   * this data set records, so that the same files can be recognised elsewhere.
+   */
+  hash?: string;
+  /**
+   * Images drawn from their GRP even with View ▸ Remastered Graphics on: the data set
+   * changed their picture or their images.dat row against the copy underneath, so the 2x
+   * sprite on file is of something else. Worked out at install.
+   */
+  hdOff?: number[];
 }
 
 export interface StoredCopy extends StoredStamp {

@@ -4,6 +4,7 @@
  * A map's MTXM entry is only an index. Resolving it to pixels walks four files:
  *
  *   MTXM id ──(id >> 4)──▶ CV5 group ──(id & 15)──▶ VX4 megatile
+ *   (eleven bits of group with bit 15 the creep flag; twelve on a tileset with more groups)
  *   VX4 megatile ──▶ 16 minitile refs ──▶ VR4 8x8 palette-index bitmaps ──▶ WPE palette
  *
  * VF4 carries the per-minitile walkability/height flags the editor overlays.
@@ -186,17 +187,32 @@ export function loadTileset(files: TilesetFiles): Tileset {
  * Bit 15 of an MTXM value is a flag, not part of the tile: the game draws the tile the other
  * bits name. Remastered also sets its tile's creep bit from it, but played it shows no creep
  * and a Zerg building cannot go there (probe R2), so it is drawn as the plain tile.
+ *
+ * A tileset with more than 2,048 groups (a mod's extended one — Cosmonarchy's Badlands has
+ * 4,094) needs the bit for the group: there the group is all twelve bits above the slot.
  */
 export const TILE_CREEP_FLAG = 0x8000;
 
-/** The CV5 group an MTXM value names, as the game takes it: bit 15 left out. */
-export function tileGroupOf(tileId: number): number {
-  return (tileId >> 4) & 0x7ff;
+/** Groups an MTXM value can name while bit 15 is the creep flag. */
+export const CLASSIC_GROUP_LIMIT = 0x800;
+
+/**
+ * The CV5 group an MTXM value names, as the game takes it: bit 15 left out — unless the
+ * tileset has more groups than eleven bits reach (`groupCount`), when the group is
+ * `(id >> 4) & 0xFFF`.
+ */
+export function tileGroupOf(tileId: number, groupCount = 0): number {
+  return (tileId >> 4) & (groupCount > CLASSIC_GROUP_LIMIT ? 0xfff : 0x7ff);
+}
+
+/** Whether a tile carries the creep flag: bit 15, on a tileset whose groups do not need it. */
+export function hasCreepFlag(tileId: number, groupCount = 0): boolean {
+  return groupCount <= CLASSIC_GROUP_LIMIT && (tileId & TILE_CREEP_FLAG) !== 0;
 }
 
 /** Resolve an MTXM tile id to a VX4 megatile index, or -1 when the id is out of range. */
 export function megatileForTile(tileset: Tileset, tileId: number): number {
-  const group = tileset.groups[tileGroupOf(tileId)];
+  const group = tileset.groups[tileGroupOf(tileId, tileset.groups.length)];
   if (!group) return -1;
   const megatile = group.megatiles[tileId & 0xf];
   return megatile < tileset.megatileCount ? megatile : -1;

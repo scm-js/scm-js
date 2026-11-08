@@ -2,7 +2,8 @@ import { useAtomValue } from "jotai";
 import { activeLayerAtom, cursorPixelAtom, cursorTileAtom, mapHeightAtom, mapTilesetAtom, mapVersionAtom, mapWidthAtom, symmetryAtom, viewOnlyAtom } from "../../atoms/editorAtoms";
 import { shownZoomAtom } from "../../atoms/zoomAtoms";
 import { chromeModeAtom, mapInFront } from "../../atoms/viewModeAtoms";
-import { scenarioAtom, terrainRevisionAtom } from "../../atoms/documentAtoms";
+import { scenarioAtom, terrainRevisionAtom, tilesetFileNameAtom } from "../../atoms/documentAtoms";
+import { peekTileset } from "../../formats/tileset/load";
 import { statusMessageAtom } from "../../atoms/uiAtoms";
 import { pluginStatusItemsAtom } from "../../atoms/pluginAtoms";
 import { statusBarCellsAtom } from "../../atoms/preferencesAtoms";
@@ -40,6 +41,9 @@ export default function StatusBar() {
   const mode = useAtomValue(chromeModeAtom);
   const onMap = mapInFront(mode);
   const pointed = onMap || mode.viewPointer;
+  const tilesetFile = useAtomValue(tilesetFileNameAtom);
+  // An extended tileset's groups take twelve bits of the id, the game's eleven.
+  const groupCount = tilesetFile ? peekTileset(tilesetFile)?.tileset.groups.length ?? 0 : 0;
   const tileId = pointed && scenario && cursor.x < scenario.width && cursor.y < scenario.height ? scenario.tiles[cursor.y * scenario.width + cursor.x] : null;
 
   return (
@@ -59,7 +63,7 @@ export default function StatusBar() {
       {show.tileId && (
         <span className="status-cell" title={t("MTXM tile id under the cursor (group · slot)")}>
           <span className="k">{t("Id")}</span>
-          <span className="v">{tileId === null ? "—" : `${hexTile(tileId)} · ${tileGroup(tileId)}:${tileSubIndex(tileId)}`}</span>
+          <span className="v">{tileId === null ? "—" : `${hexTile(tileId)} · ${tileGroup(tileId, groupCount)}:${tileSubIndex(tileId)}`}</span>
         </span>
       )}
       {show.size && (

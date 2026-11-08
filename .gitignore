@@ -42,3 +42,6 @@ fixtures
 
 # Replays of failed `scmjs map test` scenarios, kept beside the map they tested
 *.tests/
+
+# Install recipes filled for a release (scripts/release-recipes.mjs)
+/packaging/out/

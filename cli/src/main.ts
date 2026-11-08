@@ -1441,8 +1441,8 @@ program.command("about").description("this version, any newer one, and links").h
     print(...(o.json ? [JSON.stringify(r, null, 2)] : printAbout(r)));
   });
 
-// tests/cli.test.ts imports the program to read its help; only the command runs it.
-if (!process.env.VITEST) {
+/** Runs the command line on `process.argv`. Not a top-level await: the single executable's bundle is CommonJS. */
+async function run() {
   try {
     // `scmjs` on its own is a request for the overview, not a mistake.
     if (process.argv.length <= 2) program.outputHelp();
@@ -1452,3 +1452,6 @@ if (!process.env.VITEST) {
     else { process.stderr.write(`${mark.error} ${pc.red("Something went wrong")}: ${e instanceof Error ? e.stack ?? e.message : e}\n${pc.dim("  Please report it: https://github.com/scm-js/scm-js/issues")}\n`); process.exitCode = 1; }
   }
 }
+
+// tests/cli.test.ts imports the program to read its help; only the command runs it.
+if (!process.env.VITEST) void run();

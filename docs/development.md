@@ -128,6 +128,7 @@ npm run desktop           # run the desktop app against dist/
 npm run build:desktop     # installers for this OS → release/
 npm run build:image       # the container image, tagged scmjs
 npm run build:cli         # the scmjs command → cli/dist/scmjs.mjs
+npm run build:cli-binary  # scmjs as one program, Node inside, for this OS → cli/dist/bin/ (Node 24)
 npm run cli -- map info a.scx     # the scmjs command, built and run (docs/cli.md)
 npm run build:core        # the @scm-js/core library → core/dist/index.mjs + index.d.ts (docs/core.md)
 ```

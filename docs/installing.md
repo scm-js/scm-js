@@ -138,6 +138,17 @@ or install it once with `npm install -g @scm-js/cli` and type `scmjs` from then 
 commands that draw a map or run the game read your StarCraft folder directly, so they need
 no extracted graphics. The [command line guide](cli.md) has the rest.
 
+Without Node, each release also has `scmjs` as a single program with Node inside it:
+`scmjs-windows-x64.zip`, `scmjs-macos-arm64.tar.gz`, `scmjs-macos-x64.tar.gz` and
+`scmjs-linux-x64.tar.gz` on the [releases
+page](https://github.com/scm-js/scm-js/releases/latest). Unpack it and put `scmjs`
+(`scmjs.exe` on Windows) in a folder on your PATH, or install it with
+`scoop install scmjs` (after
+`scoop bucket add scm-js https://github.com/scm-js/scoop-bucket`),
+`winget install scm-js.scmjs` or `brew install scm-js/tap/scmjs`. Like the app it is not
+code-signed, so Windows and macOS ask once before running it: see [Without
+Node](cli.md#without-node).
+
 ## The graphics
 
 The editor draws terrain and units with graphics out of StarCraft's own files. Blizzard's

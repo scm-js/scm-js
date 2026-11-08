@@ -26,7 +26,7 @@ export const DATASET_MEMBER = "scmjs\\dataset.json";
 export interface MapDataSet {
   id: string;
   name: string;
-  /** A digest of the data set's files (`overCopy.ts#filesHash`); empty when none was known. */
+  /** The data set's hash (`overCopy.ts#changedFilesHash`, core's `dataSetHash`); empty when none was known. */
   hash: string;
   /** Where the data set's makers publish it, when the data set says. */
   url?: string;

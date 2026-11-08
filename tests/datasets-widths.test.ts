@@ -12,7 +12,10 @@ import { extractUnits, type ReadMember } from "../src/gamedata/extract";
 import { namesFromAssets, unitCatalogue } from "../src/data/gameNames";
 import { dataSetUnitGroups, installNames, unitName, unitTypeCount } from "../src/data/units";
 import { CLASSIC_GROUP_LIMIT, decodeCv5, hasCreepFlag, loadTileset, megatileForTile, tileGroupOf, TILE_CREEP_FLAG } from "../src/formats/tileset/decode";
-import { extractOverCopy, filesHash, hdOffImages, storedPathOf } from "../src/gamedata/overCopy";
+import { changedFilesHash, extractOverCopy, hdOffImages, storedPathOf } from "../src/gamedata/overCopy";
+import { dataSetHash } from "../src/formats/mod/sources";
+import { Archive, Creator } from "mopaq";
+import type { ExtractRequest, ExtractResponse } from "../src/gamedata/extract.worker";
 import { growDat, MADE_UNITS, madeName, madeUnitNames, madeUnitsDat } from "./support/madeDataSet";
 import { cosmonarchyFile, haveCosmonarchy } from "./support/modFiles";
 
@@ -168,15 +171,61 @@ describe.skipIf(!haveCopy)("a data set laid over a copy instead of the game's ar
     // A copy without Remastered's sprites has nothing to turn off.
     expect(await hdOffImages(over, copy)).toEqual([]);
   });
+});
 
-  it("names its files by one digest, the same for the same files in any order", async () => {
-    const a = await filesHash([{ path: "arr/units.dat", bytes: new Uint8Array([1, 2]) }, { path: "rez/unitnames.tbl", bytes: new Uint8Array([3]) }]);
-    const b = await filesHash([{ path: "rez\\unitnames.tbl", bytes: new Uint8Array([3]) }, { path: "arr\\units.dat", bytes: new Uint8Array([1, 2]) }]);
-    const c = await filesHash([{ path: "arr/units.dat", bytes: new Uint8Array([1, 3]) }, { path: "rez/unitnames.tbl", bytes: new Uint8Array([3]) }]);
-    expect(a).toMatch(/^[0-9a-f]{64}$/);
-    expect(b).toBe(a);
-    expect(c).not.toBe(a);
+describe("a data set's hash", () => {
+  const bytes = (...b: number[]) => new Uint8Array(b);
+  const base = new Map([["arr\\weapons.dat", bytes(9, 9)], ["arr\\units.dat", bytes(1, 1)]]);
+  const baseRead = (n: string) => base.get(n) ?? null;
+
+  it("is core's dataSetHash over the files that differ from the base, whatever their order or slashes", async () => {
+    const own = new Map([["arr\\units.dat", bytes(1, 2)], ["arr\\weapons.dat", bytes(9, 9)], ["rez\\unitnames.tbl", bytes(3)]]);
+    const hash = await changedFilesHash(["rez/unitnames.tbl", "ARR\\Units.dat", "arr/weapons.dat", "arr/flingy.dat"], (n) => own.get(n) ?? null, baseRead);
+    // weapons.dat is the base's byte for byte and flingy.dat is not the set's: neither is in it.
+    expect(hash).toBe(await dataSetHash([{ name: "arr\\units.dat", bytes: bytes(1, 2) }, { name: "rez\\unitnames.tbl", bytes: bytes(3) }]));
+    expect(hash).toMatch(/^[0-9a-f]{16}$/);
+    expect(await changedFilesHash(["arr\\weapons.dat"], (n) => own.get(n) ?? null, baseRead)).toBeNull();
   });
+});
+
+const FIXTURE_DATA = join(import.meta.dirname, "..", "fixtures", "data");
+const haveArchives = existsSync(join(FIXTURE_DATA, "StarDat.mpq")) && existsSync(join(FIXTURE_DATA, "BrooDat.mpq"));
+
+describe.skipIf(!haveArchives)("a made data set installed through the editor's extraction", () => {
+  it("is stamped with the hash the command line and the play page compute for the same files", async () => {
+    const archive = (name: string) => new Uint8Array(readFileSync(join(FIXTURE_DATA, name)));
+    const stardat = archive("StarDat.mpq"), broodat = archive("BrooDat.mpq");
+    const game = Archive.open(broodat);
+    const unitsDat = madeUnitsDat(game.readFile("arr\\units.dat"));
+    const unitNames = madeUnitNames();
+    const sound = new Uint8Array([82, 73, 70, 70, 1, 2, 3]);
+    // The mod's own archive holds the units table; its loose files the names, a sound and a table the game has as it is.
+    const mod = new Creator({ listfile: true });
+    mod.addFile("arr\\units.dat", unitsDat);
+    const modMpq = mod.write();
+    const ab = (b: Uint8Array) => b.slice().buffer as ArrayBuffer;
+    const req: ExtractRequest = {
+      kind: "extract", from: "test", profile: { id: "made", name: "Made" },
+      archives: [{ name: "StarDat.mpq", bytes: ab(stardat) }, { name: "BrooDat.mpq", bytes: ab(broodat) }, { name: "made.mpq", bytes: ab(modMpq) }],
+      overlay: [{ path: "rez/unitnames.tbl", bytes: ab(unitNames) }, { path: "arr/weapons.dat", bytes: ab(game.readFile("arr\\weapons.dat")) }],
+      hashOnly: [{ path: "sound/made/new.wav", data: new Blob([ab(sound)]) }],
+    };
+    const replies: ExtractResponse[] = [];
+    const done = new Promise<ExtractResponse>((resolve) => {
+      (globalThis as unknown as { self: unknown }).self = { postMessage: (r: ExtractResponse) => { replies.push(r); if (r.kind !== "progress") resolve(r); } };
+    });
+    await import("../src/gamedata/extract.worker");
+    const worker = (globalThis as unknown as { self: { onmessage: (e: { data: ExtractRequest }) => Promise<void> } }).self;
+    await worker.onmessage({ data: req });
+    const reply = await done;
+    if (reply.kind === "error") throw new Error(reply.message);
+    expect(reply.kind).toBe("done");
+    const stamp = (reply as Extract<ExtractResponse, { kind: "done" }>).stamp;
+    expect(datCount(decodeUnitsDat(new Uint8Array((reply as Extract<ExtractResponse, { kind: "done" }>).files!.find(([p]) => p === "arr/units.dat")![1])).flingy)).toBe(MADE_UNITS);
+    expect(stamp.hash).toBe(await dataSetHash([
+      { name: "arr/units.dat", bytes: unitsDat }, { name: "rez/unitnames.tbl", bytes: unitNames }, { name: "sound/made/new.wav", bytes: sound },
+    ]));
+  }, 180_000);
 });
 
 describe("a stored copy's paths, for laying a data set over it", () => {

@@ -380,7 +380,15 @@ The mods plan's slice M4 (`scm-sim` branch mods-plan, `docs/mods-plan.md`, "Tier
   folder route lays a folder without the two archives over the copy in use (or that copy's own base).
 - **In memory**: `AssetSource.kind "reader"` (`DataSetReader { read, base, hash? }`), `fetchAsset` asks `read` then
   the base source; `services/gameData.ts#attachReaderDataSet` / `reloadDataSet`; never remembered; 2x sprites off.
-- **Hash**: `overCopy.ts#filesHash` over the set's own inputs (loose files + non-game archives), in the stamp.
+- **Hash** (aligned with `mod-cli` on the `mods` branch, 2026-11-08): `overCopy.ts#changedFilesHash` = core's
+  `dataSetHash` rule (`src/formats/mod/sources.ts`; via `dataSetHashOfDigests` + `fileDigest` so a file's bytes go
+  once digested) over the set's **own files that differ from the base**. The worker's names: the overlay's keys, every
+  member the extraction asked (an archive's listfile may be partial), the mod archives' listed members, and
+  `ExtractRequest.hashOnly` — loose files in `GAME_FOLDERS` the extraction does not read (`sound\…`), posted as Blobs
+  (`install.ts#isGamePath`; `splitPickedFiles` now keeps them). Own = overlay over the non-game archives; base = the
+  game's archives, or the copy underneath via `storedPathOf`. Null (no `hash` in the stamp) when nothing differs —
+  the game's own copy has none now. Proof: `tests/datasets-widths.test.ts` "a made data set installed through the
+  editor's extraction" runs the worker's `onmessage` in Node over `fixtures/data` and compares with `dataSetHash`.
 - **The map's member** `scmjs\dataset.json` (`services/mapDataSet.ts`): `stampDataSet` before `buildOutgoing` in
   `saveDocument` (bytes the Save dialog built are dropped when it changed the extras), only for a non-default set,
   never removed; `offerMapDataSet` after `openFileInto` and the Open dialog's own load → the `mapDataSet` dialog

@@ -261,13 +261,20 @@ What does not work yet:
 
 When a map is saved while a data set other than the game's own is in use, it carries a
 small note naming it (a file `scmjs\dataset.json` inside the map's archive, with the data
-set's id, name, a digest of its files and, when known, where its makers publish it). The
+set's id, name, a hash of its files and, when known, where its makers publish it). The
 game and other editors ignore it. Opening such a map while another data set is in use, the
 editor asks once: to switch, when that data set is installed here, or, when it is not, it
 says where its makers publish it and offers Help ▸ Game Data…. Nothing is downloaded.
 
 Test Map passes the data set on in the same way, so a test target that plays the map, such
 as the play page, knows which files the map was made for.
+
+The hash covers the data set's own files that differ from the files they are laid over — a
+file the same as the game's is not part of the mod — and is worked out the same way as
+`scmjs mod play` works it out for the play page (see [Playing a mod on the play
+page](cli.md#playing-a-mod-on-the-play-page)), so the editor, the command line and the
+play page give one mod the same hash. Files of the mod in the game's folders that the
+editor does not read, such as its sounds, count too.
 
 ### Names
 

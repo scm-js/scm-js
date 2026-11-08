@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { memberKey, openArchives, readerFor } from "../src/gamedata/archives";
 import { describeExtraction, ExtractError, extractGameData, extractTilesets, extractUnits, TILESET_NAMES } from "../src/gamedata/extract";
-import { isMemberPath, pickArchives, splitPickedFiles } from "../src/gamedata/install";
+import { isGamePath, isMemberPath, pickArchives, splitPickedFiles } from "../src/gamedata/install";
 import { activeProfileId, DEFAULT_PROFILE, isProfileId, normalizeProfile, PROFILE_KEY, profileIdFrom } from "../src/gamedata/profiles";
 import { locateGameData, type LocateDeps } from "../src/gamedata/source";
 import { clearStoredCopy, keepInMemory, listStoredCopies, profileDir, profileOf, readStored, storedCopy, type StoredCopy } from "../src/gamedata/store";
@@ -297,8 +297,14 @@ describe("installing a data set from files", () => {
     const split = splitPickedFiles([
       file("Cosmonarchy/StarDat.mpq"), file("Cosmonarchy/BrooDat.mpq"), file("Cosmonarchy/mpq/arr/units.dat"),
       file("Cosmonarchy/mpq/unit/terran/marine.grp"), file("Cosmonarchy/README.md"), file("Cosmonarchy/plugins/gptp.qdp"),
+      file("Cosmonarchy/mpq/sound/misc/buzz.wav"),
     ]);
     expect(split.archives.map((a) => a.name)).toEqual(["StarDat.mpq", "BrooDat.mpq"]);
-    expect(split.files!.map((f) => f.path)).toEqual(["arr/units.dat", "unit/terran/marine.grp"]);
+    // The sound is the mod's too: the extraction does not read it, but the data set's hash covers it.
+    expect(split.files!.map((f) => f.path)).toEqual(["arr/units.dat", "unit/terran/marine.grp", "sound/misc/buzz.wav"]);
+    expect(isMemberPath("sound/misc/buzz.wav")).toBe(false);
+    expect(isGamePath("sound/misc/buzz.wav")).toBe(true);
+    expect(isGamePath("plugins/gptp.qdp")).toBe(false);
+    expect(isGamePath("sound")).toBe(false);
   });
 });

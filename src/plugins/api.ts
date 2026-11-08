@@ -2016,7 +2016,11 @@ export interface GameDataSource {
   profile: GameDataProfile;
   /** Set when the desktop app extracted the files from a StarCraft installation. */
   desktop: boolean;
-  /** A digest of the data set's own files, where one is known: what a map saved with it records. */
+  /**
+   * The data set's hash, where one is known: what a map saved with it records. Sixteen hex
+   * digits over the files of the set that differ from the game's, by the rule `scmjs mod
+   * play` hands the play page (`docs/cli.md`, "Playing a mod on the play page").
+   */
   hash?: string;
   /** The data set this one was laid over (`GameDataFiles.base`), when it was. */
   base?: string;

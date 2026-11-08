@@ -20,6 +20,7 @@ import { forgetStoredFolders, keepInMemory, storedCopy, type StoredCopy } from "
 import { currentAssetSource } from "./source";
 import { findMembers, httpRangeReader, readZipDirectory, readZipMember, ZipError } from "./zip";
 import { t, translate } from "../i18n";
+import { GAME_FOLDERS } from "../formats/mod/sources";
 
 export type InstallProgress = (fraction: number, label: string) => void;
 
@@ -111,8 +112,18 @@ export function isMemberPath(path: string): boolean {
 }
 
 /**
+ * Whether a loose file is in one of the game's folders at all (`sound\…`, `font\…` too): a
+ * mod's file, which the data set's hash covers even where the extraction does not read it.
+ */
+export function isGamePath(path: string): boolean {
+  const parts = memberKey(path).split("\\");
+  return parts.length > 1 && (GAME_FOLDERS as readonly string[]).includes(parts[0]);
+}
+
+/**
  * A folder pick as `GameDataFiles`: every `.mpq` is an archive, and every other file whose
- * path (relative to the picked folder) starts with a game data folder is a loose member.
+ * path (relative to the picked folder) starts with one of the game's folders is a loose
+ * member (the extraction reads those under `isMemberPath`; the rest count for the hash).
  * The picked folder's own name is the first segment of `webkitRelativePath` and is dropped,
  * so a mod's `mpq/arr/units.dat` is the member `arr\units.dat`.
  */
@@ -130,7 +141,7 @@ export function splitPickedFiles(files: readonly File[]): GameDataFiles {
     // `mpq` or a StarCraft folder both put the game folders one level down.
     for (let skip = 0; skip < Math.min(3, segments.length - 1); skip++) {
       const path = segments.slice(skip).join("/");
-      if (isMemberPath(path)) {
+      if (isGamePath(path)) {
         loose.push({ path, data: file });
         break;
       }
@@ -165,12 +176,14 @@ export async function installDataSet(profile: GameDataProfile, input: GameDataFi
   const archives: ExtractRequest["archives"] = [];
   for (const a of orderArchives(input.archives)) archives.push({ name: a.name, bytes: await bytesOf(a.data) });
   const overlay: NonNullable<ExtractRequest["overlay"]> = [];
+  // The mod's files the extraction does not read (its sounds, say) go along for the hash alone, as Blobs where they are.
+  const hashOnly: NonNullable<ExtractRequest["hashOnly"]> = [];
   for (const f of input.files ?? []) {
-    if (!isMemberPath(f.path)) continue;
-    overlay.push({ path: f.path, bytes: await bytesOf(f.data) });
+    if (isMemberPath(f.path)) overlay.push({ path: f.path, bytes: await bytesOf(f.data) });
+    else if (isGamePath(f.path)) hashOnly.push({ path: f.path, data: f.data instanceof Blob ? f.data : await bytesOf(f.data) });
   }
   const from = [...archives.map((a) => a.name), ...(overlay.length ? [t("{n, plural, one {# loose file} other {# loose files}}", { n: overlay.length })] : [])].join(" + ");
-  return runWorker(archives, from, progress, isDefaultProfile(normalized.id) ? undefined : normalized, overlay, undefined, false, base);
+  return runWorker(archives, from, progress, isDefaultProfile(normalized.id) ? undefined : normalized, overlay, undefined, false, base, hashOnly);
 }
 
 /**
@@ -294,6 +307,7 @@ function runWorker(
   remastered?: ExtractRequest["remastered"],
   lighting = false,
   base?: ExtractRequest["base"],
+  hashOnly: NonNullable<ExtractRequest["hashOnly"]> = [],
 ): Promise<StoredCopy> {
   return new Promise((resolve, reject) => {
     let worker: Worker;
@@ -326,7 +340,7 @@ function runWorker(
       }
       resolve({ ...reply.stamp, where: reply.where });
     };
-    const req: ExtractRequest = { kind: "extract", archives, from, profile, overlay, ...(remastered ? { remastered } : {}), ...(lighting ? { lighting } : {}), ...(base ? { base } : {}) };
+    const req: ExtractRequest = { kind: "extract", archives, from, profile, overlay, ...(remastered ? { remastered } : {}), ...(lighting ? { lighting } : {}), ...(base ? { base } : {}), ...(hashOnly.length ? { hashOnly } : {}) };
     worker.postMessage(req, [...archives.map((a) => a.bytes), ...overlay.map((o) => o.bytes)]);
   });
 }

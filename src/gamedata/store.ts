@@ -55,8 +55,10 @@ export interface StoredStamp {
    */
   base?: string;
   /**
-   * A digest of the data set's own files (`overCopy.ts#filesHash`): what a map made with
-   * this data set records, so that the same files can be recognised elsewhere.
+   * The data set's hash (`overCopy.ts#changedFilesHash`: core's `dataSetHash` over its own
+   * files that differ from the base's, sixteen hex digits, as `scmjs mod play` and the play
+   * page compute it): what a map made with this data set records, so that the same files can
+   * be recognised elsewhere. Absent when none of its files differs (the game's own copy).
    */
   hash?: string;
   /**

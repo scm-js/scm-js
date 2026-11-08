@@ -97,6 +97,11 @@ datex tables together (sfxdata excluded: GPTP reads sfxdata.dat).
 - The play page's side of `scmjs.play.dataSet` (M1, another slice): the message shape is in `docs/cli.md` "Playing a
   mod on the play page"; the page's own drop hashes *every* file of a mod, `mod play` hashes the files it hands over
   (the changed ones) — the same only when every file differs; reconcile when M1 lands (send the whole-mod hash too?).
+  The editor's data-set hash (stamp, `scmjs\dataset.json`, `TestMapFile.dataSet.hash`) is `mod play`'s rule since
+  the `mods` merge (`gamedata.md` "Hash"). Gaps left: the CLI's base is the person's game, the editor's the copy it
+  laid the set over (another data set's copy, if that was the base); the CLI probes a list-less archive by the game's
+  names, the editor by what its extraction asks; and the CLI counts any file under the mod's root, the editor files
+  under `GAME_FOLDERS`.
 - The runners' `--mod <folder>` and `current.json` `"mods": 1` are this side's assumption; M1/M0 must publish them.
 - `map run` (plugins, no engine) has no `--mod`; `map test|trace|cost` and `mod test` do.
 - iscript header comments (images using an id) are not written; table comments are.

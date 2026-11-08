@@ -24,6 +24,7 @@ import type { Params } from "../i18n";
 import { animPath } from "../formats/dat/anim.ts";
 import { decodeDat, type DatFile } from "../formats/dat/table.ts";
 import { DAT_SCHEMAS } from "../formats/dat/schema.ts";
+import { dataSetHashOfDigests, fileDigest, gameName } from "../formats/mod/sources.ts";
 import {
   DATEX_TABLES, EXTRA_TABLES, extractGameData, ExtractError, ICON_FILES, reportStep, SOUND_TABLES, UNIT_EXTRA_FILES, UNIT_TABLES,
   type ExtractProgress, type GameDataExtraction, type ReadMember,
@@ -144,7 +145,11 @@ function tblStrings(tbl: Uint8Array | null | undefined): string[] {
   return out;
 }
 
-const sameBytes = (a: Uint8Array, b: Uint8Array) => a.length === b.length && a.every((v, i) => v === b[i]);
+function sameBytes(a: Uint8Array, b: Uint8Array): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+  return true;
+}
 
 /**
  * The images among those with a 2x sprite in the new copy (`result.units.manifest.hd`)
@@ -184,16 +189,26 @@ export async function hdOffImages(over: OverCopyExtraction, copy: CopyReader): P
   return off;
 }
 
+/** A member by the game's name (any case or slash), or null; sync or not. */
+export type MemberBytes = (member: string) => Uint8Array | null | Promise<Uint8Array | null>;
+
 /**
- * One digest of a data set's own files, for a map to name the files it was made with: the
- * SHA-256 of every file's path and SHA-256, in path order, as hex.
+ * The data set's hash: core's `dataSetHash` — the one `scmjs mod play` hands the play page —
+ * over the set's own files that differ from the base's. `names` are the members the set may
+ * have (its loose files, its archives' listed members, what the extraction asked for);
+ * `own` answers from the set's own files only, `base` from what they are laid over (the
+ * game's archives, or the copy underneath). A file the base has byte for byte is not part of
+ * the mod and not hashed; a file the base lacks is. Files are read and digested one at a
+ * time. Null when nothing differs.
  */
-export async function filesHash(files: readonly { path: string; bytes: ArrayBuffer | Uint8Array }[]): Promise<string> {
-  const hex = (buf: ArrayBuffer) => [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
-  const lines: string[] = [];
-  for (const f of [...files].sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0))) {
-    const bytes = f.bytes instanceof Uint8Array ? f.bytes : new Uint8Array(f.bytes);
-    lines.push(`${key(f.path)} ${hex(await crypto.subtle.digest("SHA-256", bytes as Uint8Array<ArrayBuffer>))}`);
+export async function changedFilesHash(names: Iterable<string>, own: MemberBytes, base: MemberBytes): Promise<string | null> {
+  const digests: { name: string; sha256: string }[] = [];
+  for (const name of new Set([...names].map(gameName))) {
+    const mine = await own(name);
+    if (!mine) continue;
+    const theirs = await Promise.resolve(base(name)).catch(() => null);
+    if (theirs && sameBytes(mine, theirs)) continue;
+    digests.push({ name, sha256: await fileDigest(mine) });
   }
-  return hex(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(lines.join("\n"))));
+  return digests.length > 0 ? dataSetHashOfDigests(digests) : null;
 }

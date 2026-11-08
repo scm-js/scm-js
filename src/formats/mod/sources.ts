@@ -179,7 +179,16 @@ const sha256 = async (bytes: Uint8Array) => hex(await crypto.subtle.digest("SHA-
  * digits. The same files give the same hash wherever it is computed.
  */
 export async function dataSetHash(files: readonly { name: string; bytes: Uint8Array }[]): Promise<string> {
-  const lines: string[] = [];
-  for (const f of [...files].sort((a, b) => (gameName(a.name) < gameName(b.name) ? -1 : gameName(a.name) > gameName(b.name) ? 1 : 0))) lines.push(`${gameName(f.name)}\t${await sha256(f.bytes)}`);
+  const digests: { name: string; sha256: string }[] = [];
+  for (const f of files) digests.push({ name: f.name, sha256: await fileDigest(f.bytes) });
+  return dataSetHashOfDigests(digests);
+}
+
+/** One file's SHA-256 in hex, as `dataSetHash` takes it: for a caller that hashes a file at a time and lets the bytes go. */
+export const fileDigest = (bytes: Uint8Array): Promise<string> => sha256(bytes);
+
+/** `dataSetHash` from each file's `fileDigest` rather than its bytes: the same rule, the same hash. */
+export async function dataSetHashOfDigests(files: readonly { name: string; sha256: string }[]): Promise<string> {
+  const lines = files.map((f) => ({ name: gameName(f.name), sha256: f.sha256 })).sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0)).map((f) => `${f.name}\t${f.sha256}`);
   return (await sha256(new TextEncoder().encode(lines.join("\n")))).slice(0, 16);
 }

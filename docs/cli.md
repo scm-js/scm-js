@@ -2246,7 +2246,9 @@ opens the play page with `?handoff=1` and, each time that page says `scmjs.ready
 `path` is the game's path in lower case with forward slashes. `hash` is SHA-256 over a
 line `path<TAB>sha256 of the file` for each file handed over, the game's names with
 backslashes, sorted and joined with newlines; its first sixteen hex digits. A page that
-already keeps a mod with that hash can skip storing it again. The page answers with
+already keeps a mod with that hash can skip storing it again. The editor records the same
+hash for a data set made from the same files (see [Game
+data](game-data.md#a-map-remembers-its-data-set)). The page answers with
 `scmjs.play.started`, `scmjs.play.shown` or `scmjs.taken`, which end the wait, or
 `scmjs.play.error` with a `message`, which the command prints before it exits 1;
 `scmjs.waiting` messages are printed as they come. The command waits five minutes.

@@ -18,14 +18,15 @@
  * values (`ExtractText`), which `install.ts#runWorker` translates as it arrives. The problems
  * stay English; they only reach the console.
  */
-import { isStarEditDownload, memberKey, openArchives, readerFor } from "./archives";
+import { isGameArchive, isStarEditDownload, memberKey, openArchives, readerFor } from "./archives";
 import { describeExtraction, ExtractError, extractGameData, reportStep, type ExtractProgress, type ExtractText, type GameDataExtraction } from "./extract";
 import { msg } from "../i18n";
 import { copyPlaySet } from "./play";
 import { DEFAULT_PROFILE, type GameDataProfile } from "./profiles";
 import { extractRemastered, pickedFilesSource, type PickedFile } from "./remastered";
 import { readStored, writeStoredCopy, type StoredStamp } from "./store";
-import { extractOverCopy, filesHash, hdOffImages, type CopyReader } from "./overCopy";
+import { changedFilesHash, extractOverCopy, hdOffImages, storedPathOf, type CopyReader } from "./overCopy";
+import type { ReadMember } from "./extract";
 
 /** The copy a data set is laid over, read a file at a time: from this browser's storage, or from the build's own files. */
 function copyReader(base: NonNullable<ExtractRequest["base"]>): CopyReader {
@@ -62,6 +63,11 @@ export interface ExtractRequest {
    * serves under a URL (a clone that extracted its own). The game's archives are then not needed.
    */
   base?: { profile: string } | { url: string };
+  /**
+   * The set's other files in the game's folders (`sound\…`, `font\…`): the extraction does
+   * not read them, but they are the mod's, so its hash covers them as `scmjs mod play`'s does.
+   */
+  hashOnly?: { path: string; data: Blob | ArrayBuffer }[];
 }
 
 export type ExtractResponse =
@@ -110,10 +116,15 @@ self.onmessage = async (e: MessageEvent<ExtractRequest>) => {
 
       const overlay = new Map<string, Uint8Array>();
       for (const { path, bytes } of req.overlay ?? []) overlay.set(memberKey(path), new Uint8Array(bytes));
-      hash = await filesHash([...(req.overlay ?? []), ...req.archives.map((a) => ({ path: a.name, bytes: a.bytes }))]);
+      // What the extraction reads, noted: an archive's list of its files may be partial or absent.
+      const asked = new Set<string>();
+      const layered = readerFor(opened.archives, overlay.size ? overlay : undefined);
+      const reader: ReadMember = (name) => {
+        asked.add(memberKey(name));
+        return layered(name);
+      };
 
       // Extraction is 0–80% of the bar, the write the rest.
-      const reader = readerFor(opened.archives, overlay.size ? overlay : undefined);
       if (req.base) {
         const copy = copyReader(req.base);
         const over = await extractOverCopy(reader, copy, progressOver(0, 0.8));
@@ -124,8 +135,22 @@ self.onmessage = async (e: MessageEvent<ExtractRequest>) => {
         overCopy = true;
       } else {
         result = extractGameData(reader, progressOver(0, 0.8));
-        member = async (name) => reader(name);
+        member = async (name) => layered(name);
       }
+
+      // The set's hash (core's `dataSetHash`, as the command line and the play page have it): its own files — loose,
+      // and in its own archives — that differ from what they are laid over.
+      const own = opened.archives.filter((a) => !isGameArchive(a.name));
+      const ownRead = readerFor(own, overlay.size ? overlay : undefined);
+      const more = new Map((req.hashOnly ?? []).map((f) => [memberKey(f.path), f.data]));
+      const names = [...overlay.keys(), ...asked, ...more.keys(), ...own.flatMap((a) => (a.archive.files() ?? []).filter((n) => !n.startsWith("(")))];
+      const under = req.base ? copyReader(req.base) : null;
+      const baseRead = under ? (name: string) => under(storedPathOf(name)) : readerFor(opened.archives.filter((a) => isGameArchive(a.name)));
+      hash = (await changedFilesHash(names, async (name) => {
+        const extra = more.get(name);
+        if (extra) return new Uint8Array(extra instanceof Blob ? await extra.arrayBuffer() : extra);
+        return ownRead(name);
+      }, baseRead)) ?? undefined;
     }
     const stamp: StoredStamp = {
       from,

@@ -135,7 +135,7 @@ Strings have the same pair, `formatStringTable` and `parseStringTable`.
   tables that only the editor has. `mapStatistics` and `validateScenario` take `null` for
   them and leave those parts out, as the command line does. The decoders are here, but no
   game file is: `scmjs map preview` reads the tileset out of your copy of StarCraft and
-  draws with them.
+  draws with it.
 - **No plugin API.** The functions are the editor's, not `api.*`; a plugin's code does not
   run here. A plugin can share logic with a script by putting it in a module both import.
 - **One language.** The library's own text — a warning, an issue — is English.

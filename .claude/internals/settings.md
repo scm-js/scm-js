@@ -73,7 +73,7 @@ pattern (`i18n.md`): every string goes through `useT()`'s `t`, the encoding labe
 Map Properties also changes the tileset: `editor/tileset.ts#changeTileset` (ERA, the terrain laid
 again with `flatTerrain` and ISOM to match, the doodads and their overlay sprites dropped — or
 `keepTiles` for ERA alone) through `changeTilesetAtom`, a whole-document transaction like Resize
-(`afterWholeDocumentChange` drops the history and bumps every revision; `tilesetFileNameAtom` reads
+(`afterWholeDocumentChange` records a `whole` undo entry — see `clipboard.md` — and bumps every revision; `tilesetFileNameAtom` reads
 the settings revision so it re-derives from the mutated ERA). The dialog `ensureTileset`s the new
 graphics first so the fill uses real tile ids.
 Upgrade / Technology Settings (`DataDialogs.tsx`) share `CatalogueList` (a race-grouped id list) and

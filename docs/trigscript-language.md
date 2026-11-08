@@ -98,12 +98,13 @@ program(() => {
 actions, and the program runs those actions in the game. A helper that throws while the
 script is applied is reported at the line that called it.
 
-**A `const` is what it can be.** `const limit = waves.length` is worked out when the
-script is applied. `const next = wave + 1` needs a variable of the program, so it is one,
-which TypeScript keeps you from assigning again. A constant inside a branch that is never
-built, such as `if (false) …`, is never worked out at all.
+**A `const` is worked out as early as it can be.** `const limit = waves.length` is worked
+out when the script is applied. `const next = wave + 1` needs a variable of the program,
+so it becomes a program variable too, one that TypeScript will not let you assign again. A
+constant inside a branch that is never built, such as `if (false) …`, is never worked out
+at all.
 
-**The one rule to keep in mind**: the player and the location of an action, and the amount
+**What a variable cannot reach**: the player and the location of an action, and the amount
 a condition compares with, are known when the script is applied. A variable of the program
 cannot reach them. A parameter of a function given a known value does reach them, so
 `function spawn(p: Player, n: number) { createUnit(p, units.ZergZergling, n, spawnAt); }`
@@ -168,8 +169,8 @@ Three more types hold a number that is never below zero:
 `let lives: u8 = 3` stops at its ends after the whole sum, never between its parts, which
 is what lives and cooldowns want. A `u32` is for bit masks, hashes and counts past two
 thousand million. Everything the game is asked (`minerals()`, `deaths()`, `u.hp`) is a
-`number`. A constant its variable cannot hold is an error: `let mask = 0xffffffff` wants
-`let mask: u32`.
+`number`. A constant that does not fit its variable's type is an error:
+`let mask = 0xffffffff` wants `let mask: u32`.
 
 **A `number` and a `u32` do not mix in arithmetic** without saying which is meant. `h + n`
 is an error that names the two ways out, `u32(n)` and `i32(h)`, which read the same 32
@@ -237,8 +238,8 @@ Two things are not JavaScript's:
   where it happened, since it is always a mistake.
 - **`const b = a` is a copy**, where JavaScript would give the same array a second name.
 
-In a program of every player, each player has their own copy of an array;
-`shared([0, 0, 0])` is one for everybody.
+In a per-player program, each player has their own copy of an array; `shared([0, 0, 0])`
+is one for everybody.
 
 ### Arrays that grow
 
@@ -1224,13 +1225,13 @@ hosting one alone is enough.
 
 ### What input takes from the map
 
-Only a program that reads input takes anything for it, and nothing is a death counter, a
-switch or a string: one unit-properties slot; one unit type the map does not use (the
-Valkyrie, unless the map uses it); the location the build already keeps for orders; and
-hidden units of Player 12 at the map's top-left corner, six for each human player and six
-more when the mouse is read. Outside a program these functions are an error, where
-`if (keyPressed(…))` would otherwise quietly be true. Simulate presses no keys, so there
-they read as nothing; a [test](trigscript.md#tests) can press them.
+Only a program that reads input takes anything from the map for it, and none of it is a
+death counter, a switch or a string: one unit-properties slot; one unit type the map does
+not use (the Valkyrie, unless the map uses it); the location the build already keeps for
+orders; and hidden units of Player 12 at the map's top-left corner, six for each human
+player and six more when the mouse is read. Outside a program these functions are an
+error, where `if (keyPressed(…))` would otherwise quietly be true. Simulate presses no
+keys, so there they read as nothing; a [test](trigscript.md#tests) can press them.
 
 ### What only one computer knows
 
@@ -1346,7 +1347,7 @@ line columns up.
 The objectives, a leaderboard's label, a transmission's line and a unit type's name
 (`stats(units.TerranMarine).name = …`) take a made text, up to 255 bytes. The game shows
 the text as it was when the action ran, so when the text changes, run the action again. In
-a program of every player, each player sees their own. Any other action's text, such as
+a per-player program, each player sees their own. Any other action's text, such as
 `setNextScenario` or a sound's path, has to be written in the script.
 
 ### Lines of JSX
@@ -1408,8 +1409,8 @@ under 1 where copies overlap. Music played note by note is `trigscript/music`
 picture, a sound or a MIDI file as well as a video, and keeps the result in the map with
 the script:
 
-- a video becomes a `.video` file (`import film from "./film.video"`): its frames, a tile
-  a pixel, ink or not, for `fog.play` or `fog.light`;
+- a video becomes a `.video` file (`import film from "./film.video"`): its frames, one
+  tile per pixel, each pixel ink or not, for `fog.play` or `fog.light`;
 - a picture becomes an `.image` file: its pixels at the size chosen, which `scale`,
   `crop`, `threshold`, `tones` and `halftone` turn into rows for `fog.picture`;
 - a sound file becomes a `.sound` file: a clip for `playWav` and the music library;
@@ -1455,8 +1456,9 @@ other plugins](trigscript-library.md#libraries-from-other-plugins).
 
 ## What a program does not have
 
-Outside `program()` the script is all of TypeScript, since it simply runs. Inside one,
-these cannot become something the game does. Each is refused with a message as you type:
+Outside `program()` the script is all of TypeScript, since it runs in the editor. Inside
+one, these cannot become something the game does. Each is refused with a message as you
+type:
 
 | Not there | Write instead |
 | --- | --- |

@@ -197,17 +197,21 @@ describe("undo for what the dialogs write", () => {
     expect(scn.triggers[0].actions[0].time).toBe(50000);
   });
 
-  it("starts again after a resize, which drops the history", () => {
-    const { store, scn } = open();
+  it("goes on across a resize, which is a step of its own", () => {
+    const { store, scn } = open("first");
     setScenarioName(scn, "before the resize");
     store.set(commitSettingsAtom);
     store.set(resizeDocumentAtom, { width: 10, height: 6, anchor: 4, clampLocations: true });
-    expect(store.get(undoStackAtom)).toEqual([]);
+    expect(store.get(undoStackAtom).map((e) => e.label)).toEqual(["Edit strings", "Resize map"]);
     applyTriggers(scn, [waiting(1)]);
     store.set(commitTriggersAtom);
     store.set(undoAtom);
     expect(scenarioName(scn)).toBe("before the resize");
     expect(scn.triggers).toHaveLength(0);
+    store.set(undoAtom);
+    expect(scn.width).toBe(8);
+    store.set(undoAtom);
+    expect(scenarioName(scn)).toBe("first");
   });
 });
 

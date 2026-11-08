@@ -3,11 +3,13 @@ import { createStore } from "jotai";
 import { createScenario } from "../src/formats/chk/create";
 import { parseScenario, serializeScenario } from "../src/formats/chk/scenario";
 import {
-  archiveExtrasAtom, closeDocumentAtom, commitEditAtom, isomRevisionAtom, commitSettingsAtom, loadDocumentAtom, redoAtom, redoStackAtom, resizeDocumentAtom, scenarioAtom, syncTapAtom,
+  archiveExtrasAtom, closeDocumentAtom, commitEditAtom, commitTriggersAtom, isomRevisionAtom, commitSettingsAtom, loadDocumentAtom, redoAtom, redoStackAtom, resizeDocumentAtom, scenarioAtom, syncTapAtom,
   undoAtom, undoStackAtom,
 } from "../src/atoms/documentAtoms";
 import { mapModifiedAtom, mapNameAtom, mapPointerHeldAtom, mapWidthAtom, selectedUnitsAtom } from "../src/atoms/editorAtoms";
-import { closeDialogAtom, openDialogAtom } from "../src/atoms/uiAtoms";
+import { closeDialogAtom, openDialogAtom, toastsAtom } from "../src/atoms/uiAtoms";
+import { applyTriggers, newAction, newTrigger } from "../src/editor/triggers";
+import { ActionType } from "../src/formats/chk/sections/triggers";
 import { applyEntry, type HistoryEntry } from "../src/editor/history";
 import { makeUnit } from "../src/editor/units";
 import { setScenarioName } from "../src/formats/chk/scenario";
@@ -46,6 +48,69 @@ function room() {
   };
   return { log, editors, flush, edit, same };
 }
+
+/** A trigger that can be told from another by its Wait. */
+function waiting(ms: number) {
+  const tr = newTrigger();
+  const a = newAction(ActionType.Wait);
+  a.time = ms;
+  tr.actions.push(a);
+  return tr;
+}
+
+const waits = (store: ReturnType<typeof createStore>) => store.get(scenarioAtom)!.triggers.map((tr) => tr.actions[0].time);
+
+function writeTriggers(store: ReturnType<typeof createStore>, ms: number) {
+  applyTriggers(store.get(scenarioAtom)!, [waiting(ms)]);
+  store.set(commitTriggersAtom);
+}
+
+describe("two people pressing OK on the same table", () => {
+  it("keeps the version that was written over, and puts it back on request", () => {
+    const { editors: [a, b], flush, same } = room();
+    writeTriggers(a.store, 1);
+    // B writes before A's change reaches it; the server orders A's first, so B's stands.
+    writeTriggers(b.store, 2);
+    flush();
+    expect(same()).toBe(true);
+    expect(waits(a.store)).toEqual([2]);
+
+    const toasts = a.store.get(toastsAtom);
+    expect(toasts).toHaveLength(1);
+    expect(toasts[0]).toMatchObject({ kind: "warn", ttl: 0, title: "Someone else's change replaced your triggers" });
+    expect(b.store.get(toastsAtom)).toHaveLength(0);
+
+    toasts[0].action!.run();
+    expect(waits(a.store)).toEqual([1]);
+    expect(a.store.get(undoStackAtom).at(-1)?.label).toBe("Put back my changes");
+    flush();
+    expect(same()).toBe(true);
+    expect(waits(b.store)).toEqual([1]);
+    // A put it back having seen B's: that is a choice, not a collision, so B is not told.
+    expect(b.store.get(toastsAtom)).toHaveLength(0);
+  });
+
+  it("says nothing when the second write was made on top of the first", () => {
+    const { editors: [a, b], flush, same } = room();
+    writeTriggers(a.store, 1);
+    flush();
+    writeTriggers(b.store, 2);
+    flush();
+    expect(same()).toBe(true);
+    expect(a.store.get(toastsAtom)).toHaveLength(0);
+    expect(b.store.get(toastsAtom)).toHaveLength(0);
+  });
+
+  it("says nothing to the one whose write was still unconfirmed and went on top", () => {
+    const { editors: [a, b], flush } = room();
+    writeTriggers(a.store, 1);
+    writeTriggers(b.store, 2);
+    flush();
+    // B's own write was pending when A's arrived, so B's went on top: B lost nothing.
+    expect(b.store.get(toastsAtom)).toHaveLength(0);
+    expect(waits(b.store)).toEqual([2]);
+  });
+});
 
 describe("a shared map's session", () => {
   it("sends each edit and applies the other editor's", () => {

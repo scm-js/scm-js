@@ -749,8 +749,8 @@ export interface DocumentApi {
    */
   test(bytes: Uint8Array, fileName: string, options?: { launch?: boolean }): Promise<TestMapOutcome | null>;
   /**
-   * Scenario ▸ Resize / Crop Map: a transaction outside the undo model that drops both
-   * history stacks (as the dialog does). Content keeps its place relative to `anchor`
+   * Scenario ▸ Resize / Crop Map: one undo step, as the dialog is (on a shared map, where
+   * it replaces everyone's map, both history stacks are dropped instead). Content keeps its place relative to `anchor`
    * (a 3 × 3 grid, row-major, 4 = centre, the default); the new ground is `terrainId`
    * (the tileset's default when omitted); objects outside the new bounds are dropped,
    * locations clamped unless `clampLocations` is false. Null with no map.
@@ -760,7 +760,7 @@ export interface DocumentApi {
    * Scenario ▸ Map Properties ▸ Tileset: change ERA and lay the terrain again with the
    * new tileset's terrain (tile numbers do not carry across tilesets; the doodads go with
    * them, everything else stays). Waits for the new graphics so the fill uses real tiles.
-   * Like `resize`, a transaction outside the undo model. Null with no map.
+   * Like `resize`, one undo step (on a shared map, the history is dropped instead). Null with no map.
    */
   changeTileset(options: ChangeTilesetOptions): Promise<ChangeTilesetResult | null>;
   readonly extras: ExtrasApi;

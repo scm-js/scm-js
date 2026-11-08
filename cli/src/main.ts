@@ -20,6 +20,8 @@ import { LAYOUTS, nameFromFile, NEW_VERSIONS, parseSize, parseTileset, writeNewM
 import { doctorJson, doctorReport, printDoctor } from "./doctor";
 import { initFolder, printInit, printRecipe } from "./init";
 import { diffMaps, printDiff, revisionInput } from "./diff";
+import { mapLog, printLog } from "./maplog";
+import { BLAME_KINDS, blameMap, printBlame, printBlameItem, type BlameKind } from "./blame";
 import { asMap, printMerge, runMerge, stagedInputs, type Side } from "./merge";
 import { diffPicture } from "./diffpicture";
 import { dumpMap, printDump } from "./dump";
@@ -846,6 +848,72 @@ Exits 1 when the maps differ, 0 when they are the same, like diff.
       else say(piped, ...lines);
     } else print(...(o.json ? [JSON.stringify(d, null, 2)] : printDiff(d, !!o.all)));
     if (!d.same) process.exitCode = 1;
+  });
+
+map.command("log").description("the map's history in git, each commit's changes in the map's terms").argument("<map>").addOption(json)
+  .option("--rev <revision>", "the history up to this revision, or a range A..B (HEAD by default)")
+  .option("-n, --max-count <n>", "the newest n commits only")
+  .addHelpText("after", `
+One entry per commit that changed the file: hash, date, author, subject, and what changed in
+the map, as map diff would say it between the commit's version and its parent's.
+  scmjs map log maps/ridge.scx
+  scmjs map log maps/ridge.scx -n 5
+  scmjs map log maps/ridge.scx --rev main..HEAD     # what this branch did to the map`)
+  .action(async (file: string, o: { json?: boolean; rev?: string; maxCount?: string }) => {
+    const limit = o.maxCount === undefined ? undefined : Number(o.maxCount);
+    if (limit !== undefined && !(Number.isInteger(limit) && limit > 0)) throw new CliError(`-n takes a number of commits, not ${o.maxCount}`, null, 2);
+    const log = await mapLog(file, { rev: o.rev, limit });
+    print(...(o.json ? [JSON.stringify(log, null, 2)] : printLog(log)));
+  });
+
+map.command("blame").description("the commit that last changed each trigger, location, string, unit or setting").argument("<map>").addOption(json)
+  .option("--triggers", "the triggers (the default, when the map has any)")
+  .option("--locations", "the locations")
+  .option("--strings", "the strings")
+  .option("--units", "the units, a row for each kind and owner")
+  .option("--settings", "the name, size, players, forces, terrain, unit and tech settings, and the archive's files")
+  .option("--trigger <n>", "one trigger, by its number in the list, with its whole text")
+  .option("--location <name>", "one location, by name or number")
+  .option("--string <n>", "one string, by number")
+  .option("--rev <revision>", "the map as this revision has it (the file as it is by default), or a range A..B")
+  .addHelpText("after", `
+Like git blame, a row per thing in the map instead of per line: the commit, author and date
+that last changed it. A trigger that only moved in the list has not changed. Without --rev
+the file is read as it is, and what is not committed yet says so.
+  scmjs map blame maps/ridge.scx
+  scmjs map blame maps/ridge.scx --locations --strings
+  scmjs map blame maps/ridge.scx --trigger 4`)
+  .action(async (file: string, o: { json?: boolean; rev?: string; trigger?: string; location?: string; string?: string } & Partial<Record<BlameKind, boolean>>) => {
+    const one = (["trigger", "location", "string"] as const).filter((k) => o[k] !== undefined);
+    if (one.length > 1) throw new CliError(`--${one[0]} or --${one[1]}, one at a time`, null, 2);
+    const number = (v: string | undefined, what: string) => {
+      if (v === undefined) return undefined;
+      const n = Number(v);
+      if (!Number.isInteger(n) || n < 1) throw new CliError(`--${what} takes a number from 1, not ${v}`, null, 2);
+      return n;
+    };
+    const trigger = number(o.trigger, "trigger"), str = number(o.string, "string");
+    let kinds: BlameKind[] = BLAME_KINDS.filter((k) => o[k]);
+    if (one.length) kinds = [one[0] === "trigger" ? "triggers" : one[0] === "location" ? "locations" : "strings"];
+    const fallback = !kinds.length;
+    if (fallback) kinds = ["triggers", "settings"];
+    const b = await blameMap(file, kinds, { rev: o.rev, trigger });
+    // With no choice: the triggers, or the settings for a map with none (a melee map).
+    if (fallback) { if (b.kinds.triggers!.length) delete b.kinds.settings; else delete b.kinds.triggers; }
+    if (one.length) {
+      const kind = kinds[0];
+      const rows = b.kinds[kind]!;
+      const want = one[0] === "location" ? o.location! : String(trigger ?? str);
+      const at = one[0] === "location"
+        ? rows.findIndex((r) => r.label.toLowerCase() === want.toLowerCase() || r.text.startsWith(`#${want} `))
+        : rows.findIndex((r) => r.label === want);
+      if (at < 0) throw new CliError(`${b.path} has no ${one[0]} ${want}${b.rev ? ` at ${b.rev}` : ""}`, `scmjs map blame "${file}" --${kind} lists them.`, 2);
+      const row = rows[at];
+      if (o.json) { print(JSON.stringify({ file: b.file, path: b.path, rev: b.rev, kind, ...row, ...(kind === "triggers" ? { textForm: b.detail } : {}) }, null, 2)); return; }
+      print(...printBlameItem(b, kind, row, `${one[0] === "trigger" ? "Trigger" : one[0] === "location" ? "Location" : "String"} ${row.label}`));
+      return;
+    }
+    print(...(o.json ? [JSON.stringify(b, null, 2)] : printBlame(b)));
   });
 
 map.command("merge").description("merge two versions of a map with their common ancestor, as git's merge driver").argument("<base>", "the common ancestor; with no other map, the map git stopped on").argument("[ours]").argument("[theirs]").addOption(json)

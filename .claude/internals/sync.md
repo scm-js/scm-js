@@ -112,3 +112,21 @@ presence of the other person's selection. A server refusal of an op (`error.abou
 then three Playwright contexts: share → join from the link → concurrent edits equal →
 Ctrl+Z propagates → stroke hold ("stroke", waiting 1, applied on mouse-up) → rename via
 `document.update` → late joiner after snapshot-please → resize across three → Leave.
+
+**Lost dialog writes are kept (2026-11-07).** Fields ops are per-field LWW, so two people
+pressing OK on the Trigger Editor lost the first one's work silently. `diffFields` now puts
+`from[f] = fieldHash(base value)` beside each field it sets (cyrb53 of the packed JSON — the
+value itself can be megabytes). `applyFieldsOp` compares it with the field as it stands and
+reports a mismatch in `Applied.overwritten` (the replaced value's packed JSON). The service
+keeps `mine` — each field as this editor's last dialog write left it — and only when the
+replaced value *is* `mine` does it count as lost. That one comparison sorts out the order
+cases. If our op was still pending, it was rolled back before theirs applied, so the
+replaced value is the confirmed one, not ours, and ours goes on top: we lost nothing. If a
+third person wrote in between, the value isn't ours either, and that person gets the notice.
+`offerRestore` raises a `ttl: 0` warn toast whose action writes the kept values back
+through the commit atoms. That makes it an ordinary undoable, synced dialog write, and
+because it was made having seen theirs, it raises no notice on their side. Not done: string
+slots are not kept with the triggers, so a text both people edited in the same slot comes
+back as theirs. Ops from older editors have no `from` and are never reported. The relay
+passes ops through as JSON; if the server ever validates op shapes, `from` must be allowed.
+`tests/sync-session.test.ts` ("two people pressing OK on the same table").

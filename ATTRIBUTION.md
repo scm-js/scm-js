@@ -163,7 +163,15 @@ descriptions:
 - `src/formats/wav.ts` follows the RIFF/WAVE container and the IMA and Microsoft ADPCM
   specifications as published; the codecs are original.
 - PyMS, above, is also the compatibility reference for the DAT, GRP, PCX, TBL and LO
-  decoders.
+  decoders, and for the mod codecs beside them: the field names and layouts of every
+  `.dat` table (`src/formats/dat/schema.ts`), and the text forms PyDAT, PyTBL, PyLO, PyICE
+  and PyAI write, which those codecs read and write. None of its code is included.
+- [aise](https://github.com/neivv/aise) by neivv (Apache-2.0) is the reference for the AI
+  script commands it adds (opcode numbers, as PyMS lists them); a reference only.
+- GPTP's DatExtend and grafting loaders, as published with Cosmonarchy's sources, are the
+  reference for the `.datex` table layout and the `.graft` binary files; the CMBW editor's
+  `graftc` notes are the reference for the `.graft` text. References only.
+- The PNG specification (W3C) for `src/formats/png.ts`; zlib is the platform's.
 - Maps written by StarEdit and Blizzard's own maps are the ground truth the tests
   re-encode byte for byte. They stay in the gitignored `fixtures/`.
 

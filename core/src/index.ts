@@ -96,6 +96,33 @@ export { decodeUnitsDat, type UnitsDat } from "../../src/formats/dat/dat";
 export { unitGeometry, type UnitGeometry } from "../../src/editor/units";
 export { displayColorHex } from "../../src/data/players";
 
+// ── Mods: the game's data files read and written ──
+// Every table in all three layouts (the game's .dat, DatExtend's expanded .dat, GPTP's .datex) with the width from the
+// file's length; PyDAT TXT, PyTBL, PyLO, PyICE and PyAI text both ways; GRP, PCX, .lo?, .graft; PNG sheets of a GRP.
+export { DAT_SCHEMAS, DAT_TABLES, datTableOf, type DatSchema, type DatField, type DatTableName, type DatValueType, type DatTextCoder } from "../../src/formats/dat/schema";
+export {
+  decodeDat, encodeDat, datShape, datEntrySize, datStandardSize, emptyDat, datRow, datRows, setDatRow, datFromRows, datHas, fieldType, storedRange,
+  datToText, datFromText, parseDatText, DatTextError, type DatFile, type DatLayout, type DatRow, type DatShape, type DecodeDatOptions, type DatFromTextOptions, type DatTextEntry,
+} from "../../src/formats/dat/table";
+export { decodeTblFile, encodeTblFile, tblToText, tblFromText, tblEscape, tblUnescape, type TblFile } from "../../src/formats/dat/tblFile";
+export { decodeGrpImage, encodeGrpImage, encodeGrpFrame, encodeGrpLine, frameFromPicture, framePicture, opaqueBox, type GrpImage, type GrpFramePixels } from "../../src/formats/dat/grpFile";
+export { decodePcxImage, encodePcxImage, type PcxImage } from "../../src/formats/dat/pcxFile";
+export { decodeLoFile, encodeLoFile, loToText, loFromText, type LoOverlays, type EncodeLoOptions } from "../../src/formats/dat/loFile";
+export {
+  iscriptToText, iscriptFromText, readIscriptHeaders, iscriptEntryCount, ISCRIPT_OPCODES, ISCRIPT_ANIMS, ISCRIPT_TYPE_ANIMS, IscriptTextError,
+  type IscriptOpcode, type IscriptArgKind, type IscriptEntryRule, type IscriptHeaderInfo, type IscriptToTextOptions, type IscriptFromTextOptions,
+} from "../../src/formats/dat/iscriptText";
+export {
+  aiscriptToText, aiscriptFromText, aiStringText, AI_OPCODES, AI_ENUMS, AI_FLAGS, AI_SCRIPT_FLAGS, AiScriptTextError,
+  type AiOpcode, type AiArgKind, type AiNames, type AiScriptFiles, type AiScriptToTextOptions, type AiScriptFromTextOptions,
+} from "../../src/formats/dat/aiscript";
+export {
+  decodeReqGraft, encodeReqGraft, reqGraftToText, reqGraftFromText, decodeButtonGraft, encodeButtonGraft, buttonGraftToText, buttonGraftFromText, GraftTextError,
+  type ReqGraft, type ButtonGraft, type GraftButton,
+} from "../../src/formats/dat/graft";
+export { decodePng, encodePng, isPng, inflate, deflate, type PngImage, type EncodePngInput } from "../../src/formats/png";
+export { grpToPng, pngToGrp, sheetColumns, type NamedPalette, type PngToGrpOptions, type QuantiseReport } from "../../src/formats/dat/grpPng";
+
 // ── Names and tables ──
 export { TILESETS, TILESET_BY_ID, MAP_SIZES, type TilesetId, type TilesetInfo } from "../../src/data/tilesets";
 export { UNIT_NAMES, UNIT_TYPE_COUNT, START_LOCATION, unitName, UPGRADE_NAMES, TECH_NAMES, upgradeName, techName, type RaceKey } from "../../src/data/units";

@@ -764,6 +764,10 @@ files holding the source, and packs back into the same built map. The packed fil
 opened as a map before it is written, so a folder whose scenario is not a scenario is
 refused.
 
+With `--text`, the scenario itself is written as text files under `scenario/` instead of
+the one binary `staredit/scenario.chk`, so the map can be kept in git and read and merged
+as text. [A map as a folder of text](#a-map-as-a-folder-of-text) explains the folder.
+
 ### Building a TrigScript map
 
 The editor builds a map with a [TrigScript](trigscript.md) script every time it saves it:
@@ -893,6 +897,10 @@ What it writes:
 The workflow has no `map test` step: that needs a copy of StarCraft, which GitHub's
 runners do not have.
 
+`init` keeps the maps themselves in git and has git read them through scmjs. The other way
+is to keep each map as a folder of text and build the map file from it when you need one:
+see [A map as a folder of text](#a-map-as-a-folder-of-text).
+
 Nothing is overwritten. `.gitattributes` and `.gitignore` get only the lines they lack, at
 the end. A `README.md` or workflow that is already there is left as it is, and so is a git
 setting that holds another value; each is reported on its own line. `--force` replaces the
@@ -937,6 +945,112 @@ bare `##`; `scmjs init` replaces that value. `git config diff.scmjs.cachetextcon
 keeps the text of each version, so a long `git log -p` does not read every map again. The
 `.gitattributes` lines are committed, so everyone who clones gets them; the `git config`
 lines are per clone, or for every repository on your computer with `--global`.
+
+### A map as a folder of text
+
+`scmjs map unpack --text` writes a map as a folder of text files: the header and players
+as JSON, the terrain as a grid, the units, locations and settings as tables, and the
+strings and triggers in their usual text forms. Keep the folder in git in place of the map
+file, and `scmjs map pack` builds the map from it:
+
+```sh
+scmjs map unpack ridge.scx --text     # → ridge/, the scenario under ridge/scenario/
+scmjs map pack ridge                  # → ridge.scx, built from the text
+```
+
+```
+ridge/
+  archive.json                 how the archive was stored, as for any unpacked map
+  staredit/wav/tone.wav        the map's other files, as map unpack writes them
+  scenario/
+    map.json                   type, revision, size, tileset, name, players, forces, sounds, switches
+    strings.txt                the string table, as map strings export writes it
+    triggers.txt               the triggers, as map triggers export writes them
+    briefing.txt               the mission briefing, the same way
+    terrain.txt                the tiles, a row of the map per line
+    under-doodads.txt          the ground under doodads, where it differs from terrain.txt
+    isom.txt                   the isometric terrain, a row per line
+    mask.txt                   the fog of war, a row per line
+    units.tsv                  the units, one per line, in the map's order
+    sprites.tsv, doodads.tsv   the sprites and doodads, one per line
+    locations.tsv              the locations in use, numbered as triggers number them
+    cuwp.tsv                   the Create Unit with Properties slots
+    settings/*.tsv             unit, weapon, upgrade and technology settings, one row each
+    sections.json              every section of the scenario, in the file's order
+    sections/                  the sections kept as they are: IVE2.bin, VCOD.bin, …
+```
+
+Each change to the map is then a change to a few lines. Moving a mineral field in the
+editor and unpacking again, or editing the line by hand, gives:
+
+```
+$ git diff -U1
+--- a/ridge/scenario/units.tsv
++++ b/ridge/scenario/units.tsv
+@@ -2,3 +2,3 @@
+ 1	336	1744	214	0x0000	0x0000	0x0000	0	100	100	100	0	0	0x0000	0	0	Start Location
+-2	176	1552	176	0x0000	0x0000	0x0010	11	100	100	100	1500	0	0x0000	0	0	Mineral Field (Type 1)
++2	272	1552	176	0x0000	0x0000	0x0010	11	100	100	100	1500	0	0x0000	0	0	Mineral Field (Type 1)
+ 3	240	1552	176	0x0000	0x0000	0x0010	11	100	100	100	1500	0	0x0000	0	0	Mineral Field (Type 1)
+```
+
+so two people who changed different units, triggers or strings merge with git's own line
+merge, and a pull request shows the change itself. A conflict is a conflict in the text
+file, settled there.
+
+**Nothing is lost.** Before writing the folder, `unpack` packs it again in memory and
+compares the result with the map, section by section; an untouched folder packs back into
+the same scenario, byte for byte. A section the editor does not model (`IVE2`, `VCOD`, a
+protected map's extra sections), a section the file has more than one copy of, and any
+section whose text could not hold all of it are kept as bytes under `sections/`, and
+`unpack` lists them:
+
+```
+$ scmjs map unpack ridge.scx --text
+✔ ridge.scx: 24 files · 137 KB · → ridge
+  Scenario as text  31 sections · 126 KB in 23 files
+  Kept as bytes     IVE2 (not modelled), VCOD (not modelled)
+```
+
+A map StarEdit wrote also keeps its string table and its triggers' records beside their
+text ("Bytes kept beside"). StarEdit lays the string table out its own way and leaves a
+flag clear in conditions and actions that the text form always sets; the kept bytes are
+written for as long as the text says what it said. A changed string table is written the
+way the editor saves one, and a changed trigger is read from its text, while every trigger
+whose text is unchanged keeps its record exactly.
+
+**Editing the text.** The text decides: `pack` reads each file into the editor's model of
+the map and writes each section as the editor would save it.
+
+- In the `.tsv` tables the columns are the fields of the record in the order the file
+  stores them; positions are in pixels, owners count from 0 (Player 1) to 11 (neutral),
+  and flags are hexadecimal. The `name` column is there to read and is not read back: the
+  number columns decide.
+- `terrain.txt` holds a tile id per cell in hexadecimal, the tileset's group times 16 plus
+  the megatile within it, so a whole tile group shares its first three digits.
+- `strings.txt` and `triggers.txt` are what `map strings export` and `map triggers export`
+  write. A trigger names its text by what it says, so triggers.txt decides a trigger's
+  text: changing a message there adds it to the string table (as `map triggers import`
+  does), and the old one stays until `scmjs map strings prune`. To change a message in
+  place, change it in both files.
+- `map.json` names players' types, races and colours, and the forces' flags, by name;
+  `nameString` and the like are numbers in the string table.
+
+A file that does not read stops the pack, with the file and line:
+
+```
+$ scmjs map pack ridge
+✖ scenario/units.tsv, line 3: x: "abc" is not a number
+```
+
+The map's size is in `map.json` and in the shape of every grid, so a map is resized with
+`scmjs map resize`, not by hand. `map dump` and the git textconv are unchanged: they read
+a map file, which this folder builds.
+
+**TrigScript.** A map built from a TrigScript script unpacks as the editor saved it: the
+built scenario as text, beside the script's files under `trigscript/` and `scmjs/`.
+Packing the folder does not build the script again; run `scmjs map build` on the packed
+map after changing the script.
 
 ### Comparing two maps
 
@@ -2413,6 +2527,7 @@ gives its options.
 | [`scmjs map triggers export\|import\|edit`](#triggers-and-strings-as-text) | The triggers as a text or `.trg` file and back; `edit` opens them in your editor |
 | [`scmjs map strings export\|import\|edit\|prune`](#triggers-and-strings-as-text) | The strings as a text file and back; `prune` removes the unused ones |
 | [`scmjs map unpack <map>`, `scmjs map pack <folder>`](#the-archive-as-a-folder) | The map's archive as a folder of files, and back |
+| [`scmjs map unpack <map> --text`](#a-map-as-a-folder-of-text) | The scenario as text files to keep in git; `map pack` builds the map from them |
 | [`scmjs map build <map>`](#building-a-trigscript-map) | Builds the map's TrigScript script into it, as Save does |
 | [`scmjs map run <plugin> <map>`](#running-a-plugin-over-a-map) | Runs a plugin, or a script written like one, over the map |
 | [`scmjs map diff <a> <b>`](#comparing-two-maps) | What changed between two maps, or since a git revision with `--rev`; `--picture` shows where |
@@ -2493,6 +2608,7 @@ scmjs map heatmap map.scx replays/ --out h.png  # where units died in those game
 scmjs replay export game.rep --to 0:30          # its first half minute, as game.webm
 scmjs map share map.scx --qr                    # a link, and a code for a phone
 scmjs init                                      # this folder of maps, ready for git
+scmjs map unpack map.scx --text                 # the map as text files, to keep in git
 ```
 
 ## In the source
@@ -2525,6 +2641,7 @@ from a clone with `npm run cli -- <command>`, or build it with `npm run build:cl
 | `cli/src/init.ts` | A folder of maps set up for git and GitHub: the lines and files it lacks, the workflow and README made from the maps, the git settings |
 | `cli/src/doctor.ts` | The checks: Node, npm's newest, TypeScript, Docker, a browser, ffmpeg, StarCraft, the engine cache, the desktop app, and what each one is for |
 | `cli/src/archive.ts` | The archive as a folder and back: member names as file names, the manifest, the members without a name |
+| `cli/src/source.ts` | The scenario as a folder of text and back: each section's text form, the check that the folder packs back into the same scenario, the bytes kept beside |
 | `cli/src/texteditor.ts` | `triggers edit` and `strings edit`: the editor chosen and started, the file kept when the text does not read |
 | `cli/src/sounds.ts` | The map's sounds: the WAV table joined with the archive's members, their lengths, the files written |
 | `cli/src/qr.ts` | The QR encoder for `--qr` and its drawing in the terminal |

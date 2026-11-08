@@ -1792,6 +1792,87 @@ overview row. Docs: `docs/cli.md` "A map's history", "Who last changed what".
 - **CLI strings are literals, not `t()`**: the i18n extractor reads `src/` only and no CLI module uses `t()` for its
   own words (plugin.ts's are the starter's text); followed that.
 
+## A map as a folder of text: `map unpack --text` / `pack` (`cli/src/source.ts`, `archive.ts`) — 2026-11-07
+
+The user's slice: a map lives in git as a **folder of text** and is rebuilt into the identical scenario, so merges are
+line merges and a PR reads the real change. Branch `cli-map-source`. `map dump` (one-way, textconv) is unchanged.
+
+- **Flag `--text`, not `--source`**: "source" already means the TrigScript source a built map carries (`map build`,
+  `restoreBuiltMap`, `scmjs\source.chk`), and an unpacked built map has *both*; `--text` says what it writes.
+  `archive.json` goes to **version 2** with `scenario.text: "scenario"` (the folder); pack reads 1 and 2 (a 3 says "a
+  newer scmjs wrote it"), and with no manifest takes `scenario/sections.json` without `staredit/scenario.chk` as the
+  text form. Plain unpack is still version 1, byte for byte as before. An archive member under `scenario\` refuses
+  `--text`. Unpacking one form over the other removes the other (`staredit/scenario.chk`, or `scenario/` when it has
+  `sections.json`), since pack would otherwise take it for a member; `scenario/` is replaced whole each time.
+- **Layout** (`FORMS`, also the read order): `map.json` (TYPE VER DIM ERA SPRP OWNR IOWN SIDE COLR CRGB FORC WAV SWNM
+  + the string table's `slots`/`encoding`; players/races/colours/colour modes/force flags **by name** from the codecs'
+  const tables, a number when unknown; force 1-based; `tileset` by TILESETS id when era < 8 else `era`; WAV/SWNM as
+  lists trimmed of trailing zeros), `strings.txt` (= `formatStringTable`, so `map strings import` takes it), terrain
+  grids `terrain.txt` (MTXM) / `isom.txt` / `mask.txt` (hex, a row per line, one `#` comment line), `under-doodads.txt`
+  (TILE as `x y tile` where it differs from MTXM — so a tile edit is one file and TILE follows MTXM as the brush does),
+  `units.tsv` / `sprites.tsv` / `doodads.tsv` (record fields in file order, flags `0x` hex, a trailing informational
+  `name` column never read back), `locations.tsv` (rows for slots that are not all zero, 1-based `location`), `cuwp.tsv`
+  (UPRP fields + UPUS `used`), `settings/{units,weapons,availability,upgrades,upgrade-levels,techs,tech-availability}.tsv`
+  (one generic struct-of-arrays table: a row per id, per-player columns as 12 comma-separated values, `name` column),
+  `triggers.txt` / `briefing.txt` (= `triggersToText`), `sections.json` (every section in file order: `text`, or
+  `bytes`, `size` when the header's length is not the data's, `trailing`), `sections/NAME.bin` (trailing spaces
+  trimmed, anything outside `[A-Za-z0-9_-]` as `%XX`, case clashes `.2`). A form writes only the keys/columns of its
+  sections that are text.
+- **The check is the packer** (`scenarioToText`): candidates = modelled, one copy, not cut off, and for STR/STRx the
+  one `parseScenario` reads. The files are rendered in memory and run through **`assemble`, the same function pack
+  runs**; each text section's encoding is compared with the file's bytes. Equal → text alone. Not equal but equal to
+  `encodeSection(model, name)` (**the model is the same, the bytes are not**) → **layout**: the original bytes kept
+  under `sections/` with `sha1` = the text's encoding; pack writes them while the text still encodes to that hash,
+  else the encoding (= what the editor's Save writes after an edit). Otherwise the text lost something → for TRIG/MBRF
+  another round with **records kept** (below), else the section goes to bytes and the round repeats. A form that
+  throws demotes its sections. Last, the whole folder is assembled and must equal the CHK **byte for byte**, else a
+  CliError (never seen). So an untouched folder packs to the identical scenario, and idempotence follows.
+- **`assemble`**: kept sections first (`parseScenario` of them alone), the forms read over that model, every text
+  section encoded with **`encodeSection`** (now exported from scenario.ts and core — a save's bytes for one section);
+  then a second pass parses the assembled CHK and reads the text again, so a kept section is decoded against the
+  text's size and revision; stops when two passes agree (≤ 3). Assembled with `serializeChk` directly, **not**
+  `serializeScenario`: its VCOD replacement and MRGN re-dirtying would change kept bytes. With the string table kept as
+  bytes, text that adds a string (a trigger naming new text) is refused — it would point past the table.
+- **Why STR is "layout" on every Blizzard map** (probed: dirty-one-section re-encode over all 21 maps): StarEdit's
+  unused slots point at one shared 0 byte and decode as `""`, which `encodeStrings` gives its own blob, and its order
+  differs; the generated maps re-encode exactly. Ashworld Hunters (hybrid) has UPGR/PTEC "layout": `readPair` takes the
+  `x` restrictions whole, so the original tables cannot be re-encoded from the model.
+- **Why TRIG/MBRF keep records**: the text form normalises — `unitFlags` sets 0x10 "unit type used" on any condition or
+  action with a unit argument (StarEdit leaves it clear: 12 of the 16 Blizzard maps), a string is named by its text so a
+  duplicated text resolves to the lowest index (Ground Zero), an action's unused text index is dropped (Defenders'
+  briefing). With records kept (`bytes` without `sha1`, `Form.keepsRecords`), the trigger form parses the text, then
+  replaces each parsed trigger whose `formatTrigger` text (with the current names) equals a kept record's by that
+  record (multiset, in order). Unchanged triggers stay byte for byte; an edited or new one is the parsed record, as
+  `map triggers import` gives. Measured: an edit to one trigger of Zoo Keeper changes that trigger only in `map diff`.
+  A changed message is a **new string** (intern), the old one stays until `strings prune` — triggers.txt decides a
+  trigger's text; editing strings.txt alone does not move a trigger (its text then no longer matches → re-parsed
+  with the old text → interned back). Documented.
+- **Results** (all 21 maps: 5 committed + 16 fixtures, every one byte for byte, `diffMaps` same, text identical on a
+  second unpack): every modelled section is text on every map; kept as bytes alone only IVE2/IVER/VCOD (unmodelled);
+  layout STR on all 16 Blizzard maps (+ UPGR, PTEC on Ashworld); records TRIG on 11, MBRF on 9. Sizes (KB): generated
+  64×64 maps ~124 text vs 3–6 scx (isom 42, terrain 20, PUNI table 16); Blizzard maps 137–680 text (deflated 24–72)
+  vs 35–559 scx; ISOM is usually the biggest file (325 KB on Spring Thaw, the largest map here), then terrain and mask; triggers lead on Defenders.
+  Kept bytes 3–10 KB on melee maps, up to 340 KB on Wakka Wakka (140 StarEdit TRIG records, **4.7 KB deflated**, git
+  stores it compressed). unpack --text 25–190 ms a map in vitest.
+- **The language server** reads a text folder: `isUnpackedMap` also accepts `scenario/sections.json`, `readMap` builds
+  the scenario with `scenarioFromText`, the stamp is the newest mtime under `scenario/`. The in-process LSP conversation
+  test now runs on a text-unpacked map (the built-command run keeps the binary one), so both are covered.
+- **Core exports added**: `encodeSection`, `defaultUnitSettings` and its five kin (a text table for a section the base
+  model lacks), `locationSlots`, `WEAPON_NAMES`/`weaponName`. docs/core.md's table names them.
+- **Tests** (`tests/cli-source.test.ts`, 33 with fixtures, 17 without): every committed map and (skipIf) every fixture
+  through `checkMap` (CHK bytes equal, sections parse equal, kept `.bin` = section bytes, extras, `diffMaps` same, no
+  modelled section kept as bytes alone, second unpack identical); manifest v2 / no manifest / switching forms / member
+  in `scenario\` / built-shaped map / `stableJson`; a synthetic CHK with a 1-byte STR decoy, an odd section name,
+  trailing bytes, and a cut-off last section; edits (unit move = UNIT only, re-unpack gives the edited text; tile =
+  MTXM+TILE; string; player; location; unit setting; trigger), error messages with file and line, the STR layout kept
+  then dropped on an edit. ~1.5 s without fixtures, ~14 s with.
+- **Not done / leftovers**: `pack` does not run a TrigScript build (two commands: `map pack` then `map build`; a
+  `--build` flag reusing `buildMap` is cheap but needs TypeScript and the vendored compiler at pack time — left for the
+  user to ask); no MCP tool (`map_unpack`/`map_pack` with `text`); a `--plain`/normalise option that drops the kept
+  STR/TRIG bytes and accepts the editor's layout and the text form's flags (smaller folders for StarEdit maps; the
+  first pack would change those sections); `map diff` between two folders (today: pack both); `init` does not offer the
+  folder workflow (docs mention it as the alternative); resizing by editing the text is refused by the grids' shape
+  checks (use `map resize`); ISOM as hex words is mergeable but not readable — a diamond-per-cell form would be.
 ## Without Node: single executables (`cli/src/runtime.ts`, `sea.ts`, `scripts/build-cli-binary.mjs`) — 2026-11-07
 
 The user's ask: "most Windows map makers do not have Node installed" — one executable per platform on the

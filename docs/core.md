@@ -52,16 +52,16 @@ terrain. Everything else is a function that reads or changes one.
 
 | Area | Functions |
 | --- | --- |
-| Files | `openMapBytes`, `writeMapBytes`; `loadMap` and `readMembers` for the archive itself; `parseScenario` and `serializeScenario` for a bare scenario; `createScenario` for a new map |
+| Files | `openMapBytes`, `writeMapBytes`; `loadMap` and `readMembers` for the archive itself; `parseScenario` and `serializeScenario` for a bare scenario, `encodeSection` for the bytes one section of it would be saved as; `createScenario` for a new map |
 | Describing | `scenarioName`, `scenarioDescription`, `mapVersionOf`, `mapStatistics`, `statisticsText`, `findInScenario` |
 | Check Map | `validateScenario`, `issueCounts` — every rule the editor runs that needs no game data |
 | Triggers | `readTriggers` / `applyTriggers`, `readBriefing` / `applyBriefing`, `newTrigger`, `newCondition`, `newAction`, `triggerNames`, `triggerUsage`, `triggerComment`; the numbers a record holds, by name (`ConditionType`, `ActionType`, `PlayerGroup`, `Comparison`, `SwitchState`, `SwitchAction`, `SetModifier`, `ResourceType`, `UnitClass`); the text form, `triggersToText` / `triggersFromText`; `.trg` files, `encodeTrg` / `decodeTrg`; the condition and action definitions |
 | Strings | `readStrings` / `applyStrings`, `stringUsages`, `unusedStrings`, `deleteUnused`; the table as text, `formatStringTable` / `parseStringTable`; `plainText` to drop colour codes; `decodeText` for bytes in a map's encoding (`TEXT_ENCODINGS`) |
 | Units | `addUnits`, `removeUnits`, `updateUnits`, `moveUnits`, `makeUnit`, `unitAt`, `unitsInBox`, `isResource` |
 | Locations | `addLocation`, `editLocation`, `removeLocations`, `moveLocations`, `locationName`, `usedLocations` |
-| Settings | `readPlayerSettings` / `applyPlayerSettings`, forces, unit, upgrade and tech settings, `changeMapVersion`, `changeTextEncoding` |
+| Settings | `readPlayerSettings` / `applyPlayerSettings`, forces, unit, upgrade and tech settings, `changeMapVersion`, `changeTextEncoding`; `defaultUnitSettings` and its kin, each table as a map has it before anyone changes it; `locationSlots`, how many locations a revision holds |
 | The map | `resizeScenario`, `placeStartLocations`, `setScenarioName`, `setScenarioDescription`; `flatTerrain` and `baseTerrain`, the flat ground a new map is filled with |
-| Names | `unitName`, `upgradeName`, `techName`, `TILESETS`, `PLAYER_TYPES`, `PLAYER_RACES`, `PLAYER_COLORS` |
+| Names | `unitName`, `upgradeName`, `techName`, `weaponName`, `TILESETS`, `PLAYER_TYPES`, `PLAYER_RACES`, `PLAYER_COLORS` |
 | The game's files | `loadTileset`, `megatileForTile` and `drawMegatile` for a tileset's graphics, `decodeUnitsDat` and `unitGeometry` for the units' sizes, `displayColorHex` for a player's colour — for files you read from your own copy of the game |
 | Terrain and doodads | `paintIsom` and `paintIsomDiamonds`, the isometric brush (one diamond, or any set of them in one stroke), `checkIsom`; `buildDoodadCatalogue`, `checkDoodadPlacement` and `placeDoodad` for a doodad placed as StarEdit allows; `symmetryImages` for the editor's symmetry modes — these need a tileset you read from your own copy of the game |
 | Plugins | `validateManifest`, `PLUGIN_API_VERSION` — what the editor checks a plugin's manifest for |

@@ -38,6 +38,8 @@ command's output changes, with `--play-url` at a staged scm-sim deploy when the 
   throws on a package with no licence file); `cli/LICENSE` is a copy of the root one. Today: @scm-js/replay,
   commander, fflate (via mopaq), mopaq, picocolors; ATTRIBUTION.md has a table for them. Added 2026-11-06 just
   before the first publish, which had gone without either (the publish failed on 2FA first). commander 15 needs Node ≥ 22.12 (`engines`).
+  The Vite builds live in `scripts/lib/cli-bundle.mjs` (`bundleCli`, `bundleWeigh`), shared with the single
+  executable's CommonJS build ("Without Node" below); the npm bundle differs only by the `__SCMJS_INSTALL__` define.
 - **Type-checked** by `tsconfig.cli.json` (in `tsc -b`'s references): `types: node, vite/client`, `cli/src` only
   (it pulls in the `src/` files it imports). `tests/cli.test.ts` covers the pieces; `npm run cli -- …` runs it.
 - **Output** (`cli/src/ui.ts`): picocolors decides colour (`NO_COLOR`, `FORCE_COLOR`, `--no-color`, a pipe). Marks
@@ -1789,3 +1791,109 @@ overview row. Docs: `docs/cli.md` "A map's history", "Who last changed what".
   with textconv does that); `map log --rev A...B` passes through to git, `map blame` refuses `...`.
 - **CLI strings are literals, not `t()`**: the i18n extractor reads `src/` only and no CLI module uses `t()` for its
   own words (plugin.ts's are the starter's text); followed that.
+
+## Without Node: single executables (`cli/src/runtime.ts`, `sea.ts`, `scripts/build-cli-binary.mjs`) — 2026-11-07
+
+The user's ask: "most Windows map makers do not have Node installed" — one executable per platform on the
+GitHub release, with install recipes. PR on branch `cli-binary`.
+
+**The spike** (Linux x64 under WSL2, Node v24.13.0, Bun 1.4.4; wall time per run over 10 runs, `tests/maps/melee.scx`):
+
+| Option | Worked | Size (Linux; packed) | `--version` | `info melee.scx` |
+| --- | --- | --- | --- | --- |
+| npm bundle on Node (baseline) | — | 5.5 MB | 148 ms | 182 ms |
+| **Node SEA, V8 code cache** | every check below, Windows exe too | 122.9 MB; tar.gz 42.0 MB (Windows exe 91.2 MB, zip 34.2 MB) | **74 ms** | **102 ms** |
+| Node SEA, no code cache | the same | 120.9 MB | 136 ms | 169 ms |
+| `bun build --compile` | map info/check/dump, `map run` plugin, runners (trace, cost) under Bun | 114 MB; gz 53 MB (Windows 120.6 MB) | 131 ms | 150 ms |
+| `bun build --compile --bytecode` | (not re-run beyond startup) | 126.6 MB | 29 ms | 43 ms |
+| Deno compile | not tried: 1 and 2 both worked | | | |
+
+`about` is 503 ms (npm) vs 455 ms (SEA): the npm registry call dominates. **Chose Node SEA**: the runners are the
+lifted game, and under Bun they would run on JavaScriptCore rather than the V8 the play page, the tests and every
+replay check run on (Math functions and number formatting are implementation-defined, so a replay's exactness is
+not a given across engines); every Node API the command uses is Node's own. Bun's two advantages — 45 ms faster
+start with bytecode, and cross-compiling all four from one machine — did not outweigh a second runtime under the
+game. SEA's own cost: three runners in CI, ~120 MB a file (the Node executable).
+
+**How it is built** (`npm run build:cli-binary`, `node scripts/build-cli-binary.mjs [--target linux-x64,darwin-arm64,darwin-x64,win-x64] [--archive] [--check] [--download] [--no-code-cache]`):
+1. `bundleCli({ install: "binary" })` → `cli/dist/bin/.work/scmjs.cjs`: **CommonJS** (SEA runs only CJS), entry
+   `cli/src/sea.ts`, `__SCMJS_INSTALL__ = "binary"`; `weigh.mjs` built as for npm.
+2. Per target, the Node executable: this computer's own (`process.execPath`) for the host target, else the
+   official one of **the same version** from nodejs.org, checked against `SHASUMS256.txt` and cached in
+   `~/.cache/scmjs-build/node/<version>/<target>/` (`SCMJS_BUILD_CACHE`).
+3. The blob (`--experimental-sea-config`): `assets: { "weigh.mjs" }`, `disableExperimentalSEAWarning`, and
+   `useCodeCache: true` **only when made by the target's own Node** (code cache is V8- and flag-specific), i.e.
+   the host, or darwin-x64 on Apple silicon through Rosetta; otherwise a portable blob any Node of that version
+   reads (a Windows exe built from Linux was run through WSL interop: map info/about/trace/cost all fine).
+4. `npx --yes postject@1.0.0-alpha.6 … NODE_SEA_BLOB … --sentinel-fuse NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2`
+   (`--macho-segment-name NODE_SEA` on macOS) — npx, not a devDependency: postject is in the lock only as an
+   optional transitive of electron-builder, and making it direct meant hand-editing the lock. macOS: `codesign
+   --remove-signature` before and `codesign --sign -` (ad hoc) after, so **a Mac target needs a Mac**.
+5. `--version` of the result must say the package version (when it runs here); `--archive` packs
+   `scmjs[.exe]` + `LICENSE` + `THIRD-PARTY-NOTICES.txt` (the bundle's notices **plus Node's own LICENSE**, fetched
+   from `raw.githubusercontent.com/nodejs/node/<version>/LICENSE` — V8, ICU, OpenSSL… ship inside) into
+   `scmjs-<windows|macos|linux>-<arch>.{zip|tar.gz}` (the desktop's naming) and writes a local `SHA256SUMS`. The
+   zip is written by hand (`zlib.crc32` + `deflateRawSync`, no fflate import — it is only transitive via mopaq).
+   Archives rather than bare executables: the exec bit survives a browser download and they are a third the size.
+6. `--check` runs `scripts/check-cli-binary.mjs <exe>` — the hand/CI check: **no `node` or `npm` on PATH** (every
+   PATH folder holding one dropped), a temp folder, and: --version, the overview, `about`/`doctor --json` say
+   `install.kind: "binary"`, map info (file and stdin), check over tests/maps, new, dump, find, set+diff,
+   unpack+pack round trip, triggers export, preview refusing a non-game folder, `map run` with a .js plugin,
+   **`map build` with TypeScript from a project's node_modules** (a link to the clone's), `map build` without
+   TypeScript failing with the install line, a script run as Node with a file Worker (as runners do), `mcp`
+   initialize + tools/list; `--replay <file>` adds replay info/map, `--game` adds `map trace`/`map cost` in the
+   game. All pass on Linux (2026-11-07), including `--game` with the cached engine 1248410ad2a0 and Remastered.
+
+**What differs at run time** (all in `runtime.ts`):
+- **`import()` from disk works in SEA on Node 24** (TypeScript, `map run`'s plugin modules, runners) — checked
+  directly; the build refuses Node < 24 rather than finding out what 22 does. `vm`'s
+  `USE_MAIN_CONTEXT_DEFAULT_LOADER` also worked but is not needed.
+- **Runners**: `startRunner` spawns `process.execPath`, which in SEA is scmjs itself. `runnerEnv` adds
+  `SCMJS_RUN_AS_NODE=1` (only when the "node" is `process.execPath` and this is the binary; `--node` elsewhere is
+  left alone); `sea.ts` sees it and calls `runAsNode`, which **rewrites argv**: SEA's is `[exe, exe-as-typed,
+  script, …]`, Node's `[node, script, …]`, and the runners decide they are the main module by
+  `import.meta.url === pathToFileURL(process.argv[1])`, so `scriptArgv` drops index 1 and resolves the script. The
+  CLI is a lazy `import("./main")` in `sea.ts`, so a runner's process never builds the command tree. The variable is
+  inherited by the runner's children (as `ELECTRON_RUN_AS_NODE` is); runners spawn none today.
+- **`weigh.mjs`** (map cost hands its path to the map runner): `assetFile` writes the SEA asset to
+  `cacheRoot()/weigh/<version>-weigh.mjs` (compared each run, written via a `.part` rename) — `process.getBuiltinModule("node:sea")`, no static import of `node:sea`.
+- **TypeScript**: `findTypeScript` skips "beside the command" in the binary; the project (cwd) and `npm root -g`
+  remain (no npm → caught → "TrigScript compiles with TypeScript…"). doctor's TypeScript note adds that npm comes
+  with Node.
+- **`about`**: `install: { kind, manager, path, update }` in the JSON, an `Installed` row (`npm package` /
+  `single executable[, from Scoop|winget|Homebrew]` + path), Node marked `(inside scmjs)`, and **Newest** offers
+  `updateCommand(install)`: npm's line, `scoop update scmjs`, `winget upgrade scm-js.scmjs`, `brew upgrade scmjs`,
+  or `download it again from https://github.com/scm-js/scm-js/releases/latest`. The manager is read off the
+  executable's path (`managerOf`: `/scoop/apps|shims/`, `/microsoft/winget/`, `/cellar/|/homebrew/|/linuxbrew/`).
+  "Newest" still asks npm: both kinds are released together with one version.
+- **`doctor`**: the scmjs check's detail gains ` · single executable[, from …]` (so the title line says it; npm
+  says nothing more, keeping the docs' sample), its fix is `updateCommand`; `nodeCheck(_, "binary")` is never bad;
+  `doctorReport`/`doctorJson` carry `install`; Claude Code's fix is `mcpAddLine` (`claude mcp add scmjs -- scmjs
+  mcp` from a package manager, else the executable's own path, quoted when it has spaces; Scoop's/Homebrew's
+  versioned folders would break a path on update). `versionCheck(latest?, install?)` takes both for tests;
+  "is on npm" became "is out".
+- **No top-level await anywhere in `cli/src`** (CJS): `main.ts`'s run is `void run()` now;
+  `tests/cli-binary.test.ts` walks every module with TypeScript's parser for an `await` outside a function.
+
+**CI** (`build.yml` `cli-binary`, see `desktop-releases.md`): three runners, `--archive --check`, artifacts
+`cli-binary-<os>`; on PRs as a dry run; `release` attaches them and writes `SHA256SUMS` over all assets.
+**Recipes** (`packaging/`, `packaging/README.md`): Scoop manifest (autoupdate, hash from `$baseurl/SHA256SUMS`
+by `$sha256\s+\*?$basename`), winget 1.9.0 manifests (zip + nested portable, alias `scmjs`; `winget validate`
+passed on Windows 11 through WSL), Homebrew formula (on_macos arm/intel, on_linux intel, `bin.install`, test
+`--version`, livecheck github_latest); `@VERSION@`-style placeholders filled by `scripts/release-recipes.mjs`
+(`scripts/lib/recipes.mjs`, `tests/release-recipes.test.ts`) into ignored `packaging/out/v<version>/`.
+
+**Traps**
+- postject on Linux prints `warning: Can't find string offset for section name '.note.100'` many times; harmless,
+  hidden unless postject fails.
+- A distribution's own Node may lack the SEA fuse (postject then cannot find the sentinel): `--download` uses the
+  official build for the host too. `/usr/bin/node` on this machine (NodeSource) has it.
+- `cli/dist/bin/` sits inside the npm package's `dist/`; `npm pack`'s prepack empties `cli/dist` first, and the CI
+  `cli` job never builds executables, so none can be published to npm. Never commit `cli/dist`.
+- The npm bundle's behaviour is unchanged (`__SCMJS_INSTALL__` is "npm", folded to constants); diffed after the
+  refactor, the only changes were the new code.
+
+**Leftovers**: signing (Authenticode, Developer ID + notarization) — the hook is after the injection; Linux arm64
+and Windows arm64 executables (SEA needs a runner of each; GitHub has `ubuntu-24.04-arm` and `windows-11-arm`);
+`useSnapshot` (startup) not tried; the Scoop bucket and Homebrew tap repositories do not exist yet, and the docs
+already give their commands.

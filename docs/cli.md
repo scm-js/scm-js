@@ -11,7 +11,7 @@ map, and build plugins and bots.
 
 ## Getting started
 
-You need Node.js 22.12 or newer. Install the command once:
+With Node.js 22.12 or newer, install the command once with npm:
 
 ```sh
 npm install -g @scm-js/cli
@@ -23,6 +23,61 @@ Or run it without installing. `npx` fetches it the first time:
 ```sh
 npx @scm-js/cli info "(2)Ridge.scx"
 ```
+
+Without Node, download the command as a single program instead: see [Without
+Node](#without-node).
+
+### Without Node
+
+Each release also carries `scmjs` as one program with Node inside it, for Windows, macOS
+and Linux. It runs every command the npm package runs, and nothing else needs installing.
+
+| System | Download |
+| --- | --- |
+| Windows (x64) | [scmjs-windows-x64.zip](https://github.com/scm-js/scm-js/releases/latest/download/scmjs-windows-x64.zip) |
+| macOS (Apple silicon) | [scmjs-macos-arm64.tar.gz](https://github.com/scm-js/scm-js/releases/latest/download/scmjs-macos-arm64.tar.gz) |
+| macOS (Intel) | [scmjs-macos-x64.tar.gz](https://github.com/scm-js/scm-js/releases/latest/download/scmjs-macos-x64.tar.gz) |
+| Linux (x64) | [scmjs-linux-x64.tar.gz](https://github.com/scm-js/scm-js/releases/latest/download/scmjs-linux-x64.tar.gz) |
+
+Each holds `scmjs` (`scmjs.exe` on Windows), its licence and the licences of what is
+inside it, Node's among them. Put the program in a folder on your PATH so that `scmjs`
+works from any folder. On Windows, make a folder such as `C:\Tools`, unpack `scmjs.exe`
+into it, and add the folder under Settings ▸ System ▸ About ▸ Advanced system settings ▸
+Environment Variables ▸ Path. On macOS and Linux:
+
+```sh
+curl -L https://github.com/scm-js/scm-js/releases/latest/download/scmjs-linux-x64.tar.gz | tar -xz scmjs
+sudo mv scmjs /usr/local/bin/
+```
+
+The programs are not code-signed. The first time, Windows may show SmartScreen's "Windows
+protected your PC": choose **More info**, then **Run anyway**. macOS refuses a program
+downloaded in a browser because "the developer cannot be verified"; clear the quarantine
+flag once in Terminal, or allow it under System Settings ▸ Privacy & Security:
+
+```sh
+xattr -d com.apple.quarantine scmjs
+```
+
+A file fetched with `curl` carries no quarantine flag. The release's `SHA256SUMS` lists
+each file's checksum; `sha256sum -c SHA256SUMS --ignore-missing` (`shasum -a 256 -c` on
+macOS) checks the files you downloaded.
+
+A package manager installs the same program and updates it with the rest of your software:
+
+```sh
+scoop bucket add scm-js https://github.com/scm-js/scoop-bucket
+scoop install scmjs                  # Windows, Scoop
+winget install scm-js.scmjs          # Windows, winget
+brew install scm-js/tap/scmjs        # macOS and Linux, Homebrew
+```
+
+One thing still needs Node: `map build`, and a plugin written in TypeScript, compile with
+TypeScript, which is installed with npm. The program looks for it in the map's project
+(`npm install typescript` there) and in npm's global folder. Everything else is the same
+as the npm package: the same cache folder, the same copy of StarCraft, the same Docker for
+bots. For Claude Code, register the program itself: `claude mcp add scmjs -- scmjs mcp`
+(`scmjs doctor` prints the line for your copy).
 
 ### The commands
 
@@ -52,10 +107,10 @@ scmjs map open "(2)Ridge.scx"     # open it in scmJS
 
 ### Checking your setup
 
-Most commands need only Node. A few need more: TypeScript, Docker, or your copy of
-StarCraft. `scmjs doctor` says what this computer has, what each thing is for, and the
-command that installs what is missing. It ends with the commands that cannot run yet and
-the one thing each lacks.
+Most commands need nothing more than the command itself. A few need more: TypeScript,
+Docker, or your copy of StarCraft. `scmjs doctor` says what this computer has, what each
+thing is for, and the command that installs what is missing. It ends with the commands
+that cannot run yet and the one thing each lacks.
 
 ```
 scmjs 0.9.1 · the newest · Node v24.13.0 · linux x64
@@ -104,8 +159,11 @@ engine with a runner of its own; an engine fetched before the play page had a ru
 that one, and the line says which it holds. The next command that needs a missing runner
 fetches it. Before anything is fetched the line says "not fetched yet".
 
-`--json` prints the checks and the list of ready commands as JSON. The doctor changes
-nothing, and exits with 1 only when Node itself is too old.
+The first line says which `scmjs` this is: the npm package says nothing more, and the
+single program says "single executable", with the package manager it came from. `--json`
+prints the checks, how this copy was installed and the list of ready commands as JSON. The
+doctor changes nothing, and exits with 1 only when Node itself is too old (the single
+program carries its own).
 
 ### Commands that need StarCraft
 
@@ -126,13 +184,25 @@ None of these run on a build server such as GitHub's, which has no copy of the g
 
 ### Updating
 
-`scmjs about` prints this version, whether a newer one is out, the desktop app and Docker
-if they are installed, and the addresses of the editor, the docs and the source. To
-update:
+`scmjs about` prints this version, whether a newer one is out and the line that installs
+it, how this copy was installed, the desktop app and Docker if they are installed, and the
+addresses of the editor, the docs and the source. To update the npm package:
 
 ```sh
 npm install -g @scm-js/cli@latest
 ```
+
+The single program updates through the package manager that installed it:
+
+```sh
+scoop update scmjs
+winget upgrade scm-js.scmjs
+brew upgrade scmjs
+```
+
+A downloaded one is replaced by downloading the newer file from the [releases
+page](https://github.com/scm-js/scm-js/releases/latest) over it. Both kinds are released
+together, with the same version.
 
 ### Shell completion
 
@@ -2360,6 +2430,9 @@ from a clone with `npm run cli -- <command>`, or build it with `npm run build:cl
 | `cli/src/paint.ts` | The picture in a terminal: colour half blocks, the 256-colour fallback, ASCII shades, kitty's and iTerm2's picture protocols |
 | `cli/src/gamefiles.ts` | Files out of your copy of the game: a Remastered installation's storage, a 1.16.1 copy's archives in the game's order |
 | `cli/src/weigh.ts` | The weigher `map cost` hands the game: TrigScript's model of what Remastered charges, built beside the command |
+| `cli/src/runtime.ts`, `cli/src/sea.ts` | The npm package and the single program told apart: how each updates, the package manager read off the program's folder, a runner started by the program as Node would run it, the weigher written out of it |
+| `scripts/build-cli-binary.mjs`, `scripts/check-cli-binary.mjs` | The single programs: the bundle again as CommonJS, injected into Node's own executable for each system and packed for the release; the commands run against one with no Node on PATH |
+| `packaging/` | The Scoop, winget and Homebrew recipes, filled for a release by `scripts/release-recipes.mjs` |
 | `cli/src/plugin.ts` | A new plugin's files, the plugin check, and the server `plugin dev` runs |
 | `src/plugins/devLink.ts` | The editor's half of `plugin dev`: only a plugin served on this computer is taken |
 | `cli/src/ui.ts` | Colour, marks, aligned rows, and StarCraft's text colours in a terminal |

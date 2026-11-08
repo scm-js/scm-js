@@ -71,6 +71,19 @@ installers on ONE rolling prerelease whose `nightly` tag is force-moved and whos
 replaced with `gh release upload --clobber`, never deleted and recreated) and `v*` tags (permanent
 numbered releases, the only ones that accumulate).
 The `cli` job publishes `@scm-js/cli` to npm on `v*` tags only (its version is the editor's; see `cli.md`).
+**The command as single executables** (2026-11-07, branch `cli-binary`; `cli.md` "Without Node"): the
+`cli-binary` matrix (ubuntu-latest → linux-x64, windows-latest → win-x64, macos-latest → darwin-arm64
+*and* darwin-x64, the Intel one's Node run under Rosetta) runs `scripts/build-cli-binary.mjs --archive
+--check` on Node 24 (`SEA_NODE_VERSION`) on the nightly and stable channels **and on pull requests**
+(read-only, artifacts `cli-binary-<os>` only — the third job a pull request runs, which the header
+comment now says; pushes to main skip it). `release` needs it beside `desktop`, downloads
+`{web-zip,desktop-*,cli-binary-*}`, and writes **`SHA256SUMS` over every asset** (installers too)
+before `gh release create`/`upload --clobber`; Scoop's autoupdate reads the zip's line from it. So a
+failed executable blocks the release as a failed installer does. The recipes the user publishes are
+`packaging/` (Scoop bucket, winget-pkgs, Homebrew tap; `packaging/README.md`), filled per release by
+`scripts/release-recipes.mjs <version>` from that SHA256SUMS. No macOS capacity trap is recorded
+here: the matrix uses the same `macos-latest` label as `desktop`, one Mac job per run, not a second
+(Intel) Mac runner.
 **Both hosted builds are releases**: the `pages` job serves the *tag* at `editor.scmjs.dev` (it was
 main's HEAD, which was the one artifact whose version nobody could get back to) — which needs the
 `github-pages` **environment** to allow the tag: its deployment policy listed the `main` branch alone,

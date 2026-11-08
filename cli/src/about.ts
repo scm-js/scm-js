@@ -1,7 +1,12 @@
-/** `scmjs about`: this build and whether npm has a newer one, who made it, the machine it runs on, the desktop app and Docker, and where everything is. */
+/**
+ * `scmjs about`: this build and whether npm has a newer one (the single executable is released with the same version),
+ * how it was installed and so how to update it, who made it, the machine it runs on, the desktop app and Docker, and
+ * where everything is.
+ */
 import { PLUGIN_API_VERSION } from "../../src/plugins/api";
 import { BOT_GUIDE, dockerVersion } from "./bot";
 import { findDesktopApp, EDITOR_URL } from "./open";
+import { installInfo, installLabel, updateCommand, type Install } from "./runtime";
 import { dot, pc, rows } from "./ui";
 
 declare const __SCMJS_VERSION__: string, __SCMJS_COMMIT__: string, __SCMJS_BUILT__: string;
@@ -29,17 +34,22 @@ export async function newestVersion(): Promise<string | null> {
   } catch { return null; }
 }
 
-/** About's "Newest" row: the update to install, this one, or what npm has when this is newer (a build from a clone). */
-export function newestLine(version: string, latest: string | null): string {
+/**
+ * About's "Newest" row: the update and the line that installs it (npm's, the package manager's, or the release page
+ * for a downloaded executable), this one, or what npm has when this is newer (a build from a clone).
+ */
+export function newestLine(version: string, latest: string | null, install: Install = installInfo()): string {
   if (latest === null) return pc.dim("could not ask npm");
-  if (olderThan(version, latest)) return `${pc.yellow(latest)}${dot}npm install -g ${PACKAGE}@latest`;
+  if (olderThan(version, latest)) return `${pc.yellow(latest)}${dot}${updateCommand(install, PACKAGE)}`;
   return pc.dim(latest === version ? "this one" : `${latest} on npm`);
 }
 
 export async function aboutReport() {
   const latest = await newestVersion();
+  const install = installInfo();
   return {
     version: VERSION, latest, outdated: latest !== null && olderThan(VERSION, latest), commit: COMMIT || null, built: BUILT || null,
+    install: { ...install, update: updateCommand(install, PACKAGE) },
     node: process.version, platform: `${process.platform} ${process.arch}`,
     desktopApp: findDesktopApp(), docker: dockerVersion(), pluginApi: PLUGIN_API_VERSION,
     reads: { maps: [".scm", ".scx", ".chk"], replays: [".rep"], bots: [".scmbot"] },
@@ -55,8 +65,9 @@ export function printAbout(r: Awaited<ReturnType<typeof aboutReport>>): string[]
     "",
     ...rows([
       ["Version", [r.version, r.commit && `commit ${r.commit}`, r.built && `built ${r.built}`].filter(Boolean).join(dot)],
-      ["Newest", newestLine(r.version, r.latest)],
-      ["Node", `${r.node}${dot}${r.platform}`],
+      ["Newest", newestLine(r.version, r.latest, r.install)],
+      ["Installed", `${installLabel(r.install)}${r.install.path ? pc.dim(`${dot}${r.install.path}`) : ""}`],
+      ["Node", `${r.node}${r.install.kind === "binary" ? " (inside scmjs)" : ""}${dot}${r.platform}`],
       ["Desktop app", r.desktopApp ?? pc.dim("not found (scmjs … open uses the browser)")],
       ["Docker", r.docker ? `${r.docker}` : pc.dim("not found (scmjs bot needs it)")],
       ["Plugin API", String(r.pluginApi)],

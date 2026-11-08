@@ -19,6 +19,7 @@ import { findDesktopApp } from "./open";
 import { findBrowser, NO_BROWSER } from "./browser";
 import { findFfmpeg } from "./export";
 import { readSession, serverLabel, serverUrl, sessionPath } from "./account";
+import { INSTALL, installInfo, installLabel, updateCommand, type Install, type InstallKind } from "./runtime";
 import { CliError, columns, mark, pc, visible } from "./ui";
 
 /** The Node this package's `engines` asks for (cli/package.json). */
@@ -44,17 +45,17 @@ const KINDS = Object.keys(RUNNERS) as RunnerKind[];
 /** "a", "a and b", "a, b and c". */
 const joinAnd = (xs: string[]) => (xs.length < 2 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs.at(-1)}`);
 
-/** Is Node older than `engines` says. */
-export function nodeCheck(version = process.version): Check {
+/** Is Node older than `engines` says. The single executable carries its own, which is never too old. */
+export function nodeCheck(version = process.version, kind: InstallKind = INSTALL): Check {
   const v = version.replace(/^v/, "");
-  return olderThan(v, NODE_MIN)
+  return kind === "npm" && olderThan(v, NODE_MIN)
     ? { what: "Node", state: "bad", detail: `${version}, needs ${NODE_MIN} or newer`, fix: "Install the current LTS from https://nodejs.org (or nvm install 22)" }
     : { what: "Node", state: "ok", detail: `${version}${pc.dim(` · ${process.platform} ${process.arch}`)}`};
 }
 
 export function typescriptCheck(cwd = process.cwd()): Check {
   const path = findTypeScript(cwd);
-  if (!path) return { what: "TypeScript", state: "warn", detail: "not found", fix: "npm install typescript   (in the map's project, or npm install -g typescript)", note: "scmjs map build and a .ts plugin under scmjs map run compile with it." };
+  if (!path) return { what: "TypeScript", state: "warn", detail: "not found", fix: "npm install typescript   (in the map's project, or npm install -g typescript)", note: `scmjs map build and a .ts plugin under scmjs map run compile with it.${INSTALL === "binary" ? " It is installed with npm, which comes with Node." : ""}` };
   // `path` is typescript/lib/typescript.js; the package.json two folders up says the version.
   let version = "";
   for (let dir = dirname(path); dir !== dirname(dir); dir = dirname(dir)) {
@@ -147,11 +148,21 @@ function startsScmjsMcp(entry: unknown): boolean {
 export const MCP_ADD = "claude mcp add scmjs -- npx -y @scm-js/cli mcp";
 
 /**
+ * The line that registers `scmjs mcp` with Claude Code for this install: npx for the npm package; for the single
+ * executable `scmjs` when a package manager put it on PATH, else its own path (a download can be anywhere).
+ */
+export function mcpAddLine(install: Install = installInfo()): string {
+  if (install.kind === "npm") return MCP_ADD;
+  const path = install.manager ? "scmjs" : /^[\w./:\\-]+$/.test(install.path) ? install.path : `"${install.path}"`;
+  return `claude mcp add scmjs -- ${path} mcp`;
+}
+
+/**
  * Whether Claude Code starts `scmjs mcp`: its `~/.claude.json` keeps `mcpServers` for every folder and, under
  * `projects`, for each folder. Only those entries are looked at; nothing else in the file is read out or printed.
  * Not having it is no problem, so the state is `ok` either way.
  */
-export function mcpCheck(config = join(homedir(), ".claude.json"), cwd = process.cwd()): Check {
+export function mcpCheck(config = join(homedir(), ".claude.json"), cwd = process.cwd(), add = mcpAddLine()): Check {
   const what = "MCP";
   let cfg: { mcpServers?: Record<string, unknown>; projects?: Record<string, { mcpServers?: Record<string, unknown> } | null> };
   try { cfg = JSON.parse(readFileSync(config, "utf8")); } catch { return { what, state: "ok", detail: pc.dim("Claude Code not found") }; }
@@ -161,8 +172,8 @@ export function mcpCheck(config = join(homedir(), ".claude.json"), cwd = process
   const projects = cfg?.projects && typeof cfg.projects === "object" ? cfg.projects : {};
   if (has(projects[resolve(cwd)]?.mcpServers ?? undefined)) return { what, state: "ok", detail: `registered with Claude Code${pc.dim(" · this folder")}` };
   const others = Object.values(projects).filter((p) => has(p?.mcpServers ?? undefined)).length;
-  if (others) return { what, state: "ok", detail: `registered with Claude Code${pc.dim(` · ${others === 1 ? "another folder" : `${others} other folders`}`)}`, note: "Claude Code starts it only in the folders it was added in; in your maps folder:", fix: MCP_ADD };
-  return { what, state: "ok", detail: "not registered", note: why, fix: MCP_ADD };
+  if (others) return { what, state: "ok", detail: `registered with Claude Code${pc.dim(` · ${others === 1 ? "another folder" : `${others} other folders`}`)}`, note: "Claude Code starts it only in the folders it was added in; in your maps folder:", fix: add };
+  return { what, state: "ok", detail: "not registered", note: why, fix: add };
 }
 
 /** A browser `replay export` can draw with: Chrome, Chromium, Edge (or one named with SCMJS_BROWSER). */
@@ -197,16 +208,21 @@ export function scmjsDevCheck(file = sessionPath(), server = serverUrl()): Check
   return { what, state: "ok", detail: pc.dim(s ? `not signed in to ${serverLabel(server)}` : "not signed in"), note: "scmjs map share makes links to maps with it.", fix: "scmjs login" };
 }
 
-export async function versionCheck(): Promise<Check> {
-  const latest = await newestVersion();
-  if (latest === null) return { what: "scmjs", state: "ok", detail: `${VERSION}${pc.dim(" · could not ask npm for a newer one")}` };
-  if (olderThan(VERSION, latest)) return { what: "scmjs", state: "warn", detail: `${VERSION}, ${latest} is on npm`, fix: `npm install -g ${PACKAGE}@latest` };
-  return { what: "scmjs", state: "ok", detail: `${VERSION}${pc.dim(latest === VERSION ? " · the newest" : ` · ${latest} on npm`)}` };
+/**
+ * This version against npm's newest, and how it was installed: the single executable says so in the detail (the
+ * npm package is the usual case and says nothing), and the fix is the line that updates this install.
+ */
+export async function versionCheck(latest: string | null | undefined = undefined, install: Install = installInfo()): Promise<Check> {
+  if (latest === undefined) latest = await newestVersion();
+  const kind = install.kind === "binary" ? ` · ${installLabel(install)}` : "";
+  if (latest === null) return { what: "scmjs", state: "ok", detail: `${VERSION}${pc.dim(` · could not ask npm for a newer one${kind}`)}` };
+  if (olderThan(VERSION, latest)) return { what: "scmjs", state: "warn", detail: `${VERSION}, ${latest} is out${kind}`, fix: updateCommand(install, PACKAGE) };
+  return { what: "scmjs", state: "ok", detail: `${VERSION}${pc.dim(`${latest === VERSION ? " · the newest" : ` · ${latest} on npm`}${kind}`)}` };
 }
 
-export async function doctorReport(): Promise<{ checks: Check[]; blocked: boolean }> {
+export async function doctorReport(): Promise<{ checks: Check[]; blocked: boolean; install?: Install }> {
   const checks = [nodeCheck(), await versionCheck(), typescriptCheck(), dockerCheck(), starcraftCheck(), engineCheck(), browserCheck(), ffmpegCheck(), desktopAppCheck(), mcpCheck(), scmjsDevCheck()];
-  return { checks, blocked: checks.some((c) => c.state === "bad") };
+  return { checks, blocked: checks.some((c) => c.state === "bad"), install: installInfo() };
 }
 
 /** A group of commands and whether this computer can run them now; `lacks` names the one thing missing. */
@@ -248,8 +264,8 @@ export function readiness(checks: Check[]): Ready[] {
 }
 
 /** What the report says, in JSON: the same checks without colour, and what is ready. */
-export function doctorJson(r: { checks: Check[]; blocked: boolean }) {
-  return { blocked: r.blocked, checks: r.checks.map((c) => ({ ...c, detail: visible(c.detail) })), ready: readiness(r.checks) };
+export function doctorJson(r: { checks: Check[]; blocked: boolean; install?: Install }) {
+  return { blocked: r.blocked, ...(r.install ? { install: r.install } : {}), checks: r.checks.map((c) => ({ ...c, detail: visible(c.detail) })), ready: readiness(r.checks) };
 }
 
 /** A path for the eye: the home folder as `~`, and cut from the left to `room` columns. */

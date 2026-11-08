@@ -38,7 +38,8 @@ export const DEFAULT_PNG_SCALE = 4;
 
 /** What the picture is drawn with, read from the copy of the game. */
 export interface GameGraphics {
-  tileset: Tileset;
+  /** The tileset's graphics; null draws the ground plain (`plainBlock`), for a computer without the game. */
+  tileset: Tileset | null;
   /** For the units' sizes; without it each unit is a tile. */
   units: UnitsDat | null;
 }
@@ -71,11 +72,35 @@ export const MINERAL_COLOR = "#5fd7ff";
 export const GEYSER_COLOR = "#3ddc84";
 const VOID: [number, number, number] = [0, 0, 0];
 
+/**
+ * A tile's colour without the game's graphics: a grey for its tile group (the id's top twelve bits), the same for every
+ * tile of a group, so cliffs, ramps, water and doodads read as patches of their own. Used where no copy of the game is
+ * (a CI runner): `map diff --picture` still shows where a map changed.
+ */
+export function plainShade(tile: number): [number, number, number] {
+  if (!tile) return VOID;
+  let h = Math.imul((tile >>> 4) ^ 0x9e37, 0x85ebca6b);
+  h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35) ^ (h >>> 16);
+  const v = 80 + ((h >>> 0) % 40);
+  return [v, v, Math.min(255, v + 10)];
+}
+
 /** The terrain alone at `scale` pixels a tile (one of `PNG_SCALES`); an id with no megatile is black, as the editor draws it. */
-export function terrainPicture(scn: Scenario, tileset: Tileset, scale: number): Picture {
+export function terrainPicture(scn: Scenario, tileset: Tileset | null, scale: number): Picture {
   if (!(PNG_SCALES as readonly number[]).includes(scale)) throw new Error(`terrainPicture: scale ${scale} is not one of ${PNG_SCALES.join(", ")}`);
   const width = scn.width * scale, height = scn.height * scale;
   const pixels = new Uint8Array(width * height * 4);
+  if (!tileset) {
+    for (let ty = 0; ty < scn.height; ty++) {
+      for (let tx = 0; tx < scn.width; tx++) {
+        const [r, g, b] = plainShade(scn.tiles[ty * scn.width + tx] ?? 0);
+        for (let y = 0; y < scale; y++) {
+          for (let x = 0, o = ((ty * scale + y) * width + tx * scale) * 4; x < scale; x++, o += 4) { pixels[o] = r; pixels[o + 1] = g; pixels[o + 2] = b; pixels[o + 3] = 255; }
+        }
+      }
+    }
+    return { width, height, pixels };
+  }
   const step = MEGATILE_PX / scale;
   const blocks = new Map<number, Uint8Array>();
   const whole = new Uint8Array(MEGATILE_PX * MEGATILE_PX * 4);

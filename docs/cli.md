@@ -182,6 +182,8 @@ itself. They need two things on your computer:
   other systems; `SCMJS_CACHE` moves it).
 
 None of these run on a build server such as GitHub's, which has no copy of the game.
+`map diff --picture` uses your copy when it finds one and draws the ground in plain greys
+when it does not, so it runs there too.
 
 ### Updating
 
@@ -924,7 +926,7 @@ folder, or name the folder:
 $ scmjs init maps
 maps · 5 maps · in the git repository ladder
   ✔ .gitattributes                 written: maps diff as text and merge part by part
-  ✔ .gitignore                     written: the .bak files Save leaves, map test's replays
+  ✔ .gitignore                     written: the .bak files Save leaves, map test's replays and clips
   ✔ ../.github/workflows/maps.yml  written: checks the 5 maps on push and pull request; scmjs 0.9.0
   ✔ README.md                      written: lists the 5 maps, and the commands
   ✔ git config diff.scmjs          set: textconv, xfuncname, cachetextconv
@@ -943,21 +945,25 @@ What it writes:
   and everyone who clones it runs `scmjs init` once too; it writes nothing that is already
   there. `git diff` and `git merge` run `scmjs` by name, so it has to be installed
   (`npm install -g @scm-js/cli`); `init` says so when it is not.
-- `.github/workflows/maps.yml` runs `map check --strict --format github` over the maps on
-  every push and pull request, so a map with errors or warnings fails the run and each
-  finding shows on the pull request beside the map. A map with a TrigScript script also
-  gets `map build --check`, which compiles the script and writes nothing. The workflow
-  names this version of `@scm-js/cli`, so a run gives the same answer until you change the
+- `.github/workflows/maps.yml` runs the [scmjs action](#checking-maps-on-github) on every
+  push and pull request. Check Map runs over the folder's maps with `strict` on, so a map
+  with errors or warnings fails the run and each finding shows on the pull request beside
+  the map. A pull request also gets one comment saying what changed in each map it
+  touches, with a picture of where. When a map keeps a TrigScript script, the workflow
+  turns `build` on, which compiles the script and writes nothing. The workflow names this
+  version of the action and of scmjs, so a run gives the same answer until you change the
   version, as its first lines say. GitHub reads workflows only at a repository's top, so
   for a folder inside a repository the file goes there and names the folder's maps.
 - `README.md` lists the maps (name, file, size, tileset, players) and the commands people
   need: `map check`, `map dump`, `map diff --rev HEAD`, settling a merge with `map merge`,
   and the git settings a new clone needs.
 - `.gitignore` has `*.bak`, the copy of a map the desktop app keeps when Save replaces it,
-  and `*.tests/`, where `scmjs map test` keeps the replays of failed scenarios.
+  `*.tests/`, where `scmjs map test` keeps the replays of failed scenarios, and
+  `*.clips/`, where it keeps their clips.
 
 The workflow has no `map test` step: that needs a copy of StarCraft, which GitHub's
-runners do not have.
+runners do not have. A comment in it shows the line for a runner of your own that has the
+game.
 
 `init` keeps the maps themselves in git and has git read them through scmjs. The other way
 is to keep each map as a folder of text and build the map file from it when you need one:
@@ -977,6 +983,60 @@ are not. Run `scmjs init` again after `git init`, or add `--git` to have the com
 first or paste by hand. `--json` lists the files and what became of each, with their text
 when given `--print` as well. The command exits with 2 when the folder does not exist.
 `scmjs help init` has its help.
+
+### Checking maps on GitHub
+
+The scmjs action runs the command on GitHub for a repository of maps. On every push and
+pull request it checks the maps, and on a pull request it says what changed in each map
+the pull request touches. This is all a workflow needs:
+
+```yaml
+name: Maps
+on: [push, pull_request]
+permissions:
+  contents: read
+  pull-requests: write
+jobs:
+  maps:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: scm-js/scm-js/action@v0.13.0
+```
+
+What a run does:
+
+- It installs `scmjs`: the release's single program for the runner, checked against the
+  release's `SHA256SUMS` and kept between runs, or `npx @scm-js/cli` with `install: npm`.
+  Later steps of the job can run `scmjs` too.
+- It runs Check Map over the maps. Each finding shows on the pull request beside its map,
+  and errors fail the run, warnings too with `strict: true`. A
+  [baseline](#a-baseline-for-old-maps) at `.scmjs-baseline.json` (or named with
+  `baseline:`) is used when there is one, so only new findings fail. `sarif: true` sends
+  the findings to code scanning as well.
+- On a pull request, it compares each changed map with the base as `map diff --rev` does,
+  and puts one comment on the pull request: a line for each map saying in a few words what
+  changed, and the full text of the comparison folded under it. Each later push edits that
+  comment rather than adding another. With `pictures: true` it also draws where each map
+  changed, as [`map diff --picture`](#where-a-map-changed) does, and the comment links to
+  the pictures. GitHub's runners have no copy of StarCraft, so the ground is drawn in
+  plain greys, a shade for each kind of tile; the changes are marked as usual.
+- With `build: true`, it compiles the TrigScript script of each map that keeps one, as
+  `map build --check` does. The script compiles with the repository's own TypeScript when
+  `npm ci` has installed it, else with `typescript@6`, installed for the run.
+
+`maps:` takes globs from the repository's top, one a line (`maps/*.scx`); by default it
+takes every `.scx`, `.scm` and `.chk` file in the repository. The action's outputs are
+`problems` (the errors and warnings found), `new_problems` (those the baseline does not
+hold) and `changed_maps` (a JSON list of paths). The [action's
+page](https://github.com/scm-js/scm-js/tree/main/action) lists every input, with the
+workflow that uses them all.
+
+The action runs only the commands that need no game. `map test`, `map trace`,
+`map coverage` and the other commands that play a map need a runner of your own with
+StarCraft installed (`runs-on: self-hosted`), where a step after the action can run them:
+`scmjs map test map.scx --format github --clips` keeps a clip of each failed scenario to
+attach to the run.
 
 ### Reading maps in git diff
 
@@ -1194,6 +1254,10 @@ puts the first map, the changes and the second map in one picture, also in the t
 when it is wide enough for three pictures of 32 columns; otherwise you get the changes
 alone. `--json` adds what was drawn to the comparison: how many tiles, units and locations
 changed, and the box of tiles round the changes.
+
+Without a copy of StarCraft the ground is drawn in plain greys, the same grey for every
+tile of a kind, so cliffs, water and doodads still show as patches of their own; the
+changes are marked the same way. This is how the pictures are drawn on a build server.
 
 Tiles are compared by position, so a map resized with its content moved shows every tile
 as changed. Maps of two tilesets cannot be drawn as one picture: they are drawn side by
@@ -1698,8 +1762,31 @@ replay is kept in `<map>.tests/` beside the map (or where `--out` says) and play
 scenario exactly as it ran. `scmjs replay open` opens it in the editor, where the test's
 own triggers show first and last among the map's.
 
+`--clips` also keeps a clip of each failed scenario, to see what went wrong without
+opening the replay: the eight seconds of its game up to the moment it ended, and two more,
+as [`replay export`](#a-video-or-gif-of-a-replay) draws them, the camera following your
+units. A clip is a GIF named after the tests file and the scenario, such as
+`ums.tests.a-marine-brought-to-the-middle-raises-the-alarm.gif`, in `<map>.clips/` beside
+the map, or in the folder `--clips` names. `--clips-format webm` makes WebM files instead.
+Each clip gets a line after the summary, `--json` lists them, and `--format github`,
+`junit` and `sarif` name a scenario's clip in its failure. The clips are drawn in a
+browser on your computer, as `replay export` draws, so they need Chrome, Chromium or Edge;
+without one the command says so once and the result of the tests stands. A scenario that
+plays a replay has no clip of its own, since its game is that replay.
+
+```
+$ scmjs map test ums.scx --clips
+…
+✖ 2 of 3 scenarios failed (10.0 s)
+  ✔ ums.clips/ums.tests.the-carrier-flies-to-the-middle-which-is-not-a-marine.gif · 228 KB · 0:08 · 0:32–0:40 of the game
+  ✔ ums.clips/ums.tests.a-marine-brought-to-the-middle-raises-the-alarm.gif · 254 KB · 0:08 · 0:17–0:25 of the game
+  2 clips of the failed scenarios in ums.clips
+```
+
 | Option | What it does |
 | --- | --- |
+| `--clips [folder]` | A GIF of the end of each failed scenario's game, in `<map>.clips/` or the folder named |
+| `--clips-format webm` | The clips as WebM files rather than GIFs |
 | `--seed` | The game's random seed for scenarios that do not set one; the same map, scenario and seed give the same game every time |
 | `--frames` | How long to play, for scenarios and files that do not say |
 | `--out` | Where the failed scenarios' replays go |
@@ -2782,7 +2869,7 @@ gives its options.
 | [`scmjs map trace <map>`](#which-triggers-fire) | Runs the triggers in the game: which fired, how often, which never did and why |
 | [`scmjs map trace [map] --replay <rep>`](#triggers-in-a-replays-game) | The same for a replay's game: when each trigger fired, and `--order` lists every firing in turn |
 | [`scmjs map cost <map>`](#what-the-triggers-cost) | What the triggers cost Remastered each frame, and the costliest; `--replay` as for `map trace` |
-| [`scmjs map test <map> [tests…]`](#testing-a-maps-triggers) | Plays the map's test scenarios in the game, with a replay of each that fails; `-u` rewrites what a replay's scenario expects |
+| [`scmjs map test <map> [tests…]`](#testing-a-maps-triggers) | Plays the map's test scenarios in the game, with a replay of each that fails and, with `--clips`, a GIF of its end; `-u` rewrites what a replay's scenario expects |
 | [`scmjs map test record <map> <rep>`](#a-test-from-a-replay) | A test scenario from a replay, its expectations taken from the end of the game |
 | [`scmjs map coverage <map> <replays…>`](#which-triggers-fired-across-many-games) | Plays many replays on the map: which triggers fired in how many games, and which never did |
 | [`scmjs map analyze <map>`](#a-maps-layout) | A melee map's layout in a second: starts, mains, naturals, the walks between starts, their narrowest points, the ground's shares and verdicts; `--picture` draws them |
@@ -2796,7 +2883,8 @@ gives its options.
 
 | Command | What it does |
 | --- | --- |
-| [`scmjs init [folder]`](#setting-up-a-folder-of-maps) | Sets a folder of maps up for git and GitHub: maps as text in `git diff`, merged part by part, checked on every push |
+| [`scmjs init [folder]`](#setting-up-a-folder-of-maps) | Sets a folder of maps up for git and GitHub: maps as text in `git diff`, merged part by part, checked on every push by the scmjs action |
+| [`uses: scm-js/scm-js/action`](#checking-maps-on-github) | The GitHub Action: Check Map on every push, and on a pull request one comment saying what changed in each map, with pictures |
 
 ### `scmjs replay`
 
@@ -2851,6 +2939,7 @@ scmjs map balance map.scx --bots mybot.scmbot   # is every start fair? games fro
 scmjs map optimize map.scx --dry-run            # what would make the map smaller
 scmjs map trace map.scx                         # which triggers fire in the game
 scmjs map test map.scx                          # run map.tests.json in the game
+scmjs map test map.scx --clips                  # and a GIF of each failed scenario's end
 scmjs map trace --replay bug.rep --order        # which triggers fired in a played game, and when
 scmjs map coverage map.scx replays/             # which triggers never fired in any of those games
 scmjs replay watch game.rep                     # a replay in the terminal
@@ -2917,6 +3006,8 @@ from a clone with `npm run cli -- <command>`, or build it with `npm run build:cl
 | `cli/src/camera.ts` | The camera that follows a player: aims from the game's units (the army, the biggest fight), or the player's clicks, made into a smoothed track |
 | `cli/src/gif.ts` | The GIF writer: a palette a picture by median cut, unchanged pixels left transparent, LZW |
 | `cli/src/trace.ts` | A map's triggers run in the game: scm-sim's map runner run, its trace and cost worded against the map's own triggers; a replay's game, the map given compared with the replay's, the firings in order |
+| `cli/src/clips.ts` | `map test --clips`: the stretch of each failed scenario's game, its clip's name, the clips made through `replay export`'s machinery, and the one line when they cannot be |
+| `action/` | The GitHub Action: a composite action of shell scripts around the command, its page, and the workflow that tests it (`.github/workflows/action-test.yml`) |
 | `cli/src/maptest.ts` | A map's tests: the tests file read and resolved against the map's names, the setup and timed steps made triggers of a copy, the map runner run in its test mode for each scenario, the end judged and the failed scenarios' replays kept; scenarios that play a replay, recorded from one and rewritten with `-u` |
 | `cli/src/coverage.ts` | `map coverage`: the replays matched to the map, played a few at once by the map runner's replay mode, each game's trace folded per trigger (to the parting, from the firings in order), the tests' scenarios as games, the totals and the report |
 | `cli/src/heatmap.ts`, `cli/src/heat.ts` | A heatmap from replays: the replays matched to the map, played a few at once by the replay runner's event mode and kept in the cache, the events chosen, counted per tile, spread and drawn as a heat ramp |

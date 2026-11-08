@@ -1,0 +1,145 @@
+# Tests the GitHub Action in action/ (action/README.md) for real, on a pull request that touches it or the committed
+# maps: the action as this branch has it, over tests/maps.
+#
+# - `source`: scmjs built from this branch (install: none), a map changed in the working tree and a map with a
+#   TrigScript script added, so every part runs: Check Map with annotations and SARIF, the build, the comparison with
+#   the pull request's base as text and as a picture (plain ground: a GitHub runner has no StarCraft), and the
+#   comment, twice, to see the second run edit the first one's comment rather than add another.
+# - `release`: the newest release's scmjs as the action installs it by default (the single executable, checked
+#   against SHA256SUMS) and through npm, then a baseline written and the maps checked against it with strict on.
+name: Action test
+
+on:
+  pull_request:
+    paths:
+      - action/**
+      - tests/maps/**
+      - .github/workflows/action-test.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: action-test-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+env:
+  MAPS: |
+    tests/maps/*.scx
+    tests/maps/*.scm
+
+jobs:
+  source:
+    name: This branch's scmjs (pictures, build, comment)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+      # The TrigScript compiler `map build` bundles is vendored by the build; the token keeps that off the anonymous
+      # rate limit.
+      - run: npm run build:cli
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Put this branch's scmjs on PATH
+        run: |
+          mkdir -p "$RUNNER_TEMP/bin"
+          printf '#!/usr/bin/env bash\nexec node "%s/cli/dist/scmjs.mjs" "$@"\n' "$GITHUB_WORKSPACE" > "$RUNNER_TEMP/bin/scmjs"
+          chmod +x "$RUNNER_TEMP/bin/scmjs"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+      - name: Change a map, and add one with a script
+        run: |
+          scmjs map set tests/maps/melee.scx --name "Changed by the action test"
+          scmjs map resize tests/maps/melee.scx --size 96x64 --anchor top-left
+          scmjs map unpack tests/maps/ums.scx --out "$RUNNER_TEMP/scripted"
+          mkdir -p "$RUNNER_TEMP/scripted/trigscript"
+          printf 'import { trigger, always, displayText, P1 } from "trigscript";\ntrigger(P1, [always()], [displayText("built in the action test")]);\n' > "$RUNNER_TEMP/scripted/trigscript/main.ts"
+          scmjs map pack "$RUNNER_TEMP/scripted" --out tests/maps/scripted.scx
+      - uses: ./action
+        id: maps
+        with:
+          install: none
+          maps: ${{ env.MAPS }}
+          pictures: true
+          sarif: true
+          build: true
+      - name: What the action said
+        env:
+          PROBLEMS: ${{ steps.maps.outputs.problems }}
+          NEW: ${{ steps.maps.outputs.new_problems }}
+          CHANGED: ${{ steps.maps.outputs.changed_maps }}
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          echo "problems=$PROBLEMS new_problems=$NEW changed_maps=$CHANGED"
+          [ "$PROBLEMS" -gt 0 ] && [ "$NEW" = "$PROBLEMS" ]
+          [ "$(jq -r 'index("tests/maps/melee.scx") != null' <<< "$CHANGED")" = true ]
+          comments() { gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate --jq '.[] | select(.body | startswith("<!-- scmjs-action:maps -->")) | .body'; }
+          comments | grep -q 'name, size'
+          [ -s "$RUNNER_TEMP/scmjs-action/pictures/tests/maps/melee.scx.png" ]
+      - name: The action again
+        uses: ./action
+        with:
+          install: none
+          maps: ${{ env.MAPS }}
+          artifact: map-pictures-again
+          pictures: true
+      - name: One comment, edited
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          n="$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate --jq '.[] | select(.body | startswith("<!-- scmjs-action:maps -->")) | .id' | wc -l)"
+          echo "$n comment(s) from the action"
+          [ "$n" -eq 1 ]
+
+  release:
+    name: The release's scmjs (${{ matrix.install }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        install: [binary, npm]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./action
+        id: first
+        with:
+          install: ${{ matrix.install }}
+          maps: ${{ env.MAPS }}
+          comment: false
+      - name: Write a baseline
+        run: |
+          set -euo pipefail
+          scmjs --version
+          # shellcheck disable=SC2086 # the globs are meant to expand
+          scmjs map check $MAPS --write-baseline
+      - uses: ./action
+        id: second
+        with:
+          install: ${{ matrix.install }}
+          maps: ${{ env.MAPS }}
+          strict: true
+          comment: false
+      - name: What the action said
+        env:
+          FIRST: ${{ steps.first.outputs.problems }}
+          PROBLEMS: ${{ steps.second.outputs.problems }}
+          NEW: ${{ steps.second.outputs.new_problems }}
+          CHANGED: ${{ steps.second.outputs.changed_maps }}
+        run: |
+          set -euo pipefail
+          echo "first: problems=$FIRST; with the baseline: problems=$PROBLEMS new_problems=$NEW changed_maps=$CHANGED"
+          [ "$FIRST" -gt 0 ] && [ "$PROBLEMS" = "$FIRST" ] && [ "$NEW" = 0 ]
+          [ "$(jq -r 'type' <<< "$CHANGED")" = array ]

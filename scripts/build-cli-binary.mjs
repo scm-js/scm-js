@@ -13,6 +13,10 @@
 // faster start; otherwise without it, which any Node of the same version reads. A macOS executable must be signed
 // to run on Apple silicon: ad hoc (`codesign --sign -`), so only on a Mac. `--archive` packs each into the release's
 // asset (.tar.gz, or .zip for Windows) with LICENSE and the third-party notices, Node's licence among them.
+// The archives sit on one release page beside electron-builder's `${productName}-…` files (scmJS-windows-x64.zip),
+// and GitHub treats asset names case-insensitively: a name here must not equal one of those but for case — 0.12.0's
+// release died on scmjs-windows-x64.zip, hence `scmjs-cli-`. build.yml's release job refuses such a pair before it
+// uploads anything.
 // Node 24 or newer: the executable imports TypeScript, plugins and the engine's runners from disk with `import()`.
 import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";

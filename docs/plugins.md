@@ -456,12 +456,12 @@ piece in turn.
 
 From a terminal, `scmjs map run script.mjs map.scx` runs a file exporting `activate(api)`
 over a map with the same API and no editor, and writes the map back if it changed; the
-[command line guide](cli.md#running-a-plugin-over-a-map) has the details. In the editor:
+[command line guide](cli.md#running-a-plugin-over-a-map) has the details.
 
-The [API Playground](https://github.com/scm-js/plugin-api-playground) plugin lets you call
-the API before setting anything up. Install it from Plugins ▸ Browse Plugins… and open
-Tools ▸ API Playground. Its panel has a code editor where `api` is already defined. Write
-a few lines, press Ctrl+Enter, and they run against the open map.
+In the editor, the [API Playground](https://github.com/scm-js/plugin-api-playground)
+plugin lets you call the API before setting anything up. Install it from Plugins ▸ Browse
+Plugins… and open Tools ▸ API Playground. Its panel has a code editor where `api` is
+already defined. Write a few lines, press Ctrl+Enter, and they run against the open map.
 
 - **Stop** removes everything the run added: menu items, listeners, panels, overlays, map
   tools and timers. Running again stops the previous run first.
@@ -486,9 +486,9 @@ panel, makes the same kind of link for your own snippet.
 Examples without a link are fragments: they need something only your plugin has, such as a
 server to talk to or a variable defined elsewhere.
 
-> **Note.** A snippet runs as the playground, so a command or service id without a dot is
-> prefixed with the playground's id and can replace the playground's own. Use a dotted id of
-> your own (`"my-plugin.open"`) while you try things.
+> **Note.** A snippet runs as part of the playground plugin, so a command or service id
+> without a dot is prefixed with the playground's id and can replace the playground's own.
+> Use a dotted id of your own (`"my-plugin.open"`) while you try things.
 
 ### Starting a plugin
 
@@ -835,8 +835,8 @@ You call `fetch` yourself. Two things only show up in the desktop app:
 - **The desktop app's origin is `app://scmjs`.** The web editor's origin is
   `https://scmjs.dev`, for the stable editor and the nightly alike. Your server's CORS
   settings need to allow both, or desktop requests fail as if the server were down.
-- **Open a sign-in popup blank, then point it.** A link opens in the user's real browser,
-  which cannot post a session back. Open an empty named window
+- **Open a blank sign-in popup, then set its address.** A link opens in the user's real
+  browser, which cannot post a session back. Open an empty named window
   (`window.open("", "my-plugin-signin", "width=540,height=720")`) and set its
   `location.href` once your server says where to go.
 
@@ -1842,8 +1842,8 @@ The open map as a whole.
   when `launch` is true (the user's preference when left out). In a browser the file goes
   into the test folder the user picked; with none picked it answers null and never
   downloads.
-- **Whole-map changes:** `resize` and `changeTileset`. Both clear the undo history, as the
-  editor's own dialogs do.
+- **Whole-map changes:** `resize` and `changeTileset`. Each is one undo step, as the
+  editor's own dialogs are; on a shared map they clear everyone's undo history instead.
 - **Several open maps:** `id()`, `list()` and `activate(id)`; see [Several
   maps](#several-maps-and-maps-to-look-at-only).
 - **Files inside the archive:** `extras` lists, reads and writes files stored next to the

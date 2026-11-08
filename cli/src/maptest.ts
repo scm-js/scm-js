@@ -11,10 +11,16 @@
  * fails — holds them too, and plays back as the test ran. The person's own commands and what stands at the end are the
  * map runner's (scm-sim's `src/exact/mapTest.ts`, `runMap.ts --test`): the commands handed over at their frames as
  * the play page hands them, the end read with the game's own Bring and Command conditions.
+ *
+ * A scenario may instead name a replay (`"replay": "game.rep"`, beside the tests file): the replay's commands are the
+ * game — people and computers as they played — on the map being tested, so a game from a bug report becomes a test
+ * the fixed map is held to (the runner's `--play`, scm-sim's `src/exact/mapReplay.ts`). `map test record` writes such
+ * a scenario with its expectations taken from the end of the game, as a snapshot to trim; `map test -u` rewrites the
+ * expectations of replay-driven scenarios that no longer hold to what the game gives now.
  */
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { basename, dirname, join, relative } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { createInterface } from "node:readline";
 import { readArchive, writeArchiveBytes } from "../../src/editor/mapFile";
 import { mapVersionOf, parseScenario, serializeScenario, type Scenario } from "../../src/formats/chk/scenario";
@@ -25,9 +31,10 @@ import { ActionType, Comparison, ConditionType, PlayerGroup, ResourceType, SetMo
 import { PlayerType } from "../../src/formats/chk/sections/players";
 import { conditionDef } from "../../src/data/triggerDefs";
 import { plainText } from "../../src/editor/textColors";
+import { decodeText, type TextEncoding } from "../../src/formats/text/encoding";
 import { ensureEngine, findGameCopy, runnerFor, startRunner } from "./engine";
 import { unitByName } from "./rush";
-import { summarizeRows, type CopyLine } from "./trace";
+import { gameClock, summarizeRows, type CopyLine, type ReplayCheck, type ReplayPlayerLine } from "./trace";
 import { CliError, dot, mark, num, pc, plural } from "./ui";
 
 /* ── The runner's lines (scm-sim's src/exact/mapTest.ts, through runMap.ts --test) ──────── */
@@ -40,7 +47,15 @@ export interface RunnerCount { player: number; unit: number; location: number }
 /** What the runner is handed for one scenario (`--test <file>`). */
 export interface RunnerSpec { frames: number; steps: RunnerStep[]; counts: RunnerCount[] }
 
-export interface TestStartLine { kind: "start"; mode?: "test"; map: { name: string; width: number; height: number; tileset: string }; copy: string; seed: number; rows: number; copies: number; remastered: boolean; localPlayer: number; ms: { load: number; start: number } }
+export interface TestStartLine {
+  kind: "start"; mode?: "test";
+  /** "replay" for a scenario driven by a replay (`--play`); absent from a runner older than that. */
+  driver?: "replay";
+  map: { name: string; width: number; height: number; tileset: string }; copy: string; seed: number; rows: number; copies: number; remastered: boolean; localPlayer: number;
+  /** A replay-driven scenario's replay: its length and players. */
+  replay?: { name: string; frames: number; gameType: number; players: ReplayPlayerLine[] };
+  ms: { load: number; start: number };
+}
 export interface Observed {
   switches: number[];
   deaths: [number, number, number][];
@@ -50,7 +65,13 @@ export interface Observed {
   outcomes: ("victory" | "defeat" | "draw" | null)[];
   steps: { frame: number; kind: string; units?: number }[];
 }
-export interface TestEndLine { kind: "end"; mode?: "test"; frame: number; ended: boolean; reason: string | null; passes: number; trace: CopyLine[]; observed: Observed; replay: string | null; ms: { load: number; start: number; game: number; total: number } }
+export interface TestEndLine {
+  kind: "end"; mode?: "test"; driver?: "replay"; frame: number; ended: boolean; reason: string | null; passes: number; trace: CopyLine[]; observed: Observed; replay: string | null;
+  /** A replay-driven scenario: whether the game kept to the replay (`parted`, the first frame it did not), and how it ended. */
+  check?: ReplayCheck;
+  by?: "victory" | "replay" | null;
+  ms: { load: number; start: number; game: number; total: number };
+}
 type RunnerLine = TestStartLine | TestEndLine | { kind: "error"; message: string } | { kind: "progress" };
 
 /* ── The tests file ─────────────────────────────────────────── */
@@ -75,9 +96,14 @@ export type Expectation = { what: string } & (
 /** A scenario made ready to run: the map copy's triggers, the runner's spec, the expectations. */
 export interface PlannedScenario {
   name: string;
-  /** The tests file it came from, and the line its name is on (for CI's annotations). */
+  /** The tests file it came from, its place in the file's list, and the line its name is on (for CI's annotations). */
   file: string;
+  index: number;
   line: number | null;
+  /** The replay whose commands are the game, for a scenario driven by one; null for one with nobody playing but the steps. */
+  replay: string | null;
+  /** The map's text encoding: the lines the game shows are its bytes. */
+  encoding: TextEncoding;
   frames: number;
   seed: number;
   /** The scenario's triggers: the setup's (before the map's own) and the timed effects' (after them). */
@@ -333,7 +359,8 @@ export function planScenario(chk: Uint8Array, raw: Raw, file: string, index: num
   if (converted) changeMapVersion(scenario, "broodwar");
   const rows = scenario.triggers.length;
   const names = new Names(scenario, rows);
-  const frames = raw.frames === undefined ? defaults.frames : framesOf(raw.frames, `${at}: frames`);
+  // (A replay runs to its end unless the scenario says otherwise.)
+  const frames = raw.frames === undefined ? (raw.replay !== undefined ? REPLAY_END : defaults.frames) : framesOf(raw.frames, `${at}: frames`);
   if (frames < 1) throw bad(`${at}: frames`, "a scenario runs for at least one frame");
   const seed = raw.seed === undefined ? defaults.seed : Number(raw.seed);
   if (!Number.isInteger(seed) || seed < 0) throw bad(`${at}: seed`, `takes a whole number, not ${JSON.stringify(raw.seed)}`);
@@ -343,6 +370,8 @@ export function planScenario(chk: Uint8Array, raw: Raw, file: string, index: num
     if (!Array.isArray(v) || !v.every(isObject)) throw bad(`${at}: ${key}`, "is a list of objects");
     return v;
   };
+  const replay = replayOf(raw.replay, file, at);
+  if (replay && (raw.setup !== undefined || raw.steps !== undefined)) throw bad(at, "is driven by a replay, which takes no setup or steps: the replay's commands are the game, and anything added to it can make the game part from the replay");
   const owner = firstInGame(scenario);
   const setup = list("setup").flatMap((e, i) => actionsOf(e, names, `${at}: setup[${i}]`));
   const before: TriggerRecord[] = [];
@@ -371,7 +400,19 @@ export function planScenario(chk: Uint8Array, raw: Raw, file: string, index: num
   const counts: RunnerCount[] = [];
   const expect = list("expect").map((e, i) => expectationOf(e, names, counts, `${at}: expect[${i}]`));
   if (before.length || after.length) applyTriggers(scenario, [...before, ...readTriggers(scenario), ...after]);
-  return { name, file, line: lineOf(text, name), frames, seed, before, after, rows, spec: { frames, steps: steps.sort((a, b) => a.frame - b.frame), counts }, expect, scenario, converted };
+  return { name, file, index, line: lineOf(text, name), replay, encoding: scenario.strings.encoding, frames, seed, before, after, rows, spec: { frames, steps: steps.sort((a, b) => a.frame - b.frame), counts }, expect, scenario, converted };
+}
+
+/** Frames a replay-driven scenario runs when it does not say: the replay's end comes first. */
+export const REPLAY_END = 0x7fffffff;
+
+/** A scenario's replay: a path from the tests file's folder (or absolute) to a file that is there; null when it names none. */
+function replayOf(v: unknown, file: string, at: string): string | null {
+  if (v === undefined) return null;
+  if (typeof v !== "string" || !v.trim()) throw bad(`${at}: replay`, "takes the replay's file, from the tests file's folder");
+  const path = isAbsolute(v) ? v : resolve(dirname(file), v);
+  if (!existsSync(path)) throw bad(`${at}: replay`, `names ${v}, which is not there (from ${dirname(file) || "."})`);
+  return path;
 }
 
 /** The line a scenario's name is on in its file, for an annotation; null when it cannot be told. */
@@ -401,35 +442,47 @@ export function defaultOut(map: string): string {
 
 /* ── Judging the end ────────────────────────────────────────── */
 
-export interface ExpectationResult { kind: Expectation["kind"]; what: string; ok: boolean; actual: string }
+export interface ExpectationResult {
+  kind: Expectation["kind"]; what: string; ok: boolean; actual: string;
+  /** What the game gave, as the tests file writes it (`-u` writes it in): a count, "set"/"clear", true/false, an outcome or "none". */
+  value: number | string | boolean;
+}
+
+/** A line the game showed, as text: the runner hands its bytes one a character, in the map's encoding. */
+export function shownText(text: string, encoding: TextEncoding): string {
+  return plainText(decodeText(Uint8Array.from(text, (c) => c.charCodeAt(0) & 0xff), encoding));
+}
 
 /** Each expectation against what the game left: held or not, and what was there instead. */
 export function judge(p: PlannedScenario, end: Pick<TestEndLine, "frame" | "ended" | "trace" | "observed">): ExpectationResult[] {
   const shift = p.before.length;
   const rows = summarizeRows(end.trace.filter((l) => l.row >= shift && l.row < shift + p.rows).map((l) => ({ ...l, row: l.row - shift })), p.rows);
   const o = end.observed;
+  // Frames as a replay's game clock too, where a replay is the game: a bug report says when.
+  const at = (f: number) => (p.replay ? `frame ${num(f)} (${gameClock(f)})` : `frame ${num(f)}`);
+  const texts = o.texts.map((t) => ({ frame: t.frame, text: shownText(t.text, p.encoding) }));
   return p.expect.map((x): ExpectationResult => {
-    const r = (ok: boolean, actual: string): ExpectationResult => ({ kind: x.kind, what: x.what, ok, actual });
+    const r = (ok: boolean, actual: string, value: ExpectationResult["value"]): ExpectationResult => ({ kind: x.kind, what: x.what, ok, actual, value });
     switch (x.kind) {
       case "trigger": {
         const s = rows[x.row];
         const ok = holds(x.fired, s.fired);
-        if (s.fired) return r(ok, `it fired ${s.fired === 1 ? "once" : `${num(s.fired)} times`}, first at frame ${num(s.firstFired ?? 0)}`);
-        const why = !s.players.length ? "no player in the game owns it" : s.lastFail ? `${conditionDef(s.lastFail.type)?.name ?? `condition ${s.lastFail.type}`} (condition ${s.lastFail.slot + 1}) said no last, at frame ${num(s.lastFail.frame)}` : "it was never asked";
-        return r(ok, `it never fired: ${why}`);
+        if (s.fired) return r(ok, `it fired ${s.fired === 1 ? "once" : `${num(s.fired)} times`}, first at ${at(s.firstFired ?? 0)}`, s.fired);
+        const why = !s.players.length ? "no player in the game owns it" : s.lastFail ? `${conditionDef(s.lastFail.type)?.name ?? `condition ${s.lastFail.type}`} (condition ${s.lastFail.slot + 1}) said no last, at ${at(s.lastFail.frame)}` : "it was never asked";
+        return r(ok, `it never fired: ${why}`, 0);
       }
-      case "switch": { const set = o.switches.includes(x.index); return r(set === x.set, `it is ${set ? "set" : "clear"}`); }
-      case "deaths": { const n = o.deaths.find(([p, u]) => p === x.player && u === x.unit)?.[2] ?? 0; return r(holds(x.is, n), `they are ${num(n)}`); }
-      case "minerals": case "gas": { const n = o.resources[x.player]?.[x.kind === "minerals" ? 0 : 1] ?? 0; return r(holds(x.is, n), `it has ${num(n)}`); }
-      case "units": { const n = o.counts[x.query] ?? 0; return r(holds(x.is, n), `it has ${num(n)}`); }
+      case "switch": { const set = o.switches.includes(x.index); return r(set === x.set, `it is ${set ? "set" : "clear"}`, set ? "set" : "clear"); }
+      case "deaths": { const n = o.deaths.find(([p, u]) => p === x.player && u === x.unit)?.[2] ?? 0; return r(holds(x.is, n), `they are ${num(n)}`, n); }
+      case "minerals": case "gas": { const n = o.resources[x.player]?.[x.kind === "minerals" ? 0 : 1] ?? 0; return r(holds(x.is, n), `it has ${num(n)}`, n); }
+      case "units": { const n = o.counts[x.query] ?? 0; return r(holds(x.is, n), `it has ${num(n)}`, n); }
       case "text": {
-        const seen = o.texts.find((t) => plainText(t.text).includes(x.text));
-        if (seen) return r(x.shown, `shown at frame ${num(seen.frame)}`);
-        const lines = o.texts.length;
-        return r(!x.shown, lines ? `it was not; ${plural(lines, "line")} shown, the last ${JSON.stringify(plainText(o.texts[lines - 1].text))}` : "nothing was shown");
+        const seen = texts.find((t) => t.text.includes(x.text));
+        if (seen) return r(x.shown, `shown at ${at(seen.frame)}`, true);
+        const lines = texts.length;
+        return r(!x.shown, lines ? `it was not; ${plural(lines, "line")} shown, the last ${JSON.stringify(texts[lines - 1].text)}` : "nothing was shown", false);
       }
-      case "outcome": { const got = o.outcomes[x.player] ?? null; return r(got === x.is, got ? `it ended in ${got}` : `it has none${end.ended ? "" : `: the game was still going at frame ${num(end.frame)}`}`); }
-      case "ended": return r(end.ended === x.ended, end.ended ? `it ended at frame ${num(end.frame)}` : `it was still going at frame ${num(end.frame)}`);
+      case "outcome": { const got = o.outcomes[x.player] ?? null; return r(got === x.is, got ? `it ended in ${got}` : `it has none${end.ended ? "" : `: the game was still going at ${at(end.frame)}`}`, got ?? "none"); }
+      case "ended": return r(end.ended === x.ended, end.ended ? `it ended at ${at(end.frame)}` : `it was still going at ${at(end.frame)}`, end.ended);
     }
   });
 }
@@ -439,8 +492,15 @@ export function judge(p: PlannedScenario, end: Pick<TestEndLine, "frame" | "ende
 export interface ScenarioResult {
   name: string;
   file: string;
+  /** Its place in the tests file's list of scenarios. */
+  index: number;
   line: number | null;
   ok: boolean;
+  /** The replay a replay-driven scenario plays, and the first frame the game parted from it (null: it kept to it). */
+  playing: string | null;
+  parted: number | null;
+  /** With `-u`, the expectations of a replay-driven scenario that did not hold and are written anew: their places in its `expect` and what the game gave. */
+  updated: { expect: number; kind: Expectation["kind"]; what: string; actual: string; value: ExpectationResult["value"] }[];
   frame: number;
   ended: boolean;
   seed: number;
@@ -464,6 +524,12 @@ export interface TestRunOptions {
   onStart?: (start: TestStartLine) => void;
   signal?: AbortSignal;
   node?: string;
+  /** `-u`: a replay-driven scenario's expectations that do not hold are taken as what the game gives now (written back by `updateTests`). */
+  update?: boolean;
+  /** Each scenario's runner lines as they came, before judging (`recordTest` makes its expectations from them). */
+  onEnd?: (p: PlannedScenario, start: TestStartLine, end: TestEndLine) => void;
+  /** No line a scenario as it ends (`recordTest` says what it recorded instead). */
+  quiet?: boolean;
 }
 
 export interface TestRun {
@@ -501,10 +567,14 @@ export async function runTests(mapName: string, scenarios: PlannedScenario[], me
       const map = join(dir, `${mapName.replace(/\.(scm|scx|chk)$/i, "")}.scx`), spec = join(dir, "spec.json"), rep = join(dir, "game.rep");
       writeFileSync(map, await writeArchiveBytes(serializeScenario(p.scenario), { extras: members.extras, stored: members.stored }));
       writeFileSync(spec, JSON.stringify(p.spec));
-      const { start, end } = await runScenario(runner, [map, "--test", spec, "--replay", rep, "--engine", engine.dir, "--starcraft", game.folder, "--seed", String(p.seed)], engine.dir, o);
+      // A replay-driven scenario plays the replay on the map (the runner's `--play`); its own game is the replay, so none is kept.
+      const args = p.replay ? [map, "--test", spec, "--play", p.replay] : [map, "--test", spec, "--replay", rep, "--seed", String(p.seed)];
+      const { start, end } = await runScenario(runner, [...args, "--engine", engine.dir, "--starcraft", game.folder], engine.dir, o, !!p.replay);
       if (!first) { first = start; o.onStart?.(start); }
+      o.onEnd?.(p, start, end);
       const results = judge(p, end);
-      const ok = results.every((x) => x.ok);
+      const updated = o.update && p.replay ? results.flatMap((x, i) => (x.ok ? [] : [{ expect: i, kind: x.kind, what: x.what, actual: x.actual, value: x.value }])) : [];
+      const ok = results.every((x) => x.ok) || (updated.length > 0 && updated.length === results.filter((x) => !x.ok).length);
       let replay: string | null = null;
       if (!ok && end.replay && existsSync(rep)) {
         mkdirSync(o.out, { recursive: true });
@@ -515,9 +585,9 @@ export async function runTests(mapName: string, scenarios: PlannedScenario[], me
         copyFileSync(rep, replay);
       }
       const notices = end.observed.texts.filter((t) => /^WARNING:/i.test(plainText(t.text))).map((t) => plainText(t.text));
-      const r: ScenarioResult = { name: p.name, file: p.file, line: p.line, ok, frame: end.frame, ended: end.ended, seed: p.seed, results, replay, notices: [...new Set(notices)], steps: end.observed.steps, ms: end.ms.total };
+      const r: ScenarioResult = { name: p.name, file: p.file, index: p.index, line: p.line, ok, playing: p.replay, parted: end.check?.parted ?? null, updated, frame: end.frame, ended: end.ended, seed: p.seed, results, replay, notices: [...new Set(notices)], steps: end.observed.steps, ms: end.ms.total };
       out.push(r);
-      o.live?.(scenarioLines(r).join("\n"));
+      if (!o.quiet) o.live?.(scenarioLines(r).join("\n"));
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -525,7 +595,7 @@ export async function runTests(mapName: string, scenarios: PlannedScenario[], me
   return { engine: { build: engine.build, dir: engine.dir, fetched: engine.fetched }, game, start: first, scenarios: out, ms: performance.now() - t0 };
 }
 
-async function runScenario(runner: string, args: string[], engineDir: string, o: TestRunOptions): Promise<{ start: TestStartLine; end: TestEndLine }> {
+async function runScenario(runner: string, args: string[], engineDir: string, o: TestRunOptions, played = false): Promise<{ start: TestStartLine; end: TestEndLine }> {
   const child = startRunner(runner, args, { node: o.node });
   const exited = new Promise<number>((done) => { child.on("error", () => done(2)); child.on("close", (c) => done(c ?? 2)); });
   const stop = () => { child.kill(); };
@@ -538,8 +608,9 @@ async function runScenario(runner: string, args: string[], engineDir: string, o:
       let l: RunnerLine;
       try { l = JSON.parse(raw) as RunnerLine; } catch { continue; }
       if (l.kind === "start") {
-        // A runner from before `--test` ignores the flag and runs the triggers: its start has no mode.
-        if (l.mode !== "test") { older = true; child.kill(); break; }
+        // A runner from before `--test` ignores the flag and runs the triggers: its start has no mode. One from before
+        // `--play` runs the scenario with nobody playing: its start has no driver.
+        if (l.mode !== "test" || (played && l.driver !== "replay")) { older = true; child.kill(); break; }
         start = l;
       } else if (l.kind === "end") end = l as TestEndLine;
       else if (l.kind === "error") error = l.message;
@@ -547,7 +618,7 @@ async function runScenario(runner: string, args: string[], engineDir: string, o:
   } finally { o.signal?.removeEventListener("abort", stop); }
   const exitCode = await exited;
   if (o.signal?.aborted) throw cancelled();
-  if (older) throw new CliError(`The engine at ${engineDir} has a map runner from before map test.`, "A play page deployed since has one; the next run fetches it (or name a newer one with --engine).");
+  if (older) throw new CliError(`The engine at ${engineDir} has a map runner from before ${played ? "tests driven by a replay" : "map test"}.`, "A play page deployed since has one; the next run fetches it (or name a newer one with --engine).");
   if (error) throw new CliError(error, "The runner is scm-sim's; a map StarCraft itself opens, with a slot for a person, and your own copy of the game are what it needs.", 2);
   if (!start || !end) throw new CliError(`The game did not finish: the runner stopped without a result (exit ${exitCode}).${stderr.trim() ? `\n${stderr.trim().split("\n").slice(-6).join("\n")}` : ""}`);
   return { start, end };
@@ -561,9 +632,11 @@ const shown = (path: string) => { const r = relative(process.cwd(), path); retur
 /** A scenario's lines: ✔ or ✖ and its name, then for a failure what did not hold, what the game said, and its replay. */
 export function scenarioLines(r: ScenarioResult): string[] {
   const failed = r.results.filter((x) => !x.ok);
-  const head = `  ${r.ok ? mark.ok : mark.error} ${r.ok ? r.name : pc.bold(r.name)}  ${pc.dim(`${seconds(r.ms)}${r.results.length ? `${dot}${r.results.length - failed.length} of ${plural(r.results.length, "expectation")} held` : `${dot}expects nothing`}`)}`;
-  if (r.ok) return [head];
-  const out = [head];
+  const parted = r.parted !== null ? [`      ${mark.warn} ${pc.yellow(`the game parted from the replay at ${gameClock(r.parted)} (frame ${num(r.parted)})`)}${pc.dim(": the map has changed too much for this game; what came after is not what was played")}`] : [];
+  const head = `  ${r.ok ? mark.ok : mark.error} ${r.ok ? r.name : pc.bold(r.name)}  ${pc.dim(`${seconds(r.ms)}${r.playing ? `${dot}${basename(r.playing)}` : ""}${r.results.length ? `${dot}${r.results.length - failed.length} of ${plural(r.results.length, "expectation")} held` : `${dot}expects nothing`}`)}`;
+  if (r.updated.length) return [head, `      ${pc.cyan("✎")} ${plural(r.updated.length, "expectation")} written anew from this game:`, ...r.updated.slice(0, 10).map((x) => `        ${x.what} ${pc.dim("→")} ${x.actual}`), ...(r.updated.length > 10 ? [pc.dim(`        … and ${r.updated.length - 10} more`)] : []), ...parted];
+  if (r.ok) return [head, ...parted];
+  const out = [head, ...parted];
   for (const x of failed) out.push(`      ${mark.error} ${x.what} ${pc.dim("—")} ${x.actual}`);
   for (const n of r.notices.slice(0, 3)) out.push(`      ${pc.dim(`the game said: ${n}`)}`);
   if (r.notices.length > 3) out.push(`      ${pc.dim(`… and ${r.notices.length - 3} more such ${r.notices.length === 4 ? "line" : "lines"}`)}`);
@@ -593,4 +666,162 @@ export function testJson(mapFile: string, run: TestRun) {
 export async function readMapForTests(bytes: Uint8Array) {
   const a = await readArchive(bytes);
   return { chk: a.chk, extras: a.extras, stored: a.stored };
+}
+
+/* ── Snapshots: map test record, map test -u ───────────────── */
+
+/** The tests file as JSON a person reads and trims: an object or list of plain values on one line, when it fits. */
+export function formatTests(v: unknown, indent = ""): string {
+  const plain = (x: unknown) => typeof x !== "object" || x === null || (!Array.isArray(x) && !Object.keys(x).length);
+  const inline = (x: unknown): string => (plain(x) ? JSON.stringify(x) : Array.isArray(x) ? `[${x.map(inline).join(", ")}]` : Object.keys(x as Raw).length ? `{ ${Object.entries(x as Raw).map(([k, y]) => `${JSON.stringify(k)}: ${inline(y)}`).join(", ")} }` : "{}");
+  if (plain(v)) return JSON.stringify(v);
+  const flat = Array.isArray(v) ? v.every(plain) : Object.values(v as Raw).every((x) => plain(x) || (Array.isArray(x) && x.every(plain)));
+  const one = inline(v);
+  if ((flat && indent.length + one.length <= 116) || one === "[]" || one === "{}") return one;
+  const inner = `${indent}  `;
+  return Array.isArray(v)
+    ? `[\n${v.map((x) => inner + formatTests(x, inner)).join(",\n")}\n${indent}]`
+    : `{\n${Object.entries(v as Raw).map(([k, x]) => `${inner}${JSON.stringify(k)}: ${formatTests(x, inner)}`).join(",\n")}\n${indent}}`;
+}
+
+/** A tests file's scenarios list, from a file that is there (or a new one): the whole and the list in it. */
+function testsDocument(file: string): { doc: Raw | unknown[]; list: unknown[] } {
+  if (!existsSync(file)) { const doc = { scenarios: [] as unknown[] }; return { doc, list: doc.scenarios }; }
+  let doc: unknown;
+  try { doc = JSON.parse(readFileSync(file, "utf8")); } catch (e) { throw new CliError(`${basename(file)} is not JSON: ${e instanceof Error ? e.message : e}`, null, 2); }
+  if (Array.isArray(doc)) return { doc, list: doc };
+  if (!isObject(doc) || !Array.isArray(doc.scenarios)) throw new CliError(`${basename(file)} has no "scenarios" list.`, null, 2);
+  return { doc, list: doc.scenarios };
+}
+
+/** The key of an expectation's entry that holds what it expects, by kind: what `-u` writes the game's answer into. */
+const VALUE_KEY: Record<Expectation["kind"], string> = { trigger: "fired", switch: "is", deaths: "is", minerals: "minerals", gas: "gas", units: "is", text: "shown", outcome: "outcome", ended: "ended" };
+
+/**
+ * `map test -u`: the expectations the run took anew (`ScenarioResult.updated`) written into their tests files, each
+ * entry's value replaced and nothing else — what a person trimmed stays trimmed. Returns the files written and how many.
+ */
+export function updateTests(results: readonly ScenarioResult[]): { file: string; expectations: number }[] {
+  const byFile = new Map<string, ScenarioResult[]>();
+  for (const r of results) if (r.updated.length) byFile.set(r.file, [...(byFile.get(r.file) ?? []), r]);
+  const out: { file: string; expectations: number }[] = [];
+  for (const [file, rs] of byFile) {
+    const { doc, list } = testsDocument(file);
+    let n = 0;
+    for (const r of rs) {
+      const expect = (list[r.index] as Raw | undefined)?.expect;
+      if (!Array.isArray(expect)) continue;
+      for (const u of r.updated) { const e = expect[u.expect]; if (isObject(e)) { e[VALUE_KEY[u.kind]] = u.value; n++; } }
+    }
+    writeFileSync(file, `${formatTests(doc)}\n`);
+    out.push({ file, expectations: n });
+  }
+  return out;
+}
+
+/** A replay's player, as `map test record` needs one: the map's slot and the kind. */
+export interface RecordPlayer { slot: number; name: string; computer: boolean }
+
+/** A chat line as the game shows it: the sender's name, a colon and the colour byte the game puts before the text. */
+const CHAT = /^[^\x02:]{1,40}:\x02/;
+/** Lines kept as expectations: a snapshot is for trimming, not for reading through. */
+const MAX_TEXT_EXPECTATIONS = 20;
+
+/**
+ * Expectations from the end of a game, in the tests file's own words: every trigger a player in the game owns and how
+ * often it fired (0 included), the switches set (and the named ones clear), the lines the game showed that were not
+ * chat, each player's outcome, whether the game ended, each player's men and buildings, minerals and gas, and every
+ * death count. Names where the map has them (a trigger's comment, a switch's name, a unit's), numbers otherwise. The
+ * units entries come in the order `recordCounts` asked for them.
+ */
+export function snapshotExpect(p: PlannedScenario, end: Pick<TestEndLine, "ended" | "trace" | "observed">, players: readonly RecordPlayer[]): Raw[] {
+  const names = new Names(p.scenario, p.rows);
+  const rows = summarizeRows(end.trace.filter((l) => l.row >= 0 && l.row < p.rows), p.rows);
+  const comments = readTriggers(p.scenario).slice(0, p.rows).map((t) => triggerComment(t, names.t)?.trim() ?? "");
+  const count = new Map<string, number>();
+  for (const c of comments) if (c) count.set(c.toLowerCase(), (count.get(c.toLowerCase()) ?? 0) + 1);
+  const triggerLabel = (row: number) => (comments[row] && count.get(comments[row].toLowerCase()) === 1 && !/^#?\d+$/.test(comments[row]) ? comments[row] : row + 1);
+  const o = end.observed;
+  const out: Raw[] = [];
+  for (const s of rows) if (s.players.length) out.push({ trigger: triggerLabel(s.row), fired: s.fired });
+  for (let i = 0; i < 256; i++) {
+    const name = names.switchName(i), named = !/^Switch \d+$/.test(name);
+    const set = o.switches.includes(i);
+    if (set || named) out.push({ switch: named ? name : i + 1, is: set ? "set" : "clear" });
+  }
+  const seen = new Set<string>();
+  for (const t of o.texts) {
+    if (CHAT.test(t.text)) continue;
+    const text = shownText(t.text, p.encoding).trim();
+    if (!text || seen.has(text) || seen.size >= MAX_TEXT_EXPECTATIONS) continue;
+    seen.add(text);
+    out.push({ text, shown: true });
+  }
+  for (const pl of players) if (pl.slot < 8) out.push({ outcome: o.outcomes[pl.slot] ?? "none", player: pl.slot + 1 });
+  out.push({ ended: end.ended });
+  recordCounts(players).forEach((q, i) => out.push({ units: q.units, player: q.player, is: o.counts[i] ?? 0 }));
+  for (const pl of players) { const r = o.resources[pl.slot] ?? [0, 0]; out.push({ minerals: r[0], player: pl.slot + 1 }, { gas: r[1], player: pl.slot + 1 }); }
+  const unitLabel = (u: number) => { const n = names.unitName(u); try { return names.unit(n, "") === u ? n : u; } catch { return u; } };
+  for (const [player, unit, n] of o.deaths) out.push({ deaths: unitLabel(unit), player: player + 1, is: n });
+  return out;
+}
+
+/** The units a recording counts: each player's men and buildings, in this order. */
+export const recordCounts = (players: readonly RecordPlayer[]) => players.flatMap((pl) => [{ units: "Men", player: pl.slot + 1 }, { units: "Buildings", player: pl.slot + 1 }]);
+
+export interface RecordOutcome {
+  /** The tests file, and the map it is beside (as named). */
+  file: string;
+  map: string;
+  name: string;
+  /** The scenario was there before, and was written anew. */
+  replaced: boolean;
+  frames: number;
+  /** The game's frame at the end, and whether it kept to the replay (`parted`: the first frame it did not). */
+  frame: number;
+  parted: number | null;
+  expect: Raw[];
+  engine: TestRun["engine"];
+  game: TestRun["game"];
+  ms: number;
+}
+
+/**
+ * `map test record <map> <replay>`: the replay played on the map as a test scenario plays one, and a scenario written
+ * into the tests file — `replay` (from the tests file's folder), `frames` (the replay's length unless given) and the
+ * expectations `snapshotExpect` takes from the end. A scenario of the same name is replaced; the file is made when it
+ * is not there.
+ */
+export async function recordTest(mapName: string, map: { chk: Uint8Array } & Pick<Awaited<ReturnType<typeof readArchive>>, "extras" | "stored">, replay: { path: string; frames: number; players: RecordPlayer[] }, testsFile: string, o: TestRunOptions & { name: string; frames?: number }): Promise<RecordOutcome> {
+  const where = relative(dirname(resolve(testsFile)), resolve(replay.path)).split(sep).join("/") || basename(replay.path);
+  const { doc, list } = testsDocument(testsFile);
+  const at = list.findIndex((x) => isObject(x) && x.name === o.name);
+  const frames = o.frames ?? replay.frames;
+  const raw: Raw = { name: o.name, replay: where, frames, expect: recordCounts(replay.players).map((q) => ({ ...q, is: ">= 0" })) };
+  const planned = planScenario(map.chk, raw, testsFile, at < 0 ? list.length : at, { frames, seed: 1 });
+  let end: TestEndLine | null = null;
+  const run = await runTests(mapName, [planned], map, { ...o, update: false, quiet: true, onEnd: (_p, _s, e) => { end = e; } });
+  if (!end) throw new CliError("The game did not finish: the runner stopped without a result.");
+  const expect = snapshotExpect(planned, end, replay.players);
+  // Held against the same game, every entry should hold; one that does not is left out rather than written wrong.
+  const check = planScenario(map.chk, { ...raw, expect }, testsFile, planned.index, { frames, seed: 1 });
+  const kept = judge(check, end).map((x, i) => (x.ok ? expect[i] : null)).filter((x): x is Raw => x !== null);
+  const scenario: Raw = { ...raw, expect: kept };
+  if (at < 0) list.push(scenario); else list[at] = scenario;
+  writeFileSync(testsFile, `${formatTests(doc)}\n`);
+  const r = run.scenarios[0];
+  return { file: testsFile, map: mapName, name: o.name, replaced: at >= 0, frames, frame: r.frame, parted: r.parted, expect: kept, engine: run.engine, game: run.game, ms: run.ms };
+}
+
+/** What `map test record` says: the scenario, the game, and the expectations by kind. */
+export function recordLines(r: RecordOutcome): string[] {
+  const kinds = new Map<string, number>();
+  // (An entry's first key is its kind, as snapshotExpect writes it.)
+  for (const e of r.expect) { const k = Object.keys(e)[0]; kinds.set(k, (kinds.get(k) ?? 0) + 1); }
+  const words: Record<string, string> = { trigger: "trigger", switch: "switch", text: "line shown", outcome: "outcome", ended: "end", units: "unit count", minerals: "minerals", gas: "gas", deaths: "death count" };
+  const parts = [...kinds].map(([k, n]) => (k === "minerals" || k === "gas" || k === "ended" ? `${n} ${words[k]}` : plural(n, words[k] ?? k, k === "switch" ? "switches" : undefined)));
+  const out = [`${mark.ok} ${r.replaced ? "Recorded anew" : "Recorded"} ${pc.bold(JSON.stringify(r.name))} into ${shown(r.file)}${dot}${num(r.frame)} frames ${pc.dim(`(${gameClock(r.frame)})`)}${dot}${plural(r.expect.length, "expectation")}${dot}${seconds(r.ms)}`, `  ${pc.dim(parts.join(", "))}`];
+  if (r.parted !== null) out.push(`${mark.warn} ${pc.yellow(`The game parted from the replay at ${gameClock(r.parted)} (frame ${num(r.parted)})`)}: this map is not the one the replay was played on, and what came after is not the game in the replay.`);
+  out.push(pc.dim(`  Trim what the test need not hold to. scmjs map test ${r.map} runs it; -u writes in what the game gives after a change.`));
+  return out;
 }

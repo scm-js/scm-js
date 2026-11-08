@@ -595,7 +595,7 @@ The command waits until the editor is closed. If you saved a change, the text is
 as `import` reads it and the map is written. If you saved nothing, or only a comment, the
 map is left alone and the command says nothing changed.
 
-Text that does not read, such as a condition the map does not know or a strings line that
+Text that cannot be read, such as a condition the map does not know or a strings line that
 is not a number and a tab, is not imported and the map is left alone. The error gives the
 line. The file you edited is kept with your changes in it, and the command prints its path
 and the `import` command that brings it in once you have fixed it.
@@ -675,11 +675,12 @@ of the command: install it in the map's project (`npm install typescript`) or gl
 with an encoder the command fetches once, unless the project has `wasm-media-encoders`
 installed.
 
-Two things differ from the editor. The tests' world takes a unit type's hit points from
-the map's own unit settings, because the game's unit data the editor reads for the other
-types is not available to the command; a test that counts on a Marine's 40 hit points
-should set them in the map. And programs that other plugins add to a build are not built
-here: a map with Magenta's triggers is refused, and is built by saving it in the editor.
+Two things differ from the editor. In the tests, a unit type's hit points come only from
+the map's own unit settings: the editor falls back on the game's unit data for a type the
+map leaves at its defaults, and the command does not have that data. A test that counts on
+a Marine's 40 hit points should set them in the map. And programs that other plugins add
+to a build are not built here: a map with Magenta's triggers is refused, and is built by
+saving it in the editor.
 
 ### Running a plugin over a map
 
@@ -900,6 +901,117 @@ as changed. Maps of two tilesets cannot be drawn as one picture: they are drawn 
 side with nothing marked, and the command says so. The exit code is the comparison's,
 picture or not.
 
+### A map's history
+
+`scmjs map log` lists the commits that changed a map, newest first, and says under each
+one what it changed in the map, in the words `map diff` would use:
+
+```
+$ scmjs map log maps/ridge.scx
+maps/ridge.scx · 8 commits
+
+d5587bc  2026-11-07 09:00  Jeany  Tidy the trigger order
+         triggers reordered
+
+dbf21a0  2026-11-06 14:00  Mina   Rename Middle to Ridge top
+         1 location changed
+
+daa8752  2026-11-06 08:30  Jeany  Say what to do
+         description changed
+
+d25740d  2026-11-05 13:10  Mina   Spread the minerals
+         2 units moved, 1 removed
+
+68033b5  2026-11-04 16:40  Mina   Room for a third base
+         resized 64 × 64 → 96 × 96 · 1 location changed
+
+d38a14e  2026-11-03 09:05  Jeany  Waves, and four marines to win
+         3 triggers added, 1 changed · 3 strings added
+
+55d0fd9  2026-11-02 11:20  Mina   Call it Ridge
+         name changed
+
+3927771  2026-11-01 10:00  Jeany  Start Ridge from the test scenario
+         map added: 64 × 64 Badlands, 21 units, 4 locations, 3 triggers
+```
+
+Each commit is compared with the version before it. A trigger that was replaced in the
+same place counts as changed. One that only moved in the list is not counted at all, and
+when that is all a commit did, the entry says the triggers were reordered. A unit in a new
+place with nothing else different has moved. A string that is a name (the map's, a
+location's or a force's) is counted as a change to that name, not as a string as well. A
+commit that saved the file again without changing the map says so. For the details of one
+commit, `git show <commit>` shows its changes as text, once the map's text form is set up
+as [Reading maps in git diff](#reading-maps-in-git-diff) describes.
+
+`-n 5` shows the newest five commits. `--rev` takes what `map diff --rev` takes, and a
+range as well. `--rev main..HEAD` lists what this branch did to the map. A merge is
+compared with its first parent, so the entry shows what the merge brought in. `--json`
+gives each commit's hash, parents, author, date, subject and the list of changes.
+
+### Who last changed what
+
+`scmjs map blame` is `git blame` for a map. Instead of a line of text, each row is a
+trigger, a location, a string, a group of units or a setting, with the commit, author and
+date that last changed it. With no option it shows the triggers, or the settings when the
+map has no triggers:
+
+```
+$ scmjs map blame maps/ridge.scx
+Triggers (6) · maps/ridge.scx
+39277712 (Jeany 2026-11-01 1) Player 1: Always() → Display Text Message(Always Display, "Hold the ridge."); …
+d38a14e1 (Jeany 2026-11-03 2) Player 1: Bring("Player 1", "Terran Marine", "Ridge top", At least, 4) → …
+39277712 (Jeany 2026-11-01 3) Force 1: Switch("Alarm raised", set) → Victory()
+d38a14e1 (Jeany 2026-11-03 4) Player 2: Elapsed Time(At least, 60) → Display Text Message(Always Display, …
+d38a14e1 (Jeany 2026-11-03 5) Player 2: Elapsed Time(At least, 180) → Display Text Message(Always Display, …
+d38a14e1 (Jeany 2026-11-03 6) Player 2: Elapsed Time(At least, 120) → Display Text Message(Always Display, …
+```
+
+`--locations`, `--strings`, `--units` and `--settings` show the other kinds, and can be
+given together. Units get one row for each kind of unit and owner, and the row counts as
+changed when one of them was added, removed, moved or edited. Settings are the name,
+description, size, tileset and version, each player and force, the terrain, doodads and
+sprites, the unit, upgrade and tech settings and availability, the switch names, the sound
+list and each file in the archive.
+
+```
+$ scmjs map blame maps/ridge.scx --locations
+Locations (4) · maps/ridge.scx
+39277712 (Jeany 2026-11-01 Base     ) #0  192,1600–512,1856
+39277712 (Jeany 2026-11-01 Nest     ) #1  1536,192–1856,512
+dbf21a0c (Mina  2026-11-06 Ridge top) #2  896,896–1152,1152
+68033b5d (Mina  2026-11-04 Anywhere ) #63  0,0–3072,3072
+```
+
+Things are matched between versions the way `map diff` matches them. Triggers and units
+are matched by what they are, so moving a trigger up the list does not change it.
+Locations and strings are matched by their number, and settings by name. A trigger's text
+is a string, so editing what a trigger says changes the string, not the trigger, and
+`--strings` shows who did that.
+
+`--trigger 4` shows one trigger with its whole text and the commit's subject.
+`--location "Ridge top"`, by name or by number, and `--string 16` do the same for a
+location and a string.
+
+Without `--rev` the map is read as it is on disk. What differs from the last commit is
+marked as `git blame` marks it, with a hash of zeros:
+
+```
+$ scmjs map blame maps/ridge.scx --strings
+…
+00000000 (Not committed yet 2026-11-07 16) Hold the ridge.
+```
+
+`--rev HEAD~3` blames the map as that revision has it. `--rev v1.0..HEAD` looks only at
+the commits since `v1.0`. Anything older is put on the commit at the start of the range,
+with a `^` before its hash, as `git blame` does. Changes made on a branch and merged are
+put on the branch's commit, not on the merge. `--json` gives every row with its commit.
+
+Both commands work from any folder of the repository, read every version of the map from
+git once, and stop with a message when the file is not in a repository or has not been
+committed. Neither follows a map that was renamed, so the history starts at the commit
+that gave the map its present name.
+
 ### Merging two versions of a map
 
 When two people change copies of one map, `scmjs map merge` puts both sets of changes into
@@ -1016,9 +1128,11 @@ built from and written that way, so build it again after merging.
 These commands start the map in the game itself, the engine of the play page, with the
 game's files from your copy of StarCraft ([what they
 need](#commands-that-need-starcraft)). Nobody has to play: the game runs as fast as the
-computer can run it. A map in the original StarCraft 1.00 form is run as Brood War, as the
-editor would convert it. The Blizzard campaign maps are not something the engine runs yet.
-Each command exits with 2 when the game could not start.
+computer can run it. Or the players of a recorded game play it: `--replay` gives the game
+the commands from a replay, so the game in a bug report can be traced and tested. A map in
+the original StarCraft 1.00 form is run as Brood War, as the editor would convert it. The
+Blizzard campaign maps are not something the engine runs yet. Each command exits with 2
+when the game could not start.
 
 ### Which triggers fire
 
@@ -1066,6 +1180,72 @@ A TrigScript or eudplib program runs its own records through the EUD trigger cha
 than through the map's trigger list. For such a map the cost is in the first lines, and
 the triggers listed are only the ones that start the program. TrigScript's editor shows a
 program's cost line by line.
+
+### Triggers in a replay's game
+
+When someone sends a replay of a game where the map went wrong, `--replay` plays that game
+with the trace on. The players' own commands drive it, people and computers as they
+played, to the end of the replay.
+
+```sh
+scmjs map trace --replay report.rep --order
+```
+
+The report is the one above, with two differences. The first and last firings are given on
+the game's clock, `m:ss` at Fastest as the replay viewer counts it, and only the triggers
+owned by the players in the game are listed. `--order` adds every firing in the order the
+game ran them: the time, the frame, whose copy of the trigger it was, and the trigger.
+
+```
+$ scmjs map trace --replay 1631.rep --order
+1631.rep 128 × 128, jungle · 4 players · 10:16 · 1,713 triggers (12 copies in the game) · Remastered files
+
+✔ 1631.rep: 1,713 triggers (5 owned by the players) · 14,662 frames (10:16), Ever)Z(bOy won · 473 passes · 4 fired · 1 never · 6.2 s
+
+  #     Fired  First  Last   Players      Trigger
+  1709  2      0:00   0:00   P3 P4        Elapsed Time(At least, 0) → Set Resources("Current Player", S…
+  1710  2      0:00   0:00   P5 P6        Always() → Run AI Script("Turn ON Shared Vision for Player 1"…
+  1711  0      –      –      P3 P4        Command("Current Player", "Buildings", At most, 0) → Defeat()
+  1712  1      10:13  10:13  P3 P4        Command("Non Allied Victory Players", "Buildings", At most, 0…
+  1713  4      0:00   0:00   P3 P4 P5 P6  Elapsed Time(Exactly, 0) → Display Text Message(Always Displa…
+
+  Never fired (1 of 5)
+  ▸ #1711  Command("Current Player", "Buildings", At most, 0) → Defeat()
+      Command (condition 1) said no last, at frame 14,634
+
+  In the order they fired (9)
+  Clock  Frame   Player          #      Trigger
+  0:00   2       P3 ErOs_Class   #1709  Elapsed Time(At least, 0) → Set Resources("Current Player"…
+  0:00   2       P3 ErOs_Class   #1713  Elapsed Time(Exactly, 0) → Display Text Message(Always Dis…
+  0:00   2       P4 Ever)Z(bOy   #1709  Elapsed Time(At least, 0) → Set Resources("Current Player"…
+  0:00   2       P4 Ever)Z(bOy   #1713  Elapsed Time(Exactly, 0) → Display Text Message(Always Dis…
+  0:00   2       P5 ErOs_Kyoung  #1710  Always() → Run AI Script("Turn ON Shared Vision for Player…
+  0:00   2       P5 ErOs_Kyoung  #1713  Elapsed Time(Exactly, 0) → Display Text Message(Always Dis…
+  0:00   2       P6 iCoN`MisO    #1710  Always() → Run AI Script("Turn ON Shared Vision for Player…
+  0:00   2       P6 iCoN`MisO    #1713  Elapsed Time(Exactly, 0) → Display Text Message(Always Dis…
+  10:13  14,603  P4 Ever)Z(bOy   #1712  Command("Non Allied Victory Players", "Buildings", At most…
+```
+
+With no map named, the game is played on the map inside the replay. Name a map as well to
+play the replay's commands on that map instead, such as the fixed version of the one in
+the bug report:
+
+```sh
+scmjs map trace fixed.scx --replay report.rep
+```
+
+The command says first how the map differs from the one in the replay. A replay is only
+the players' commands, so a changed map can make the game go out of step. When a unit a
+player clicked is not there, or a building cannot be placed, the game plays on with
+commands meant for another game. Changes to triggers alone usually keep it in step.
+Changes to units, terrain or resources usually do not. The game checks each command
+against what it has, and the report says when and where the game parted from the replay.
+What fired before that point is what happened.
+
+`scmjs map cost --replay` weighs the triggers of the replay's game in the same way.
+`--frames` stops the game sooner. Left out, the whole replay is played. In a game that is
+not Use Map Settings, the game runs its own melee triggers rather than the map's, and the
+report says so.
 
 ### Testing a map's triggers
 
@@ -1128,6 +1308,26 @@ A scenario has a `name`, and may have `frames`, `seed`, `setup`, `steps` and `ex
 2,400 unless the file or `--frames` says otherwise. `frames` and `seed` at the top of the
 file apply to every scenario that does not set its own.
 
+A scenario may name a `replay` instead of `setup` and `steps`. The replay's commands drive
+the game, played on the map being tested, and the scenario plays to the replay's end
+unless `frames` says otherwise:
+
+```json
+{
+  "name": "the bunker fills at 7:30",
+  "replay": "reports/bunker.rep",
+  "expect": [
+    { "trigger": "Bunker full", "fired": 1 },
+    { "outcome": "victory", "player": 1 }
+  ]
+}
+```
+
+The path is relative to the tests file's folder. `seed` does nothing here, because the
+game uses the replay's own. Such a scenario takes no `setup` or `steps`, since anything
+added to the game would take it out of step with the replay. `scmjs map test record`
+writes these scenarios for you ([below](#a-test-from-a-replay)).
+
 Things are named as the trigger window names them:
 
 | Thing | Written as |
@@ -1178,7 +1378,7 @@ their time.
 | `{ "deaths": unit, "player": p, "is": n }` | The player's death count for that unit |
 | `{ "minerals": n, "player": p }`, `{ "gas": n, "player": p }` | The player's minerals or gas |
 | `{ "units": unit, "player": p, "location": l, "is": n }` | How many of the units the player has there, counted as the Bring condition counts them (as Command counts them when there is no `location`; `player` is All Players when left out) |
-| `{ "text": "words" }` | The words were on your screen at some point: trigger text, transmissions, chat. `"shown": false` for words that must not appear |
+| `{ "text": "words" }` | The words were on your screen at some point: trigger text, transmissions, chat. `"shown": false` for words that must not appear. In a replay's game, the screen is the replay viewer's |
 | `{ "outcome": "victory", "player": p }` | The player's game ended in victory (`"defeat"`, `"draw"`, or `"none"` for no outcome yet) |
 | `{ "ended": true }` | The game ended before the scenario's frames ran out (`false`: it was still going) |
 
@@ -1204,6 +1404,7 @@ own triggers show first and last among the map's.
 | `--seed` | The game's random seed for scenarios that do not set one; the same map, scenario and seed give the same game every time |
 | `--frames` | How long to play, for scenarios and files that do not say |
 | `--out` | Where the failed scenarios' replays go |
+| `-u`, `--update` | For scenarios that play a replay: the expectations that no longer hold are rewritten to what the game gives now |
 | `--json` | Every scenario with each expectation, whether it held and what the game had |
 | `--format github`, `junit`, `sarif` | The failures in the forms CI tools read, as for [`map check`](#checking-a-map), each placed on the scenario's line in the tests file |
 
@@ -1213,7 +1414,60 @@ GitHub's own runners; the workflow `scmjs init` writes leaves it out and says ho
 it on a runner of your own that has the game.
 
 A test cannot yet have a player leave (you are the only person in the game) or give the
-computers' own commands.
+computers' own commands, except by playing a replay of a game where they did.
+
+### A test from a replay
+
+`scmjs map test record` turns a replay into a test. It plays the replay on the map, as
+[`map trace --replay`](#triggers-in-a-replays-game) does, and writes a scenario into the
+map's tests file with everything the game ended with as expectations:
+
+```
+$ scmjs map test record 1631.scx 1631.rep --name "2v2 to the end"
+✔ Recorded "2v2 to the end" into 1631.tests.json · 14,662 frames (10:16) · 40 expectations · 6.5 s
+  5 triggers, 1 line shown, 4 outcomes, 1 end, 8 unit counts, 4 minerals, 4 gas, 13 death counts
+```
+
+The scenario it wrote begins:
+
+```json
+{
+  "name": "2v2 to the end",
+  "replay": "1631.rep",
+  "frames": 14662,
+  "expect": [
+    { "trigger": 1709, "fired": 2 },
+    { "trigger": 1710, "fired": 2 },
+    { "trigger": 1711, "fired": 0 },
+    { "trigger": 1712, "fired": 1 },
+    { "trigger": 1713, "fired": 4 },
+    { "text": "ErOs_Class has left the game.", "shown": true },
+    { "outcome": "defeat", "player": 3 },
+    { "outcome": "victory", "player": 4 },
+```
+
+The expectations are a snapshot of the end of the game: how often each trigger the players
+own fired (`0` for the ones that never did), the switches that are set and the named ones
+that are clear, the lines shown that were not chat, each player's outcome, whether the
+game ended, each player's men and buildings, minerals and gas, and every death count.
+Triggers, switches and units are named as the map names them, where the map has a name for
+them. Each expectation is one line of the file, so delete the lines you do not care about
+and keep the ones the test is for.
+
+| Option | What it does |
+| --- | --- |
+| `--name` | The scenario's name; the replay's file name by default. A scenario with that name is replaced |
+| `--tests` | The tests file to write into; `<map>.tests.json` beside the map by default, made if it is not there |
+| `--frames` | How much of the replay to play; all of it by default |
+| `--json` | The scenario as written, with the game's end |
+
+From then on `scmjs map test` plays the replay against the map as it is now. After a
+change you meant to make, `scmjs map test map.scx -u` rewrites the expectations of
+replay-driven scenarios that no longer hold to what the game gives now. Only the values
+change. The expectations you deleted stay deleted, and a comparison such as `">= 3"` that
+still holds is left alone. Scenarios with steps are never rewritten. If the map changed so
+much that the game parted from the replay, the report says when, as `map trace --replay`
+does.
 
 ### Rush distances
 
@@ -1267,7 +1521,10 @@ flyer is refused (exit 2), as is a map with fewer than two start locations.
 
 ## Replays
 
-`scmjs replay` reads replays from any version, from 1.16 to Remastered.
+`scmjs replay` reads replays from any version, from 1.16 to Remastered. To see which of
+the map's triggers fired in a replay, and when, see [Triggers in a replay's
+game](#triggers-in-a-replays-game). To make a test from one, see [A test from a
+replay](#a-test-from-a-replay).
 
 ### What a replay holds
 
@@ -1809,10 +2066,14 @@ gives its options.
 | [`scmjs map build <map>`](#building-a-trigscript-map) | Builds the map's TrigScript script into it, as Save does |
 | [`scmjs map run <plugin> <map>`](#running-a-plugin-over-a-map) | Runs a plugin, or a script written like one, over the map |
 | [`scmjs map diff <a> <b>`](#comparing-two-maps) | What changed between two maps, or since a git revision with `--rev`; `--picture` shows where |
+| [`scmjs map log <map>`](#a-maps-history) | The commits that changed the map, each with what it changed in the map's terms |
+| [`scmjs map blame <map>`](#who-last-changed-what) | The commit, author and date that last changed each trigger, location, string, unit group or setting |
 | [`scmjs map merge <base> <ours> <theirs>`](#merging-two-versions-of-a-map) | Two versions of a map merged with their common ancestor, as git's merge driver |
 | [`scmjs map trace <map>`](#which-triggers-fire) | Runs the triggers in the game: which fired, how often, which never did and why |
-| [`scmjs map cost <map>`](#what-the-triggers-cost) | What the triggers cost Remastered each frame, and the costliest |
-| [`scmjs map test <map> [tests…]`](#testing-a-maps-triggers) | Plays the map's test scenarios in the game, with a replay of each that fails |
+| [`scmjs map trace [map] --replay <rep>`](#triggers-in-a-replays-game) | The same for a replay's game: when each trigger fired, and `--order` lists every firing in turn |
+| [`scmjs map cost <map>`](#what-the-triggers-cost) | What the triggers cost Remastered each frame, and the costliest; `--replay` as for `map trace` |
+| [`scmjs map test <map> [tests…]`](#testing-a-maps-triggers) | Plays the map's test scenarios in the game, with a replay of each that fails; `-u` rewrites what a replay's scenario expects |
+| [`scmjs map test record <map> <rep>`](#a-test-from-a-replay) | A test scenario from a replay, its expectations taken from the end of the game |
 | [`scmjs map rush <map>`](#rush-distances) | The time to walk between the start locations, by the game's own pathing |
 | [`scmjs map heatmap <map> <replays…>`](#where-things-happened-across-many-games) | Where units died, buildings went up or armies walked in many replays, as heat over the map |
 | [`scmjs map share <map>`](#a-link-to-a-map) | A link to the map on scmjs.dev; `--edit` to edit it together |
@@ -1866,9 +2127,12 @@ scmjs map preview map.scx --out map.png         # a picture
 scmjs map find "Marine" maps/*.scx              # search
 scmjs map triggers edit map.scx                 # triggers in your text editor
 scmjs map diff --rev HEAD~1 map.scx --picture   # what the last commit changed, and where
+scmjs map log map.scx                           # the map's history, in the map's terms
+scmjs map blame map.scx                         # who last changed each trigger
 scmjs map generate "(2)Duel.scx" --seed 7       # a melee map to play
 scmjs map trace map.scx                         # which triggers fire in the game
 scmjs map test map.scx                          # run map.tests.json in the game
+scmjs map trace --replay bug.rep --order        # which triggers fired in a played game, and when
 scmjs replay watch game.rep                     # a replay in the terminal
 scmjs map heatmap map.scx replays/ --out h.png  # where units died in those games
 scmjs map share map.scx --qr                    # a link, and a code for a phone
@@ -1888,6 +2152,9 @@ from a clone with `npm run cli -- <command>`, or build it with `npm run build:cl
 | `cli/src/files.ts` | What kind of file was named, a map or replay read out of it, and `-` as standard input and output |
 | `cli/src/diff.ts` | What changed between two maps, by group, and the section comparison underneath; a map read from a git revision |
 | `cli/src/diffpicture.ts` | `map diff --picture`: the second map drawn with the changes marked, side by side, in the terminal or as a PNG |
+| `cli/src/history.ts` | A map's versions in git: the commits that changed the file, the blob ids of all of them in one call, the blobs read in batches and each parsed once |
+| `cli/src/maplog.ts` | `map log`: each commit compared with its parent's version, the comparison put in a few words |
+| `cli/src/blame.ts` | `map blame`: the items of each kind, matched between versions as `map diff` matches them, and git blame's walk from the newest version back |
 | `cli/src/merge.ts` | The three-way merge: each part's rule, the ordered list merge for triggers, units matched without ids, the string table numbered again; git's three versions of a stopped file |
 | `cli/src/edit.ts` | The header set, the map resized and the unused strings dropped, over the open document |
 | `cli/src/report.ts` | Check Map's findings, and a map test's failures, as GitHub annotations, JUnit XML and SARIF |
@@ -1919,8 +2186,8 @@ from a clone with `npm run cli -- <command>`, or build it with `npm run build:cl
 | `cli/src/botrun.ts` | A bot's game with no page: scm-sim's bot runner run and its lines worded |
 | `cli/src/ladder.ts` | The ladder: the sides read off the command line, the schedule and the replays' names, scm-sim's match runner run for each game, Elo, the standing and the head-to-head |
 | `cli/src/watch.ts` | A replay in the terminal: the braille minimap, its colours and the lines around it, the replay's chat and APM, and the runner paced a picture at a time |
-| `cli/src/trace.ts` | A map's triggers run in the game: scm-sim's map runner run, its trace and cost worded against the map's own triggers |
-| `cli/src/maptest.ts` | A map's tests: the tests file read and resolved against the map's names, the setup and timed steps made triggers of a copy, the map runner run in its test mode for each scenario, the end judged and the failed scenarios' replays kept |
+| `cli/src/trace.ts` | A map's triggers run in the game: scm-sim's map runner run, its trace and cost worded against the map's own triggers; a replay's game, the map given compared with the replay's, the firings in order |
+| `cli/src/maptest.ts` | A map's tests: the tests file read and resolved against the map's names, the setup and timed steps made triggers of a copy, the map runner run in its test mode for each scenario, the end judged and the failed scenarios' replays kept; scenarios that play a replay, recorded from one and rewritten with `-u` |
 | `cli/src/heatmap.ts`, `cli/src/heat.ts` | A heatmap from replays: the replays matched to the map, played a few at once by the replay runner's event mode and kept in the cache, the events chosen, counted per tile, spread and drawn as a heat ramp |
 | `cli/src/rush.ts` | The walks between the start locations: the unit found by name, the map runner run in its rush mode, the table of the starts |
 | `cli/src/preview.ts`, `cli/src/png.ts` | A map's picture: the terrain from the tileset, reduced to the scale asked, the units, resources and start locations over it, and the PNG written by hand |

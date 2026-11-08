@@ -172,7 +172,7 @@ dialogs — `tx.players` / `tx.forces` (OWNR+IOWN, SIDE, COLR, CRGB, FORC), `tx.
 `editor/settings.ts` (`playerSlotViews` / `patchPlayer`, `unitTypeView` / `patchUnitType`, …: effective numbers with
 the dat defaults filled in, hit points in whole points, a patch answers with the sections it changed so `runUpdate`'s
 `tracked` can report them even on a fresh map where everything is already dirty), and `api.settings` reads the same
-views without a transaction; `document.resize` is `resizeDocumentAtom` (history dropped). Around them: `api.triggers`
+views without a transaction; `document.resize` is `resizeDocumentAtom` (one `whole` undo step; history dropped on a shared map). Around them: `api.triggers`
 (read TRIG/MBRF plus `triggerDefs.ts`, the text printer/parser and the `newTrigger` /
 `isPreserved` helpers — everything a trigger editor needs that is not a write), `api.query`
 (hit-testing through the layers' own functions, `validateScenario`, `mapStatistics`,

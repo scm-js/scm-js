@@ -10,14 +10,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
-  compareOf, compareWords, defaultOut, defaultTests, firstInGame, framesOf, holds, judge, planScenario, readMapForTests, readTests, runTests, scenarioLines,
-  secondOf, slug, testSummary, type Observed, type PlannedScenario,
+  compareOf, compareWords, defaultOut, defaultTests, firstInGame, formatTests, framesOf, holds, judge, planScenario, readMapForTests, readTests, recordLines, recordTest, REPLAY_END, runTests, scenarioLines,
+  secondOf, shownText, slug, snapshotExpect, testSummary, updateTests, type Observed, type PlannedScenario,
 } from "../cli/src/maptest";
 import { githubTestAnnotations, junitTestXml, sarifTestJson, type TestReport } from "../cli/src/report";
 import { CliError, visible } from "../cli/src/ui";
 import { ActionType, ConditionType } from "../src/formats/chk/sections/triggers";
 import { testMap } from "./support/maps";
-import { classicCopy, FAKE_TEST_RUNNER, stagedEngine } from "./support/mapRunner";
+import { classicCopy, FAKE_TEST_RUNNER, OLD_TEST_RUNNER, stagedEngine } from "./support/mapRunner";
 
 const tmp = () => mkdtempSync(join(tmpdir(), "scmjs-maptest-"));
 const ums = async () => readMapForTests(new Uint8Array(readFileSync(testMap("ums.scx"))));
@@ -213,6 +213,109 @@ describe("scmjs map test: the runner", () => {
     await expect(runTests("ums.scx", [p], map, { out: tmp(), engine: stagedEngine(tmp(), false).dir, starcraft: copy })).rejects.toThrow(/has no map runner/);
     await expect(runTests("bad.scx", [p], map, { out: tmp(), engine: stagedEngine(tmp(), true, FAKE_TEST_RUNNER).dir, starcraft: copy })).rejects.toThrow(/did not take this map/);
     await expect(runTests("ums.scx", [p], map, { out: tmp(), engine: stagedEngine(tmp(), true, FAKE_TEST_RUNNER).dir, starcraft: tmp() })).rejects.toThrow(/not a copy of StarCraft/);
+  });
+});
+
+describe("scmjs map test: scenarios driven by a replay", () => {
+  /** A folder with a tests file's place and a replay beside it (the stand-in reads only the replay's name). */
+  const folder = () => { const dir = tmp(); writeFileSync(join(dir, "bug.rep"), "a replay"); return { dir, tests: join(dir, "ums.tests.json") }; };
+  const ANN_BO = [{ slot: 0, name: "Ann", computer: false }, { slot: 1, name: "Bo", computer: false }];
+
+  it("finds the replay from the tests file's folder, runs it to its end, and takes no setup or steps", async () => {
+    const { dir, tests } = folder(), map = await ums();
+    const p = planScenario(map.chk, { name: "bug", replay: "bug.rep", expect: [{ trigger: 1 }] }, tests, 0, DEFAULTS);
+    expect(p.replay).toBe(join(dir, "bug.rep"));
+    expect(p.frames).toBe(REPLAY_END);
+    expect(planScenario(map.chk, { name: "bug", replay: "bug.rep", frames: "1:00" }, tests, 0, DEFAULTS).frames).toBe(1440);
+    expect((await refused(() => planScenario(map.chk, { name: "bug", replay: "bug.rep", steps: [{ at: 1, chat: "hi" }] }, tests, 0, DEFAULTS))).message).toMatch(/driven by a replay, which takes no setup or steps/);
+    expect((await refused(() => planScenario(map.chk, { name: "bug", replay: "gone.rep" }, tests, 0, DEFAULTS)))).toMatchObject({ code: 2, message: expect.stringMatching(/names gone\.rep, which is not there/) });
+  });
+
+  it("plays the replay through the runner, says where the game parted from it, and with -u takes what no longer holds", async () => {
+    const { dir, tests } = folder(), map = await ums();
+    const staged = stagedEngine(tmp(), true, FAKE_TEST_RUNNER), copy = classicCopy(tmp());
+    const specs = join(tmp(), "specs.jsonl"), answer = join(tmp(), "answer.json");
+    process.env.SCMJS_TEST_SPECS = specs;
+    process.env.SCMJS_TEST_ANSWER = answer;
+    writeFileSync(answer, JSON.stringify({ frame: 1000, ended: true, check: { named: 9, gone: 0, ahead: 1, parted: 720 }, observed: { switches: [0], resources: Array.from({ length: 12 }, (_, i) => (i === 0 ? [80, 8] : [0, 0])) } }));
+    writeFileSync(tests, formatTests({ scenarios: [{ name: "steady", setup: [] }, { name: "bug", replay: "bug.rep", expect: [{ switch: "Alarm raised", is: "clear" }, { minerals: ">= 50", player: 1 }, { gas: 3, player: 1 }] }] }));
+    const scenarios = readTests(tests, readFileSync(tests, "utf8"), map.chk, DEFAULTS);
+    const lines: string[] = [];
+    const run = await runTests("ums.scx", scenarios, map, { out: tmp(), engine: staged.dir, starcraft: copy, live: (l) => lines.push(visible(l)) });
+    const handed = readFileSync(specs, "utf8").trim().split("\n").map((l) => JSON.parse(l));
+    expect(handed.map((h) => h.play ?? null)).toEqual([null, join(dir, "bug.rep")]);
+    expect(handed[1].spec.frames).toBe(REPLAY_END);
+    const bug = run.scenarios[1];
+    expect(bug).toMatchObject({ ok: false, playing: join(dir, "bug.rep"), parted: 720, replay: null, updated: [] });
+    expect(bug.results.map((x) => [x.ok, x.value])).toEqual([[false, "set"], [true, 80], [false, 8]]);
+    expect(lines.join("\n")).toMatch(/✖ bug .*bug\.rep · 1 of 3 expectations held\n.*▲ the game parted from the replay at 0:30 \(frame 720\)/);
+    // -u: the expectations that no longer hold are taken from this game, and the scenario passes.
+    const updating = await runTests("ums.scx", scenarios, map, { out: tmp(), engine: staged.dir, starcraft: copy, update: true });
+    expect(updating.scenarios[1]).toMatchObject({ ok: true, updated: [{ expect: 0, kind: "switch", value: "set" }, { expect: 2, kind: "gas", value: 8 }] });
+    expect(scenarioLines(updating.scenarios[1]).map(visible)[1]).toBe("      ✎ 2 expectations written anew from this game:");
+    expect(updateTests(updating.scenarios)).toEqual([{ file: tests, expectations: 2 }]);
+    const written = JSON.parse(readFileSync(tests, "utf8"));
+    expect(written.scenarios[1].expect).toEqual([{ switch: "Alarm raised", is: "set" }, { minerals: ">= 50", player: 1 }, { gas: 8, player: 1 }]);
+    expect(written.scenarios[0]).toEqual({ name: "steady", setup: [] });
+    // A runner from before --play ran it with nobody playing: said, not judged.
+    const old = stagedEngine(tmp(), true, OLD_TEST_RUNNER);
+    await expect(runTests("ums.scx", [scenarios[1]], map, { out: tmp(), engine: old.dir, starcraft: copy })).rejects.toThrow(/map runner from before tests driven by a replay/);
+  });
+
+  it("makes expectations from the end of a game, in the file's own words", async () => {
+    const { tests } = folder(), map = await ums();
+    const p = planScenario(map.chk, { name: "snap", replay: "bug.rep" }, tests, 0, DEFAULTS);
+    // The lines come as the map's bytes: this map's text is UTF-8.
+    expect(p.encoding).toBe("utf-8");
+    const line = (row: number, fired: number) => ({ player: 0, row, fired, continued: 0, failed: 0, firstFired: fired ? 2 : null, lastFired: fired ? 2 : null, lastFail: null, flags: 0 });
+    const observed: Observed = {
+      ...nothing(4), switches: [0, 9], deaths: [[1, 37, 4]], counts: [3, 1, 0, 2], outcomes: ["victory", "defeat", null, null, null, null, null, null],
+      texts: [{ frame: 2, text: "\x04Hold the base." }, { frame: 3, text: "Ann:\x02 gg" }, { frame: 4, text: "\x04Hold the base." }, { frame: 5, text: "Caf\xc3\xa9 open" }],
+      resources: Array.from({ length: 12 }, (_, i) => (i === 0 ? [75, 5] : [0, 0])),
+    };
+    const expect_ = snapshotExpect(p, { ended: true, trace: [line(0, 1), line(1, 3), { ...line(2, 0), player: 1 }], observed }, ANN_BO);
+    expect(expect_).toEqual([
+      { trigger: "Opening", fired: 1 }, { trigger: 2, fired: 3 }, { trigger: 3, fired: 0 },
+      { switch: "Alarm raised", is: "set" }, { switch: 10, is: "set" },
+      { text: "Hold the base.", shown: true }, { text: "Café open", shown: true },
+      { outcome: "victory", player: 1 }, { outcome: "defeat", player: 2 }, { ended: true },
+      { units: "Men", player: 1, is: 3 }, { units: "Buildings", player: 1, is: 1 }, { units: "Men", player: 2, is: 0 }, { units: "Buildings", player: 2, is: 2 },
+      { minerals: 75, player: 1 }, { gas: 5, player: 1 }, { minerals: 0, player: 2 }, { gas: 0, player: 2 },
+      { deaths: "Zerg Zergling", player: 2, is: 4 },
+    ]);
+    // Every entry holds against the game it came from.
+    const back = planScenario(map.chk, { name: "snap", replay: "bug.rep", expect: expect_ }, tests, 0, DEFAULTS);
+    expect(judge(back, { frame: 1000, ended: true, trace: [line(0, 1), line(1, 3), { ...line(2, 0), player: 1 }], observed }).every((x) => x.ok)).toBe(true);
+    expect(shownText("Caf\xe9", "windows-1252")).toBe("Café");
+  });
+
+  it("records a replay into the tests file: a new scenario, then the same one written anew", async () => {
+    const { dir, tests } = folder(), map = await ums();
+    const staged = stagedEngine(tmp(), true, FAKE_TEST_RUNNER), copy = classicCopy(tmp());
+    const answer = join(tmp(), "answer.json");
+    process.env.SCMJS_TEST_ANSWER = answer;
+    writeFileSync(answer, JSON.stringify({ frame: 1000, ended: true, trace: [{ player: 0, row: 0, fired: 1, continued: 0, failed: 0, firstFired: 2, lastFired: 2, lastFail: null, flags: 8 }], observed: { switches: [0], outcomes: ["victory", "defeat", null, null, null, null, null, null] } }));
+    writeFileSync(tests, formatTests([{ name: "kept", setup: [] }]));
+    const o = { name: "bug report", out: tmp(), engine: staged.dir, starcraft: copy };
+    const r = await recordTest("ums.scx", map, { path: join(dir, "bug.rep"), frames: 1000, players: ANN_BO }, tests, o);
+    expect(r).toMatchObject({ file: tests, map: "ums.scx", name: "bug report", replaced: false, frames: 1000, frame: 1000, parted: null });
+    const file = JSON.parse(readFileSync(tests, "utf8"));
+    expect(file.map((x: { name: string }) => x.name)).toEqual(["kept", "bug report"]);
+    expect(file[1]).toMatchObject({ name: "bug report", replay: "bug.rep", frames: 1000 });
+    expect(file[1].expect.slice(0, 2)).toEqual([{ trigger: "Opening", fired: 1 }, { switch: "Alarm raised", is: "set" }]);
+    // One expectation a line, so trimming is deleting lines.
+    expect(readFileSync(tests, "utf8")).toContain('\n      { "trigger": "Opening", "fired": 1 },\n');
+    expect(visible(recordLines(r)[0])).toMatch(/^✔ Recorded "bug report" into .*ums\.tests\.json · 1,000 frames \(0:42\) · \d+ expectations · /);
+    const again = await recordTest("ums.scx", map, { path: join(dir, "bug.rep"), frames: 1000, players: ANN_BO }, tests, { ...o, frames: 600 });
+    expect(again).toMatchObject({ replaced: true, frames: 600 });
+    expect(JSON.parse(readFileSync(tests, "utf8")).map((x: { frames?: number }) => x.frames ?? null)).toEqual([null, 600]);
+  });
+
+  it("writes JSON a person trims: plain objects on a line, the rest indented", () => {
+    expect(formatTests({ scenarios: [{ name: "a", replay: "b.rep", expect: [{ trigger: 1, fired: 2 }, { text: "x", shown: true }] }] })).toBe([
+      "{", '  "scenarios": [', "    {", '      "name": "a",', '      "replay": "b.rep",', '      "expect": [', '        { "trigger": 1, "fired": 2 },', '        { "text": "x", "shown": true }', "      ]", "    }", "  ]", "}",
+    ].join("\n"));
+    expect(formatTests({ steps: [], setup: {} })).toBe('{ "steps": [], "setup": {} }');
   });
 });
 

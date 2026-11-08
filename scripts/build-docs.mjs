@@ -422,6 +422,8 @@ ${guides.map((g) => `<li><a class="card" href="${base}${g.url}"><b>${escapeHtml(
 <h2 id="start">Where to start</h2>
 <ul>
 <li>New to the editor: <a href="${base}/guide/getting-started/">Getting started</a>, then <a href="${base}/guide/your-first-map/">Your first map</a>.</li>
+<li>Making a scenario with triggers: <a href="${base}/guide/your-first-map/">Your first map</a> for the ground and the bases, then <a href="${base}/guide/triggers/">Triggers</a>, or TrigScript's <a href="${base}/trigscript/quick-start/">Quick start</a> to write them as code.</li>
+<li>Bringing a map over from SCMDraft 2: <a href="${base}/guide/coming-from-scmdraft-2/">Coming from SCMDraft 2</a>.</li>
 <li>Wondering whether it does the thing you need: <a href="${base}/guide/what-it-does-not-do/">What it does not do</a>.</li>
 <li>Installing a plugin, or wondering what one may do: <a href="${base}/plugins/using-plugins/">Using plugins</a>.</li>
 <li>Writing a plugin: try the API first in the <a href="${base}/plugins/writing-a-plugin/#trying-the-api-first">API Playground</a>, which runs code against the open map in the editor. Then <a href="${base}/plugins/writing-a-plugin/">Writing a plugin</a> and the <a href="${base}/api/">API reference</a>; <a href="https://github.com/scm-js/plugin-hello-world">Hello World</a> is the repository to copy.</li>

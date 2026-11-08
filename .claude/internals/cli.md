@@ -1,6 +1,6 @@
 # The `scmjs` command line
 
-`cli/` is the npm package **`@scm-js/cli`** (its command is `scmjs`): `scmjs about | doctor | info | map info|check|open|new|generate|dump|find|fetch|set|resize|triggers|strings|sounds|diff|merge|build|run|unpack|pack|trace|cost|rush|test|preview|heatmap |
+`cli/` is the npm package **`@scm-js/cli`** (its command is `scmjs`): `scmjs about | doctor | info | map info|check|open|new|generate|dump|find|fetch|set|resize|triggers|strings|sounds|diff|log|blame|merge|build|run|unpack|pack|trace|cost|rush|test [record]|preview|heatmap |
 replay info|open|watch | plugin new|check|dev | bot new|init|build|update|run|ladder`, or `npx @scm-js/cli …`. npm refused the plain name `scmjs` on the first publish (2026-11-06,
 E403 "too similar to scss, sockjs"), so the user chose the scope beside @scm-js/replay and @scm-js/plugin-api. The reader's page is `docs/cli.md`. The shape was the user's (2026-11-05): one command, a noun for
 each kind of thing (`map`, `replay`, `plugin`, `bot`), "an impressive UX tool … not overly engineered".
@@ -1475,4 +1475,152 @@ A fork built both ends (scm-sim branch `heatmap`, scm-js `cli-map-heatmap`).
 - **Not built**: an MCP tool; a legend inside the PNG (no font); per-race or per-matchup filters; the `--view` of a
   player's fog; a `doctor` line that knows whether the fetched replay runner has `--events` (doctor cannot tell a
   runner's modes apart, as with rush).
+
+## A replay's game: `map trace|cost --replay`, `map test record`, `map test -u` (`trace.ts`, `maptest.ts`) — 2026-11-07
+
+`scmjs map trace [map] --replay <rep> [--order]`, `map cost [map] --replay <rep>`, `map test record <map> <rep> [--name]
+[--tests] [--frames]`, `map test -u|--update`. A fork built both ends (scm-js branch `cli-trace-replay`, scm-sim branch
+`trace-replay`, PR on jeany55/scm-sim). The play page must deploy the new map runner before the CLI's PR is useful.
+
+- **The runner is the map runner's `--play <rep>` mode** (scm-sim `src/exact/mapReplay.ts`), not a new bundle or
+  `current.json` key, so no `RUNNERS` kind and no `doctor` row: `RUNNER_COMMANDS.map` covers it. The game is started
+  as `runReplay.ts` starts one (served engine + the copy, `playableReplay` for a later game's replay), then the map
+  runner's taps at the gate of frame 0: `installEud` (strings placed when the scenario has `STRx`), `installCost`, then
+  **`installTriggerTrace` called directly** with the TRIG of the chk the game runs (the replay engine has no
+  `traceTriggers`), and after every `engine.step` the runner closes the turn itself: `trace.endTurn(frame,
+  u16[0x6509A0] === 30, …)` as `live.ts#advance` does. The fold takes an `OnFired(copy, frame)` callback (additive in
+  `traceFold.ts`) for `--order [n]` (10,000 kept by default, `orderDropped` counts the rest; rows < 0 skipped).
+  **A map given** is put into the replay: `writeLegacyReplay(header, playable.commands, mapBytes(map).chk)` — the
+  replay's commands with the map's classic scenario; the game loads the map from the replay, so nothing else changes.
+  The cost helpers moved from `runMap.ts` to `mapCost.ts` (re-exported); `mapTest.ts`'s end reading is `readEnd(game,
+  counts, me)`, shared. Protocol (additive): `start` {mode: "replay", map, replay {name, frames, gameType, players
+  [{slot, name, race, type}]}, replaced, copy, seed (the replay's), rows, copies, remastered, localPlayer, ms},
+  `progress` as before, `end` {mode, frame, ended (the replay ran out or a side won), reason, by "victory"|"replay"|null,
+  passes, trace, cost, order [[frame, player, row]]|null, orderDropped, check {named, gone, ahead, parted}, outcomes (per
+  replay player), observed|null, ms}. With `--test` as well: `start`/`end` say `mode: "test"`, `driver: "replay"`; a
+  spec with steps is refused. **An older runner** wants a map (`--map is needed`) or runs the map with nobody playing
+  (start without `mode`); the CLI kills it and says "from before map trace --replay" / "before tests driven by a replay".
+- **The CLI**: `gameRun` in main.ts (shared by trace and cost) — no `--replay`: as before; with it: `replayRun(rep,
+  map|null)` → the scenario the report is worded against (the given map's **archive chk as stored**, i.e. a built
+  map's built scenario, since that is what the game runs; else the replay's), `differs` = `diffMaps` of the two bare
+  chks with `members` dropped (a replay holds none) → `summarizeDiff`, now in `diff.ts` (re-exported by run.ts), and a
+  VER 59 map (given or the replay's) as `gameMap`'s converted temp copy. `--frames`/`--every` left at their defaults
+  (`getOptionValueSource`) mean the replay's end and a progress line a minute of play (1,440). Report in replay mode:
+  rows only for triggers a player in the game owns (1631.rep's map has 1,713 rows, 5 owned), First/Last as
+  `gameClock` (42 ms a frame, as `replay info`/`watch`; the scripted mode keeps frames), the winner's names, a ▲ line
+  when `check.parted`, an ℹ line when the game type is not Use Map Settings (melee runs the game's own triggers:
+  the trace has only row −1 copies), then `orderLines` (cut at 200 unless `--all`). `traceReport().replay` carries it
+  all for `--json`, plus `replayFile`, `map`, `differs`.
+- **Tests from replays**: a scenario `{ "replay": "x.rep" }` (from the tests file's folder; `replayOf` checks it exists
+  at plan time) refuses `setup`/`steps`, runs to `REPLAY_END` (0x7fffffff; the replay's end comes first) unless
+  `frames`, and is run as `[map, --test, spec, --play, rep]` (no `--seed`, no replay kept). `judge` now returns
+  `value` (what the file would write) and words frames with the clock for replay scenarios; **text is decoded** with
+  the map's encoding (`shownText`: the runner hands bytes as char codes; new core export `decodeText`) — before, a
+  Korean map's text could never match. `ScenarioResult` gained `index`, `playing`, `parted`, `updated`.
+  **`-u`** only touches replay-driven scenarios and only the entries that failed: `VALUE_KEY` per kind (`fired`, `is`,
+  `minerals`, `gas`, `shown`, `outcome`, `ended`) gets the game's value; a loosened comparison that still holds stays,
+  deleted entries stay deleted (decided: Jest-like snapshots that respect trimming; re-record to regenerate the whole
+  list). The scenario then counts as passed and the file is rewritten with `formatTests` (one plain object a line, so
+  trimming is deleting lines; hand formatting of the file is not kept). **`record`** plans the scenario with
+  placeholder units entries (Men and Buildings per playing player, so the runner counts them), runs it through
+  `runTests` (`quiet`, `onEnd` hands back the raw end), builds `snapshotExpect` (triggers owned by a player in the game
+  with counts incl. 0, by unique comment else number; switches set + named ones clear; non-chat lines (`/^[^\x02:]{1,40}:\x02/`
+  is chat), 20 at most; outcomes; ended; the unit counts in the order asked; minerals/gas; every death count), then
+  judges it against the same end and drops any entry that would not hold, and writes it (same name → replaced).
+- **Measured** (Remastered copy, a local stage — the four engine files + bundled `run.mjs`/`map.mjs`, gzip, a
+  `current.json` — served by `python3 -m http.server`, `SCMJS_PLAY_URL`/`SCMJS_CACHE` at it; `deploy-play.mjs` itself was
+  refused by the session's permission classifier as a deploy, even without `--upload`): 1631.rep (UMS 2v2 on 투혼 1.3,
+  14,662 frames) traces in 6.2 s end to end, 4.1 s of game ≈ 3,600 frames/s: 9 firings (each player's start triggers at
+  frame 2, the victory trigger #1712 for P4 at 14,603 = 10:13), never parted. 1544.rep (UMS 1v1, 70,255 frames) 37 s
+  game, 1603.rep (48,765) 26 s — ~1,500–1,900 frames/s with the machine's load average at 10; with both taps off the
+  same runs were no faster (noise dominates; the trace is not the cost). The map extracted by `replay map` played
+  back in place of the replay's: no `differs`, identical firings. The same map with its 108 mineral fields removed
+  (`map run` with a script): "differs (108 units removed)" up front, parted at frame 6. `map test record` on 1631: 40
+  expectations in 6.5 s; `map test` passes (40/40); on the mineral-less map 21/40 hold, `-u` rewrote the 19 others
+  (units, resources, deaths) and the next run passed. In a replay the game's local player word (0x512684) reads 0,
+  so the lines kept are what slot 1's eyes see: on 1631 only chat and "… has left the game", not the start trigger's
+  text for P3–P6 — the memory is not poked to change that (it would change the game).
+- `tests/cli-trace.test.ts` (+4): the replay run over the stand-in (`FAKE_RUNNER` now takes `--play`/`--order`;
+  `OLD_RUNNER` is it from before), the clock and order lines, a map given + parted, melee, cost, the older runner,
+  `replayRun`'s comparison and the 1.00 conversion. `tests/cli-map-test.test.ts` (+5): planning, the run with
+  `-u` + `updateTests`, `snapshotExpect` round-trip, `recordTest` new + replaced, `formatTests`. scm-sim:
+  `tests/exact-map-replay.test.ts` and `exact-map-replay-map.test.ts` (one game a file; skip without engine, copy or
+  data/replays-psistorm/1631.rep).
+- **Not built**: an MCP tool for `--replay` / `record`; `--order` for `map cost`; a replay from standard input
+  (refused: the runner reads a file); `record` of a melee replay was not tried (its game runs the game's own triggers,
+  so its snapshot would hold no trigger counts). The scenario-name dispatch: `map test record` is a commander
+  subcommand of `map test`, so a map file literally named `record` would be taken for it.
+
+## A map's history: `map log`, `map blame` (`cli/src/history.ts`, `maplog.ts`, `blame.ts`) — 2026-11-07
+
+`scmjs map log <map> [--rev X|A..B] [-n N] [--json]` and `scmjs map blame <map> [--triggers|--locations|--strings|
+--units|--settings] [--trigger N|--location NAME|--string N] [--rev X|A..B] [--json]`. Verbs under `map`, so no
+overview row. Docs: `docs/cli.md` "A map's history", "Who last changed what".
+
+- **The git layer** (`history.ts`): `locate(file)` = `git -C <file's dir> rev-parse --show-toplevel --show-prefix`
+  → `{root, path: prefix + basename}`; **`--show-prefix` rather than `relative(root, resolve(file))`**, so a folder
+  reached through a symbolic link still gives git's path (`revisionInput` now uses it too; its messages kept).
+  `commitsTouching` = `git log --parents --format=%x1e%H%x1f%P%x1f%an%x1f%ae%x1f%aI%x1f%s [--topo-order] [-n] <rev> --
+  <path>`: **`--parents` turns on parent rewriting, so `%P` names the nearest ancestors that touched the file**
+  (checked in a throwaway repo: without it `%P` is the real parents), and with a range the parents outside it are
+  still printed — that is how blame finds the range's edge. A revision starting with `-` is refused (it would be an
+  option of git's). `blobIds` = one `git cat-file --batch-check` for every `<commit>:<path>` (missing → null).
+  `Versions` reads blobs through `git cat-file --batch`, **24 at a time in the order they will be wanted** (`expect`),
+  and parses each once (`loadMapInput`), keeping `keep` parsed maps (log 3, blame 1 — blame keeps snapshots instead).
+  spawnSync's `input` is a Buffer: `encoding: "buffer"` with a string input throws ERR_UNKNOWN_ENCODING (first run).
+- **`map log`** (`mapLog`): the commits `git log <rev> -- <path>` lists (no `--topo-order`; `-n` asks git for N+1
+  to know there are more), each compared with its **rewritten first parent**'s version (same bytes as the real first
+  parent's for this path). No version → "map added: 64 × 64 Badlands, 21 units, …" (`describeMap`); none now → "map
+  removed"; same blob → "no change to the map"; a version that does not parse → `unreadable`, the rest go on.
+  `describeChange` runs `diffMaps` and words it: header fields (name/description changed, `resized a → b`, tileset,
+  version, encoding), players + forces (one → `Player 2 race Zerg → Protoss`, more → "N player settings changed"),
+  units by `unitCounts` (multiset by `unitKey`, then pairs: same record but x/y = **moved**, same kind + owner =
+  **changed**), locations/strings by the diff's change kinds, triggers and briefing by **`listCounts`**: multiset
+  added/removed (as map diff), then an added and a removed in the same LCS gap (`lcsMatch` from merge.ts) are one
+  **changed**; nothing added/removed but another order = "triggers reordered". **Strings that are names** (SPRP
+  name/description, every MRGN `nameIndex`, FORC names, either version) are not counted as strings — "description
+  changed · 1 string changed" said one thing twice (first run). Then each changed section no phrase spoke for
+  (`said`) in words (`SECTION_WORDS`: terrain, doodads, unit settings, …; else "XXXX section changed"); **section
+  names are padded to four (`"STR "`) — trim before looking up** (first run printed "STR  section changed"). Nothing
+  at all → "saved again; the map is the same".
+- **`map blame`** (`blameMap`): items per kind (`Item {id, content, label, text}`; same thing in two versions ⇔
+  id and content equal): triggers id = content = `fingerprintTrigger` (multiset, so a reorder is no change — the
+  task's rule, map diff's matching); locations id = slot, content = name + rect + flags (`locationText`'s
+  fields); strings id = number, non-empty only (map diff's null = "" rule); units one item per `unitId:owner`,
+  content = sha1 of the sorted `unitKey`s; settings by label: header fields, a row per player and force, section
+  groups by bytes (`sectionBytes`: Terrain = MTXM+TILE+ISOM, Doodads, Sprites, Fog, UNIS/UNIx, UPGS/UPGx, TECS/TECx,
+  PUNI, UPGR/PUPx, PTEC/PTEx, SWNM, WAV) and each archive member by sha1. **The walk is git blame's**: items of the
+  top version pending at the first node; nodes in `--topo-order` (children first); at a node, for each rewritten
+  parent in order, `matchItems` (first-come, one parent item per child item) hands matched items to the parent;
+  what no parent takes is this commit's. So a change made on a branch and merged lands on the branch's commit
+  (tested). Same blob on an edge → everything passes, nothing parsed. **Stops as soon as nothing is pending**, so
+  only as much history is read as the answer needs (`walked` in the JSON). With `A..B`, items pending at a parent
+  outside the list settle on that commit with `boundary` (printed `^` + 7 hex, as git); its author/date from one
+  `git show -s`. **Uncommitted**: without `--rev` and with the file on disk, the disk bytes are the top; if they differ
+  from `HEAD:<path>` a node `0000…` with parent = the first listed commit comes first, and what it keeps is "Not
+  committed yet" (date = the file's mtime). With `--rev X` the file on disk is not read.
+  Trigger summaries (`summarizeTrigger`) are made only for the top version (`shown`): the rest need the fingerprint.
+- **Output**: git blame's shape, `hash8 (author date label) text` — author column one width for all kinds shown
+  (max 24, by terminal columns), labels padded per kind (numbers right-aligned), the text cut to the terminal width
+  (120 when piped). Default view = triggers, or settings when the map has none (both computed, one dropped).
+  `--trigger N` (1-based, the list's order), `--location` (name, any case, or `#n`), `--string N` → one item: the
+  commit's hash, author, date and subject, then the trigger's whole text (`triggersToText`) or the item's text.
+- **Measured** (WSL2, built bundle, `/usr/bin/time`): the docs' demo (ums.scx, 8 commits) `map log` 0.5 s. A 201-commit
+  history of `(8)StarCraft Fortress.scm` (399 KB, 87 triggers, a string edit per commit, made in the scratchpad):
+  `map log` 3.5 s (~17 ms a commit: two parses, one cached, plus `diffMaps`' two serialisations), `-n 10` 0.34 s,
+  `map blame` 2.4 s (walks all 201: the oldest triggers are unchanged since the first commit, so every version must
+  be read, as git blame must), all five kinds 2.5 s, `--rev HEAD~20..HEAD` 0.43 s; `map info` alone 0.17 s. Peak RSS
+  ~400 MB on the full log (V8 not collecting between parses; the batch itself is ~10 MB).
+- **Tests** (`tests/cli-map-log.test.ts`, 12): `counted`, `listCounts`, `unitCounts`, `matchItems`, `splitRange`;
+  a temp repository (skipped without git) from ums.scx via `setHeader`, `importTriggers`, `resizeMap`, `importStrings`,
+  a commit touching another file only, a reorder, a branch + **a merge made by hand** (git cannot merge the binary
+  without the driver: `checkout --ours`, apply the side's change, commit) — log words, `-n`, ranges, blame per kind,
+  the merge followed to the branch, uncommitted, the range edge, the early stop, and the errors (not a repository,
+  not committed, no such file, bad revision, `--all` as a revision).
+- **Not done**: renames are not followed (`--follow` linearises and hides merges; the history starts at the name the
+  file has, documented); briefing triggers have no blame kind; no MCP tool; trigger text edits blame the string, not
+  the trigger (map diff's matching — documented); `map log` has no per-commit `--stat` of the full diff (`git show`
+  with textconv does that); `map log --rev A...B` passes through to git, `map blame` refuses `...`.
+- **CLI strings are literals, not `t()`**: the i18n extractor reads `src/` only and no CLI module uses `t()` for its
+  own words (plugin.ts's are the starter's text); followed that.
 

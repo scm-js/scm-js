@@ -32,7 +32,7 @@ import { applyDoodadChanges, convertDoodads, removeDoodads, strandedDoodads } fr
 import { strandedUnits } from "../editor/placement";
 import { peekUnitAssets } from "../formats/units/load";
 import { applySpriteChanges, removeSprites } from "../editor/sprites";
-import { ALL_PARTS, applyEntry, entryArea, entryParts, hasEdits, NO_PARTS, touchesDoodads, touchesGround, type CommitNotice, type HistoryEdit, type HistoryEntry } from "../editor/history";
+import { ALL_PARTS, applyEntry, entryArea, entryParts, hasEdits, NO_PARTS, swapWholeState, takeWholeState, touchesDoodads, touchesGround, type CommitNotice, type HistoryEdit, type HistoryEntry, type WholeState } from "../editor/history";
 import { applyTables, followTables, rebaseAfterTables, rebaseStrings, rebaseTables, TABLES_BUDGET, tablesKind, tablesWeight, takeTablesEdit, type TablesEdit } from "../editor/tableHistory";
 import { applyLocationChanges, boundsOf, isInverted, LOCATION_MIRROR_PX, locationName, moveLocationsMirrored, placedLocations, removeLocations, scrambledLocations, usedLocations } from "../editor/locations";
 import { mirrorMoves } from "../editor/symmetry";
@@ -311,15 +311,17 @@ export interface ResizeRequest {
 }
 
 /**
- * Scenario ▸ Resize / Crop Map. Not an undoable edit: the history is dropped, every
- * selection cleared and every revision bumped, since the whole document moved. Null
- * when there is no map.
+ * Scenario ▸ Resize / Crop Map. One undo step holding the map as it was (`wholeEntry`);
+ * every selection is cleared and every revision bumped, since the whole document moved.
+ * On a shared map the history is dropped instead, as it is for everyone else. Null when
+ * there is no map.
  */
 export const resizeDocumentAtom = atom(null, (get, set, req: ResizeRequest): ResizeResult | null => {
   const scn = get(scenarioAtom);
   if (scn && !canEdit(get, set)) return null;
   if (!scn) return null;
   get(syncTapAtom)?.beforeWhole(get);
+  const before = takeWholeState(scn);
   const loaded = peekTileset(get(tilesetFileNameAtom));
   const tileset = loaded?.tileset ?? null;
   const result = resizeScenario(scn, {
@@ -328,7 +330,7 @@ export const resizeDocumentAtom = atom(null, (get, set, req: ResizeRequest): Res
   });
   set(mapWidthAtom, scn.width);
   set(mapHeightAtom, scn.height);
-  afterWholeDocumentChange(get, set);
+  afterWholeDocumentChange(get, set, wholeEntry(get, t("Resize map"), before));
   get(syncTapAtom)?.whole(get, set, t("Resize map"));
   set(noticeWholeAtom, { reason: "whole", label: t("Resize map") });
   count("map.resize", { size: `${scn.width}x${scn.height}` });
@@ -345,7 +347,7 @@ export interface ChangeTilesetRequest {
 
 /**
  * Scenario ▸ Map Properties ▸ Tileset: change ERA and refill the terrain (editor/tileset.ts).
- * A transaction like Resize — history dropped, every revision bumped. The new tileset's
+ * A whole-map step like Resize — one undo step, every revision bumped. The new tileset's
  * graphics should be loaded first (`ensureTileset`) so the fill uses real tile ids; the
  * caller does that, since an atom cannot await. Null when there is no map.
  */
@@ -353,6 +355,7 @@ export const changeTilesetAtom = atom(null, (get, set, req: ChangeTilesetRequest
   const scn = get(scenarioAtom);
   if (!scn || !canEdit(get, set)) return null;
   get(syncTapAtom)?.beforeWhole(get);
+  const before = takeWholeState(scn);
   const era = Math.max(0, TILESETS.findIndex((t) => t.id === req.tileset));
   const previous = peekTileset(get(tilesetFileNameAtom));
   const next = peekTileset(TILESET_FILENAMES[era]);
@@ -363,18 +366,35 @@ export const changeTilesetAtom = atom(null, (get, set, req: ChangeTilesetRequest
     doodads: previous?.doodads ?? null,
   });
   set(mapTilesetAtom, req.tileset);
-  afterWholeDocumentChange(get, set);
+  afterWholeDocumentChange(get, set, wholeEntry(get, t("Change tileset"), before));
   get(syncTapAtom)?.whole(get, set, t("Change tileset"));
   set(noticeWholeAtom, { reason: "whole", label: t("Change tileset") });
   count("map.tileset", { tileset: req.tileset, keepTiles: req.keepTiles === true });
   return result;
 });
 
-/** What every transaction that moves the whole document does afterwards: drop the history, clear the selections, repaint everything. */
-function afterWholeDocumentChange(get: Getter, set: Setter) {
+/**
+ * The undo step for a whole-map change, holding the map as it was before it — or null on a
+ * shared map, where the change replaced everyone's map and every history starts again.
+ */
+function wholeEntry(get: Getter, label: string, before: WholeState): HistoryEntry | null {
+  return get(syncTapAtom)?.owns(get) ? null : { label, changes: [], whole: before };
+}
+
+/**
+ * What every transaction that moves the whole document does afterwards: record it (an
+ * entry), drop the history (null) or leave the stacks to the caller (`"keep"` — an undo or
+ * redo of one), clear the selections, repaint everything.
+ */
+function afterWholeDocumentChange(get: Getter, set: Setter, history: HistoryEntry | null | "keep") {
   set(mapModifiedAtom, true);
-  set(undoStackAtom, []);
-  set(redoStackAtom, []);
+  if (history === null) {
+    set(undoStackAtom, []);
+    set(redoStackAtom, []);
+  } else if (history !== "keep") {
+    set(undoStackAtom, withinTablesBudget([...get(undoStackAtom), history].slice(-Math.max(1, get(preferencesAtom).undoLevels))));
+    set(redoStackAtom, []);
+  }
   set(selectedUnitsAtom, []);
   set(selectedDoodadsAtom, []);
   set(selectedSpritesAtom, []);
@@ -682,7 +702,7 @@ export const loadDocumentAtom = atom(null, (get, set, doc: LoadedDocument) => {
 /**
  * Install a scenario parsed again from edited bytes — a plugin's raw section edit — in
  * place of the open one: the same file name and archive extras, the map marked modified,
- * and, as with Resize, the history dropped and every selection cleared, since any part
+ * and the history dropped (a new `Scenario` object, which a whole-map undo step's reference swap cannot take back) and every selection cleared, since any part
  * of the document may have changed. The mirror atoms are refilled from the new object.
  * `asOpened` leaves the map unmodified instead: the bytes are taken as the reading of the
  * file that was opened (Repair's on-open pass), so Save still writes them but closing
@@ -917,6 +937,25 @@ function stepTables(get: Getter, set: Setter, scn: Scenario, entry: HistoryEntry
   noticeEntry(get, set, direction === "do" ? "redo" : "undo", entry, entry.label);
 }
 
+/**
+ * Undo or redo a whole-map step (Resize, Change Tileset): swap the map the entry holds with
+ * the scenario's, refill the mirrors and repaint. The caller has already moved the entry to
+ * the other stack. On a shared map the result goes to everyone as a whole-map change and,
+ * as with Resize there, every history starts again.
+ */
+function stepWhole(get: Getter, set: Setter, scn: Scenario, entry: HistoryEntry, direction: "do" | "undo") {
+  const tap = get(syncTapAtom);
+  const shared = tap?.owns(get) === true;
+  tap?.beforeWhole(get);
+  entry.whole = swapWholeState(scn, entry.whole!);
+  set(mapWidthAtom, scn.width);
+  set(mapHeightAtom, scn.height);
+  set(mapTilesetAtom, TILESETS[tilesetIndex(scn)].id);
+  afterWholeDocumentChange(get, set, shared ? null : "keep");
+  tap?.whole(get, set, entry.label);
+  noticeEntry(get, set, direction === "do" ? "redo" : "undo", entry, entry.label);
+}
+
 export const undoAtom = atom(
   (get) => get(undoStackAtom).at(-1)?.label ?? null,
   (get, set) => {
@@ -925,6 +964,12 @@ export const undoAtom = atom(
     const entry = stack.at(-1);
     if (!scn || !entry || !canEdit(get, set)) return null;
     count("undo");
+    if (entry.whole) {
+      set(undoStackAtom, stack.slice(0, -1));
+      set(redoStackAtom, [...get(redoStackAtom), entry]);
+      stepWhole(get, set, scn, entry, "undo");
+      return entry.label;
+    }
     if (entry.tables) {
       stepTables(get, set, scn, entry, "undo");
       set(undoStackAtom, stack.slice(0, -1));
@@ -977,6 +1022,12 @@ export const redoAtom = atom(
     const entry = stack.at(-1);
     if (!scn || !entry || !canEdit(get, set)) return null;
     count("redo");
+    if (entry.whole) {
+      set(redoStackAtom, stack.slice(0, -1));
+      set(undoStackAtom, [...get(undoStackAtom), entry]);
+      stepWhole(get, set, scn, entry, "do");
+      return entry.label;
+    }
     if (entry.tables) {
       stepTables(get, set, scn, entry, "do");
       set(redoStackAtom, stack.slice(0, -1));

@@ -206,6 +206,25 @@ game data, exported from `@scm-js/core` (index.ts "Mods" block), and walk clean 
   near byte 60 of a copy is copied; trailing transparency is written; a frame equal to an earlier one shares its
   offset. **All 833 GRPs images.tbl names are byte-identical.** Cosmonarchy's 1,569 GRPs (another encoder): 162
   identical, the rest decode-equal, ours 4.3% larger in all (169.2 MB vs 162.3 MB).
+- **Uncompressed GRPs** (`GrpImage.raw`): the game's interface pictures store each frame as its `w × h` indices row
+  by row, no line table — same header and frame table, equal frames sharing. 22 of the game's (`dlgs\*.grp`,
+  `game\icons.grp`, `glue\chatroom\ichat.grp`, `glue\pal??\dlg.grp`, `glue\score??\iScore.grp`) and 37 of
+  Cosmonarchy's (those plus `game\{gas,mineral,supply}icons.grp`, `glue\dlg.grp`, `glue\dynamic\dlg.grp`,
+  `glue\create\icreate.grp`, `glue\score{ad,av}\iscore.grp`, `glue\score??\pIcons.grp`; boxes up to 512 × 256,
+  frames up to 184 × 18 / 128 × 56, 8-bit frame sizes throughout) — these were the 37 `mod unpack` kept as bytes
+  ("line N runs past the end", "an empty copy"). Nothing in the file says which kind: the drawing code knows (GPTP's
+  `graphics::FrameFormat::Rle`/`Raw` in `systems/graphics/grp.cpp`; the HUD cost icons are drawn `Raw`). So the
+  decoder tries run-length first and reads raw only when that **fails** and the frames pack exactly (each new frame
+  at the data's end, a reused one at an earlier frame's start, an empty one inside what came before, ending at the
+  file's last byte) — never raw-first: a 4 × 4 one-colour RLE frame is 16 bytes and packs both ways (the cli-mod
+  "kept as bytes" fixture is one). Sharing: equal frames share, and an empty frame points where the data then ends
+  (`game\icons.grp`'s 100 empty frames) — the RLE rule, reproduced unchanged — except the game's `dlgs\*.grp` store
+  their last frame twice and Cosmonarchy's `glue\dlg.grp` shares nothing, so decode records `shares` (each frame's
+  first frame at its offset) when the plain rule would not give the bytes back; the encoder honours a share only
+  while the frames are still equal. The PNG note carries `raw`/`shares`. **59/59 byte-identical**, through the
+  sheets too; the 997 RLE GRPs of the game (images.tbl's 833 + listfile names + Cosmonarchy's paths) unchanged.
+  GPTP's reader also takes an offset's high bit as "frame 256 wider" (`frame_view`); no file sets it, the decoder
+  refuses it by name. `mod info` reads sizes only, and raw is the game's own format, so it is not listed "extended".
 - **PCX** (`pcxFile.ts`): header kept; RLE per line; `thpbar.pcx` has an odd bytes-per-line (19), kept. 77/77 of the
   game's PCXs tried are byte-identical. **LO** (`loFile.ts`): offsets kept; 8 of the game's 96 share frames, which PyLO
   text cannot say — a first comment line `# scmjs: offsets …` carries them, so text round-trips too (96/96).

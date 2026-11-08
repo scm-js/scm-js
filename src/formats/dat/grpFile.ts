@@ -15,6 +15,15 @@
  * run is measured only as far as the copy has room, so a run that starts near a full copy's end is copied. Trailing
  * transparency is written like any other. A frame whose bytes equal an earlier frame's points at
  * that frame's data instead of a copy of it.
+ *
+ * **Uncompressed GRPs.** The game's interface pictures (`dlgs\*.grp`, `glue\…\dlg.grp`, `glue\…\iScore.grp`,
+ * `glue\chatroom\ichat.grp`, `game\icons.grp`) store each frame as its `width × height` palette indices, row by row,
+ * with no line table — the same header and frame table, and the same sharing of equal frames. Nothing in the file says
+ * which kind it is (the code that draws it knows; GPTP calls the two `FrameFormat::Rle` and `Raw`), so a GRP is read
+ * uncompressed only when its lines do not read (an offset outside the file, a line that never ends) and its frames
+ * pack their `width × height` bytes one after another from the end of the frame table to the file's last byte. Both
+ * hold for all 22 of the game's interface GRPs and Cosmonarchy's 37; a GRP whose lines do read stays run-length (a
+ * tiny one can pack both ways: a 4 × 4 frame of one colour is 16 bytes run-length encoded).
  */
 
 /** One frame: its box inside the GRP's shared box, and `width × height` palette indices. */
@@ -30,6 +39,15 @@ export interface GrpImage {
   width: number;
   height: number;
   frames: GrpFramePixels[];
+  /** The frames are stored uncompressed (`width × height` bytes each, no line table), as the game's interface GRPs are. */
+  raw?: true;
+  /**
+   * Which frames share their data, when that is not "every frame equal to an earlier one" (the encoder's rule without
+   * it): for each frame, the first frame whose data it points at (its own index when it has data of its own). Only an
+   * uncompressed GRP has it, and only when its maker shared otherwise — the game's `dlgs\*.grp` store one frame twice,
+   * Cosmonarchy's `glue\dlg.grp` shares none. A frame edited since no longer equal to the one named gets its own data.
+   */
+  shares?: number[];
 }
 
 export function decodeGrpImage(data: Uint8Array): GrpImage {
@@ -39,11 +57,35 @@ export function decodeGrpImage(data: Uint8Array): GrpImage {
   const width = view.getUint16(2, true);
   const height = view.getUint16(4, true);
   if (data.length < 6 + count * 8) throw new Error(`GRP declares ${count} frames but is only ${data.length} bytes`);
+  try {
+    return { width, height, frames: decodeRleFrames(data, view, count) };
+  } catch (e) {
+    if (!isRawLayout(data, view, count)) throw e;
+    const frames = Array.from({ length: count }, (_, i): GrpFramePixels => {
+      const at = 6 + i * 8, fw = data[at + 2], fh = data[at + 3], offset = view.getUint32(at + 4, true);
+      return { x: data[at], y: data[at + 1], width: fw, height: fh, pixels: data.slice(offset, offset + fw * fh) };
+    });
+    const image: GrpImage = { width, height, frames, raw: true };
+    if (!sameBytes(encodeGrpImage(image), data)) {
+      const first = new Map<number, number>();
+      image.shares = frames.map((_, i) => {
+        const offset = view.getUint32(6 + i * 8 + 4, true);
+        if (!first.has(offset)) first.set(offset, i);
+        return first.get(offset)!;
+      });
+    }
+    return image;
+  }
+}
+
+function decodeRleFrames(data: Uint8Array, view: DataView, count: number): GrpFramePixels[] {
   const frames: GrpFramePixels[] = [];
   for (let i = 0; i < count; i++) {
     const at = 6 + i * 8;
     const fw = data[at + 2], fh = data[at + 3];
     const offset = view.getUint32(at + 4, true);
+    // GPTP's reader takes the offset's high bit as "this frame is 256 pixels wider"; no file of the game's or Cosmonarchy's sets it.
+    if (offset >= 0x80000000) throw new Error(`GRP frame ${i}: its offset has the high bit set, which GPTP reads as a frame wider than 255 pixels, a layout this reader does not take`);
     const pixels = new Uint8Array(fw * fh);
     for (let row = 0; row < fh; row++) {
       const lineAt = offset + row * 2;
@@ -66,7 +108,25 @@ export function decodeGrpImage(data: Uint8Array): GrpImage {
     }
     frames.push({ x: data[at], y: data[at + 1], width: fw, height: fh, pixels });
   }
-  return { width, height, frames };
+  return frames;
+}
+
+/**
+ * Whether a GRP's frames are stored uncompressed: walking the frames in order, each frame with pixels either starts
+ * where the data so far ends (and adds its `width × height` bytes) or starts where an earlier frame's data starts and
+ * fits in what is there; a frame with no pixels points inside what came before; and the data ends at the file's end.
+ */
+function isRawLayout(data: Uint8Array, view: DataView, count: number): boolean {
+  let end = 6 + count * 8, any = false;
+  const starts = new Set<number>();
+  for (let i = 0; i < count; i++) {
+    const at = 6 + i * 8, n = data[at + 2] * data[at + 3], offset = view.getUint32(at + 4, true);
+    if (n === 0) { if (offset > end) return false; continue; }
+    any = true;
+    if (offset === end) { starts.add(offset); end += n; }
+    else if (!starts.has(offset) || offset + n > end) return false;
+  }
+  return any && end === data.length;
 }
 
 const MAX_SKIP = 0x7f;
@@ -120,21 +180,29 @@ export function encodeGrpFrame(frame: GrpFramePixels): Uint8Array {
   return out;
 }
 
+/**
+ * A GRP's bytes: the frames run-length encoded the game's way, or stored as they are when `image.raw`. A frame equal
+ * to an earlier one points at its data — or, when `image.shares` is given, the frame it names, if still equal.
+ */
 export function encodeGrpImage(image: GrpImage): Uint8Array {
   if (image.frames.length > 0xffff) throw new Error(`a GRP holds at most 65535 frames, not ${image.frames.length}`);
   const header = 6 + image.frames.length * 8;
   const chunks: Uint8Array[] = [];
   const offsets: number[] = [];
+  const written: Uint8Array[] = [];
   const seen = new Map<string, number>();
   let at = header;
-  for (const frame of image.frames) {
+  for (const [i, frame] of image.frames.entries()) {
     if (frame.width > 255 || frame.height > 255 || frame.x > 255 || frame.y > 255) throw new Error(`a GRP frame's box is at most 255 × 255 at (≤255, ≤255); this one is ${frame.width} × ${frame.height} at (${frame.x}, ${frame.y})`);
     if (frame.pixels.length !== frame.width * frame.height) throw new Error(`a ${frame.width} × ${frame.height} frame needs ${frame.width * frame.height} pixels, not ${frame.pixels.length}`);
-    const bytes = encodeGrpFrame(frame);
+    const bytes = image.raw ? frame.pixels : encodeGrpFrame(frame);
+    written.push(bytes);
     const key = keyOf(bytes);
-    const again = seen.get(key);
+    const hint = image.shares?.[i];
+    const again = hint === undefined ? seen.get(key)
+      : hint < i && (bytes.length === 0 || sameBytes(bytes, written[hint])) ? offsets[hint] : undefined;
     if (again !== undefined) { offsets.push(again); continue; }
-    seen.set(key, at);
+    if (!seen.has(key)) seen.set(key, at);
     offsets.push(at);
     chunks.push(bytes);
     at += bytes.length;
@@ -152,6 +220,12 @@ export function encodeGrpImage(image: GrpImage): Uint8Array {
   let p = header;
   for (const c of chunks) { out.set(c, p); p += c.length; }
   return out;
+}
+
+function sameBytes(a: Uint8Array, b: Uint8Array): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+  return true;
 }
 
 function keyOf(bytes: Uint8Array): string {

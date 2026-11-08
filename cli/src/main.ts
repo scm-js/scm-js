@@ -43,6 +43,7 @@ import { FORMATS, githubAnnotations, githubTestAnnotations, junitTestXml, junitX
 import { defaultOut, defaultTests, readMapForTests, readTests, recordLines, recordTest, runTests, testHeader, testJson, testSummary, updateTests, type PlannedScenario } from "./maptest";
 import { printRun, runOnMap } from "./run";
 import { previewMap, PNG_SCALES } from "./preview";
+import { heatmapMap, type HeatmapOptions as HeatmapFlags } from "./heatmap";
 import { printGenerated, runGenerate, type GenerateFlags } from "./generatecmd";
 import { GEN_PLAYERS, GEN_STYLES, GEN_SYMMETRIES } from "./generate";
 import { accountReport, login, logout, PROVIDERS, printAccount, serverLabel } from "./account";
@@ -799,6 +800,36 @@ character is two pixels, in 24-bit colour where the terminal says it has it, els
     const { report, lines } = await previewMap(input, doc, o);
     if (o.json) print(JSON.stringify(report, null, 2));
     else say(piped, ...lines);
+  });
+
+map.command("heatmap").description("where units died, buildings went up or armies walked in many replays, as heat over the map").argument("<map>").argument("<replays...>", "replays (.rep), or folders of them").addOption(json)
+  .option("--what <kind>", "deaths, kills, buildings or paths (where armies walked)", "deaths")
+  .option("--player <n|name>", "one player's: their number (1-8) or their name as the replays have it; for kills, the killer")
+  .option("--until <m:ss>", "only what happened by this time in each game")
+  .option("--out <picture.png>", "write a PNG instead; - for standard output")
+  .option("--side-by-side", "the map as map preview draws it beside the heat")
+  .option("--scale <n>", `pixels a tile: ${PNG_SCALES.join(", ")} in a PNG (4 by default)`)
+  .option("--width <columns>", "the terminal picture's width in characters")
+  .option("--blocks", "colour blocks, even in kitty or iTerm2")
+  .option("--force", "take replays played on another map too")
+  .option("--parallel <n>", "replays played at once (half the processors, at most 4, by default)")
+  .option("--starcraft <folder>", "your installation of StarCraft (SCMJS_STARCRAFT); found in the usual places otherwise")
+  .addOption(new Option("--engine <where>", "the play page's address, or a folder holding the engine (SCMJS_PLAY_URL)").hideHelp())
+  .addHelpText("after", `
+Each replay is played to its end in the game, as scmjs replay watch plays it, and every unit's death (where it
+died, and who killed it), every building placed and where the armies walked are noted. Only replays played on this
+map count: the same map, or one with the same name and size; the others are listed as left out. What a replay gave
+is kept in scmjs's cache, so a second run with more replays plays only the new ones. Needs your copy of StarCraft.
+  scmjs map heatmap "Fighting Spirit.scx" replays/
+  scmjs map heatmap fs.scx replays/*.rep --what kills --player 1 --until 10:00 --out kills.png`)
+  .action(async (file: string, replays: string[], o: HeatmapFlags) => {
+    const piped = o.out === STDIO;
+    if (piped && o.json) throw new CliError("--json and the picture both want standard output", "Write the PNG to a file with --out, or leave --json off.", 2);
+    const { input, doc } = await openForEdit(file);
+    const live = (line: string) => (o.json || piped ? process.stderr.write(line + "\n") : print(line));
+    const { report, lines } = await heatmapMap(input, doc, replays, o, { live });
+    if (o.json) print(JSON.stringify(report, null, 2));
+    else say(piped, "", ...lines);
   });
 
 map.command("play").description("a lobby on the play page with this map, and its invite link to send around").argument("<map>").addOption(json)

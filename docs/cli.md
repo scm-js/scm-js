@@ -931,22 +931,22 @@ d38a14e  2026-11-03 09:05  Jeany  Waves, and four marines to win
 ```
 
 Each commit is compared with the version before it. A trigger that was replaced in the
-same place counts as changed, and one that only moved in the list is not counted at all;
-when that is all a commit did, it says the triggers were reordered. A unit in a new place
-with nothing else different has moved. A string that is a name (the map's, a location's or
-a force's) is counted as a change to that name, not as a string as well. A commit that
-saved the file again without changing the map says so. For the details of one commit,
-`git show <commit>` shows its changes as text once the map's text form is set up ([Reading
-maps in git diff](#reading-maps-in-git-diff)).
+same place counts as changed. One that only moved in the list is not counted at all, and
+when that is all a commit did, the entry says the triggers were reordered. A unit in a new
+place with nothing else different has moved. A string that is a name (the map's, a
+location's or a force's) is counted as a change to that name, not as a string as well. A
+commit that saved the file again without changing the map says so. For the details of one
+commit, `git show <commit>` shows its changes as text, once the map's text form is set up
+as [Reading maps in git diff](#reading-maps-in-git-diff) describes.
 
 `-n 5` shows the newest five commits. `--rev` takes what `map diff --rev` takes, and a
-range too: `--rev main..HEAD` lists what this branch did to the map. A merge is compared
-with its first parent, so it shows what the merge brought in. `--json` gives each commit's
-hash, parents, author, date, subject and the list of changes.
+range as well. `--rev main..HEAD` lists what this branch did to the map. A merge is
+compared with its first parent, so the entry shows what the merge brought in. `--json`
+gives each commit's hash, parents, author, date, subject and the list of changes.
 
 ### Who last changed what
 
-`scmjs map blame` is `git blame` for a map: instead of a line of text, each row is a
+`scmjs map blame` is `git blame` for a map. Instead of a line of text, each row is a
 trigger, a location, a string, a group of units or a setting, with the commit, author and
 date that last changed it. With no option it shows the triggers, or the settings when the
 map has no triggers:
@@ -963,11 +963,11 @@ d38a14e1 (Jeany 2026-11-03 6) Player 2: Elapsed Time(At least, 120) → Display 
 ```
 
 `--locations`, `--strings`, `--units` and `--settings` show the other kinds, and can be
-given together. Units are a row for each kind of unit and owner, changed when one of them
-was added, removed, moved or edited. Settings are the name, description, size, tileset and
-version, each player and force, the terrain, doodads and sprites, the unit, upgrade and
-tech settings and availability, the switch names, the sound list and each file in the
-archive.
+given together. Units get one row for each kind of unit and owner, and the row counts as
+changed when one of them was added, removed, moved or edited. Settings are the name,
+description, size, tileset and version, each player and force, the terrain, doodads and
+sprites, the unit, upgrade and tech settings and availability, the switch names, the sound
+list and each file in the archive.
 
 ```
 $ scmjs map blame maps/ridge.scx --locations
@@ -978,14 +978,15 @@ dbf21a0c (Mina  2026-11-06 Ridge top) #2  896,896–1152,1152
 68033b5d (Mina  2026-11-04 Anywhere ) #63  0,0–3072,3072
 ```
 
-Things are matched between versions the way `map diff` matches them: triggers and units by
-what they are, so moving a trigger up the list does not change it; locations and strings
-by their number; settings by name. A trigger's text is a string, so editing what a trigger
-says changes the string, not the trigger; `--strings` shows who did that.
+Things are matched between versions the way `map diff` matches them. Triggers and units
+are matched by what they are, so moving a trigger up the list does not change it.
+Locations and strings are matched by their number, and settings by name. A trigger's text
+is a string, so editing what a trigger says changes the string, not the trigger, and
+`--strings` shows who did that.
 
-`--trigger 4` shows one trigger with its whole text and the commit's subject;
-`--location "Ridge top"` (a name or a number) and `--string 16` do the same for a location
-and a string.
+`--trigger 4` shows one trigger with its whole text and the commit's subject.
+`--location "Ridge top"`, by name or by number, and `--string 16` do the same for a
+location and a string.
 
 Without `--rev` the map is read as it is on disk. What differs from the last commit is
 marked as `git blame` marks it, with a hash of zeros:
@@ -997,14 +998,14 @@ $ scmjs map blame maps/ridge.scx --strings
 ```
 
 `--rev HEAD~3` blames the map as that revision has it. `--rev v1.0..HEAD` looks only at
-the commits since `v1.0`: anything older is put on the commit at the start of the range,
+the commits since `v1.0`. Anything older is put on the commit at the start of the range,
 with a `^` before its hash, as `git blame` does. Changes made on a branch and merged are
 put on the branch's commit, not on the merge. `--json` gives every row with its commit.
 
 Both commands work from any folder of the repository, read every version of the map from
 git once, and stop with a message when the file is not in a repository or has not been
-committed. Neither follows a map that was renamed: its history starts at the commit that
-gave it its present name.
+committed. Neither follows a map that was renamed, so the history starts at the commit
+that gave the map its present name.
 
 ### Merging two versions of a map
 

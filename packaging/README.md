@@ -40,27 +40,52 @@ writes `packaging/out/v0.12.0/` (ignored by git), laid out as the three reposito
 `homebrew/Formula/scmjs.rb`. `--sums cli/dist/bin/SHA256SUMS --partial` fills them from a
 local build instead, with zeros for the archives not built here, to try a recipe.
 
+## Each release
+
+Scoop and Homebrew follow a release by themselves; winget is still by hand.
+
+- **Scoop.** `scm-js/scoop-bucket`'s `excavator.yml` runs every 4 hours. Scoop's `checkver`
+  reads the newest scm-js release (the nightly is a pre-release and is skipped), and
+  `autoupdate` rewrites `bucket/scmjs.json` with its URL and the hash from its `SHA256SUMS`.
+  The commit is pushed to main.
+- **Homebrew.** `scm-js/homebrew-tap`'s `update.yml` runs every 4 hours. When the newest
+  release is newer than the formula, it fills `Formula/scmjs.rb` from
+  `packaging/homebrew/scmjs.rb` at that release's tag, with `scripts/release-recipes.mjs`,
+  installs it from the tap, runs `brew test`, and pushes it to main.
+- **winget.** Each version is a pull request to `microsoft/winget-pkgs`:
+  `wingetcreate update scm-js.scmjs --version <v> --urls https://github.com/scm-js/scm-js/releases/download/v<v>/scmjs-cli-windows-x64.zip --submit`.
+
+A release whose archives are not uploaded yet is left for the next run. Either workflow can
+be run by hand from its repository's Actions tab: it updates nothing that is already
+current, and checks with a dry-run push that it can still push.
+
+Both repositories' main needs pull requests (a ruleset, as on scm-js's other repositories),
+which a workflow's own token cannot get past. So each workflow pushes over SSH with a deploy
+key that has write access to that repository alone, kept as its `CI_BUILD_KEY` secret, and
+the workflow's token only reads. Scoop's ready-made Excavator action
+(`ScoopInstaller/GithubActions`) always pushes with the workflow's token, so the bucket runs
+`checkver` with steps of its own instead. To replace a key, make a new one, add it as a
+deploy key with write access, set `CI_BUILD_KEY` to its private half, and remove the old
+deploy key.
+
 ## The first time
 
-- **Scoop.** Make the repository `scm-js/scoop-bucket` from Scoop's bucket template
-  (github.com/ScoopInstaller/BucketTemplate) and commit the filled `bucket/scmjs.json`. The
-  template's Excavator workflow runs `checkver` and `autoupdate` on a schedule: it reads the
-  newest release, rewrites the URL and takes the hash from that release's `SHA256SUMS`, so
-  later releases need nothing by hand. Try it with `scoop install <path to scmjs.json>`.
+How the three were first published, for a new package manager or a repository made again:
+
+- **Scoop.** Make the repository from Scoop's bucket template
+  (github.com/ScoopInstaller/BucketTemplate) and commit the filled `bucket/scmjs.json`. Try
+  it with `scoop install <path to scmjs.json>`.
 - **winget.** Submit the three filled files as a pull request to `microsoft/winget-pkgs`:
   `wingetcreate submit packaging/out/v<version>/winget/manifests/s/scm-js/scmjs/<version>`
   (or `komac`). `winget validate --manifest <that folder>` checks them first, and
   `winget install --manifest <that folder>` installs from them (it needs
   `winget settings --enable LocalManifestFiles` once, as administrator). The review scans
-  the zip; an unsigned program is accepted. Later versions:
-  `wingetcreate update scm-js.scmjs --version <v> --urls https://github.com/scm-js/scm-js/releases/download/v<v>/scmjs-cli-windows-x64.zip --submit`,
-  which can run from a workflow with a token of its own.
-- **Homebrew.** Make the repository `scm-js/homebrew-tap` and commit the filled
-  `Formula/scmjs.rb`. Check it with `brew install --formula ./Formula/scmjs.rb`,
-  `brew test scmjs` and `brew audit --new scmjs`. Later versions:
-  `brew bump-formula-pr --version <v> scm-js/tap/scmjs` updates the version and every
-  `sha256` (or run `release-recipes.mjs` and commit its file). No bottle is needed: the
-  formula installs the release's program as it is.
+  the zip; an unsigned program is accepted. The first version is
+  microsoft/winget-pkgs#475062.
+- **Homebrew.** Make the repository and commit the filled `Formula/scmjs.rb`. Check it with
+  `brew install --formula ./Formula/scmjs.rb`, `brew test scmjs` and
+  `brew audit --new scmjs`. No bottle is needed: the formula installs the release's program
+  as it is.
 
 ## Signing
 

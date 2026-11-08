@@ -1977,8 +1977,13 @@ passed on Windows 11 through WSL), Homebrew formula (on_macos arm/intel, on_linu
 
 **Leftovers**: signing (Authenticode, Developer ID + notarization) — the hook is after the injection; Linux arm64
 and Windows arm64 executables (SEA needs a runner of each; GitHub has `ubuntu-24.04-arm` and `windows-11-arm`);
-`useSnapshot` (startup) not tried; the Scoop bucket and Homebrew tap repositories do not exist yet, and the docs
-already give their commands.
+`useSnapshot` (startup) not tried; winget updates by hand (`wingetcreate update … --submit`; automating it needs a
+token secret in scm-js). **Published (2026-11-08):** `scm-js/scoop-bucket` and `scm-js/homebrew-tap` exist and follow
+each release by themselves (bucket `excavator.yml`, tap `update.yml`, every 4 h); winget's first version is
+microsoft/winget-pkgs#475062. Both repos' main needs PRs, so their workflows push over SSH with a per-repo deploy
+key (`CI_BUILD_KEY`), the workflow token read-only. Trap: ScoopInstaller/GithubActions' Excavator sets the push URL to
+HTTPS with the workflow token (`src/Helpers.psm1`), so it cannot push past the PR rule — the bucket runs Scoop's
+`checkver -Update` in its own steps instead. `packaging/README.md` "Each release" has it all.
 ## Many games and old maps: `map coverage`, `map check --baseline` (`coverage.ts`, `baseline.ts`) — 2026-11-07
 
 `scmjs map coverage <map> [replays…] [--tests] [--strict] [--format text|json|github|junit|sarif] [--all] [--force]

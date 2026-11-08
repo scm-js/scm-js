@@ -7,7 +7,8 @@ import { loadModData } from "../../../src/formats/mod/data";
 import { gameName } from "../../../src/formats/mod/sources";
 import { datTableOf, type DatTableName } from "../../../src/formats/dat/schema";
 import type { GameFiles } from "../gamefiles";
-import { dot, mark, pc, plural } from "../ui";
+import { t } from "../i18n";
+import { dot, mark, pc } from "../ui";
 import { reader, type ModSource } from "./source";
 
 export interface ModCheckReport {
@@ -27,8 +28,8 @@ export interface ModCheckReport {
 export function modTables(source: ModSource): Partial<Record<DatTableName, string>> {
   const out: Partial<Record<DatTableName, string>> = {};
   for (const f of source.files.values()) {
-    const t = /^arr\\[^\\]+\.dat(?:ex)?$/.test(gameName(f.name)) ? datTableOf(f.name) : null;
-    if (t && (!out[t] || /\.datex$/i.test(f.name))) out[t] = f.name;
+    const table = /^arr\\[^\\]+\.dat(?:ex)?$/.test(gameName(f.name)) ? datTableOf(f.name) : null;
+    if (table && (!out[table] || /\.datex$/i.test(f.name))) out[table] = f.name;
   }
   return out;
 }
@@ -59,27 +60,27 @@ export async function checkModSource(source: ModSource, base: GameFiles | null):
   for (const f of source.files.values()) if (/\.graft$/i.test(f.name)) grafts.push({ member: f.name, bytes: await f.read() });
   const inBase = await baseHas(base);
   const findings = await checkMod(data, { inMod: (n) => source.files.has(gameName(n)), inBase, grafts });
-  for (const d of source.duplicates) findings.push({ level: "warning", rule: "duplicate-file", where: d, why: "one game path, two files in another case: the game reads one of them" });
+  for (const d of source.duplicates) findings.push({ level: "warning", rule: "duplicate-file", where: d, why: t("one game path, two files in another case: the game reads one of them") });
   const notes = [...data.problems];
-  if (!base) notes.push("No copy of StarCraft was found, so the game's own files were not looked in: only what the mod adds is checked against them (name one with --starcraft).");
-  else if (!(await base.read("unit\\terran\\marine.grp"))) notes.push(`${base.label} has no 1.16.1 GRPs or WAVs: pictures and sounds the mod does not have were not looked for.`);
+  if (!base) notes.push(t("No copy of StarCraft was found, so the game's own files were not looked in: only what the mod adds is checked against them (name one with --starcraft)."));
+  else if (!(await base.read("unit\\terran\\marine.grp"))) notes.push(t("{copy} has no 1.16.1 GRPs or WAVs: pictures and sounds the mod does not have were not looked for.", { copy: base.label }));
   const errors = findings.filter((f) => f.level === "error").length;
   return { path: source.path, name: source.name, game: base?.label ?? null, findings, errors, warnings: findings.length - errors, notes, failed: errors > 0 };
 }
 
 /** One line for the whole check: "✔ nothing found", "✖ 2 errors, 1 warning". */
 export function checkLine(r: ModCheckReport): string {
-  if (!r.findings.length) return `${mark.ok} nothing found`;
-  const parts = [r.errors ? pc.red(plural(r.errors, "error")) : "", r.warnings ? pc.yellow(plural(r.warnings, "warning")) : ""].filter(Boolean);
+  if (!r.findings.length) return `${mark.ok} ${t("nothing found")}`;
+  const parts = [r.errors ? pc.red(t("{n, plural, one {# error} other {# errors}}", { n: r.errors })) : "", r.warnings ? pc.yellow(t("{n, plural, one {# warning} other {# warnings}}", { n: r.warnings })) : ""].filter(Boolean);
   return `${r.errors ? mark.error : mark.warn} ${parts.join(", ")}`;
 }
 
 export function printModCheck(r: ModCheckReport, { all = false } = {}): string[] {
-  const lines = [`${pc.bold(r.name)}${dot}${checkLine(r)}${r.game ? pc.dim(` (over ${r.game})`) : ""}`];
+  const lines = [`${pc.bold(r.name)}${dot}${checkLine(r)}${r.game ? pc.dim(` ${t("(over {copy})", { copy: r.game })}`) : ""}`];
   const sorted = [...r.findings].sort((a, b) => (a.level === b.level ? 0 : a.level === "error" ? -1 : 1));
   const shown = all ? sorted : sorted.slice(0, 40);
   for (const f of shown) lines.push(`  ${f.level === "error" ? mark.error : mark.warn} ${f.where}${pc.dim(":")} ${f.why}`);
-  if (shown.length < sorted.length) lines.push(pc.dim(`  … and ${plural(sorted.length - shown.length, "more finding")} (--all lists them)`));
+  if (shown.length < sorted.length) lines.push(pc.dim(`  ${t("… and {n, plural, one {# more finding} other {# more findings}} (--all lists them)", { n: sorted.length - shown.length })}`));
   for (const n of r.notes) lines.push(pc.dim(`  ${n}`));
   return lines;
 }

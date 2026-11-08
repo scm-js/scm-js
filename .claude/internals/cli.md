@@ -1,6 +1,6 @@
 # The `scmjs` command line
 
-`cli/` is the npm package **`@scm-js/cli`** (its command is `scmjs`): `scmjs about | doctor | info | mcp | lsp | map info|check|open|new|generate|dump|find|fetch|set|resize|triggers|strings|sounds|diff|log|blame|merge|build|run|unpack|pack|trace|cost|rush|balance|test [record]|preview|heatmap|coverage|optimize |
+`cli/` is the npm package **`@scm-js/cli`** (its command is `scmjs`): `scmjs about | doctor | info | mcp | lsp | map info|check|open|new|generate|dump|find|fetch|set|resize|triggers|strings|sounds|diff|log|blame|merge|build|run|unpack|pack|trace|cost|rush|balance|test [record]|preview|heatmap|coverage|optimize|analyze |
 replay info|map|open|watch|export|share | mod info|unpack|pack|check|diff|new|build|play|test | plugin new|check|dev | bot new|init|build|update|run|ladder`, or `npx @scm-js/cli …`. npm refused the plain name `scmjs` on the first publish (2026-11-06,
 E403 "too similar to scss, sockjs"), so the user chose the scope beside @scm-js/replay and @scm-js/plugin-api. The reader's page is `docs/cli.md`. The shape was the user's (2026-11-05): one command, a noun for
 each kind of thing (`map`, `replay`, `plugin`, `bot`), "an impressive UX tool … not overly engineered".
@@ -18,8 +18,8 @@ command's output changes, with `--play-url` at a staged scm-sim deploy when the 
 - **The editor's code, not a copy.** Maps are read with `openMapFile` (`services/mapIo.ts`): built maps restored,
   members read, warnings — what the editor would show. Statistics are `mapStatistics` with no tileset/dat (so no
   terrain table, no building counts); the check is `validateScenario(scn, { extras })`, so the rules that need the
-  tileset or units.dat (units on unwalkable ground, …) do not run. Strings go through `t()`, which is English in
-  Node. Replays are read by **`@scm-js/replay`** (github.com/scm-js/replay, ~/github/replay), extracted 2026-11-05
+  tileset or units.dat (units on unwalkable ground, …) do not run. Strings go through `t()`, in the language the
+  command chose (English or Korean; "The command line in Korean" below). Replays are read by **`@scm-js/replay`** (github.com/scm-js/replay, ~/github/replay), extracted 2026-11-05
   from Aftermath's `replay.ts` at the user's "extract replay" so the CLI and Aftermath share one reader (there had
   been three copies: Aftermath, a CLI copy, and scm-sim's own `src/replay/`, which feeds the exact engine and was
   left alone). It is a devDependency here, bundled into the CLI; the editor app does not import it. APM in
@@ -188,7 +188,8 @@ native/ — see scm-sim's docs/own-bots.md. Added 2026-11-06 with "Made by Jeany
 - **Bundle trap**: the first build with the host in it was 6.2 MB (from 3.1): `host.ts` imports `builtin.ts`, whose
   `import.meta.glob` of every vendored plugin's `plugin.ts` is inlined whole by `codeSplitting: false` — TrigScript's
   workspace, Aftermath, the AI assistant, React. `build-cli.mjs`'s `scmjs-cli-leave-out` plugin resolves
-  `src/plugins/builtin.ts` to empty tables and `ko.json` to `{}` (as `build-core.mjs` does): 3.66 MB, i.e. the host
+  `src/plugins/builtin.ts` to empty tables and `ko.json` to `{}` (as `build-core.mjs` does; since the Korean slice the
+  catalogue is cut to what the bundle's modules ask for instead): 3.66 MB, i.e. the host
   and atoms cost ~0.5 MB. React (~50 KB) is still in: `host.ts` and `services/gameData.ts` import helpers from
   `hooks/useDoodadTools|useSpriteTools|useMapFileActions`, which import React and jotai's hooks, so aliasing `jotai`
   to `jotai/vanilla` breaks the build (tried) — moving those helpers out of the hook files would take it out. `tests/cli-run.test.ts` (5 tests): sources, a JS plugin folder (events, diff, written, reopen), `--command` +
@@ -1789,8 +1790,8 @@ overview row. Docs: `docs/cli.md` "A map's history", "Who last changed what".
   file has, documented); briefing triggers have no blame kind; no MCP tool; trigger text edits blame the string, not
   the trigger (map diff's matching — documented); `map log` has no per-commit `--stat` of the full diff (`git show`
   with textconv does that); `map log --rev A...B` passes through to git, `map blame` refuses `...`.
-- **CLI strings are literals, not `t()`**: the i18n extractor reads `src/` only and no CLI module uses `t()` for its
-  own words (plugin.ts's are the starter's text); followed that.
+- **CLI strings** were literals at the time (the extractor read `src/` only); since the Korean slice (2026-11-08)
+  every printed word goes through `cli/src/i18n.ts`'s `t()` — see "The command line in Korean" at the end.
 
 ## A map as a folder of text: `map unpack --text` / `pack` (`cli/src/source.ts`, `archive.ts`) — 2026-11-07
 
@@ -2189,6 +2190,228 @@ templates, docs/cli.md, docs/installing.md). The file inside each archive is sti
 tag with no release page (its editor, docs, npm packages and image did publish); 0.12.1 is that release, and
 `docs/releases/0.12.0.md` became `0.12.1.md`.
 
+## The command line in Korean (`cli/src/i18n.ts`, `commanderText.ts`, `ko.json`) — 2026-11-08
+
+The user's slice: the editor is in Korean, StarCraft's biggest mapping community reads Korean, so `scmjs` speaks it
+too. Branch `cli-korean`. Reverses the first slice's "CLI strings are literals".
+
+- **Choosing the language** (`chooseLocale(args, env, system)`): `--lang ko|en` / `--lang=ko` anywhere before `--`,
+  else `SCMJS_LANG`, else the first set of `LC_ALL`, `LC_MESSAGES`, `LANG` (Korean when it starts with `ko`; `C` is
+  English — a set POSIX locale decides, the system is not asked), else `Intl.DateTimeFormat().resolvedOptions().locale`
+  (Windows, which has no `LANG`), else English. Read from `process.argv` rather than commander because the help's
+  descriptions are made when the program is built: **main.ts's commands are inside `buildProgram()`** (the whole
+  1,400-line body indented once — template literals left alone, their text is output), and the module does
+  `if (!VITEST) setLocale(chooseLocale(argv)); export const program = buildProgram();` — tests get English unless
+  they `setLocale("ko")` and build their own. `--lang` is also a real option (`.choices(["en","ko"])`) so commander
+  takes it anywhere and refuses `--lang fr`. No `t()` at module scope still holds: every module is evaluated before
+  main's body sets the language.
+- **The catalogue is separate**: `cli/src/ko.json` (1,848 messages, 231 KB on disk), kept by `npm run i18n` as a
+  second tree (`scripts/i18n.mjs` `TREES`; `tests/i18n.test.ts` checks both). Why not the editor's: the app's ko.json
+  would have grown by its whole size again for strings the app never shows, and the CLI bundle would have carried the
+  editor's UI. `cli/src/i18n.ts` exports `t`/`msg`/`translate` (its catalogue, then the editor's `translate`, so a
+  finding's `where`, tileset and game names come out translated), `inEnglish`, `locale`/`setLocale`; it is the one CLI
+  module allowed to import `src/i18n` (`tests/core.test.ts` `I18N_EXCEPTION`), since core does not export the
+  translator (its own build empties the catalogue).
+- **Bundle**: the leave-out plugin no longer empties the editor's catalogue; it loads a placeholder and `renderChunk`
+  replaces it with the entries the chunk's modules ask for (`editorCatalogueFor(chunk.moduleIds)`: `messagesIn` over
+  each `src/**.ts` module in the bundle) — 1,154 of 3,195 entries, ~93 KB (the plugin host and atoms pull UI modules
+  in, hence not smaller). `cli/dist/scmjs.mjs`: 5,713,798 → 6,089,246 bytes (+375 KB, +6.6%).
+- **Check Map's findings** come from `validateScenario`, already `t()` — they follow the language for free once it is
+  set. **Baselines are matched in English**: `findingId` parses English ("Trigger 2:", counts), and the file is shared
+  between computers, so `map check` with a baseline in another language validates a second time `inEnglish`, matches
+  those, and shows the same-index findings in the reader's language; written entries are English. `fixedFindings`
+  print as the file has them (English). Test: a baseline written in Korean holds with `--strict` in both languages.
+- **The line drawn**: translated — help, descriptions, printed reports, `CliError`s and hints, human sentences inside
+  `--json` (a finding's text, a hint, optimize's step labels). English — `--json` keys and naming values (levels,
+  kinds, version and tileset labels in JSON, game types), every file a command writes (dump, baseline, tests files,
+  init's README/workflow/.gitattributes and `--print`, plugin starter, ladder.json's entrant labels), map text, the
+  trigger text form and the dump/unpack formats (so `git diff` reads the same everywhere), text sent to servers, the
+  CI formats' rule ids and level words (their messages follow the language), the trigger vocabulary inside messages
+  (condition names, "always"/"nothing", player names in tests files), debug lines, internal `Error`s. **`scmjs mcp` and
+  `scmjs lsp` call `setLocale("en")`** in their actions: the MCP tools are read by a model; the LSP carries the
+  TrigScript compiler's English diagnostics (their help text in `--help` is translated).
+- **commander's own words** (`commanderText.ts`): titles through `styleTitle` → `translate` (`msg()`'d "Usage:",
+  "Options:", "Arguments:", "Commands:", "Global Options:"), `(default: …)`/choices/preset/env through
+  `optionDescription`/`argumentDescription` overrides, errors through `outputError` matched by regex (unknown
+  option/command, missing argument, option needs a value, too many arguments, invalid choice, conflicting options,
+  the "Did you mean" line). Not changeable: the usage line's `[options]` / `[command]` (syntax, left), and any
+  commander message the regexes do not know (stays English).
+- **Width**: `ui.ts` has `charWidth` over a sorted range table of East_Asian_Width W/F (Hangul, CJK, kana, full-width,
+  emoji blocks) and zero-width marks (combining, ZWJ, variation selectors, conjoining jamo), binary-searched;
+  `columns`, `padColumns`. `rows()` now pads by columns (it was `.length`), banner's fit and title alignment too, and
+  commander's `displayWidth` is `columns` so its padding and wrapping count Hangul as two. Root help: 23 lines in
+  both languages (`tests/cli.test.ts`), ≤ 80 columns by `columns()`. Multi-line Korean help texts were broken by hand
+  at ≤ 80 columns.
+- **How it was done**: six parallel agents over disjoint files (main.ts split at `map test`, edits through a locked
+  string-replace script), each writing a Korean fragment checked for missing keys, placeholder mismatches and lines
+  past 80 columns; merged with ~40 conflicting translations of shared keys settled by hand. Shadowing locals named
+  `t` were renamed across a dozen files. `files.ts` gained `MapReadError` (`.reason`), so `fetch` and `map log` no
+  longer strip an English prefix.
+- **Tests**: `tests/cli-i18n.test.ts` (13): the choice of language, widths and alignment, commander's words, Korean
+  help, `info` with the map's own text untouched, `--json` key paths equal in both languages (`info`, `map check`),
+  findings in Korean with SARIF rule ids English, a dump identical in both, the baseline across languages,
+  `SCMJS_LANG`, `--lang fr` refused. `tests/cli.test.ts`: the Korean overview within 23 lines.
+- **Leftovers**: the Korean is Claude's, not a native speaker's — review via `npm run i18n -- --export ko` (the CSV
+  holds both trees); docs/cli.md is not in Korean (the docs site's Korean pages are a separate effort); a few English
+  fragments remain inside Korean sentences by decision (trigger vocabulary, condition names, web-page button labels
+  such as "Invite Players", "My Maps"); `heatmap`'s "no such file" detection still keys on files.ts's English "No
+  file " prefix (shows the full Korean message instead); the editor catalogue subset could shrink further if the
+  plugin host stopped pulling UI modules in; `--lang` is not in the shell completion's value list.
+## The GitHub Action, `map test --clips`, plain-ground pictures (`action/`, `cli/src/clips.ts`) — 2026-11-08, branch `cli-action`
+
+One PR (#186) of three parts: the action, clips of failed tests, and the release job's asset-name guard
+(`desktop-releases.md`, end).
+
+**The action** (`action/action.yml` + `action/scripts/{find,install,run,report}.sh` + `action/README.md`, its page):
+`uses: scm-js/scm-js/action@v<release>` — GitHub runs an action from a subfolder, so no repository of its own; the
+README says how to move it to one (copy the folder, nothing names it). A **composite action of bash scripts**, not a
+JavaScript action: nothing to build or vendor (`dist/` with ncc), the logic is the CLI's, and `scmjs` itself is the
+dependency. Steps: `find.sh` (version: `latest` → `gh api …/releases/latest`, falling back to where github.com's
+`/releases/latest` redirects; the asset `scmjs-cli-<os>-<arch>` from `RUNNER_OS`/`RUNNER_ARCH`; the folder
+`$RUNNER_TOOL_CACHE/scmjs-cli/<v>/<os>-<arch>`) → `actions/cache` keyed `scmjs-cli-<v>-<asset>` → `install.sh`
+(download + `SHA256SUMS` line by awk, `sha256sum` or `shasum -a 256`, tar/unzip, `GITHUB_PATH`; `install: npm` writes
+a two-line `scmjs` wrapper around `npx -y -p @scm-js/cli@<v> [-p typescript@6]`; `none` checks PATH) → `run.sh` →
+upload-artifact (pictures) → upload-sarif → `report.sh`. Third-party actions are pinned by commit with the version in a
+comment (`tests/action.test.ts` holds that; build.yml itself uses `@v4` tags — the brief assumed otherwise).
+- **run.sh never fails**; it writes `$RUNNER_TEMP/scmjs-action/{body.md,status,changed}` and `report.sh` exits with
+  the status *after* the summary and the comment, so a failing check still gets its map's changes shown. `export
+  NO_COLOR=1` for the whole script: picocolors turns colour on under `GITHUB_ACTIONS`, and the first CI comment was
+  full of escape codes. **Bash 3.2-safe** (a Mac's): no mapfile/globstar/assoc arrays.
+- **Maps** = `git ls-files -co --exclude-standard -z -- ':(glob)<line>'…` (one glob a line — a line split on spaces
+  would break `my maps/*.scx`; default `:(icase)*.scx` etc.), filtered to map extensions and files that exist. git
+  rather than bash globs: `**` without bash 4, and ignored folders (node_modules) skipped for free.
+- **Check** three or four times (text in a group for the log, `--format github` for annotations whose exit code is the
+  verdict, `--json` for counts, `--format sarif`): each is ~0.2 s. `problems` = errors + warnings of the new findings +
+  `baseline.suppressed`; `new_problems` = the new ones. Baseline: the input, else `.scmjs-baseline.json` if present.
+- **Build**: which maps keep a script is **`map info --json`'s new `script` field** (`hasScript(doc.extras)`, null when
+  the build cannot tell; measured no cost on `map info`). An older scmjs lacks the field → a warning, nothing built.
+  TypeScript: the repository's `node_modules/typescript`, else `npm install --prefix $work/typescript typescript@6` and
+  the build run *from that folder* with the map's absolute path (`findTypeScript` looks from the cwd; a `-g` install
+  failed for permissions locally and is not needed). `TYPESCRIPT` in init.ts is held to the scripts by the test.
+- **Diff**: base = input, else `pull_request.base.sha`, else `github.event.before` (all zeros = none). Fetched with
+  `--depth=1` when the checkout lacks it. Changed maps = `git diff --name-only --no-renames -z <base>` (base vs the
+  *working tree*, so a step that edits a map before the action counts — the test relies on it) ∩ the maps; a deleted
+  path counts when the globs (bash `[[ == ]]`) would have taken it; new = not in the base tree. Per map: the text
+  (`map diff --rev`, exit 0 = "the same map (only the file's bytes differ)"), a jq summary of `--json` (header fields
+  by name, then `units +a −r ~c` per part, "sections only"), and with pictures `--picture --out
+  $work/pictures/<path>.png` (one artifact keeps the folders). The comment: marker `<!-- scmjs-action:maps -->` on line
+  one, found with `gh api …/issues/<n>/comments --paginate`, PATCHed or POSTed with `-F body=@file`; posted only when a
+  map changed or one exists to edit; details cut at 80 lines a map and ~45 KB in all (GitHub's limit is 65,536). A
+  fork's read-only token → a warning, not a failure. Artifact name `map-pictures-<job>` (`overwrite: true`; two uses
+  in one job need `artifact:`), linked by `artifact-url` (GitHub asks for a sign-in).
+- **Plain ground** (`preview.ts#plainShade`, `GameGraphics.tileset: Tileset | null`): with no game copy found and none
+  named, `map diff --picture` draws each tile a grey by its tile group (id >> 4, hashed into 80–119, blue +10; id 0
+  black as the editor's null tile) instead of refusing; `copy: null` in the JSON, a dim line in the terminal, "drawn
+  without the game" under a PNG. A named `--starcraft` that is not a copy is still refused. Made for the runner, which
+  has no game — without it `pictures: true` could never work there. Real terrain reads as fine noise (each variant
+  group differs); the generated test maps are all tile 0, so black. Preview/heatmap/share still need the copy.
+- **`scmjs init`** writes a `maps.yml` that uses the action (`uses: scm-js/scm-js/action@v<VERSION>` + `version:
+  <VERSION>`, `maps:` one glob or a block, `strict: true`, `pictures: true`, `build: true` only when a map keeps a
+  script, else commented; `pull-requests: write`), replacing the npx steps. `mapGlobs(prefix, files, quote = true)`:
+  unquoted for the action. A single glob is JSON-quoted when it starts with `*` (a YAML alias otherwise). The map test
+  comment line is now `scmjs map test <map> --format github --clips` on a self-hosted runner.
+- **Tested for real** by `.github/workflows/action-test.yml` (PRs touching `action/**`, `tests/maps/**`, itself):
+  `source` builds the CLI from the branch (`npm ci`, `build:cli`, a `node cli/dist/scmjs.mjs` wrapper, `install:
+  none`), changes `tests/maps/melee.scx` (name + resize top-left) and packs a scripted copy of ums.scx, runs the action
+  with pictures, SARIF and build, asserts the outputs, the PNG and the comment, then runs it again and asserts one
+  comment; `release` (matrix binary/npm) installs the newest release, writes a baseline with it and runs with strict.
+  The first push failed on the manifest (`Empty: ` in a plain description is a YAML mapping) — the tests now read
+  action.yml and both workflows with js-yaml (in node_modules through the tools, not a dependency; skipped without).
+  `tests/action.test.ts`: inputs/outputs == README tables, pins, scripts exist and pass `bash -n`, init's `with:` keys
+  are inputs.
+
+**`map test --clips [folder] [--clips-format gif|webm]`** (`clips.ts`): after the verdict (the summary line now
+prints before the clips), for each failed scenario with a kept replay, `exportReplay` (DI'd for tests) with the new
+`ExportOptions.fromFrame/toFrame` (frames, not m:ss) = `clipWindow(end frame, replay length)`: 8 s (190 frames)
+before to 2 s (48) after, inside the game. Named `<tests file minus .json>.<slug>.<kind>` (`ums.tests.x.gif`, `-2` on a
+clash) in `<map>.clips/` (stdin: cwd). `--clips` named `--clips` rather than `--video`: one file a failure, and the kind
+is its own option. `--clips foo.json` is taken as a tests file (optional value). **Missing machinery**: no browser
+found → one `▲ No clips: …` line, nothing tried; the first `CliError` from export (play page too old, browser crash,
+no game files) → the same line and the rest untried — such causes repeat for every clip. The exit code stays the
+tests'. A replay-driven scenario gets "no clip … it plays bug.rep" (its game is that replay; export draws it).
+`--json` adds `clips` + `clipsMissing`; `TestCaseReport.clip` is named in github/junit/sarif as `clip: <path>`.
+`IGNORE_LINES` gained `*.clips/` (and this repository's .gitignore). `tests/cli-clips.test.ts` (5).
+- **Measured** (WSL, Remastered copy, Playwright's Chromium with `~/.cache/scmjs-headless-libs` on
+  `LD_LIBRARY_PATH`): ums.scx with the sample's second scenario broken on purpose (carrier `is: 0`) plus the real third
+  failure — 3 scenarios in 10.0 s, two GIFs 640×360, 100 pictures, 8.0 s each (the games ended at 0:40 and 0:25, so no
+  "after"), 228 KB and 254 KB, whole command 25 s; WebM the same window 124 KB / 386 KB. Without the libraries: `▲ No
+  clips: The browser stopped (exit code 127) … libnspr4.so` once, the tests' result unchanged.
+
+**Leftovers**: the README and docs show `@v0.13.0` (the first release with `action/`; check the number at release);
+the action is untested on macOS/Windows runners (Windows needs `unzip` in Git Bash, which the hosted image has);
+per-picture links (an artifact is one zip; `archive: false` uploads one file an artifact, and a composite cannot loop
+`uses:`); pictures inline in the comment would need hosting outside GitHub; `map coverage` stays out (needs the game);
+the clips for a replay-driven scenario could use its replay with the map's own scenario swapped in.
+## A melee map's layout: `map analyze` (`cli/src/analyze.ts`, `walk.ts`) — 2026-11-08
+
+`scmjs map analyze <map> [--json] [--picture out.png|-] [--scale n] [--all] [--starcraft dir]`, branch
+`cli-map-analyze`. Starts, mains, naturals, every pair's ground and air distance, the narrowest points, terrain shares
+and verdicts, **without the engine**: the tileset from the copy (`openGameFiles` → `readTileset`, `readUnitsDat`,
+`readSpeedTables`) and pure TypeScript after that. Whole command 0.4–0.8 s (the copy's kascade open ~0.2–0.5 s of it);
+the analysis itself 20–140 ms (Spring Thaw 256 × 128, 4 starts: 135 ms; Big Game Hunters, 8 starts: ~100 ms).
+
+- **Grid: minitiles (8 px), octile.** `walk.ts` = the Walkability plugin's pieces copied with attribution (EDT clearance
+  by Felzenszwalb–Huttenlocher, `passageWidth`, Dial's algorithm 5/7 with no corner cutting) plus `pathTo` (back down the
+  distances, straight steps first), `distancesWithin` (a bounded walk into a Map), `withoutSpecks`, `narrowestOn`.
+  Tile resolution was rejected: VF4 walkability is per minitile, and ramps/doodad feet are a few minitiles. **Unit
+  size**: a cell is walked when its clearance > 1 (`UNIT_RADIUS`, the plugin's Small default; generate.ts's 3 × 3
+  erosion is the Chebyshev version). Tried radius 0 / 1.5 / 2 against the game: 4.2% / 3.4% / 3.1% mean gap vs 3.6% at
+  1 — not worth departing from the plugin's default. **Blockers**: every unit or unit-sprite (THG2 without the
+  PureSprite bit) whose units.dat flags say building and not flyer, by its collision extents (+1), so resources,
+  neutral and player buildings, doors and traps; without units.dat only fields/geysers (bases.ts sizes). Start
+  locations do not block (no town hall is placed, unlike the rush's Nexus).
+- **Narrow = `passageWidth`** (the shortest of four wall-to-wall lines through the cell) along the shortest path,
+  ends (3 tiles) left out, on a wall grid where closed patches standing alone under 16 tiles in area are opened
+  (`ROCK_TILES`). The first version measured only terrain specks under one tile and named a 1.3-tile "choke" on Spring
+  Thaw between a cliff and a 27-cell rock, and a 1-tile one on Big Game Hunters between a base's field line and its
+  geyser; opening every standalone patch < 16 tiles (rocks, doodads, a lone geyser or a few fields) fixed both while a
+  cliff, a field line touching it, or a building still counts. The widest-route bottleneck (the plugin's maximin) was
+  not used: the brief asked for the narrowest point on the shortest walk.
+- **Bases**: resources within `BASE_LINK` 12 tiles are one base when the walk between them (radius-0 open grid,
+  `distancesWithin` from each one's nearest open cell) is ≤ straight + 6 tiles; fields < 100 minerals are walls;
+  a base needs a geyser or ≥ 3 fields. The first rule (fields 6 tiles, geysers to the nearest field ≤ 10) split
+  Spring Thaw's bases whose hall stands between two field groups 12 tiles apart, and left a geyser 10.5 tiles off as
+  its own base. **Main** = every base whose middle is within 12 tiles (balance's `MAIN_RADIUS`) of its nearest start;
+  the numbers shown are `balance.ts#mainResources` (reused; its signature now takes `Pick<OpenedMap, "scenario">`).
+  "Only the nearest base is the main" gave Big Game Hunters (mains in two groups) a natural 5 tiles away. **Natural** =
+  the nearest non-main base by ground to its "hall spot" (the cell nearest the resources' middle with clearance ≥ 6
+  cells). Spring Thaw and Binary Burghs pick bases 50–90 tiles away: their mains have no base near on foot, so this is
+  the honest answer, not a bug.
+- **Way out** (JSON `wayOut`) = narrowest point on start → natural; a pair's narrowest within 4 tiles of one is labelled
+  `wayOutOf`. **Seconds** = px / `walkSpeed` × 0.042 for Zergling, Marine, Zealot (see units.md for `walkSpeed`; needs
+  units/flingy/sprites/images.dat + iscript.bin from the copy, else tiles only and the text says so).
+- **Verdicts** (`verdictsOf`, thresholds exported): pairs ≤ `FAIR_WITHIN` 8% (generate's tolerance); with ≥ 3 starts
+  the rank comparison (`rankSpread`: each start's sorted walks, rank by rank) decides, since a square of four has near
+  and far pairs by design; naturals ≥ 5 tiles from the median (two starts: the larger against the smaller, `apartFrom`
+  — a median of two flagged both); no gas where others have it; shared natural; way out ±1 tile; a pair's narrowest
+  < 2 tiles; raised (mid + high) ground ±15 points within 12 tiles ("high" alone was 0% on every generated map: Jungle's
+  High Dirt is the middle level).
+- **Cross-check with `map rush`** (Zergling, Remastered copy, engine 1248410ad2a0 from the cache; scratch script):
+  same start point (`testPoint`: 5 tiles toward the middle) to the target start, minus the rush's `off`: mean 3.6%
+  shorter than the game, max 13.1% (`map generate --seed 7 --players 2`, an open diagonal); per map Binary Burghs 3.2,
+  Spring Thaw 4.4, Big Game Hunters 2.9 (56 walks), Isolation 3.4, Crescent Moon 3.5, Ice Floes 6.8 (one walk; 1 → 2
+  "stopped" in the game), Zoo Keeper 2.6 (most of its walks stop or are apart in the game too), generated 4p 5.2,
+  generated 2p 10.8. **The command's own figure (centre to centre) against the game's walk: mean |diff| 2.5%, max 8.3%,
+  mean +1.6%** over the 103 walks — the start/end offsets roughly cancel. The gap is the game's region-to-region
+  pathing (longer than octile-optimal, most on open diagonals) and acceleration/turning; documented, not corrected.
+  Zergling seconds run about 0–8% under the rush's (14% on the open 2-player generated map). `map generate`'s own
+  `measureMap` numbers for (4)Crossing seed 2026 (141/93/123) are this command's exactly (same metric).
+- Core gained `tileGroupOf`, `decodeFlingyDat`, `decodeSpritesDat`, `decodeImagesDat`, `decodeIscript`, `walkSpeed`
+  (+ types); doctor's READY row is `map preview|generate|analyze`; MCP `map_analyze` (read-only; `picture` adds the
+  PNG as image content).
+- Tests: `tests/cli-analyze.test.ts` (21): octile costs, the wall with a gap (detour, crossing only in the gap,
+  narrowest = the gap's 4 cells), corners, clearance, specks, bounded walk, ground from flags; spread/median/apartFrom/
+  rankSpread/sideOf; clustering with and without the ground predicate; blockers; a 64 × 64 map with a made-up tileset
+  (wall with a one-tile gap: naturals, the choke verdict at (32, 40), no gas, the picture's walk through the gap); the
+  verdicts' thresholds on both sides; `walkSpeed` over a hand-built iscript.bin; the command through a stand-in
+  1.16.1 copy (refusals, report, PNG) and the committed melee map. cli-mcp: names + read-only + scale refusal + a
+  real-copy call (`skipIf`); cli-doctor pins the row.
+- **Leftovers**: no screenshot in docs (`scripts/cli-screenshots.mjs` not run for it); the picture has no start
+  numbers (no font, as preview); unit size is fixed (no `--unit`); speed upgrades and acceleration not modelled; the
+  natural is "nearest base on foot", so a map whose designers mean another base reads differently; chokes off the
+  shortest walks (a second route's narrows) are not reported — the plugin's BWEM-style areas would be the next step;
+  `map generate` could call `analyzeLayout` instead of its own `measureMap` (same numbers) but was left alone.
+
 ## Mods: `scmjs mod` (`cli/src/mod/`) — 2026-11-08, slice M3 of the mods plan
 
 The whole design, the proofs and the traps are in **`mods.md`**. Here, what touches the rest of the command:
@@ -2203,5 +2426,13 @@ The whole design, the proofs and the traps are in **`mods.md`**. Here, what touc
   own Remastered reader has not got them); `mods.md` "Remastered copy and the engine's reload".
 - `mod play` has its own loopback page (`play.ts`), not `open.ts`'s `handOver`: it serves `/manifest`, `/file/<i>` and
   `/map`, builds `File`s in the page and posts `scmjs.play` with `dataSet`; `tests/cli-mod.test.ts` stands in for the page.
-- MCP: six tools (`mod_info|check|diff|unpack|pack|new`), 30 in all; `mod_unpack`'s data leaves out the manifest.
-
+- MCP: six tools (`mod_info|check|diff|unpack|pack|new`), 31 in all with `map_analyze`; `mod_unpack`'s data leaves out the manifest.
+- **In Korean** (merged after the Korean slice): every printed word of `cli/src/mod/` and the `mod` commands in
+  main.ts goes through `t()`, as the rest; the files a mod command writes (mod.json, README, the tables' text) stay
+  English, as map unpack's do, and so does the play page hand-over's loopback page, as `open.ts`'s. **Left English**:
+  the findings of `mod check` and the lines of `mod diff`, which `src/formats/mod/{check,diff}.ts` make — the editor
+  does not show them, so they are not in its catalogue, and the CLI's catalogue reads `cli/src` only; translating them
+  means moving their words into `cli/src` (a table of rules to sentences) or a third tree.
+- `mapTestAction` carries #186's `--clips` too, but `mod test` does not offer it and `map test --mod --clips` draws
+  the clips on the play page without the mod (the replay is the modded game's): a clip of a mod that changes the
+  units can go out of step. Not guarded.

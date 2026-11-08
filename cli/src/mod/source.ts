@@ -12,6 +12,7 @@ import { MOD_MANIFEST, readManifest, type ModManifest } from "../../../src/forma
 import { DAT_SCHEMAS, DAT_TABLES } from "../../../src/formats/dat/schema";
 import { decodeTblFile } from "../../../src/formats/dat/tblFile";
 import type { GameFiles } from "../gamefiles";
+import { t } from "../i18n";
 import { CliError } from "../ui";
 
 export interface SourceFile {
@@ -87,7 +88,7 @@ function probeNames(archive: Archive): string[] {
 /** Opens what the person named. A mod folder is packed in memory by `pack` (handed in, to keep the modules apart). */
 export async function openModSource(path: string, packed: (dir: string, manifest: ModManifest) => Promise<ModSource>): Promise<ModSource> {
   let s;
-  try { s = await stat(path); } catch { throw new CliError(`No file or folder ${path}`, "Name a mod: a folder, an .mpq, a mod's .exe, a .zip, or a folder scmjs mod unpack wrote.", 2); }
+  try { s = await stat(path); } catch { throw new CliError(t("No file or folder {path}", { path }), t("Name a mod: a folder, an .mpq, a mod's .exe, a .zip, or a folder scmjs mod unpack wrote."), 2); }
   const name = basename(resolve(path)).replace(/\.(mpq|exe|zip)$/i, "");
   if (s.isDirectory()) {
     const manifestPath = join(path, MOD_MANIFEST);
@@ -98,7 +99,7 @@ export async function openModSource(path: string, packed: (dir: string, manifest
   }
   const bytes = new Uint8Array(await readFile(path));
   const kind: SourceKind = isZip(bytes) ? "zip" : isMpq(bytes) ? "archive" : bytes[0] === 0x4d && bytes[1] === 0x5a ? "exe" : "archive";
-  if (kind === "archive" && !isMpq(bytes)) throw new CliError(`${path} is not a mod: not an MPQ, a self-executing exe or a zip.`, null, 2);
+  if (kind === "archive" && !isMpq(bytes)) throw new CliError(t("{path} is not a mod: not an MPQ, a self-executing exe or a zip.", { path }), null, 2);
   return fromPieces(path, kind, name, [{ path: basename(path), size: bytes.length, read: async () => bytes }]);
 }
 
@@ -140,11 +141,11 @@ async function fromPieces(path: string, kind: SourceKind, name: string, pieces: 
         const prefix = list.length === 1 && depth === 0 ? "" : p.path.replace(/\.zip$/i, "") + "/";
         await take(members.map((m) => ({ path: `${prefix}${m.path}`, size: m.size, read: m.read })), depth + 1);
       } else if (leaf.endsWith(".mpq") && isMpq(bytes)) {
-        try { archives.push({ label: p.path, archive: Archive.open(bytes) }); } catch (e) { throw new CliError(`${p.path} could not be opened as an archive: ${(e as Error).message}`, null, 2); }
+        try { archives.push({ label: p.path, archive: Archive.open(bytes) }); } catch (e) { throw new CliError(t("{file} could not be opened as an archive: {why}", { file: p.path, why: (e as Error).message }), null, 2); }
       } else if (leaf.endsWith(".exe")) {
         const found = exeArchive(bytes);
         if (!found) { source.left.push(p.path); continue; }
-        try { archives.push({ label: p.path, archive: Archive.open(found.archive) }); } catch (e) { throw new CliError(`The archive inside ${p.path} could not be opened: ${(e as Error).message}`, null, 2); }
+        try { archives.push({ label: p.path, archive: Archive.open(found.archive) }); } catch (e) { throw new CliError(t("The archive inside {file} could not be opened: {why}", { file: p.path, why: (e as Error).message }), null, 2); }
         source.exes.push({ file: p.path, kind: found.kind, at: found.at, plugins: found.plugins });
       } else loose.push(p);
     }

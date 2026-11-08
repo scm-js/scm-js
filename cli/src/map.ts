@@ -4,7 +4,8 @@ import { mapStatistics, type MapStatistics } from "../../src/editor/statistics";
 import { issueCounts, validateScenario, type Issue } from "../../src/editor/validate";
 import type { OpenedMap } from "../../src/editor/mapFile";
 import type { Input } from "./files";
-import { dot, gameLines, gameText, mark, num, pc, plural, rows, size, table, visible } from "./ui";
+import { t, translate } from "./i18n";
+import { columns, dot, gameLines, gameText, mark, num, pc, rows, size, table } from "./ui";
 
 /** Slots that hold no one: Inactive and Unused. */
 const EMPTY_SLOT = new Set([0, 4]);
@@ -22,6 +23,8 @@ export interface MapReport {
   builtBy: string[];
   /** The player slots (0–7) someone holds or that have units or a start location. */
   usedSlots: number[];
+  /** `map info` only: whether the map keeps a TrigScript script (`map build` builds it); null when this build cannot tell. */
+  script?: boolean | null;
 }
 
 export function mapReport(input: Input, doc: OpenedMap): MapReport {
@@ -39,43 +42,45 @@ export function mapReport(input: Input, doc: OpenedMap): MapReport {
   };
 }
 
-/** One line for the issues: none, or how many of each. */
-export function issueLine(issues: Issue[]): string {
+/** One line for the issues: none, or how many of each (`fresh`: the ones a baseline does not hold, "new"). */
+export function issueLine(issues: Issue[], fresh = false): string {
   const n = issueCounts(issues);
-  if (!n.error && !n.warn) return `${mark.ok} ${pc.green("no problems")}`;
-  return [n.error && `${mark.error} ${pc.red(plural(n.error, "error"))}`, n.warn && `${mark.warn} ${pc.yellow(plural(n.warn, "warning"))}`].filter(Boolean).join("  ");
+  if (!n.error && !n.warn) return `${mark.ok} ${pc.green(fresh ? t("no new problems") : t("no problems"))}`;
+  const errors = fresh ? t("{n, plural, one {# new error} other {# new errors}}", { n: n.error }) : t("{n, plural, one {# error} other {# errors}}", { n: n.error });
+  const warnings = fresh ? t("{n, plural, one {# new warning} other {# new warnings}}", { n: n.warn }) : t("{n, plural, one {# warning} other {# warnings}}", { n: n.warn });
+  return [n.error && `${mark.error} ${pc.red(errors)}`, n.warn && `${mark.warn} ${pc.yellow(warnings)}`].filter(Boolean).join("  ");
 }
 
 export function printMapInfo(r: MapReport): string[] {
   const s = r.statistics;
   const players = s.players.filter((p) => r.usedSlots.includes(p.slot));
   const neutral = s.players.slice(8).reduce((n, p) => n + p.units, 0);
-  const triggers = s.triggers.count ? `${num(s.triggers.count)}${pc.dim(` (${num(s.triggers.conditions)} conditions, ${num(s.triggers.actions)} actions)`)}` : "none";
+  const triggers = s.triggers.count ? `${num(s.triggers.count)}${pc.dim(` ${t("({conditions} conditions, {actions} actions)", { conditions: num(s.triggers.conditions), actions: num(s.triggers.actions) })}`)}` : t("none");
   const out: (string | null)[] = [
-    pc.bold(gameText(r.name) || pc.italic("Untitled")),
+    pc.bold(gameText(r.name) || pc.italic(t("Untitled"))),
     r.description ? pc.dim(gameLines(r.description).split("\n").map((l) => wrap(l, 76)).join("\n")) : null,
     "",
     ...rows([
-      ["Map", `${r.width} × ${r.height}${dot}${r.tileset}${dot}${r.version}`],
-      ["File", `${r.file.name}${dot}${size(r.file.bytes)}${r.file.archive ? "" : `${dot}bare scenario.chk`}`],
-      ["Players", `${plural(players.length, "slot")} used${dot}${plural(players.reduce((n, p) => n + p.startLocations, 0), "start location")}`],
-      ["Units", `${num(s.units.total)}${neutral ? pc.dim(` (${num(neutral)} neutral)`) : ""}`],
-      ["Resources", s.resources.fields || s.resources.geysers ? `${plural(s.resources.fields, "mineral field")} ${pc.dim(`(${num(s.resources.minerals)})`)}${dot}${plural(s.resources.geysers, "geyser")} ${pc.dim(`(${num(s.resources.gas)})`)}` : "none"],
-      ["Triggers", triggers + (s.briefings.count ? `${dot}briefing ${plural(s.briefings.count, "trigger")}` : "")],
-      ["Objects", `${plural(s.locations, "location")}${dot}${plural(s.doodads, "doodad")}${dot}${plural(s.sprites.pure + s.sprites.unit, "sprite")}`],
-      ["Strings", `${num(s.strings.set)} of ${num(s.strings.slots)}${s.strings.extended ? pc.dim(" (extended)") : ""}${dot}${plural(s.sounds, "sound")}`],
-      ["Built by", r.builtBy.length ? r.builtBy.join(", ") : null],
-      ["Check", issueLine(r.issues)],
+      [t("Map"), `${r.width} × ${r.height}${dot}${translate(r.tileset)}${dot}${translate(r.version)}`],
+      [t("File"), `${r.file.name}${dot}${size(r.file.bytes)}${r.file.archive ? "" : `${dot}${t("bare scenario.chk")}`}`],
+      [t("Players"), `${t("{n, plural, one {# slot} other {# slots}} used", { n: players.length })}${dot}${t("{n, plural, one {# start location} other {# start locations}}", { n: players.reduce((n, p) => n + p.startLocations, 0) })}`],
+      [t("Units"), `${num(s.units.total)}${neutral ? pc.dim(` ${t("({n} neutral)", { n: num(neutral) })}`) : ""}`],
+      [t("Resources"), s.resources.fields || s.resources.geysers ? `${t("{n, plural, one {# mineral field} other {# mineral fields}}", { n: s.resources.fields })} ${pc.dim(`(${num(s.resources.minerals)})`)}${dot}${t("{n, plural, one {# geyser} other {# geysers}}", { n: s.resources.geysers })} ${pc.dim(`(${num(s.resources.gas)})`)}` : t("none")],
+      [t("Triggers"), triggers + (s.briefings.count ? `${dot}${t("briefing {n, plural, one {# trigger} other {# triggers}}", { n: s.briefings.count })}` : "")],
+      [t("Objects"), `${t("{n, plural, one {# location} other {# locations}}", { n: s.locations })}${dot}${t("{n, plural, one {# doodad} other {# doodads}}", { n: s.doodads })}${dot}${t("{n, plural, one {# sprite} other {# sprites}}", { n: s.sprites.pure + s.sprites.unit })}`],
+      [t("Strings"), `${t("{set} of {slots}", { set: num(s.strings.set), slots: num(s.strings.slots) })}${s.strings.extended ? pc.dim(` ${t("(extended)")}`) : ""}${dot}${t("{n, plural, one {# sound} other {# sounds}}", { n: s.sounds })}`],
+      [t("Built by"), r.builtBy.length ? r.builtBy.join(", ") : null],
+      [t("Check"), issueLine(r.issues)],
     ]),
   ];
   if (players.length) {
-    out.push("", pc.dim("  Players"), ...table(players.map((p) => [
-      pc.dim(String(p.slot + 1)), p.type, p.race, pc.dim(plural(p.units, "unit")), p.startLocations ? pc.green("start location") : "",
+    out.push("", pc.dim(`  ${t("Players")}`), ...table(players.map((p) => [
+      pc.dim(String(p.slot + 1)), translate(p.type), translate(p.race), pc.dim(t("{n, plural, one {# unit} other {# units}}", { n: p.units })), p.startLocations ? pc.green(t("start location")) : "",
     ])));
   }
   if (s.units.top.length) {
     const top = s.units.top.slice(0, 5), width = Math.max(...top.map((u) => num(u.count).length));
-    out.push("", pc.dim("  Most placed"), ...table(top.map((u) => [pc.dim(`${num(u.count).padStart(width)} ×`), u.name])));
+    out.push("", pc.dim(`  ${t("Most placed")}`), ...table(top.map((u) => [pc.dim(`${num(u.count).padStart(width)} ×`), translate(u.name)])));
   }
   return out.filter((l): l is string => l !== null);
 }
@@ -91,14 +96,14 @@ export function printIssues(issues: Issue[], all: boolean): string[] {
   const order = { error: 0, warn: 1, info: 2 };
   const shown = issues.filter((i) => all || i.level !== "info").sort((a, b) => order[a.level] - order[b.level]);
   const width = Math.max(40, Math.min(process.stdout.columns || 100, 110) - 6);
-  return shown.map((i) => `  ${LEVEL[i.level].mark} ${wrap(`${i.text}${i.where ? dot + pc.dim(i.where) : ""}`, width, 99).split("\n").join("\n    ")}`);
+  return shown.map((i) => `  ${LEVEL[i.level].mark} ${wrap(`${i.text}${i.where ? dot + pc.dim(translate(i.where)) : ""}`, width, 99).split("\n").join("\n    ")}`);
 }
 
 function wrap(text: string, width: number, most = 4): string {
   const words = text.split(" "), lines: string[] = [];
   let line = "";
   for (const w of words) {
-    if (line && visible(line + " " + w).length > width) { lines.push(line); line = w; }
+    if (line && columns(line + " " + w) > width) { lines.push(line); line = w; }
     else line = line ? `${line} ${w}` : w;
   }
   if (line) lines.push(line);
@@ -111,13 +116,13 @@ export interface BaselineCounts { suppressed: number; fixed: number; new: number
 /** The map's line with a baseline: its new findings, then how many were known and how many are fixed since. */
 export function baselineLine(fresh: Issue[], b: BaselineCounts): string {
   const n = issueCounts(fresh);
-  const head = !n.error && !n.warn ? `${mark.ok} ${pc.green("no new problems")}` : issueLine(fresh).replace(/(errors?|warnings?)/g, "new $1");
-  const known = [b.suppressed && `${num(b.suppressed)} known`, b.fixed && pc.green(`${num(b.fixed)} fixed since the baseline`)].filter(Boolean).join(", ");
+  const head = !n.error && !n.warn ? `${mark.ok} ${pc.green(t("no new problems"))}` : issueLine(fresh, true);
+  const known = [b.suppressed && t("{n} known", { n: num(b.suppressed) }), b.fixed && pc.green(t("{n} fixed since the baseline", { n: num(b.fixed) }))].filter(Boolean).join(", ");
   return `${head}${known ? pc.dim(dot) + pc.dim(known) : ""}`;
 }
 
 /** The map's line when its findings are written as the baseline: how many, and what changed from the one before. */
 export function baselineWritten(name: string, b: BaselineCounts & { written?: number }, before: boolean): string {
-  const changed = before ? [b.new && `${num(b.new)} new`, b.fixed && `${num(b.fixed)} fixed and dropped`].filter(Boolean).join(", ") : "";
-  return `${pc.bold(name)}  ${plural(b.written ?? 0, "finding")} in the baseline${changed ? pc.dim(` (${changed})`) : before ? pc.dim(" (as before)") : ""}`;
+  const changed = before ? [b.new && t("{n} new", { n: num(b.new) }), b.fixed && t("{n} fixed and dropped", { n: num(b.fixed) })].filter(Boolean).join(", ") : "";
+  return `${pc.bold(name)}  ${t("{n, plural, one {# finding} other {# findings}} in the baseline", { n: b.written ?? 0 })}${changed ? pc.dim(` (${changed})`) : before ? pc.dim(` ${t("(as before)")}`) : ""}`;
 }

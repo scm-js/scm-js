@@ -3,9 +3,13 @@
  * the pull request is read rather than in a log — GitHub's workflow annotations, JUnit XML for everything that takes
  * test results, SARIF for code-scanning tools. `scmjs map test` gives its scenarios in the same three forms. The text
  * and JSON forms stay in main.ts; these are pure functions of the reports, one per map.
+ *
+ * A finding's text and the sentences these add (a title, a failure's summary) are in the reader's language; what a tool
+ * reads stays English: rule ids and their names and descriptions, level words, the XML and JSON structure.
  */
 import { relative } from "node:path";
 import type { Issue, IssueLevel } from "../../src/editor/validate";
+import { t, translate } from "./i18n";
 
 export const FORMATS = ["text", "json", "github", "junit", "sarif"] as const;
 export type Format = (typeof FORMATS)[number];
@@ -28,7 +32,7 @@ const GITHUB_KIND: Record<IssueLevel, "error" | "warning" | "notice"> = { error:
 
 /** One annotation per finding; GitHub shows them on the pull request's Files and in the job's summary. */
 export function githubAnnotations(reports: CheckReport[]): string[] {
-  return reports.flatMap((r) => r.issues.map((i) => annotation(GITHUB_KIND[i.level], { file: reportPath(r.file), title: `${r.name || r.file}${i.where ? ` · ${i.where}` : ""}` }, i.text)));
+  return reports.flatMap((r) => r.issues.map((i) => annotation(GITHUB_KIND[i.level], { file: reportPath(r.file), title: `${r.name || r.file}${i.where ? ` · ${translate(i.where)}` : ""}` }, i.text)));
 }
 
 const xml = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -39,11 +43,11 @@ export function junitXml(reports: CheckReport[]): string {
   const failures = reports.filter((r) => r.failed).length;
   const out = [`<?xml version="1.0" encoding="UTF-8"?>`, `<testsuites name="scmjs map check" tests="${reports.length}" failures="${failures}">`, `  <testsuite name="scmjs map check" tests="${reports.length}" failures="${failures}">`];
   for (const r of reports) {
-    const lines = r.issues.map((i) => `${LEVEL_WORD[i.level]}: ${i.text}${i.where ? ` (${i.where})` : ""}`);
+    const lines = r.issues.map((i) => `${LEVEL_WORD[i.level]}: ${i.text}${i.where ? ` (${translate(i.where)})` : ""}`);
     out.push(`    <testcase name="${xml(r.name || reportPath(r.file))}" classname="${xml(reportPath(r.file))}" file="${xml(reportPath(r.file))}">`);
     if (r.failed) {
       const n = (level: IssueLevel) => r.issues.filter((i) => i.level === level).length;
-      const summary = [n("error") && `${n("error")} error${n("error") === 1 ? "" : "s"}`, n("warn") && `${n("warn")} warning${n("warn") === 1 ? "" : "s"}`].filter(Boolean).join(", ");
+      const summary = [n("error") && t("{n, plural, one {# error} other {# errors}}", { n: n("error") }), n("warn") && t("{n, plural, one {# warning} other {# warnings}}", { n: n("warn") })].filter(Boolean).join(", ");
       out.push(`      <failure message="${xml(summary)}">${xml(lines.join("\n"))}</failure>`);
     } else if (lines.length) out.push(`      <system-out>${xml(lines.join("\n"))}</system-out>`);
     out.push(`    </testcase>`);
@@ -86,12 +90,17 @@ export interface TestCaseReport {
   failures: { kind: string; what: string; actual: string }[];
   /** The replay kept of a scenario that failed. */
   replay: string | null;
+  /** The clip of its game `--clips` made. */
+  clip?: string | null;
 }
 /** A map's test run: the map as given, and its scenarios. */
 export interface TestReport { map: string; name: string; cases: TestCaseReport[] }
 
 const failureText = (f: TestCaseReport["failures"][number]) => `${f.what} — ${f.actual}`;
-const replayNote = (c: TestCaseReport) => (c.replay ? `replay: ${reportPath(c.replay)} (scmjs replay open ${reportPath(c.replay)})` : "");
+const replayNote = (c: TestCaseReport) => [
+  c.replay ? t("replay: {path} (scmjs replay open {path})", { path: reportPath(c.replay) }) : "",
+  c.clip ? t("clip: {path}", { path: reportPath(c.clip) }) : "",
+].filter(Boolean).join("\n");
 
 /** An error annotation per expectation that did not hold, on the scenario's line of its tests file. */
 export function githubTestAnnotations(reports: TestReport[]): string[] {
@@ -108,7 +117,7 @@ export function junitTestXml(reports: TestReport[]): string {
     out.push(`  <testsuite name="${xml(r.name || reportPath(r.map))}" tests="${r.cases.length}" failures="${failed}" time="${time(r.cases.reduce((n, c) => n + c.ms, 0))}">`);
     for (const c of r.cases) {
       out.push(`    <testcase name="${xml(c.name)}" classname="${xml(reportPath(r.map))}" file="${xml(reportPath(c.file))}"${c.line ? ` line="${c.line}"` : ""} time="${time(c.ms)}">`);
-      if (!c.ok) out.push(`      <failure message="${xml(`${c.failures.length} expectation${c.failures.length === 1 ? "" : "s"} did not hold`)}">${xml([...c.failures.map(failureText), replayNote(c)].filter(Boolean).join("\n"))}</failure>`);
+      if (!c.ok) out.push(`      <failure message="${xml(t("{n, plural, one {# expectation} other {# expectations}} did not hold", { n: c.failures.length }))}">${xml([...c.failures.map(failureText), replayNote(c)].filter(Boolean).join("\n"))}</failure>`);
       out.push(`    </testcase>`);
     }
     out.push(`  </testsuite>`);
@@ -149,13 +158,13 @@ export interface CoverageCase {
 /** A map's coverage: the map as given, the games counted, the triggers a player in them owned, the games that parted from the map. */
 export interface CoverageForm { map: string; name: string; games: number; strict: boolean; cases: CoverageCase[]; parted: { name: string; clock: string }[] }
 
-const neverText = (r: CoverageForm, c: CoverageCase) => `Trigger #${c.number} never fired in ${r.games} game${r.games === 1 ? "" : "s"}: ${c.text}${c.why ? `\n${c.why}` : ""}`;
-const partedText = (p: CoverageForm["parted"][number]) => `${p.name} parted from the map at ${p.clock}: what fired after that is not counted`;
+const neverText = (r: CoverageForm, c: CoverageCase) => `${t("Trigger #{number} never fired in {n, plural, one {# game} other {# games}}:", { number: c.number, n: r.games })} ${c.text}${c.why ? `\n${c.why}` : ""}`;
+const partedText = (p: CoverageForm["parted"][number]) => t("{name} parted from the map at {clock}: what fired after that is not counted", { name: p.name, clock: p.clock });
 
 /** A warning annotation per trigger that never fired (an error with `--strict`), a notice per game that parted from the map. */
 export function githubCoverageAnnotations(reports: CoverageForm[]): string[] {
   return reports.flatMap((r) => [
-    ...r.cases.filter((c) => !c.fired).map((c) => annotation(r.strict ? "error" : "warning", { file: reportPath(r.map), title: `${r.name || reportPath(r.map)} · trigger #${c.number}` }, neverText(r, c))),
+    ...r.cases.filter((c) => !c.fired).map((c) => annotation(r.strict ? "error" : "warning", { file: reportPath(r.map), title: `${r.name || reportPath(r.map)} · ${t("trigger #{number}", { number: c.number })}` }, neverText(r, c))),
     ...r.parted.map((p) => annotation("notice", { file: reportPath(r.map), title: `${r.name || reportPath(r.map)} · ${p.name}` }, partedText(p))),
   ]);
 }
@@ -170,9 +179,9 @@ export function junitCoverageXml(reports: CoverageForm[]): string {
     out.push(`  <testsuite name="${xml(r.name || reportPath(r.map))}" tests="${r.cases.length}" ${r.strict ? "failures" : "skipped"}="${n}">`);
     for (const c of r.cases) {
       const name = xml(`#${c.number} ${c.text}`);
-      if (c.fired) { out.push(`    <testcase name="${name}" classname="${xml(reportPath(r.map))}" file="${xml(reportPath(r.map))}"><system-out>${xml(`fired ${c.fired} time${c.fired === 1 ? "" : "s"} in ${c.games} of ${r.games} games`)}</system-out></testcase>`); continue; }
+      if (c.fired) { out.push(`    <testcase name="${name}" classname="${xml(reportPath(r.map))}" file="${xml(reportPath(r.map))}"><system-out>${xml(t("fired {n, plural, one {# time} other {# times}} in {games} of {total} games", { n: c.fired, games: c.games, total: r.games }))}</system-out></testcase>`); continue; }
       out.push(`    <testcase name="${name}" classname="${xml(reportPath(r.map))}" file="${xml(reportPath(r.map))}">`);
-      out.push(r.strict ? `      <failure message="never fired">${xml(neverText(r, c))}</failure>` : `      <skipped message="${xml(neverText(r, c).split("\n")[0])}"/>`);
+      out.push(r.strict ? `      <failure message="${xml(t("never fired"))}">${xml(neverText(r, c))}</failure>` : `      <skipped message="${xml(neverText(r, c).split("\n")[0])}"/>`);
       out.push(`    </testcase>`);
     }
     if (r.parted.length) out.push(`    <system-out>${xml(r.parted.map(partedText).join("\n"))}</system-out>`);

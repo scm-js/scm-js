@@ -13,6 +13,7 @@ import { gameName } from "../../../src/formats/mod/sources";
 import { loadModData } from "../../../src/formats/mod/data";
 import { datTableOf, type DatTableName } from "../../../src/formats/dat/schema";
 import type { GameFiles } from "../gamefiles";
+import { t } from "../i18n";
 import { CliError } from "../ui";
 import { reader, type ModSource } from "./source";
 
@@ -50,14 +51,14 @@ const KNOWN = Object.values(MOD_FOLDERS);
 
 export async function unpackMod(source: ModSource, dir: string, o: UnpackOptions = {}): Promise<UnpackReport> {
   const out = resolve(dir);
-  if (resolve(source.path) === out) throw new CliError("The folder to write is the mod itself.", "Name another folder.", 2);
+  if (resolve(source.path) === out) throw new CliError(t("The folder to write is the mod itself."), t("Name another folder."), 2);
   // Over an earlier unpack, its folders are replaced (what a person added beside them stays); anything else must be empty.
   let existing: string[] = [];
   try { existing = await readdir(out); } catch { /* a new folder */ }
   if (existing.length) {
     let earlier: ModManifest | null = null;
     try { earlier = readManifest(await readFile(join(out, MOD_MANIFEST), "utf8")); } catch { earlier = null; }
-    if (!earlier) throw new CliError(`${dir} is there and is not an unpacked mod.`, "Name a new folder, or an empty one.", 2);
+    if (!earlier) throw new CliError(t("{folder} is there and is not an unpacked mod.", { folder: dir }), t("Name a new folder, or an empty one."), 2);
     for (const f of KNOWN) await rm(join(out, f), { recursive: true, force: true });
   }
 
@@ -72,8 +73,8 @@ export async function unpackMod(source: ModSource, dir: string, o: UnpackOptions
   // Each table's member; a mod with both a .dat and a .datex of one table is read by GPTP from the .datex.
   const modTables: Partial<Record<DatTableName, string>> = {};
   for (const f of source.files.values()) {
-    const t = /^arr\\[^\\]+\.dat(?:ex)?$/.test(gameName(f.name)) ? datTableOf(f.name) : null;
-    if (t && (!modTables[t] || /\.datex$/i.test(f.name))) modTables[t] = f.name;
+    const table = /^arr\\[^\\]+\.dat(?:ex)?$/.test(gameName(f.name)) ? datTableOf(f.name) : null;
+    if (table && (!modTables[table] || /\.datex$/i.test(f.name))) modTables[table] = f.name;
   }
   const ownNames = source.files.has("rez\\stat_txt.tbl") || source.files.has("rez\\unitnames.tbl");
   manifest.names = ownNames ? "mod" : base ? "game" : "none";

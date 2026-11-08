@@ -52,7 +52,7 @@ describe("scmjs mcp", () => {
   it("lists the tools with what each is for, and says how they fit together", async () => {
     const { tools } = await client.listTools();
     const names = tools.map((t) => t.name).sort();
-    expect(names).toEqual(["doctor", "map_balance", "map_build", "map_check", "map_cost", "map_coverage", "map_diff", "map_dump", "map_find", "map_info", "map_new", "map_optimize", "map_preview", "map_resize", "map_run", "map_set", "map_strings_export", "map_strings_import", "map_strings_prune", "map_trace", "map_triggers_export", "map_triggers_import", "mod_check", "mod_diff", "mod_info", "mod_new", "mod_pack", "mod_unpack", "replay_info", "replay_map"]);
+    expect(names).toEqual(["doctor", "map_analyze", "map_balance", "map_build", "map_check", "map_cost", "map_coverage", "map_diff", "map_dump", "map_find", "map_info", "map_new", "map_optimize", "map_preview", "map_resize", "map_run", "map_set", "map_strings_export", "map_strings_import", "map_strings_prune", "map_trace", "map_triggers_export", "map_triggers_import", "mod_check", "mod_diff", "mod_info", "mod_new", "mod_pack", "mod_unpack", "replay_info", "replay_map"]);
     for (const t of tools) {
       expect(t.description?.length ?? 0, t.name).toBeGreaterThan(60);
       expect((t.inputSchema as { properties?: object }).properties, t.name).toBeDefined();
@@ -351,6 +351,28 @@ describe("scmjs mcp: the picture and the replay's map", () => {
     expect(png.readUInt32BE(16)).toBe(128);
     expect(r.structuredContent?.picture).toMatchObject({ width: 128, height: 128, scale: 2 });
     expect(r.content.find((c) => c.type === "text")?.text).toMatch(/^ums\.scx: 64 × 64, badlands, drawn at 2 px a tile/);
+    await client.close();
+  });
+
+  it("map_analyze is read-only, checks its scale and says when there is no copy of the game", async () => {
+    const { client, call } = await connected();
+    const { tools } = await client.listTools();
+    expect(tools.find((t) => t.name === "map_analyze")?.annotations?.readOnlyHint).toBe(true);
+    const none = await call("map_analyze", { path: join(TEST_MAPS_DIR, "melee.scx"), starcraft: mkdtempSync(join(tmpdir(), "scmjs-no-game-")) });
+    expect(none.isError).toBe(true);
+    expect(none.content[0].text).toMatch(/StarCraft/);
+    const odd = await call("map_analyze", { path: join(TEST_MAPS_DIR, "melee.scx"), scale: 3 });
+    expect(odd.content[0].text).toContain("scale takes 1, 2, 4 or 8");
+    await client.close();
+  });
+
+  it.skipIf(!copy)("map_analyze answers with the layout, and the picture when asked", async () => {
+    const { client, call } = await connected();
+    const r = await call("map_analyze", { path: join(TEST_MAPS_DIR, "melee.scx"), picture: true, scale: 2 });
+    expect(r.isError).toBeFalsy();
+    expect(r.content.find((c) => c.type === "image")).toBeTruthy();
+    expect((r.structuredContent as { starts: unknown[] }).starts).toHaveLength(2);
+    expect(r.content.find((c) => c.type === "text")?.text).toMatch(/Start/);
     await client.close();
   });
 

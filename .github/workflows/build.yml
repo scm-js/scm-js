@@ -858,6 +858,17 @@ jobs:
           # artifact the web job also uploads.
           pattern: "{web-zip,desktop-*,cli-binary-*}"
           merge-multiple: true
+      # GitHub keeps release assets by name without regard to case, so two names that differ only in case make the
+      # second upload fail after the release exists — 0.12.0's died on scmJS-windows-x64.zip beside
+      # scmjs-windows-x64.zip and gh removed the release (desktop-releases.md). Refused here, before anything is made.
+      - name: Asset names differ in more than case
+        run: |
+          same="$(ls assets | sort -f | uniq -di)"
+          if [ -n "$same" ]; then
+            names="$(ls assets | grep -iFx -f <(printf '%s\n' "$same") | tr '\n' ' ')"
+            echo "::error title=Release assets::These names differ only in case, and GitHub keeps one of them: $names"
+            exit 1
+          fi
       # One checksum file over every asset, in sha256sum's own form (`sha256sum -c
       # SHA256SUMS` checks a download; Scoop's manifest reads the executable's line).
       - run: |

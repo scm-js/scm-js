@@ -22,6 +22,7 @@ import {
   ADDED_COLOR, asciiOverlay, GAP_COLOR, changePicture, diffChanges, diffLegend, diffPicture, MOVED_COLOR, PAD_COLOR, REMOVED_COLOR, sideBySide, TILE, TILE_COLOR, unitChanges,
 } from "../cli/src/diffpicture";
 import { asciiShades } from "../cli/src/paint";
+import { plainShade } from "../cli/src/preview";
 import { visible, type CliError } from "../cli/src/ui";
 
 const tmp = () => mkdtempSync(join(tmpdir(), "scmjs-diffpicture-"));
@@ -131,6 +132,20 @@ describe("the change picture", () => {
     // The kept landmarks are drawn as preview draws them; the moved marine is not among them.
     expect(cp.marks.map((m) => m.kind)).toEqual(["mineral", "start"]);
     expect(cp.changes).toEqual([expect.objectContaining({ kind: "unit", change: "moved", color: MOVED_COLOR, x0: 42, y0: 21, x1: 44, y1: 23, line: [40, 21, 42, 21], was: { x0: 40, y0: 21, x1: 42, y1: 23 } })]);
+  });
+
+  it("without the game's graphics: plain greys, one a tile group, with the same changes marked", () => {
+    const { a, b } = pair();
+    b.tiles[6 * 64 + 6] = 0x123; // another group: its own grey
+    const cp = changePicture(a, b, { tileset: null, units: null }, { scale: 1 });
+    const dim = (c: number[]) => c.map((v) => Math.round(v * 0.6));
+    expect(px(cp.picture, 0, 0)).toEqual(dim(plainShade(a.tiles[0])));
+    expect(px(cp.picture, 6, 6)).toEqual(over(plainShade(0x123), rgb(TILE_COLOR), 0.6));
+    expect(plainShade(0x123)).not.toEqual(plainShade(a.tiles[0]));
+    expect(plainShade(0x120)).toEqual(plainShade(0x12f)); // a group's tiles share theirs
+    expect(plainShade(0)).toEqual([0, 0, 0]);
+    expect(cp.diff.counts).toMatchObject({ tiles: 2, unitsMoved: 1 });
+    expect(cp.changes).toEqual([expect.objectContaining({ kind: "unit", change: "moved", x0: 42, y0: 21 })]);
   });
 
   it("at four pixels a tile: a box with a dark edge, a frame where it was, the tile's sixteen pixels tinted", () => {

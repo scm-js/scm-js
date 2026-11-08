@@ -111,6 +111,9 @@ describe("@scm-js/core: the scmjs command is a thin layer over it", () => {
   // `map run` is the plugin host without the editor — the editor's own code, which the library does not promise
   // (it runs on atoms). `run.ts` may take that one module, and nothing else beyond the entry.
   const HOST_EXCEPTION = { from: "run.ts", module: "src/plugins/headless.ts" };
+  // The command's words go through the editor's translator (`cli/src/i18n.ts`, over a catalogue of its own): the
+  // language runtime, not map code, and only that one module takes it.
+  const I18N_EXCEPTION = { from: "i18n.ts", module: "src/i18n/index.ts" };
 
   it("imports from the editor only what the entry exports", () => {
     const api = exported();
@@ -124,6 +127,7 @@ describe("@scm-js/core: the scmjs command is a thin layer over it", () => {
       for (const m of text.matchAll(/import\s+(?:type\s+)?\{([^}]*)\}\s*from\s*["']((?:\.\.\/)+src\/[^"']+)["']/g)) {
         const file = resolveModule(name, m[2]);
         if (name.endsWith(HOST_EXCEPTION.from) && file === join(root, HOST_EXCEPTION.module)) continue;
+        if (name.endsWith(`/${I18N_EXCEPTION.from}`) && file === join(root, I18N_EXCEPTION.module)) continue;
         const names = file ? api.get(file) : undefined;
         for (const spec of m[1].split(",")) {
           const imported = spec.trim().replace(/^type\s+/, "").split(/\s+as\s+/)[0];

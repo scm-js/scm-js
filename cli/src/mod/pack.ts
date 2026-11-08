@@ -16,6 +16,7 @@ import { gameName } from "../../../src/formats/mod/sources";
 import { loadModData } from "../../../src/formats/mod/data";
 import type { NamedPalette, QuantiseReport } from "../../../src/formats/dat/grpPng";
 import type { GameFiles } from "../gamefiles";
+import { t } from "../i18n";
 import { CliError } from "../ui";
 import { emptySource, type ModSource } from "./source";
 
@@ -55,8 +56,8 @@ export async function convertWithFfmpeg(bytes: Uint8Array, file: string): Promis
     const input = join(dir, `in${file.replace(/^.*(\.[^.]+)$/, "$1")}`), output = join(dir, "out.wav");
     writeFileSync(input, bytes);
     const r = spawnSync("ffmpeg", ["-v", "error", "-y", "-i", input, "-ac", "1", "-ar", "22050", "-c:a", "pcm_s16le", "-fflags", "+bitexact", "-flags:a", "+bitexact", "-map_metadata", "-1", output], { stdio: ["ignore", "ignore", "pipe"] });
-    if (r.error) throw new Error("a sound that is not a WAV is converted with ffmpeg, which is not on the PATH: install it, or convert the sound to a WAV yourself");
-    if (r.status !== 0) throw new Error(`ffmpeg could not convert it: ${String(r.stderr).trim().split("\n")[0]}`);
+    if (r.error) throw new Error(t("a sound that is not a WAV is converted with ffmpeg, which is not on the PATH: install it, or convert the sound to a WAV yourself"));
+    if (r.status !== 0) throw new Error(t("ffmpeg could not convert it: {why}", { why: String(r.stderr).trim().split("\n")[0] }));
     return new Uint8Array(readFileSync(output));
   } finally { rmSync(dir, { recursive: true, force: true }); }
 }
@@ -77,7 +78,7 @@ export async function packFolder(dir: string, manifest: ModManifest, options: Pa
     if (!list.length && file !== "mod.json" && !/^readme(\.\w+)?$/i.test(file)) left.push(file);
     for (const m of list) {
       const key = gameName(m.member);
-      if (out.has(key)) throw new CliError(`${file} and ${out.get(key)!.file} are both ${m.member}.`, "Keep one of them: a mod has one file at each of the game's paths.", 1);
+      if (out.has(key)) throw new CliError(t("{file} and {other} are both {member}.", { file, other: out.get(key)!.file, member: m.member }), t("Keep one of them: a mod has one file at each of the game's paths."), 1);
       out.set(key, { member: m.member, file, data: m.data });
     }
   };
@@ -113,8 +114,8 @@ export async function packFolder(dir: string, manifest: ModManifest, options: Pa
     palettes.set(name, own ? { name, colours: own } : null);
   }
   if (later.some((f) => f.startsWith("ai/"))) {
-    if (manifest.names === "game" && !base) throw new CliError("The AI script names units as the game's string tables do, and no copy of StarCraft was found to read them from.", "Name the copy with --starcraft (or SCMJS_STARCRAFT); the folder was unpacked with the game's names.", 1);
-    const data = manifest.names === "none" ? null : await loadModData(readOwn, manifest.names === "game" && base ? (n) => base.read(n) : null, Object.fromEntries(Object.entries(manifest.tables).map(([t, v]) => [t, v!.file])));
+    if (manifest.names === "game" && !base) throw new CliError(t("The AI script names units as the game's string tables do, and no copy of StarCraft was found to read them from."), t("Name the copy with --starcraft (or SCMJS_STARCRAFT); the folder was unpacked with the game's names."), 1);
+    const data = manifest.names === "none" ? null : await loadModData(readOwn, manifest.names === "game" && base ? (n) => base.read(n) : null, Object.fromEntries(Object.entries(manifest.tables).map(([table, v]) => [table, v!.file])));
     ctx.names = data?.names ?? null;
   }
   for (const f of later) await pack(f);
@@ -190,7 +191,7 @@ export async function packMod(dir: string, manifest: ModManifest, o: PackModOpti
   const quantised = packed.quantised.map((q) => ({ file: q.file, colours: q.report.coloursLost.length, pixels: q.report.pixelsChanged }));
   if (o.folder) {
     const out = resolve(o.folder);
-    if (out === resolve(dir) || out.startsWith(resolve(dir) + "/")) throw new CliError("The loose folder would be written inside the mod folder.", "Name a folder elsewhere with --folder.", 2);
+    if (out === resolve(dir) || out.startsWith(resolve(dir) + "/")) throw new CliError(t("The loose folder would be written inside the mod folder."), t("Name a folder elsewhere with --folder."), 2);
     const bytes = await writeLoose(packed.members, out);
     return { path: out, form: "folder", members: packed.members.length, bytes, compression: null, left: packed.left, quantised, converted: packed.converted };
   }
@@ -210,9 +211,9 @@ export async function isFolder(path: string): Promise<boolean> {
 /** The manifest of a folder mod unpack or mod new wrote, or a CliError saying what the folder is not. */
 export async function readModFolder(dir: string): Promise<ModManifest> {
   let text: string;
-  try { text = await readFile(join(dir, MOD_MANIFEST), "utf8"); } catch { throw new CliError(`${dir} has no ${MOD_MANIFEST}: it is not a mod folder.`, "scmjs mod unpack <mod> <folder> makes one from a mod, scmjs mod new <folder> an empty one.", 2); }
+  try { text = await readFile(join(dir, MOD_MANIFEST), "utf8"); } catch { throw new CliError(t("{folder} has no {file}: it is not a mod folder.", { folder: dir, file: MOD_MANIFEST }), t("scmjs mod unpack <mod> <folder> makes one from a mod, scmjs mod new <folder> an empty one."), 2); }
   let manifest: ModManifest | null;
   try { manifest = readManifest(text); } catch (e) { throw new CliError((e as Error).message, null, 2); }
-  if (!manifest) throw new CliError(`${join(dir, MOD_MANIFEST)} is not one scmjs wrote (it has no "scmjs" version).`, null, 2);
+  if (!manifest) throw new CliError(t("{file} is not one scmjs wrote (it has no \"scmjs\" version).", { file: join(dir, MOD_MANIFEST) }), null, 2);
   return manifest;
 }

@@ -6,7 +6,8 @@
 import { DAT_SCHEMAS, datTableOf } from "../../../src/formats/dat/schema";
 import { datShape } from "../../../src/formats/dat/table";
 import { gameName } from "../../../src/formats/mod/sources";
-import { dot, num, pc, plural, rows, size } from "../ui";
+import { t } from "../i18n";
+import { dot, num, pc, rows, size } from "../ui";
 import { shownPath, type ModSource } from "./source";
 
 /** The kinds of file a mod changes, in the order they are named (the play page names them alike). */
@@ -53,7 +54,10 @@ export interface ModInfo {
   probed: string[];
 }
 
-const HOW = { dat: "the game's layout", expanded: "DatExtend's expanded layout (PyMS)", datex: "GPTP's .datex layout" } as const;
+/** The layout a table is in, in words. */
+function howWords(layout: "expanded" | "datex"): string {
+  return layout === "expanded" ? t("DatExtend's expanded layout (PyMS)") : t("GPTP's .datex layout");
+}
 
 export function modInfo(source: ModSource): ModInfo {
   const kinds: ModInfo["kinds"] = {};
@@ -66,22 +70,24 @@ export function modInfo(source: ModSource): ModInfo {
   }
   const tables: ModTableInfo[] = [];
   for (const f of [...source.files.values()].sort((a, b) => (gameName(a.name) < gameName(b.name) ? -1 : 1))) {
-    const t = /^arr\\[^\\]+\.dat(?:ex)?$/.test(gameName(f.name)) ? datTableOf(f.name) : null;
-    if (!t) continue;
-    const shape = datShape(t, f.size, f.name);
-    const standard = DAT_SCHEMAS[t].entries;
+    const table = /^arr\\[^\\]+\.dat(?:ex)?$/.test(gameName(f.name)) ? datTableOf(f.name) : null;
+    if (!table) continue;
+    const shape = datShape(table, f.size, f.name);
+    const standard = DAT_SCHEMAS[table].entries;
     const extended = !!shape && (shape.layout !== "dat");
     tables.push({
-      table: t, member: f.name, layout: shape?.layout ?? null, entries: shape?.count ?? null, standard, extended,
-      how: !shape ? `${num(f.size)} bytes, which is no layout of ${t}` : shape.layout === "dat" ? `${num(shape.count)} entries${shape.legacy ? ", the original game's (no Brood War columns)" : ""}` : `${num(shape.count)} entries (the game's ${num(standard)}), ${HOW[shape.layout]}`,
+      table, member: f.name, layout: shape?.layout ?? null, entries: shape?.count ?? null, standard, extended,
+      how: !shape ? t("{bytes} bytes, which is no layout of {table}", { bytes: num(f.size), table })
+        : shape.layout === "dat" ? (shape.legacy ? t("{n, plural, one {# entry} other {# entries}}, the original game's (no Brood War columns)", { n: shape.count }) : t("{n, plural, one {# entry} other {# entries}}", { n: shape.count }))
+        : t("{n, plural, one {# entry} other {# entries}} (the game's {standard}), {how}", { n: shape.count, standard: num(standard), how: howWords(shape.layout) }),
     });
   }
   const names = [...source.files.keys()];
   const remastered = names.some((n) => /^(anim|hd2|sd)\\|\.(dds|anim)$/.test(n));
-  const game = source.manifest?.base ? `StarCraft ${source.manifest.base}` : remastered ? "StarCraft: Remastered (its own pictures; samase)" : "StarCraft 1.16.1";
+  const game = source.manifest?.base ? `StarCraft ${source.manifest.base}` : remastered ? t("StarCraft: Remastered (its own pictures; samase)") : "StarCraft 1.16.1";
   return {
     path: source.path, name: source.name, kind: source.kind, layers: source.layers, files: source.files.size, bytes, kinds, tables,
-    extended: tables.filter((t) => t.extended).map((t) => `${t.member.split("\\").pop()}: ${t.how}`),
+    extended: tables.filter((x) => x.extended).map((x) => `${x.member.split("\\").pop()}: ${x.how}`),
     scripts: [...source.files.values()].filter((f) => /^scripts\\.*\.bin$/.test(gameName(f.name))).map((f) => f.name).sort(),
     plugins: source.plugins.map((p) => ({ name: p.name.split(/[\\/]/).pop()!, bytes: p.bytes })),
     firegraft: source.firegraft.map((p) => ({ name: p.name.split(/[\\/]/).pop()!, bytes: p.bytes })),
@@ -90,33 +96,56 @@ export function modInfo(source: ModSource): ModInfo {
   };
 }
 
-const KIND_WORDS: Record<ModKind, [string, string]> = {
-  tables: ["table", "tables"], scripts: ["script", "scripts"], pictures: ["picture", "pictures"], sounds: ["sound", "sounds"], terrain: ["terrain file", "terrain files"],
-  strings: ["string table", "string tables"], AI: ["AI script", "AI scripts"], maps: ["map", "maps"], other: ["other file", "other files"],
-};
+/** A count of files of one kind, in words. */
+function kindWords(kind: ModKind, n: number): string {
+  switch (kind) {
+    case "tables": return t("{n, plural, one {# table} other {# tables}}", { n });
+    case "scripts": return t("{n, plural, one {# script} other {# scripts}}", { n });
+    case "pictures": return t("{n, plural, one {# picture} other {# pictures}}", { n });
+    case "sounds": return t("{n, plural, one {# sound} other {# sounds}}", { n });
+    case "terrain": return t("{n, plural, one {# terrain file} other {# terrain files}}", { n });
+    case "strings": return t("{n, plural, one {# string table} other {# string tables}}", { n });
+    case "AI": return t("{n, plural, one {# AI script} other {# AI scripts}}", { n });
+    case "maps": return t("{n, plural, one {# map} other {# maps}}", { n });
+    default: return t("{n, plural, one {# other file} other {# other files}}", { n });
+  }
+}
 
-const FROM: Record<ModSource["kind"], string> = {
-  "mod folder": "a mod folder scmjs mod unpack wrote", folder: "a folder of the game's files", archive: "an MPQ", exe: "a self-executing mod (its archive read, nothing run)", zip: "a zip", game: "the game's own files",
-};
+/** A mod for the game, from where. */
+function fromWords(kind: ModSource["kind"], game: string): string {
+  switch (kind) {
+    case "mod folder": return t("A mod for {game}, from a mod folder scmjs mod unpack wrote", { game });
+    case "folder": return t("A mod for {game}, from a folder of the game's files", { game });
+    case "archive": return t("A mod for {game}, from an MPQ", { game });
+    case "exe": return t("A mod for {game}, from a self-executing mod (its archive read, nothing run)", { game });
+    case "zip": return t("A mod for {game}, from a zip", { game });
+    default: return t("A mod for {game}, from the game's own files", { game });
+  }
+}
 
 export function printModInfo(r: ModInfo): string[] {
-  const lines = [pc.bold(r.name), pc.dim(`A mod for ${r.game}, from ${FROM[r.kind]}`), ""];
-  const kinds = MOD_KINDS.filter((k) => r.kinds[k]).map((k) => `${plural(r.kinds[k]!.files, ...KIND_WORDS[k])} ${pc.dim(`(${size(r.kinds[k]!.bytes)})`)}`);
+  const lines = [pc.bold(r.name), pc.dim(fromWords(r.kind, r.game)), ""];
+  const kinds = MOD_KINDS.filter((k) => r.kinds[k]).map((k) => `${kindWords(k, r.kinds[k]!.files)} ${pc.dim(`(${size(r.kinds[k]!.bytes)})`)}`);
+  const patcher = (e: ModInfo["exes"][number]) => e.plugins.length
+    ? t("FireGraft's patcher with {n, plural, one {# plugin} other {# plugins}} ({list})", { n: e.plugins.length, list: e.plugins.map((p) => `id ${p.id.toString(16)}, ${size(p.size)}`).join("; ") })
+    : t("FireGraft's patcher");
   lines.push(...rows([
-    ["Files", `${num(r.files)}${dot}${size(r.bytes)}`],
-    ["Kinds", kinds.join(", ") || pc.dim("none")],
-    ["Tables", r.tables.length ? r.tables.map((t) => t.member.split("\\").pop()).join(", ") : null],
-    ["Extended", r.extended.length ? r.extended[0] : null],
+    [t("Files"), `${num(r.files)}${dot}${size(r.bytes)}`],
+    [t("Kinds"), kinds.join(", ") || pc.dim(t("none"))],
+    [t("Tables"), r.tables.length ? r.tables.map((x) => x.member.split("\\").pop()).join(", ") : null],
+    [t("Extended"), r.extended.length ? r.extended[0] : null],
     ...r.extended.slice(1).map((e) => ["", e] as [string, string]),
-    ["Scripts", r.scripts.length ? r.scripts.map((s) => s.split("\\").pop()).join(", ") : null],
-    ["Plugins", r.plugins.length ? `${r.plugins.map((p) => `${p.name} ${pc.dim(`(${size(p.bytes)})`)}`).join(", ")} ${pc.dim("— kept, not run")}` : null],
-    ["FireGraft", r.firegraft.length ? `${r.firegraft.map((p) => `${p.name} ${pc.dim(`(${size(p.bytes)})`)}`).join(", ")} ${pc.dim("— kept, not applied")}` : null],
-    ...r.exes.map((e) => ["Exe", `${e.file}: ${e.kind === "firegraft" ? `FireGraft's patcher${e.plugins.length ? ` with ${plural(e.plugins.length, "plugin")} (${e.plugins.map((p) => `id ${p.id.toString(16)}, ${size(p.size)}`).join("; ")})` : ""}` : "MPQDraft's self-executing MPQ"}, its archive at byte ${num(e.at)}`] as [string, string]),
-    ["Maps", r.maps.length ? `${plural(r.maps.length, "map")}${r.maps.length <= 4 ? `: ${r.maps.map((m) => m.split("\\").pop()).join(", ")}` : ""}` : null],
-    ["Layers", r.layers.length > 1 ? r.layers.map(shownPath).join(pc.dim(" then ")) : null],
+    [t("Scripts"), r.scripts.length ? r.scripts.map((s) => s.split("\\").pop()).join(", ") : null],
+    [t("Plugins"), r.plugins.length ? `${r.plugins.map((p) => `${p.name} ${pc.dim(`(${size(p.bytes)})`)}`).join(", ")} ${pc.dim(t("— kept, not run"))}` : null],
+    ["FireGraft", r.firegraft.length ? `${r.firegraft.map((p) => `${p.name} ${pc.dim(`(${size(p.bytes)})`)}`).join(", ")} ${pc.dim(t("— kept, not applied"))}` : null],
+    ...r.exes.map((e) => ["Exe", t("{file}: {what}, its archive at byte {at}", { file: e.file, what: e.kind === "firegraft" ? patcher(e) : t("MPQDraft's self-executing MPQ"), at: num(e.at) })] as [string, string]),
+    [t("Maps"), r.maps.length ? `${t("{n, plural, one {# map} other {# maps}}", { n: r.maps.length })}${r.maps.length <= 4 ? `: ${r.maps.map((m) => m.split("\\").pop()).join(", ")}` : ""}` : null],
+    [t("Layers"), r.layers.length > 1 ? r.layers.map(shownPath).join(pc.dim(` ${t("then")} `)) : null],
   ]));
-  if (r.probed.length) lines.push("", `${pc.yellow("▲")} ${r.probed.join(", ")} has no list of its files: only the names the game reads were looked for`);
-  if (r.duplicates.length) lines.push("", `${pc.yellow("▲")} ${plural(r.duplicates.length, "file")} twice, in another case: ${r.duplicates.slice(0, 3).join("; ")}${r.duplicates.length > 3 ? " …" : ""}`);
-  if (r.left.length) lines.push("", pc.dim(`Not the game's, left out: ${r.left.slice(0, 6).map((l) => l.split("/").pop()).join(", ")}${r.left.length > 6 ? ` and ${num(r.left.length - 6)} more` : ""}`));
+  if (r.probed.length) lines.push("", `${pc.yellow("▲")} ${t("{archives} has no list of its files: only the names the game reads were looked for", { archives: r.probed.join(", ") })}`);
+  if (r.duplicates.length) lines.push("", `${pc.yellow("▲")} ${t("{n, plural, one {# file} other {# files}} twice, in another case: {list}", { n: r.duplicates.length, list: `${r.duplicates.slice(0, 3).join("; ")}${r.duplicates.length > 3 ? " …" : ""}` })}`);
+  if (r.left.length) lines.push("", pc.dim(r.left.length > 6
+    ? t("Not the game's, left out: {list} and {more} more", { list: r.left.slice(0, 6).map((l) => l.split("/").pop()).join(", "), more: num(r.left.length - 6) })
+    : t("Not the game's, left out: {list}", { list: r.left.map((l) => l.split("/").pop()).join(", ") })));
   return lines;
 }

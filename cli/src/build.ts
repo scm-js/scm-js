@@ -38,7 +38,8 @@ import type { ScriptSettings } from "../../plugins/trigscript/script";
 import { outputFormat, writeBack, writeOutput } from "./exchange";
 import { STDIO, toStdout } from "./files";
 import { INSTALL } from "./runtime";
-import { CliError, dot, mark, pc, plural, size } from "./ui";
+import { t } from "./i18n";
+import { CliError, dot, mark, pc, size } from "./ui";
 
 /**
  * The plugin's modules, loaded when a build asks for them. `plugins/` is vendored by `npm run vendor:plugins`
@@ -59,7 +60,7 @@ async function trigscript() {
     return { ...compiler, ...names, ...libraries, ...backend, ...vorbis, ...script, TRIGSCRIPT_VERSION: version.VERSION };
   } catch (e) {
     if ((e as NodeJS.ErrnoException)?.code !== "ERR_MODULE_NOT_FOUND") throw e;
-    throw new CliError("The TrigScript compiler is not in this build of scmjs.", "In a clone, npm run vendor:plugins fetches the plugins the editor ships, then build the command again.");
+    throw new CliError(t("The TrigScript compiler is not in this build of scmjs."), t("In a clone, npm run vendor:plugins fetches the plugins the editor ships, then build the command again."));
   }
 }
 type TrigScript = Awaited<ReturnType<typeof trigscript>>;
@@ -95,11 +96,11 @@ const LIB_ENTRY = "lib.es2023.d.ts";
 export async function loadTypeScript(from = process.cwd()): Promise<TypeScriptModule> {
   const path = findTypeScript(from);
   if (!path) {
-    throw new CliError("TrigScript compiles with TypeScript, and none is installed here.", "npm install typescript in the map's project, or npm install -g typescript, then build again.");
+    throw new CliError(t("TrigScript compiles with TypeScript, and none is installed here."), t("npm install typescript in the map's project, or npm install -g typescript, then build again."));
   }
   const mod = (await import(pathToFileURL(path).href)) as { default?: typeof TS } & typeof TS;
   const ts = mod.default ?? mod;
-  if (typeof ts.createSourceFile !== "function") throw new CliError(`${path} is not TypeScript.`);
+  if (typeof ts.createSourceFile !== "function") throw new CliError(t("{path} is not TypeScript.", { path }));
   return { ts, path, version: ts.version, lib: libText(dirname(path)) };
 }
 
@@ -115,8 +116,8 @@ export function findTypeScript(from: string): string | null {
       return createRequire(join(root, "package.json")).resolve("typescript");
     },
   ];
-  for (const t of tries) {
-    try { return t(); } catch { /* the next place */ }
+  for (const attempt of tries) {
+    try { return attempt(); } catch { /* the next place */ }
   }
   return null;
 }
@@ -148,14 +149,14 @@ export async function loadVorbis(from = process.cwd()): Promise<VorbisEncoder> {
     if (dirname(dir) === dir) break;
   }
   const url = `https://cdn.jsdelivr.net/gh/scm-js/plugin-trigscript@v${TRIGSCRIPT_VERSION}/dist/vorbis.wasm`;
-  const hint = "Connect to the network, or npm install wasm-media-encoders in the map's project.";
+  const hint = t("Connect to the network, or npm install wasm-media-encoders in the map's project.");
   let r: Response;
   try {
     r = await fetch(url);
   } catch (e) {
-    throw new CliError(`The script plays a sound of two seconds or more, and the Ogg Vorbis encoder could not be fetched from ${url} (${e instanceof Error ? e.message : e}).`, hint);
+    throw new CliError(t("The script plays a sound of two seconds or more, and the Ogg Vorbis encoder could not be fetched from {url} ({why}).", { url, why: e instanceof Error ? e.message : String(e) }), hint);
   }
-  if (!r.ok) throw new CliError(`The script plays a sound of two seconds or more, and the Ogg Vorbis encoder could not be fetched from ${url} (${r.status}).`, hint);
+  if (!r.ok) throw new CliError(t("The script plays a sound of two seconds or more, and the Ogg Vorbis encoder could not be fetched from {url} ({why}).", { url, why: r.status }), hint);
   return vorbisEncoder(await r.arrayBuffer());
 }
 
@@ -263,12 +264,12 @@ export async function buildMap(doc: OpenedMap, inputPath: string, typescript: Ty
   const extras: ReadonlyMap<string, Uint8Array> = doc.extras;
   const list = readTriggers(scn);
   const state = scriptState(list, extras);
-  if (!state.files) throw new CliError(`${doc.fileName} has no TrigScript script.`, "Triggers ▸ TrigScript… in the editor writes one into the map; docs.scmjs.dev/trigscript is the guide.");
+  if (!state.files) throw new CliError(t("{file} has no TrigScript script.", { file: String(doc.fileName) }), t("Triggers ▸ TrigScript… in the editor writes one into the map; docs.scmjs.dev/trigscript is the guide."));
   if ([...extras.keys()].some((k) => memberKey(k) === MAGENTA_MEMBER)) {
-    throw new CliError(`${doc.fileName} has Magenta's triggers in it, which the command line does not build yet.`, "Save the map from the editor, where Magenta builds them with TrigScript.");
+    throw new CliError(t("{file} has Magenta's triggers in it, which the command line does not build yet.", { file: String(doc.fileName) }), t("Save the map from the editor, where Magenta builds them with TrigScript."));
   }
   if (state.stale) {
-    throw new CliError("The script's triggers were edited or removed outside the script, so it was not applied.", "Open the map in the editor: Triggers ▸ TrigScript… and Apply chooses what becomes of them.");
+    throw new CliError(t("The script's triggers were edited or removed outside the script, so it was not applied."), t("Open the map in the editor: Triggers ▸ TrigScript… and Apply chooses what becomes of them."));
   }
   const settings = readSettings(extras);
   // The libraries the script imports: the map's own copies (a plugin's offer of one is the editor's business).
@@ -276,7 +277,7 @@ export async function buildMap(doc: OpenedMap, inputPath: string, typescript: Ty
   const { used } = libraryImports(Object.values(state.files), librarySources(all));
   const libraries = Object.fromEntries(used.filter((id) => all[id]).map((id) => [id, all[id]]));
   const missing = used.filter((id) => !all[id]);
-  if (missing.length) throw new CliError(`The script imports the ${missing.length === 1 ? "library" : "libraries"} ${missing.join(", ")}, and the map keeps no copy.`, "Apply the script in the editor once, with the plugin that provides it running: the map then keeps a copy.");
+  if (missing.length) throw new CliError(t("The script imports the {n, plural, one {library} other {libraries}} {list}, and the map keeps no copy.", { n: missing.length, list: missing.join(", ") }), t("Apply the script in the editor once, with the plugin that provides it running: the map then keeps a copy."));
 
   const runTests = !!options.test || settings.testsGuardBuild;
   const compiled = compileScript(typescript.ts, state.files, await mapNames(scn, extras), {
@@ -319,12 +320,12 @@ export async function buildMap(doc: OpenedMap, inputPath: string, typescript: Ty
   // Programs: the build lays them into the scenario as Save would write it, and the file keeps the source beside.
   const path = toStdout(inputPath, options.out) ? STDIO : options.out ?? inputPath;
   const format = outputFormat(doc, inputPath, options.out ?? null);
-  if (format === "chk") throw new CliError("A bare .chk has nowhere to keep the map beside what TrigScript makes of it.", "Write an .scx instead: --out map.scx.");
+  if (format === "chk") throw new CliError(t("A bare .chk has nowhere to keep the map beside what TrigScript makes of it."), t("Write an .scx instead: --out map.scx."));
   const saveOptions = { ...defaultSaveOptions(scn, doc.origin ?? null, path === STDIO ? doc.fileName : path), format };
   const savePlan = planSave(scn, doc.extras, saveOptions, doc.stored ?? null);
   const sourceChk = buildChk(savePlan);
   const own = buildOwnMap({ chk: sourceChk, compiled: { ir: compiled.ir, strings: compiled.strings, input: compiled.input, triggers: [] }, settings: { heapCells: settings.heapCells, stackDepth: settings.stackDepth } });
-  if (isRefused(own)) throw new CliError(`The programs were not built: TrigScript does not take this yet (${own.refused}).`);
+  if (isRefused(own)) throw new CliError(t("The programs were not built: TrigScript does not take this yet ({why}).", { why: own.refused }));
   outcome.log = own.lines;
   outcome.warnings = own.warnings;
   const kept = savePlan.stored?.kept ? savePlan.stored.members : null;
@@ -336,23 +337,23 @@ export async function buildMap(doc: OpenedMap, inputPath: string, typescript: Ty
 /** The outcome as lines: the diagnostics or the failing tests first, then one line that says what was done. */
 export function printBuild(name: string, r: BuildOutcome): string[] {
   const lines: string[] = [];
-  const refused = (why: string) => { lines.push("", `${mark.error} ${pc.bold(name)}: ${why}${dot}nothing written`); return lines; };
+  const refused = (why: string) => { lines.push("", `${mark.error} ${pc.bold(name)}: ${why}${dot}${t("nothing written")}`); return lines; };
   if (r.diagnostics.length) {
     for (const d of r.diagnostics) lines.push(`${pc.cyan(d.file)}:${d.line}:${d.column} ${pc.red("error")} ${d.message.split("\n").join("\n    ")}`);
-    return refused(`${plural(r.diagnostics.length, "error")} in the script`);
+    return refused(t("{n, plural, one {# error} other {# errors}} in the script", { n: r.diagnostics.length }));
   }
   if (r.tests?.failed) {
     for (const f of r.tests.failures) lines.push(`${mark.error} ${f.name}${f.file ? pc.dim(`  ${f.file}:${f.line}`) : ""}`, `    ${f.message}`);
-    return refused(`${plural(r.tests.failed, "test")} failed, ${r.tests.passed} passed`);
+    return refused(t("{n, plural, one {# test} other {# tests}} failed, {passed} passed", { n: r.tests.failed, passed: r.tests.passed }));
   }
   for (const w of r.warnings) lines.push(`${mark.warn} ${w}`);
   const block = r.block && r.block.count ? pc.dim(` → #${r.block.start + 1}–#${r.block.start + r.block.count}`) : "";
   const parts = [
-    `${plural(r.triggerCount, "trigger")}${block}`,
-    r.programs ? `${plural(r.programs, "program")} ${pc.dim("(Remastered)")}` : null,
-    r.sounds ? plural(r.sounds, "sound") : null,
-    r.tests ? `${plural(r.tests.passed, "test")} passed${r.tests.skipped ? pc.dim(`, ${r.tests.skipped} skipped`) : ""}` : r.testCount ? pc.dim(`${plural(r.testCount, "test")} not run`) : null,
-    r.written ? `written to ${pc.cyan(r.written.path)}${dot}${size(r.written.bytes)}` : "compiles, nothing written",
+    `${t("{n, plural, one {# trigger} other {# triggers}}", { n: r.triggerCount })}${block}`,
+    r.programs ? `${t("{n, plural, one {# program} other {# programs}}", { n: r.programs })} ${pc.dim(t("(Remastered)"))}` : null,
+    r.sounds ? t("{n, plural, one {# sound} other {# sounds}}", { n: r.sounds }) : null,
+    r.tests ? `${t("{n, plural, one {# test} other {# tests}} passed", { n: r.tests.passed })}${r.tests.skipped ? pc.dim(t(", {n} skipped", { n: r.tests.skipped })) : ""}` : r.testCount ? pc.dim(t("{n, plural, one {# test} other {# tests}} not run", { n: r.testCount })) : null,
+    r.written ? `${t("written to {path}", { path: pc.cyan(r.written.path) })}${dot}${size(r.written.bytes)}` : t("compiles, nothing written"),
   ].filter((p): p is string => !!p);
   lines.push(`${mark.ok} ${pc.bold(name)}: ${parts.join(dot)}${pc.dim(`  TrigScript ${r.trigscript}, TypeScript ${r.typescript}`)}`);
   return lines;

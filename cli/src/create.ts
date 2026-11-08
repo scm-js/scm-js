@@ -18,6 +18,7 @@ import { writeMapBytes } from "../../src/editor/mapFile";
 import { defaultSaveOptions, formatOf, type MapFormat } from "../../src/editor/save";
 import { writeOutput } from "./exchange";
 import { STDIO } from "./files";
+import { t } from "./i18n";
 import { CliError } from "./ui";
 
 export const NEW_VERSIONS = ["broodwar", "remastered"] as const satisfies readonly MapVersion[];
@@ -40,16 +41,16 @@ export interface NewMapOptions {
 export function parseSize(spec: string): { width: number; height: number } {
   const m = /^(\d+)(?:\s*[x×*]\s*(\d+))?$/i.exec(spec.trim());
   const sizes = MAP_SIZES as readonly number[];
-  if (!m) throw new CliError(`--size takes WIDTHxHEIGHT, such as 128x96, not "${spec}"`, `Each is one of ${sizes.join(", ")}.`, 2);
+  if (!m) throw new CliError(t("--size takes WIDTHxHEIGHT, such as 128x96, not \"{spec}\"", { spec }), t("Each is one of {sizes}.", { sizes: sizes.join(", ") }), 2);
   const width = Number(m[1]), height = Number(m[2] ?? m[1]);
-  for (const n of [width, height]) if (!sizes.includes(n)) throw new CliError(`${n} is not a map size`, `A side is one of ${sizes.join(", ")}.`, 2);
+  for (const n of [width, height]) if (!sizes.includes(n)) throw new CliError(t("{n} is not a map size", { n }), t("A side is one of {sizes}.", { sizes: sizes.join(", ") }), 2);
   return { width, height };
 }
 
 export function parseTileset(spec: string): TilesetId {
   const id = spec.trim().toLowerCase().replace(/[\s_-]+/g, "");
-  const found = TILESETS.find((t) => t.id === id || t.name.toLowerCase().replace(/[\s_-]+/g, "") === id);
-  if (!found) throw new CliError(`"${spec}" is not a tileset`, `One of ${TILESETS.map((t) => t.id).join(", ")}.`, 2);
+  const found = TILESETS.find((ts) => ts.id === id || ts.name.toLowerCase().replace(/[\s_-]+/g, "") === id);
+  if (!found) throw new CliError(t("\"{spec}\" is not a tileset", { spec }), t("One of {list}.", { list: TILESETS.map((ts) => ts.id).join(", ") }), 2);
   return found.id;
 }
 
@@ -69,7 +70,7 @@ export interface NewMapResult { path: string; bytes: number; starts: number; wid
 
 /** The scenario the options describe. */
 export function newScenario(o: NewMapOptions) {
-  const era = Math.max(0, TILESETS.findIndex((t) => t.id === o.tileset));
+  const era = Math.max(0, TILESETS.findIndex((ts) => ts.id === o.tileset));
   const info = TILESETS[era];
   // No tileset here, so the fill is the base ground (`DIRT`, the editor's own choice without game data); a terrain
   // by id would need the tileset's groups to name its tiles, which is why there is no --terrain.

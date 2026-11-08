@@ -13,6 +13,7 @@ import ko from "../src/i18n/ko.json";
 import { checkCatalogue, extractMessages, messagesIn, updatedCatalogue } from "../scripts/lib/i18n.mjs";
 
 const SRC = join(import.meta.dirname, "..", "src");
+const CLI = join(import.meta.dirname, "..", "cli", "src");
 
 describe("format", () => {
   it("fills plain placeholders and leaves a missing one visible", () => {
@@ -132,23 +133,30 @@ describe("extraction", () => {
   });
 });
 
-describe("the catalogues", () => {
-  const { messages, errors } = extractMessages(SRC);
+// Two trees, each with its own catalogues: the editor's (`src/i18n/<locale>.json`) and the command line's
+// (`cli/src/<locale>.json`), so neither bundle carries the other's words.
+for (const [tree, root, catalogueOf] of [
+  ["the editor's", SRC, (id: string) => join(SRC, "i18n", `${id}.json`)],
+  ["the command line's", CLI, (id: string) => join(CLI, `${id}.json`)],
+] as const) {
+  describe(`${tree} catalogues`, () => {
+    const { messages, errors } = extractMessages(root);
 
-  it("every t() in the source takes a literal", () => {
-    expect(errors).toEqual([]);
-  });
-
-  it("has something to translate", () => {
-    expect(messages.size).toBeGreaterThan(0);
-  });
-
-  for (const { id } of LOCALES) {
-    if (id === "en") continue;
-    it(`${id}.json has exactly the source's keys, with the source's placeholders`, () => {
-      const catalogue = JSON.parse(readFileSync(join(SRC, "i18n", `${id}.json`), "utf8"));
-      const { missing, unused, mismatched } = checkCatalogue(messages, catalogue);
-      expect({ missing, unused, mismatched }).toEqual({ missing: [], unused: [], mismatched: [] });
+    it("every t() in the source takes a literal", () => {
+      expect(errors).toEqual([]);
     });
-  }
-});
+
+    it("has something to translate", () => {
+      expect(messages.size).toBeGreaterThan(0);
+    });
+
+    for (const { id } of LOCALES) {
+      if (id === "en") continue;
+      it(`${id}.json has exactly the source's keys, with the source's placeholders`, () => {
+        const catalogue = JSON.parse(readFileSync(catalogueOf(id), "utf8"));
+        const { missing, unused, mismatched } = checkCatalogue(messages, catalogue);
+        expect({ missing, unused, mismatched }).toEqual({ missing: [], unused: [], mismatched: [] });
+      });
+    }
+  });
+}

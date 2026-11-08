@@ -12,6 +12,7 @@ import { basename, join } from "node:path";
 import type { OpenedMap } from "../../src/editor/mapFile";
 import { readBriefing, readTriggers, sameTriggers } from "../../src/editor/triggers";
 import { exportStrings, exportTriggers, importStrings, importTriggers, type StringImportResult, type TriggerImport } from "./exchange";
+import { t } from "./i18n";
 import { CliError } from "./ui";
 
 export type EditKind = "triggers" | "strings";
@@ -47,11 +48,11 @@ export async function runEditor(editor: string, file: string): Promise<void> {
     await new Promise<void>((resolve, reject) => {
       const child = spawn(how.command, how.args, { stdio: "inherit", shell: how.shell });
       child.on("error", (e: NodeJS.ErrnoException) => reject(new CliError(
-        e.code === "ENOENT" ? `No editor "${editor}" here` : `The editor "${editor}" could not be started (${e.code ?? e.message})`,
-        "Name one with --editor, or set EDITOR: code --wait, nano, vim, notepad.", 2)));
+        e.code === "ENOENT" ? t("No editor \"{editor}\" here", { editor }) : t("The editor \"{editor}\" could not be started ({reason})", { editor, reason: e.code ?? e.message }),
+        t("Name one with --editor, or set EDITOR: code --wait, nano, vim, notepad."), 2)));
       child.on("exit", (code, signal) => {
         if (code === 0) resolve();
-        else reject(new CliError(signal ? `The editor stopped (${signal})` : code === 127 && !how.shell ? `No editor "${editor}" here` : `The editor exited with code ${code}`));
+        else reject(new CliError(signal ? t("The editor stopped ({signal})", { signal }) : code === 127 && !how.shell ? t("No editor \"{editor}\" here", { editor }) : t("The editor exited with code {code}", { code: String(code) })));
       });
     });
   } finally {
@@ -92,7 +93,7 @@ export async function editInEditor(doc: OpenedMap, mapName: string, kind: EditKi
   const file = join(dir, `${stem}.${kind === "triggers" && o.briefing ? "briefing" : kind}.txt`);
   const cleanUp = () => (o.dir ? rm(file, { force: true }) : rm(dir, { recursive: true, force: true }));
   await writeFile(file, text);
-  const kept = `The map is unchanged; your text is kept in ${file}`;
+  const kept = t("The map is unchanged; your text is kept in {file}.", { file });
   o.onWait?.(file);
   try {
     await runEditor(editor, file);
@@ -100,7 +101,7 @@ export async function editInEditor(doc: OpenedMap, mapName: string, kind: EditKi
     if (!(e instanceof CliError)) throw e;
     // The editor never started: nothing was edited. It started and failed: what it saved stays.
     if (e.exitCode === 2) { await cleanUp(); throw e; }
-    throw new CliError(e.message, `${kept}.`);
+    throw new CliError(e.message, kept);
   }
   const after = await readFile(file, "utf8");
   if (same(after, text)) { await cleanUp(); return { kind, changed: false, file }; }
@@ -118,6 +119,6 @@ export async function editInEditor(doc: OpenedMap, mapName: string, kind: EditKi
     return strings.replaced + strings.added === 0 ? { kind, changed: false, file } : { kind, changed: true, file, strings };
   } catch (e) {
     if (!(e instanceof CliError)) throw e;
-    throw new CliError(e.message, `${kept}. Fix it there, then: ${importAgain}${e.hint ? `\n  ${e.hint}` : ""}`);
+    throw new CliError(e.message, `${kept} ${t("Fix it there, then: {command}", { command: importAgain })}${e.hint ? `\n  ${e.hint}` : ""}`);
   }
 }

@@ -27,7 +27,8 @@ import { STDIO, type Input } from "./files";
 import { openGameFiles, readTileset, readUnitsDat, type GameFiles } from "./gamefiles";
 import { asciiShades, halfBlocks, inlineImage, inlineProtocol, legendLine, type Depth, type InlineProtocol } from "./paint";
 import { encodePng } from "./png";
-import { CliError, dot, gameText, mark, num, pc, plural, size, truecolor, unicode } from "./ui";
+import { t } from "./i18n";
+import { CliError, dot, gameText, mark, num, pc, size, truecolor, unicode } from "./ui";
 
 /** RGBA, `width × height × 4` bytes, row by row. */
 export interface Picture { width: number; height: number; pixels: Uint8Array }
@@ -38,7 +39,8 @@ export const DEFAULT_PNG_SCALE = 4;
 
 /** What the picture is drawn with, read from the copy of the game. */
 export interface GameGraphics {
-  tileset: Tileset;
+  /** The tileset's graphics; null draws the ground plain (`plainBlock`), for a computer without the game. */
+  tileset: Tileset | null;
   /** For the units' sizes; without it each unit is a tile. */
   units: UnitsDat | null;
 }
@@ -71,11 +73,35 @@ export const MINERAL_COLOR = "#5fd7ff";
 export const GEYSER_COLOR = "#3ddc84";
 const VOID: [number, number, number] = [0, 0, 0];
 
+/**
+ * A tile's colour without the game's graphics: a grey for its tile group (the id's top twelve bits), the same for every
+ * tile of a group, so cliffs, ramps, water and doodads read as patches of their own. Used where no copy of the game is
+ * (a CI runner): `map diff --picture` still shows where a map changed.
+ */
+export function plainShade(tile: number): [number, number, number] {
+  if (!tile) return VOID;
+  let h = Math.imul((tile >>> 4) ^ 0x9e37, 0x85ebca6b);
+  h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35) ^ (h >>> 16);
+  const v = 80 + ((h >>> 0) % 40);
+  return [v, v, Math.min(255, v + 10)];
+}
+
 /** The terrain alone at `scale` pixels a tile (one of `PNG_SCALES`); an id with no megatile is black, as the editor draws it. */
-export function terrainPicture(scn: Scenario, tileset: Tileset, scale: number): Picture {
+export function terrainPicture(scn: Scenario, tileset: Tileset | null, scale: number): Picture {
   if (!(PNG_SCALES as readonly number[]).includes(scale)) throw new Error(`terrainPicture: scale ${scale} is not one of ${PNG_SCALES.join(", ")}`);
   const width = scn.width * scale, height = scn.height * scale;
   const pixels = new Uint8Array(width * height * 4);
+  if (!tileset) {
+    for (let ty = 0; ty < scn.height; ty++) {
+      for (let tx = 0; tx < scn.width; tx++) {
+        const [r, g, b] = plainShade(scn.tiles[ty * scn.width + tx] ?? 0);
+        for (let y = 0; y < scale; y++) {
+          for (let x = 0, o = ((ty * scale + y) * width + tx * scale) * 4; x < scale; x++, o += 4) { pixels[o] = r; pixels[o + 1] = g; pixels[o + 2] = b; pixels[o + 3] = 255; }
+        }
+      }
+    }
+    return { width, height, pixels };
+  }
   const step = MEGATILE_PX / scale;
   const blocks = new Map<number, Uint8Array>();
   const whole = new Uint8Array(MEGATILE_PX * MEGATILE_PX * 4);
@@ -299,7 +325,7 @@ export function terminalWidth(mapW: number, mapH: number, columns: number, o: { 
 const positive = (value: string | undefined, name: string, check: (n: number) => boolean, hint: string): number | undefined => {
   if (value === undefined) return undefined;
   const n = Number(value);
-  if (!Number.isFinite(n) || !check(n)) throw new CliError(`--${name} takes ${hint}, not "${value}"`, null, 2);
+  if (!Number.isFinite(n) || !check(n)) throw new CliError(t("--{name} takes {hint}, not \"{value}\"", { name, hint, value }), null, 2);
   return n;
 };
 
@@ -312,10 +338,10 @@ export async function previewMap(input: Input, map: OpenedMap, o: PreviewOptions
   const t0 = performance.now();
   const scn = map.scenario;
   const png = o.out !== undefined;
-  if (png && o.width !== undefined) throw new CliError("--width is the terminal picture's; a PNG's size is --scale pixels a tile", null, 2);
-  if (o.width !== undefined && o.scale !== undefined) throw new CliError("--width or --scale, not both", null, 2);
-  const scale = positive(o.scale, "scale", png ? (n) => (PNG_SCALES as readonly number[]).includes(n) : (n) => n > 0 && n <= 32, png ? PNG_SCALES.join(", ") : "a number of pixels a tile, above 0 and up to 32");
-  const width = positive(o.width, "width", (n) => Number.isInteger(n) && n >= 8, "a number of columns, 8 or more");
+  if (png && o.width !== undefined) throw new CliError(t("--width is the terminal picture's; a PNG's size is --scale pixels a tile"), null, 2);
+  if (o.width !== undefined && o.scale !== undefined) throw new CliError(t("--width or --scale, not both"), null, 2);
+  const scale = positive(o.scale, "scale", png ? (n) => (PNG_SCALES as readonly number[]).includes(n) : (n) => n > 0 && n <= 32, png ? PNG_SCALES.join(", ") : t("a number of pixels a tile, above 0 and up to 32"));
+  const width = positive(o.width, "width", (n) => Number.isInteger(n) && n >= 8, t("a number of columns, 8 or more"));
   const marks = o.units !== false;
 
   const files = await openGameFiles(o.starcraft);
@@ -333,8 +359,8 @@ export async function previewMap(input: Input, map: OpenedMap, o: PreviewOptions
     const out = await writeOutput(drawn.png, o.out!, stdout);
     const report: PreviewReport = { ...base, picture: { form: "png", width: drawn.picture.width, height: drawn.picture.height, scale: drawn.scale }, drawn: drawn.counts, out, ms: ms(performance.now()) };
     return { report, lines: [
-      `${mark.ok} ${pc.bold(report.name)}: ${drawn.picture.width} × ${drawn.picture.height} PNG, ${plural(drawn.scale, "pixel")} a tile, ${report.tileset}${marks ? `${dot}${drawnText(drawn.counts)}` : ""}${dot}written to ${out.path === STDIO ? "standard output" : pc.cyan(out.path)}${dot}${size(out.bytes)}`,
-      pc.dim(`  drawn from ${files.label} in ${files.folder}${dot}${(report.ms.total / 1000).toFixed(1)} s`),
+      `${mark.ok} ${pc.bold(report.name)}: ${t("{width} × {height} PNG, {n, plural, one {# pixel} other {# pixels}} a tile", { width: drawn.picture.width, height: drawn.picture.height, n: drawn.scale })}, ${report.tileset}${marks ? `${dot}${drawnText(drawn.counts)}` : ""}${dot}${t("written to {where}", { where: out.path === STDIO ? t("standard output") : pc.cyan(out.path) })}${dot}${size(out.bytes)}`,
+      pc.dim(`  ${t("drawn from {copy} in {folder}", { copy: files.label, folder: files.folder })}${dot}${(report.ms.total / 1000).toFixed(1)} s`),
     ] };
   }
 
@@ -359,7 +385,7 @@ export async function previewMap(input: Input, map: OpenedMap, o: PreviewOptions
 
 function drawnText(c: MarkCounts): string {
   const resources = c.minerals + c.geysers;
-  return [plural(c.starts, "start location"), plural(c.units + c.buildings, "unit"), plural(resources, "resource")].join(", ");
+  return [t("{n, plural, one {# start location} other {# start locations}}", { n: c.starts }), t("{n, plural, one {# unit} other {# units}}", { n: c.units + c.buildings }), t("{n, plural, one {# resource} other {# resources}}", { n: resources })].join(", ");
 }
 
 function title(r: PreviewReport, files: GameFiles): string {

@@ -28,7 +28,8 @@ import { VERSION } from "./about";
 import { assetFile, INSTALL } from "./runtime";
 import { diffMaps, summarizeDiff } from "./diff";
 import { GAME_TYPES } from "./replay";
-import { CliError, columns, dot, duration, mark, num, pc, plural, table } from "./ui";
+import { t, translate } from "./i18n";
+import { CliError, columns, dot, duration, mark, num, pc, table } from "./ui";
 
 /* ── The runner's lines (scm-sim's src/exact/runMap.ts) ──────── */
 
@@ -108,16 +109,16 @@ export interface MapRunOutcome {
  */
 export function weighModule(named?: string): string {
   if (named) {
-    if (!existsSync(named)) throw new CliError(`No file ${named}`, null, 2);
+    if (!existsSync(named)) throw new CliError(t("No file {file}", { file: named }), null, 2);
     return resolve(named);
   }
   if (INSTALL === "binary") {
     const file = assetFile("weigh.mjs", join(cacheRoot(), "weigh"), VERSION);
-    if (!file) throw new CliError("This scmjs carries no weigher (weigh.mjs).", "scripts/build-cli-binary.mjs puts it inside the executable.");
+    if (!file) throw new CliError(t("This scmjs carries no weigher (weigh.mjs)."), t("scripts/build-cli-binary.mjs puts it inside the executable."));
     return file;
   }
   const beside = fileURLToPath(new URL("./weigh.mjs", import.meta.url));
-  if (!existsSync(beside)) throw new CliError("The weigher is not beside the command (weigh.mjs).", "npm run build:cli writes it next to scmjs.mjs; the published package carries it.");
+  if (!existsSync(beside)) throw new CliError(t("The weigher is not beside the command (weigh.mjs)."), t("npm run build:cli writes it next to scmjs.mjs; the published package carries it."));
   return beside;
 }
 
@@ -153,12 +154,14 @@ export const gameClock = (frame: number) => duration(frame * FRAME_MS);
 
 /** The start line as the terminal's. */
 export function wordStart(l: TraceStartLine): string {
-  const files = l.copy === "remastered" ? "Remastered" : "1.16.1";
+  const files = l.copy === "remastered" ? t("Remastered files") : t("1.16.1 files");
+  const triggers = t("{n, plural, one {# trigger} other {# triggers}}", { n: l.rows });
+  const copies = l.copies !== l.rows ? pc.dim(` ${t("({n, plural, one {# copy} other {# copies}} in the game)", { n: l.copies })}`) : "";
   if (l.mode === "replay" && l.replay) {
     const r = l.replay;
-    return `${pc.bold(r.name)} ${pc.dim(`${l.map.width} × ${l.map.height}, ${l.map.tileset}`)}${l.replaced ? `${dot}played on ${l.map.name}` : ""}${dot}${plural(r.players.length, "player")}${dot}${gameClock(r.frames)}${dot}${plural(l.rows, "trigger")}${l.copies !== l.rows ? pc.dim(` (${plural(l.copies, "copy", "copies")} in the game)`) : ""}${dot}${files} files`;
+    return `${pc.bold(r.name)} ${pc.dim(`${l.map.width} × ${l.map.height}, ${translate(l.map.tileset)}`)}${l.replaced ? `${dot}${t("played on {map}", { map: l.map.name })}` : ""}${dot}${t("{n, plural, one {# player} other {# players}}", { n: r.players.length })}${dot}${gameClock(r.frames)}${dot}${triggers}${copies}${dot}${files}`;
   }
-  return `${pc.bold(l.map.name)} ${pc.dim(`${l.map.width} × ${l.map.height}, ${l.map.tileset}`)}${dot}${plural(l.rows, "trigger")}${l.copies !== l.rows ? pc.dim(` (${plural(l.copies, "copy", "copies")} in the game)`) : ""}${dot}seed ${l.seed}${dot}${l.copy === "remastered" ? "Remastered" : "1.16.1"} files`;
+  return `${pc.bold(l.map.name)} ${pc.dim(`${l.map.width} × ${l.map.height}, ${translate(l.map.tileset)}`)}${dot}${triggers}${copies}${dot}${t("seed {seed}", { seed: l.seed })}${dot}${files}`;
 }
 
 /**
@@ -169,15 +172,15 @@ export async function runMapInGame(map: string | null, what: "trace" | "cost", o
   try { return await runMap(map, what, o); } finally { if (map) removeGameMap(map); }
 }
 
-const cancelled = () => new CliError("The run was cancelled: the game was stopped before it finished.", null);
+const cancelled = () => new CliError(t("The run was cancelled: the game was stopped before it finished."), null);
 
 /** Said when the runner is older than the replays: it wanted a map, or ran the map with nobody playing. */
-const olderThanReplays = (dir: string) => new CliError(`The engine at ${dir} has a map runner from before map trace --replay.`, "A play page deployed since has one; the next run fetches it (or name a newer one with --engine).");
+const olderThanReplays = (dir: string) => new CliError(t("The engine at {dir} has a map runner from before map trace --replay.", { dir }), t("A play page deployed since has one; the next run fetches it (or name a newer one with --engine)."));
 
 async function runMap(map: string | null, what: "trace" | "cost", o: MapRunOptions): Promise<MapRunOutcome> {
-  if (map !== null && !existsSync(map)) throw new CliError(`No file ${map}`, null, 2);
-  if (map === null && !o.replay) throw new CliError("No map to run: name one, or a replay with --replay.", null, 2);
-  if (o.replay && !existsSync(o.replay)) throw new CliError(`No file ${o.replay}`, null, 2);
+  if (map !== null && !existsSync(map)) throw new CliError(t("No file {file}", { file: map }), null, 2);
+  if (map === null && !o.replay) throw new CliError(t("No map to run: name one, or a replay with --replay."), null, 2);
+  if (o.replay && !existsSync(o.replay)) throw new CliError(t("No file {file}", { file: o.replay }), null, 2);
   const weigh = what === "cost" ? weighModule(o.weigh) : null;
   const game = findGameCopy(o.starcraft);
   const engine = o.ready ?? await ensureEngine(o.engine, undefined, o.live ?? (() => {}));
@@ -213,7 +216,7 @@ async function runMap(map: string | null, what: "trace" | "cost", o: MapRunOptio
         start = l; o.live?.(wordStart(l));
         if (l.mod) o.live?.(modWords(l.mod));
       }
-      else if (l.kind === "progress") { progress.push(l); o.onProgress?.(l); o.live?.(`  ${pc.dim(`${start?.mode === "replay" ? `${gameClock(l.frame).padStart(5)}  ` : ""}frame ${String(l.frame).padStart(6)}  ${plural(l.passes, "pass", "passes")} of the triggers`)}`); }
+      else if (l.kind === "progress") { progress.push(l); o.onProgress?.(l); o.live?.(`  ${pc.dim(`${start?.mode === "replay" ? `${gameClock(l.frame).padStart(5)}  ` : ""}${t("frame {frame}  {n, plural, one {# pass} other {# passes}} of the triggers", { frame: String(l.frame).padStart(6), n: l.passes })}`)}`); }
       else if (l.kind === "end") end = l;
       else if (l.kind === "error") error = l.message;
     }
@@ -221,8 +224,8 @@ async function runMap(map: string | null, what: "trace" | "cost", o: MapRunOptio
   const exitCode = await exited;
   if (o.signal?.aborted) throw cancelled();
   if (older || (o.replay && error && /--map is needed/.test(error))) throw olderThanReplays(engine.dir);
-  if (error) throw new CliError(error, o.replay ? "The runner is scm-sim's; a replay StarCraft itself plays and your own copy of the game are what it needs." : "The runner is scm-sim's; a map StarCraft itself opens, with a slot for a person, and your own copy of the game are what it needs.");
-  if (!end) throw new CliError(`The game did not finish: the runner stopped without a result (exit ${exitCode}).${stderr.trim() ? `\n${stderr.trim().split("\n").slice(-6).join("\n")}` : ""}`);
+  if (error) throw new CliError(error, o.replay ? t("The runner is scm-sim's; a replay StarCraft itself plays and your own copy of the game are what it needs.") : t("The runner is scm-sim's; a map StarCraft itself opens, with a slot for a person, and your own copy of the game are what it needs."));
+  if (!end) throw new CliError(`${t("The game did not finish: the runner stopped without a result (exit {code}).", { code: exitCode })}${stderr.trim() ? `\n${stderr.trim().split("\n").slice(-6).join("\n")}` : ""}`);
   return { engine: { build: engine.build, dir: engine.dir, fetched: engine.fetched }, game, start, progress, end };
 }
 
@@ -263,17 +266,17 @@ export function summarizeRows(lines: readonly CopyLine[], rows: number): RowSumm
   return out;
 }
 
-const players = (slots: number[]) => (slots.length ? slots.map((p) => `P${p + 1}`).join(" ") : pc.dim("nobody"));
+const players = (slots: number[]) => (slots.length ? slots.map((p) => `P${p + 1}`).join(" ") : pc.dim(t("nobody")));
 const frame = (f: number | null) => (f === null ? pc.dim("–") : num(f));
 /** A frame as time on Fastest, `m:ss`. */
 const clock = (frames: number) => duration((frames * 1000) / 24);
 
 /** The trigger window's one line for a row: conditions → actions, cut to `width` columns. */
 export function rowText(scn: Scenario, row: number, width = 80): string {
-  const t = readTriggers(scn)[row];
-  if (!t) return pc.dim("(not in the map)");
-  const s = summarizeTrigger(t, triggerNames(scn));
-  const text = `${s.conditions || pc.dim("(no conditions)")} ${pc.dim("→")} ${s.actions || pc.dim("(no actions)")}`.replace(/\s+/g, " ");
+  const trig = readTriggers(scn)[row];
+  if (!trig) return pc.dim(t("(not in the map)"));
+  const s = summarizeTrigger(trig, triggerNames(scn));
+  const text = `${s.conditions || pc.dim(t("(no conditions)"))} ${pc.dim("→")} ${s.actions || pc.dim(t("(no actions)"))}`.replace(/\s+/g, " ");
   return cut(text, width);
 }
 
@@ -337,15 +340,15 @@ export function traceJson(file: string, scn: Scenario, r: MapRunOutcome) {
 
 /** Why a row never fired, in words. */
 function neverWhy(s: RowSummary): string {
-  return !s.players.length ? "no player in the game owns it" : s.lastFail ? `${conditionDef(s.lastFail.type)?.name ?? `condition ${s.lastFail.type}`} (condition ${s.lastFail.slot + 1}) said no last, at frame ${num(s.lastFail.frame)}` : s.failed ? "its conditions said no" : "it was never asked";
+  return !s.players.length ? t("no player in the game owns it") : s.lastFail ? t("{condition} (condition {slot}) said no last, at frame {frame}", { condition: conditionDef(s.lastFail.type)?.name ?? `condition ${s.lastFail.type}`, slot: s.lastFail.slot + 1, frame: num(s.lastFail.frame) }) : s.failed ? t("its conditions said no") : t("it was never asked");
 }
 
 /** How a replay's run ended, in a few words: who won, the replay's end, or where it was stopped. */
 function endWords(rep: TraceReport): string {
   const r = rep.replay!;
-  if (r.by === "victory") { const won = r.players.filter((p) => p.outcome === "victory").map((p) => p.name); return won.length ? `${won.join(", ")} won` : "a side won"; }
-  if (r.by === "replay") return "to the replay's end";
-  return rep.ended ? `the game ended: ${rep.reason ?? "over"}` : "stopped there";
+  if (r.by === "victory") { const won = r.players.filter((p) => p.outcome === "victory").map((p) => p.name); return won.length ? t("{players} won", { players: won.join(", ") }) : t("a side won"); }
+  if (r.by === "replay") return t("to the replay's end");
+  return rep.ended ? t("the game ended: {reason}", { reason: rep.reason ?? "over" }) : t("stopped there");
 }
 
 /** The trace's lines: the run in one, a table of the triggers, then the ones that never fired and why. With a replay, the firings in order after them when asked for. */
@@ -358,23 +361,23 @@ export function printTrace(file: string, scn: Scenario, r: MapRunOutcome, { all 
   const fired = listed.length - never.length;
   const when = replay ? (f: number | null) => (f === null ? pc.dim("–") : gameClock(f)) : frame;
   const out = replay
-    ? [`${mark.ok} ${pc.bold(file)}: ${plural(rep.rows.length, "trigger")}${listed.length !== rep.rows.length ? pc.dim(` (${num(listed.length)} owned by the players)`) : ""}${dot}${num(rep.frame)} frames ${pc.dim(`(${gameClock(rep.frame)})`)}, ${endWords(rep)}${dot}${plural(rep.passes, "pass", "passes")}${dot}${pc.green(`${fired} fired`)}${never.length ? `${dot}${pc.yellow(`${never.length} never`)}` : ""}${dot}${(r.end.ms.total / 1000).toFixed(1)} s`]
-    : [`${mark.ok} ${pc.bold(file)}: ${plural(rep.rows.length, "trigger")}${dot}${num(rep.frame)} frames ${pc.dim(`(${clock(rep.frame)} of play)`)}${rep.ended ? pc.dim(`, the game ended: ${rep.reason ?? "over"}`) : ""}${dot}${plural(rep.passes, "pass", "passes")}${dot}${pc.green(`${fired} fired`)}${never.length ? `${dot}${pc.yellow(`${never.length} never`)}` : ""}${dot}${(r.end.ms.total / 1000).toFixed(1)} s`];
-  if (replay && replay.parted !== null) out.push(`${mark.warn} ${pc.yellow(`The game parted from the replay at ${gameClock(replay.parted)} (frame ${num(replay.parted)})`)}: the players' commands after it were meant for another game, so what fired after that is not what happened.`);
-  if (replay && !replay.mapSettings) out.push(`${mark.info} ${pc.dim(`The replay is a ${replay.gameType} game: the game ran its own triggers for it, not the map's.`)}`);
+    ? [`${mark.ok} ${pc.bold(file)}: ${t("{n, plural, one {# trigger} other {# triggers}}", { n: rep.rows.length })}${listed.length !== rep.rows.length ? pc.dim(` ${t("({n} owned by the players)", { n: num(listed.length) })}`) : ""}${dot}${t("{frames} frames", { frames: num(rep.frame) })} ${pc.dim(`(${gameClock(rep.frame)})`)}, ${endWords(rep)}${dot}${t("{n, plural, one {# pass} other {# passes}}", { n: rep.passes })}${dot}${pc.green(t("{n} fired", { n: fired }))}${never.length ? `${dot}${pc.yellow(t("{n} never", { n: never.length }))}` : ""}${dot}${(r.end.ms.total / 1000).toFixed(1)} s`]
+    : [`${mark.ok} ${pc.bold(file)}: ${t("{n, plural, one {# trigger} other {# triggers}}", { n: rep.rows.length })}${dot}${t("{frames} frames", { frames: num(rep.frame) })} ${pc.dim(t("({clock} of play)", { clock: clock(rep.frame) }))}${rep.ended ? pc.dim(t(", the game ended: {reason}", { reason: rep.reason ?? "over" })) : ""}${dot}${t("{n, plural, one {# pass} other {# passes}}", { n: rep.passes })}${dot}${pc.green(t("{n} fired", { n: fired }))}${never.length ? `${dot}${pc.yellow(t("{n} never", { n: never.length }))}` : ""}${dot}${(r.end.ms.total / 1000).toFixed(1)} s`];
+  if (replay && replay.parted !== null) out.push(`${mark.warn} ${pc.yellow(t("The game parted from the replay at {clock} (frame {frame})", { clock: gameClock(replay.parted), frame: num(replay.parted) }))}${t(": the players' commands after it were meant for another game, so what fired after that is not what happened.")}`);
+  if (replay && !replay.mapSettings) out.push(`${mark.info} ${pc.dim(t("The replay is a {type} game: the game ran its own triggers for it, not the map's.", { type: translate(replay.gameType) }))}`);
   if (!listed.length) return out;
   const limit = all ? Infinity : 40;
   const shown = listed.slice(0, limit);
-  const head = ["#", "Fired", "First", "Last", "Players", "Trigger"].map((h) => pc.dim(h));
+  const head = ["#", t("Fired"), t("First"), t("Last"), t("Players"), t("Trigger")].map((h) => pc.dim(h));
   const fixed = shown.reduce((n, s) => Math.max(n, columns(`${s.row + 1}  ${num(s.fired)}  ${when(s.firstFired)}  ${when(s.lastFired)}  ${players(s.players)}  `)), 0) + 2;
   out.push("", ...table([head, ...shown.map((s) => [
     pc.dim(String(s.row + 1)), s.fired ? num(s.fired) + (s.continued ? pc.dim(` +${s.continued}`) : "") : pc.yellow("0"), when(s.firstFired), when(s.lastFired), players(s.players), rowText(scn, s.row, Math.max(30, width - fixed - 2)),
   ])], 2));
-  if (listed.length > shown.length) out.push(pc.dim(`  … and ${num(listed.length - shown.length)} more (--all lists them)`));
+  if (listed.length > shown.length) out.push(pc.dim(`  ${t("… and {n} more (--all lists them)", { n: num(listed.length - shown.length) })}`));
   if (never.length) {
-    out.push("", pc.dim(`  Never fired (${never.length} of ${listed.length})`));
+    out.push("", pc.dim(`  ${t("Never fired ({n} of {total})", { n: never.length, total: listed.length })}`));
     for (const s of never.slice(0, all ? Infinity : 20)) out.push(`  ${pc.yellow("▸")} ${pc.dim(`#${s.row + 1}`)}  ${rowText(scn, s.row, Math.max(30, width - 10))}`, `      ${pc.dim(neverWhy(s))}`);
-    if (never.length > 20 && !all) out.push(pc.dim(`  … and ${num(never.length - 20)} more (--all lists them)`));
+    if (never.length > 20 && !all) out.push(pc.dim(`  ${t("… and {n} more (--all lists them)", { n: num(never.length - 20) })}`));
   }
   if (replay?.order) out.push("", ...orderLines(scn, replay, { all, width }));
   return out;
@@ -387,15 +390,15 @@ const ORDER_SHOWN = 200;
 export function orderLines(scn: Scenario, replay: ReplayReport, { all = false, width = process.stdout.columns || 100 } = {}): string[] {
   const order = replay.order ?? [];
   const total = order.length + replay.orderDropped;
-  const out = [pc.dim(`  In the order they fired (${num(total)})`)];
-  if (!order.length) return [...out, pc.dim("  (none of the map's triggers fired)")];
+  const out = [pc.dim(`  ${t("In the order they fired ({n})", { n: num(total) })}`)];
+  if (!order.length) return [...out, pc.dim(`  ${t("(none of the map's triggers fired)")}`)];
   const nameOf = new Map(replay.players.map((p) => [p.slot, p.name]));
   const who = (p: number) => `P${p + 1}${nameOf.has(p) ? ` ${pc.dim(nameOf.get(p)!)}` : ""}`;
   const shown = all ? order : order.slice(0, ORDER_SHOWN);
   const fixed = shown.reduce((n, x) => Math.max(n, columns(`${x.clock}  ${num(x.frame)}  ${who(x.player)}  #${x.row + 1}  `)), 0) + 2;
-  out.push(...table([["Clock", "Frame", "Player", "#", "Trigger"].map((h) => pc.dim(h)), ...shown.map((x) => [x.clock, num(x.frame), who(x.player), pc.dim(`#${x.row + 1}`), rowText(scn, x.row, Math.max(30, width - fixed - 2))])], 2));
-  if (order.length > shown.length) out.push(pc.dim(`  … and ${num(order.length - shown.length)} more (--all lists them)`));
-  if (replay.orderDropped) out.push(pc.dim(`  The game kept the first ${num(order.length)}; ${num(replay.orderDropped)} later firings are counted above but not listed.`));
+  out.push(...table([[t("Clock"), t("Frame"), t("Player"), "#", t("Trigger")].map((h) => pc.dim(h)), ...shown.map((x) => [x.clock, num(x.frame), who(x.player), pc.dim(`#${x.row + 1}`), rowText(scn, x.row, Math.max(30, width - fixed - 2))])], 2));
+  if (order.length > shown.length) out.push(pc.dim(`  ${t("… and {n} more (--all lists them)", { n: num(order.length - shown.length) })}`));
+  if (replay.orderDropped) out.push(pc.dim(`  ${t("The game kept the first {kept}; {dropped} later firings are counted above but not listed.", { kept: num(order.length), dropped: num(replay.orderDropped) })}`));
   return out;
 }
 
@@ -433,7 +436,7 @@ export async function replayRun(rep: Replay, map: { doc: OpenedMap; path: string
   const changed = { ...d, members: [] };
   const same = !changed.header.length && !changed.players.length && !changed.forces.length && !changed.units.length && !changed.locations.length && !changed.triggers.length && !changed.briefing.length && !changed.strings.length && !changed.sections.length;
   const game = await gameMap(map.doc, map.path, map.name);
-  return { map: game.path, converted: game.converted, scenario: played.scenario, differs: same ? null : summarizeDiff(changed) || "the scenario's bytes differ" };
+  return { map: game.path, converted: game.converted, scenario: played.scenario, differs: same ? null : summarizeDiff(changed) || t("the scenario's bytes differ") };
 }
 
 export interface CostReport {
@@ -456,7 +459,7 @@ export interface CostReport {
 
 export function costReport(file: string, r: MapRunOutcome): CostReport {
   const c = r.end.cost;
-  if (!c) throw new CliError("The runner counted no cost.");
+  if (!c) throw new CliError(t("The runner counted no cost."));
   const ran = c.ns.map((n, i) => [n, i] as const).filter(([n]) => n > 0);
   const peak = ran.reduce((best, x) => (x[0] > best[0] ? x : best), [0, -1] as readonly [number, number]);
   const rows = c.rows.map((x) => ({ row: x.row, msAFrame: x.ns / 1e6 / Math.max(1, x.frames), frames: x.frames, records: x.conditions + x.actions, triggers: x.triggers, peakMs: x.peakNs / 1e6 })).sort((a, b) => b.msAFrame - a.msAFrame || b.records - a.records);
@@ -479,19 +482,22 @@ const ms = (x: number) => `${x > 0 && x < 0.001 ? x.toFixed(5) : x > 0 && x < 0.
 /** The cost's lines: what a frame costs against what Remastered can carry, then the costliest triggers. */
 export function printCost(file: string, scn: Scenario, r: MapRunOutcome, { all = false, width = process.stdout.columns || 100 } = {}): string[] {
   const rep = costReport(file, r);
-  if (!rep.ranIn) return [`${mark.ok} ${pc.bold(file)}: the triggers ran nothing in ${num(rep.frames)} frames`];
+  if (!rep.ranIn) return [`${mark.ok} ${pc.bold(file)}: ${t("the triggers ran nothing in {frames} frames", { frames: num(rep.frames) })}`];
   const over = rep.limits && rep.peakMs > rep.limits.mostMs ? mark.error : rep.limits && rep.peakMs > rep.limits.smoothMs ? mark.warn : mark.ok;
   const out = [
-    `${over} ${pc.bold(file)}: triggers cost ${pc.bold(ms(rep.averageMs))} a frame on average where they ran ${pc.dim(`(${num(rep.ranIn)} of ${num(rep.frames)} frames)`)}, ${pc.bold(ms(rep.peakMs))} at the most ${pc.dim(`(frame ${num(rep.peakFrame)}: ${plural(rep.peakRecords, "record")}, ${plural(rep.peakTriggers, "trigger")})`)}`,
+    `${over} ${pc.bold(file)}: ${t("triggers cost {average} a frame on average where they ran {ranIn}, {peak} at the most {peakAt}", {
+      average: pc.bold(ms(rep.averageMs)), ranIn: pc.dim(t("({ran} of {frames} frames)", { ran: num(rep.ranIn), frames: num(rep.frames) })), peak: pc.bold(ms(rep.peakMs)),
+      peakAt: pc.dim(t("(frame {frame}: {records, plural, one {# record} other {# records}}, {triggers, plural, one {# trigger} other {# triggers}})", { frame: num(rep.peakFrame), records: rep.peakRecords, triggers: rep.peakTriggers })),
+    })}`,
   ];
-  if (rep.limits) out.push(`  ${pc.dim(`Remastered on a fast computer: smooth to about ${rep.limits.smoothMs} ms of triggers a frame, slows past ${rep.limits.mostMs.toFixed(0)} ms`)}`);
-  if (rep.ungrouped.records) out.push(`  ${pc.dim(`${num(rep.ungrouped.records)} of the records ran in no trigger of the map — a program's own (TrigScript, eudplib), ${ms(rep.ungrouped.ms)} in all`)}`);
+  if (rep.limits) out.push(`  ${pc.dim(t("Remastered on a fast computer: smooth to about {smooth} ms of triggers a frame, slows past {most} ms", { smooth: rep.limits.smoothMs, most: rep.limits.mostMs.toFixed(0) }))}`);
+  if (rep.ungrouped.records) out.push(`  ${pc.dim(t("{n} of the records ran in no trigger of the map — a program's own (TrigScript, eudplib), {ms} in all", { n: num(rep.ungrouped.records), ms: ms(rep.ungrouped.ms) }))}`);
   const shown = rep.rows.slice(0, all ? Infinity : 12);
   if (shown.length) {
-    const head = ["#", "ms a frame", "Frames", "Records", "Trigger"].map((h) => pc.dim(h));
+    const head = ["#", t("ms a frame"), t("Frames"), t("Records"), t("Trigger")].map((h) => pc.dim(h));
     const fixed = shown.reduce((n, x) => Math.max(n, columns(`${x.row + 1}  ${ms(x.msAFrame)}  ${num(x.frames)}  ${num(x.records)}  `)), 0) + 2;
-    out.push("", pc.dim("  Costliest triggers, a frame they ran in"), ...table([head, ...shown.map((x) => [pc.dim(String(x.row + 1)), ms(x.msAFrame), num(x.frames), num(x.records), rowText(scn, x.row, Math.max(30, width - fixed - 2))])], 2));
-    if (rep.rows.length > shown.length) out.push(pc.dim(`  … and ${num(rep.rows.length - shown.length)} more (--all lists them)`));
+    out.push("", pc.dim(`  ${t("Costliest triggers, a frame they ran in")}`), ...table([head, ...shown.map((x) => [pc.dim(String(x.row + 1)), ms(x.msAFrame), num(x.frames), num(x.records), rowText(scn, x.row, Math.max(30, width - fixed - 2))])], 2));
+    if (rep.rows.length > shown.length) out.push(pc.dim(`  ${t("… and {n} more (--all lists them)", { n: num(rep.rows.length - shown.length) })}`));
   }
   return out;
 }

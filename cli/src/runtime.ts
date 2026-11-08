@@ -8,6 +8,7 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { t } from "./i18n";
 
 declare const __SCMJS_INSTALL__: string;
 
@@ -46,14 +47,14 @@ export function updateCommand(install: Install, pkg = "@scm-js/cli"): string {
   if (install.manager === "scoop") return "scoop update scmjs";
   if (install.manager === "winget") return "winget upgrade scm-js.scmjs";
   if (install.manager === "homebrew") return "brew upgrade scmjs";
-  return `download it again from ${RELEASES_URL}`;
+  return t("download it again from {url}", { url: RELEASES_URL });
 }
 
 /** How the install is named in `about` and `doctor`. */
 export function installLabel(install: Install): string {
-  if (install.kind === "npm") return "npm package";
-  return install.manager === "scoop" ? "single executable, from Scoop" : install.manager === "winget" ? "single executable, from winget"
-    : install.manager === "homebrew" ? "single executable, from Homebrew" : "single executable";
+  if (install.kind === "npm") return t("npm package");
+  return install.manager === "scoop" ? t("single executable, from Scoop") : install.manager === "winget" ? t("single executable, from winget")
+    : install.manager === "homebrew" ? t("single executable, from Homebrew") : t("single executable");
 }
 
 /**

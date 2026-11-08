@@ -11,6 +11,7 @@ import { join, resolve } from "node:path";
 import { randomBytes } from "node:crypto";
 import type { Input } from "./files";
 import { qrFor } from "./qr";
+import { t } from "./i18n";
 import { CliError, mark, pc, print } from "./ui";
 
 export const EDITOR_URL = "https://scmjs.dev/editor/";
@@ -64,10 +65,10 @@ export async function openInScmjs(input: Input, options: { browser?: boolean; ed
     const file = resolve(input.path);
     if (process.platform === "darwin") detach("open", ["-a", app, file]);
     else detach(app, [wsl ? toWindows(file) : file]);
-    print(`${mark.ok} Opening ${pc.bold(input.name)} in the scmJS app`);
+    print(`${mark.ok} ${t("Opening {name} in the scmJS app", { name: pc.bold(input.name) })}`);
     return;
   }
-  if (!options.browser) print(pc.dim("No scmJS app is installed here, so the editor opens in your browser."));
+  if (!options.browser) print(pc.dim(t("No scmJS app is installed here, so the editor opens in your browser.")));
   await handOver(input, options.editor ?? process.env.SCMJS_EDITOR_URL ?? EDITOR_URL);
 }
 
@@ -109,13 +110,15 @@ async function handOver(input: Input, editor: string, { lobby = false, onMessage
   const page = `http://127.0.0.1:${port}/${token}`;
   onAddress?.(page);
   openBrowser(page);
-  print(`${mark.info} Opening ${pc.bold(input.name)} in ${what} in your browser`, pc.dim(`  If nothing opens, go to ${page}`));
+  // `what` is English for the loopback page; the terminal says it in the reader's language.
+  const which = what === "the play page" ? "play" : "editor";
+  print(`${mark.info} ${t("Opening {name} in {what, select, play {the play page} other {the editor}} in your browser", { name: pc.bold(input.name), what: which })}`, pc.dim(`  ${t("If nothing opens, go to {page}", { page })}`));
   const timer = setTimeout(() => done(false), timeout);
   const taken = await finished;
   clearTimeout(timer);
   server.close();
-  if (!taken) throw new CliError(`${what[0].toUpperCase()}${what.slice(1)} did not take the file`, `Open ${editor} and drop ${input.name} on it.`);
-  print(`${mark.ok} Handed to ${what}`);
+  if (!taken) throw new CliError(t("{what, select, play {The play page} other {The editor}} did not take the file", { what: which }), t("Open {address} and drop {name} on it.", { address: editor, name: input.name }));
+  print(`${mark.ok} ${t("Handed to {what, select, play {the play page} other {the editor}}", { what: which })}`);
   return taken;
 }
 
@@ -133,9 +136,9 @@ export async function playInLobby(input: Input, options: { play?: string; live?:
   await handOver(input, options.play ?? process.env.SCMJS_PLAY_URL ?? PLAY_PAGE_URL, {
     lobby: true, timeout: options.timeout ?? 300_000, what: "the play page", onAddress: options.onAddress,
     onMessage: (m) => {
-      if (m.type === "scmjs.invite") { out.link = String(m.link ?? ""); out.invite = String(m.invite ?? ""); out.name = typeof m.name === "string" ? m.name : null; out.error = null; say(`${mark.ok} ${pc.bold("Lobby open")}: send this link to the people you want to play with\n  ${pc.cyan(out.link)}`); if (options.qr && out.link) say(["", ...qrFor(out.link), ""].join("\n")); }
-      else if (m.type === "scmjs.waiting") { const text = String(m.message ?? m.reason ?? "waiting"); out.waited.push(text); say(`${mark.info} ${text}${m.reason === "sign-in" ? pc.dim(" (sign in on the page; the lobby opens after)") : ""}`); }
-      else if (m.type === "scmjs.error") { out.error = String(m.message ?? "the page could not open a lobby"); say(`${mark.warn} ${out.error}${pc.dim(" (Invite Players on the page tries again)")}`); }
+      if (m.type === "scmjs.invite") { out.link = String(m.link ?? ""); out.invite = String(m.invite ?? ""); out.name = typeof m.name === "string" ? m.name : null; out.error = null; say(`${mark.ok} ${t("{lobby}: send this link to the people you want to play with", { lobby: pc.bold(t("Lobby open")) })}\n  ${pc.cyan(out.link)}`); if (options.qr && out.link) say(["", ...qrFor(out.link), ""].join("\n")); }
+      else if (m.type === "scmjs.waiting") { const text = String(m.message ?? m.reason ?? "waiting"); out.waited.push(text); say(`${mark.info} ${text}${m.reason === "sign-in" ? pc.dim(` ${t("(sign in on the page; the lobby opens after)")}`) : ""}`); }
+      else if (m.type === "scmjs.error") { out.error = String(m.message ?? t("the page could not open a lobby")); say(`${mark.warn} ${out.error}${pc.dim(` ${t("(Invite Players on the page tries again)")}`)}`); }
     },
   });
   return out;

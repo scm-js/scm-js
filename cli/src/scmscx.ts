@@ -6,11 +6,13 @@
  * nothing is cached.
  */
 import { VERSION } from "./about";
+import { t } from "./i18n";
 import { CliError } from "./ui";
 
 export const SCMSCX = "https://scmscx.com";
 export const TIMEOUT_MS = 10_000;
 export const USER_AGENT = `scmjs/${VERSION} (+https://docs.scmjs.dev/cli/)`;
+const ISSUES = "https://github.com/scm-js/scm-js/issues";
 
 /** The routes, as verified against the site on 2026-11-07 (.claude/internals/cli.md). */
 export const ROUTES = {
@@ -79,13 +81,13 @@ export function scmscx(options: ScmscxOptions = {}) {
     let timer = setTimeout(() => { timedOut = true; control.abort(); }, timeout);
     const again = () => { clearTimeout(timer); timer = setTimeout(() => { timedOut = true; control.abort(); }, timeout); };
     const down = (e: unknown) => timedOut
-      ? new CliError(`${site} did not answer within ${timeout / 1000} seconds`, `Try again later, or see whether ${base} is up.`)
-      : new CliError(`${site} could not be reached (${(e as { cause?: { code?: string } })?.cause?.code ?? (e instanceof Error ? e.message : e)})`, "Check the connection, or try again later.");
+      ? new CliError(t("{site} did not answer within {n} seconds", { site, n: timeout / 1000 }), t("Try again later, or see whether {address} is up.", { address: base }))
+      : new CliError(t("{site} could not be reached ({reason})", { site, reason: String((e as { cause?: { code?: string } })?.cause?.code ?? (e instanceof Error ? e.message : e)) }), t("Check the connection, or try again later."));
     try {
       let res: Response;
       try { res = await fetchFn(`${base}${path}`, { headers: { accept, "user-agent": USER_AGENT }, signal: control.signal }); } catch (e) { throw down(e); }
-      if (missing(res.status)) throw new CliError(`${site} has no such map`, "The id is the last part of the map's address on the site: scmscx.com/map/<id>.");
-      if (!res.ok) throw new CliError(`${site} answered ${res.status}${res.statusText ? ` ${res.statusText}` : ""}`, `Try again later, or see whether ${base} is up.`);
+      if (missing(res.status)) throw new CliError(t("{site} has no such map", { site }), t("The id is the last part of the map's address on the site: scmscx.com/map/<id>."));
+      if (!res.ok) throw new CliError(t("{site} answered {status}", { site, status: `${res.status}${res.statusText ? ` ${res.statusText}` : ""}` }), t("Try again later, or see whether {address} is up.", { address: base }));
       const chunks: Uint8Array[] = [];
       try {
         if (res.body) for await (const c of res.body as unknown as AsyncIterable<Uint8Array>) { chunks.push(c); again(); }
@@ -96,7 +98,7 @@ export function scmscx(options: ScmscxOptions = {}) {
 
   async function json(path: string, missing?: (status: number) => boolean): Promise<unknown> {
     const bytes = await get(path, "application/json", missing);
-    try { return JSON.parse(new TextDecoder().decode(bytes)); } catch { throw new CliError(`${site} answered with something that is not JSON`, "The site may have changed; please report it: https://github.com/scm-js/scm-js/issues"); }
+    try { return JSON.parse(new TextDecoder().decode(bytes)); } catch { throw new CliError(t("{site} answered with something that is not JSON", { site }), t("The site may have changed; please report it: {url}", { url: ISSUES })); }
   }
 
   return {
@@ -106,7 +108,7 @@ export function scmscx(options: ScmscxOptions = {}) {
     /** The site's best matches for the words (its relevance order), a row per map. */
     async search(words: string): Promise<SearchResult> {
       const body = await json(ROUTES.search(words)) as { maps?: unknown; total_results?: unknown };
-      if (!body || !Array.isArray(body.maps)) throw new CliError(`${site} answered the search with something unexpected`, "The site may have changed; please report it: https://github.com/scm-js/scm-js/issues");
+      if (!body || !Array.isArray(body.maps)) throw new CliError(t("{site} answered the search with something unexpected", { site }), t("The site may have changed; please report it: {url}", { url: ISSUES }));
       const byId = new Map<string, SearchRow>();
       for (const r of body.maps as { id?: unknown; filename?: unknown; scenario_name?: unknown }[]) {
         if (!r || typeof r.id !== "string" || !r.id) continue;
@@ -127,7 +129,7 @@ export function scmscx(options: ScmscxOptions = {}) {
         properties?: { width?: unknown; height?: unknown; tileset?: unknown; ver?: unknown };
       };
       const meta = raw?.meta ?? {}, props = raw?.properties ?? {};
-      if (typeof meta.mpq_hash !== "string" || !meta.mpq_hash) throw new CliError(`${site} answered for ${id} without the map's file`, "The site may have changed; please report it: https://github.com/scm-js/scm-js/issues");
+      if (typeof meta.mpq_hash !== "string" || !meta.mpq_hash) throw new CliError(t("{site} answered for {id} without the map's file", { site, id }), t("The site may have changed; please report it: {url}", { url: ISSUES }));
       const n = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : 0);
       const owners = Array.isArray(raw.player_owners) ? raw.player_owners : [];
       let fileNames: string[] = [];

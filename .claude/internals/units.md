@@ -4,7 +4,11 @@
 
 `dat.ts` decodes only the fields the editor needs from the Brood War `arr\*.dat` layout (struct of
 arrays; placement box / add-on offset / extents are arrays of structs — the layout is pinned by
-`tests/dat.test.ts` against the real file). `units/load.ts` fetches the tables once (`getUnitAssets` /
+`tests/dat.test.ts` against the real file). `FlingyDat` gained `topSpeed`, `acceleration`, `haltDistance`, `turnRadius` and
+`moveControl` for `scmjs map analyze` (2026-11-08; additive, so the plugin API's `api.data.flingy()` carries them too).
+`speed.ts#walkSpeed`: flingy.dat's top speed / 256 px a frame, except when `moveControl` is 2 (iscript: Marine,
+Zergling, Zealot, Hydralisk, …, whose top speed is a placeholder 1) — then the Walking animation's loop, Σ`move` /
+Σ`wait` (Marine 36/9 = 4, Zealot 4, Zergling 39/7 ≈ 5.57 against BWAPI's 5.49, Hydralisk 3.71 against 3.66; SCV 5). `units/load.ts` fetches the tables once (`getUnitAssets` /
 `peekUnitAssets`) and GRPs lazily (`requestGrp`, `onGrpLoaded` fires so canvases repaint);
 `units/sprites.ts` caches one canvas per (image, frame, colour row, tileset palette) in an
 `LruCache` (`src/lib/lru.ts`, budgeted in pixel bytes — `FRAME_CACHE_BUDGET`, 64 MB — since

@@ -36,6 +36,7 @@ import { validateScenario, type Issue } from "../../src/editor/validate";
 import { START_LOCATION } from "../../src/data/units";
 import { TILESETS, type TilesetId } from "../../src/data/tilesets";
 import { centreOf, chebGap, GEYSER, HALL, layoutBase, MINERAL, mineralLooks, TILE, type TileRect } from "./bases";
+import { t, translate } from "./i18n";
 
 /* ── Options ──────────────────────────────────────────────── */
 
@@ -76,11 +77,11 @@ export function resolveSymmetry(players: number, symmetry: GenSymmetry, width: n
     if (symmetry === "rotational") return { mode: "rot180" };
     if (symmetry === "mirror-x") return { mode: "h" };
     if (symmetry === "mirror-y") return { mode: "v" };
-    return square ? { mode: "diag" } : { problem: "diagonal symmetry needs a square map" };
+    return square ? { mode: "diag" } : { problem: t("diagonal symmetry needs a square map") };
   }
-  if (symmetry === "diagonal") return { problem: `diagonal symmetry holds two players, not ${players}` };
+  if (symmetry === "diagonal") return { problem: t("diagonal symmetry holds two players, not {n}", { n: players }) };
   if (players === 6) {
-    if (symmetry === "mirror-y" && width < 192) return { problem: "six players mirrored top to bottom need a map 192 wide or more" };
+    if (symmetry === "mirror-y" && width < 192) return { problem: t("six players mirrored top to bottom need a map 192 wide or more") };
     return { mode: symmetry === "mirror-y" ? "v" : symmetry === "rotational" ? "rot180" : "h" };
   }
   // Four and eight: the four-way mirror. A quarter turn would need a ramp up a north-facing cliff for one of the four,
@@ -128,7 +129,7 @@ export const RECIPES: Partial<Record<TilesetId, Recipe>> = {
 /** The recipe of a tileset, or an error naming why it has none. */
 export function recipeOf(tileset: TilesetId): Recipe {
   const recipe = RECIPES[tileset];
-  if (!recipe) throw new Error(`${TILESETS.find((t) => t.id === tileset)?.name ?? tileset} has no ground a building can stand on, so it has no melee maps`);
+  if (!recipe) throw new Error(t("{name} has no ground a building can stand on, so it has no melee maps", { name: translate(TILESETS.find((ts) => ts.id === tileset)?.name ?? tileset) }));
   return recipe;
 }
 
@@ -636,7 +637,7 @@ export interface Built {
 }
 
 /** A base's player for a message. */
-const whose = (owner: number) => (owner >= 0 ? `player ${owner + 1}` : "a base without a player");
+const whose = (owner: number) => (owner >= 0 ? t("player {n}", { n: owner + 1 }) : t("a base without a player"));
 
 /** Why a layout was thrown away; with the map as far as it got, for a look at what went wrong. */
 export class LayoutError extends Error {
@@ -665,7 +666,7 @@ export function layGround(plan: Plan, g: Graphics, seed: number, name: string, d
   const r = rng(seed ^ 0x5bd1e995);
   const { tiles, isom } = flatTerrain(o.width, o.height, baseTerrain(g.tileset, recipe.low), g.tileset, r, era);
   const scn = createScenario({ width: o.width, height: o.height, era, name, description, tiles, isom });
-  if (!hasIsom(scn)) throw new LayoutError("the new map has no ISOM section");
+  if (!hasIsom(scn)) throw new LayoutError(t("the new map has no ISOM section"));
   isomTables(g.tileset, era);
 
   const pick = (test: (i: number) => boolean) => [...L.all()].filter((d) => test(L.at(d.x, d.y)));
@@ -677,18 +678,18 @@ export function layGround(plan: Plan, g: Graphics, seed: number, name: string, d
   ];
   for (const [terrain, diamonds] of strokes) {
     if (terrain === null || diamonds.length === 0) continue;
-    if (!paintIsomDiamonds(scn, g.tileset, diamonds, terrain, r)) throw new LayoutError(`the tileset has no isometric terrain ${terrain}`, scn);
+    if (!paintIsomDiamonds(scn, g.tileset, diamonds, terrain, r)) throw new LayoutError(t("the tileset has no isometric terrain {terrain}", { terrain }), scn);
   }
   // A rect whose links name no tile group comes out as tile 0: the brush could not join the ground there.
   const holes = scn.tiles.reduce<number[]>((list, t, i) => (t === 0 ? [...list, i] : list), []);
-  if (holes.length > 0) throw new LayoutError(`${holes.length} tiles the brush could not join (the first at ${holes[0] % o.width}, ${Math.floor(holes[0] / o.width)})`, scn);
-  if (checkIsom(scn, g.tileset).mismatched > 0) throw new LayoutError("the lattice does not describe the tiles", scn);
+  if (holes.length > 0) throw new LayoutError(t("{n} tiles the brush could not join (the first at {x}, {y})", { n: holes.length, x: holes[0] % o.width, y: Math.floor(holes[0] / o.width) }), scn);
+  if (checkIsom(scn, g.tileset).mismatched > 0) throw new LayoutError(t("the lattice does not describe the tiles"), scn);
 
   // Ramps: the tileset's ramp doodads between the two levels, at the place nearest each complex's ramp diamond.
   const { groups } = g.tileset;
   // A ramp drawn for this cliff: it needs the cliff under it (StarEdit's own rule then says where it fits).
   const ramps = g.doodads.doodads.filter((d) => d.ramp && [...d.required].some((x) => x !== 0 && groups[x]?.index === recipe.cliff));
-  if (ramps.length === 0) throw new LayoutError(`${TILESETS[era].name} has no ramp between its two levels`, scn);
+  if (ramps.length === 0) throw new LayoutError(t("{name} has no ramp between its two levels", { name: translate(TILESETS[era].name) }), scn);
   // The tileset's own ramps come first, the ones every version of the game has: the first run of ids (a gap of more than
   // 20 ends it). Remastered adds narrow cliff pieces with the ramp bit much later in the table, which StarEdit's rule
   // takes at a ramp's place but the game does not always walk (2 × 5 pieces left a main walled off in Remastered's own
@@ -730,7 +731,7 @@ export function layGround(plan: Plan, g: Graphics, seed: number, name: string, d
       }
       applyChanges(scn, edit.tiles, "undo", "mtxm");
     }
-    if (!kept) throw new LayoutError(`no ramp fits the main of ${whose(c.owner)}`, scn);
+    if (!kept) throw new LayoutError(t("no ramp fits the main of {whose}", { whose: whose(c.owner) }), scn);
   }
 
   return { scenario: scn, ramps: placedRamps, rampBoxes };
@@ -792,7 +793,10 @@ export function placeBases(plan: Plan, g: Graphics, ground: Ground): Built {
     const fitsRes = (rect: TileRect) => flat(rect, h) && clearOf(rect, 1) && rampBoxes.every((b) => chebGap(b, rect) >= 3);
     const layout = layoutBase(hall, { minerals, geysers: 1, direction, fits: fitsRes });
     if (layout.short.minerals > 0 || layout.short.geysers > 0) {
-      throw new LayoutError(`the ${kind} of ${whose(owner)} has room for ${layout.minerals.length} of ${minerals} mineral fields`, scn);
+      const params = { whose: whose(owner), room: layout.minerals.length, n: minerals };
+      throw new LayoutError(kind === "main" ? t("the main of {whose} has room for {room} of {n} mineral fields", params)
+        : kind === "natural" ? t("the natural of {whose} has room for {room} of {n} mineral fields", params)
+        : t("the free base of {whose} has room for {room} of {n} mineral fields", params), scn);
     }
     const looks = mineralLooks(layout.minerals);
     layout.minerals.forEach((m, k) => { used.push(m); const c = centreOf(m); units.push({ unitId: looks[k], owner: NEUTRAL, x: c.x, y: c.y, amount: MINERAL_AMOUNT }); });
@@ -804,7 +808,7 @@ export function placeBases(plan: Plan, g: Graphics, ground: Ground): Built {
     const mx = 2 * c.main.x, my = c.main.y;
     const highLevel = levels.high;
     const hall = hallNear(mx, my, highLevel);
-    if (!hall) throw new LayoutError(`no room for a town hall in the main of ${whose(c.owner)}`, scn);
+    if (!hall) throw new LayoutError(t("no room for a town hall in the main of {whose}", { whose: whose(c.owner) }), scn);
     // The mineral line goes behind the hall, away from the ramp.
     const rx = 2 * c.ramp.x, ry = c.ramp.y;
     const hc = centreOf(hall);
@@ -815,7 +819,7 @@ export function placeBases(plan: Plan, g: Graphics, ground: Ground): Built {
     const nx = 2 * c.natural.x, ny = c.natural.y;
     const lowLevel = levels.low;
     const hall = hallNear(nx, ny, lowLevel);
-    if (!hall) throw new LayoutError(`no room for a town hall at the natural of ${whose(c.owner)}`, scn);
+    if (!hall) throw new LayoutError(t("no room for a town hall at the natural of {whose}", { whose: whose(c.owner) }), scn);
     // Away from both the way up the ramp and the way to the middle: the line stays off every walk.
     const toRamp = Math.atan2(c.ramp.y + 2 - ny, 2 * c.ramp.x + c.sx * 4 - nx);
     const toMiddle = Math.atan2(centre.y - ny, centre.x - nx);
@@ -833,7 +837,7 @@ export function placeBases(plan: Plan, g: Graphics, ground: Ground): Built {
     const fx = 2 * f.at.x, fy = f.at.y;
     const lowLevel = levels.low;
     const hall = hallNear(fx, fy, lowLevel);
-    if (!hall) throw new LayoutError("no room for a town hall at a free base", scn);
+    if (!hall) throw new LayoutError(t("no room for a town hall at a free base"), scn);
     let dir = Math.atan2(fy - centre.y, fx - centre.x);
     if (Math.abs(fx - centre.x) < 2 && Math.abs(fy - centre.y) < 2) dir = -Math.PI / 2;
     layBase("free", -1, hall, lowLevel, FREE_MINERALS, dir);
@@ -1081,11 +1085,11 @@ export function generateMap(o: GenerateOptions, g: Graphics, name: string, descr
     }
     const measure = measureMap(built, plan, g.tileset);
     const error = measure.issues.find((i) => i.level === "error");
-    if (!measure.connected) { rejected.push("a start location has no ground to another"); continue; }
-    if (error) { rejected.push(`Check Map: ${error.text}`); continue; }
+    if (!measure.connected) { rejected.push(t("a start location has no ground to another")); continue; }
+    if (error) { rejected.push(t("Check Map: {text}", { text: error.text })); continue; }
     if (!best || measure.spread < best.measure.spread) best = { options: o, plan, built, measure, attempt, innerSeed: seed, tried, rejected: [...rejected] };
     if (measure.spread <= BALANCE_TOLERANCE) break;
   }
-  if (!best) throw new LayoutError(`no layout of ${attempts} passed its checks (${[...new Set(rejected)].slice(0, 3).join("; ")})`);
+  if (!best) throw new LayoutError(t("no layout of {n} passed its checks ({reasons})", { n: attempts, reasons: [...new Set(rejected)].slice(0, 3).join("; ") }));
   return { ...best, tried };
 }

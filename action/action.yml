@@ -1,0 +1,142 @@
+# The scmjs GitHub Action: Check Map over a repository's maps, what changed in each map on a pull request (as text,
+# and as pictures), and the TrigScript build. A composite action of shell steps around the `scmjs` command line;
+# README.md beside this file is its page. Third-party actions are pinned by commit, with the version in a comment.
+name: scmjs maps
+description: Check StarCraft maps with scmjs, and show on a pull request what changed in each map.
+author: scm-js
+branding:
+  icon: map
+  color: purple
+
+inputs:
+  version:
+    description: The scmjs release to run, as 0.12.1 or v0.12.1; latest is the newest release.
+    default: latest
+  install:
+    description: >-
+      binary: the release's single executable for this runner (Linux, macOS or Windows on x64, macOS on arm64),
+      checked against the release's SHA256SUMS and cached. npm: npx @scm-js/cli, which needs Node. none: scmjs is
+      on PATH already.
+    default: binary
+  maps:
+    description: >-
+      The maps, as globs from the repository's top, one a line (maps/*.scx, maps/**/*.scm). Empty: every .scx,
+      .scm and .chk file git knows of, tracked or not ignored.
+    default: ""
+  check:
+    description: Run Check Map over the maps; its findings show on the pull request beside each map.
+    default: "true"
+  strict:
+    description: Warnings fail the run too, not only errors.
+    default: "false"
+  baseline:
+    description: >-
+      A baseline file (scmjs map check --write-baseline) whose findings are known and do not fail the run. Empty:
+      .scmjs-baseline.json at the repository's top when there is one.
+    default: ""
+  sarif:
+    description: Upload the findings as SARIF to code scanning too (needs the security-events write permission).
+    default: "false"
+  diff:
+    description: On a pull request (or a push), compare each changed map with the base and say what changed.
+    default: "true"
+  base:
+    description: >-
+      The revision to compare with. Empty: the pull request's base, or on a push the commit before it.
+    default: ""
+  pictures:
+    description: Draw where each changed map changed (scmjs map diff --picture) and attach the PNGs as an artifact.
+    default: "false"
+  comment:
+    description: Put the changes in one comment on the pull request, edited on each push (needs pull-requests write).
+    default: "true"
+  build:
+    description: >-
+      Compile the TrigScript script of each map that keeps one (scmjs map build --check), writing nothing. Uses the
+      repository's own TypeScript when node_modules has it, else installs typescript@6 with npm.
+    default: "false"
+  artifact:
+    description: >-
+      The pictures' artifact name. Empty: map-pictures-<job>. Give each use its own name when one run uses the action twice.
+    default: ""
+  token:
+    description: The token for the release download and the comment.
+    default: ${{ github.token }}
+
+outputs:
+  problems:
+    description: Errors and warnings Check Map found over all the maps, known ones included.
+    value: ${{ steps.run.outputs.problems }}
+  new_problems:
+    description: The errors and warnings the baseline does not hold; the same as problems without a baseline.
+    value: ${{ steps.run.outputs.new_problems }}
+  changed_maps:
+    description: The maps that differ from the base, as a JSON list of paths.
+    value: ${{ steps.run.outputs.changed_maps }}
+
+runs:
+  using: composite
+  steps:
+    - name: Find scmjs
+      id: find
+      shell: bash
+      env:
+        INSTALL: ${{ inputs.install }}
+        VERSION: ${{ inputs.version }}
+        GH_TOKEN: ${{ inputs.token }}
+      run: bash "$GITHUB_ACTION_PATH/scripts/find.sh"
+    - name: Cache scmjs
+      if: inputs.install == 'binary'
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ steps.find.outputs.dir }}
+        key: scmjs-cli-${{ steps.find.outputs.version }}-${{ steps.find.outputs.asset }}
+    - name: Install scmjs
+      shell: bash
+      env:
+        INSTALL: ${{ inputs.install }}
+        VERSION: ${{ steps.find.outputs.version }}
+        ASSET: ${{ steps.find.outputs.asset }}
+        DIR: ${{ steps.find.outputs.dir }}
+        BUILD: ${{ inputs.build }}
+        GH_TOKEN: ${{ inputs.token }}
+      run: bash "$GITHUB_ACTION_PATH/scripts/install.sh"
+    - name: Check and compare the maps
+      id: run
+      shell: bash
+      env:
+        MAPS: ${{ inputs.maps }}
+        CHECK: ${{ inputs.check }}
+        STRICT: ${{ inputs.strict }}
+        BASELINE: ${{ inputs.baseline }}
+        SARIF: ${{ inputs.sarif }}
+        DIFF: ${{ inputs.diff }}
+        BASE: ${{ inputs.base || github.event.pull_request.base.sha || github.event.before }}
+        PICTURES: ${{ inputs.pictures }}
+        BUILD: ${{ inputs.build }}
+        INSTALL: ${{ inputs.install }}
+      run: bash "$GITHUB_ACTION_PATH/scripts/run.sh"
+    - name: Upload the pictures
+      id: pictures
+      if: steps.run.outputs.pictures != '' && steps.run.outputs.pictures != '0'
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      with:
+        name: ${{ inputs.artifact || format('map-pictures-{0}', github.job) }}
+        path: ${{ steps.run.outputs.pictures_dir }}
+        overwrite: true
+        if-no-files-found: ignore
+    - name: Upload the findings to code scanning
+      if: inputs.sarif == 'true' && steps.run.outputs.sarif != ''
+      uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+      with:
+        sarif_file: ${{ steps.run.outputs.sarif }}
+        category: scmjs-maps
+        token: ${{ inputs.token }}
+    - name: Report
+      shell: bash
+      env:
+        COMMENT: ${{ inputs.comment }}
+        PICTURES_URL: ${{ steps.pictures.outputs.artifact-url }}
+        PICTURES: ${{ steps.run.outputs.pictures }}
+        GH_TOKEN: ${{ inputs.token }}
+      run: bash "$GITHUB_ACTION_PATH/scripts/report.sh"

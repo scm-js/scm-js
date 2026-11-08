@@ -17,6 +17,7 @@ import { openMapBytes, readArchive, writeArchiveBytes } from "../../src/editor/m
 import { SCENARIO_PATH, type ArchiveCompression, type StoredMembers } from "../../src/formats/mpq/scm";
 import { formatOf } from "../../src/editor/save";
 import { folderSource, scenarioFromText, scenarioToText, SECTIONS_FILE, TEXT_FOLDER, writeScenarioText, type TextReport } from "./source";
+import { t } from "./i18n";
 import { CliError } from "./ui";
 
 export const MANIFEST_FILE = "archive.json";
@@ -62,7 +63,7 @@ export async function listMembers(bytes: Uint8Array): Promise<{ members: MemberL
   const a = await readArchive(bytes);
   const members: MemberLine[] = [{ name: SCENARIO_PATH, bytes: a.chk.length, kind: "scenario" }];
   for (const [name, data] of [...a.extras].sort(([x], [y]) => x.localeCompare(y))) members.push({ name, bytes: data.length, kind: "member" });
-  for (const m of a.stored?.members ?? []) members.push({ name: `(no name, slot ${m.slot})`, bytes: m.data.length, kind: "stored" });
+  for (const m of a.stored?.members ?? []) members.push({ name: t("(no name, slot {slot})", { slot: m.slot }), bytes: m.data.length, kind: "stored" });
   return { members, listfile: a.files !== null || !a.origin, problems: a.problems };
 }
 
@@ -88,7 +89,7 @@ export async function unpackMap(bytes: Uint8Array, fileName: string, dir: string
   for (const [name, data] of a.extras) {
     let file = fileFor(name);
     if (scenarioText && file.toLowerCase().startsWith(`${TEXT_FOLDER}/`)) {
-      throw new CliError(`The map has a file ${name}, in the folder --text writes the scenario to`, "Unpack it without --text.");
+      throw new CliError(t("The map has a file {name}, in the folder --text writes the scenario to", { name }), t("Unpack it without --text."));
     }
     // Two names that differ only in case are two members; a file system may not agree.
     if (taken.has(file.toLowerCase())) { let n = 2; while (taken.has(`${file}.${n}`.toLowerCase())) n++; file = `${file}.${n}`; }
@@ -126,7 +127,7 @@ export async function unpackMap(bytes: Uint8Array, fileName: string, dir: string
     }
     await writeFile(join(out, MANIFEST_FILE), JSON.stringify(manifest, null, 2) + "\n");
   } catch (e) {
-    throw new CliError(`${out} could not be written (${(e as NodeJS.ErrnoException).code ?? e})`);
+    throw new CliError(t("{file} could not be written ({reason})", { file: out, reason: String((e as NodeJS.ErrnoException).code ?? e) }));
   }
   return {
     dir: out, files: written.length + (scenarioText?.files.size ?? 0), bytes: written.reduce((n, w) => n + w.data.length, 0) + textBytes,
@@ -164,31 +165,31 @@ async function filesUnder(dir: string, under = dir): Promise<string[]> {
 export async function packMap(dirArg: string, options: PackOptions = {}): Promise<Packed> {
   const dir = resolve(dirArg);
   try {
-    if (!(await stat(dir)).isDirectory()) throw new CliError(`${dirArg} is not a folder`, "Name the folder scmjs map unpack wrote.", 2);
+    if (!(await stat(dir)).isDirectory()) throw new CliError(t("{folder} is not a folder", { folder: dirArg }), t("Name the folder scmjs map unpack wrote."), 2);
   } catch (e) {
     if (e instanceof CliError) throw e;
-    throw new CliError(`No folder ${dirArg}`, null, 2);
+    throw new CliError(t("No folder {folder}", { folder: dirArg }), null, 2);
   }
   let manifest: ArchiveManifest | null = null;
   try {
     const raw = JSON.parse(await readFile(join(dir, MANIFEST_FILE), "utf8")) as Partial<ArchiveManifest>;
-    if ((raw.version !== 1 && raw.version !== 2) || !Array.isArray(raw.members)) throw new Error(typeof raw.version === "number" && raw.version > 2 ? `version ${raw.version}: a newer scmjs wrote it` : "not an archive.json this reads");
+    if ((raw.version !== 1 && raw.version !== 2) || !Array.isArray(raw.members)) throw new Error(typeof raw.version === "number" && raw.version > 2 ? t("version {version}: a newer scmjs wrote it", { version: raw.version }) : t("not an archive.json this reads"));
     const text = raw.version === 2 && typeof raw.scenario?.text === "string" ? raw.scenario.text : undefined;
     manifest = { version: raw.version, fileName: typeof raw.fileName === "string" ? raw.fileName : null, scenario: { compression: raw.scenario?.compression ?? null, encrypted: raw.scenario?.encrypted === true, sectorSize: raw.scenario?.sectorSize ?? null, ...(text ? { text } : {}) }, listfile: raw.listfile !== false, members: raw.members.filter((m): m is { name: string; file: string } => typeof m?.name === "string" && typeof m?.file === "string"), stored: raw.stored ?? null, problems: [] };
   } catch (e) {
-    if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw new CliError(`${join(dirArg, MANIFEST_FILE)} could not be read: ${e instanceof Error ? e.message : e}`, "Delete it to pack the folder's files as they are.");
+    if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw new CliError(t("{file} could not be read: {message}", { file: join(dirArg, MANIFEST_FILE), message: String(e instanceof Error ? e.message : e) }), t("Delete it to pack the folder's files as they are."));
   }
   const all = await filesUnder(dir);
   const byLower = new Map(all.map((f) => [f.toLowerCase(), f]));
   const read = async (file: string) => {
     const actual = byLower.get(file.toLowerCase());
-    if (!actual) throw new CliError(`${file} is named in ${MANIFEST_FILE} but is not in the folder`, "Take the line out of the manifest, or put the file back.");
+    if (!actual) throw new CliError(t("{file} is named in {manifest} but is not in the folder", { file, manifest: MANIFEST_FILE }), t("Take the line out of the manifest, or put the file back."));
     return new Uint8Array(await readFile(join(dir, actual)));
   };
   const scenarioFile = byLower.get(fileFor(SCENARIO_PATH).toLowerCase());
   // The scenario as text: the manifest says so, or (with no manifest) the folder has the text and no scenario file.
   const textFolder = manifest?.scenario.text ?? (!scenarioFile && byLower.has(`${TEXT_FOLDER}/${SECTIONS_FILE}`) ? TEXT_FOLDER : null);
-  if (!scenarioFile && !textFolder) throw new CliError(`${dirArg} has no ${fileFor(SCENARIO_PATH)}`, "A map is its scenario; the folder scmjs map unpack writes has one.");
+  if (!scenarioFile && !textFolder) throw new CliError(t("{folder} has no {file}", { folder: dirArg, file: fileFor(SCENARIO_PATH) }), t("A map is its scenario; the folder scmjs map unpack writes has one."));
   const chk = textFolder ? scenarioFromText(await folderSource(join(dir, textFolder))) : new Uint8Array(await readFile(join(dir, scenarioFile!)));
   const used = new Set<string>([MANIFEST_FILE]);
   if (textFolder) for (const f of all) { if (f.toLowerCase().startsWith(`${textFolder.toLowerCase()}/`)) used.add(f.toLowerCase()); }
@@ -221,7 +222,7 @@ export async function packMap(dirArg: string, options: PackOptions = {}): Promis
   const encrypted = manifest?.scenario.encrypted ?? false;
   let bytes: Uint8Array;
   if (formatOf(path) === "chk") {
-    if (extras.size || stored) throw new CliError("A bare .chk has no room for the archive's other members.", "Write an .scx or .scm instead.");
+    if (extras.size || stored) throw new CliError(t("A bare .chk has no room for the archive's other members."), t("Write an .scx or .scm instead."));
     bytes = chk;
   } else {
     bytes = await writeArchiveBytes(chk, { extras, stored, compression, encrypt: encrypted, listfile: manifest?.listfile ?? true });
@@ -230,12 +231,12 @@ export async function packMap(dirArg: string, options: PackOptions = {}): Promis
   try {
     await openMapBytes(bytes, basename(path));
   } catch (e) {
-    throw new CliError(`The packed file is not a map the editor reads: ${e instanceof Error ? e.message : e}`, textFolder ? `The text in ${textFolder}/ has to make a scenario.` : `${fileFor(SCENARIO_PATH)} has to be a scenario.`);
+    throw new CliError(t("The packed file is not a map the editor reads: {message}", { message: String(e instanceof Error ? e.message : e) }), textFolder ? t("The text in {folder}/ has to make a scenario.", { folder: textFolder }) : t("{file} has to be a scenario.", { file: fileFor(SCENARIO_PATH) }));
   }
   try {
     await writeFile(path, bytes);
   } catch (e) {
-    throw new CliError(`${path} could not be written (${(e as NodeJS.ErrnoException).code ?? e})`);
+    throw new CliError(t("{file} could not be written ({reason})", { file: path, reason: String((e as NodeJS.ErrnoException).code ?? e) }));
   }
   return { path, bytes: bytes.length, members: extras.size, stored: stored?.members.length ?? 0, added, compression, encrypted, fromText: !!textFolder };
 }

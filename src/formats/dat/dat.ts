@@ -129,6 +129,16 @@ export const VOICED_UNITS = 106;
 export interface FlingyDat {
   /** sprites.dat index. */
   sprite: Uint16Array;
+  /** The fastest the flingy moves, in 1/256 pixel a frame (a Zergling's 1408 is 5.5 pixels a frame). */
+  topSpeed: Uint32Array;
+  /** How quickly it reaches that speed, in the same units a frame. */
+  acceleration: Uint16Array;
+  /** How far before its goal it starts to slow down, in 1/256 pixel. */
+  haltDistance: Uint32Array;
+  /** How sharply it turns. */
+  turnRadius: Uint8Array;
+  /** 0 flingy.dat's own figures, 1 partially mobile or weapon, 2 iscript.bin's (a unit whose walk is animated). */
+  moveControl: Uint8Array;
 }
 
 export interface SpritesDat {
@@ -243,7 +253,11 @@ export function unitRace(units: UnitsDat, unitId: number): Race {
 }
 
 export function decodeFlingyDat(data: Uint8Array, fileName?: string): FlingyDat {
-  return { sprite: u16(read("flingy", data, fileName).columns.sprite) };
+  const c = read("flingy", data, fileName).columns;
+  return {
+    sprite: u16(c.sprite), topSpeed: u32(c.speed), acceleration: u16(c.acceleration), haltDistance: u32(c.halt_distance),
+    turnRadius: u8(c.turn_radius), moveControl: u8(c.movement_control),
+  };
 }
 
 export function decodeSpritesDat(data: Uint8Array, fileName?: string): SpritesDat {

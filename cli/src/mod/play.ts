@@ -17,6 +17,7 @@ import { randomBytes } from "node:crypto";
 import { dataSetHash, gameName } from "../../../src/formats/mod/sources";
 import type { GameFiles } from "../gamefiles";
 import { openBrowser, PLAY_PAGE_URL } from "../open";
+import { t } from "../i18n";
 import { CliError, mark, pc } from "../ui";
 import type { ModSource } from "./source";
 
@@ -44,7 +45,7 @@ export async function playSet(source: ModSource, base: GameFiles | null): Promis
     if (theirs && theirs.length === data.length && theirs.every((b, i) => b === data[i])) { same++; continue; }
     files.push({ path: gameName(f.name).replace(/\\/g, "/"), name: f.name, bytes: data });
   }
-  if (!files.length) throw new CliError(`${source.name} changes nothing of the game here: every file is the same as ${base?.label ?? "the game's"}.`, null, 1);
+  if (!files.length) throw new CliError(base ? t("{name} changes nothing of the game here: every file is the same as {copy}.", { name: source.name, copy: base.label }) : t("{name} changes nothing of the game here: every file is the same as the game's.", { name: source.name }), null, 1);
   return { name: source.name, hash: await dataSetHash(files.map((f) => ({ name: f.name, bytes: f.bytes }))), files, total: { files: source.files.size, bytes }, same, against: base?.label ?? null };
 }
 
@@ -88,8 +89,8 @@ export async function playOnPage(set: PlaySet, o: PlayOptions = {}): Promise<Pla
         outcome.said.push(m);
         if (m.type === "scmjs.play.started" || m.type === "scmjs.taken") { outcome.started = true; done(); }
         else if (m.type === "scmjs.play.shown") { outcome.shown = true; done(); }
-        else if (m.type === "scmjs.play.error" || m.type === "scmjs.error") { outcome.error = String(m.message ?? "the play page could not take the mod"); done(); }
-        else if (m.type === "scmjs.waiting") say(`${mark.info} ${String(m.message ?? m.reason ?? "waiting")}`);
+        else if (m.type === "scmjs.play.error" || m.type === "scmjs.error") { outcome.error = String(m.message ?? t("the play page could not take the mod")); done(); }
+        else if (m.type === "scmjs.waiting") say(`${mark.info} ${String(m.message ?? m.reason ?? t("waiting"))}`);
       });
       return;
     }
@@ -99,12 +100,12 @@ export async function playOnPage(set: PlaySet, o: PlayOptions = {}): Promise<Pla
   const page = `http://127.0.0.1:${(server.address() as { port: number }).port}/${token}`;
   o.onAddress?.(page);
   openBrowser(page);
-  say(`${mark.info} Opening the play page with ${pc.bold(set.name)} in your browser${pc.dim(`\n  If nothing opens, go to ${page}`)}`);
+  say(`${mark.info} ${t("Opening the play page with {name} in your browser", { name: pc.bold(set.name) })}${pc.dim(`\n  ${t("If nothing opens, go to {page}", { page })}`)}`);
   const timer = setTimeout(() => done(), o.timeout ?? 300_000);
   await finished;
   clearTimeout(timer);
   server.close();
-  if (!outcome.started && !outcome.shown && !outcome.error) throw new CliError("The play page did not take the mod", `Open ${target.origin}${target.pathname} and drop the mod's folder on it.`);
+  if (!outcome.started && !outcome.shown && !outcome.error) throw new CliError(t("The play page did not take the mod"), t("Open {address} and drop the mod's folder on it.", { address: `${target.origin}${target.pathname}` }));
   return outcome;
 }
 

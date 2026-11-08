@@ -15,9 +15,12 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { Archive } from "mopaq";
-import { decodeUnitsDat, type UnitsDat } from "../../src/formats/dat/dat";
+import { decodeFlingyDat, decodeImagesDat, decodeSpritesDat, decodeUnitsDat, type UnitsDat } from "../../src/formats/dat/dat";
+import { decodeIscript } from "../../src/formats/dat/iscript";
+import type { SpeedTables } from "../../src/formats/dat/speed";
 import { loadTileset, type Tileset } from "../../src/formats/tileset/decode";
 import { findGameCopy } from "./engine";
+import { t } from "./i18n";
 import { CliError } from "./ui";
 
 /** An opened copy of the game: a member by its path (`tileset\jungle.cv5`), or null when the copy has none. */
@@ -44,11 +47,11 @@ export function archiveFiles(folder: string, paths = classicArchives(folder)): G
   const archives: Archive[] = [];
   for (const p of paths) {
     try { archives.push(Archive.open(new Uint8Array(readFileSync(p)))); } catch (e) {
-      throw new CliError(`${p} could not be read as an archive (${e instanceof Error ? e.message : e}).`, "The copy's StarDat.mpq and BrooDat.mpq are read as they are; a damaged one needs the game repaired.");
+      throw new CliError(t("{path} could not be read as an archive ({reason}).", { path: p, reason: String(e instanceof Error ? e.message : e) }), t("The copy's StarDat.mpq and BrooDat.mpq are read as they are; a damaged one needs the game repaired."));
     }
   }
   return {
-    folder, kind: "classic", label: `StarCraft 1.16.1 (${archives.length} archive${archives.length === 1 ? "" : "s"})`,
+    folder, kind: "classic", label: t("StarCraft 1.16.1 ({n, plural, one {# archive} other {# archives}})", { n: archives.length }),
     read: async (member) => {
       const name = member.replaceAll("/", "\\");
       for (let i = archives.length - 1; i >= 0; i--) {
@@ -69,7 +72,7 @@ export async function storageFiles(folder: string): Promise<GameFiles> {
   const { nodeSource } = await import("kascade/node");
   let storage: Awaited<ReturnType<typeof Storage.open>>;
   try { storage = await Storage.open(nodeSource(folder)); } catch (e) {
-    throw new CliError(`${folder} could not be read as a StarCraft: Remastered installation (${e instanceof Error ? e.message : e}).`, "Name another copy with --starcraft, or let the Battle.net app repair this one.");
+    throw new CliError(t("{folder} could not be read as a StarCraft: Remastered installation ({reason}).", { folder, reason: String(e instanceof Error ? e.message : e) }), t("Name another copy with --starcraft, or let the Battle.net app repair this one."));
   }
   return {
     folder, kind: "remastered", label: `StarCraft: Remastered ${storage.build.version}`.trim(),
@@ -86,10 +89,10 @@ export async function storageFiles(folder: string): Promise<GameFiles> {
  * The copy named with `--starcraft` (or `SCMJS_STARCRAFT`), else the first in the usual places, opened. `why` is said in
  * the hint when there is none: what the command wanted the game's files for.
  */
-export async function openGameFiles(named: string | undefined, why = "The picture is drawn with your own installation's tileset graphics"): Promise<GameFiles> {
+export async function openGameFiles(named: string | undefined, why = t("The picture is drawn with your own installation's tileset graphics")): Promise<GameFiles> {
   let copy: ReturnType<typeof findGameCopy>;
   try { copy = findGameCopy(named); } catch (e) {
-    if (e instanceof CliError && !named) throw new CliError(e.message, `${why}: name its folder with --starcraft (or SCMJS_STARCRAFT).`);
+    if (e instanceof CliError && !named) throw new CliError(e.message, t("{why}: name its folder with --starcraft (or SCMJS_STARCRAFT).", { why }));
     throw e;
   }
   return copy.kind === "remastered" ? storageFiles(copy.folder) : archiveFiles(copy.folder);
@@ -104,7 +107,7 @@ export async function readTileset(files: GameFiles, name: string): Promise<Tiles
   const [cv5, vf4, vr4, wpe, vx4ex] = await Promise.all(["cv5", "vf4", "vr4", "wpe", "vx4ex"].map(part));
   const vx4 = vx4ex ?? await part("vx4");
   const missing = Object.entries({ cv5, vf4, vr4, wpe, vx4 }).filter(([, v]) => !v).map(([k]) => `${name}.${k}`);
-  if (missing.length) throw new CliError(`${files.label} in ${files.folder} has no ${missing.join(", ")}.`, "The copy may be incomplete; name another with --starcraft.");
+  if (missing.length) throw new CliError(t("{copy} in {folder} has no {files}.", { copy: files.label, folder: files.folder, files: missing.join(", ") }), t("The copy may be incomplete; name another with --starcraft."));
   return loadTileset({ cv5: cv5!, vf4: vf4!, vr4: vr4!, wpe: wpe!, vx4: vx4!, vx4Extended: !!vx4ex });
 }
 
@@ -113,6 +116,21 @@ export async function readUnitsDat(files: GameFiles): Promise<UnitsDat | null> {
   try {
     const bytes = await files.read("arr\\units.dat");
     return bytes ? decodeUnitsDat(bytes) : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * What a unit's walking speed is read from (`walkSpeed`): units.dat, flingy.dat, sprites.dat, images.dat and
+ * iscript.bin; null when the copy lacks one or one cannot be read.
+ */
+export async function readSpeedTables(files: GameFiles, units?: UnitsDat | null): Promise<SpeedTables | null> {
+  try {
+    const [u, flingy, sprites, images, iscript] = await Promise.all(["arr\\units.dat", "arr\\flingy.dat", "arr\\sprites.dat", "arr\\images.dat", "scripts\\iscript.bin"].map((m, i) => (i === 0 && units ? null : files.read(m))));
+    const table = units ?? (u ? decodeUnitsDat(u) : null);
+    if (!table || !flingy || !sprites || !images || !iscript) return null;
+    return { units: table, flingy: decodeFlingyDat(flingy), sprites: decodeSpritesDat(sprites), images: decodeImagesDat(images), iscript: decodeIscript(iscript) };
   } catch {
     return null;
   }

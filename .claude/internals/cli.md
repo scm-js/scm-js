@@ -1,7 +1,7 @@
 # The `scmjs` command line
 
 `cli/` is the npm package **`@scm-js/cli`** (its command is `scmjs`): `scmjs about | doctor | info | mcp | lsp | map info|check|open|new|generate|dump|find|fetch|set|resize|triggers|strings|sounds|diff|log|blame|merge|build|run|unpack|pack|trace|cost|rush|balance|test [record]|preview|heatmap|coverage|optimize |
-replay info|map|open|watch|export|share | plugin new|check|dev | bot new|init|build|update|run|ladder`, or `npx @scm-js/cli …`. npm refused the plain name `scmjs` on the first publish (2026-11-06,
+replay info|map|open|watch|export|share | mod info|unpack|pack|check|diff|new|build|play|test | plugin new|check|dev | bot new|init|build|update|run|ladder`, or `npx @scm-js/cli …`. npm refused the plain name `scmjs` on the first publish (2026-11-06,
 E403 "too similar to scss, sockjs"), so the user chose the scope beside @scm-js/replay and @scm-js/plugin-api. The reader's page is `docs/cli.md`. The shape was the user's (2026-11-05): one command, a noun for
 each kind of thing (`map`, `replay`, `plugin`, `bot`), "an impressive UX tool … not overly engineered".
 
@@ -2188,3 +2188,18 @@ carry `-cli-`: `scmjs-cli-windows-x64.zip`, `scmjs-cli-macos-arm64.tar.gz`, `scm
 templates, docs/cli.md, docs/installing.md). The file inside each archive is still `scmjs` / `scmjs.exe`. v0.12.0 is a
 tag with no release page (its editor, docs, npm packages and image did publish); 0.12.1 is that release, and
 `docs/releases/0.12.0.md` became `0.12.1.md`.
+
+## Mods: `scmjs mod` (`cli/src/mod/`) — 2026-11-08, slice M3 of the mods plan
+
+The whole design, the proofs and the traps are in **`mods.md`**. Here, what touches the rest of the command:
+- The first noun with **its own folder** (`cli/src/mod/*.ts`, imports `../../../src/…`); `tests/core.test.ts` now walks
+  `cli/src/**` recursively and matches `(../)+src/`, so the thin-layer rule holds there too.
+- **The overview's row** came from `about`, now `{ hidden: true }` (still listed in docs/cli.md's reference). The 23
+  lines are held again; the next row needs another freed.
+- `map test`'s action is the function `mapTestAction`, shared with `mod test <mod> <map>`; `map test|trace|cost` take
+  `--mod`, which writes the mod loose in a temp folder (`overlay.ts`) only after `modArgs` says the engine's runners
+  take one (`current.json` `"mods": 1`), and removes it after.
+- `mod play` has its own loopback page (`play.ts`), not `open.ts`'s `handOver`: it serves `/manifest`, `/file/<i>` and
+  `/map`, builds `File`s in the page and posts `scmjs.play` with `dataSet`; `tests/cli-mod.test.ts` stands in for the page.
+- MCP: six tools (`mod_info|check|diff|unpack|pack|new`), 30 in all; `mod_unpack`'s data leaves out the manifest.
+

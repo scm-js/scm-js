@@ -33,7 +33,14 @@ export function sheetColumns(frames: number): number {
   return frames >= 17 && frames % 17 === 0 ? 17 : Math.max(1, Math.ceil(Math.sqrt(frames)));
 }
 
-export async function grpToPng(grpBytes: Uint8Array | GrpImage, palette: NamedPalette, options: { columns?: number } = {}): Promise<Uint8Array> {
+export interface GrpToPngOptions {
+  /** Cells a row (default `sheetColumns`). */
+  columns?: number;
+  /** More `tEXt` chunks to write (Latin-1), beside `scmjs:grp`: what the sheet is, for a person or another tool. */
+  text?: Record<string, string>;
+}
+
+export async function grpToPng(grpBytes: Uint8Array | GrpImage, palette: NamedPalette, options: GrpToPngOptions = {}): Promise<Uint8Array> {
   const grp = grpBytes instanceof Uint8Array ? decodeGrpImage(grpBytes) : grpBytes;
   const rgb = rgbOf(palette);
   const n = grp.frames.length;
@@ -49,7 +56,7 @@ export async function grpToPng(grpBytes: Uint8Array | GrpImage, palette: NamedPa
   const pal = new Uint8Array(1024);
   for (let i = 0; i < 256; i++) { pal.set(rgb.subarray(i * 3, i * 3 + 3), i * 4); pal[i * 4 + 3] = i === 0 ? 0 : 255; }
   const note: SheetNote = { v: 1, palette: palette.name, width: grp.width, height: grp.height, columns, frames: grp.frames.map((f) => [f.x, f.y, f.width, f.height]) };
-  return encodePng({ width: W, height: H, indices, palette: pal, text: { "scmjs:grp": JSON.stringify(note) } });
+  return encodePng({ width: W, height: H, indices, palette: pal, text: { ...options.text, "scmjs:grp": JSON.stringify(note) } });
 }
 
 export interface PngToGrpOptions {

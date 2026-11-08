@@ -312,9 +312,11 @@ describe("scmjs completion", () => {
 
   it("is made from the command tree, hidden commands and help left out", () => {
     const all = names(tree);
-    for (const n of ["info", "map", "triggers", "export", "import", "strings", "diff", "replay", "plugin", "bot", "about"]) expect(all).toContain(n);
+    for (const n of ["info", "map", "triggers", "export", "import", "strings", "diff", "replay", "plugin", "bot", "mod", "unpack"]) expect(all).toContain(n);
     expect(all).not.toContain("completion");
     expect(all).not.toContain("help");
+    // Hidden from the overview to make room for `mod` (banner.ts holds 23 lines), and so from completion too.
+    expect(all).not.toContain("about");
   });
 
   it("writes a script for each shell that names every command", () => {

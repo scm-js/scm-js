@@ -23,7 +23,7 @@ import { summarizeTrigger } from "../../src/formats/triggers/text";
 import { conditionDef } from "../../src/data/triggerDefs";
 import { createInterface } from "node:readline";
 import { FRAME_MS, type Replay } from "@scm-js/replay";
-import { cacheRoot, ensureEngine, findGameCopy, runnerFor, startRunner, type Engine } from "./engine";
+import { cacheRoot, ensureEngine, findGameCopy, runnerFor, startRunner, type Engine, modArgs } from "./engine";
 import { VERSION } from "./about";
 import { assetFile, INSTALL } from "./runtime";
 import { diffMaps, summarizeDiff } from "./diff";
@@ -88,6 +88,8 @@ export interface MapRunOptions {
   /** Stops the run when it fires (an MCP client cancelling its request): the runner is killed and the run fails as cancelled. */
   signal?: AbortSignal;
   node?: string;
+  /** A mod laid over the game: `folder` writes its files in the game's paths and says where (asked once the engine is known to take one). */
+  mod?: { folder: () => Promise<string> };
 }
 
 export interface MapRunOutcome {
@@ -178,7 +180,8 @@ async function runMap(map: string | null, what: "trace" | "cost", o: MapRunOptio
   const game = findGameCopy(o.starcraft);
   const engine = o.ready ?? await ensureEngine(o.engine, undefined, o.live ?? (() => {}));
   const runner = runnerFor(engine, "map");
-  const args = [...(map !== null ? [resolve(map)] : []), "--engine", engine.dir, "--starcraft", game.folder];
+  const modFlag = o.mod ? (modArgs(engine, "?"), modArgs(engine, await o.mod.folder())) : [];
+  const args = [...(map !== null ? [resolve(map)] : []), ...modFlag, "--engine", engine.dir, "--starcraft", game.folder];
   if (o.replay) args.push("--play", resolve(o.replay));
   if (o.order) args.push("--order");
   if (o.frames !== undefined) args.push("--frames", String(o.frames));

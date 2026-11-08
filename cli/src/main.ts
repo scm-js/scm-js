@@ -60,6 +60,16 @@ import { printShare, shareMap } from "./share";
 import { qrFor } from "./qr";
 import { exportSounds, printSounds, readSounds } from "./sounds";
 import { editInEditor, type EditKind, type EditOutcome } from "./texteditor";
+import { checkModSource, printModCheck } from "./mod/check";
+import { diffModSources, printModDiff } from "./mod/diff";
+import { modInfo, printModInfo } from "./mod/info";
+import { newMod } from "./mod/new";
+import { gameFilesOrNull, openMod } from "./mod/open";
+import { modOverlay } from "./mod/overlay";
+import { MOD_COMPRESSIONS, packMod, readModFolder, type ModCompression } from "./mod/pack";
+import { playOnPage, playSet } from "./mod/play";
+import { unpackMod } from "./mod/unpack";
+import { shownPath } from "./mod/source";
 import { CliError, dot, gameText, mark, num, pc, plural, print, rows, size, table, visible } from "./ui";
 
 const json = new Option("--json", "print JSON instead of text, for scripts");
@@ -690,8 +700,12 @@ const gameOptions = (cmd: Command) => cmd
   .option("--seed <n>", "the game's seed; the same seed and map give the same run", "1")
   .option("--all", "list every trigger; by default a long list is cut")
   .option("--starcraft <folder>", "your installation of StarCraft (SCMJS_STARCRAFT); found in the usual places otherwise")
+  .option("--mod <mod>", "lay a mod over the game: a mod folder, an .mpq, a mod's .exe or .zip, or a folder of its files")
   .addOption(new Option("--engine <where>", "the play page's address, or a folder holding the engine (SCMJS_PLAY_URL)").hideHelp());
-interface GameOptions { json?: boolean; frames: string; every: string; seed: string; all?: boolean; starcraft?: string; engine?: string }
+interface GameOptions { json?: boolean; frames: string; every: string; seed: string; all?: boolean; starcraft?: string; engine?: string; mod?: string }
+
+/** `--mod`: the mod written out for the runner when the engine takes one, removed when the run ends. */
+const overlayOf = (o: { mod?: string; starcraft?: string }) => (o.mod ? modOverlay(o.mod, () => gameFilesOrNull(o.starcraft)) : null);
 
 /** `--replay` and `--order` for map trace and map cost. */
 interface ReplayOptions { replay?: string; order?: boolean }
@@ -746,7 +760,8 @@ to test a fixed map against the game in a bug report.
   scmjs map trace fixed.scx --replay report.rep`)
   .action(async (file: string | undefined, o: GameOptions & ReplayOptions, cmd: Command) => {
     const g = await gameRun(file, o, cmd);
-    const r = await runMapInGame(g.map, "trace", { frames: g.frames, every: everyOf(o, cmd), seed: whole(o.seed, "seed"), starcraft: o.starcraft, engine: o.engine, replay: g.replay, order: o.order, live: o.json ? undefined : (line) => print(line) });
+    const overlay = overlayOf(o);
+    const r = await runMapInGame(g.map, "trace", { mod: overlay ?? undefined, frames: g.frames, every: everyOf(o, cmd), seed: whole(o.seed, "seed"), starcraft: o.starcraft, engine: o.engine, replay: g.replay, order: o.order, live: o.json ? undefined : (line) => print(line) }).finally(() => overlay?.remove());
     if (o.json) print(JSON.stringify({ ...traceReport(g.name, g.scenario, r), ...g.extra, engine: r.engine, game: r.game, copies: r.end.trace, ms: r.end.ms }, null, 2));
     else print("", ...printTrace(g.name, g.scenario, r, { all: !!o.all }));
   });
@@ -761,7 +776,8 @@ With --replay, the cost of the replay's game, as map trace --replay plays it.`)
   .action(async (file: string | undefined, o: GameOptions & ReplayOptions & { weigh?: string }, cmd: Command) => {
     if (o.order) throw new CliError("--order is map trace's: map cost lists the costliest triggers.", null, 2);
     const g = await gameRun(file, o, cmd);
-    const r = await runMapInGame(g.map, "cost", { frames: g.frames, every: everyOf(o, cmd), seed: whole(o.seed, "seed"), starcraft: o.starcraft, engine: o.engine, weigh: o.weigh, replay: g.replay, live: o.json ? undefined : (line) => print(line) });
+    const overlay = overlayOf(o);
+    const r = await runMapInGame(g.map, "cost", { mod: overlay ?? undefined, frames: g.frames, every: everyOf(o, cmd), seed: whole(o.seed, "seed"), starcraft: o.starcraft, engine: o.engine, weigh: o.weigh, replay: g.replay, live: o.json ? undefined : (line) => print(line) }).finally(() => overlay?.remove());
     if (o.json) print(JSON.stringify({ ...costReport(g.name, r), ...g.extra, engine: r.engine, game: r.game, series: r.end.cost, ms: r.end.ms }, null, 2));
     else print("", ...printCost(g.name, g.scenario, r, { all: !!o.all }));
   });
@@ -835,6 +851,40 @@ as for scmjs bot ladder. Exits 1 when a game could not be played, 2 when the map
     if (r.report.games.some((g) => !g.result.end || g.result.end.by === "desync")) process.exitCode = 1;
   });
 
+/** `map test` (and `mod test`, which names the mod first): the map's scenarios played in the game, with `--mod` laid over it. */
+async function mapTestAction(file: string, testFiles: string[], o: { json?: boolean; format: string; out?: string; frames: string; seed: string; update?: boolean; starcraft?: string; engine?: string; mod?: string }) {
+  if (!(FORMATS as readonly string[]).includes(o.format)) throw new CliError(`--format takes ${FORMATS.join(", ")}, not "${o.format}"`, null, 2);
+  const format: Format = o.json ? "json" : (o.format as Format);
+  const defaults = { frames: whole(o.frames, "frames", 1), seed: whole(o.seed, "seed") };
+  const input = await readInput(file);
+  expectKind(input, "map");
+  if (input.path === STDIO && !testFiles.length) throw new CliError("A map read from standard input has no tests beside it: name the tests file.", null, 2);
+  const files = testFiles.length ? testFiles : [defaultTests(input.path)];
+  const map = await readMapForTests(input.bytes);
+  const scenarios: PlannedScenario[] = [];
+  for (const f of files) {
+    if (!existsSync(f)) throw new CliError(`No tests file ${f}`, testFiles.length ? null : `A map's tests are in ${relative(process.cwd(), f) || f} beside it, or name the file: scmjs map test ${file} <tests.json>. docs.scmjs.dev/cli/ has the file's form.`, 2);
+    scenarios.push(...readTests(f, await readFile(f, "utf8"), map.chk, defaults));
+  }
+  if (!scenarios.length) throw new CliError(`${files.join(", ")} ${files.length === 1 ? "has" : "have"} no scenarios.`, null, 2);
+  const text = format === "text";
+  if (text && scenarios[0].converted) print(pc.dim(`${input.name} is in the StarCraft 1.00 form, which the engine does not run: each scenario runs a copy converted to Brood War`));
+  const overlay = overlayOf(o);
+  const run = await runTests(input.name, scenarios, map, {
+    out: o.out ?? defaultOut(input.path === STDIO ? input.name : input.path), starcraft: o.starcraft, engine: o.engine, update: !!o.update, mod: overlay ?? undefined,
+    live: text ? (line) => print(line) : undefined, onStart: text ? (start) => print(testHeader(input.name, scenarios[0].rows, scenarios, start)) : undefined,
+  }).finally(() => overlay?.remove());
+  const written = o.update ? updateTests(run.scenarios) : [];
+  if (text) for (const w of written) print(`${pc.cyan("✎")} ${plural(w.expectations, "expectation")} written into ${relative(process.cwd(), w.file) || w.file}`);
+  if (run.scenarios.some((s) => !s.ok)) process.exitCode = Math.max(Number(process.exitCode ?? 0), 1);
+  const report: TestReport = { map: input.path, name: input.name, cases: run.scenarios.map((s) => ({ name: s.name, file: s.file, line: s.line, ok: s.ok, ms: s.ms, failures: s.results.filter((x) => !x.ok), replay: s.replay })) };
+  if (format === "json") print(JSON.stringify(testJson(input.name, run), null, 2));
+  else if (format === "github") print(...githubTestAnnotations([report]));
+  else if (format === "junit") process.stdout.write(junitTestXml([report]));
+  else if (format === "sarif") process.stdout.write(sarifTestJson([report], VERSION));
+  else print("", testSummary(run));
+}
+
 const test = map.command("test").description("runs the map's tests in the game: each scenario set up, played and checked, a replay of each that failed").argument("<map>").argument("[tests...]", "tests files (JSON); <map>.tests.json beside the map by default").addOption(json)
   .option("--format <kind>", `${FORMATS.join(", ")}: github is workflow annotations, junit and sarif the files CI tools read`, "text")
   .option("--out <folder>", "where the replays of failing scenarios go (<map>.tests/ beside the map)")
@@ -852,37 +902,8 @@ replay. A scenario may name a replay instead ("replay": "game.rep"): its players
 this map; scmjs map test record makes one from a replay, and -u writes in what such a scenario's game gives now.
 Exits 1 when a scenario fails, 2 when the tests or the map cannot be read or the game could not start.
 The engine and your copy of StarCraft are needed, as for scmjs map trace. docs.scmjs.dev/cli/ has the file's form.`)
-  .action(async (file: string, testFiles: string[], o: { json?: boolean; format: string; out?: string; frames: string; seed: string; update?: boolean; starcraft?: string; engine?: string }) => {
-    if (!(FORMATS as readonly string[]).includes(o.format)) throw new CliError(`--format takes ${FORMATS.join(", ")}, not "${o.format}"`, null, 2);
-    const format: Format = o.json ? "json" : (o.format as Format);
-    const defaults = { frames: whole(o.frames, "frames", 1), seed: whole(o.seed, "seed") };
-    const input = await readInput(file);
-    expectKind(input, "map");
-    if (input.path === STDIO && !testFiles.length) throw new CliError("A map read from standard input has no tests beside it: name the tests file.", null, 2);
-    const files = testFiles.length ? testFiles : [defaultTests(input.path)];
-    const map = await readMapForTests(input.bytes);
-    const scenarios: PlannedScenario[] = [];
-    for (const f of files) {
-      if (!existsSync(f)) throw new CliError(`No tests file ${f}`, testFiles.length ? null : `A map's tests are in ${relative(process.cwd(), f) || f} beside it, or name the file: scmjs map test ${file} <tests.json>. docs.scmjs.dev/cli/ has the file's form.`, 2);
-      scenarios.push(...readTests(f, await readFile(f, "utf8"), map.chk, defaults));
-    }
-    if (!scenarios.length) throw new CliError(`${files.join(", ")} ${files.length === 1 ? "has" : "have"} no scenarios.`, null, 2);
-    const text = format === "text";
-    if (text && scenarios[0].converted) print(pc.dim(`${input.name} is in the StarCraft 1.00 form, which the engine does not run: each scenario runs a copy converted to Brood War`));
-    const run = await runTests(input.name, scenarios, map, {
-      out: o.out ?? defaultOut(input.path === STDIO ? input.name : input.path), starcraft: o.starcraft, engine: o.engine, update: !!o.update,
-      live: text ? (line) => print(line) : undefined, onStart: text ? (start) => print(testHeader(input.name, scenarios[0].rows, scenarios, start)) : undefined,
-    });
-    const written = o.update ? updateTests(run.scenarios) : [];
-    if (text) for (const w of written) print(`${pc.cyan("✎")} ${plural(w.expectations, "expectation")} written into ${relative(process.cwd(), w.file) || w.file}`);
-    if (run.scenarios.some((s) => !s.ok)) process.exitCode = Math.max(Number(process.exitCode ?? 0), 1);
-    const report: TestReport = { map: input.path, name: input.name, cases: run.scenarios.map((s) => ({ name: s.name, file: s.file, line: s.line, ok: s.ok, ms: s.ms, failures: s.results.filter((x) => !x.ok), replay: s.replay })) };
-    if (format === "json") print(JSON.stringify(testJson(input.name, run), null, 2));
-    else if (format === "github") print(...githubTestAnnotations([report]));
-    else if (format === "junit") process.stdout.write(junitTestXml([report]));
-    else if (format === "sarif") process.stdout.write(sarifTestJson([report], VERSION));
-    else print("", testSummary(run));
-  });
+  .option("--mod <mod>", "lay a mod over the game: a mod folder, an .mpq, a mod's .exe or .zip, or a folder of its files")
+  .action(mapTestAction);
 
 test.command("record").description("a scenario from a replay: the game played on the map, its end written as expectations to trim").argument("<map>").argument("<replay>").addOption(json)
   .option("--name <name>", "the scenario's name (the replay's file name by default); a scenario of that name is written anew")
@@ -1316,6 +1337,198 @@ made from the .webm with ffmpeg, when it is installed. The camera follows where 
     else print(exportSummary(r));
   });
 
+// ── Mods ──────────────────────────────────────────────────────────────────
+
+const starcraftOption = () => new Option("--starcraft <folder>", "your installation of StarCraft (SCMJS_STARCRAFT), whose files are under the mod; found in the usual places otherwise");
+
+/** Runs `fn` on each mod named; one that fails is said and the rest go on (as `eachFile` does for maps). */
+async function eachMod(paths: string[], asJson: boolean, fn: (path: string) => Promise<{ data: unknown; lines: string[] }>): Promise<void> {
+  const results: unknown[] = [];
+  for (const [i, path] of paths.entries()) {
+    try {
+      const { data, lines } = await fn(path);
+      results.push(data);
+      if (!asJson) { if (i) print(""); print(...lines); }
+    } catch (e) {
+      if (!(e instanceof CliError)) throw e;
+      if (asJson) results.push({ file: path, error: e.message }); else fail(e);
+      process.exitCode = Math.max(Number(process.exitCode ?? 0), e.exitCode);
+    }
+  }
+  if (asJson) print(JSON.stringify(results.length === 1 ? results[0] : results, null, 2));
+}
+
+const FORM_WORDS: Record<string, [string, string]> = {
+  table: ["table", "tables"], strings: ["string table", "string tables"], iscript: ["iscript", "iscripts"], ai: ["AI script", "AI scripts"], overlay: ["overlay file", "overlay files"],
+  graft: [".graft file", ".graft files"], graphics: ["GRP", "GRPs"], sound: ["sound", "sounds"], map: ["map", "maps"], plugin: ["plugin", "plugins"], firegraft: ["FireGraft file", "FireGraft files"], file: ["other file", "other files"],
+};
+const formsText = (forms: Record<string, number>, keys: string[]) => keys.filter((k) => forms[k]).map((k) => plural(forms[k], ...FORM_WORDS[k])).join(", ");
+
+const modCmd = program.command("mod").description("unpack, check, pack and play a mod of the game").helpGroup("Plugins and bots:")
+  .addHelpText("after", `
+A mod is a folder of text and pictures: its tables as PyDAT's text, its string tables, iscript and AI as PyMS's text,
+its GRPs as PNG sheets, its sounds as they are. unpack makes one from what a mod ships as (a folder, an .mpq, a mod's
+.exe, a .zip); pack makes the MPQ the launchers load; check looks for mistakes across the tables; play plays it on the
+play page. docs.scmjs.dev/mods has the folder's form.`);
+
+modCmd.command("info").description("what a mod is: its files, tables, plugins and the game it is for").argument("<mods...>", "mods: a folder, an .mpq, a mod's .exe, a .zip, or a folder mod unpack wrote").addOption(json)
+  .addOption(starcraftOption())
+  .action(async (paths: string[], o: { json?: boolean; starcraft?: string }) => {
+    const base = await gameFilesOrNull(o.starcraft);
+    await eachMod(paths, !!o.json, async (path) => { const r = modInfo(await openMod(path, base)); return { data: r, lines: printModInfo(r) }; });
+  });
+
+modCmd.command("unpack").description("a mod as a folder of text and pictures, to edit and keep in git").argument("<mod>", "a folder, an .mpq, a mod's .exe or a .zip").argument("<folder>", "the folder to write").addOption(json)
+  .option("--palette <name>", "the tileset whose palette the GRPs are drawn with", "jungle")
+  .addOption(starcraftOption())
+  .addHelpText("after", `
+Each table, string table, iscript, AI script, overlay and .graft file is written as text, and each GRP as a PNG
+sheet, only when that text or picture packs back into the same bytes; anything else is kept as it is under files/,
+and mod.json says which and why. Sounds, maps and every other file are copied as they are, plugins and FireGraft
+files too (never run). The names beside the tables and in the AI script come from the mod's own string tables, else
+your copy of the game's. Unpacking over an earlier unpack replaces its folders.`)
+  .action(async (path: string, dir: string, o: { json?: boolean; palette: string; starcraft?: string }) => {
+    const base = await gameFilesOrNull(o.starcraft);
+    const source = await openMod(path, base);
+    const r = await unpackMod(source, dir, { base, palette: o.palette });
+    if (o.json) { print(JSON.stringify(r, null, 2)); return; }
+    const text = formsText(r.forms, ["table", "strings", "iscript", "ai", "overlay", "graft"]);
+    const kept = r.kept.reduce((n, k) => n + k.count, 0);
+    print(`${mark.ok} ${pc.bold(r.name)}: ${plural(r.members, "file")}${dot}${size(r.bytes)}${dot}${pc.dim("→")} ${pc.cyan(shownPath(r.dir))}`,
+      ...rows([
+        ["As text", text || null],
+        ["As pictures", r.forms.graphics ? `${plural(r.forms.graphics, "GRP")} ${pc.dim(`(the ${r.palette} palette)`)}` : null],
+        ["As they are", formsText(r.forms, ["sound", "map", "file"]) || null],
+        ["Kept as bytes", kept ? plural(kept, "file") : null],
+        ...r.kept.slice(0, 6).map((k) => ["", pc.dim(`${num(k.count)}: ${k.why}`)] as [string, string]),
+        ["Carried", r.plugins + r.firegraft ? `${plural(r.plugins, "plugin")}, ${plural(r.firegraft, "FireGraft file")} ${pc.dim("(kept, never run)")}` : null],
+        ["Names", r.names === "mod" ? "from the mod's string tables" : r.names === "game" ? "from the game's string tables" : pc.dim("none (no string tables): numbers")],
+      ]),
+      ...r.notes.map((n) => `${mark.info} ${n}`));
+  });
+
+modCmd.command("pack").description("the folder back into an MPQ the launchers load, or a loose folder").argument("<folder>", "a folder mod unpack or mod new wrote").addOption(json)
+  .option("-o, --out <file>", "the MPQ to write (<folder>.mpq beside the folder by default)")
+  .option("--folder <out>", "write the files loose in the game's paths instead (for samase, or the play page)")
+  .option("--compression <method>", `${MOD_COMPRESSIONS.join(", ")} for every file`, "zlib")
+  .addOption(starcraftOption())
+  .addHelpText("after", `
+Every file under the folder's tables/, strings/, iscript/, ai/, overlays/, graphics/, sounds/, grafts/, maps/ and
+files/ goes in, at the game's path mod.json and its own path say. The same folder gives the same bytes every time. A
+PNG that is no longer in its palette's colours is brought to the nearest, and a sound that is not a WAV is converted
+with ffmpeg. MPQDraft makes a self-executing mod from the MPQ; Chaoslauncher and FireGraft load it as it is.`)
+  .action(async (dir: string, o: { json?: boolean; out?: string; folder?: string; compression: string; starcraft?: string }) => {
+    if (!(MOD_COMPRESSIONS as readonly string[]).includes(o.compression)) throw new CliError(`--compression takes ${MOD_COMPRESSIONS.join(", ")}, not "${o.compression}"`, null, 2);
+    const r = await packModFolder(dir, { out: o.out, folder: o.folder, compression: o.compression as ModCompression, starcraft: o.starcraft });
+    if (o.json) { print(JSON.stringify(r, null, 2)); return; }
+    print(...printPacked(r));
+  });
+
+/** Opens a folder mod unpack or mod new wrote, and packs it. */
+async function packModFolder(dir: string, o: { out?: string; folder?: string; compression: ModCompression; starcraft?: string }) {
+  const manifest = await readModFolder(dir);
+  return packMod(dir, manifest, { out: o.out, folder: o.folder, compression: o.compression, base: await gameFilesOrNull(o.starcraft) });
+}
+
+function printPacked(r: Awaited<ReturnType<typeof packMod>>): string[] {
+  return [
+    `${mark.ok} ${pc.bold(shownPath(r.path))}: ${plural(r.members, "file")}${r.compression ? `${dot}${r.compression}` : `${dot}loose`}${dot}${size(r.bytes)}`,
+    ...r.converted.map((c) => `  ${pc.dim(`${c} converted to a WAV`)}`),
+    ...r.quantised.map((q) => `${mark.warn} ${q.file}: ${plural(q.pixels, "pixel")} in ${plural(q.colours, "colour")} not in the palette, brought to the nearest`),
+    ...(r.left.length ? [pc.dim(`  Left out (not in a mod's folders): ${r.left.slice(0, 6).join(", ")}${r.left.length > 6 ? " …" : ""}`)] : []),
+  ];
+}
+
+modCmd.command("check").description("mistakes across the tables: pictures, scripts, sounds and references that are not there").argument("<mods...>").addOption(json)
+  .option("--all", "list every finding; by default a long list is cut at 40")
+  .addOption(starcraftOption())
+  .addHelpText("after", `
+Errors: a reference past its table (a unit's weapon, flingy, sprite or image), a string past its string table, an
+image with no GRP, an image whose iscript entry is missing, a button set or requirement for something that is not
+there. Warnings: a weapon or iscript entry the mod added that nothing uses, a sound row with no file, two tables in
+different extended layouts, units with the same name. What the mod leaves as the game had it is not judged.
+Exits 1 when there is an error.`)
+  .action(async (paths: string[], o: { json?: boolean; all?: boolean; starcraft?: string }) => {
+    const base = await gameFilesOrNull(o.starcraft);
+    await eachMod(paths, !!o.json, async (path) => {
+      const r = await checkModSource(await openMod(path, base), base);
+      if (r.failed) process.exitCode = Math.max(Number(process.exitCode ?? 0), 1);
+      return { data: r, lines: printModCheck(r, { all: !!o.all }) };
+    });
+  });
+
+modCmd.command("diff").description("what changed between two mods, or what one changes in the game, as a changelog").argument("<a>").argument("[b]", "the other mod; with none, the game against <a>").addOption(json)
+  .option("--all", "list every change; by default each kind is cut at 30")
+  .addOption(starcraftOption())
+  .action(async (a: string, b: string | undefined, o: { json?: boolean; all?: boolean; starcraft?: string }) => {
+    const base = await gameFilesOrNull(o.starcraft);
+    const r = await diffModSources(await openMod(a, base), b ? await openMod(b, base) : null, base);
+    print(...(o.json ? [JSON.stringify(r, null, 2)] : printModDiff(r, { all: !!o.all })));
+  });
+
+modCmd.command("new").description("an empty mod folder: mod.json and a README").argument("<folder>").addOption(json)
+  .option("--name <name>", "the mod's name (the folder's by default)")
+  .action(async (dir: string, o: { json?: boolean; name?: string }) => {
+    const r = await newMod(dir, o.name);
+    if (o.json) { print(JSON.stringify(r, null, 2)); return; }
+    print(`${mark.ok} ${pc.bold(r.name)}: ${r.files.join(", ")} in ${pc.cyan(relative(process.cwd(), r.dir) || ".")}`, pc.dim(`  Put the game's files you change under files/ at their paths, or start from a mod: scmjs mod unpack <mod> ${dir}`));
+  });
+
+modCmd.command("build").description("check the folder, then pack it; a check error stops it").argument("<folder>").addOption(json)
+  .option("-o, --out <file>", "the MPQ to write (<folder>.mpq beside the folder by default)")
+  .option("--folder <out>", "write the files loose in the game's paths instead")
+  .option("--compression <method>", `${MOD_COMPRESSIONS.join(", ")} for every file`, "zlib")
+  .option("--force", "pack even when the check finds errors")
+  .addOption(starcraftOption())
+  .action(async (dir: string, o: { json?: boolean; out?: string; folder?: string; compression: string; force?: boolean; starcraft?: string }) => {
+    if (!(MOD_COMPRESSIONS as readonly string[]).includes(o.compression)) throw new CliError(`--compression takes ${MOD_COMPRESSIONS.join(", ")}, not "${o.compression}"`, null, 2);
+    const base = await gameFilesOrNull(o.starcraft);
+    await readModFolder(dir);
+    const check = await checkModSource(await openMod(dir, base), base);
+    if (check.failed && !o.force) {
+      if (o.json) print(JSON.stringify({ check, packed: null }, null, 2)); else print(...printModCheck(check), "", `${mark.error} Not packed: the check found ${plural(check.errors, "error")} ${pc.dim("(--force packs anyway)")}`);
+      process.exitCode = 1;
+      return;
+    }
+    const packed = await packModFolder(dir, { out: o.out, folder: o.folder, compression: o.compression as ModCompression, starcraft: o.starcraft });
+    if (o.json) { print(JSON.stringify({ check, packed }, null, 2)); return; }
+    print(...printModCheck(check), ...printPacked(packed));
+  });
+
+modCmd.command("play").description("play the mod on the play page in your browser").argument("<mod>", "a folder, an .mpq, a mod's .exe, a .zip, or a folder mod unpack wrote").addOption(json)
+  .option("--map <file>", "start this map with the mod (otherwise the page offers its maps)")
+  .addOption(starcraftOption())
+  .addOption(new Option("--play <url>", "the play page's address (SCMJS_PLAY_URL)").hideHelp())
+  .addHelpText("after", `
+Opens scmjs.dev/play in your browser and hands it the mod's files that differ from your own copy of the game (all of
+them when no copy is found here), with a hash the page knows the mod by. Nothing is uploaded: the page keeps the mod
+in your browser. Waits up to five minutes for the page.`)
+  .action(async (path: string, o: { json?: boolean; map?: string; starcraft?: string; play?: string }) => {
+    const base = await gameFilesOrNull(o.starcraft);
+    const set = await playSet(await openMod(path, base), base);
+    const map = o.map ? await readInput(o.map) : null;
+    if (map) expectKind(map, "map");
+    if (!o.json) print(`${pc.bold(set.name)}: ${plural(set.files.length, "file")} to hand over${set.against ? pc.dim(` (${num(set.same)} the same as ${set.against})`) : pc.dim(" (no copy of the game here to compare with: all of them)")}${dot}${pc.dim(`hash ${set.hash}`)}`);
+    const r = await playOnPage(set, { map: map && { name: map.name, bytes: map.bytes }, play: o.play, live: o.json ? undefined : (line) => print(line) });
+    if (o.json) { print(JSON.stringify({ name: set.name, hash: set.hash, files: set.files.map((f) => ({ path: f.path, bytes: f.bytes.length })), against: set.against, ...r }, null, 2)); }
+    else if (r.error) throw new CliError(`The play page said: ${r.error}`, null, 1);
+    else print(`${mark.ok} ${r.shown ? "On the play page's setup screen" : "Playing on the play page"}`);
+    if (r.error) process.exitCode = 1;
+  });
+
+modCmd.command("test").description("map test with the mod laid over the game").argument("<mod>").argument("<map>").argument("[tests...]", "tests files (JSON); <map>.tests.json beside the map by default").addOption(json)
+  .option("--format <kind>", `${FORMATS.join(", ")}`, "text")
+  .option("--out <folder>", "where the replays of failing scenarios go (<map>.tests/ beside the map)")
+  .option("--frames <n>", "frames a scenario runs when it does not say (24 a second)", "2400")
+  .option("--seed <n>", "the game's seed when a scenario does not say", "1")
+  .option("-u, --update", "a scenario driven by a replay: write what the game gives now into the expectations that no longer hold")
+  .addOption(starcraftOption())
+  .addOption(new Option("--engine <where>", "the play page's address, or a folder holding the engine (SCMJS_PLAY_URL)").hideHelp())
+  .addHelpText("after", `
+The same as scmjs map test <map> --mod <mod>: each scenario played in the game with the mod's files over the game's.
+Needs a game engine whose runners take a mod.`)
+  .action(async (path: string, file: string, tests: string[], o: Parameters<typeof mapTestAction>[2]) => mapTestAction(file, tests, { ...o, mod: path }));
+
 const plugin = program.command("plugin").description("start, check and run a plugin for the editor").helpGroup("Plugins and bots:");
 plugin.command("new").description("a plugin to start from, in a new folder").argument("[name]", "the plugin's name, such as \"Base Check\"")
   .option("--dir <folder>", "the folder to write it in (default plugin-<id>)")
@@ -1514,7 +1727,7 @@ Speaks the Model Context Protocol on standard input and output, so an AI tool th
 Code, Cursor, VS Code, …) can read, check, search, compare and change maps with the same code these commands use:
 map_info, map_check, map_dump, map_find, map_diff, map_triggers_export|import, map_strings_export|import|prune,
 map_set, map_resize, map_new, map_build, map_run, map_preview (the picture itself), map_trace, map_cost, replay_info,
-replay_map and doctor. map_preview, map_trace and map_cost need a copy of StarCraft here, as the commands do; doctor
+replay_map, mod_info, mod_check, mod_diff, mod_unpack, mod_pack, mod_new and doctor. map_preview, map_trace and map_cost need a copy of StarCraft here, as the commands do; doctor
 says whether there is one. Paths are files on this
 computer, relative to the folder the tool started it in. Claude Code, in your maps folder:
   claude mcp add scmjs -- npx -y @scm-js/cli mcp
@@ -1534,7 +1747,7 @@ folder of a map scmjs map unpack wrote; the map's names come from the scenario b
 the setup for each editor. Needs TypeScript, as map build does.`)
   .action(async (o: { map?: string }) => { await serveLsp({ map: o.map }); });
 
-program.command("about").description("this version, any newer one, and links").helpGroup("This tool:").addOption(json)
+program.command("about", { hidden: true }).description("this version, any newer one, and links").helpGroup("This tool:").addOption(json)
   .action(async (o: { json?: boolean }) => {
     const r = await aboutReport();
     print(...(o.json ? [JSON.stringify(r, null, 2)] : printAbout(r)));

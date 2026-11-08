@@ -102,7 +102,7 @@ export { displayColorHex } from "../../src/data/players";
 export { DAT_SCHEMAS, DAT_TABLES, datTableOf, type DatSchema, type DatField, type DatTableName, type DatValueType, type DatTextCoder } from "../../src/formats/dat/schema";
 export {
   decodeDat, encodeDat, datShape, datEntrySize, datStandardSize, emptyDat, datRow, datRows, setDatRow, datFromRows, datHas, fieldType, storedRange,
-  datToText, datFromText, parseDatText, DatTextError, type DatFile, type DatLayout, type DatRow, type DatShape, type DecodeDatOptions, type DatFromTextOptions, type DatTextEntry,
+  datToText, datFromText, parseDatText, DatTextError, type DatFile, type DatLayout, type DatRow, type DatShape, type DecodeDatOptions, type DatFromTextOptions, type DatTextEntry, type DatToTextOptions,
 } from "../../src/formats/dat/table";
 export { decodeTblFile, encodeTblFile, tblToText, tblFromText, tblEscape, tblUnescape, type TblFile } from "../../src/formats/dat/tblFile";
 export { decodeGrpImage, encodeGrpImage, encodeGrpFrame, encodeGrpLine, frameFromPicture, framePicture, opaqueBox, type GrpImage, type GrpFramePixels } from "../../src/formats/dat/grpFile";
@@ -121,7 +121,20 @@ export {
   type ReqGraft, type ButtonGraft, type GraftButton,
 } from "../../src/formats/dat/graft";
 export { decodePng, encodePng, isPng, inflate, deflate, type PngImage, type EncodePngInput } from "../../src/formats/png";
-export { grpToPng, pngToGrp, sheetColumns, type NamedPalette, type PngToGrpOptions, type QuantiseReport } from "../../src/formats/dat/grpPng";
+export { grpToPng, pngToGrp, sheetColumns, type GrpToPngOptions, type NamedPalette, type PngToGrpOptions, type QuantiseReport } from "../../src/formats/dat/grpPng";
+
+// ── Mods: a mod as a folder of text and pictures ──
+// What a mod comes in (a folder, an MPQ, a self-executing exe, a zip), the folder's form both ways with the check that
+// keeps a text only when it packs back to the same bytes, the lints across tables, and a changelog between two mods.
+export { GAME_FOLDERS, gameName, modRoot, programEnd, exeArchive, isMpq, isZip, isExe, readZip, dataSetHash, ModSourceError, type ExeArchive, type ZipMember } from "../../src/formats/mod/sources";
+export {
+  MOD_MANIFEST, MOD_FORMAT, MOD_FOLDERS, DEFAULT_PALETTE, emptyManifest, readManifest, folderPath, memberPath, placeOf, memberOf, aiNames, renderMember, renderAiScripts, packFile,
+  recordRendered, tidyManifest, ModFolderError,
+  type MemberForm, type ModTable, type ModCarried, type ModManifest, type ModNames, type RenderContext, type Rendered, type PackContext,
+} from "../../src/formats/mod/folder";
+export { loadModData, namesOf, entryText, flatRow, rowChanges, ownEntry, type ReadMember, type ModData } from "../../src/formats/mod/data";
+export { checkMod, GAME_ISCRIPT_LAST, type ModFinding, type CheckFiles } from "../../src/formats/mod/check";
+export { diffMods, type ModChange, type ModChangeKind, type DiffSide } from "../../src/formats/mod/diff";
 
 // ── Names and tables ──
 export { TILESETS, TILESET_BY_ID, MAP_SIZES, type TilesetId, type TilesetInfo } from "../../src/data/tilesets";

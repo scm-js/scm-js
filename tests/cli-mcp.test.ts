@@ -6,7 +6,7 @@
  */
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import { copyFileSync, existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
@@ -52,14 +52,16 @@ describe("scmjs mcp", () => {
   it("lists the tools with what each is for, and says how they fit together", async () => {
     const { tools } = await client.listTools();
     const names = tools.map((t) => t.name).sort();
-    expect(names).toEqual(["doctor", "map_balance", "map_build", "map_check", "map_cost", "map_coverage", "map_diff", "map_dump", "map_find", "map_info", "map_new", "map_optimize", "map_preview", "map_resize", "map_run", "map_set", "map_strings_export", "map_strings_import", "map_strings_prune", "map_trace", "map_triggers_export", "map_triggers_import", "replay_info", "replay_map"]);
+    expect(names).toEqual(["doctor", "map_balance", "map_build", "map_check", "map_cost", "map_coverage", "map_diff", "map_dump", "map_find", "map_info", "map_new", "map_optimize", "map_preview", "map_resize", "map_run", "map_set", "map_strings_export", "map_strings_import", "map_strings_prune", "map_trace", "map_triggers_export", "map_triggers_import", "mod_check", "mod_diff", "mod_info", "mod_new", "mod_pack", "mod_unpack", "replay_info", "replay_map"]);
     for (const t of tools) {
       expect(t.description?.length ?? 0, t.name).toBeGreaterThan(60);
       expect((t.inputSchema as { properties?: object }).properties, t.name).toBeDefined();
     }
     expect(tools.find((t) => t.name === "map_info")?.annotations?.readOnlyHint).toBe(true);
     expect(tools.find((t) => t.name === "map_set")?.annotations?.destructiveHint).toBe(true);
-    for (const name of ["map_trace", "map_cost", "map_coverage", "doctor"]) expect(tools.find((t) => t.name === name)?.annotations?.readOnlyHint, name).toBe(true);
+    for (const name of ["map_trace", "map_cost", "map_coverage", "doctor", "mod_info", "mod_check", "mod_diff"]) expect(tools.find((t) => t.name === name)?.annotations?.readOnlyHint, name).toBe(true);
+    for (const name of ["mod_unpack", "mod_pack", "mod_new"]) expect(tools.find((t) => t.name === name)?.annotations?.destructiveHint, name).toBe(true);
+    expect(INSTRUCTIONS).toMatch(/mod_unpack writes it as a folder of text/);
     const trace = tools.find((t) => t.name === "map_trace")!;
     expect(trace.description).toMatch(/copy of StarCraft.*about 25 MB.*doctor/);
     const most = (name: string) => (tools.find((t) => t.name === name)!.inputSchema.properties as Record<string, { maximum?: number }>).frames.maximum;
@@ -362,6 +364,41 @@ describe("scmjs mcp: the picture and the replay's map", () => {
     const again = await call("replay_map", { path: REPLAY, out });
     expect(again.isError).toBe(true);
     expect(again.content[0].text).toContain("is there already");
+    await client.close();
+  });
+});
+
+describe("scmjs mcp: the mod tools", () => {
+  it("starts a mod, packs it, reads it back, unpacks, checks and compares it", { timeout: 60_000 }, async () => {
+    const { client, call } = await connected();
+    const dir = tmp();
+    const mod = join(dir, "mymod");
+    const made = await call("mod_new", { path: mod, name: "My Mod" });
+    expect(made.isError).toBeFalsy();
+    expect(text(made)).toMatch(/^My Mod: mod\.json, README\.md in /);
+    mkdirSync(join(mod, "files", "glue"), { recursive: true });
+    writeFileSync(join(mod, "files", "glue", "title.txt"), "a mod's own file");
+    const packed = await call("mod_pack", { path: mod, out: join(dir, "mymod.mpq") });
+    expect(packed.isError).toBeFalsy();
+    expect(text(packed)).toMatch(/^Written .*mymod\.mpq: 1 files, \d+ bytes, zlib/);
+    expect(packed.structuredContent).toMatchObject({ form: "mpq", members: 1, compression: "zlib" });
+    const info = await call("mod_info", { path: join(dir, "mymod.mpq") });
+    expect(text(info)).toMatch(/^mymod\nA mod for StarCraft/);
+    expect(info.structuredContent).toMatchObject({ files: 1, kind: "archive" });
+    const unpacked = await call("mod_unpack", { path: join(dir, "mymod.mpq"), out: join(dir, "again") });
+    expect(unpacked.isError).toBeFalsy();
+    expect(readFileSync(join(dir, "again", "files", "glue", "title.txt"), "utf8")).toBe("a mod's own file");
+    expect(unpacked.structuredContent).toMatchObject({ members: 1, kept: [] });
+    expect(unpacked.structuredContent).not.toHaveProperty("manifest");
+    const checked = await call("mod_check", { path: join(dir, "again") });
+    expect(checked.structuredContent).toMatchObject({ failed: false, findings: [] });
+    writeFileSync(join(dir, "again", "files", "glue", "title.txt"), "changed");
+    const diff = await call("mod_diff", { a: mod, b: join(dir, "again") });
+    expect(text(diff)).toMatch(/1 other file changed/);
+    const refused = await call("mod_unpack", { path: join(dir, "mymod.mpq"), out: "-" });
+    expect(refused.isError).toBe(true);
+    const missing = await call("mod_pack", { path: join(dir, "nowhere") });
+    expect(text(missing)).toMatch(/has no mod\.json: it is not a mod folder/);
     await client.close();
   });
 });

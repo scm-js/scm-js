@@ -257,13 +257,20 @@ function textFields(schema: DatSchema): DatField[] {
   return schema.textOrder ? schema.textOrder.map((n) => schema.fields.find((f) => f.name === n)!) : [...schema.fields];
 }
 
+export interface DatToTextOptions {
+  /** A name for an entry, written after its header as a comment (`Unit(0):  # Terran Marine`), which PyDAT skips. */
+  name?: (id: number) => string | undefined;
+}
+
 /** PyDAT TXT: one block an entry (`Unit(0):`, then a tab-indented `field value` line each), a blank line after each. */
-export function datToText(file: DatFile, ids?: readonly number[]): string {
+export function datToText(file: DatFile, ids?: readonly number[] | null, options: DatToTextOptions = {}): string {
   const schema = DAT_SCHEMAS[file.table];
   const fields = textFields(schema);
   const lines: string[] = [];
   for (const id of ids ?? Array.from({ length: file.count }, (_, i) => i)) {
-    lines.push(`${schema.textType}(${id}):`);
+    // (PyDAT's comment rule is `\s*#.+`: a name of nothing but spaces is left out rather than written as a bare `#`.)
+    const name = options.name?.(id)?.replace(/[\r\n]+/g, " ").trim();
+    lines.push(`${schema.textType}(${id}):${name ? `  # ${name}` : ""}`);
     for (const f of fields) if (datHas(file, f, id)) fieldLines(f, file, id, lines);
     lines.push("");
   }

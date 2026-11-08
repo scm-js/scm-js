@@ -27,7 +27,8 @@ import { spawnSync } from "node:child_process";
 import { basename, dirname, relative, resolve } from "node:path";
 import { looksLikeChk, type Input } from "./files";
 import { writeBack, writeOutput, type Written } from "./exchange";
-import { CliError, dot, mark, num, pc, plural, table } from "./ui";
+import { msg, t, translate } from "./i18n";
+import { CliError, columns, dot, mark, num, padColumns, pc, table } from "./ui";
 
 export type Side = "ours" | "theirs";
 
@@ -347,17 +348,17 @@ function mergeInstances<T>(base: readonly T[], ours: readonly T[], theirs: reado
     if (m.prefer === "theirs") { apply(); changed = true; }
   };
   base.forEach((_, b) => {
-    const t = td.state[b], o = od.state[b];
-    if (t.kind === "kept") return;
-    if (t.kind === "removed") {
+    const tk = td.state[b], o = od.state[b];
+    if (tk.kind === "kept") return;
+    if (tk.kind === "removed") {
       if (o.kind === "kept") { slots[o.at] = null; changed = true; }
-      else if (o.kind === "edited") conflict(b, `changed to ${spec.text(ours[o.at])}`, "removed", () => { slots[o.at] = null; });
+      else if (o.kind === "edited") conflict(b, t("changed to {what}", { what: spec.text(ours[o.at]) }), t("removed"), () => { slots[o.at] = null; });
       return;
     }
-    const mine = theirs[t.at];
+    const mine = theirs[tk.at];
     if (o.kind === "kept") { slots[o.at] = { item: mine, slot: o.at }; changed = true; }
-    else if (o.kind === "removed") conflict(b, "removed", `changed to ${spec.text(mine)}`, () => { appended.push({ item: mine, slot: null }); });
-    else if (spec.key(ours[o.at]) !== spec.key(mine)) conflict(b, `changed to ${spec.text(ours[o.at])}`, `changed to ${spec.text(mine)}`, () => { slots[o.at] = { item: mine, slot: o.at }; });
+    else if (o.kind === "removed") conflict(b, t("removed"), t("changed to {what}", { what: spec.text(mine) }), () => { appended.push({ item: mine, slot: null }); });
+    else if (spec.key(ours[o.at]) !== spec.key(mine)) conflict(b, t("changed to {what}", { what: spec.text(ours[o.at]) }), t("changed to {what}", { what: spec.text(mine) }), () => { slots[o.at] = { item: mine, slot: o.at }; });
   });
   const oursAdded = new Map<string, number>();
   for (const a of od.added) { const k = spec.key(ours[a]); oursAdded.set(k, (oursAdded.get(k) ?? 0) + 1); }
@@ -398,29 +399,29 @@ class Merging {
 
 /** A string by number, null for none; an empty string is none too (an empty slot the table keeps). */
 const text = (scn: Scenario, i: number): string | null => (i > 0 ? scn.strings.strings[i] || null : null);
-const show = (s: string | null, max = 60) => { if (s === null) return "(none)"; const p = plainText(s).replace(/\s+/g, " "); return `"${p.length > max ? `${p.slice(0, max - 1)}…` : p}"`; };
-const owner = (o: number) => (o === 11 ? "Neutral" : o < 8 ? `Player ${o + 1}` : `Owner ${o}`);
+const show = (s: string | null, max = 60) => { if (s === null) return t("(none)"); const p = plainText(s).replace(/\s+/g, " "); return `"${p.length > max ? `${p.slice(0, max - 1)}…` : p}"`; };
+const owner = (o: number) => (o === 11 ? t("Neutral") : o < 8 ? t("Player {n}", { n: o + 1 }) : t("Owner {n}", { n: o }));
 
 /* Header: the revision and the text encoding. */
 
 function mergeHeader(m: Merging) {
   const { base, ours, theirs, out } = m;
-  const label = (s: Scenario) => `${MAP_VERSIONS[mapVersionOf(s.fileVersion)].label}${s.strings.extended ? " (STRx)" : ""}`;
+  const label = (s: Scenario) => `${translate(MAP_VERSIONS[mapVersionOf(s.fileVersion)].label)}${s.strings.extended ? " (STRx)" : ""}`;
   const rev = (s: Scenario) => `${mapVersionOf(s.fileVersion)}:${s.strings.extended}`;
   const v = pick3(rev(base), rev(ours), rev(theirs), (x, y) => x === y);
-  if (v.from === "conflict") m.conflict({ part: "Map", what: "Revision", base: label(base), ours: label(ours), theirs: label(theirs) });
+  if (v.from === "conflict") m.conflict({ part: "Map", what: t("Revision"), base: label(base), ours: label(ours), theirs: label(theirs) });
   if (v.from === "theirs" || (v.from === "conflict" && m.prefer === "theirs")) changeMapVersion(out, mapVersionOf(theirs.fileVersion), theirs.strings.extended);
   const enc = (s: Scenario) => s.strings.encoding;
-  const encLabel = (s: Scenario) => TEXT_ENCODINGS.find((e) => e.id === s.strings.encoding)?.label ?? s.strings.encoding;
+  const encLabel = (s: Scenario) => { const l = TEXT_ENCODINGS.find((e) => e.id === s.strings.encoding)?.label; return l ? translate(l) : s.strings.encoding; };
   const e = pick3(enc(base), enc(ours), enc(theirs), (x, y) => x === y);
-  if (e.from === "conflict") m.conflict({ part: "Map", what: "Text encoding", base: encLabel(base), ours: encLabel(ours), theirs: encLabel(theirs) });
+  if (e.from === "conflict") m.conflict({ part: "Map", what: t("Text encoding"), base: encLabel(base), ours: encLabel(ours), theirs: encLabel(theirs) });
   if (e.from === "theirs" || (e.from === "conflict" && m.prefer === "theirs")) changeTextEncoding(out, theirs.strings.encoding);
   m.count("Map", Number(v.from === "ours" || v.from === "conflict") + Number(e.from === "ours" || e.from === "conflict"), Number(v.from === "theirs" || v.from === "conflict") + Number(e.from === "theirs" || e.from === "conflict"));
 }
 
 /* Geometry: size, tileset, terrain, and what stands on it. */
 
-const sizeLabel = (s: Scenario) => `${s.width} × ${s.height} ${TILESETS[s.era & 7]?.name ?? `tileset ${s.era}`}`;
+const sizeLabel = (s: Scenario) => `${s.width} × ${s.height} ${TILESETS[s.era & 7] ? translate(TILESETS[s.era & 7].name) : t("tileset {n}", { n: s.era })}`;
 const sameFrame = (a: Scenario, b: Scenario) => a.width === b.width && a.height === b.height && a.era === b.era;
 const rect = (l: LocationRecord | undefined) => (l ? [l.left, l.top, l.right, l.bottom] : [0, 0, 0, 0]);
 
@@ -453,7 +454,7 @@ function mergeFrame(m: Merging): Side | null {
   if (!tc) return "ours";
   if (!oc) { takeGeometry(m, theirs); return "theirs"; }
   if (sameFrame(ours, theirs) && !geometryChanged(ours, theirs)) return "ours";
-  m.conflict({ part: "Size", what: "Size and tileset", base: sizeLabel(base), ours: `${sizeLabel(ours)}, with the terrain and units on it`, theirs: `${sizeLabel(theirs)}, with the terrain and units on it` });
+  m.conflict({ part: "Size", what: t("Size and tileset"), base: sizeLabel(base), ours: t("{size}, with the terrain and units on it", { size: sizeLabel(ours) }), theirs: t("{size}, with the terrain and units on it", { size: sizeLabel(theirs) }) });
   if (m.prefer === "theirs") { takeGeometry(m, theirs); return "theirs"; }
   return "ours";
 }
@@ -499,7 +500,7 @@ function mergeTerrain(m: Merging) {
     const B = a.get(base), O = a.get(ours), T = a.get(theirs);
     if (!B || !O || !T || B.length !== O.length || B.length !== T.length) {
       const p = pick3(B, O, T);
-      if (p.from === "conflict") m.conflict({ part: "Terrain", what: `the ${a.section === "ISOM" ? "isometric record" : a.section === "MASK" ? "fog of war" : "tiles"} (${a.section.trim()})`, base: B ? "present" : "none", ours: O ? "changed" : "removed", theirs: T ? "changed differently" : "removed" });
+      if (p.from === "conflict") m.conflict({ part: "Terrain", what: t("the {what, select, ISOM {isometric record} MASK {fog of war} other {tiles}} ({section})", { what: a.section.trim(), section: a.section.trim() }), base: B ? t("present") : t("none"), ours: O ? t("changed") : t("removed"), theirs: T ? t("changed differently") : t("removed") });
       if (p.from === "theirs" || (p.from === "conflict" && m.prefer === "theirs")) { a.set(T ? (T as Uint16Array | Uint8Array).slice() : null); markDirty(out, a.section); }
       continue;
     }
@@ -518,21 +519,23 @@ function mergeTerrain(m: Merging) {
   }
   m.count("Terrain", oursTiles.size, theirsTiles.size);
   for (const r of tileRegions(clash, w)) {
-    m.conflict({ part: "Terrain", what: `${plural(r.count, "tile")} at ${r.x0},${r.y0}${r.x1 !== r.x0 || r.y1 !== r.y0 ? `–${r.x1},${r.y1}` : ""}`, base: null, ours: "changed these tiles", theirs: "changed them differently" });
+    m.conflict({ part: "Terrain", what: t("{n, plural, one {# tile} other {# tiles}} at {at}", { n: r.count, at: `${r.x0},${r.y0}${r.x1 !== r.x0 || r.y1 !== r.y0 ? `–${r.x1},${r.y1}` : ""}` }), base: null, ours: t("changed these tiles"), theirs: t("changed them differently") });
   }
 }
 
 export const unitKey = (u: UnitRecord) => JSON.stringify({ ...u, serial: 0 });
-const unitText = (u: UnitRecord) => `${unitName(u.unitId)} (${owner(u.owner)}) at ${u.x},${u.y}${u.resourceAmount ? `, ${num(u.resourceAmount)} resources` : ""}`;
+const unitText = (u: UnitRecord) => (u.resourceAmount
+  ? t("{unit} ({owner}) at {x},{y}, {amount} resources", { unit: unitName(u.unitId), owner: owner(u.owner), x: u.x, y: u.y, amount: num(u.resourceAmount) })
+  : t("{unit} ({owner}) at {x},{y}", { unit: unitName(u.unitId), owner: owner(u.owner), x: u.x, y: u.y }));
 
 const UNIT_SPEC: InstanceSpec<UnitRecord> = {
   part: "Units", key: unitKey, group: (u) => `${u.unitId}:${u.owner}`, x: (u) => u.x, y: (u) => u.y, serial: (u) => u.serial, text: unitText,
 };
 const DOODAD_SPEC: InstanceSpec<DoodadRecord> = {
-  part: "Doodads", key: (d) => JSON.stringify(d), group: (d) => String(d.doodadId), x: (d) => d.x, y: (d) => d.y, text: (d) => `doodad ${d.doodadId} at ${d.x},${d.y}`,
+  part: "Doodads", key: (d) => JSON.stringify(d), group: (d) => String(d.doodadId), x: (d) => d.x, y: (d) => d.y, text: (d) => t("doodad {id} at {x},{y}", { id: d.doodadId, x: d.x, y: d.y }),
 };
 const SPRITE_SPEC: InstanceSpec<SpriteRecord> = {
-  part: "Sprites", key: (s) => JSON.stringify(s), group: (s) => `${s.spriteId}:${s.flags}`, x: (s) => s.x, y: (s) => s.y, text: (s) => `sprite ${s.spriteId} at ${s.x},${s.y}`,
+  part: "Sprites", key: (s) => JSON.stringify(s), group: (s) => `${s.spriteId}:${s.flags}`, x: (s) => s.x, y: (s) => s.y, text: (s) => t("sprite {id} at {x},{y}", { id: s.spriteId, x: s.x, y: s.y }),
 };
 
 function mergeObjects(m: Merging) {
@@ -567,18 +570,18 @@ function mergeLocations(m: Merging, frame: Side | null) {
   const blank: LocationRecord = { left: 0, top: 0, right: 0, bottom: 0, nameIndex: 0, elevationFlags: 0 };
   const at = (s: Scenario, i: number) => s.locations[i] ?? blank;
   const name = (s: Scenario, i: number) => text(s, at(s, i).nameIndex);
-  const label = (i: number) => { const n = name(base, i) ?? name(ours, i) ?? name(theirs, i); return n ? `${show(n)} (slot ${i})` : `slot ${i}`; };
-  const place = (l: number[]) => (l.every((v) => v === 0) ? "(not placed)" : `${l[0]},${l[1]}–${l[2]},${l[3]}`);
+  const label = (i: number) => { const n = name(base, i) ?? name(ours, i) ?? name(theirs, i); return n ? t("{name} (slot {slot})", { name: show(n), slot: i }) : t("slot {slot}", { slot: i }); };
+  const place = (l: number[]) => (l.every((v) => v === 0) ? t("(not placed)") : `${l[0]},${l[1]}–${l[2]},${l[3]}`);
   let changed = false, oc = 0, tc = 0;
   for (let i = 0; i < out.locations.length; i++) {
     const b = at(base, i), o = at(ours, i), t = at(theirs, i);
     const r = frame ? { value: rect(frame === "theirs" ? t : o), from: "none" as Pick3 } : pick3(rect(b), rect(o), rect(t));
     const f = pick3(b.elevationFlags, o.elevationFlags, t.elevationFlags);
     const n = pick3(name(base, i), name(ours, i), name(theirs, i));
-    for (const [p, what, fmt] of [[r, "place", (s: LocationRecord) => place(rect(s))], [f, "elevation flags", (s: LocationRecord) => String(s.elevationFlags)], [n, "name", (s: LocationRecord, scn: Scenario) => show(text(scn, s.nameIndex))]] as const) {
+    for (const [p, what, fmt] of [[r, msg("{location} place"), (s: LocationRecord) => place(rect(s))], [f, msg("{location} elevation flags"), (s: LocationRecord) => String(s.elevationFlags)], [n, msg("{location} name"), (s: LocationRecord, scn: Scenario) => show(text(scn, s.nameIndex))]] as const) {
       if (p.from === "ours" || p.from === "conflict") oc++;
       if (p.from === "theirs" || p.from === "conflict") tc++;
-      if (p.from === "conflict") m.conflict({ part: "Locations", what: `${label(i)} ${what}`, base: fmt(b, base), ours: fmt(o, ours), theirs: fmt(t, theirs) });
+      if (p.from === "conflict") m.conflict({ part: "Locations", what: translate(what, { location: label(i) }), base: fmt(b, base), ours: fmt(o, ours), theirs: fmt(t, theirs) });
     }
     const theirsWins = (p: { from: Pick3 }) => p.from === "theirs" || (p.from === "conflict" && m.prefer === "theirs");
     const nextRect = theirsWins(r) ? rect(t) : frame ? r.value : rect(o);
@@ -637,9 +640,10 @@ function mergeTriggers(m: Merging, briefing: boolean) {
   m.count(part, listChanges(k.b.map(id), k.o.map(id)), listChanges(k.b.map(id), k.t.map(id)));
   if (deepEqual(k.b, k.t)) return;
   const r = mergeList(list(base), list(ours), list(theirs), k, m.prefer);
-  const many = (ts: TriggerRecord[], s: Scenario) => (ts.length ? ts.map((t) => triggerText(t, s, briefing)).join("\n") : "(none)");
+  const many = (ts: TriggerRecord[], s: Scenario) => (ts.length ? ts.map((x) => triggerText(x, s, briefing)).join("\n") : t("(none)"));
   for (const c of r.conflicts) {
-    const where = c.base.length ? `${c.base.length === 1 ? "trigger" : `${c.base.length} triggers`} ${list(base).indexOf(c.base[0]) + 1}${c.base.length > 1 ? `–${list(base).indexOf(c.base[0]) + c.base.length}` : ""} of the base` : "triggers added at the same place";
+    const first = list(base).indexOf(c.base[0]) + 1;
+    const where = c.base.length === 1 ? t("trigger {first} of the base", { first }) : c.base.length ? t("{n} triggers {first}–{last} of the base", { n: c.base.length, first, last: first + c.base.length - 1 }) : t("triggers added at the same place");
     m.conflict({ part, what: where, base: c.base.length ? many(c.base, base) : null, ours: many(c.ours, ours), theirs: many(c.theirs, theirs) });
   }
   const next = r.items.map((it) => {
@@ -702,23 +706,23 @@ function describe(path: (string | number)[]): string {
   const [root, a, b] = path;
   const slot = (i: unknown) => (typeof i === "number" ? ` ${i + 1}` : "");
   switch (root) {
-    case "name": return "Name";
-    case "description": return "Description";
-    case "playerTypes": case "editorPlayerTypes": return `Player${slot(a)} ${root === "playerTypes" ? "type" : "type (StarEdit's copy)"}`;
-    case "playerRaces": return `Player${slot(a)} race`;
-    case "playerColors": return `Player${slot(a)} colour`;
-    case "playerRgb": return `Player${typeof b === "number" ? ` ${b + 1}` : ""} Remastered colour`;
-    case "forces": return a === "playerForce" ? `Player${slot(b)} force` : `Force${slot(b)} ${a === "names" ? "name" : "flags"}`;
-    case "unitSettings": return typeof b === "number" && !String(a).startsWith("weapon") ? `${unitName(b)} ${a === "names" ? "name" : a}` : `${a}${typeof b === "number" ? ` ${b}` : ""}`;
-    case "switchNames": return `Switch${slot(a)} name`;
-    case "wavs": return `Sound slot ${a}`;
-    case "cuwp": case "cuwpUsed": return `Slot${slot(a)}${typeof b === "string" ? ` ${b}` : root === "cuwpUsed" ? " in use" : ""}`;
+    case "name": return t("Name");
+    case "description": return t("Description");
+    case "playerTypes": case "editorPlayerTypes": return root === "playerTypes" ? t("Player{n} type", { n: slot(a) }) : t("Player{n} type (StarEdit's copy)", { n: slot(a) });
+    case "playerRaces": return t("Player{n} race", { n: slot(a) });
+    case "playerColors": return t("Player{n} colour", { n: slot(a) });
+    case "playerRgb": return t("Player{n} Remastered colour", { n: typeof b === "number" ? ` ${b + 1}` : "" });
+    case "forces": return a === "playerForce" ? t("Player{n} force", { n: slot(b) }) : a === "names" ? t("Force{n} name", { n: slot(b) }) : t("Force{n} flags", { n: slot(b) });
+    case "unitSettings": return typeof b === "number" && !String(a).startsWith("weapon") ? (a === "names" ? t("{unit} name", { unit: unitName(b) }) : `${unitName(b)} ${a}`) : `${a}${typeof b === "number" ? ` ${b}` : ""}`;
+    case "switchNames": return t("Switch{n} name", { n: slot(a) });
+    case "wavs": return t("Sound slot {n}", { n: String(a) });
+    case "cuwp": case "cuwpUsed": return typeof b === "string" ? `${t("Slot{n}", { n: slot(a) })} ${b}` : root === "cuwpUsed" ? t("Slot{n} in use", { n: slot(a) }) : t("Slot{n}", { n: slot(a) });
     default: return path.slice(1).map((p) => (typeof p === "number" ? `[${p}]` : p)).join(" ").replace(/ \[/g, "[") || String(root);
   }
 }
 
 const valueText = (v: unknown): string => {
-  if (v === null || v === undefined) return "(none)";
+  if (v === null || v === undefined) return t("(none)");
   if (typeof v === "string") return show(v);
   if (typeof v !== "object") return String(v);
   const j = JSON.stringify(ArrayBuffer.isView(v) ? Array.from(v as unknown as ArrayLike<number>) : v);
@@ -874,7 +878,7 @@ function mergeStrings(m: Merging): number {
     if (t !== null && !table.includes(t)) claimed.set(place(t), t);
   }
   // Only a table the merge made longer than the limit is refused (ours's own may be over it already: the editor lets it).
-  if (table.length - 1 > Math.max(capacity, out.strings.strings.length - 1)) throw new CliError(`The merged map needs ${num(table.length - 1)} strings, and its string table holds ${num(capacity)}`, "Prune the strings nothing refers to on one side (scmjs map strings prune), then merge again.");
+  if (table.length - 1 > Math.max(capacity, out.strings.strings.length - 1)) throw new CliError(t("The merged map needs {n} strings, and its string table holds {capacity}", { n: num(table.length - 1), capacity: num(capacity) }), t("Prune the strings nothing refers to on one side (scmjs map strings prune), then merge again."));
   applyStrings(out, table, stringUsages(out));
   return renumbered;
 }
@@ -884,19 +888,19 @@ function mergeStrings(m: Merging): number {
 function mergeMembers(m: Merging, base: OpenedMap, ours: OpenedMap, theirs: OpenedMap, out: OpenedMap) {
   const norm = (name: string) => name.replace(/\//g, "\\").toLowerCase();
   const index = (d: OpenedMap) => new Map([...d.extras].map(([k, v]) => [norm(k), { name: k, bytes: v }]));
-  const b = index(base), o = index(ours), t = index(theirs);
-  const sz = (x: { bytes: Uint8Array } | undefined) => (x ? `${num(x.bytes.length)} bytes` : "removed");
+  const b = index(base), o = index(ours), th = index(theirs);
+  const sz = (x: { bytes: Uint8Array } | undefined) => (x ? t("{n} bytes", { n: num(x.bytes.length) }) : t("removed"));
   let oc = 0, tc = 0;
-  for (const key of new Set([...b.keys(), ...o.keys(), ...t.keys()])) {
-    const p = pick3(b.get(key)?.bytes, o.get(key)?.bytes, t.get(key)?.bytes, sameBytes);
+  for (const key of new Set([...b.keys(), ...o.keys(), ...th.keys()])) {
+    const p = pick3(b.get(key)?.bytes, o.get(key)?.bytes, th.get(key)?.bytes, sameBytes);
     if (p.from === "ours" || p.from === "conflict") oc++;
     if (p.from === "theirs" || p.from === "conflict") tc++;
-    const name = (o.get(key) ?? t.get(key) ?? b.get(key))!.name;
-    if (p.from === "conflict") m.conflict({ part: "Archive members", what: name, base: b.has(key) ? sz(b.get(key)) : null, ours: sz(o.get(key)), theirs: sz(t.get(key)) });
+    const name = (o.get(key) ?? th.get(key) ?? b.get(key))!.name;
+    if (p.from === "conflict") m.conflict({ part: "Archive members", what: name, base: b.has(key) ? sz(b.get(key)) : null, ours: sz(o.get(key)), theirs: sz(th.get(key)) });
     if (!(p.from === "theirs" || (p.from === "conflict" && m.prefer === "theirs"))) continue;
     const mine = o.get(key);
     if (mine) out.extras.delete(mine.name);
-    const yours = t.get(key);
+    const yours = th.get(key);
     if (yours) out.extras.set(mine?.name ?? yours.name, yours.bytes);
   }
   m.count("Archive members", oc, tc);
@@ -913,8 +917,8 @@ function mergeRawSections(m: Merging) {
     const p = pick3(of(base, name), of(ours, name), of(theirs, name), same);
     if (p.from === "ours" || p.from === "conflict") oc++;
     if (p.from === "theirs" || p.from === "conflict") tc++;
-    const bytes = (l: ChkSection[]) => (l.length ? `${num(l.reduce((n, s) => n + s.data.length, 0))} bytes` : "removed");
-    if (p.from === "conflict") m.conflict({ part: "Sections", what: `${name.trim()} (not modelled: compared as bytes)`, base: of(base, name).length ? bytes(of(base, name)) : null, ours: bytes(of(ours, name)), theirs: bytes(of(theirs, name)) });
+    const bytes = (l: ChkSection[]) => (l.length ? t("{n} bytes", { n: num(l.reduce((n, s) => n + s.data.length, 0)) }) : t("removed"));
+    if (p.from === "conflict") m.conflict({ part: "Sections", what: t("{section} (not modelled: compared as bytes)", { section: name.trim() }), base: of(base, name).length ? bytes(of(base, name)) : null, ours: bytes(of(ours, name)), theirs: bytes(of(theirs, name)) });
     if (!(p.from === "theirs" || (p.from === "conflict" && m.prefer === "theirs"))) continue;
     // Theirs's copies take the place of ours's first one; with none of ours's, they go where theirs had them, after the section before.
     const sections = out.chk.sections;
@@ -933,7 +937,8 @@ function mergeRawSections(m: Merging) {
   m.count("Sections", oc, tc);
 }
 
-const PART_ORDER = ["Map", "Size", "Terrain", "Doodads", "Sprites", "Units", "Locations", "Triggers", "Briefing", "Players", "Forces", "Unit settings", "Upgrades", "Technologies", "Unit properties", "Switches", "Sounds", "Strings", "Archive members", "Sections"];
+// The parts are identities (the JSON's `part`) and stay English; they are shown through `translate`.
+const PART_ORDER = [msg("Map"), msg("Size"), msg("Terrain"), msg("Doodads"), msg("Sprites"), msg("Units"), msg("Locations"), msg("Triggers"), msg("Briefing"), msg("Players"), msg("Forces"), msg("Unit settings"), msg("Upgrades"), msg("Technologies"), msg("Unit properties"), msg("Switches"), msg("Sounds"), msg("Strings"), msg("Archive members"), msg("Sections")];
 
 /**
  * The merge of three opened maps. `out` is a second opening of ours: it is changed in place and is the result (ours's
@@ -1020,18 +1025,18 @@ export async function runMerge(inputs: { base: Input; ours: Input; theirs: Input
     try {
       return await openMapBytes(input.bytes, input.name);
     } catch (e) {
-      throw new CliError(`${input.name} is not a map this can read: ${e instanceof Error ? e.message : e}`);
+      throw new CliError(t("{name} is not a map this can read: {error}", { name: input.name, error: e instanceof Error ? e.message : String(e) }));
     }
   };
-  const [b, x, t, out] = await Promise.all([open(base), open(ours), open(theirs), open(ours)]);
-  const r = mergeDocs(b, x, t, out, o.prefer ?? null);
+  const [b, x, th, out] = await Promise.all([open(base), open(ours), open(theirs), open(ours)]);
+  const r = mergeDocs(b, x, th, out, o.prefer ?? null);
   outcome.conflicts = r.conflicts;
   outcome.changes = r.changes;
   outcome.renumbered = r.renumbered;
   if (r.conflicts.length && !o.prefer) {
     outcome.hint = o.staged || o.name
-      ? `scmjs map merge ${quote(name)} --ours (or --theirs) settles each with that side's version; then git add ${quote(name)}`
-      : "Add --ours or --theirs to settle each with that side's version.";
+      ? t("scmjs map merge {name} --ours (or --theirs) settles each with that side's version; then git add {name}", { name: quote(name) })
+      : t("Add --ours or --theirs to settle each with that side's version.");
     return outcome;
   }
   if (r.conflicts.length) outcome.settled = o.prefer ?? null;
@@ -1052,54 +1057,56 @@ const quote = (p: string) => (/^[\w./@+-]+$/.test(p) ? p : `"${p}"`);
 export function stagedInputs(file: string): { base: Input; ours: Input; theirs: Input } {
   const git = (args: string[]) => spawnSync("git", args, { encoding: "buffer", maxBuffer: 512 * 1024 * 1024 });
   const top = git(["-C", dirname(resolve(file)), "rev-parse", "--show-toplevel"]);
-  if (top.error) throw new CliError("git is not installed, or not on PATH", "With one map, scmjs map merge reads the three versions git keeps during a merge.", 2);
-  if (top.status !== 0) throw new CliError(`${file} is not in a git repository`, "Give the three maps: scmjs map merge <base> <ours> <theirs>.", 2);
+  if (top.error) throw new CliError(t("git is not installed, or not on PATH"), t("With one map, scmjs map merge reads the three versions git keeps during a merge."), 2);
+  if (top.status !== 0) throw new CliError(t("{file} is not in a git repository", { file }), t("Give the three maps: scmjs map merge <base> <ours> <theirs>."), 2);
   const root = top.stdout.toString().trim();
   const path = relative(root, resolve(file)).split("\\").join("/");
   const stage = (n: number, what: string): Input => {
     const shown = git(["-C", root, "show", `:${n}:${path}`]);
-    if (shown.status !== 0) throw new CliError(`git has no ${what} of ${path}: is it in a merge that stopped on it?`, `git status lists the files a merge left unmerged; ${shown.stderr.toString().trim().split("\n")[0] || ""}`.trim(), 2);
+    if (shown.status !== 0) throw new CliError(t("git has no {what} of {path}: is it in a merge that stopped on it?", { what: translate(what), path }), `${t("git status lists the files a merge left unmerged;")} ${shown.stderr.toString().trim().split("\n")[0] || ""}`.trim(), 2);
     const bytes = new Uint8Array(shown.stdout);
-    return { path: n === 2 ? file : `:${n}:${path}`, name: `${what} (${basename(file)})`, bytes, kind: "map" };
+    return { path: n === 2 ? file : `:${n}:${path}`, name: `${translate(what)} (${basename(file)})`, bytes, kind: "map" };
   };
-  return { base: stage(1, "common ancestor"), ours: stage(2, "our version"), theirs: stage(3, "their version") };
+  return { base: stage(1, msg("common ancestor")), ours: stage(2, msg("our version")), theirs: stage(3, msg("their version")) };
 }
 
 /** A map read for the merge: by its bytes, since git's temporary files have no extension. */
 export function asMap(input: Input): Input {
   if (input.kind === "map" || (input.kind === null && looksLikeChk(input.bytes))) return { ...input, kind: "map" };
-  throw new CliError(`${input.name} is not a map`, "scmjs map merge takes three versions of one map: .scm, .scx or .chk.", 2);
+  throw new CliError(t("{name} is not a map", { name: input.name }), t("scmjs map merge takes three versions of one map: .scm, .scx or .chk."), 2);
 }
 
 /** The outcome as lines: one line saying what happened, the parts each side changed, the conflicts. */
 export function printMerge(r: MergeOutcome): string[] {
-  const where = r.written ? `${dot}written to ${r.written.path === "-" ? "standard output" : pc.cyan(r.written.path)}` : "";
+  const where = r.written ? `${dot}${t("written to {path}", { path: r.written.path === "-" ? t("standard output") : pc.cyan(r.written.path) })}` : "";
   const name = pc.bold(r.name);
-  if (r.kind === "same") return [`${mark.ok} ${name}: both sides made the same changes${where}`];
-  if (r.kind === "ours") return [`${mark.ok} ${name}: only ours changed it since the common ancestor, so it is ours${where}`];
-  if (r.kind === "theirs") return [`${mark.ok} ${name}: only theirs changed it since the common ancestor, so it is theirs${where}`];
+  if (r.kind === "same") return [`${mark.ok} ${name}: ${t("both sides made the same changes")}${where}`];
+  if (r.kind === "ours") return [`${mark.ok} ${name}: ${t("only ours changed it since the common ancestor, so it is ours")}${where}`];
+  if (r.kind === "theirs") return [`${mark.ok} ${name}: ${t("only theirs changed it since the common ancestor, so it is theirs")}${where}`];
   const lines: string[] = [];
   const nOurs = r.changes.reduce((n, c) => n + c.ours, 0), nTheirs = r.changes.reduce((n, c) => n + c.theirs, 0);
-  const counts = `${plural(nOurs, "change")} from ours, ${num(nTheirs)} from theirs`;
-  if (r.conflicts.length && !r.settled) lines.push(`${mark.error} ${name}: ${plural(r.conflicts.length, "conflict")}; nothing written`);
-  else if (r.conflicts.length) lines.push(`${mark.warn} ${name} merged, ${plural(r.conflicts.length, "conflict")} settled as ${r.settled}: ${counts}${where}`);
-  else lines.push(`${mark.ok} ${name} merged: ${counts}${where}`);
-  const parts = r.changes.filter((c) => c.ours || c.theirs).map((c) => [c.part, [c.ours && `${num(c.ours)} from ours`, c.theirs && `${num(c.theirs)} from theirs`].filter(Boolean).join(", ")]);
-  if (r.renumbered) parts.push(["Strings", `${plural(r.renumbered, "string")} of theirs renumbered`]);
+  const counts = t("{n, plural, one {# change} other {# changes}} from ours, {theirs} from theirs", { n: nOurs, theirs: num(nTheirs) });
+  if (r.conflicts.length && !r.settled) lines.push(`${mark.error} ${name}: ${t("{n, plural, one {# conflict} other {# conflicts}}; nothing written", { n: r.conflicts.length })}`);
+  else if (r.conflicts.length) lines.push(`${mark.warn} ${t("{name} merged, {n, plural, one {# conflict} other {# conflicts}} settled as {side}:", { name, n: r.conflicts.length, side: r.settled === "ours" ? t("ours") : t("theirs") })} ${counts}${where}`);
+  else lines.push(`${mark.ok} ${t("{name} merged:", { name })} ${counts}${where}`);
+  const parts = r.changes.filter((c) => c.ours || c.theirs).map((c) => [translate(c.part), [c.ours && t("{n} from ours", { n: num(c.ours) }), c.theirs && t("{n} from theirs", { n: num(c.theirs) })].filter(Boolean).join(", ")]);
+  if (r.renumbered) parts.push([translate("Strings"), t("{n, plural, one {# string} other {# strings}} of theirs renumbered", { n: r.renumbered })]);
   if (parts.length) lines.push(...table(parts.map(([p, d]) => [p, pc.dim(d)]), 2));
   if (r.conflicts.length) {
-    lines.push("", pc.bold(r.settled ? "Settled" : "Conflicts"));
+    lines.push("", pc.bold(r.settled ? t("Settled") : t("Conflicts")));
     const shown = r.conflicts.slice(0, 40);
     for (const c of shown) {
-      lines.push(`  ${pc.yellow(c.part)}${dot}${c.what}`);
+      lines.push(`  ${pc.yellow(translate(c.part))}${dot}${c.what}`);
       // Where ours and theirs first part, so a long trigger is cut to show the difference rather than its start.
       let at = 0;
       while (at < c.ours.length && c.ours[at] === c.theirs[at]) at++;
-      const side = (label: string, v: string, colour: (s: string) => string, chosen: boolean) => v.split("\n").map((l, i) => `      ${i ? " ".repeat(7) : `${label.padEnd(6)} `}${colour(around(l, at))}${chosen && i === 0 ? pc.dim(" (taken)") : ""}`);
-      if (c.base !== null) lines.push(...side("base", c.base, pc.dim, false));
-      lines.push(...side("ours", c.ours, pc.red, r.settled === "ours"), ...side("theirs", c.theirs, pc.green, r.settled === "theirs"));
+      const labels = { base: t("base"), ours: t("ours"), theirs: t("theirs") };
+      const w = Math.max(6, ...Object.values(labels).map(columns));
+      const side = (label: string, v: string, colour: (s: string) => string, chosen: boolean) => v.split("\n").map((l, i) => `      ${i ? " ".repeat(w + 1) : `${padColumns(label, w)} `}${colour(around(l, at))}${chosen && i === 0 ? pc.dim(` ${t("(taken)")}`) : ""}`);
+      if (c.base !== null) lines.push(...side(labels.base, c.base, pc.dim, false));
+      lines.push(...side(labels.ours, c.ours, pc.red, r.settled === "ours"), ...side(labels.theirs, c.theirs, pc.green, r.settled === "theirs"));
     }
-    if (r.conflicts.length > shown.length) lines.push(pc.dim(`  … and ${num(r.conflicts.length - shown.length)} more (--json lists them all)`));
+    if (r.conflicts.length > shown.length) lines.push(pc.dim(`  ${t("… and {n} more (--json lists them all)", { n: num(r.conflicts.length - shown.length) })}`));
     if (r.hint) lines.push("", pc.dim(r.hint));
   }
   return lines;

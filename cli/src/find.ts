@@ -5,7 +5,8 @@
  */
 import type { OpenedMap } from "../../src/editor/mapFile";
 import { FIND_KINDS, findInScenario, type FindKind, type FindResult } from "../../src/editor/find";
-import { CliError, pc } from "./ui";
+import { msg, t, translate } from "./i18n";
+import { CliError, columns, padColumns, pc } from "./ui";
 
 export const KINDS: readonly FindKind[] = FIND_KINDS.map((k) => k.value);
 
@@ -14,7 +15,7 @@ export function parseKinds(spec: string | undefined): FindKind[] {
   if (!spec) return [...KINDS];
   const kinds = spec.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
   const bad = kinds.filter((k) => !(KINDS as readonly string[]).includes(k));
-  if (bad.length) throw new CliError(`--in does not know ${bad.join(", ")}`, `It takes any of ${KINDS.join(", ")}, with commas between.`, 2);
+  if (bad.length) throw new CliError(t("--in does not know {list}", { list: bad.join(", ") }), t("It takes any of {list}, with commas between.", { list: KINDS.join(", ") }), 2);
   return [...new Set(kinds)] as FindKind[];
 }
 
@@ -30,14 +31,14 @@ export function findInMap(doc: OpenedMap, file: string, query: string, kinds: re
   return out;
 }
 
-const KIND_LABEL: Record<FindKind, string> = { units: "unit", locations: "location", sprites: "sprite", doodads: "doodad", strings: "string", triggers: "trigger", briefing: "briefing" };
+const KIND_LABEL: Record<FindKind, string> = { units: msg("unit"), locations: msg("location"), sprites: msg("sprite"), doodads: msg("doodad"), strings: msg("string"), triggers: msg("trigger"), briefing: msg("briefing") };
 
 /** A map's hits as lines: the kind, what matched and where, the way the Find dialog lists them. */
 export function printHits(hits: FindHit[]): string[] {
-  const width = Math.max(0, ...hits.map((h) => KIND_LABEL[h.kind].length));
+  const width = Math.max(0, ...hits.map((h) => columns(translate(KIND_LABEL[h.kind]))));
   return hits.map((h) => {
     const label = h.label.replace(/\s+/g, " ");
     const where = h.detail.replace(/\s+/g, " ");
-    return `  ${pc.cyan(KIND_LABEL[h.kind].padEnd(width))}  ${label.length > 80 ? `${label.slice(0, 77)}…` : label}${where ? pc.dim(`  ${where}`) : ""}`;
+    return `  ${pc.cyan(padColumns(translate(KIND_LABEL[h.kind]), width))}  ${label.length > 80 ? `${label.slice(0, 77)}…` : label}${where ? pc.dim(`  ${where}`) : ""}`;
   });
 }

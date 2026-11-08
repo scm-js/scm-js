@@ -486,6 +486,11 @@ English and Korean ship today, chosen in Preferences ▸ General or following th
   back. The Korean was not written by a native speaker, and a native reader's review is
   welcome.
 
+The `scmjs` command line has its own catalogue, `cli/src/ko.json`, kept the same way: the
+extractor reads `cli/src/` into it as it reads `src/` into `src/i18n/ko.json`, so neither
+bundle carries the other's words. What the command leaves English is in
+[cli.md](cli.md#in-korean).
+
 Plugins get the same translator on `api.i18n`; see [plugins.md](plugins.md#apii18n).
 `.claude/internals/i18n.md` covers adding a language and the Korean particle rules.
 

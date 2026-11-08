@@ -10,7 +10,8 @@ import { createInterface } from "node:readline";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, extname, join, relative, resolve } from "node:path";
 import { ensureEngine, findGameCopy, runnerFor, startRunner, type Engine } from "./engine";
-import { CliError, dot, duration, mark, num, pc, plural, print, table } from "./ui";
+import { t } from "./i18n";
+import { CliError, dot, duration, mark, num, pc, print, table } from "./ui";
 
 /** A frame of the game on Fastest, as the clock counts it. */
 const FRAME_MS = 42;
@@ -38,10 +39,10 @@ export function parseRaces(s: string): RaceLetter[] {
   const out: RaceLetter[] = [];
   for (const ch of s.replace(/[\s,]/g, "")) {
     const r = raceLetter(ch);
-    if (!r) throw new CliError(`--races ${s}: "${ch}" is not a race`, "Letters of z, t, p and r (random): --races tpz.", 2);
+    if (!r) throw new CliError(t("--races {races}: \"{letter}\" is not a race", { races: s, letter: ch }), t("Letters of z, t, p and r (random): --races tpz."), 2);
     if (!out.includes(r)) out.push(r);
   }
-  if (!out.length) throw new CliError("--races names no race", "Letters of z, t, p and r (random): --races tpz.", 2);
+  if (!out.length) throw new CliError(t("--races names no race"), t("Letters of z, t, p and r (random): --races tpz."), 2);
   return out;
 }
 
@@ -87,14 +88,14 @@ export function parseEntrants(specs: readonly string[], races: readonly RaceLett
       for (const r of suffix ? [suffix] : races) add({ key: `computer-${r}`, label: r === "r" ? "Random computer" : `${RACE_WORD[r][0].toUpperCase()}${RACE_WORD[r].slice(1)} computer`, kind: "computer", race: r });
       continue;
     }
-    if (!existsSync(name)) throw new CliError(`No file ${name}`, "A bot is a .scmbot file (scmjs bot build writes out/<key>.scmbot), or computer for the game's own.", 2);
+    if (!existsSync(name)) throw new CliError(t("No file {name}", { name }), t("A bot is a .scmbot file (scmjs bot build writes out/<key>.scmbot), or computer for the game's own."), 2);
     let header: ReturnType<typeof readBotHeader>;
     try { header = readBotHeader(read(name)); }
-    catch { throw new CliError(`${name} is not a bot file`, "A bot is a .scmbot file, as scmjs bot build writes it.", 2); }
+    catch { throw new CliError(t("{name} is not a bot file", { name }), t("A bot is a .scmbot file, as scmjs bot build writes it."), 2); }
     add({ key: slug(header.key) || "bot", label: header.name, kind: "bot", file: resolve(name), race: suffix });
   }
-  if (out.length < 2) throw new CliError("A ladder needs two sides at least", "Name two bots, or a bot and computer: scmjs bot ladder mybot.scmbot computer --maps (2)Boxer.scm", 2);
-  if (!out.some((e) => e.kind === "bot")) throw new CliError("A ladder needs a bot: the game's computers alone do not play one", null, 2);
+  if (out.length < 2) throw new CliError(t("A ladder needs two sides at least"), t("Name two bots, or a bot and computer: scmjs bot ladder mybot.scmbot computer --maps (2)Boxer.scm"), 2);
+  if (!out.some((e) => e.kind === "bot")) throw new CliError(t("A ladder needs a bot: the game's computers alone do not play one"), null, 2);
   return out;
 }
 
@@ -278,35 +279,37 @@ export function gameLine(r: GameResult, entrants: readonly Entrant[], total: num
   const g = r.game;
   const at = pc.dim(`${String(g.index).padStart(String(total).length)}/${total}`);
   const mapName = basename(g.map);
-  if (!r.end) return `${at} ${mark.error} ${entrants[g.sides[0]].label} vs ${entrants[g.sides[1]].label} on ${mapName}${dot}seed ${g.seed}: ${r.error ?? "not played"}`;
+  const seed = t("seed {seed}", { seed: g.seed });
+  if (!r.end) return `${at} ${mark.error} ${t("{a} vs {b} on {map}", { a: entrants[g.sides[0]].label, b: entrants[g.sides[1]].label, map: mapName })}${dot}${seed}: ${r.error ?? t("not played")}`;
   const e = r.end;
   // The races the game dealt (random drawn), by side.
   const race = (k: number) => e.players.find((p) => p.side === k)?.race ?? RACE_WORD[g.races[k]];
   const a = sideWord(entrants[g.sides[0]], race(0)), b = sideWord(entrants[g.sides[1]], race(1));
-  const where = `on ${pc.cyan(mapName)}${dot}seed ${g.seed}${dot}${clock(e.frame)}`;
+  const where = `${t("on {map}", { map: pc.cyan(mapName) })}${dot}${seed}${dot}${clock(e.frame)}`;
   const failed = e.bots.filter((x) => x.state === "crashed" || x.state === "failed");
-  const why = failed.length ? `${dot}${pc.red(`${failed.map((x) => entrants[g.sides[x.side]].label).join(" and ")} ${failed.some((x) => x.state === "crashed") ? "crashed" : "failed"}`)}` : "";
+  const names = failed.map((x) => entrants[g.sides[x.side]].label).join(t(" and "));
+  const why = failed.length ? `${dot}${pc.red(failed.some((x) => x.state === "crashed") ? t("{names} crashed", { names }) : t("{names} failed", { names }))}` : "";
   const file = r.replay ? `  ${pc.dim(basename(r.replay))}` : "";
-  if (e.by === "desync") return `${at} ${mark.error} ${a} vs ${b} ${where}${dot}${pc.red(`the copies went out of step at frame ${num(e.hashes.differedAt ?? e.frame)}`)}${why}${file}`;
-  if (r.winner === null) return `${at} ${mark.warn} ${a} and ${b} ${e.by === "frames" ? "undecided" : "drew"} ${where}${e.by === "frames" ? pc.dim(" (the frame limit)") : ""}${why}${file}`;
+  if (e.by === "desync") return `${at} ${mark.error} ${a} vs ${b} ${where}${dot}${pc.red(t("the copies went out of step at frame {frame}", { frame: num(e.hashes.differedAt ?? e.frame) }))}${why}${file}`;
+  if (r.winner === null) return `${at} ${mark.warn} ${e.by === "frames" ? t("{a} and {b} undecided", { a, b }) : t("{a} and {b} drew", { a, b })} ${where}${e.by === "frames" ? pc.dim(` ${t("(the frame limit)")}`) : ""}${why}${file}`;
   const [w, l] = r.winner === g.sides[0] ? [a, b] : [b, a];
-  const how = e.by === "left" ? pc.dim(" (the other left)") : "";
-  return `${at} ${mark.ok} ${w} beat ${l} ${where}${how}${why}${file}`;
+  const how = e.by === "left" ? pc.dim(` ${t("(the other left)")}`) : "";
+  return `${at} ${mark.ok} ${t("{winner} beat {loser}", { winner: w, loser: l })} ${where}${how}${why}${file}`;
 }
 
 /** The standing and the head-to-head as the terminal's lines. */
 export function ladderLines(entrants: readonly Entrant[], results: readonly GameResult[]): string[] {
   const table1 = standings(entrants, results);
-  const lines = ["", pc.bold("Standing"), ...table([
-    ["#", "", "Elo", "Games", "Won", "Lost", "Undecided", "Length", "ms a frame", "Longest", "> 55 ms"].map((h) => pc.dim(h)),
+  const lines = ["", pc.bold(t("Standing")), ...table([
+    ["#", "", "Elo", t("Games"), t("Won"), t("Lost"), t("Undecided"), t("Length"), t("ms a frame"), t("Longest"), "> 55 ms"].map((h) => pc.dim(h)),
     ...table1.map((s, i) => [String(i + 1), pc.bold(s.label), String(Math.round(s.elo)), String(s.games), String(s.won), String(s.lost), String(s.undecided), s.games ? clock(s.frames) : "-", s.msPerFrame === null ? pc.dim("-") : s.msPerFrame.toFixed(2), s.maxMs === null ? pc.dim("-") : `${Math.round(s.maxMs)} ms`, s.msPerFrame === null ? pc.dim("-") : String(s.over55)]),
   ], 2)];
   const uncounted = table1.filter((s) => s.uncounted || s.crashed);
-  for (const s of uncounted) lines.push(pc.dim(`  ${s.label}: ${[s.crashed ? `its copy failed in ${plural(s.crashed, "game")}` : "", s.uncounted ? `${plural(s.uncounted, "game")} not counted` : ""].filter(Boolean).join(", ")}`));
+  for (const s of uncounted) lines.push(pc.dim(`  ${s.label}: ${[s.crashed ? t("its copy failed in {n, plural, one {# game} other {# games}}", { n: s.crashed }) : "", s.uncounted ? t("{n, plural, one {# game} other {# games}} not counted", { n: s.uncounted }) : ""].filter(Boolean).join(", ")}`));
   const h2h = headToHead(entrants.length, results);
   const order = table1.map((s) => s.entrant);
   if (entrants.length > 2) {
-    lines.push("", `${pc.bold("Head to head")} ${pc.dim("(the row's wins-losses against the column, then undecided)")}`, ...table([
+    lines.push("", `${pc.bold(t("Head to head"))} ${pc.dim(t("(the row's wins-losses against the column, then undecided)"))}`, ...table([
       ["", ...order.map((i) => pc.dim(entrants[i].label))],
       ...order.map((i) => [pc.bold(entrants[i].label), ...order.map((j) => { const c = h2h[i][j]; return i === j || !c ? pc.dim("-") : `${c[0]}-${c[1]}${c[2] ? pc.dim(`-${c[2]}`) : ""}`; })]),
     ], 2));
@@ -386,6 +389,7 @@ export async function playGame(runner: string, engine: Engine, copy: string, ent
     else if (l.kind === "text") o.text?.(entrants[g.sides[l.side]]?.label ?? "?", l.text);
   }
   const code = await exit;
+  // (English whatever the language: the error goes into ladder.json, a file.)
   if (!end && !error) error = `the runner stopped without a result (exit ${code})${stderr.trim() ? `: ${stderr.trim().split("\n").slice(-3).join(" | ")}` : ""}`;
   const winner = end && end.winner !== null ? g.sides[end.winner] ?? null : null;
   return { game: g, end, error: end ? null : error, winner, replay: end?.replay ? replay : null };
@@ -394,12 +398,12 @@ export async function playGame(runner: string, engine: Engine, copy: string, ent
 /** The ladder: every game scheduled, played one at a time (or `parallel` at once), then the standing. */
 export async function runLadder(entrants: Entrant[], o: LadderOptions): Promise<LadderOutcome> {
   const t0 = performance.now();
-  if (!o.maps.length) throw new CliError("A ladder needs a map", "Name them with --maps: --maps \"(2)Boxer.scm\" \"(4)Lost Temple.scm\".", 2);
-  for (const m of o.maps) if (!existsSync(o.play?.get(m) ?? m)) throw new CliError(`No file ${m}`, null, 2);
+  if (!o.maps.length) throw new CliError(t("A ladder needs a map"), t("Name them with --maps: --maps \"(2)Boxer.scm\" \"(4)Lost Temple.scm\"."), 2);
+  for (const m of o.maps) if (!existsSync(o.play?.get(m) ?? m)) throw new CliError(t("No file {name}", { name: m }), null, 2);
   const races = o.races ?? ["r"];
   const seeds = o.seeds ?? [1];
   const games = schedule(entrants, o.maps, races, seeds);
-  if (!games.length) throw new CliError("Nothing to play: no pairing has a bot in it", null, 2);
+  if (!games.length) throw new CliError(t("Nothing to play: no pairing has a bot in it"), null, 2);
   const game = findGameCopy(o.starcraft);
   const say = o.live ?? (() => {});
   const engine = await ensureEngine(o.engine, undefined, say);
@@ -407,7 +411,7 @@ export async function runLadder(entrants: Entrant[], o: LadderOptions): Promise<
   const out = resolve(o.out ?? ladderFolder(process.cwd(), o.now ?? new Date()));
   mkdirSync(out, { recursive: true });
   const data = resolve(o.data ?? join(out, "bwapi-data"));
-  say(`${pc.bold(`${plural(games.length, "game")}`)}${dot}${entrants.map((e) => e.label).join(", ")}${dot}${plural(o.maps.length, "map")}${dot}${pc.dim(relative(process.cwd(), out) || out)}`);
+  say(`${pc.bold(t("{n, plural, one {# game} other {# games}}", { n: games.length }))}${dot}${entrants.map((e) => e.label).join(", ")}${dot}${t("{n, plural, one {# map} other {# maps}}", { n: o.maps.length })}${dot}${pc.dim(relative(process.cwd(), out) || out)}`);
 
   const results: GameResult[] = [];
   const parallel = Math.max(1, Math.min(o.parallel ?? 1, games.length));
@@ -451,5 +455,5 @@ export function printLadder(r: LadderOutcome): void {
   print(...ladderLines(r.entrants, r.results));
   const played = r.results.filter((x) => x.end).length;
   const at = relative(process.cwd(), r.out) || ".";
-  print("", `${mark.info} ${plural(played, "replay")} in ${pc.cyan(at + "/")}${dot}${pc.dim(`scmjs replay watch ${at}/<file>`)}${dot}${pc.dim(`${(r.ms / 1000).toFixed(0)} s`)}`);
+  print("", `${mark.info} ${t("{n, plural, one {# replay} other {# replays}} in {folder}", { n: played, folder: pc.cyan(at + "/") })}${dot}${pc.dim(`scmjs replay watch ${at}/<file>`)}${dot}${pc.dim(`${(r.ms / 1000).toFixed(0)} s`)}`);
 }

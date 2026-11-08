@@ -8,6 +8,7 @@ import { spawnSync } from "node:child_process";
 import { basename, dirname, resolve } from "node:path";
 import type { OpenedMap } from "../../src/editor/mapFile";
 import { kindOf, loadMapInput } from "./files";
+import { t } from "./i18n";
 import { CliError } from "./ui";
 
 /** A file in a git repository: the repository's top folder and the file's path from there, with `/`. */
@@ -22,8 +23,8 @@ const git = (args: string[], input?: string) => spawnSync("git", args, { maxBuff
 export function locate(file: string): GitFile {
   const dir = dirname(resolve(file));
   const r = git(["-C", dir, "rev-parse", "--show-toplevel", "--show-prefix"]);
-  if (r.error) throw new CliError("git is not installed, or not on PATH", "A map's history is read through git.", 2);
-  if (r.status !== 0) throw new CliError(`${file} is not in a git repository`, r.stderr.toString().trim().split("\n")[0] || null, 2);
+  if (r.error) throw new CliError(t("git is not installed, or not on PATH"), t("A map's history is read through git."), 2);
+  if (r.status !== 0) throw new CliError(t("{file} is not in a git repository", { file }), r.stderr.toString().trim().split("\n")[0] || null, 2);
   const [root, prefix = ""] = r.stdout.toString().split("\n");
   return { root, path: `${prefix}${basename(file)}`, name: basename(file) };
 }
@@ -41,7 +42,7 @@ export interface Commit {
 
 /** A revision as the person gave it: refused when it would read as an option of git's. */
 function checkRevision(rev: string): void {
-  if (!rev || rev.startsWith("-")) throw new CliError(`${rev || "An empty revision"} is not a revision`, "A commit, branch or tag (HEAD~3, main, v1.0), or a range A..B.", 2);
+  if (!rev || rev.startsWith("-")) throw new CliError(rev ? t("{rev} is not a revision", { rev }) : t("An empty revision is not a revision"), t("A commit, branch or tag (HEAD~3, main, v1.0), or a range A..B."), 2);
 }
 
 /**
@@ -52,7 +53,7 @@ export function commitsTouching(f: GitFile, rev: string, o: { topo?: boolean; li
   checkRevision(rev);
   const args = ["-C", f.root, "log", "--parents", "--format=%x1e%H%x1f%P%x1f%an%x1f%ae%x1f%aI%x1f%s", ...(o.topo ? ["--topo-order"] : []), ...(o.limit ? ["-n", String(o.limit)] : []), rev, "--", f.path];
   const r = git(args);
-  if (r.status !== 0) throw new CliError(`git does not know the revision ${rev}`, r.stderr.toString().trim().split("\n")[0] || null, 2);
+  if (r.status !== 0) throw new CliError(t("git does not know the revision {rev}", { rev }), r.stderr.toString().trim().split("\n")[0] || null, 2);
   return r.stdout.toString().split("\x1e").filter((s) => s.trim()).map((rec) => {
     const [hash, parents, author, email, date, subject] = rec.replace(/\n+$/, "").split("\x1f");
     return { hash, parents: parents ? parents.split(" ") : [], author, email, date, subject: subject ?? "" };
@@ -63,7 +64,7 @@ export function commitsTouching(f: GitFile, rev: string, o: { topo?: boolean; li
 export function blobIds(f: GitFile, specs: readonly string[]): (string | null)[] {
   if (!specs.length) return [];
   const r = git(["-C", f.root, "cat-file", "--batch-check"], specs.join("\n") + "\n");
-  if (r.status !== 0) throw new CliError("git could not list the map's versions", r.stderr.toString().trim().split("\n")[0] || null);
+  if (r.status !== 0) throw new CliError(t("git could not list the map's versions"), r.stderr.toString().trim().split("\n")[0] || null);
   const lines = r.stdout.toString().split("\n");
   return specs.map((_, i) => {
     const m = /^([0-9a-f]{40,64}) blob \d+$/.exec(lines[i] ?? "");
@@ -76,7 +77,7 @@ export function readBlobs(f: GitFile, oids: readonly string[]): Map<string, Uint
   const out = new Map<string, Uint8Array>();
   if (!oids.length) return out;
   const r = git(["-C", f.root, "cat-file", "--batch"], oids.join("\n") + "\n");
-  if (r.status !== 0) throw new CliError("git could not read the map's versions", r.stderr.toString().trim().split("\n")[0] || null);
+  if (r.status !== 0) throw new CliError(t("git could not read the map's versions"), r.stderr.toString().trim().split("\n")[0] || null);
   const buf = r.stdout;
   let at = 0;
   for (const oid of oids) {
@@ -124,7 +125,7 @@ export class Versions {
       this.counts.calls++;
       this.counts.read += want.length;
       b = this.fetched.get(oid);
-      if (!b) throw new CliError(`git has no blob ${oid}`);
+      if (!b) throw new CliError(t("git has no blob {oid}", { oid }));
     }
     return b;
   }

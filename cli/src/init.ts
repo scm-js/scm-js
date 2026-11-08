@@ -15,7 +15,8 @@ import { VERSION } from "./about";
 import { hasScript } from "./build";
 import { loadMapInput, readInput } from "./files";
 import { mapReport } from "./map";
-import { CliError, dot, gameText, mark, pc, plural, table, visible } from "./ui";
+import { msg, t, translate } from "./i18n";
+import { CliError, dot, gameText, mark, pc, table, visible } from "./ui";
 
 /** The maps a folder holds, by extension. */
 const MAP_FILE = /\.(scx|scm|chk)$/i;
@@ -312,11 +313,11 @@ async function readMaps(dir: string): Promise<{ maps: InitMap[]; skipped: InitRe
 export async function initFolder(folder: string, o: InitOptions = {}): Promise<InitResult> {
   let dir: string;
   try {
-    if (!statSync(folder).isDirectory()) throw new CliError(`${folder} is a file, not a folder`, "scmjs init takes the folder the maps are in.", 2);
+    if (!statSync(folder).isDirectory()) throw new CliError(t("{folder} is a file, not a folder", { folder }), t("scmjs init takes the folder the maps are in."), 2);
     dir = realpathSync(folder);
   } catch (e) {
     if (e instanceof CliError) throw e;
-    throw new CliError(`No folder ${folder}`, "scmjs init takes the folder the maps are in; . is this one.", 2);
+    throw new CliError(t("No folder {folder}", { folder }), t("scmjs init takes the folder the maps are in; . is this one."), 2);
   }
   const notes: string[] = [];
   let repository = repositoryOf(dir);
@@ -325,7 +326,7 @@ export async function initFolder(folder: string, o: InitOptions = {}): Promise<I
     if (o.print) repository = dir;
     else {
       const r = git(dir, "init", "--quiet");
-      if (!r.ok) throw new CliError(`git init did not run in ${folder}: ${r.err.split("\n")[0] || "is git installed?"}`, "Install git (git-scm.com), or leave --git off.", 2);
+      if (!r.ok) throw new CliError(t("git init did not run in {folder}: {error}", { folder, error: r.err.split("\n")[0] || t("is git installed?") }), t("Install git (git-scm.com), or leave --git off."), 2);
       repository = repositoryOf(dir) ?? dir;
       created = true;
     }
@@ -342,23 +343,23 @@ export async function initFolder(folder: string, o: InitOptions = {}): Promise<I
     const path = join(dir, name);
     const text = existsSync(path) ? readFileSync(path, "utf8") : null;
     const lack = missingLines(text ?? "", want, attributes);
-    const what = attributes ? "maps diff as text and merge part by part" : "the .bak files Save leaves, map test's replays";
-    if (!lack.length) { files.push({ path: show(path), state: "kept", detail: "has the lines already", content: want.join("\n") + "\n" }); continue; }
+    const what = attributes ? t("maps diff as text and merge part by part") : t("the .bak files Save leaves, map test's replays");
+    if (!lack.length) { files.push({ path: show(path), state: "kept", detail: t("has the lines already"), content: want.join("\n") + "\n" }); continue; }
     const content = appendLines(text ?? "", lack, comment);
     if (!o.print) writeFileSync(path, content);
-    files.push({ path: show(path), state: text === null ? "written" : "added", detail: text === null ? what : `${lack.length === 1 ? "a line" : `${lack.length} lines`} added: ${lack.join(", ")}`, content: text === null ? content : lack.join("\n") + "\n" });
+    files.push({ path: show(path), state: text === null ? "written" : "added", detail: text === null ? what : t("{n, plural, one {a line} other {# lines}} added: {lines}", { n: lack.length, lines: lack.join(", ") }), content: text === null ? content : lack.join("\n") + "\n" });
   }
 
   // The whole files: written when absent, or with --force.
   const scripted = maps.filter((m) => m.script).map((m) => (prefix ? `${prefix}/${m.file}` : m.file));
   const whole: [string, string, string][] = [
     [join(top, WORKFLOW_PATH), workflowText({ version: VERSION, globs: mapGlobs(prefix, maps.map((m) => m.file)), scripted }),
-      `checks ${maps.length === 1 ? "the map" : maps.length ? `the ${maps.length} maps` : "the maps"} on push and pull request${scripted.length ? `, builds ${plural(scripted.length, "script")}` : ""}; scmjs ${VERSION}`],
-    [join(dir, "README.md"), readmeText(basename(dir), maps), maps.length ? `lists ${maps.length === 1 ? "the map" : `the ${maps.length} maps`}, and the commands` : "the commands"],
+      `${t("checks {n, plural, =0 {the maps} one {the map} other {the # maps}} on push and pull request", { n: maps.length })}${scripted.length ? t(", builds {n, plural, one {# script} other {# scripts}}", { n: scripted.length }) : ""}; scmjs ${VERSION}`],
+    [join(dir, "README.md"), readmeText(basename(dir), maps), maps.length ? t("lists {n, plural, one {the map} other {the # maps}}, and the commands", { n: maps.length }) : t("the commands")],
   ];
   for (const [path, content, detail] of whole) {
     const there = existsSync(path);
-    if (there && !o.force) { files.push({ path: show(path), state: "kept", detail: "there already (--force replaces it)", content }); continue; }
+    if (there && !o.force) { files.push({ path: show(path), state: "kept", detail: t("there already (--force replaces it)"), content }); continue; }
     if (!o.print) { mkdirSync(dirname(path), { recursive: true }); writeFileSync(path, content); }
     files.push({ path: show(path), state: there ? "replaced" : "written", detail, content });
   }
@@ -372,20 +373,20 @@ export async function initFolder(folder: string, o: InitOptions = {}): Promise<I
     if (current !== null && !o.force && !OLD_SETTINGS[key]?.includes(current)) return { key, value, state: "other", current };
     if (!o.print) {
       const r = git(top, "config", key, value);
-      if (!r.ok) throw new CliError(`git config ${key} did not take: ${r.err.split("\n")[0]}`);
+      if (!r.ok) throw new CliError(t("git config {key} did not take: {error}", { key, error: r.err.split("\n")[0] }));
     }
     return { key, value, state: "set", current };
   });
-  if (!repository) notes.push("Not in a git repository, so the git settings were not made: run scmjs init again after git init (or now with --git), or set them by hand (scmjs init --print).");
-  else if (settings.some((s) => s.state !== "kept") && !onPath("scmjs")) notes.push("git diff runs scmjs map dump and git merge runs scmjs map merge, and scmjs is not on PATH here: npm install -g @scm-js/cli.");
-  if (repository && prefix) notes.push(`The workflow is at the repository's top, where GitHub reads it, and checks ${prefix}/ from there.`);
-  if (!maps.length) notes.push("No maps in the folder yet: the workflow checks *.scx, and fails until there is one.");
-  if (maps.some((m) => m.script === null)) notes.push("This build of scmjs has no TrigScript compiler, so maps with a script were not looked for.");
+  if (!repository) notes.push(t("Not in a git repository, so the git settings were not made: run scmjs init again after git init (or now with --git), or set them by hand (scmjs init --print)."));
+  else if (settings.some((s) => s.state !== "kept") && !onPath("scmjs")) notes.push(t("git diff runs scmjs map dump and git merge runs scmjs map merge, and scmjs is not on PATH here: npm install -g @scm-js/cli."));
+  if (repository && prefix) notes.push(t("The workflow is at the repository's top, where GitHub reads it, and checks {folder}/ from there.", { folder: prefix }));
+  if (!maps.length) notes.push(t("No maps in the folder yet: the workflow checks *.scx, and fails until there is one."));
+  if (maps.some((m) => m.script === null)) notes.push(t("This build of scmjs has no TrigScript compiler, so maps with a script were not looked for."));
 
   return { folder: dir, repository, created, printed: !!o.print, maps, skipped, files, git: settings, notes };
 }
 
-/** The recipe as text to paste, for `--print`: each file (or the lines it takes), then the git commands. */
+/** The recipe as text to paste, for `--print`: each file (or the lines it takes), then the git commands. English, as the files are. */
 export function printRecipe(r: InitResult): string {
   const out: string[] = [];
   for (const f of r.files) {
@@ -395,7 +396,7 @@ export function printRecipe(r: InitResult): string {
   return out.join("\n");
 }
 
-const STATE_WORD: Record<FileState, string> = { written: "written", replaced: "replaced", added: "lines added", kept: "left alone" };
+const STATE_WORD: Record<FileState, string> = { written: msg("written"), replaced: msg("replaced"), added: msg("lines added"), kept: msg("left alone") };
 
 /** What was written and what was left alone, one line each, then the notes. */
 /** A folder as the person would type it: from here when that is shorter, else the whole path. */
@@ -407,24 +408,24 @@ function showFolder(p: string): string {
 export function printInit(r: InitResult): string[] {
   const show = showFolder;
   const scripts = r.maps.filter((m) => m.script).length;
-  const where = r.created ? "a new git repository" : r.repository === r.folder ? "a git repository" : r.repository ? `in the git repository ${show(r.repository)}` : "not in a git repository";
+  const where = r.created ? t("a new git repository") : r.repository === r.folder ? t("a git repository") : r.repository ? t("in the git repository {folder}", { folder: show(r.repository) }) : t("not in a git repository");
   const rowsOut: string[][] = r.files.map((f) => f.state === "kept"
-    ? [pc.dim(`· ${f.path}`), pc.dim(`${STATE_WORD[f.state]}: ${f.detail}`)]
-    : [`${mark.ok} ${f.path}`, f.state === "added" ? f.detail : `${STATE_WORD[f.state]}: ${f.detail}`]);
+    ? [pc.dim(`· ${f.path}`), pc.dim(`${translate(STATE_WORD[f.state])}: ${f.detail}`)]
+    : [`${mark.ok} ${f.path}`, f.state === "added" ? f.detail : `${translate(STATE_WORD[f.state])}: ${f.detail}`]);
   // One row per group of settings (`diff.scmjs`, `merge.scmjs`) and state, with the keys' last parts.
   const group = (k: string) => k.slice(0, k.lastIndexOf("."));
   const short = (k: string) => k.slice(k.lastIndexOf(".") + 1);
   for (const prefix of new Set(r.git.map((g) => group(g.key)))) {
     const of = r.git.filter((g) => group(g.key) === prefix);
     const set = of.filter((g) => g.state === "set"), kept = of.filter((g) => g.state === "kept");
-    if (set.length) rowsOut.push([`${mark.ok} git config ${prefix}`, `set: ${set.map((g) => short(g.key)).join(", ")}`]);
-    if (kept.length) rowsOut.push([pc.dim(`· git config ${prefix}`), pc.dim(`left alone: ${kept.map((g) => short(g.key)).join(", ")} already so`)]);
+    if (set.length) rowsOut.push([`${mark.ok} git config ${prefix}`, t("set: {keys}", { keys: set.map((g) => short(g.key)).join(", ") })]);
+    if (kept.length) rowsOut.push([pc.dim(`· git config ${prefix}`), pc.dim(t("left alone: {keys} already so", { keys: kept.map((g) => short(g.key)).join(", ") }))]);
   }
-  for (const g of r.git.filter((x) => x.state === "other")) rowsOut.push([`${mark.warn} git config ${g.key}`, `left alone: it is "${g.current}" (--force sets "${g.value}")`]);
+  for (const g of r.git.filter((x) => x.state === "other")) rowsOut.push([`${mark.warn} git config ${g.key}`, t("left alone: it is \"{current}\" (--force sets \"{value}\")", { current: g.current ?? "", value: g.value })]);
   return [
-    `${pc.bold(showFolder(r.folder))}${dot}${plural(r.maps.length, "map")}${scripts ? pc.dim(` (${scripts} with a TrigScript script)`) : ""}${dot}${where}`,
+    `${pc.bold(showFolder(r.folder))}${dot}${t("{n, plural, one {# map} other {# maps}}", { n: r.maps.length })}${scripts ? pc.dim(` ${t("({n} with a TrigScript script)", { n: scripts })}`) : ""}${dot}${where}`,
     ...table(rowsOut, 2),
-    ...r.skipped.map((s) => `${mark.warn} ${s.file} was left out: ${s.error}`),
+    ...r.skipped.map((s) => `${mark.warn} ${t("{file} was left out: {error}", { file: s.file, error: s.error })}`),
     ...r.notes.map((n) => `${mark.info} ${n}`),
   ];
 }

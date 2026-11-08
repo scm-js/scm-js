@@ -39,6 +39,7 @@ import { TILESETS } from "../../src/data/tilesets";
 import { PLAYER_COLORS } from "../../src/data/players";
 import { techName, unitName, upgradeName } from "../../src/data/units";
 import { weaponName } from "../../src/data/weapons";
+import { t } from "./i18n";
 import { CliError } from "./ui";
 
 /** The folder under an unpacked map that holds its scenario as text. */
@@ -96,7 +97,7 @@ const HEX_DIGITS: Record<Kind, number> = { u8: 2, u16: 4, u32: 8, i32: 8 };
 export class TextFormError extends CliError {
   readonly form: string;
   constructor(form: string, line: number | null, message: string) {
-    super(`${TEXT_FOLDER}/${form}${line ? `, line ${line}` : ""}: ${message}`, "Each file's form is in docs.scmjs.dev/cli, \"A map as a folder of text\".");
+    super(line ? t("{file}, line {line}: {message}", { file: `${TEXT_FOLDER}/${form}`, line, message }) : `${TEXT_FOLDER}/${form}: ${message}`, t("Each file's form is in docs.scmjs.dev/cli, \"A map as a folder of text\"."));
     this.form = form;
   }
 }
@@ -109,10 +110,10 @@ function cell(value: number, kind: Kind, asHex = false): string {
 
 function number(text: string, kind: Kind, fail: (message: string) => never): number {
   const s = text.trim();
-  if (!/^(-?\d+|0x[0-9a-f]+)$/i.test(s)) fail(`"${text}" is not a number`);
+  if (!/^(-?\d+|0x[0-9a-f]+)$/i.test(s)) fail(t("\"{text}\" is not a number", { text }));
   const n = /^0x/i.test(s) ? parseInt(s.slice(2), 16) : Number(s);
   const [lo, hi] = LIMITS[kind];
-  if (!Number.isSafeInteger(n) || n < lo || n > hi) fail(`${s} is out of range (${lo} to ${hi})`);
+  if (!Number.isSafeInteger(n) || n < lo || n > hi) fail(t("{value} is out of range ({lo} to {hi})", { value: s, lo, hi }));
   return n;
 }
 
@@ -142,15 +143,15 @@ function formatTable(columns: readonly string[], rows: readonly string[][]): str
 
 function readTable(form: string, body: string, columns: readonly string[]): TableRow[] {
   const lines = contentLines(body);
-  if (!lines.length) throw new TextFormError(form, null, `the header line is missing; it is: ${columns.join(" ")}`);
+  if (!lines.length) throw new TextFormError(form, null, t("the header line is missing; it is: {columns}", { columns: columns.join(" ") }));
   const header = lines[0].text.split("\t").map((c) => c.trim());
   const named = header[header.length - 1] === "name";
   const expected = named ? header.slice(0, -1) : header;
-  if (expected.join("\t") !== columns.join("\t")) throw new TextFormError(form, lines[0].line, `the columns are ${columns.join(" ")}${named ? " name" : ""}, not ${header.join(" ")}`);
+  if (expected.join("\t") !== columns.join("\t")) throw new TextFormError(form, lines[0].line, t("the columns are {columns}, not {header}", { columns: `${columns.join(" ")}${named ? " name" : ""}`, header: header.join(" ") }));
   return lines.slice(1).map(({ line, text }) => {
     const cells = text.split("\t");
     if (cells.length !== header.length && !(named && cells.length === header.length - 1)) {
-      throw new TextFormError(form, line, `${cells.length} columns, the header has ${header.length}`);
+      throw new TextFormError(form, line, t("{n} columns, the header has {header}", { n: cells.length, header: header.length }));
     }
     return { line, get: (name: string) => cells[columns.indexOf(name)] ?? "" };
   });
@@ -206,11 +207,11 @@ function formatGrid(comment: string, values: ArrayLike<number>, width: number, d
 
 function readGrid(form: string, body: string, width: number, height: number, kind: Kind): number[] {
   const lines = contentLines(body);
-  if (lines.length !== height) throw new TextFormError(form, null, `${lines.length} rows, the map's size needs ${height}`);
+  if (lines.length !== height) throw new TextFormError(form, null, t("{n} rows, the map's size needs {height}", { n: lines.length, height }));
   const out: number[] = [];
   for (const { line, text } of lines) {
     const cells = text.trim().split(/\s+/);
-    if (cells.length !== width) throw new TextFormError(form, line, `${cells.length} cells, the map's size needs ${width}`);
+    if (cells.length !== width) throw new TextFormError(form, line, t("{n} cells, the map's size needs {width}", { n: cells.length, width }));
     for (const c of cells) out.push(number(`0x${c}`, kind, (m) => { throw new TextFormError(form, line, m); }));
   }
   return out;
@@ -248,26 +249,26 @@ function settingsForm(spec: SettingsSpec): Form {
       return formatTable([...header, "name"], rows);
     },
     read(scn, body) {
-      const t = spec.ensure(scn);
-      const count = countOf(t);
+      const table = spec.ensure(scn);
+      const count = countOf(table);
       const seen = new Set<number>();
       for (const row of readTable(spec.file, body, header)) {
         const fail = (m: string): never => { throw new TextFormError(spec.file, row.line, m); };
         const id = number(row.get("id"), "u16", fail);
-        if (id >= count) fail(`id ${id} is past the table's ${count} entries`);
-        if (seen.has(id)) fail(`id ${id} is listed twice`);
+        if (id >= count) fail(t("id {id} is past the table's {count} entries", { id, count }));
+        if (seen.has(id)) fail(t("id {id} is listed twice", { id }));
         seen.add(id);
         for (const c of spec.columns) {
           if (c.perPlayer) {
             const values = row.get(c.name).split(",");
-            if (values.length !== PLAYER_SLOTS) fail(`${c.name}: ${PLAYER_SLOTS} values separated by commas, one per player, not ${values.length}`);
-            values.forEach((v, p) => { t[c.name][p * count + id] = number(v, c.kind, (m) => fail(`${c.name}: ${m}`)); });
+            if (values.length !== PLAYER_SLOTS) fail(t("{column}: {slots} values separated by commas, one per player, not {n}", { column: c.name, slots: PLAYER_SLOTS, n: values.length }));
+            values.forEach((v, p) => { table[c.name][p * count + id] = number(v, c.kind, (m) => fail(`${c.name}: ${m}`)); });
           } else {
-            t[c.name][id] = number(row.get(c.name), c.kind, (m) => fail(`${c.name}: ${m}`));
+            table[c.name][id] = number(row.get(c.name), c.kind, (m) => fail(`${c.name}: ${m}`));
           }
         }
       }
-      if (seen.size !== count) throw new TextFormError(spec.file, null, `${count - seen.size} of the ${count} ids are missing; every one has a row`);
+      if (seen.size !== count) throw new TextFormError(spec.file, null, t("{missing} of the {count} ids are missing; every one has a row", { missing: count - seen.size, count }));
     },
   };
 }
@@ -295,13 +296,13 @@ function valueOf(form: string, what: string, v: unknown, table: Record<string, n
   if (typeof v === "string") {
     const key = Object.keys(table).find((k) => squash(k) === squash(v));
     if (key !== undefined) return table[key];
-    throw new TextFormError(form, null, `${what}: "${v}" is not one of ${Object.keys(table).join(", ")} (or a number)`);
+    throw new TextFormError(form, null, t("{what}: \"{value}\" is not one of {list} (or a number)", { what, value: String(v), list: Object.keys(table).join(", ") }));
   }
-  throw new TextFormError(form, null, `${what} is missing`);
+  throw new TextFormError(form, null, t("{what} is missing", { what }));
 }
 
 function intOf(form: string, what: string, v: unknown, kind: Kind): number {
-  if (typeof v !== "number") throw new TextFormError(form, null, v === undefined ? `${what} is missing` : `${what}: a number, not ${JSON.stringify(v)}`);
+  if (typeof v !== "number") throw new TextFormError(form, null, v === undefined ? t("{what} is missing", { what }) : t("{what}: a number, not {value}", { what, value: JSON.stringify(v) }));
   return number(String(v), kind, (m) => { throw new TextFormError(form, null, `${what}: ${m}`); });
 }
 
@@ -376,12 +377,12 @@ const mapForm: Form = {
     try {
       m = JSON.parse(body.replace(/^\uFEFF/, "")) as Record<string, unknown>;
     } catch (e) {
-      throw new TextFormError(form, null, `not JSON: ${e instanceof Error ? e.message : e}`);
+      throw new TextFormError(form, null, t("not JSON: {message}", { message: String(e instanceof Error ? e.message : e) }));
     }
-    if (!m || typeof m !== "object" || Array.isArray(m)) throw new TextFormError(form, null, "not a JSON object");
+    if (!m || typeof m !== "object" || Array.isArray(m)) throw new TextFormError(form, null, t("not a JSON object"));
     const has = (n: string) => text.has(n);
     if (has("TYPE")) {
-      if (typeof m.type !== "string" || m.type.length > 4) throw new TextFormError(form, null, "type: up to four characters, RAWB for Brood War or RAWS");
+      if (typeof m.type !== "string" || m.type.length > 4) throw new TextFormError(form, null, t("type: up to four characters, RAWB for Brood War or RAWS"));
       scn.type = m.type;
     }
     if (has("VER ")) scn.fileVersion = intOf(form, "version", m.version, "u16");
@@ -389,7 +390,7 @@ const mapForm: Form = {
     if (has("ERA ")) {
       if (m.tileset !== undefined) {
         const i = TILESETS.findIndex((t) => typeof m.tileset === "string" && (squash(t.id) === squash(m.tileset) || squash(t.name) === squash(m.tileset)));
-        if (i < 0) throw new TextFormError(form, null, `tileset: "${m.tileset}" is not one of ${TILESETS.map((t) => t.id).join(", ")}`);
+        if (i < 0) throw new TextFormError(form, null, t("tileset: \"{tileset}\" is not one of {list}", { tileset: String(m.tileset), list: TILESETS.map((ts) => ts.id).join(", ") }));
         scn.era = i;
       } else scn.era = intOf(form, "era", m.era, "u16");
     }
@@ -398,16 +399,16 @@ const mapForm: Form = {
       const s = m.strings as { slots?: unknown; encoding?: unknown } | undefined;
       const slots = intOf(form, "strings.slots", s?.slots, has("STRx") ? "u32" : "u16");
       const encoding = TEXT_ENCODINGS.find((e) => e.id === s?.encoding)?.id;
-      if (!encoding) throw new TextFormError(form, null, `strings.encoding: one of ${TEXT_ENCODINGS.map((e) => e.id).join(", ")}`);
+      if (!encoding) throw new TextFormError(form, null, t("strings.encoding: one of {list}", { list: TEXT_ENCODINGS.map((e) => e.id).join(", ") }));
       scn.strings = { strings: Array.from({ length: slots + 1 }, () => null), extended: has("STRx"), encoding: encoding as TextEncoding };
     }
     if (["OWNR", "IOWN", "SIDE", "COLR", "CRGB", "FORC"].some(has)) {
-      if (!Array.isArray(m.players)) throw new TextFormError(form, null, "players: a list with an entry per slot");
+      if (!Array.isArray(m.players)) throw new TextFormError(form, null, t("players: a list with an entry per slot"));
       const bySlot = new Map<number, Record<string, unknown>>();
       for (const p of m.players as Record<string, unknown>[]) bySlot.set(intOf(form, "players: slot", p?.slot, "u8"), p);
       const player = (i: number) => {
         const p = bySlot.get(i + 1);
-        if (!p) throw new TextFormError(form, null, `players: slot ${i + 1} is missing`);
+        if (!p) throw new TextFormError(form, null, t("players: slot {slot} is missing", { slot: i + 1 }));
         return p;
       };
       if (has("OWNR")) scn.playerTypes = Array.from({ length: PLAYER_SLOTS }, (_, i) => valueOf(form, `player ${i + 1} type`, player(i).type, PlayerType));
@@ -419,7 +420,7 @@ const mapForm: Form = {
           mode: Array.from({ length: FORCE_SLOTS }, (_, i) => valueOf(form, `player ${i + 1} colorMode`, player(i).colorMode, ColorMode)),
           rgb: Array.from({ length: FORCE_SLOTS }, (_, i) => {
             const rgb = player(i).rgb;
-            if (!Array.isArray(rgb) || rgb.length !== 3) throw new TextFormError(form, null, `player ${i + 1} rgb: three numbers, [red, green, blue]`);
+            if (!Array.isArray(rgb) || rgb.length !== 3) throw new TextFormError(form, null, t("player {slot} rgb: three numbers, [red, green, blue]", { slot: i + 1 }));
             return rgb.map((v) => intOf(form, `player ${i + 1} rgb`, v, "u8")) as [number, number, number];
           }),
         };
@@ -427,18 +428,18 @@ const mapForm: Form = {
       if (has("FORC")) {
         const playerForce = Array.from({ length: FORCE_SLOTS }, (_, i) => {
           const f = player(i).force;
-          if (typeof f !== "number" || !Number.isInteger(f) || f < 1 || f > 256) throw new TextFormError(form, null, `player ${i + 1} force: a number from 1`);
+          if (typeof f !== "number" || !Number.isInteger(f) || f < 1 || f > 256) throw new TextFormError(form, null, t("player {slot} force: a number from 1", { slot: i + 1 }));
           return f - 1;
         });
-        if (!Array.isArray(m.forces)) throw new TextFormError(form, null, "forces: a list of the four forces");
+        if (!Array.isArray(m.forces)) throw new TextFormError(form, null, t("forces: a list of the four forces"));
         const forces = new Map<number, Record<string, unknown>>();
         for (const f of m.forces as Record<string, unknown>[]) forces.set(intOf(form, "forces: force", f?.force, "u8"), f);
         const nameIndex: number[] = [], flags: number[] = [];
         for (let f = 0; f < 4; f++) {
           const force = forces.get(f + 1);
-          if (!force) throw new TextFormError(form, null, `forces: force ${f + 1} is missing`);
+          if (!force) throw new TextFormError(form, null, t("forces: force {force} is missing", { force: f + 1 }));
           nameIndex.push(intOf(form, `force ${f + 1} nameString`, force.nameString, "u16"));
-          if (!Array.isArray(force.flags)) throw new TextFormError(form, null, `force ${f + 1} flags: a list of ${Object.keys(ForceFlag).join(", ")}`);
+          if (!Array.isArray(force.flags)) throw new TextFormError(form, null, t("force {force} flags: a list of {list}", { force: f + 1, list: Object.keys(ForceFlag).join(", ") }));
           flags.push((force.flags as unknown[]).reduce<number>((a, v) => a | valueOf(form, `force ${f + 1} flags`, v, ForceFlag), 0));
         }
         scn.forces = { playerForce, nameIndex, flags };
@@ -446,8 +447,8 @@ const mapForm: Form = {
     }
     const list = (key: string, length: number) => {
       const v = m[key];
-      if (!Array.isArray(v)) throw new TextFormError(form, null, `${key}: a list of string numbers`);
-      if (v.length > length) throw new TextFormError(form, null, `${key}: at most ${length} entries`);
+      if (!Array.isArray(v)) throw new TextFormError(form, null, t("{key}: a list of string numbers", { key }));
+      if (v.length > length) throw new TextFormError(form, null, t("{key}: at most {length} entries", { key, length }));
       return Array.from({ length }, (_, i) => (i < v.length ? intOf(form, key, v[i], "u32") : 0));
     };
     if (has("WAV ")) scn.wavs = list("sounds", 512);
@@ -503,7 +504,7 @@ const underDoodadsForm: Form = {
     for (const row of readTable("under-doodads.txt", body, ["x", "y", "tile"])) {
       const fail = (m: string): never => { throw new TextFormError("under-doodads.txt", row.line, m); };
       const x = number(row.get("x"), "u16", fail), y = number(row.get("y"), "u16", fail);
-      if (x >= scn.width || y >= scn.height) fail(`${x},${y} is outside the map (${scn.width} × ${scn.height})`);
+      if (x >= scn.width || y >= scn.height) fail(t("{x},{y} is outside the map ({width} × {height})", { x, y, width: scn.width, height: scn.height }));
       editor[y * scn.width + x] = number(`0x${row.get("tile").trim()}`, "u16", fail);
     }
     scn.editorTiles = editor;
@@ -541,8 +542,8 @@ const locationsForm: Form = {
     for (const row of readTable("locations.tsv", body, ["location", ...LOCATION_COLUMNS.map((c) => c.name)])) {
       const fail = (m: string): never => { throw new TextFormError("locations.tsv", row.line, m); };
       const n = number(row.get("location"), "u16", fail);
-      if (n < 1) fail("locations are numbered from 1");
-      if (seen.has(n)) fail(`location ${n} is listed twice`);
+      if (n < 1) fail(t("locations are numbered from 1"));
+      if (seen.has(n)) fail(t("location {n} is listed twice", { n }));
       seen.add(n);
       while (locations.length < n) locations.push(blankLocation());
       locations[n - 1] = recordFrom<LocationRecord>("locations.tsv", row, LOCATION_COLUMNS);
@@ -568,7 +569,7 @@ const cuwpForm: Form = {
     for (const row of readTable("cuwp.tsv", body, columns)) {
       const fail = (m: string): never => { throw new TextFormError("cuwp.tsv", row.line, m); };
       const n = number(row.get("slot"), "u8", fail);
-      if (n !== slots.length + 1 && n !== inUse.length + 1) fail(`slot ${n} out of order; the slots run 1, 2, 3 …`);
+      if (n !== slots.length + 1 && n !== inUse.length + 1) fail(t("slot {n} out of order; the slots run 1, 2, 3 …", { n }));
       if (props) slots.push(recordFrom<CuwpSlot>("cuwp.tsv", row, CUWP_COLUMNS));
       if (used) inUse.push(number(row.get("used"), "u8", fail) !== 0);
     }
@@ -704,7 +705,7 @@ interface Assembled {
 function assemble(list: SectionsList, source: TextSource): Assembled {
   const kept = (path: string) => {
     const b = source.bytes(path);
-    if (!b) throw new TextFormError(SECTIONS_FILE, null, `${path} is listed but not in the folder`);
+    if (!b) throw new TextFormError(SECTIONS_FILE, null, t("{path} is listed but not in the folder", { path }));
     return b;
   };
   const sectionOf = (e: SectionEntry, data: Uint8Array): ChkSection => ({ name: e.name, offset: -1, declaredSize: e.size ?? data.length, data });
@@ -715,7 +716,7 @@ function assemble(list: SectionsList, source: TextSource): Assembled {
   const records = new Map(list.sections.filter((e) => e.text && e.bytes && !e.sha1).map((e) => [e.name, kept(e.bytes!)]));
   const bodies = new Map(forms.map((f) => {
     const body = source.text(f.file);
-    if (body === null) throw new TextFormError(f.file, null, `the file is missing; ${SECTIONS_FILE} lists ${f.sections.filter((s) => text.has(s)).map((s) => s.trim()).join(", ")} in it`);
+    if (body === null) throw new TextFormError(f.file, null, t("the file is missing; {list} lists {sections} in it", { list: SECTIONS_FILE, sections: f.sections.filter((s) => text.has(s)).map((s) => s.trim()).join(", ") }));
     return [f.file, body];
   }));
   // The sections kept as bytes come first; the text is read over them. A second pass reads the text over the whole
@@ -729,13 +730,13 @@ function assemble(list: SectionsList, source: TextSource): Assembled {
     // A trigger's text names its strings by what they say; one the table lacks is added to it. With the table kept as
     // bytes there is nowhere to add it, and the trigger would point past the table.
     if (strings !== null && JSON.stringify(scn.strings.strings) !== strings) {
-      throw new TextFormError(formsFor(text).some((f) => f.file === "triggers.txt") ? "triggers.txt" : "briefing.txt", null, "a string here is not in the map's string table, which this folder keeps as bytes; add the string in the editor first");
+      throw new TextFormError(formsFor(text).some((f) => f.file === "triggers.txt") ? "triggers.txt" : "briefing.txt", null, t("a string here is not in the map's string table, which this folder keeps as bytes; add the string in the editor first"));
     }
     encoded = new Map();
     const sections = list.sections.map((e, i) => {
       if (raw[i]) return sectionOf(e, raw[i]!);
       const data = encodeSection(scn, e.name);
-      if (!data) throw new TextFormError(primaryFile(e.name), null, `the text has nothing to write for section ${e.name.trim()}`);
+      if (!data) throw new TextFormError(primaryFile(e.name), null, t("the text has nothing to write for section {section}", { section: e.name.trim() }));
       encoded.set(i, data);
       return sectionOf({ name: e.name }, e.bytes && e.sha1 && e.sha1 === sha1(data) ? kept(e.bytes) : data);
     });
@@ -748,16 +749,16 @@ function assemble(list: SectionsList, source: TextSource): Assembled {
 
 /** `sections.json`, checked. */
 function readSectionsList(body: string | null): SectionsList {
-  if (body === null) throw new TextFormError(SECTIONS_FILE, null, "the file is missing; it lists the scenario's sections");
+  if (body === null) throw new TextFormError(SECTIONS_FILE, null, t("the file is missing; it lists the scenario's sections"));
   let raw: Partial<SectionsList>;
-  try { raw = JSON.parse(body) as Partial<SectionsList>; } catch (e) { throw new TextFormError(SECTIONS_FILE, null, `not JSON: ${e instanceof Error ? e.message : e}`); }
-  if (raw?.format !== TEXT_FORMAT) throw new TextFormError(SECTIONS_FILE, null, `format ${raw?.format} is not one this scmjs reads (${TEXT_FORMAT}); a newer scmjs wrote it`);
-  if (!Array.isArray(raw.sections)) throw new TextFormError(SECTIONS_FILE, null, "sections: the list of the scenario's sections");
+  try { raw = JSON.parse(body) as Partial<SectionsList>; } catch (e) { throw new TextFormError(SECTIONS_FILE, null, t("not JSON: {message}", { message: String(e instanceof Error ? e.message : e) })); }
+  if (raw?.format !== TEXT_FORMAT) throw new TextFormError(SECTIONS_FILE, null, t("format {format} is not one this scmjs reads ({known}); a newer scmjs wrote it", { format: String(raw?.format), known: TEXT_FORMAT }));
+  if (!Array.isArray(raw.sections)) throw new TextFormError(SECTIONS_FILE, null, t("sections: the list of the scenario's sections"));
   for (const e of raw.sections) {
-    if (typeof e?.name !== "string" || e.name.length !== 4) throw new TextFormError(SECTIONS_FILE, null, `a section's name is four characters, not ${JSON.stringify(e?.name)}`);
-    if (!e.text && !e.bytes) throw new TextFormError(SECTIONS_FILE, null, `section ${JSON.stringify(e.name)} names neither a text file nor its bytes`);
-    if (e.text && (!MODELLED_SECTIONS.has(e.name) || !FORMS.some((f) => f.sections.includes(e.name)))) throw new TextFormError(SECTIONS_FILE, null, `section ${JSON.stringify(e.name)} has no text form; keep it as bytes`);
-    if (e.text && e.bytes && !e.sha1 && !FORMS.some((f) => f.keepsRecords && f.sections.includes(e.name))) throw new TextFormError(SECTIONS_FILE, null, `section ${JSON.stringify(e.name)} names its bytes without a sha1, and its text keeps no records`);
+    if (typeof e?.name !== "string" || e.name.length !== 4) throw new TextFormError(SECTIONS_FILE, null, t("a section's name is four characters, not {name}", { name: String(JSON.stringify(e?.name)) }));
+    if (!e.text && !e.bytes) throw new TextFormError(SECTIONS_FILE, null, t("section {name} names neither a text file nor its bytes", { name: JSON.stringify(e.name) }));
+    if (e.text && (!MODELLED_SECTIONS.has(e.name) || !FORMS.some((f) => f.sections.includes(e.name)))) throw new TextFormError(SECTIONS_FILE, null, t("section {name} has no text form; keep it as bytes", { name: JSON.stringify(e.name) }));
+    if (e.text && e.bytes && !e.sha1 && !FORMS.some((f) => f.keepsRecords && f.sections.includes(e.name))) throw new TextFormError(SECTIONS_FILE, null, t("section {name} names its bytes without a sha1, and its text keeps no records", { name: JSON.stringify(e.name) }));
   }
   return { format: TEXT_FORMAT, sections: raw.sections, trailing: typeof raw.trailing === "string" ? raw.trailing : undefined };
 }
@@ -805,10 +806,10 @@ export function scenarioToText(chkBytes: Uint8Array): ScenarioText {
   const why = new Map<string, string>();
   const text = new Set<string>();
   for (const s of chk.sections) {
-    if (!MODELLED_SECTIONS.has(s.name) || !FORMS.some((f) => f.sections.includes(s.name))) why.set(s.name, "not modelled");
-    else if (counts.get(s.name)! > 1) why.set(s.name, `${counts.get(s.name)} copies`);
-    else if (s.truncated || s.declaredSize !== s.data.length) why.set(s.name, "its length runs past the file");
-    else if ((s.name === "STR " && model.strings.extended) || (s.name === "STRx" && !model.strings.extended)) why.set(s.name, "not the string table the game reads");
+    if (!MODELLED_SECTIONS.has(s.name) || !FORMS.some((f) => f.sections.includes(s.name))) why.set(s.name, t("not modelled"));
+    else if (counts.get(s.name)! > 1) why.set(s.name, t("{n} copies", { n: counts.get(s.name)! }));
+    else if (s.truncated || s.declaredSize !== s.data.length) why.set(s.name, t("its length runs past the file"));
+    else if ((s.name === "STR " && model.strings.extended) || (s.name === "STRx" && !model.strings.extended)) why.set(s.name, t("not the string table the game reads"));
     else text.add(s.name);
   }
   const reference = new Map<string, Uint8Array | null>([...text].map((n) => [n, encodeSection(model, n)]));
@@ -852,20 +853,20 @@ export function scenarioToText(chkBytes: Uint8Array): ScenarioText {
       if (!(e instanceof TextFormError) || round > 20) throw e;
       lost = FORMS.find((f) => f.file === e.form)?.sections.filter((n) => text.has(n)) ?? [];
       if (!lost.length) throw e;
-      for (const n of lost) why.set(n, `its text does not read back (${e.message})`);
+      for (const n of lost) why.set(n, t("its text does not read back ({message})", { message: e.message }));
     }
     if (lost.length) {
       for (const n of lost) {
         // Text that keeps records gets one more round with them before the section goes back to bytes.
         if (!withRecords.has(n) && !why.has(n) && FORMS.some((f) => f.keepsRecords && f.sections.includes(n))) { withRecords.add(n); continue; }
         text.delete(n);
-        if (!why.has(n)) why.set(n, "its text would lose something the model holds");
+        if (!why.has(n)) why.set(n, t("its text would lose something the model holds"));
       }
       continue;
     }
     files.set(SECTIONS_FILE, stableJson(list) + "\n");
     // The whole check: the folder packs into the scenario it came from.
-    if (!same(assemble(list, source).chk, chkBytes)) throw new CliError("The scenario's text does not pack back into the same scenario.", "Please report it: https://github.com/scm-js/scm-js/issues — scmjs map unpack without --text keeps the scenario as it is.");
+    if (!same(assemble(list, source).chk, chkBytes)) throw new CliError(t("The scenario's text does not pack back into the same scenario."), t("Please report it: https://github.com/scm-js/scm-js/issues — scmjs map unpack without --text keeps the scenario as it is."));
     const textNames = chk.sections.filter((s) => text.has(s.name)).map((s) => s.name);
     return {
       files,

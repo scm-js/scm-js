@@ -14,7 +14,8 @@ import { doctorJson, engineCheck, nodeCheck, printDoctor, type Check } from "../
 import { kindOf, loadMapInput, type Input } from "../cli/src/files";
 import { checkPlugin, devEditorUrl, nameFromFolder, newPlugin, pluginId, sourceImports } from "../cli/src/plugin";
 import { devPluginSpec } from "../src/plugins/devLink";
-import { program } from "../cli/src/main";
+import { buildProgram, program } from "../cli/src/main";
+import { setLocale } from "../cli/src/i18n";
 import { mapReport, printIssues, printMapInfo } from "../cli/src/map";
 import { columns, dot, gameLines, gameText, rows, table, visible } from "../cli/src/ui";
 import { githubAnnotations, junitXml, sarifJson, type CheckReport } from "../cli/src/report";
@@ -285,9 +286,22 @@ describe("scmjs: the overview", () => {
     expect(lines.some((l) => /^ {2}map info\|check\|open\|(\w+\|)*…/.test(l))).toBe(true);
     expect(lines.some((l) => l.includes("completion"))).toBe(false);
     expect(lines.some((l) => l.includes("scmjs 0.0.0-dev"))).toBe(true);
-    expect(lines.at(-1)).toBe("Options: -v, --version   --no-color   -h, --help");
+    expect(lines.at(-1)).toBe("Options: -v, --version   --no-color   --lang <code>   -h, --help");
     expect(lines.length, "a line left for the prompt").toBeLessThanOrEqual(23);
     for (const l of lines) expect(l.length, l).toBeLessThanOrEqual(80);
+  });
+
+  it("fits a 24-row terminal in Korean too, by terminal columns", () => {
+    setLocale("ko");
+    try {
+      const korean = buildProgram();
+      const lines = help(korean);
+      for (const group of ["맵과 리플레이:", "플러그인과 봇:", "이 도구:"]) expect(lines).toContain(group);
+      for (const cmd of korean.commands.filter((c) => !(c as unknown as { _hidden?: boolean })._hidden)) expect(lines.some((l) => l.startsWith(`  ${cmd.name()} `)), cmd.name()).toBe(true);
+      expect(lines.at(-1)).toBe("옵션: -v, --version   --no-color   --lang <code>   -h, --help");
+      expect(lines.length, "a line left for the prompt").toBeLessThanOrEqual(23);
+      for (const l of lines) expect(columns(l), l).toBeLessThanOrEqual(80);
+    } finally { setLocale("en"); }
   });
 
   it("leaves a command's own help plain", () => {

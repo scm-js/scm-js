@@ -15,6 +15,7 @@ import { homedir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { gunzipSync } from "node:zlib";
 import { runnerEnv } from "./runtime";
+import { msg, t, translate } from "./i18n";
 import { CliError, pc } from "./ui";
 
 /** Where the play page is, and so where the engine's files are (`SCMJS_PLAY_URL` for another). */
@@ -22,10 +23,10 @@ export const PLAY_URL = "https://scmjs.dev/play";
 
 /** The runners a deploy may name in `current.json`, by what they run, and the file name each goes by. */
 export const RUNNERS = {
-  bot: { key: "runner", file: /^run(-[0-9a-f]+)?\.(mjs|cjs)$/, command: "scmjs bot run" },
-  replay: { key: "replayRunner", file: /^replay(-[0-9a-f]+)?\.(mjs|cjs)$/, command: "scmjs replay watch (and map heatmap)" },
-  map: { key: "mapRunner", file: /^map(-[0-9a-f]+)?\.(mjs|cjs)$/, command: "scmjs map trace (and map cost, rush and test)" },
-  match: { key: "matchRunner", file: /^match(-[0-9a-f]+)?\.(mjs|cjs)$/, command: "scmjs bot ladder (and map balance)" },
+  bot: { key: "runner", file: /^run(-[0-9a-f]+)?\.(mjs|cjs)$/, command: msg("scmjs bot run") },
+  replay: { key: "replayRunner", file: /^replay(-[0-9a-f]+)?\.(mjs|cjs)$/, command: msg("scmjs replay watch (and map heatmap)") },
+  map: { key: "mapRunner", file: /^map(-[0-9a-f]+)?\.(mjs|cjs)$/, command: msg("scmjs map trace (and map cost, rush and test)") },
+  match: { key: "matchRunner", file: /^match(-[0-9a-f]+)?\.(mjs|cjs)$/, command: msg("scmjs bot ladder (and map balance)") },
 } as const;
 export type RunnerKind = keyof typeof RUNNERS;
 
@@ -63,9 +64,9 @@ async function fetchBytes(url: string): Promise<Uint8Array> {
   try {
     r = await fetch(url);
   } catch (e) {
-    throw new CliError(`${url} could not be fetched (${e instanceof Error ? e.message : e}).`, "The engine comes from the play page once; connect, or name a folder that has it with --engine.");
+    throw new CliError(t("{url} could not be fetched ({message}).", { url, message: String(e instanceof Error ? e.message : e) }), t("The engine comes from the play page once; connect, or name a folder that has it with --engine."));
   }
-  if (!r.ok) throw new CliError(`${url} answered ${r.status}.`, "The engine comes from the play page once; name a folder that has it with --engine if the page is down.");
+  if (!r.ok) throw new CliError(t("{url} answered {status}.", { url, status: r.status }), t("The engine comes from the play page once; name a folder that has it with --engine if the page is down."));
   return plain(new Uint8Array(await r.arrayBuffer()));
 }
 
@@ -98,12 +99,12 @@ export async function ensureEngine(at: string = process.env.SCMJS_PLAY_URL || PL
     const files = existsSync(dir) ? readdirSafe(dir) : [];
     const runners: Engine["runners"] = {};
     for (const kind of Object.keys(RUNNERS) as RunnerKind[]) { const f = files.find((n) => RUNNERS[kind].file.test(n)); if (f) runners[kind] = f; }
-    if (!Object.keys(runners).length) throw new CliError(`${at} holds no engine: no current.json and no run-<hash>.mjs beside the engine's files.`, "Name the play page's address, or a folder scm-sim's deploy-play.mjs staged.");
+    if (!Object.keys(runners).length) throw new CliError(t("{folder} holds no engine: no current.json and no run-<hash>.mjs beside the engine's files.", { folder: at }), t("Name the play page's address, or a folder scm-sim's deploy-play.mjs staged."));
     return { dir, build: basename(dir), runner: runners.bot ?? "", runners, fetched: 0 };
   }
   const base = at.replace(/\/+$/, "");
   const current = JSON.parse(new TextDecoder().decode(await fetchBytes(`${base}/engine/current.json`))) as EngineCurrent;
-  if (!current.build || !Array.isArray(current.files) || !current.runner) throw new CliError(`${base}/engine/current.json does not name an engine build and a runner.`);
+  if (!current.build || !Array.isArray(current.files) || !current.runner) throw new CliError(t("{file} does not name an engine build and a runner.", { file: `${base}/engine/current.json` }));
   const dir = join(cache, "engine", current.build);
   mkdirSync(dir, { recursive: true });
   let fetched = 0;
@@ -111,8 +112,8 @@ export async function ensureEngine(at: string = process.env.SCMJS_PLAY_URL || PL
   const wanted = [...current.files, ...Object.values(runners)];
   const missing = wanted.filter((f) => !existsSync(join(dir, f)));
   // (A build fetched before a runner was deployed lacks only that runner: a small fetch, said as such.)
-  if (missing.some((f) => current.files.includes(f))) say(`${pc.dim(`Fetching the game engine from ${base} (about 25 MB, once) → ${dir}`)}`);
-  else if (missing.length) say(`${pc.dim(`Fetching the newer runners from ${base} → ${dir}`)}`);
+  if (missing.some((f) => current.files.includes(f))) say(`${pc.dim(t("Fetching the game engine from {url} (about 25 MB, once) → {dir}", { url: base, dir }))}`);
+  else if (missing.length) say(`${pc.dim(t("Fetching the newer runners from {url} → {dir}", { url: base, dir }))}`);
   for (const name of missing) {
     const bytes = await fetchBytes(`${base}/engine/${current.build}/${name}`);
     // Written whole or not at all: a half file would be taken for the engine next time.
@@ -134,7 +135,7 @@ function runnersNamed(c: EngineCurrent): Engine["runners"] {
 /** The path of the engine's runner for `kind`, or a CliError when the deploy the engine came from had none. */
 export function runnerFor(engine: Engine, kind: RunnerKind): string {
   const file = engine.runners[kind];
-  if (!file) throw new CliError(`The engine at ${engine.dir} has no ${kind} runner.`, `${RUNNERS[kind].command} needs a play page deployed with one; a folder named with --engine must hold a ${RUNNERS[kind].file.source.split("(")[0].replace(/^\^/, "")}-<hash>.mjs.`);
+  if (!file) throw new CliError(t("The engine at {dir} has no {kind} runner.", { dir: engine.dir, kind }), t("{command} needs a play page deployed with one; a folder named with --engine must hold a {file}-<hash>.mjs.", { command: translate(RUNNERS[kind].command), file: RUNNERS[kind].file.source.split("(")[0].replace(/^\^/, "") }));
   return join(engine.dir, file);
 }
 
@@ -169,14 +170,14 @@ export function usualGameFolders(env = process.env): string[] {
 export function findGameCopy(named: string | undefined): { folder: string; kind: "remastered" | "classic" } {
   if (named) {
     const kind = gameCopyKind(resolve(named));
-    if (!kind) throw new CliError(`${named} is not a copy of StarCraft.`, "A Remastered installation (with .build.info) or a 1.16.1 one (StarDat.mpq and BrooDat.mpq).");
+    if (!kind) throw new CliError(t("{folder} is not a copy of StarCraft.", { folder: named }), t("A Remastered installation (with .build.info) or a 1.16.1 one (StarDat.mpq and BrooDat.mpq)."));
     return { folder: resolve(named), kind };
   }
   for (const folder of usualGameFolders()) {
     const kind = gameCopyKind(folder);
     if (kind) return { folder, kind };
   }
-  throw new CliError("No copy of StarCraft was found on this computer.", "The game plays with your own installation's files: name its folder with --starcraft (or SCMJS_STARCRAFT).");
+  throw new CliError(t("No copy of StarCraft was found on this computer."), t("The game plays with your own installation's files: name its folder with --starcraft (or SCMJS_STARCRAFT)."));
 }
 
 /**

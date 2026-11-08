@@ -10,10 +10,11 @@ import { MAP_VERSIONS, mapVersionOf } from "../../src/formats/chk/scenario";
 import { looksLikeMpq } from "../../src/formats/mpq/scm";
 import { TILESETS } from "../../src/data/tilesets";
 import { writeOutput, type Written } from "./exchange";
-import { loadMapInput, STDIO, type Input } from "./files";
+import { loadMapInput, MapReadError, STDIO, type Input } from "./files";
 import { mapReport, type MapReport } from "./map";
 import { SCMSCX, type MapInfo, type Scmscx, type SearchRow } from "./scmscx";
-import { CliError, columns, dot, gameText, mark, num, pc, plural, rows, size, table } from "./ui";
+import { t, translate } from "./i18n";
+import { CliError, columns, dot, gameText, mark, num, pc, rows, size, table } from "./ui";
 
 export const DEFAULT_LIMIT = 10;
 export const MAX_LIMIT = 50;
@@ -30,7 +31,7 @@ export interface SearchReport { words: string; total: number; maps: FoundMap[] }
 export function parseLimit(value: string | undefined): number {
   if (value === undefined) return DEFAULT_LIMIT;
   const n = Number(value);
-  if (!Number.isInteger(n) || n < 1 || n > MAX_LIMIT) throw new CliError(`--limit takes 1 to ${MAX_LIMIT}, not "${value}"`, null, 2);
+  if (!Number.isInteger(n) || n < 1 || n > MAX_LIMIT) throw new CliError(t("--limit takes 1 to {most}, not \"{value}\"", { most: MAX_LIMIT, value }), null, 2);
   return n;
 }
 
@@ -58,21 +59,21 @@ function cut(s: string, width: number): string {
 }
 
 export function printSearch(r: SearchReport, width = process.stdout.columns || 100): string[] {
-  if (!r.maps.length) return [pc.dim(`Nothing on scmscx.com matches "${r.words}"`)];
-  const players = (i: MapInfo) => (i.computers ? `${i.humans} + ${i.computers} computer` : String(i.humans));
-  const cells = r.maps.map((m) => [m.name, m.info ? `${m.info.width} × ${m.info.height}` : "", m.info ? tilesetName(m.info.tileset) : "", m.info ? players(m.info) : "", m.info ? num(m.info.downloads) : "", m.id]);
+  if (!r.maps.length) return [pc.dim(t("Nothing on scmscx.com matches \"{words}\"", { words: r.words }))];
+  const players = (i: MapInfo) => (i.computers ? t("{humans} + {computers} computer", { humans: i.humans, computers: i.computers }) : String(i.humans));
+  const cells = r.maps.map((m) => [m.name, m.info ? `${m.info.width} × ${m.info.height}` : "", m.info ? translate(tilesetName(m.info.tileset)) : "", m.info ? players(m.info) : "", m.info ? num(m.info.downloads) : "", m.id]);
   // The name takes what the other columns leave of the terminal, at least 24 columns.
   const others = [1, 2, 3, 4, 5].reduce((n, c) => n + Math.max(...cells.map((row) => columns(row[c])), 9) + 2, 4);
   const nameWidth = Math.max(24, Math.min(48, width - 1 - others));
   return [
-    `${pc.bold("scmscx.com")}${dot}${plural(r.total, "file")} match "${r.words}"${dot}the best ${plural(r.maps.length, "map")}`,
+    `${pc.bold("scmscx.com")}${dot}${t("{n, plural, one {# file matches} other {# files match}} \"{words}\"", { n: r.total, words: r.words })}${dot}${t("the best {n, plural, one {# map} other {# maps}}", { n: r.maps.length })}`,
     "",
     ...table([
-      ["Name", "Size", "Tileset", "Players", "Downloads", "Id"].map((h) => pc.dim(h)),
+      [t("Name"), t("Size"), t("Tileset"), t("Players"), t("Downloads"), t("Id")].map((h) => pc.dim(h)),
       ...cells.map(([name, ...rest]) => [cut(name, nameWidth), ...rest.slice(0, 4), pc.cyan(rest[4])]),
     ], 2),
     "",
-    pc.dim(`scmjs map fetch --id <id> downloads one. The maps are their makers', shared on ${SCMSCX}.`),
+    pc.dim(t("scmjs map fetch --id <id> downloads one. The maps are their makers', shared on {site}.", { site: SCMSCX })),
   ];
 }
 
@@ -90,7 +91,7 @@ export function searchJson(r: SearchReport) {
 export function mapIdFrom(given: string): string {
   const s = given.trim();
   const m = /scmscx\.com\/map\/([A-Za-z0-9_-]+)/i.exec(s) ?? /^([A-Za-z0-9_-]+)$/.exec(s);
-  if (!m) throw new CliError(`"${given}" is not a map id`, "The id is the last part of the map's address on the site: scmscx.com/map/<id>.", 2);
+  if (!m) throw new CliError(t("\"{given}\" is not a map id", { given }), t("The id is the last part of the map's address on the site: scmscx.com/map/<id>."), 2);
   return m[1];
 }
 
@@ -129,13 +130,13 @@ export async function fetchMap(site: Scmscx, id: string, o: { out?: string; forc
   const info = await site.mapInfo(id, true);
   const name = safeFileName(info.fileNames[0] ?? info.name, info.version, id);
   const path = outputPath(o.out, name);
-  if (path !== STDIO && existsSync(path) && !o.force) throw new CliError(`${path} is there already`, "--force overwrites it, --out names another file or folder.", 2);
+  if (path !== STDIO && existsSync(path) && !o.force) throw new CliError(t("{path} is there already", { path }), t("--force overwrites it, --out names another file or folder."), 2);
   const bytes = await site.file(info.mpqHash);
-  if (!looksLikeMpq(bytes)) throw new CliError(`What scmscx.com sent for ${id} is not a map (${size(bytes.length)}, no archive header)`, "Nothing was written. The site may have changed; please report it: https://github.com/scm-js/scm-js/issues");
+  if (!looksLikeMpq(bytes)) throw new CliError(t("What scmscx.com sent for {id} is not a map ({size}, no archive header)", { id, size: size(bytes.length) }), t("Nothing was written. The site may have changed; please report it: {url}", { url: "https://github.com/scm-js/scm-js/issues" }));
   const input: Input = { path, name, bytes, kind: "map" };
   let report: MapReport;
   try { report = mapReport(input, await loadMapInput(input)); } catch (e) {
-    if (e instanceof CliError) throw new CliError(`What scmscx.com sent for ${id} is not a map this can read: ${e.message.replace(/^.*? is not a map this can read: /, "")}`, "Nothing was written.");
+    if (e instanceof CliError) throw new CliError(t("What scmscx.com sent for {id} is not a map this can read: {reason}", { id, reason: e instanceof MapReadError ? e.reason : e.message }), t("Nothing was written."));
     throw e;
   }
   const written = await writeOutput(bytes, path, o.stdout);
@@ -144,15 +145,15 @@ export async function fetchMap(site: Scmscx, id: string, o: { out?: string; forc
 
 /** What `map info` says first — the name, the map, the file — then where it came from and where it went. */
 export function printFetched(r: FetchResult): string[] {
-  const where = r.written.path === STDIO ? "standard output" : pc.cyan(r.written.path);
+  const where = r.written.path === STDIO ? t("standard output") : pc.cyan(r.written.path);
   return [
-    pc.bold(gameText(r.report.name) || pc.italic("Untitled")),
+    pc.bold(gameText(r.report.name) || pc.italic(t("Untitled"))),
     ...rows([
-      ["Map", `${r.report.width} × ${r.report.height}${dot}${r.report.tileset}${dot}${r.report.version}`],
-      ["File", `${r.report.file.name}${dot}${size(r.report.file.bytes)}`],
-      ["From", `${pc.cyan(r.url)}${r.info.uploadedBy ? `${dot}uploaded by ${r.info.uploadedBy}` : ""}${dot}${plural(r.info.downloads, "download")}`],
+      [t("Map"), `${r.report.width} × ${r.report.height}${dot}${translate(r.report.tileset)}${dot}${translate(r.report.version)}`],
+      [t("File"), `${r.report.file.name}${dot}${size(r.report.file.bytes)}`],
+      [t("From"), `${pc.cyan(r.url)}${r.info.uploadedBy ? `${dot}${t("uploaded by {name}", { name: r.info.uploadedBy })}` : ""}${dot}${t("{n, plural, one {# download} other {# downloads}}", { n: r.info.downloads })}`],
     ]),
-    `${mark.ok} Written to ${where}`,
+    `${mark.ok} ${t("Written to {where}", { where })}`,
   ];
 }
 

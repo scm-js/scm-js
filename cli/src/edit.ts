@@ -12,6 +12,7 @@ import { baseTerrain } from "../../src/formats/tileset/terrain";
 import { applyStrings, deleteUnused, stringUsages, unusedStrings } from "../../src/editor/strings";
 import { unescapeStringText } from "../../src/editor/exchange";
 import { plainText } from "../../src/editor/textColors";
+import { msg, t } from "./i18n";
 import { CliError } from "./ui";
 
 export const VERSIONS = Object.keys(MAP_VERSIONS) as MapVersion[];
@@ -28,23 +29,23 @@ export function setHeader(doc: OpenedMap, given: HeaderOptions): FieldChange[] {
   const scn = doc.scenario;
   const out: FieldChange[] = [];
   const o = { ...given, name: given.name === undefined ? undefined : unescapeStringText(given.name), description: given.description === undefined ? undefined : unescapeStringText(given.description) };
-  if (o.version !== undefined && !(VERSIONS as string[]).includes(o.version)) throw new CliError(`--revision takes ${VERSIONS.join(", ")}, not "${o.version}"`, null, 2);
-  if (o.encoding !== undefined && !(ENCODINGS as string[]).includes(o.encoding)) throw new CliError(`--encoding takes ${ENCODINGS.join(", ")}, not "${o.encoding}"`, null, 2);
+  if (o.version !== undefined && !(VERSIONS as string[]).includes(o.version)) throw new CliError(t("--revision takes {list}, not \"{value}\"", { list: VERSIONS.join(", "), value: o.version }), null, 2);
+  if (o.encoding !== undefined && !(ENCODINGS as string[]).includes(o.encoding)) throw new CliError(t("--encoding takes {list}, not \"{value}\"", { list: ENCODINGS.join(", "), value: o.encoding }), null, 2);
   if (o.name !== undefined) {
     const from = scenarioName(scn) ?? "";
-    if (from !== o.name) { setScenarioName(scn, o.name); out.push({ field: "Name", from: plainText(from), to: plainText(o.name) }); }
+    if (from !== o.name) { setScenarioName(scn, o.name); out.push({ field: msg("Name"), from: plainText(from), to: plainText(o.name) }); }
   }
   if (o.description !== undefined) {
     const from = scenarioDescription(scn) ?? "";
-    if (from !== o.description) { setScenarioDescription(scn, o.description); out.push({ field: "Description", from: plainText(from), to: plainText(o.description) }); }
+    if (from !== o.description) { setScenarioDescription(scn, o.description); out.push({ field: msg("Description"), from: plainText(from), to: plainText(o.description) }); }
   }
   if (o.version !== undefined) {
     const from = mapVersionOf(scn.fileVersion);
-    if (from !== o.version) { changeMapVersion(scn, o.version as MapVersion); out.push({ field: "Version", from: MAP_VERSIONS[from].label, to: MAP_VERSIONS[o.version as MapVersion].label }); }
+    if (from !== o.version) { changeMapVersion(scn, o.version as MapVersion); out.push({ field: msg("Version"), from: MAP_VERSIONS[from].label, to: MAP_VERSIONS[o.version as MapVersion].label }); }
   }
   if (o.encoding !== undefined) {
     const from = scn.strings.encoding;
-    if (from !== o.encoding) { changeTextEncoding(scn, o.encoding as TextEncoding); out.push({ field: "Text encoding", from: TEXT_ENCODINGS.find((e) => e.id === from)?.label ?? from, to: TEXT_ENCODINGS.find((e) => e.id === o.encoding)?.label ?? o.encoding }); }
+    if (from !== o.encoding) { changeTextEncoding(scn, o.encoding as TextEncoding); out.push({ field: msg("Text encoding"), from: TEXT_ENCODINGS.find((e) => e.id === from)?.label ?? from, to: TEXT_ENCODINGS.find((e) => e.id === o.encoding)?.label ?? o.encoding }); }
   }
   return out;
 }
@@ -54,7 +55,7 @@ export const ANCHORS: Record<string, number> = { "top-left": 0, top: 1, "top-rig
 
 export function parseAnchor(spec: string): number {
   const n = ANCHORS[spec.trim().toLowerCase()];
-  if (n === undefined) throw new CliError(`--anchor takes ${Object.keys(ANCHORS).filter((k) => k !== "centre").join(", ")}, not "${spec}"`, null, 2);
+  if (n === undefined) throw new CliError(t("--anchor takes {list}, not \"{value}\"", { list: Object.keys(ANCHORS).filter((k) => k !== "centre").join(", "), value: spec }), null, 2);
   return n;
 }
 
@@ -64,7 +65,7 @@ export interface ResizeOutcome extends ResizeResult { from: { width: number; hei
 export function resizeMap(doc: OpenedMap, o: { width: number; height: number; anchor: number; clampLocations: boolean }): ResizeOutcome {
   const scn = doc.scenario;
   const from = { width: scn.width, height: scn.height };
-  if (from.width === o.width && from.height === o.height) throw new CliError(`${from.width} × ${from.height} is the map's size already`, null, 2);
+  if (from.width === o.width && from.height === o.height) throw new CliError(t("{width} × {height} is the map's size already", { width: from.width, height: from.height }), null, 2);
   const r = resizeScenario(scn, { width: o.width, height: o.height, anchor: o.anchor, fill: baseTerrain(null), tileset: null, era: scn.era, clampLocations: o.clampLocations, random: () => 0.5 });
   return { ...r, from, to: { width: scn.width, height: scn.height } };
 }

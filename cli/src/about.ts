@@ -7,6 +7,7 @@ import { PLUGIN_API_VERSION } from "../../src/plugins/api";
 import { BOT_GUIDE, dockerVersion } from "./bot";
 import { findDesktopApp, EDITOR_URL } from "./open";
 import { installInfo, installLabel, updateCommand, type Install } from "./runtime";
+import { t } from "./i18n";
 import { dot, pc, rows } from "./ui";
 
 declare const __SCMJS_VERSION__: string, __SCMJS_COMMIT__: string, __SCMJS_BUILT__: string;
@@ -39,9 +40,9 @@ export async function newestVersion(): Promise<string | null> {
  * for a downloaded executable), this one, or what npm has when this is newer (a build from a clone).
  */
 export function newestLine(version: string, latest: string | null, install: Install = installInfo()): string {
-  if (latest === null) return pc.dim("could not ask npm");
+  if (latest === null) return pc.dim(t("could not ask npm"));
   if (olderThan(version, latest)) return `${pc.yellow(latest)}${dot}${updateCommand(install, PACKAGE)}`;
-  return pc.dim(latest === version ? "this one" : `${latest} on npm`);
+  return pc.dim(latest === version ? t("this one") : t("{version} on npm", { version: latest }));
 }
 
 export async function aboutReport() {
@@ -61,27 +62,27 @@ export async function aboutReport() {
 export function printAbout(r: Awaited<ReturnType<typeof aboutReport>>): string[] {
   return [
     `${pc.bold(pc.cyan("scmjs"))} ${pc.bold(r.version)}`,
-    pc.dim("StarCraft: Brood War maps, replays and bots from the command line, by scmJS"),
+    pc.dim(t("StarCraft: Brood War maps, replays and bots from the command line, by scmJS")),
     "",
     ...rows([
-      ["Version", [r.version, r.commit && `commit ${r.commit}`, r.built && `built ${r.built}`].filter(Boolean).join(dot)],
-      ["Newest", newestLine(r.version, r.latest, r.install)],
-      ["Installed", `${installLabel(r.install)}${r.install.path ? pc.dim(`${dot}${r.install.path}`) : ""}`],
-      ["Node", `${r.node}${r.install.kind === "binary" ? " (inside scmjs)" : ""}${dot}${r.platform}`],
-      ["Desktop app", r.desktopApp ?? pc.dim("not found (scmjs … open uses the browser)")],
-      ["Docker", r.docker ? `${r.docker}` : pc.dim("not found (scmjs bot needs it)")],
-      ["Plugin API", String(r.pluginApi)],
-      ["Reads", `maps ${r.reads.maps.join(" ")}${dot}replays ${r.reads.replays.join(" ")}${dot}bots ${r.reads.bots.join(" ")}`],
+      [t("Version"), [r.version, r.commit && t("commit {commit}", { commit: r.commit }), r.built && t("built {date}", { date: r.built })].filter(Boolean).join(dot)],
+      [t("Newest"), newestLine(r.version, r.latest, r.install)],
+      [t("Installed"), `${installLabel(r.install)}${r.install.path ? pc.dim(`${dot}${r.install.path}`) : ""}`],
+      ["Node", `${r.node}${r.install.kind === "binary" ? ` ${t("(inside scmjs)")}` : ""}${dot}${r.platform}`],
+      [t("Desktop app"), r.desktopApp ?? pc.dim(t("not found (scmjs … open uses the browser)"))],
+      ["Docker", r.docker ? `${r.docker}` : pc.dim(t("not found (scmjs bot needs it)"))],
+      [t("Plugin API"), String(r.pluginApi)],
+      [t("Reads"), `${t("maps {list}", { list: r.reads.maps.join(" ") })}${dot}${t("replays {list}", { list: r.reads.replays.join(" ") })}${dot}${t("bots {list}", { list: r.reads.bots.join(" ") })}`],
       null,
-      ["Editor", pc.cyan(r.links.editor)],
-      ["Play", pc.cyan(r.links.play)],
-      ["Docs", pc.cyan(r.links.docs)],
-      ["Bots", pc.cyan(r.links.bots)],
-      ["Source", pc.cyan(r.links.source)],
-      ["Issues", pc.cyan(r.links.issues)],
+      [t("Editor"), pc.cyan(r.links.editor)],
+      [t("Play"), pc.cyan(r.links.play)],
+      [t("Docs"), pc.cyan(r.links.docs)],
+      [t("Bots"), pc.cyan(r.links.bots)],
+      [t("Source"), pc.cyan(r.links.source)],
+      [t("Issues"), pc.cyan(r.links.issues)],
       null,
-      ["Made by", pc.bold(r.author)],
-      ["Licence", r.license],
+      [t("Made by"), pc.bold(r.author)],
+      [t("Licence"), r.license],
     ]),
   ];
 }

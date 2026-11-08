@@ -6,6 +6,7 @@ import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { build } from "vite";
+import { messagesIn } from "./i18n.mjs";
 import { cliNotices } from "./notices.mjs";
 
 /** The editor's version (package.json) and the clone's short commit, if it is one. */
@@ -16,11 +17,32 @@ export function cliVersion() {
   return { version, commit };
 }
 
+/** Where the editor's catalogue goes in the bundle, until the bundle's modules say which of its messages it needs. */
+const EDITOR_CATALOGUE = "__SCMJS_EDITOR_CATALOGUE__";
+
+/**
+ * The editor's Korean the bundle can show: the entries of `src/i18n/ko.json` that a module in `moduleIds` asks for
+ * with `t` / `tc` / `msg` (Check Map's findings, the game's names, table labels) — about a tenth of the 200 KB, the
+ * rest being the editor's UI. The command's own catalogue (`cli/src/ko.json`) goes in whole, as an ordinary import.
+ */
+export function editorCatalogueFor(moduleIds) {
+  const catalogue = JSON.parse(readFileSync("src/i18n/ko.json", "utf8"));
+  const keys = new Set();
+  const src = resolve("src") + "/";
+  for (const id of moduleIds) {
+    const path = resolve(id.replace(/\?.*$/, ""));
+    if (!path.replace(/\\/g, "/").startsWith(src.replace(/\\/g, "/")) || !/\.tsx?$/.test(path)) continue;
+    for (const m of messagesIn(readFileSync(path, "utf8"), path).messages) keys.add(m.key);
+  }
+  return Object.fromEntries(Object.entries(catalogue).filter(([key, value]) => value && keys.has(key)));
+}
+
 const plugins = (version) => [{
-  // Two modules of the editor's the command has no use for, replaced by empty ones. The Korean catalogue
-  // (`src/i18n/ko.json`, 200 KB): the command prints English. The built-in plugins (`src/plugins/builtin.ts`): its
-  // `import.meta.glob` of every vendored plugin's entry would be inlined whole into this one file by `map run`'s
-  // host — TrigScript's workspace, Aftermath, React among them, 3 MB — and the command never loads a built-in.
+  // Two modules of the editor's the command has no use for, replaced, and one cut down. The built-in plugins
+  // (`src/plugins/builtin.ts`): its `import.meta.glob` of every vendored plugin's entry would be inlined whole into
+  // this one file by `map run`'s host — TrigScript's workspace, Aftermath, React among them, 3 MB — and the command
+  // never loads a built-in. The editor's Korean catalogue (`src/i18n/ko.json`, 200 KB): only the entries the bundle's
+  // modules ask for go in (`editorCatalogueFor`), filled in once the chunk is known.
   name: "scmjs-cli-leave-out",
   enforce: "pre",
   async resolveId(source, importer) {
@@ -28,14 +50,20 @@ const plugins = (version) => [{
     if (!source.endsWith("ko.json") && !/\/builtin(?:\.ts)?$/.test(source)) return null;
     const resolved = await this.resolve(source, importer, { skipSelf: true });
     if (!resolved) return null;
-    if (resolve(resolved.id) === resolve("src/i18n/ko.json")) return "\0scmjs-cli-empty-catalogue";
+    if (resolve(resolved.id) === resolve("src/i18n/ko.json")) return "\0scmjs-cli-editor-catalogue";
     if (resolve(resolved.id) === resolve("src/plugins/builtin.ts")) return "\0scmjs-cli-no-builtins";
     return null;
   },
   load(id) {
-    if (id === "\0scmjs-cli-empty-catalogue") return "export default {};";
+    if (id === "\0scmjs-cli-editor-catalogue") return `export default JSON.parse(${JSON.stringify(EDITOR_CATALOGUE)});`;
     if (id === "\0scmjs-cli-no-builtins") return "export const BUILTIN_PLUGINS = {}; export const BUILTIN_REPLACES = {};";
     return null;
+  },
+  renderChunk(code, chunk) {
+    const at = code.indexOf(JSON.stringify(EDITOR_CATALOGUE));
+    if (at < 0) return null;
+    const catalogue = JSON.stringify(JSON.stringify(editorCatalogueFor(chunk.moduleIds)));
+    return { code: code.slice(0, at) + catalogue + code.slice(at + EDITOR_CATALOGUE.length + 2), map: null };
   },
 }, {
   // The packages the bundle holds, from its modules' paths: node_modules/<name> or node_modules/@scope/<name>.

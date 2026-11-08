@@ -4,6 +4,7 @@
  * 256-colour cube; ASCII shades where the terminal cannot draw blocks or has no colour; or, in kitty and iTerm2, the
  * PNG itself through their image protocols. Pure functions of an RGBA picture and the marks drawn on it (preview.ts).
  */
+import { t } from "./i18n";
 import type { Mark, Picture } from "./preview";
 
 /** What colour the terminal takes. */
@@ -167,10 +168,10 @@ export function legendLine(marks: Mark[], depth: Depth, unicode: boolean): strin
     if (m.kind !== "mineral" && m.kind !== "geyser" && !players.has(m.owner)) players.set(m.owner, m.color);
   }
   const swatch = (hex: string, text: string) => (depth === "none" ? text : `\x1b[${sgr(38, hexRgb(hex), depth)}m${unicode ? "■" : "#"}\x1b[39m ${text}`);
-  const parts = [...players].sort(([a], [b]) => a - b).map(([owner, hex]) => swatch(hex, owner === 11 ? "neutral" : `P${owner + 1}`));
-  if (kinds.has("mineral")) parts.push(swatch(kinds.get("mineral")!, depth === "none" ? "$ minerals" : "minerals"));
-  if (kinds.has("geyser")) parts.push(swatch(kinds.get("geyser")!, depth === "none" ? "$ gas" : "gas"));
-  if (kinds.has("start")) parts.push("numbers: start locations");
-  if (depth === "none" && (kinds.has("building") || kinds.has("unit"))) parts.push("# buildings, o units");
+  const parts = [...players].sort(([a], [b]) => a - b).map(([owner, hex]) => swatch(hex, owner === 11 ? t("neutral") : `P${owner + 1}`));
+  if (kinds.has("mineral")) parts.push(swatch(kinds.get("mineral")!, depth === "none" ? `$ ${t("minerals")}` : t("minerals")));
+  if (kinds.has("geyser")) parts.push(swatch(kinds.get("geyser")!, depth === "none" ? `$ ${t("gas")}` : t("gas")));
+  if (kinds.has("start")) parts.push(t("numbers: start locations"));
+  if (depth === "none" && (kinds.has("building") || kinds.has("unit"))) parts.push(t("# buildings, o units"));
   return parts.join("  ");
 }

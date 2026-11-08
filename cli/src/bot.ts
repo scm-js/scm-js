@@ -5,6 +5,7 @@
  */
 import { spawn, spawnSync } from "node:child_process";
 import { basename } from "node:path";
+import { t } from "./i18n";
 import { CliError, mark, pc, print } from "./ui";
 
 export const BOT_IMAGE = "ghcr.io/scm-js/scmbot";
@@ -36,15 +37,15 @@ function needDocker(): void {
   if (dockerVersion()) return;
   const installed = spawnSync("docker", ["--version"], { stdio: "ignore" }).status === 0;
   throw new CliError(
-    installed ? "Docker is installed but not running" : "scmjs bot needs Docker",
-    installed ? "Start Docker (Docker Desktop on Windows and macOS), then run this again." : "Install it from https://docs.docker.com/get-docker/, then run this again.",
+    installed ? t("Docker is installed but not running") : t("scmjs bot needs Docker"),
+    installed ? t("Start Docker (Docker Desktop on Windows and macOS), then run this again.") : t("Install it from {url}, then run this again.", { url: "https://docs.docker.com/get-docker/" }),
   );
 }
 
 /** Runs the toolchain with `args` in this folder; the toolchain's own output and exit code are the command's. */
 export async function runBot(args: string[], image = process.env.SCMBOT_IMAGE || BOT_IMAGE): Promise<void> {
   needDocker();
-  if (!hasImage(image)) print(pc.dim(`Downloading the bot toolchain (${image}), once. It is a few GB.`));
+  if (!hasImage(image)) print(pc.dim(t("Downloading the bot toolchain ({image}), once. It is a few GB.", { image })));
   const user = process.platform === "win32" || !process.getuid ? null : `${process.getuid()}:${process.getgid?.()}`;
   const child = spawn("docker", dockerArgs({ folder: process.cwd(), args, image, tty: !!process.stdout.isTTY && !!process.stdin.isTTY, user }), { stdio: "inherit" });
   const code = await new Promise<number>((resolve) => { child.on("error", () => resolve(1)); child.on("close", (c) => resolve(c ?? 1)); });
@@ -54,9 +55,9 @@ export async function runBot(args: string[], image = process.env.SCMBOT_IMAGE ||
 /** `scmjs bot update`: the newest toolchain, the one the play page expects. */
 export async function updateBot(image = process.env.SCMBOT_IMAGE || BOT_IMAGE): Promise<void> {
   needDocker();
-  print(pc.dim(`Fetching ${image}…`));
+  print(pc.dim(t("Fetching {image}…", { image })));
   const child = spawn("docker", ["pull", image], { stdio: "inherit" });
   const code = await new Promise<number>((resolve) => { child.on("error", () => resolve(1)); child.on("close", (c) => resolve(c ?? 1)); });
-  if (code) throw new CliError("The toolchain could not be fetched", `docker pull ${image} said why, above.`);
-  print(`${mark.ok} The bot toolchain is up to date`);
+  if (code) throw new CliError(t("The toolchain could not be fetched"), t("docker pull {image} said why, above.", { image }));
+  print(`${mark.ok} ${t("The bot toolchain is up to date")}`);
 }

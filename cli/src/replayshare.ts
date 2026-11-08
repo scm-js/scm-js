@@ -12,6 +12,7 @@ import { findGameCopy } from "./engine";
 import type { Input } from "./files";
 import { openGameFiles } from "./gamefiles";
 import { loadGraphics, previewPng } from "./preview";
+import { t } from "./i18n";
 import { CliError, duration, gameText, pc, size } from "./ui";
 
 /** What the server knows of a replay: the header's facts, as `GET /v1/replays/:id` answers. */
@@ -36,7 +37,7 @@ export interface ReplayShareOutcome {
 /** The map's picture for the card, from the map the replay carries; none without a copy of the game. */
 export async function replayPicture(rep: Replay, starcraft: string | undefined): Promise<{ picture: Uint8Array | null; none?: string }> {
   try { findGameCopy(starcraft); } catch (e) {
-    if (e instanceof CliError && !starcraft) return { picture: null, none: "no copy of StarCraft here to draw it with" };
+    if (e instanceof CliError && !starcraft) return { picture: null, none: t("no copy of StarCraft here to draw it with") };
     throw e;
   }
   try {
@@ -47,10 +48,10 @@ export async function replayPicture(rep: Replay, starcraft: string | undefined):
       const { png } = previewPng(scn, graphics, { width, marks: true });
       if (png.length <= 900_000) return { picture: png };
     }
-    return { picture: null, none: "the picture came out larger than the server takes" };
+    return { picture: null, none: t("the picture came out larger than the server takes") };
   } catch (e) {
     if (e instanceof CliError) return { picture: null, none: e.message };
-    return { picture: null, none: `the replay's map could not be drawn (${e instanceof Error ? e.message : e})` };
+    return { picture: null, none: t("the replay's map could not be drawn ({reason})", { reason: String(e instanceof Error ? e.message : e) }) };
   }
 }
 
@@ -59,7 +60,7 @@ export async function shareReplay(input: Input, rep: Replay, o: ReplayShareOptio
   const session = requireSession(server, deps.file ?? sessionPath());
   const client = new Client({ server, session: session.session, fetchImpl: deps.fetchImpl });
   const fileName = /\.rep$/i.test(input.name) ? input.name : `${input.name.replace(/^stdin$/, "replay")}.rep`;
-  const pics = o.picture === false ? { picture: null, none: "left out with --no-picture" } : await replayPicture(rep, o.starcraft);
+  const pics = o.picture === false ? { picture: null, none: t("left out with --no-picture") } : await replayPicture(rep, o.starcraft);
   const form = new FormData();
   form.append("file", new Blob([input.bytes as BlobPart], { type: "application/octet-stream" }), fileName);
   form.append("fileName", fileName);
@@ -68,19 +69,19 @@ export async function shareReplay(input: Input, rep: Replay, o: ReplayShareOptio
   if (pics.picture) form.append("picture", new Blob([pics.picture as BlobPart], { type: "image/png" }), "picture.png");
   const r = await client.request<{ replay: ReplayView; storage?: StorageView; link?: { token: string }; existing?: boolean }>("POST", "/v1/replays", form, { timeoutMs: 120_000 });
   const token = r.link?.token ?? r.replay.links[0]?.token;
-  if (!token) throw new CliError("The server stored the replay but gave no link", "Make one in My Maps ▸ Replays, or try again.");
+  if (!token) throw new CliError(t("The server stored the replay but gave no link"), t("Make one in My Maps ▸ Replays, or try again."));
   return {
     link: linkTo("replay", token, server),
     replay: { id: r.replay.id, fileName: r.replay.fileName, mapName: r.replay.mapName, matchup: r.replay.matchup, players: r.replay.players.map((p) => p.name), durationSec: r.replay.durationSec, gameType: r.replay.gameTypeName, playedAt: r.replay.playedAt, bytes: r.replay.sizeBytes },
     existing: !!r.existing,
-    picture: pics.picture ? { bytes: pics.picture.length } : { none: pics.none ?? "none" },
+    picture: pics.picture ? { bytes: pics.picture.length } : { none: pics.none ?? t("none") },
     ...(r.storage ? { storage: r.storage } : {}),
   };
 }
 
 /** The lines: the link first, alone, then what the replay is. */
 export function printReplayShare(r: ReplayShareOutcome): string[] {
-  const facts = [gameText(r.replay.mapName) || "Untitled", r.replay.matchup, r.replay.players.map(gameText).join(" vs "), duration(r.replay.durationSec * 1000), size(r.replay.bytes)].filter(Boolean);
-  return [r.link, `${facts.join(" · ")} · ${r.existing ? "already on your account" : "stored on your account"}`,
-    pc.dim(`Anyone with the link watches it in the editor, without signing in.${"none" in r.picture ? ` No map picture for its card: ${r.picture.none}.` : ""}`)];
+  const facts = [gameText(r.replay.mapName) || t("Untitled"), r.replay.matchup, r.replay.players.map(gameText).join(" vs "), duration(r.replay.durationSec * 1000), size(r.replay.bytes)].filter(Boolean);
+  return [r.link, `${facts.join(" · ")} · ${r.existing ? t("already on your account") : t("stored on your account")}`,
+    pc.dim(`${t("Anyone with the link watches it in the editor, without signing in.")}${"none" in r.picture ? ` ${t("No map picture for its card: {why}.", { why: r.picture.none })}` : ""}`)];
 }

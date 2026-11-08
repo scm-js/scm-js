@@ -18,8 +18,8 @@ command's output changes, with `--play-url` at a staged scm-sim deploy when the 
 - **The editor's code, not a copy.** Maps are read with `openMapFile` (`services/mapIo.ts`): built maps restored,
   members read, warnings — what the editor would show. Statistics are `mapStatistics` with no tileset/dat (so no
   terrain table, no building counts); the check is `validateScenario(scn, { extras })`, so the rules that need the
-  tileset or units.dat (units on unwalkable ground, …) do not run. Strings go through `t()`, which is English in
-  Node. Replays are read by **`@scm-js/replay`** (github.com/scm-js/replay, ~/github/replay), extracted 2026-11-05
+  tileset or units.dat (units on unwalkable ground, …) do not run. Strings go through `t()`, in the language the
+  command chose (English or Korean; "The command line in Korean" below). Replays are read by **`@scm-js/replay`** (github.com/scm-js/replay, ~/github/replay), extracted 2026-11-05
   from Aftermath's `replay.ts` at the user's "extract replay" so the CLI and Aftermath share one reader (there had
   been three copies: Aftermath, a CLI copy, and scm-sim's own `src/replay/`, which feeds the exact engine and was
   left alone). It is a devDependency here, bundled into the CLI; the editor app does not import it. APM in
@@ -188,7 +188,8 @@ native/ — see scm-sim's docs/own-bots.md. Added 2026-11-06 with "Made by Jeany
 - **Bundle trap**: the first build with the host in it was 6.2 MB (from 3.1): `host.ts` imports `builtin.ts`, whose
   `import.meta.glob` of every vendored plugin's `plugin.ts` is inlined whole by `codeSplitting: false` — TrigScript's
   workspace, Aftermath, the AI assistant, React. `build-cli.mjs`'s `scmjs-cli-leave-out` plugin resolves
-  `src/plugins/builtin.ts` to empty tables and `ko.json` to `{}` (as `build-core.mjs` does): 3.66 MB, i.e. the host
+  `src/plugins/builtin.ts` to empty tables and `ko.json` to `{}` (as `build-core.mjs` does; since the Korean slice the
+  catalogue is cut to what the bundle's modules ask for instead): 3.66 MB, i.e. the host
   and atoms cost ~0.5 MB. React (~50 KB) is still in: `host.ts` and `services/gameData.ts` import helpers from
   `hooks/useDoodadTools|useSpriteTools|useMapFileActions`, which import React and jotai's hooks, so aliasing `jotai`
   to `jotai/vanilla` breaks the build (tried) — moving those helpers out of the hook files would take it out. `tests/cli-run.test.ts` (5 tests): sources, a JS plugin folder (events, diff, written, reopen), `--command` +
@@ -1789,8 +1790,8 @@ overview row. Docs: `docs/cli.md` "A map's history", "Who last changed what".
   file has, documented); briefing triggers have no blame kind; no MCP tool; trigger text edits blame the string, not
   the trigger (map diff's matching — documented); `map log` has no per-commit `--stat` of the full diff (`git show`
   with textconv does that); `map log --rev A...B` passes through to git, `map blame` refuses `...`.
-- **CLI strings are literals, not `t()`**: the i18n extractor reads `src/` only and no CLI module uses `t()` for its
-  own words (plugin.ts's are the starter's text); followed that.
+- **CLI strings** were literals at the time (the extractor read `src/` only); since the Korean slice (2026-11-08)
+  every printed word goes through `cli/src/i18n.ts`'s `t()` — see "The command line in Korean" at the end.
 
 ## A map as a folder of text: `map unpack --text` / `pack` (`cli/src/source.ts`, `archive.ts`) — 2026-11-07
 
@@ -2188,3 +2189,71 @@ carry `-cli-`: `scmjs-cli-windows-x64.zip`, `scmjs-cli-macos-arm64.tar.gz`, `scm
 templates, docs/cli.md, docs/installing.md). The file inside each archive is still `scmjs` / `scmjs.exe`. v0.12.0 is a
 tag with no release page (its editor, docs, npm packages and image did publish); 0.12.1 is that release, and
 `docs/releases/0.12.0.md` became `0.12.1.md`.
+
+## The command line in Korean (`cli/src/i18n.ts`, `commanderText.ts`, `ko.json`) — 2026-11-08
+
+The user's slice: the editor is in Korean, StarCraft's biggest mapping community reads Korean, so `scmjs` speaks it
+too. Branch `cli-korean`. Reverses the first slice's "CLI strings are literals".
+
+- **Choosing the language** (`chooseLocale(args, env, system)`): `--lang ko|en` / `--lang=ko` anywhere before `--`,
+  else `SCMJS_LANG`, else the first set of `LC_ALL`, `LC_MESSAGES`, `LANG` (Korean when it starts with `ko`; `C` is
+  English — a set POSIX locale decides, the system is not asked), else `Intl.DateTimeFormat().resolvedOptions().locale`
+  (Windows, which has no `LANG`), else English. Read from `process.argv` rather than commander because the help's
+  descriptions are made when the program is built: **main.ts's commands are inside `buildProgram()`** (the whole
+  1,400-line body indented once — template literals left alone, their text is output), and the module does
+  `if (!VITEST) setLocale(chooseLocale(argv)); export const program = buildProgram();` — tests get English unless
+  they `setLocale("ko")` and build their own. `--lang` is also a real option (`.choices(["en","ko"])`) so commander
+  takes it anywhere and refuses `--lang fr`. No `t()` at module scope still holds: every module is evaluated before
+  main's body sets the language.
+- **The catalogue is separate**: `cli/src/ko.json` (1,848 messages, 231 KB on disk), kept by `npm run i18n` as a
+  second tree (`scripts/i18n.mjs` `TREES`; `tests/i18n.test.ts` checks both). Why not the editor's: the app's ko.json
+  would have grown by its whole size again for strings the app never shows, and the CLI bundle would have carried the
+  editor's UI. `cli/src/i18n.ts` exports `t`/`msg`/`translate` (its catalogue, then the editor's `translate`, so a
+  finding's `where`, tileset and game names come out translated), `inEnglish`, `locale`/`setLocale`; it is the one CLI
+  module allowed to import `src/i18n` (`tests/core.test.ts` `I18N_EXCEPTION`), since core does not export the
+  translator (its own build empties the catalogue).
+- **Bundle**: the leave-out plugin no longer empties the editor's catalogue; it loads a placeholder and `renderChunk`
+  replaces it with the entries the chunk's modules ask for (`editorCatalogueFor(chunk.moduleIds)`: `messagesIn` over
+  each `src/**.ts` module in the bundle) — 1,154 of 3,195 entries, ~93 KB (the plugin host and atoms pull UI modules
+  in, hence not smaller). `cli/dist/scmjs.mjs`: 5,713,798 → 6,089,246 bytes (+375 KB, +6.6%).
+- **Check Map's findings** come from `validateScenario`, already `t()` — they follow the language for free once it is
+  set. **Baselines are matched in English**: `findingId` parses English ("Trigger 2:", counts), and the file is shared
+  between computers, so `map check` with a baseline in another language validates a second time `inEnglish`, matches
+  those, and shows the same-index findings in the reader's language; written entries are English. `fixedFindings`
+  print as the file has them (English). Test: a baseline written in Korean holds with `--strict` in both languages.
+- **The line drawn**: translated — help, descriptions, printed reports, `CliError`s and hints, human sentences inside
+  `--json` (a finding's text, a hint, optimize's step labels). English — `--json` keys and naming values (levels,
+  kinds, version and tileset labels in JSON, game types), every file a command writes (dump, baseline, tests files,
+  init's README/workflow/.gitattributes and `--print`, plugin starter, ladder.json's entrant labels), map text, the
+  trigger text form and the dump/unpack formats (so `git diff` reads the same everywhere), text sent to servers, the
+  CI formats' rule ids and level words (their messages follow the language), the trigger vocabulary inside messages
+  (condition names, "always"/"nothing", player names in tests files), debug lines, internal `Error`s. **`scmjs mcp` and
+  `scmjs lsp` call `setLocale("en")`** in their actions: the MCP tools are read by a model; the LSP carries the
+  TrigScript compiler's English diagnostics (their help text in `--help` is translated).
+- **commander's own words** (`commanderText.ts`): titles through `styleTitle` → `translate` (`msg()`'d "Usage:",
+  "Options:", "Arguments:", "Commands:", "Global Options:"), `(default: …)`/choices/preset/env through
+  `optionDescription`/`argumentDescription` overrides, errors through `outputError` matched by regex (unknown
+  option/command, missing argument, option needs a value, too many arguments, invalid choice, conflicting options,
+  the "Did you mean" line). Not changeable: the usage line's `[options]` / `[command]` (syntax, left), and any
+  commander message the regexes do not know (stays English).
+- **Width**: `ui.ts` has `charWidth` over a sorted range table of East_Asian_Width W/F (Hangul, CJK, kana, full-width,
+  emoji blocks) and zero-width marks (combining, ZWJ, variation selectors, conjoining jamo), binary-searched;
+  `columns`, `padColumns`. `rows()` now pads by columns (it was `.length`), banner's fit and title alignment too, and
+  commander's `displayWidth` is `columns` so its padding and wrapping count Hangul as two. Root help: 23 lines in
+  both languages (`tests/cli.test.ts`), ≤ 80 columns by `columns()`. Multi-line Korean help texts were broken by hand
+  at ≤ 80 columns.
+- **How it was done**: six parallel agents over disjoint files (main.ts split at `map test`, edits through a locked
+  string-replace script), each writing a Korean fragment checked for missing keys, placeholder mismatches and lines
+  past 80 columns; merged with ~40 conflicting translations of shared keys settled by hand. Shadowing locals named
+  `t` were renamed across a dozen files. `files.ts` gained `MapReadError` (`.reason`), so `fetch` and `map log` no
+  longer strip an English prefix.
+- **Tests**: `tests/cli-i18n.test.ts` (13): the choice of language, widths and alignment, commander's words, Korean
+  help, `info` with the map's own text untouched, `--json` key paths equal in both languages (`info`, `map check`),
+  findings in Korean with SARIF rule ids English, a dump identical in both, the baseline across languages,
+  `SCMJS_LANG`, `--lang fr` refused. `tests/cli.test.ts`: the Korean overview within 23 lines.
+- **Leftovers**: the Korean is Claude's, not a native speaker's — review via `npm run i18n -- --export ko` (the CSV
+  holds both trees); docs/cli.md is not in Korean (the docs site's Korean pages are a separate effort); a few English
+  fragments remain inside Korean sentences by decision (trigger vocabulary, condition names, web-page button labels
+  such as "Invite Players", "My Maps"); `heatmap`'s "no such file" detection still keys on files.ts's English "No
+  file " prefix (shows the full Korean message instead); the editor catalogue subset could shrink further if the
+  plugin host stopped pulling UI modules in; `--lang` is not in the shell completion's value list.

@@ -10,6 +10,7 @@ import { readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { t } from "./i18n";
 import { CliError, dot, mark, pc, size } from "./ui";
 import { openMapBytes } from "../../src/editor/mapFile";
 // The one module of the editor's the command takes that is not the library's: the plugin host is the editor's
@@ -40,7 +41,7 @@ export function nodeLoaderDeps(options: NodeLoaderOptions = {}): LoaderDeps {
       return res.text();
     },
     transpile: async (source, fileName) => {
-      if (!options.typescript) throw new Error(`${fileName} is TypeScript, and no TypeScript is installed here to compile it; build the plugin, or npm install typescript.`);
+      if (!options.typescript) throw new Error(t("{file} is TypeScript, and no TypeScript is installed here to compile it; build the plugin, or npm install typescript.", { file: fileName }));
       return transpileTs(await options.typescript(), source, fileName);
     },
     createModuleUrl: (code, sourceUrl) => {
@@ -110,7 +111,7 @@ export async function runOnMap(doc: OpenedMap, inputPath: string, inputBytes: Ui
   try {
     source = sourceFor(target);
   } catch (e) {
-    throw new CliError(e instanceof Error ? e.message : String(e), "A folder with a plugin.json, a plugin.ts or .js file, github:owner/repo, or a URL.", 2);
+    throw new CliError(e instanceof Error ? e.message : String(e), t("A folder with a plugin.json, a plugin.ts or .js file, github:owner/repo, or a URL."), 2);
   }
   const events: RunEvent[] = [];
   const note = (e: RunEvent) => { events.push(e); options.live?.(eventLine(e)); };
@@ -122,15 +123,15 @@ export async function runOnMap(doc: OpenedMap, inputPath: string, inputBytes: Ui
     host = await runHeadless(source, doc, deps, {
       status: (text) => note({ kind: "status", level: "info", text }),
       // Plain text in the event (it goes into --json too); the colour is the printed line's.
-      toast: (t) => note({ kind: "toast", level: toastLevel(t.kind), text: t.detail ? `${t.title}: ${t.detail}` : t.title }),
+      toast: (toast) => note({ kind: "toast", level: toastLevel(toast.kind), text: toast.detail ? `${toast.title}: ${toast.detail}` : toast.title }),
       // Warnings and errors only: the info tier is the host's own trace of the plugin ("Update: Rename", a command's
       // timing), which the status line already said; a plugin's api.log goes to the console, which is this terminal.
       log: (e: LogEntry) => { if (e.level !== "info") note({ kind: "log", level: e.level, text: `${e.source}: ${e.message}` }); },
     });
   } catch (e) {
     if (e instanceof CliError) throw e;
-    if (e instanceof PluginLoadError) throw new CliError(e.message, "scmjs plugin check says what the editor would make of the plugin.");
-    throw new CliError(`${target} failed in activate: ${e instanceof Error ? e.message : e}`);
+    if (e instanceof PluginLoadError) throw new CliError(e.message, t("scmjs plugin check says what the editor would make of the plugin."));
+    throw new CliError(t("{plugin} failed in activate: {reason}", { plugin: target, reason: String(e instanceof Error ? e.message : e) }));
   }
   let result: unknown = null;
   try {
@@ -162,9 +163,9 @@ const isJson = (v: unknown): boolean => { try { return v !== undefined && JSON.s
 export function printRun(name: string, r: RunOutcome, { events = false, dryRun = false } = {}): string[] {
   const lines: string[] = events ? r.events.map(eventLine) : [];
   const who = `${r.plugin.name}${r.plugin.version ? pc.dim(` ${r.plugin.version}`) : ""}`;
-  if (!r.modified) { lines.push(`${mark.ok} ${pc.bold(name)}: ${who} ran${dot}${r.written ? `unchanged, written to ${pc.cyan(r.written.path)}` : "the map is unchanged"}`); return lines; }
+  if (!r.modified) { lines.push(`${mark.ok} ${pc.bold(name)}: ${t("{plugin} ran", { plugin: who })}${dot}${r.written ? t("unchanged, written to {path}", { path: pc.cyan(r.written.path) }) : t("the map is unchanged")}`); return lines; }
   if (dryRun && r.diff) lines.push(...printDiff(r.diff), "");
-  const change = r.diff ? summarizeDiff(r.diff) : "changed";
-  lines.push(`${mark.ok} ${pc.bold(name)}: ${who} ran${dot}${change}${dot}${r.written ? `written to ${pc.cyan(r.written.path)}${dot}${size(r.written.bytes)}` : pc.dim("not written (--dry-run)")}`);
+  const change = r.diff ? summarizeDiff(r.diff) : t("changed");
+  lines.push(`${mark.ok} ${pc.bold(name)}: ${t("{plugin} ran", { plugin: who })}${dot}${change}${dot}${r.written ? `${t("written to {where}", { where: pc.cyan(r.written.path) })}${dot}${size(r.written.bytes)}` : pc.dim(t("not written (--dry-run)"))}`);
   return lines;
 }

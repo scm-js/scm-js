@@ -10,12 +10,14 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { ensureEngine } from "../cli/src/engine";
-import { costReport, gameMap, printCost, printTrace, runMapInGame, summarizeRows, traceReport, weighModule, type CopyLine } from "../cli/src/trace";
+import { costReport, gameClock, gameMap, printCost, printTrace, replayRun, runMapInGame, summarizeRows, traceReport, weighModule, type CopyLine } from "../cli/src/trace";
+import { readArchive } from "../src/editor/mapFile";
+import type { Replay } from "@scm-js/replay";
 import { CliError, visible } from "../cli/src/ui";
 import { openMapBytes } from "../src/editor/mapFile";
 import { mapVersionOf } from "../src/formats/chk/scenario";
 import { testMap } from "./support/maps";
-import { classicCopy, stagedEngine } from "./support/mapRunner";
+import { classicCopy, OLD_RUNNER, stagedEngine } from "./support/mapRunner";
 
 const tmp = () => mkdtempSync(join(tmpdir(), "scmjs-trace-"));
 const plain = (lines: string[]) => lines.map(visible);
@@ -161,6 +163,86 @@ describe("scmjs map trace | cost: the runner", () => {
     expect(plain(printCost("ums.scx", scn, quiet))[0]).toBe("✔ ums.scx: the triggers ran nothing in 308 frames");
   });
 });
+
+describe("scmjs map trace | cost --replay: a replay's game", () => {
+  /** A file the stand-in takes for a replay (it reads only the name). */
+  const replayFile = (name: string) => { const f = join(tmp(), name); writeFileSync(f, "a replay"); return f; };
+
+  it("hands the runner the replay, words the game by its clock, and lists the firings in order", async () => {
+    const staged = stagedEngine(tmp()), copy = classicCopy(tmp());
+    const live: string[] = [];
+    const r = await runMapInGame(null, "trace", { engine: staged.dir, starcraft: copy, replay: replayFile("bug.rep"), order: true, every: 500, live: (l) => live.push(visible(l)) });
+    expect(r.start).toMatchObject({ mode: "replay", replaced: false, replay: { name: "bug.rep", frames: 1000 } });
+    expect(live[0]).toBe("bug.rep 64 × 64, badlands · 2 players · 0:42 · 3 triggers · 1.16.1 files");
+    expect(live[1]).toMatch(/^ +0:21 {2}frame +500 {2}16 passes of the triggers$/);
+    const scn = await ums();
+    const rep = traceReport("bug.rep", scn, r);
+    expect(rep.replay).toMatchObject({ gameType: "Use Map Settings", mapSettings: true, by: "victory", replaced: false, parted: null, orderDropped: 0 });
+    expect(rep.replay!.players).toEqual([{ slot: 0, name: "Ann", race: "terran", outcome: "victory" }, { slot: 1, name: "Bo", race: "zerg", outcome: "defeat" }]);
+    expect(rep.replay!.order!.slice(0, 3)).toEqual([{ frame: 2, clock: "0:00", player: 0, row: 1 }, { frame: 2, clock: "0:00", player: 0, row: 0 }, { frame: 33, clock: "0:01", player: 0, row: 0 }]);
+    const lines = plain(printTrace("bug.rep", scn, r, { width: 120 }));
+    expect(lines[0]).toMatch(/^✔ bug\.rep: 3 triggers · 1,000 frames \(0:42\), Ann won · 32 passes · 2 fired · 1 never · 0\.1 s$/);
+    // First and last as the game's clock; the last firing of row 0 is at frame 963.
+    expect(lines.find((l) => /^ {2}1 +32 /.test(l))).toMatch(/^ {2}1 +32 +0:00 +0:40 +P1 /);
+    const at = lines.indexOf("  In the order they fired (33)");
+    expect(at).toBeGreaterThan(0);
+    expect(lines[at + 1]).toMatch(/^ {2}Clock +Frame +Player +# +Trigger$/);
+    expect(lines[at + 2]).toMatch(/^ {2}0:00 +2 +P1 Ann +#2 +/);
+    expect(lines.at(-1)).toMatch(/^ {2}0:40 +963 +P1 Ann +#1 +/);
+    expect(gameClock(14603)).toBe("10:13");
+  });
+
+  it("plays a map given in place of the replay's own, and warns when the game parted from the replay", async () => {
+    const staged = stagedEngine(tmp()), copy = classicCopy(tmp());
+    const r = await runMapInGame(testMap("ums.scx"), "trace", { engine: staged.dir, starcraft: copy, replay: replayFile("parted.rep"), frames: 400 });
+    expect(r.start).toMatchObject({ replaced: true, map: { name: "ums.scx" } });
+    const scn = await ums();
+    const lines = plain(printTrace("parted.rep", scn, r, { width: 120 }));
+    expect(lines[0]).toMatch(/^✔ parted\.rep: .* 400 frames \(0:17\), stopped there · /);
+    expect(lines[1]).toBe("▲ The game parted from the replay at 0:21 (frame 500): the players' commands after it were meant for another game, so what fired after that is not what happened.");
+    expect(traceReport("parted.rep", scn, r).replay!.order).toBeNull();
+    // A melee game runs the game's own triggers.
+    const melee = await runMapInGame(null, "trace", { engine: staged.dir, starcraft: copy, replay: replayFile("melee.rep") });
+    expect(plain(printTrace("melee.rep", scn, melee))[1]).toBe("ℹ The replay is a Melee game: the game ran its own triggers for it, not the map's.");
+    // The cost of a replay's game.
+    const cost = await runMapInGame(null, "cost", { engine: staged.dir, starcraft: copy, replay: replayFile("bug.rep"), weigh: weighStandIn() });
+    expect(costReport("bug.rep", cost).frames).toBe(998);
+  });
+
+  it("says when the engine's map runner is from before replays, or there is nothing to run", async () => {
+    const old = stagedEngine(tmp(), true, OLD_RUNNER), copy = classicCopy(tmp());
+    await expect(runMapInGame(null, "trace", { engine: old.dir, starcraft: copy, replay: replayFile("a.rep") })).rejects.toThrow(/map runner from before map trace --replay/);
+    await expect(runMapInGame(testMap("ums.scx"), "trace", { engine: old.dir, starcraft: copy, replay: replayFile("a.rep") })).rejects.toThrow(/map runner from before map trace --replay/);
+    await expect(runMapInGame(null, "trace", { engine: old.dir, starcraft: copy })).rejects.toThrow(/name one, or a replay/);
+    await expect(runMapInGame(null, "trace", { engine: old.dir, starcraft: copy, replay: join(tmp(), "none.rep") })).rejects.toThrow(/No file/);
+  });
+
+  it("compares a map given with the replay's: the same scenario is no difference, another is named", async () => {
+    const ums = new Uint8Array(readFileSync(testMap("ums.scx"))), melee = new Uint8Array(readFileSync(testMap("melee.scx")));
+    const rep = { chk: (await readArchive(ums)).chk } as Replay;
+    const own = await replayRun(rep, null);
+    expect(own).toMatchObject({ map: null, converted: false, differs: null });
+    expect(own.scenario.triggers).toHaveLength(3);
+    const same = await replayRun(rep, { doc: await openMapBytes(ums, "ums.scx"), path: testMap("ums.scx"), name: "ums.scx", bytes: ums });
+    expect(same).toMatchObject({ map: testMap("ums.scx"), converted: false, differs: null });
+    const other = await replayRun(rep, { doc: await openMapBytes(melee, "melee.scx"), path: testMap("melee.scx"), name: "melee.scx", bytes: melee });
+    expect(other.differs).toMatch(/changed|added|removed/);
+    // A replay of a StarCraft 1.00 map is played as a converted copy, deleted with the run.
+    const original = { chk: (await readArchive(new Uint8Array(readFileSync(testMap("original.scm"))))).chk } as Replay;
+    const converted = await replayRun(original, null);
+    expect(converted.converted).toBe(true);
+    expect(converted.map).toMatch(/replay\.scx$/);
+    await runMapInGame(converted.map, "trace", { engine: stagedEngine(tmp()).dir, starcraft: classicCopy(tmp()), replay: replayFile("old.rep") });
+    expect(existsSync(dirname(converted.map!))).toBe(false);
+  });
+});
+
+/** A weigher that weighs nothing, for a cost run of the stand-in. */
+function weighStandIn(): string {
+  const f = join(tmp(), "weigh.mjs");
+  writeFileSync(f, "export const weigher = () => ({ trigger: () => 0, record: () => 0 });\n");
+  return f;
+}
 
 const have = existsSync(join(import.meta.dirname, "..", "plugins", "trigscript", "compiler", "remasteredCost.ts"));
 describe.skipIf(!have)("scmjs map cost: the weigher", () => {

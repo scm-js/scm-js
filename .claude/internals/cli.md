@@ -1,6 +1,6 @@
 # The `scmjs` command line
 
-`cli/` is the npm package **`@scm-js/cli`** (its command is `scmjs`): `scmjs about | doctor | info | map info|check|open|new|generate|dump|find|fetch|set|resize|triggers|strings|sounds|diff|log|blame|merge|build|run|unpack|pack|trace|cost|rush|test|preview |
+`cli/` is the npm package **`@scm-js/cli`** (its command is `scmjs`): `scmjs about | doctor | info | map info|check|open|new|generate|dump|find|fetch|set|resize|triggers|strings|sounds|diff|log|blame|merge|build|run|unpack|pack|trace|cost|rush|test [record]|preview |
 replay info|open|watch | plugin new|check|dev | bot new|init|build|update|run|ladder`, or `npx @scm-js/cli …`. npm refused the plain name `scmjs` on the first publish (2026-11-06,
 E403 "too similar to scss, sockjs"), so the user chose the scope beside @scm-js/replay and @scm-js/plugin-api. The reader's page is `docs/cli.md`. The shape was the user's (2026-11-05): one command, a noun for
 each kind of thing (`map`, `replay`, `plugin`, `bot`), "an impressive UX tool … not overly engineered".
@@ -1409,6 +1409,81 @@ freed two of the 23 rows (a 24-row terminal keeps the globe on screen; `tests/cl
 `init [folder]` and `account show|login|logout` took. A new top-level row now needs a line freed again: a one-line
 description is the first rule (commander wraps a long one onto a second row, which the count sees), and a hidden
 command (`{ hidden: true }`: `completion`, `login`, `logout`, `help`) is the fallback.
+
+## A replay's game: `map trace|cost --replay`, `map test record`, `map test -u` (`trace.ts`, `maptest.ts`) — 2026-11-07
+
+`scmjs map trace [map] --replay <rep> [--order]`, `map cost [map] --replay <rep>`, `map test record <map> <rep> [--name]
+[--tests] [--frames]`, `map test -u|--update`. A fork built both ends (scm-js branch `cli-trace-replay`, scm-sim branch
+`trace-replay`, PR on jeany55/scm-sim). The play page must deploy the new map runner before the CLI's PR is useful.
+
+- **The runner is the map runner's `--play <rep>` mode** (scm-sim `src/exact/mapReplay.ts`), not a new bundle or
+  `current.json` key, so no `RUNNERS` kind and no `doctor` row: `RUNNER_COMMANDS.map` covers it. The game is started
+  as `runReplay.ts` starts one (served engine + the copy, `playableReplay` for a later game's replay), then the map
+  runner's taps at the gate of frame 0: `installEud` (strings placed when the scenario has `STRx`), `installCost`, then
+  **`installTriggerTrace` called directly** with the TRIG of the chk the game runs (the replay engine has no
+  `traceTriggers`), and after every `engine.step` the runner closes the turn itself: `trace.endTurn(frame,
+  u16[0x6509A0] === 30, …)` as `live.ts#advance` does. The fold takes an `OnFired(copy, frame)` callback (additive in
+  `traceFold.ts`) for `--order [n]` (10,000 kept by default, `orderDropped` counts the rest; rows < 0 skipped).
+  **A map given** is put into the replay: `writeLegacyReplay(header, playable.commands, mapBytes(map).chk)` — the
+  replay's commands with the map's classic scenario; the game loads the map from the replay, so nothing else changes.
+  The cost helpers moved from `runMap.ts` to `mapCost.ts` (re-exported); `mapTest.ts`'s end reading is `readEnd(game,
+  counts, me)`, shared. Protocol (additive): `start` {mode: "replay", map, replay {name, frames, gameType, players
+  [{slot, name, race, type}]}, replaced, copy, seed (the replay's), rows, copies, remastered, localPlayer, ms},
+  `progress` as before, `end` {mode, frame, ended (the replay ran out or a side won), reason, by "victory"|"replay"|null,
+  passes, trace, cost, order [[frame, player, row]]|null, orderDropped, check {named, gone, ahead, parted}, outcomes (per
+  replay player), observed|null, ms}. With `--test` as well: `start`/`end` say `mode: "test"`, `driver: "replay"`; a
+  spec with steps is refused. **An older runner** wants a map (`--map is needed`) or runs the map with nobody playing
+  (start without `mode`); the CLI kills it and says "from before map trace --replay" / "before tests driven by a replay".
+- **The CLI**: `gameRun` in main.ts (shared by trace and cost) — no `--replay`: as before; with it: `replayRun(rep,
+  map|null)` → the scenario the report is worded against (the given map's **archive chk as stored**, i.e. a built
+  map's built scenario, since that is what the game runs; else the replay's), `differs` = `diffMaps` of the two bare
+  chks with `members` dropped (a replay holds none) → `summarizeDiff`, now in `diff.ts` (re-exported by run.ts), and a
+  VER 59 map (given or the replay's) as `gameMap`'s converted temp copy. `--frames`/`--every` left at their defaults
+  (`getOptionValueSource`) mean the replay's end and a progress line a minute of play (1,440). Report in replay mode:
+  rows only for triggers a player in the game owns (1631.rep's map has 1,713 rows, 5 owned), First/Last as
+  `gameClock` (42 ms a frame, as `replay info`/`watch`; the scripted mode keeps frames), the winner's names, a ▲ line
+  when `check.parted`, an ℹ line when the game type is not Use Map Settings (melee runs the game's own triggers:
+  the trace has only row −1 copies), then `orderLines` (cut at 200 unless `--all`). `traceReport().replay` carries it
+  all for `--json`, plus `replayFile`, `map`, `differs`.
+- **Tests from replays**: a scenario `{ "replay": "x.rep" }` (from the tests file's folder; `replayOf` checks it exists
+  at plan time) refuses `setup`/`steps`, runs to `REPLAY_END` (0x7fffffff; the replay's end comes first) unless
+  `frames`, and is run as `[map, --test, spec, --play, rep]` (no `--seed`, no replay kept). `judge` now returns
+  `value` (what the file would write) and words frames with the clock for replay scenarios; **text is decoded** with
+  the map's encoding (`shownText`: the runner hands bytes as char codes; new core export `decodeText`) — before, a
+  Korean map's text could never match. `ScenarioResult` gained `index`, `playing`, `parted`, `updated`.
+  **`-u`** only touches replay-driven scenarios and only the entries that failed: `VALUE_KEY` per kind (`fired`, `is`,
+  `minerals`, `gas`, `shown`, `outcome`, `ended`) gets the game's value; a loosened comparison that still holds stays,
+  deleted entries stay deleted (decided: Jest-like snapshots that respect trimming; re-record to regenerate the whole
+  list). The scenario then counts as passed and the file is rewritten with `formatTests` (one plain object a line, so
+  trimming is deleting lines; hand formatting of the file is not kept). **`record`** plans the scenario with
+  placeholder units entries (Men and Buildings per playing player, so the runner counts them), runs it through
+  `runTests` (`quiet`, `onEnd` hands back the raw end), builds `snapshotExpect` (triggers owned by a player in the game
+  with counts incl. 0, by unique comment else number; switches set + named ones clear; non-chat lines (`/^[^\x02:]{1,40}:\x02/`
+  is chat), 20 at most; outcomes; ended; the unit counts in the order asked; minerals/gas; every death count), then
+  judges it against the same end and drops any entry that would not hold, and writes it (same name → replaced).
+- **Measured** (Remastered copy, a local stage — the four engine files + bundled `run.mjs`/`map.mjs`, gzip, a
+  `current.json` — served by `python3 -m http.server`, `SCMJS_PLAY_URL`/`SCMJS_CACHE` at it; `deploy-play.mjs` itself was
+  refused by the session's permission classifier as a deploy, even without `--upload`): 1631.rep (UMS 2v2 on 투혼 1.3,
+  14,662 frames) traces in 6.2 s end to end, 4.1 s of game ≈ 3,600 frames/s: 9 firings (each player's start triggers at
+  frame 2, the victory trigger #1712 for P4 at 14,603 = 10:13), never parted. 1544.rep (UMS 1v1, 70,255 frames) 37 s
+  game, 1603.rep (48,765) 26 s — ~1,500–1,900 frames/s with the machine's load average at 10; with both taps off the
+  same runs were no faster (noise dominates; the trace is not the cost). The map extracted by `replay map` played
+  back in place of the replay's: no `differs`, identical firings. The same map with its 108 mineral fields removed
+  (`map run` with a script): "differs (108 units removed)" up front, parted at frame 6. `map test record` on 1631: 40
+  expectations in 6.5 s; `map test` passes (40/40); on the mineral-less map 21/40 hold, `-u` rewrote the 19 others
+  (units, resources, deaths) and the next run passed. In a replay the game's local player word (0x512684) reads 0,
+  so the lines kept are what slot 1's eyes see: on 1631 only chat and "… has left the game", not the start trigger's
+  text for P3–P6 — the memory is not poked to change that (it would change the game).
+- `tests/cli-trace.test.ts` (+4): the replay run over the stand-in (`FAKE_RUNNER` now takes `--play`/`--order`;
+  `OLD_RUNNER` is it from before), the clock and order lines, a map given + parted, melee, cost, the older runner,
+  `replayRun`'s comparison and the 1.00 conversion. `tests/cli-map-test.test.ts` (+5): planning, the run with
+  `-u` + `updateTests`, `snapshotExpect` round-trip, `recordTest` new + replaced, `formatTests`. scm-sim:
+  `tests/exact-map-replay.test.ts` and `exact-map-replay-map.test.ts` (one game a file; skip without engine, copy or
+  data/replays-psistorm/1631.rep).
+- **Not built**: an MCP tool for `--replay` / `record`; `--order` for `map cost`; a replay from standard input
+  (refused: the runner reads a file); `record` of a melee replay was not tried (its game runs the game's own triggers,
+  so its snapshot would hold no trigger counts). The scenario-name dispatch: `map test record` is a commander
+  subcommand of `map test`, so a map file literally named `record` would be taken for it.
 
 ## A map's history: `map log`, `map blame` (`cli/src/history.ts`, `maplog.ts`, `blame.ts`) — 2026-11-07
 

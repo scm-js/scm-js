@@ -16,23 +16,52 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { mapVersionOf, parseScenario, serializeScenario, type Scenario } from "../../src/formats/chk/scenario";
 import type { OpenedMap } from "../../src/editor/mapFile";
-import { writeMapBytes } from "../../src/editor/mapFile";
+import { openMapBytes, readArchive, writeMapBytes } from "../../src/editor/mapFile";
 import { changeMapVersion } from "../../src/editor/settings";
 import { readTriggers, triggerNames } from "../../src/editor/triggers";
 import { summarizeTrigger } from "../../src/formats/triggers/text";
 import { conditionDef } from "../../src/data/triggerDefs";
 import { createInterface } from "node:readline";
+import { FRAME_MS, type Replay } from "@scm-js/replay";
 import { ensureEngine, findGameCopy, runnerFor, startRunner } from "./engine";
+import { diffMaps, summarizeDiff } from "./diff";
+import { GAME_TYPES } from "./replay";
 import { CliError, columns, dot, duration, mark, num, pc, plural, table } from "./ui";
 
 /* ── The runner's lines (scm-sim's src/exact/runMap.ts) ──────── */
 
+/** A player of a replay, as the runner's start line names them. */
+export interface ReplayPlayerLine { slot: number; name: string; race: string; type: number }
+/** The replay's commands held against the game (scm-sim's `watch.ts`): `parted` is the first frame they were not the game played. */
+export interface ReplayCheck { named: number; gone: number; ahead: number; parted: number | null }
+export type Outcome = "victory" | "defeat" | "draw" | null;
+
 export interface CopyLine { player: number; row: number; fired: number; continued: number; failed: number; firstFired: number | null; lastFired: number | null; lastFail: { slot: number; type: number; frame: number } | null; flags: number }
 export interface RowCostLine { row: number; conditions: number; actions: number; triggers: number; frames: number; ns: number; peakNs: number; peakNsFrame: number }
 export interface CostSeriesLine { from: number; ns: number[]; records: number[]; triggers: number[]; rows: RowCostLine[]; ungroupedRecords: number[]; ungroupedNs: number[]; byConditionType: number[]; byActionType: number[]; limits: { smoothMs: number; mostMs: number } | null; weighed: boolean }
-export interface TraceStartLine { kind: "start"; map: { name: string; width: number; height: number; tileset: string }; copy: string; seed: number; rows: number; copies: number; remastered: boolean; ms: { load: number; start: number } }
+export interface TraceStartLine {
+  kind: "start";
+  /** "replay" when the runner played a replay (`--play`); absent from a run with nobody playing, and from a runner older than replays. */
+  mode?: "replay";
+  map: { name: string; width: number; height: number; tileset: string };
+  copy: string; seed: number; rows: number; copies: number; remastered: boolean;
+  /** With a replay: its length and players, and whether a map file was played in place of its own. */
+  replay?: { name: string; frames: number; gameType: number; players: ReplayPlayerLine[] };
+  replaced?: boolean;
+  ms: { load: number; start: number };
+}
 export interface TraceProgressLine { kind: "progress"; frame: number; passes: number; ms: { game: number } }
-export interface TraceEndLine { kind: "end"; frame: number; ended: boolean; reason: string | null; passes: number; trace: CopyLine[] | null; cost: CostSeriesLine | null; ms: { load: number; start: number; game: number; total: number } }
+export interface TraceEndLine {
+  kind: "end"; frame: number; ended: boolean; reason: string | null; passes: number; trace: CopyLine[] | null; cost: CostSeriesLine | null;
+  /** With a replay: how it ended ("victory": a side won, "replay": the replay ran out), the firings in order (frame, player 0–7, row) when asked for, and the check. */
+  by?: "victory" | "replay" | null;
+  order?: [number, number, number][] | null;
+  orderDropped?: number;
+  check?: ReplayCheck;
+  /** Per replay player, in the start line's order. */
+  outcomes?: Outcome[];
+  ms: { load: number; start: number; game: number; total: number };
+}
 export type MapRunnerLine = TraceStartLine | TraceProgressLine | TraceEndLine | { kind: "error"; message: string };
 
 export interface MapRunOptions {
@@ -44,6 +73,10 @@ export interface MapRunOptions {
   engine?: string;
   /** The weigher's module, instead of the `weigh.mjs` beside the command. */
   weigh?: string;
+  /** A replay whose commands are the game (the runner's `--play`); the map given is then played in place of its own, or none is given. */
+  replay?: string;
+  /** Keep each firing in the order the game ran them (`--order`). */
+  order?: boolean;
   /** Each line as it comes, already worded; absent, nothing is printed as it goes. */
   live?: (line: string) => void;
   /** Each progress line as it comes, unworded (the MCP server's progress notifications). */
@@ -99,8 +132,16 @@ export function removeGameMap(path: string): void {
   try { rmSync(dirname(path), { recursive: true, force: true }); } catch { /* the temporary folder is the system's to clear */ }
 }
 
+/** A frame as the game's clock on Fastest, `m:ss`: 42 ms a frame, as `replay info` and `replay watch` count it. */
+export const gameClock = (frame: number) => duration(frame * FRAME_MS);
+
 /** The start line as the terminal's. */
 export function wordStart(l: TraceStartLine): string {
+  const files = l.copy === "remastered" ? "Remastered" : "1.16.1";
+  if (l.mode === "replay" && l.replay) {
+    const r = l.replay;
+    return `${pc.bold(r.name)} ${pc.dim(`${l.map.width} × ${l.map.height}, ${l.map.tileset}`)}${l.replaced ? `${dot}played on ${l.map.name}` : ""}${dot}${plural(r.players.length, "player")}${dot}${gameClock(r.frames)}${dot}${plural(l.rows, "trigger")}${l.copies !== l.rows ? pc.dim(` (${plural(l.copies, "copy", "copies")} in the game)`) : ""}${dot}${files} files`;
+  }
   return `${pc.bold(l.map.name)} ${pc.dim(`${l.map.width} × ${l.map.height}, ${l.map.tileset}`)}${dot}${plural(l.rows, "trigger")}${l.copies !== l.rows ? pc.dim(` (${plural(l.copies, "copy", "copies")} in the game)`) : ""}${dot}seed ${l.seed}${dot}${l.copy === "remastered" ? "Remastered" : "1.16.1"} files`;
 }
 
@@ -108,19 +149,26 @@ export function wordStart(l: TraceStartLine): string {
  * Runs the map in the game and keeps what the runner said. `what` is which tap the runner is asked for: the trace,
  * or the cost (with the weigher). The engine is fetched when it is not cached.
  */
-export async function runMapInGame(map: string, what: "trace" | "cost", o: MapRunOptions = {}): Promise<MapRunOutcome> {
-  try { return await runMap(map, what, o); } finally { removeGameMap(map); }
+export async function runMapInGame(map: string | null, what: "trace" | "cost", o: MapRunOptions = {}): Promise<MapRunOutcome> {
+  try { return await runMap(map, what, o); } finally { if (map) removeGameMap(map); }
 }
 
 const cancelled = () => new CliError("The run was cancelled: the game was stopped before it finished.", null);
 
-async function runMap(map: string, what: "trace" | "cost", o: MapRunOptions): Promise<MapRunOutcome> {
-  if (!existsSync(map)) throw new CliError(`No file ${map}`, null, 2);
+/** Said when the runner is older than the replays: it wanted a map, or ran the map with nobody playing. */
+const olderThanReplays = (dir: string) => new CliError(`The engine at ${dir} has a map runner from before map trace --replay.`, "A play page deployed since has one; the next run fetches it (or name a newer one with --engine).");
+
+async function runMap(map: string | null, what: "trace" | "cost", o: MapRunOptions): Promise<MapRunOutcome> {
+  if (map !== null && !existsSync(map)) throw new CliError(`No file ${map}`, null, 2);
+  if (map === null && !o.replay) throw new CliError("No map to run: name one, or a replay with --replay.", null, 2);
+  if (o.replay && !existsSync(o.replay)) throw new CliError(`No file ${o.replay}`, null, 2);
   const weigh = what === "cost" ? weighModule(o.weigh) : null;
   const game = findGameCopy(o.starcraft);
   const engine = await ensureEngine(o.engine, undefined, o.live ?? (() => {}));
   const runner = runnerFor(engine, "map");
-  const args = [resolve(map), "--engine", engine.dir, "--starcraft", game.folder];
+  const args = [...(map !== null ? [resolve(map)] : []), "--engine", engine.dir, "--starcraft", game.folder];
+  if (o.replay) args.push("--play", resolve(o.replay));
+  if (o.order) args.push("--order");
   if (o.frames !== undefined) args.push("--frames", String(o.frames));
   if (o.every !== undefined) args.push("--every", String(o.every));
   if (o.seed !== undefined) args.push("--seed", String(o.seed));
@@ -128,7 +176,7 @@ async function runMap(map: string, what: "trace" | "cost", o: MapRunOptions): Pr
   else args.push("--no-trace", "--weigh", weigh!);
   let start: TraceStartLine | null = null, end: TraceEndLine | null = null;
   const progress: TraceProgressLine[] = [];
-  let error: string | null = null;
+  let error: string | null = null, older = false;
   if (o.signal?.aborted) throw cancelled();
   const child = startRunner(runner, args, { node: o.node });
   // Listened for from the start, so a runner that ends at once (or is killed) is not missed.
@@ -141,15 +189,20 @@ async function runMap(map: string, what: "trace" | "cost", o: MapRunOptions): Pr
     for await (const raw of createInterface({ input: child.stdout! })) {
       let l: MapRunnerLine;
       try { l = JSON.parse(raw) as MapRunnerLine; } catch { continue; }
-      if (l.kind === "start") { start = l; o.live?.(wordStart(l)); }
-      else if (l.kind === "progress") { progress.push(l); o.onProgress?.(l); o.live?.(`  ${pc.dim(`frame ${String(l.frame).padStart(6)}  ${plural(l.passes, "pass", "passes")} of the triggers`)}`); }
+      if (l.kind === "start") {
+        // A runner from before `--play` ran the map with nobody playing: its start has no mode.
+        if (o.replay && l.mode !== "replay") { older = true; child.kill(); break; }
+        start = l; o.live?.(wordStart(l));
+      }
+      else if (l.kind === "progress") { progress.push(l); o.onProgress?.(l); o.live?.(`  ${pc.dim(`${start?.mode === "replay" ? `${gameClock(l.frame).padStart(5)}  ` : ""}frame ${String(l.frame).padStart(6)}  ${plural(l.passes, "pass", "passes")} of the triggers`)}`); }
       else if (l.kind === "end") end = l;
       else if (l.kind === "error") error = l.message;
     }
   } finally { o.signal?.removeEventListener("abort", stop); }
   const exitCode = await exited;
   if (o.signal?.aborted) throw cancelled();
-  if (error) throw new CliError(error, "The runner is scm-sim's; a map StarCraft itself opens, with a slot for a person, and your own copy of the game are what it needs.");
+  if (older || (o.replay && error && /--map is needed/.test(error))) throw olderThanReplays(engine.dir);
+  if (error) throw new CliError(error, o.replay ? "The runner is scm-sim's; a replay StarCraft itself plays and your own copy of the game are what it needs." : "The runner is scm-sim's; a map StarCraft itself opens, with a slot for a person, and your own copy of the game are what it needs.");
   if (!end) throw new CliError(`The game did not finish: the runner stopped without a result (exit ${exitCode}).${stderr.trim() ? `\n${stderr.trim().split("\n").slice(-6).join("\n")}` : ""}`);
   return { engine: { build: engine.build, dir: engine.dir, fetched: engine.fetched }, game, start, progress, end };
 }
@@ -217,12 +270,45 @@ function cut(text: string, width: number): string {
   return out;
 }
 
-export interface TraceReport { file: string; rows: RowSummary[]; passes: number; frame: number; ended: boolean; reason: string | null }
+/** A replay's part of the report: who played and how it ended, whether the game kept to it, the firings in order. */
+export interface ReplayReport {
+  frames: number;
+  gameType: string;
+  /** Use Map Settings: only then does the game run the map's own triggers. */
+  mapSettings: boolean;
+  players: { slot: number; name: string; race: string; outcome: Outcome }[];
+  by: "victory" | "replay" | null;
+  /** A map file was played in place of the replay's own. */
+  replaced: boolean;
+  /** The first frame the replay's commands were not the game played, or null. */
+  parted: number | null;
+  /** Each firing of a map trigger in the order the game ran them, when asked for. */
+  order: { frame: number; clock: string; player: number; row: number }[] | null;
+  /** Firings past those the runner keeps. */
+  orderDropped: number;
+}
+
+export interface TraceReport { file: string; rows: RowSummary[]; passes: number; frame: number; ended: boolean; reason: string | null; replay?: ReplayReport }
+
+const USE_MAP_SETTINGS = 10;
+
+/** The replay's part of a run, from the runner's lines; undefined for a run with nobody playing. */
+export function replayReport(r: Pick<MapRunOutcome, "start" | "end">): ReplayReport | undefined {
+  const s = r.start, e = r.end;
+  if (s?.mode !== "replay" || !s.replay) return undefined;
+  return {
+    frames: s.replay.frames, gameType: GAME_TYPES[s.replay.gameType] ?? `Type ${s.replay.gameType}`, mapSettings: s.replay.gameType === USE_MAP_SETTINGS,
+    players: s.replay.players.map((p, k) => ({ slot: p.slot, name: p.name, race: p.race, outcome: e.outcomes?.[k] ?? null })),
+    by: e.by ?? null, replaced: !!s.replaced, parted: e.check?.parted ?? null,
+    order: e.order ? e.order.map(([frame, player, row]) => ({ frame, clock: gameClock(frame), player, row })) : null, orderDropped: e.orderDropped ?? 0,
+  };
+}
 
 /** The trace as data: one summary per map row. */
 export function traceReport(file: string, scn: Scenario, r: MapRunOutcome): TraceReport {
   const rows = readTriggers(scn).length;
-  return { file, rows: summarizeRows(r.end.trace ?? [], rows), passes: r.end.passes, frame: r.end.frame, ended: r.end.ended, reason: r.end.reason };
+  const replay = replayReport(r);
+  return { file, rows: summarizeRows(r.end.trace ?? [], rows), passes: r.end.passes, frame: r.end.frame, ended: r.end.ended, reason: r.end.reason, ...(replay ? { replay } : {}) };
 }
 
 /** `map trace --json`: the report, with where the engine and the game came from, every copy's line and the run's times. */
@@ -230,30 +316,105 @@ export function traceJson(file: string, scn: Scenario, r: MapRunOutcome) {
   return { ...traceReport(file, scn, r), engine: r.engine, game: r.game, copies: r.end.trace, ms: r.end.ms };
 }
 
-/** The trace's lines: the run in one, a table of the triggers, then the ones that never fired and why. */
+/** Why a row never fired, in words. */
+function neverWhy(s: RowSummary): string {
+  return !s.players.length ? "no player in the game owns it" : s.lastFail ? `${conditionDef(s.lastFail.type)?.name ?? `condition ${s.lastFail.type}`} (condition ${s.lastFail.slot + 1}) said no last, at frame ${num(s.lastFail.frame)}` : s.failed ? "its conditions said no" : "it was never asked";
+}
+
+/** How a replay's run ended, in a few words: who won, the replay's end, or where it was stopped. */
+function endWords(rep: TraceReport): string {
+  const r = rep.replay!;
+  if (r.by === "victory") { const won = r.players.filter((p) => p.outcome === "victory").map((p) => p.name); return won.length ? `${won.join(", ")} won` : "a side won"; }
+  if (r.by === "replay") return "to the replay's end";
+  return rep.ended ? `the game ended: ${rep.reason ?? "over"}` : "stopped there";
+}
+
+/** The trace's lines: the run in one, a table of the triggers, then the ones that never fired and why. With a replay, the firings in order after them when asked for. */
 export function printTrace(file: string, scn: Scenario, r: MapRunOutcome, { all = false, width = process.stdout.columns || 100 } = {}): string[] {
   const rep = traceReport(file, scn, r);
-  const never = rep.rows.filter((s) => s.fired === 0);
-  const fired = rep.rows.length - never.length;
-  const out = [`${mark.ok} ${pc.bold(file)}: ${plural(rep.rows.length, "trigger")}${dot}${num(rep.frame)} frames ${pc.dim(`(${clock(rep.frame)} of play)`)}${rep.ended ? pc.dim(`, the game ended: ${rep.reason ?? "over"}`) : ""}${dot}${plural(rep.passes, "pass", "passes")}${dot}${pc.green(`${fired} fired`)}${never.length ? `${dot}${pc.yellow(`${never.length} never`)}` : ""}${dot}${(r.end.ms.total / 1000).toFixed(1)} s`];
-  if (!rep.rows.length) return out;
+  const replay = rep.replay;
+  // A replay's game: the rows no player in the game owns are left out (a map for eight with four playing, or rows a map keeps for nobody).
+  const listed = replay ? rep.rows.filter((s) => s.players.length) : rep.rows;
+  const never = listed.filter((s) => s.fired === 0);
+  const fired = listed.length - never.length;
+  const when = replay ? (f: number | null) => (f === null ? pc.dim("–") : gameClock(f)) : frame;
+  const out = replay
+    ? [`${mark.ok} ${pc.bold(file)}: ${plural(rep.rows.length, "trigger")}${listed.length !== rep.rows.length ? pc.dim(` (${num(listed.length)} owned by the players)`) : ""}${dot}${num(rep.frame)} frames ${pc.dim(`(${gameClock(rep.frame)})`)}, ${endWords(rep)}${dot}${plural(rep.passes, "pass", "passes")}${dot}${pc.green(`${fired} fired`)}${never.length ? `${dot}${pc.yellow(`${never.length} never`)}` : ""}${dot}${(r.end.ms.total / 1000).toFixed(1)} s`]
+    : [`${mark.ok} ${pc.bold(file)}: ${plural(rep.rows.length, "trigger")}${dot}${num(rep.frame)} frames ${pc.dim(`(${clock(rep.frame)} of play)`)}${rep.ended ? pc.dim(`, the game ended: ${rep.reason ?? "over"}`) : ""}${dot}${plural(rep.passes, "pass", "passes")}${dot}${pc.green(`${fired} fired`)}${never.length ? `${dot}${pc.yellow(`${never.length} never`)}` : ""}${dot}${(r.end.ms.total / 1000).toFixed(1)} s`];
+  if (replay && replay.parted !== null) out.push(`${mark.warn} ${pc.yellow(`The game parted from the replay at ${gameClock(replay.parted)} (frame ${num(replay.parted)})`)}: the players' commands after it were meant for another game, so what fired after that is not what happened.`);
+  if (replay && !replay.mapSettings) out.push(`${mark.info} ${pc.dim(`The replay is a ${replay.gameType} game: the game ran its own triggers for it, not the map's.`)}`);
+  if (!listed.length) return out;
   const limit = all ? Infinity : 40;
-  const shown = rep.rows.slice(0, limit);
+  const shown = listed.slice(0, limit);
   const head = ["#", "Fired", "First", "Last", "Players", "Trigger"].map((h) => pc.dim(h));
-  const fixed = shown.reduce((n, s) => Math.max(n, columns(`${s.row + 1}  ${num(s.fired)}  ${frame(s.firstFired)}  ${frame(s.lastFired)}  ${players(s.players)}  `)), 0) + 2;
+  const fixed = shown.reduce((n, s) => Math.max(n, columns(`${s.row + 1}  ${num(s.fired)}  ${when(s.firstFired)}  ${when(s.lastFired)}  ${players(s.players)}  `)), 0) + 2;
   out.push("", ...table([head, ...shown.map((s) => [
-    pc.dim(String(s.row + 1)), s.fired ? num(s.fired) + (s.continued ? pc.dim(` +${s.continued}`) : "") : pc.yellow("0"), frame(s.firstFired), frame(s.lastFired), players(s.players), rowText(scn, s.row, Math.max(30, width - fixed - 2)),
+    pc.dim(String(s.row + 1)), s.fired ? num(s.fired) + (s.continued ? pc.dim(` +${s.continued}`) : "") : pc.yellow("0"), when(s.firstFired), when(s.lastFired), players(s.players), rowText(scn, s.row, Math.max(30, width - fixed - 2)),
   ])], 2));
-  if (rep.rows.length > shown.length) out.push(pc.dim(`  … and ${num(rep.rows.length - shown.length)} more (--all lists them)`));
+  if (listed.length > shown.length) out.push(pc.dim(`  … and ${num(listed.length - shown.length)} more (--all lists them)`));
   if (never.length) {
-    out.push("", pc.dim(`  Never fired (${never.length} of ${rep.rows.length})`));
-    for (const s of never.slice(0, all ? Infinity : 20)) {
-      const why = !s.players.length ? "no player in the game owns it" : s.lastFail ? `${conditionDef(s.lastFail.type)?.name ?? `condition ${s.lastFail.type}`} (condition ${s.lastFail.slot + 1}) said no last, at frame ${num(s.lastFail.frame)}` : s.failed ? "its conditions said no" : "it was never asked";
-      out.push(`  ${pc.yellow("▸")} ${pc.dim(`#${s.row + 1}`)}  ${rowText(scn, s.row, Math.max(30, width - 10))}`, `      ${pc.dim(why)}`);
-    }
+    out.push("", pc.dim(`  Never fired (${never.length} of ${listed.length})`));
+    for (const s of never.slice(0, all ? Infinity : 20)) out.push(`  ${pc.yellow("▸")} ${pc.dim(`#${s.row + 1}`)}  ${rowText(scn, s.row, Math.max(30, width - 10))}`, `      ${pc.dim(neverWhy(s))}`);
     if (never.length > 20 && !all) out.push(pc.dim(`  … and ${num(never.length - 20)} more (--all lists them)`));
   }
+  if (replay?.order) out.push("", ...orderLines(scn, replay, { all, width }));
   return out;
+}
+
+/** Firings listed in order before the list is cut (`--all` lists them all). */
+const ORDER_SHOWN = 200;
+
+/** The firings in the order the game ran them: the game's clock, the frame, whose copy, the trigger. */
+export function orderLines(scn: Scenario, replay: ReplayReport, { all = false, width = process.stdout.columns || 100 } = {}): string[] {
+  const order = replay.order ?? [];
+  const total = order.length + replay.orderDropped;
+  const out = [pc.dim(`  In the order they fired (${num(total)})`)];
+  if (!order.length) return [...out, pc.dim("  (none of the map's triggers fired)")];
+  const nameOf = new Map(replay.players.map((p) => [p.slot, p.name]));
+  const who = (p: number) => `P${p + 1}${nameOf.has(p) ? ` ${pc.dim(nameOf.get(p)!)}` : ""}`;
+  const shown = all ? order : order.slice(0, ORDER_SHOWN);
+  const fixed = shown.reduce((n, x) => Math.max(n, columns(`${x.clock}  ${num(x.frame)}  ${who(x.player)}  #${x.row + 1}  `)), 0) + 2;
+  out.push(...table([["Clock", "Frame", "Player", "#", "Trigger"].map((h) => pc.dim(h)), ...shown.map((x) => [x.clock, num(x.frame), who(x.player), pc.dim(`#${x.row + 1}`), rowText(scn, x.row, Math.max(30, width - fixed - 2))])], 2));
+  if (order.length > shown.length) out.push(pc.dim(`  … and ${num(order.length - shown.length)} more (--all lists them)`));
+  if (replay.orderDropped) out.push(pc.dim(`  The game kept the first ${num(order.length)}; ${num(replay.orderDropped)} later firings are counted above but not listed.`));
+  return out;
+}
+
+/* ── A replay as the game ─────────────────────────────────────── */
+
+/** What `map trace|cost --replay` hands the runner, and what the trace is worded against. */
+export interface ReplayRun {
+  /** The map file handed to the game in place of the replay's own (a 1.00 map as a converted copy), or null: the replay's own. */
+  map: string | null;
+  /** The map (given, or the replay's) is in the StarCraft 1.00 form and a converted copy is played. */
+  converted: boolean;
+  /** The scenario the trace is worded against: the given map's as the game runs it, else the replay's. */
+  scenario: Scenario;
+  /** How the given map differs from the replay's, in a few words; null when it does not, or no map was given. */
+  differs: string | null;
+}
+
+/**
+ * The replay's game, made ready: with a map given, that map's scenario (a built map's built one, which is what the
+ * game runs) is compared with the replay's, so the command can say when they differ — a changed map can make the
+ * replay go out of step. A map in the StarCraft 1.00 form, given or the replay's own, is played as a converted copy,
+ * as `map trace` plays one; the copy is deleted when the run ends.
+ */
+export async function replayRun(rep: Replay, map: { doc: OpenedMap; path: string; name: string; bytes: Uint8Array } | null): Promise<ReplayRun> {
+  if (!map) {
+    const doc = await openMapBytes(rep.chk, "replay.chk");
+    if (mapVersionOf(doc.scenario.fileVersion) !== "original") return { map: null, converted: false, scenario: doc.scenario, differs: null };
+    const game = await gameMap(doc, "-", "replay.scx");
+    return { map: game.path, converted: true, scenario: doc.scenario, differs: null };
+  }
+  const chk = (await readArchive(map.bytes)).chk;
+  const played = await openMapBytes(chk, `${map.name}.chk`), recorded = await openMapBytes(rep.chk, "replay.chk");
+  const d = diffMaps({ name: "replay", doc: recorded }, { name: map.name, doc: played });
+  // (A replay holds no archive members — sounds — so those are not a difference.)
+  const changed = { ...d, members: [] };
+  const same = !changed.header.length && !changed.players.length && !changed.forces.length && !changed.units.length && !changed.locations.length && !changed.triggers.length && !changed.briefing.length && !changed.strings.length && !changed.sections.length;
+  const game = await gameMap(map.doc, map.path, map.name);
+  return { map: game.path, converted: game.converted, scenario: played.scenario, differs: same ? null : summarizeDiff(changed) || "the scenario's bytes differ" };
 }
 
 export interface CostReport {

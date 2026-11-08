@@ -21,7 +21,7 @@ import { spawnSync } from "node:child_process";
 import { basename } from "node:path";
 import { kindOf, type Input } from "./files";
 import { locate } from "./history";
-import { CliError, mark, num, pc, size } from "./ui";
+import { CliError, mark, num, pc, plural, size } from "./ui";
 
 export type Change = "added" | "removed" | "changed";
 
@@ -252,4 +252,20 @@ export function revisionInput(rev: string, file: string): Input {
   const bytes = new Uint8Array(shown.stdout);
   const name = `${rev}:${basename(file)}`;
   return { path: name, name, bytes, kind: kindOf(file, bytes) };
+}
+
+/** The change in a few words: "3 units added, 1 string changed". */
+export function summarizeDiff(d: MapDiff): string {
+  const parts: string[] = [];
+  const list = (name: string, es: { change: string }[]) => {
+    const n = (c: string) => es.filter((e) => e.change === c).length;
+    if (n("added")) parts.push(`${plural(n("added"), name)} added`);
+    if (n("removed")) parts.push(`${plural(n("removed"), name)} removed`);
+    if (n("changed")) parts.push(`${plural(n("changed"), name)} changed`);
+  };
+  const fields = d.header.length + d.players.length + d.forces.length;
+  if (fields) parts.push(`${plural(fields, "setting")} changed`);
+  list("unit", d.units); list("location", d.locations); list("trigger", d.triggers); list("briefing trigger", d.briefing); list("string", d.strings); list("file", d.members);
+  if (!parts.length && d.sections.length) parts.push(`${plural(d.sections.length, "section")} changed`);
+  return parts.join(", ");
 }

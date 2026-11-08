@@ -56,7 +56,7 @@ terrain. Everything else is a function that reads or changes one.
 | Describing | `scenarioName`, `scenarioDescription`, `mapVersionOf`, `mapStatistics`, `statisticsText`, `findInScenario` |
 | Check Map | `validateScenario`, `issueCounts` — every rule the editor runs that needs no game data |
 | Triggers | `readTriggers` / `applyTriggers`, `readBriefing` / `applyBriefing`, `newTrigger`, `newCondition`, `newAction`, `triggerNames`, `triggerUsage`, `triggerComment`; the numbers a record holds, by name (`ConditionType`, `ActionType`, `PlayerGroup`, `Comparison`, `SwitchState`, `SwitchAction`, `SetModifier`, `ResourceType`, `UnitClass`); the text form, `triggersToText` / `triggersFromText`; `.trg` files, `encodeTrg` / `decodeTrg`; the condition and action definitions |
-| Strings | `readStrings` / `applyStrings`, `stringUsages`, `unusedStrings`, `deleteUnused`; the table as text, `formatStringTable` / `parseStringTable`; `plainText` to drop colour codes |
+| Strings | `readStrings` / `applyStrings`, `stringUsages`, `unusedStrings`, `deleteUnused`; the table as text, `formatStringTable` / `parseStringTable`; `plainText` to drop colour codes; `decodeText` for bytes in a map's encoding (`TEXT_ENCODINGS`) |
 | Units | `addUnits`, `removeUnits`, `updateUnits`, `moveUnits`, `makeUnit`, `unitAt`, `unitsInBox`, `isResource` |
 | Locations | `addLocation`, `editLocation`, `removeLocations`, `moveLocations`, `locationName`, `usedLocations` |
 | Settings | `readPlayerSettings` / `applyPlayerSettings`, forces, unit, upgrade and tech settings, `changeMapVersion`, `changeTextEncoding` |

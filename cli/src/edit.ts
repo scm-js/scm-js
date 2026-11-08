@@ -4,7 +4,7 @@
  * editor's own function over the open document; main.ts writes the map back with `writeBack`.
  */
 import type { OpenedMap } from "../../src/editor/mapFile";
-import { MAP_VERSIONS, mapVersionOf, scenarioDescription, scenarioName, setScenarioDescription, setScenarioName, type MapVersion } from "../../src/formats/chk/scenario";
+import { MAP_VERSIONS, mapVersionOf, scenarioDescription, scenarioName, setScenarioDescription, setScenarioName, type MapVersion, type Scenario } from "../../src/formats/chk/scenario";
 import { changeMapVersion, changeTextEncoding } from "../../src/editor/settings";
 import { TEXT_ENCODINGS, type TextEncoding } from "../../src/formats/text/encoding";
 import { resizeScenario, type ResizeResult } from "../../src/editor/resize";
@@ -76,7 +76,11 @@ export interface PrunedString { index: number; text: string }
  * An empty slot is a gap the table keeps so the numbers after it hold, not a string, so it is neither listed nor counted.
  */
 export function pruneStrings(doc: OpenedMap, { dryRun = false } = {}): PrunedString[] {
-  const scn = doc.scenario;
+  return pruneScenarioStrings(doc.scenario, { dryRun });
+}
+
+/** `pruneStrings` on a scenario alone (`map optimize` prunes the built file's scenario, which no `OpenedMap` holds). */
+export function pruneScenarioStrings(scn: Scenario, { dryRun = false } = {}): PrunedString[] {
   const usages = stringUsages(scn);
   const removed = unusedStrings(scn, usages).filter((index) => scn.strings.strings[index] !== "").map((index) => ({ index, text: plainText(scn.strings.strings[index] ?? "") }));
   if (!dryRun && removed.length) applyStrings(scn, deleteUnused(scn.strings.strings, usages), usages);

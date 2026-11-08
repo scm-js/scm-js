@@ -1,6 +1,6 @@
 # The `scmjs` command line
 
-`cli/` is the npm package **`@scm-js/cli`** (its command is `scmjs`): `scmjs about | doctor | info | mcp | lsp | map info|check|open|new|generate|dump|find|fetch|set|resize|triggers|strings|sounds|diff|log|blame|merge|build|run|unpack|pack|trace|cost|rush|test [record]|preview|heatmap |
+`cli/` is the npm package **`@scm-js/cli`** (its command is `scmjs`): `scmjs about | doctor | info | mcp | lsp | map info|check|open|new|generate|dump|find|fetch|set|resize|triggers|strings|sounds|diff|log|blame|merge|build|run|unpack|pack|trace|cost|rush|balance|test [record]|preview|heatmap|optimize |
 replay info|map|open|watch|export|share | plugin new|check|dev | bot new|init|build|update|run|ladder`, or `npx @scm-js/cli …`. npm refused the plain name `scmjs` on the first publish (2026-11-06,
 E403 "too similar to scss, sockjs"), so the user chose the scope beside @scm-js/replay and @scm-js/plugin-api. The reader's page is `docs/cli.md`. The shape was the user's (2026-11-05): one command, a noun for
 each kind of thing (`map`, `replay`, `plugin`, `bot`), "an impressive UX tool … not overly engineered".
@@ -1789,3 +1789,112 @@ overview row. Docs: `docs/cli.md` "A map's history", "Who last changed what".
   with textconv does that); `map log --rev A...B` passes through to git, `map blame` refuses `...`.
 - **CLI strings are literals, not `t()`**: the i18n extractor reads `src/` only and no CLI module uses `t()` for its
   own words (plugin.ts's are the starter's text); followed that.
+
+## Fair starts and smaller maps: `map balance`, `map optimize` (`balance.ts`, `optimize.ts`, `relocate.ts`) — 2026-11-07
+
+Branch `cli-balance-optimize`, one PR; nothing in scm-sim changed (the runner facts below are what it would need).
+
+### `map balance <map> --bots a[,b] [--races r] [--games 8 | --seeds] [--frames 30000] [--parallel] [--out] [--no-rush] [--timeout] [--json]`
+
+- **Runner facts (scm-sim `src/bwapi/match.ts` on main = the deployed `match-19e82f98d80f.mjs`, build 1248410ad2a0):**
+  (1) **no computer against computer**: `runMatch` throws "a match needs a bot: the game's computers alone are not a
+  ladder's game", so `--bots` is required (one bot plays the game's computer, `parseEntrants([bot, "computer"])`).
+  (2) **no fixed starts**: `parseArgs` knows only `--bot file|race|data`, `--computer race` and the flags engine,
+  starcraft, map, seed, frames, every, replay, hash-every, timeout; the game is started as `{ game: "melee", seed,
+  opponents }` and the game deals the start locations. `MatchPlayer` has `slot`, no start, and no line carries a
+  position. **What fixed starts would need**: a per-side start in the runner's arguments (e.g. `--bot
+  file|race|data|start` and `--computer race@start`, start = player 1–8 of the map's Start Locations), applied by the
+  seat to the melee start assignment before the starting units are placed (the same in every seat's copy), and
+  `players[].start` (the start location's index or x/y) in the `start` line so the CLI need not play the replay
+  back. Computer against computer would need the relay to run one copy with no bot seat (`seats: 0`).
+- **So the starts are read back from the replays**: every game's replay (the ladder's `playGame`, into `--out` or a
+  `mkdtemp` folder removed in a `finally`) is played by the replay runner's `--events` (`heatmap.ts#playForEvents`,
+  ~3.5 s a game: 1.5 s load, 7,862 frames in 1.6 s). `dealtStart`: the centroid of a slot's units in the first
+  `walk` sample it appears in (frame 24: the workers set out for the minerals) → the nearest Start Location within 20
+  tiles; else its first `built`. `firstContact`: the first `death` whose owner and killer are both the game's two
+  slots and differ (`NOT_A_LOSS` skipped: Scarab, Nuke, Disruption Web, Dark Swarm). Side → slot from the match
+  runner's `end.players`.
+- **Rows** (`balanceReport`): per start, the games a side was dealt it (desync and unplayed left out), won/lost/
+  undecided, win rate over decided, **expected** = the mean of each side's own share of decided wins (so a stronger
+  side dealt a start more often does not read as a strong start), margin = 1.96 √Σp(1−p) / n, average length and
+  contact, the average arrived walk from `map rush` (run first, on its own `gameMap` copy since `runRush` deletes its
+  copy; `--no-rush`), and `mainResources`: every field/geyser assigned to its nearest start and kept within 12 tiles
+  (amount by `UnitUsed.Resources` as statistics.ts, else the defaults), with the average distance in tiles.
+- **Verdict** (`verdictOf`): too-few (< 2 starts with decided games); one-sided when every side that played won or
+  lost all its decided games (no game says anything); balanced when every start is within 10 points
+  (`BALANCED_WITHIN`) of expected, "Balanced within N%"; chance when the worst is within its margin; else the start,
+  its rate, the expected and `differs`: the static number furthest (≥ 10%) from the others' average — gas, minerals,
+  the mineral line's or geyser's distance, the rush walks, the first contact — said as a fact.
+- **A bot against itself plays each seed once** (`mirrorOnce`, by the bots' bytes): the first real run played both
+  lobby orders, and every seed's two games had the same starts and the same winner (Crescent Moon: the same length to
+  the second all 8 times; a generated map: 16:20 vs 17:16 once — the learning files differ), so the pair counted one
+  game twice and the margin was too small: the first verdict called a start unbalanced on what was three games.
+- `doctor` gained a `map balance` row (needs StarCraft, the match and the replay runners); `RUNNERS.match.command` says
+  "(and map balance)". MCP `map_balance` (read-only; games 1–50, frames ≤ 50,000, the live lines to stderr).
+- Measured (built CLI, the deployed engine from scmjs.dev/play in the cache, the user's Remastered copy, UAlbertaBot
+  built into a `.scmbot` from scm-sim's `data/bots` with a hand-made bundle in the scratchpad): bot against the
+  computer (`--bots ualbertabot.scmbot:p --races p --games 4 --parallel 4`, Crescent Moon): 47 s, UAlbertaBot 4-0 →
+  "one-sided". Mirrors at `--parallel 4`, deduplicated: Crescent Moon 12 games in 269 s (one undecided at 30,000
+  frames; start 3 25% vs 52% expected, "cannot tell that from chance (±49%)"); `map generate --seed 7 --players 4`
+  12 games in 176 s (start 1 won 1 of 8, outside the ±35% margin, flagged "unbalanced" with no static difference — the
+  map is mirrored, so it is the bot's play from the top left, or chance at ~p 0.03); the literal `map generate
+  "(4)Test.scx" --seed 7` (2 players: `--players` is not read from the name) 6 games in 131 s, 2-4, "chance". Peak
+  resident of the command ~0.75–0.97 GB (the seats are children; ~1.3 GB each). A game is 10–60 s of wall time;
+  the rush walks ~4 s before the games.
+
+### `map optimize <map> [--out] [--dry-run] [--strip-editor] [--compression pkware|zlib] [--keep …] [--all] [--json]`
+
+- **Archive-level, one pass of decisions, measured stage by stage.** `readArchive` (not `openMapBytes`: a built
+  map's scenario must stay the built bytes), then: sounds (audio by name or magic) and other members no trigger or
+  briefing string names (`stringUsages` kinds trigger/briefing — any string, text or WAV, so it errs on keeping) and,
+  while the WAV section stays, the WAV table does not name; WAV entries whose file is absent and not `sound\…`;
+  `pruneScenarioStrings` (edit.ts, split from `pruneStrings`); `--strip-editor` = `planSave` with
+  `stripTerrainEditing` + `stripBookkeeping` (ISOM TILE DD2 / IVER IVE2 IOWN UPUS SWNM WAV — the registry's
+  `editorOnly`, the docs' "Editors only. The game never reads it."; TYPE, the old settings tables in a 205 file,
+  unknown sections, repeats and trailing bytes are left: conservative), with `scn.wavs`/`switchNames` nulled first so
+  their strings and the list-only sounds go too. Each stage is written with the as-opened compression and its size
+  taken; the compression row is (original − baseline rewrite) + (last − final), so the rows add up to the whole.
+- **Kept whatever names them**: `trigscript\`, `magenta\`, `scmjs\`, a build's `added`, `--keep` (exact, or a folder
+  ending in `\`), and **what the game opens by name**: StarCraft.exe's strings hold `(attributes)`, `(signature)`,
+  `Blizzard_2.cnd`, `Ladder_2..4.cnd`, `League_%d.cnd`, `CompUSA_1.cnd`, `KBK_2.cnd`, `PGL_2.cnd`, `Tourn_1.cnd`,
+  `WGT_1.cnd` (`GAME_MEMBERS`). The first dry run listed `blizzard_2.cnd` ("Blizzard Authentication Candidate
+  Scenario", 44 B, in 15 of 16 Blizzard fixtures) as junk.
+- **Built maps** (`restoreBuiltMap` not plain): the chk is written back byte for byte (the manifest's hash), no WAV,
+  string or section step; members referenced by the built or the source scenario stay. **EUD maps** (`usesMemory`:
+  any `triggerReferences` ref of kind `memory`): strings left — euddraft-style maps reach strings by place, and a
+  re-encoded STR loses bytes past the table.
+- **Compression**: PKWARE by default (every version reads it; zlib is Remastered-only per saving.md's audit), a map
+  already zlib tries both and keeps the smaller, `--compression` forces. Our PKWARE implode beats Blizzard's own:
+  Crescent Moon's scenario 77 → 61 KB with nothing removed.
+- **ADPCM members are carried as stored** — the trap of this slice. StarEdit stores a WAV with ADPCM + Huffman sectors
+  (the first sector PKWARE, so `memberInfo` says "pkware"); mopaq decodes them to PCM and any rewrite stores the PCM:
+  StarCraft Fortress grew 399 KB → 1.0 MB. `asStoredFor(compression)` writes every member once that way and keeps,
+  as stored, each whose original stored size is smaller than the new one. **But `Creator.addStored` pins a member at
+  its old offset** (the key is offset-adjusted), so the archive could not shrink past it (Fortress with
+  `--strip-editor` saved 0 B). `relocate.ts` moves them: the MPQ cipher copied from mopaq's `crypto.ts` (MIT, not
+  exported), sector table decrypted with key−1 and each sector with key+i under the old offset's key, encrypted under
+  the new; `packStored` lays them from offset 32 round the nameless members; `(attributes)`/`(signature)` found by
+  `slotOf` among the nameless move too. Single-unit and sector-CRC members (not in SC1 maps; mopaq reads neither) are
+  left in place. With members carried, a `(listfile)` naming them is written by hand (`listfile: false` + an extra),
+  since the writer lists only what it encoded; a protected map (no listfile) gets none. `writeBest` also tries
+  every member written afresh and keeps the smaller.
+- **Checks**: the result is opened with `openMapBytes` before anything is written; not smaller → nothing written
+  (exit 0, said). Verified over the 16 Blizzard fixtures and the 5 test maps (scratchpad script): every kept member
+  decodes byte-identical (Fortress 16, Wakka Wakka 14, Race of Death 8 with ADPCM moved and re-keyed), `diffMaps`
+  shows only STR/WAV and the removed members; `map rush` runs the optimized Ice Floes (STR pruned to 7 slots) and the
+  stripped Crescent Moon (77 → 24 KB) in the game. Sizes, default: Crescent Moon 79,131 → 62,826; Wakka Wakka 572,824
+  → 502,969; Race of Death 386,890 → 319,372; Fortress 408,484 → 381,792; Ashworld Hunters unchanged (nothing written).
+- MCP `map_optimize` (dry run unless `write`); core gained `memberInfo`, `readWavs`, `applySounds`, `UnitUsed`,
+  `triggerReferences` (+ its types).
+- Tests: `tests/cli-optimize.test.ts` (8: junk removed and only junk, diff, strip, built map, EUD, compression, bare
+  chk, keep/GAME_MEMBERS, relocation of an encrypted adjusted member read back), `tests/cli-balance.test.ts` (10: starts
+  and resources, dealt start and contact from events, rows/pairs/verdict kinds, `differs`, the run over a stand-in
+  match runner + replay runner both ways round, a bot against itself once a seed, one bot against the computer with no
+  replays left, refusals); `cli-mcp` names + a dry run and write, `cli-doctor` the new row.
+- **Leftovers**: fixed starts and computer-vs-computer in the match runner (above); the start in the runner's lines;
+  balance over several maps at once; a `--pairs` that hands the game a copy with only two Start Locations (decided
+  against as the default: the AIs scout fewer places, so first contact would read early); optimize does not merge
+  repeated sections or drop unknown ones (the Save dialog's other ticks), and a built map's source is not pruned
+  (rebuild); a member is carried as stored by its own size alone, so a few small ones can be carried where writing
+  them afresh would have packed tighter (the whole file is compared both ways, which bounds it). Aside: `map rush` on (8)StarCraft Fortress reports "910 walks" for 8 starts on
+  the original file too.

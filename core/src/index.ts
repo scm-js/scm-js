@@ -14,7 +14,7 @@
 
 // ── Files ──
 export { openMapBytes, writeMapBytes, type OpenedMap, type WriteOptions, readArchive, type ArchiveContents, writeArchiveBytes, type WriteArchiveOptions } from "../../src/editor/mapFile";
-export { loadMap, readMembers, readExtras, looksLikeMpq, MapLoadError, SCENARIO_PATH, type LoadedMap, type MemberInfo, type StoredMembers, type ArchiveMembers, type ArchiveCompression } from "../../src/formats/mpq/scm";
+export { loadMap, readMembers, readExtras, looksLikeMpq, memberInfo, MapLoadError, SCENARIO_PATH, type LoadedMap, type MemberInfo, type StoredMembers, type ArchiveMembers, type ArchiveCompression } from "../../src/formats/mpq/scm";
 export { type MapFormat, type SaveOptions, DEFAULT_SAVE_OPTIONS, SAVE_PRESETS, formatOf, defaultSaveOptions, planSave, buildChk, keptExtras, buildMapFile, type SavePlan, type PlannedSection, type PlannedExtra, type SectionFate, extraKind, type ExtraKind, formatBytes } from "../../src/editor/save";
 export { type BuiltBy, type BuildManifest, readBuildManifest, restoreBuiltMap, type Restored, packBuiltMap, type PackInput, BUILD_SOURCE_MEMBER, BUILD_MANIFEST_MEMBER } from "../../src/editor/mapBuild";
 
@@ -51,6 +51,8 @@ export { findInScenario, FIND_KINDS, type FindKind, type FindOptions, type FindR
 export { readTriggers, applyTriggers, readBriefing, applyBriefing, newTrigger, newCondition, newAction, triggerNames, triggerUsage, isPreserved, setPreserved, fingerprintTrigger, sameTriggers, TRIGGER_OWNERS } from "../../src/editor/triggers";
 export { triggersToText, triggersFromText, readTriggerFile, triggerFormatOf, type TriggerFileFormat, encodeTrg, decodeTrg } from "../../src/editor/exchange";
 export { formatTrigger, formatTriggers, parseTriggers, summarizeTrigger, triggerComment, TriggerTextError, type TriggerNames, type TextTrigger } from "../../src/formats/triggers/text";
+// What each trigger reads, writes and names (`memory` is an EUD address: a death counter out of range).
+export { triggerReferences, type TriggerRef, type TriggerRefs, type TriggerRefKind } from "../../src/editor/triggerRefs";
 export { CONDITION_DEFS, ACTION_DEFS, BRIEFING_ACTION_DEFS, conditionDef, conditionDefByName, actionDef, actionDefByName, type ConditionDef, type ActionDef, type ArgDef, type ArgKind, CHOICES, choiceLabel, choiceValue, AI_SCRIPT_NAMES, aiScriptName, aiScriptByName } from "../../src/data/triggerDefs";
 
 // ── Strings and text ──
@@ -59,7 +61,7 @@ export { formatStringTable, parseStringTable, applyStringImport, escapeStringTex
 export { plainText, runsOf, TEXT_CODES, textCode } from "../../src/editor/textColors";
 
 // ── Units, locations and settings ──
-export { addUnits, removeUnits, updateUnits, moveUnits, applyUnitChanges, makeUnit, nextSerial, unitAt, unitsInBox, isResource, type UnitChange, MINERAL_FIELD_IDS, VESPENE_GEYSER, DEFAULT_MINERALS, DEFAULT_GAS } from "../../src/editor/units";
+export { addUnits, removeUnits, updateUnits, moveUnits, applyUnitChanges, makeUnit, nextSerial, unitAt, unitsInBox, isResource, type UnitChange, MINERAL_FIELD_IDS, VESPENE_GEYSER, DEFAULT_MINERALS, DEFAULT_GAS, UnitUsed } from "../../src/editor/units";
 export { addLocation, editLocation, removeLocations, moveLocations, applyLocationChanges, locationName, usedLocations, placedLocations, locationCapacity, type Bounds, type LocationChange, type LocationPatch, ANYWHERE_NAME } from "../../src/editor/locations";
 export {
   readPlayerSettings, applyPlayerSettings, type PlayerSettings, readForceSettings, applyForceSettings, type ForceSettings, forceName,
@@ -67,7 +69,7 @@ export {
   changeMapVersion, changeTextEncoding, unitCustomName, internString,
 } from "../../src/editor/settings";
 export { readSwitchNames } from "../../src/editor/switches";
-export { soundList, type SoundRow } from "../../src/editor/sounds";
+export { soundList, readWavs, applySounds, type SoundRow } from "../../src/editor/sounds";
 export { parseWavHeader, wavDuration, wavFormatLabel, type WavInfo } from "../../src/formats/wav";
 export { resizeScenario, type ResizeOptions, type ResizeResult } from "../../src/editor/resize";
 export { placeStartLocations, idealStarts, playableCount, DEFAULT_START_PLACEMENT, type StartLayout, type StartPlacementOptions, type StartPlacementResult } from "../../src/editor/startLocations";

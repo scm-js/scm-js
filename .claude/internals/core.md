@@ -74,6 +74,11 @@ export list's parser in `tests/core.test.ts` reads names between the braces, so 
 list hides the next name** (the first try put one there and the test said the name was not exported); comments go
 above the statement.
 
+Done 2026-11-07 (`map balance`, `map optimize`): `memberInfo` (scm.ts: how a member is stored), `readWavs` and
+`applySounds` (the WAV table, as the Sound Editor edits it), `UnitUsed` (which fields of a unit record are set, for
+a resource's amount) and `triggerReferences` with `TriggerRef`/`TriggerRefs`/`TriggerRefKind` (triggerRefs.ts, pure;
+its `memory` refs tell an EUD map). `cli.md` "Fair starts and smaller maps".
+
 Done 2026-11-07 (`map sounds`): `parseWavHeader`, `wavDuration`, `wavFormatLabel` and `WavInfo` from
 `formats/wav.ts` (pure; its one import is `t` for the format label's words). `cli.md` "Cheap wins".
 

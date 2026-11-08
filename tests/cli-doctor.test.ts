@@ -81,7 +81,7 @@ describe("scmjs doctor: what is ready", () => {
       engine(["bot", "replay"]),
     ])).toEqual({
       "map info|check|…": "ok", "replay info|open": "ok", mcp: "ok", "map build": "ok", "map preview|generate": "ok", "bot new|build": "Docker",
-      "bot run": "ok", "replay watch": "ok", "replay export": "Browser", "map trace|cost": "engine runner", "bot ladder": "engine runner",
+      "bot run": "ok", "replay watch": "ok", "replay export": "Browser", "map trace|cost": "engine runner", "bot ladder": "engine runner", "map balance": "engine runner",
     });
   });
 
@@ -89,13 +89,13 @@ describe("scmjs doctor: what is ready", () => {
     const r = by([{ what: "StarCraft", state: "warn", detail: "not found" }, engine([], null)]);
     expect([r["bot run"], r["map trace|cost"], r["bot ladder"], r["map preview|generate"], r["map build"]]).toEqual(["StarCraft", "StarCraft", "StarCraft", "StarCraft", "ok"]);
     expect(by([engine([], null)])["map trace|cost"]).toBe("ok");
-    expect(Object.values(by([{ what: "Node", state: "bad", detail: "" }]))).toEqual(Array(11).fill("Node"));
+    expect(Object.values(by([{ what: "Node", state: "bad", detail: "" }]))).toEqual(Array(12).fill("Node"));
   });
 
   it("lists only what is not ready, with the one thing it lacks, in 80 columns; the JSON has every group", () => {
     const checks: Check[] = [{ what: "Docker", state: "warn", detail: "not found" }, { what: "TypeScript", state: "warn", detail: "not found" }, engine(["bot"])];
     const lines = readyLines(readiness(checks), checks).map(visible);
-    expect(lines).toEqual(["  Not ready", "  ✖ map build       TypeScript not found", "  ✖ bot new|build   Docker not found", "  ✖ replay watch    no runner for it in the fetched engine", "  ✖ map trace|cost  no runner for it in the fetched engine", "  ✖ bot ladder      no runner for it in the fetched engine"]);
+    expect(lines).toEqual(["  Not ready", "  ✖ map build       TypeScript not found", "  ✖ bot new|build   Docker not found", "  ✖ replay watch    no runner for it in the fetched engine", "  ✖ map trace|cost  no runner for it in the fetched engine", "  ✖ bot ladder      no runner for it in the fetched engine", "  ✖ map balance     no runner for it in the fetched engine"]);
     for (const l of lines) expect(columns(l), l).toBeLessThanOrEqual(80);
     expect(readyLines(readiness([engine(["bot", "replay", "map", "match"])])).map(visible)).toEqual(["  ✔ Every command is ready on this computer."]);
     expect(shortPath("/home/me/.cache/scmjs", 30, "/home/me")).toBe("~/.cache/scmjs");

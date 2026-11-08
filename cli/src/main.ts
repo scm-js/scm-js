@@ -14,6 +14,7 @@ import { runBotGame } from "./botrun";
 import { ladderJson, parseEntrants, parseRaces, printLadder, runLadder } from "./ladder";
 import { costReport, gameMap, printCost, printTrace, removeGameMap, replayRun, runMapInGame, traceReport } from "./trace";
 import { printRush, runRush, rushJson, unitByName } from "./rush";
+import { balanceJson, printBalance, runBalance } from "./balance";
 import { buildMap, loadTypeScript, printBuild } from "./build";
 import { completionScript, SHELLS, type Shell } from "./completion";
 import { LAYOUTS, nameFromFile, NEW_VERSIONS, parseSize, parseTileset, writeNewMap, type NewMapVersion } from "./create";
@@ -26,7 +27,10 @@ import { asMap, printMerge, runMerge, stagedInputs, type Side } from "./merge";
 import { diffPicture } from "./diffpicture";
 import { dumpMap, printDump } from "./dump";
 import { ANCHORS, parseAnchor, pruneStrings, resizeMap, setHeader, VERSIONS, ENCODINGS } from "./edit";
-import { exportStrings, exportTriggers, importStrings, importTriggers, writeBack } from "./exchange";
+import { exportStrings, exportTriggers, importStrings, importTriggers, writeBack, writeOutput } from "./exchange";
+import { looksLikeMpq } from "../../src/formats/mpq/scm";
+import { formatOf } from "../../src/editor/save";
+import { COMPRESSIONS, optimizeJson, optimizeMap, printOptimize, type Compression } from "./optimize";
 import { expectKind, loadMapInput, loadReplayInput, readInput, STDIO, toStdout, type Input } from "./files";
 import { findInMap, KINDS, parseKinds, printHits } from "./find";
 import { DEFAULT_LIMIT, fetchJson, fetchMap, mapIdFrom, MAX_LIMIT, parseLimit, printFetched, printSearch, searchJson, searchMaps } from "./fetch";
@@ -491,6 +495,39 @@ is renumbered, so what the triggers hold stays right; blank slots at the end of 
       ...(removed.length > limit ? [pc.dim(`  … and ${num(removed.length - limit)} more (--all lists them)`)] : []));
   });
 
+map.command("optimize").description("the map made smaller without changing what the game plays").argument("<map>").addOption(json)
+  .option("--dry-run", "say what would go and what each step saves; write nothing")
+  .option("--strip-editor", "also drop the sections only editors read (ISOM, TILE, DD2, the sound list, switch names…)")
+  .option("--compression <method>", "pkware (every version of the game) or zlib (Remastered only); default pkware, or the smaller for a zlib map")
+  .option("--keep <members...>", "archive members to keep though nothing names them; a name ending in \\ keeps a folder")
+  .option("--all", "list everything removed; by default a long list is cut at 20")
+  .option("--out <map>", "write the result here instead of over the map; - for standard output")
+  .addHelpText("after", `
+In order: sounds no trigger or briefing plays and the sound list does not name, the sound list's entries for files
+the map lacks, any other archive member nothing names, the strings nothing refers to, and every member compressed
+again. A table says what each step saved. Kept whatever refers to them: TrigScript, Magenta and build files
+(trigscript\\, magenta\\, scmjs\\), members with no name, and sounds stored with the game's own ADPCM compression,
+which nothing the editor writes beats. A built map keeps its scenario as built, and a map whose triggers write to
+the game's memory (EUD) keeps its strings.
+
+--strip-editor also drops ISOM, TILE, DD2, IVER, IVE2, IOWN, UPUS, SWNM and WAV, which the game never reads: the map
+plays the same, but an editor opening it has no isometric terrain, no doodads to select, no sound list and no
+switch names. Keep the original to go on editing.
+  scmjs map optimize "My Map.scx" --dry-run
+  scmjs map optimize "My Map.scx" --out "My Map (small).scx" --strip-editor`)
+  .action(async (file: string, o: { json?: boolean; dryRun?: boolean; stripEditor?: boolean; compression?: string; keep?: string[]; all?: boolean; out?: string }) => {
+    if (o.compression !== undefined && !(COMPRESSIONS as readonly string[]).includes(o.compression)) throw new CliError(`--compression takes ${COMPRESSIONS.join(" or ")}, not "${o.compression}"`, null, 2);
+    const input = await readInput(file);
+    expectKind(input, "map");
+    const piped = piping(input, o);
+    const bare = !looksLikeMpq(input.bytes);
+    if (o.out && o.out !== STDIO && (formatOf(o.out) === "chk") !== bare) throw new CliError(`map optimize writes the map in its own form: ${bare ? "a bare scenario stays a .chk" : "an archive stays a .scx or .scm"}`, "Name an output of the same kind, or convert with the editor first.", 2);
+    const r = await optimizeMap(input.bytes, input.name, { stripEditor: !!o.stripEditor, compression: o.compression as Compression | undefined, keep: o.keep });
+    const w = !o.dryRun && r.after < r.before ? await writeOutput(r.bytes, o.out ?? input.path) : null;
+    if (o.json) { print(JSON.stringify(optimizeJson(r, { dryRun: !!o.dryRun, written: w }), null, 2)); return; }
+    say(piped, ...printOptimize(r, { dryRun: !!o.dryRun, written: w ? outName(w) : null, all: !!o.all }));
+  });
+
 map.command("unpack").description("a map's archive as a folder: the scenario, its sounds, scripts and other files").argument("<map>").addOption(json)
   .option("--out <folder>", "the folder to write; by default one named after the map, beside it")
   .option("--list", "list the archive's members and write nothing")
@@ -699,6 +736,53 @@ Exits 2 when the game could not start.`)
     const r = await runRush(game.path, { unit, seed: whole(o.seed, "seed"), limit: whole(o.limit, "limit", 1), starcraft: o.starcraft, engine: o.engine, live: o.json ? undefined : (line) => print(line) });
     if (o.json) print(JSON.stringify(rushJson(input.name, r), null, 2));
     else print("", ...printRush(input.name, r));
+  });
+
+map.command("balance").description("is the map fair to every start? games played over and over, a row a start location").argument("<map>").addOption(json)
+  .requiredOption("--bots <files>", "one bot (it plays the game's computer) or two, comma separated; a race after a colon: mybot.scmbot:p")
+  .option("--races <letters>", "the races a side plays when it has none of its own: z, t, p and r (random)", "r")
+  .option("--games <n>", "rounds: every pairing once a seed, seeds 1 to n", "8")
+  .option("--seeds <list>", "the seeds to play, comma separated, in place of --games")
+  .option("--frames <n>", "stop a game nobody has won after this many frames (24 a second)", "30000")
+  .option("--parallel <n>", "games at once (default: up to 4, as this computer's cores and memory allow)")
+  .option("--out <folder>", "keep every game's replay here (by default they are deleted)")
+  .option("--no-rush", "leave out the walks between the starts (map rush)")
+  .option("--timeout <seconds>", "how long a bot may think over one frame before it counts as hung", "60")
+  .option("--starcraft <folder>", "your installation of StarCraft (SCMJS_STARCRAFT); found in the usual places otherwise")
+  .addOption(new Option("--engine <where>", "the play page's address, or a folder holding the engine (SCMJS_PLAY_URL)").hideHelp())
+  .addHelpText("after", `
+The same sides play game after game on the map, as scmjs bot ladder plays them: a bot against the game's computer,
+or two bots both ways round. The game deals the start locations itself, so each game's replay is played back to see
+which start each side had and when one first lost a unit to the other. Prints a row a start: games, wins, the win
+rate beside what the two sides' own records predict, the average length and first contact, the walk to the other
+starts (as map rush) and the main's minerals and gas, then a verdict. Needs your copy of StarCraft and the engine,
+as for scmjs bot ladder. Exits 1 when a game could not be played, 2 when the map has fewer than two starts.
+
+  scmjs map balance "(4)My Map.scx" --bots out/mybot.scmbot:p --races p --games 12 --parallel 4
+  scmjs map balance "(4)My Map.scx" --bots mybot.scmbot,mybot.scmbot --games 6`)
+  .action(async (file: string, o: { json?: boolean; bots: string; races: string; games: string; seeds?: string; frames: string; parallel?: string; out?: string; rush: boolean; timeout: string; starcraft?: string; engine?: string }) => {
+    const races = parseRaces(o.races);
+    const games = whole(o.games, "games", 1);
+    const seeds = o.seeds ? o.seeds.split(",").map((x) => x.trim()).filter(Boolean).map((x) => whole(x, "seeds")) : Array.from({ length: games }, (_, k) => k + 1);
+    const bots = o.bots.split(",").map((b) => b.trim()).filter(Boolean);
+    const { input, doc } = await openForEdit(file);
+    if (input.path === STDIO) throw new CliError("map balance plays the map from a file, not standard input.", null, 2);
+    const say = (l: string) => (o.json ? process.stderr.write(l + "\n") : print(l));
+    // A map in the original 1.00 form is played as Brood War (as bot ladder does), so that its replays play back;
+    // the rush's walks get a copy of their own, which map rush deletes when it ends.
+    const play = await gameMap(doc, input.path, input.name);
+    const rushPlay = o.rush ? await gameMap(doc, input.path, input.name) : null;
+    if (play.converted) say(pc.dim(`${input.name} is an original StarCraft map: it is played converted to Brood War.`));
+    let r;
+    try {
+      r = await runBalance(input.name, input.path, doc, {
+        bots, races, seeds, frames: whole(o.frames, "frames", 1), parallel: o.parallel === undefined ? undefined : whole(o.parallel, "parallel", 1), timeout: whole(o.timeout, "timeout", 1),
+        out: o.out, rush: o.rush, starcraft: o.starcraft, engine: o.engine, play: play.path, rushPlay: rushPlay?.path, live: say,
+      });
+    } finally { removeGameMap(play.path); if (rushPlay) removeGameMap(rushPlay.path); }
+    if (o.json) print(JSON.stringify(balanceJson(r), null, 2));
+    else print("", ...printBalance(r));
+    if (r.report.games.some((g) => !g.result.end || g.result.end.by === "desync")) process.exitCode = 1;
   });
 
 const test = map.command("test").description("runs the map's tests in the game: each scenario set up, played and checked, a replay of each that failed").argument("<map>").argument("[tests...]", "tests files (JSON); <map>.tests.json beside the map by default").addOption(json)

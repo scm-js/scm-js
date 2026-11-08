@@ -19,7 +19,10 @@ import { diffMaps, printDiff, revisionInput } from "./diff";
 import { doctorJson, doctorReport, printDoctor } from "./doctor";
 import { dumpMap, printDump } from "./dump";
 import { ANCHORS, ENCODINGS, parseAnchor, pruneStrings, resizeMap, setHeader, VERSIONS } from "./edit";
-import { exportStrings, exportTriggers, importStrings, importTriggers, writeBack } from "./exchange";
+import { exportStrings, exportTriggers, importStrings, importTriggers, writeBack, writeOutput } from "./exchange";
+import { optimizeJson, optimizeMap, printOptimize } from "./optimize";
+import { balanceJson, printBalance, runBalance } from "./balance";
+import { parseRaces } from "./ladder";
 import { expectKind, loadMapInput, loadReplayInput, readInput, type Input } from "./files";
 import { findInMap, KINDS, parseKinds, printHits } from "./find";
 import { issueLine, mapReport, printIssues, printMapInfo } from "./map";
@@ -28,7 +31,7 @@ import { mapFileFor, writeReplayMap } from "./replaymap";
 import { openGameFiles } from "./gamefiles";
 import { DEFAULT_PNG_SCALE, loadGraphics, previewPng, tilesetOf } from "./preview";
 import { printRun, runOnMap } from "./run";
-import { costJson, gameMap, printCost, printTrace, runMapInGame, traceJson, type MapRunOptions } from "./trace";
+import { costJson, gameMap, printCost, printTrace, removeGameMap, runMapInGame, traceJson, type MapRunOptions } from "./trace";
 import { CliError, pc, visible } from "./ui";
 
 /** Where a tool's words go while the server runs: standard error, since standard output is the protocol. */
@@ -95,7 +98,7 @@ const WIDTH = 140;
 export interface McpOptions { engine?: string; weigh?: string }
 
 /** What the client is told once, with the tool list: how the tools fit together. */
-export const INSTRUCTIONS = `scmJS: StarCraft: Brood War maps on this computer. Paths are files here, relative to the working directory. Start with map_info or map_dump to see what a map holds; map_check is Check Map (errors and warnings, as the editor's). Triggers and strings travel as text: map_triggers_export gives the trigger window's text form (https://docs.scmjs.dev/triggers/), which map_triggers_import takes back; strings are "<number><TAB><text>" lines. Tools that change a map write over it unless given "out"; they never renumber strings. Map text is never translated. map_preview shows the map as a picture, and map_trace and map_cost run it in the game itself; all three need a copy of StarCraft on this computer, and doctor says whether one is there and what to install if not. replay_map writes the map a replay was played on.`;
+export const INSTRUCTIONS = `scmJS: StarCraft: Brood War maps on this computer. Paths are files here, relative to the working directory. Start with map_info or map_dump to see what a map holds; map_check is Check Map (errors and warnings, as the editor's). Triggers and strings travel as text: map_triggers_export gives the trigger window's text form (https://docs.scmjs.dev/triggers/), which map_triggers_import takes back; strings are "<number><TAB><text>" lines. Tools that change a map write over it unless given "out"; they never renumber strings. Map text is never translated. map_preview shows the map as a picture, and map_trace and map_cost run it in the game itself; all three need a copy of StarCraft on this computer, and doctor says whether one is there and what to install if not. replay_map writes the map a replay was played on. map_optimize makes a map smaller without changing what the game plays (a dry run unless told to write); map_balance plays games on a melee map with the person's own bots to see whether its start locations are fair, which takes minutes.`;
 
 /**
  * The server with every tool registered, and their names; `connect` it to a transport (stdio for the command, in
@@ -228,6 +231,19 @@ export function createMcpServer(options: McpOptions = {}): { server: McpServer; 
     return ok(w ? [...lines, written(w)] : lines, { removed, dryRun: !!dryRun, written: w });
   }));
 
+  reg("map_optimize", {
+    title: "Make a map smaller",
+    description: "The map made smaller without changing what the game plays (scmjs map optimize): sounds nothing plays or lists, the sound list's entries for files the map lacks, other archive members nothing names, strings nothing refers to, then every member compressed again (PKWARE, which every version of the game opens, unless `compression` says zlib, which only Remastered opens). With `stripEditor` also the sections only editors read (ISOM, TILE, DD2, the sound list, switch names): the map plays the same but is harder to edit. TrigScript, Magenta and build files, the game's own members and sounds stored with ADPCM are kept; a built map keeps its scenario, an EUD map its strings. A dry run unless `write` is true: the steps, the bytes each saves and every removal.",
+    inputSchema: { path, write: z.boolean().optional().describe("write the result (over the map, or to out); a dry run otherwise"), stripEditor: z.boolean().optional(), compression: z.enum(["pkware", "zlib"]).optional(), keep: z.array(z.string()).optional().describe("archive members to keep though nothing names them; a name ending in \\ keeps a folder"), out },
+    annotations: { destructiveHint: true },
+  }, tool(async ({ path: file, write, stripEditor, compression, keep, out: to }) => {
+    const input = await readInput(file);
+    expectKind(input, "map");
+    const r = await optimizeMap(input.bytes, input.name, { stripEditor, compression, keep });
+    const w = write && r.after < r.before ? await writeOutput(r.bytes, to ?? input.path) : null;
+    return ok([...printOptimize(r, { dryRun: !write, written: w ? shown(w.path) : null, all: true }), ...(w ? [written(w)] : [])], optimizeJson(r, { dryRun: !write, written: w }));
+  }));
+
   reg("map_set", {
     title: "Map properties",
     description: `Scenario ▸ Map Properties: set the map's name, description, revision (${VERSIONS.join(", ")}) or text encoding (${ENCODINGS.join(", ")}); what is given is set, the rest left. <03> and the like in a name are the game's colour codes.`,
@@ -340,6 +356,32 @@ export function createMcpServer(options: McpOptions = {}): { server: McpServer; 
   }, tool(async (a, extra) => {
     const { input, doc, r, note } = await play("cost", a, extra);
     return ok([...note, ...printCost(input.name, doc.scenario, r, { all: !!a.all, width: WIDTH })], costJson(input.name, r));
+  }));
+
+  reg("map_balance", {
+    title: "Is the map fair to every start",
+    description: `Play games on a melee map (scmjs map balance) with the person's own BWAPI bots: one bot against the game's computer, or two bots both ways round, a seed a round. The game deals the start locations, so each game's replay is played back to read which start each side had and when one first lost a unit to the other. Per start location: games, wins, the win rate beside what the sides' own records predict, average length and first contact, the walk to the other starts, the main's minerals and gas; then a verdict. Takes minutes (a game is 10 to 60 seconds, several at once). ${needs.replace(" Takes a few seconds for the default run.", "")}`,
+    inputSchema: {
+      path,
+      bots: z.array(z.string()).min(1).max(2).describe("one or two .scmbot files on this computer; a race after a colon: mybot.scmbot:p"),
+      races: z.string().optional().describe("the races a side plays when it has none of its own: letters of z, t, p and r, r (random) by default"),
+      games: z.number().int().min(1).max(50).optional().describe("rounds, a seed each: 8 by default"),
+      frames: z.number().int().min(1000).max(50000).optional().describe("stop a game nobody has won after this many frames, 30,000 by default"),
+      parallel: z.number().int().min(1).max(8).optional().describe("games at once"),
+      starcraft: z.string().optional().describe("the folder of the person's StarCraft installation, when doctor did not find one in the usual places"),
+    },
+    annotations: { readOnlyHint: true },
+  }, tool(async (a) => {
+    const { input, doc } = await openMap(a.path);
+    const races = parseRaces(a.races ?? "r");
+    const playMap = await gameMap(doc, input.path, input.name), rushMap = await gameMap(doc, input.path, input.name);
+    try {
+      const r = await runBalance(input.name, input.path, doc, {
+        bots: a.bots, races, seeds: Array.from({ length: a.games ?? 8 }, (_, k) => k + 1), frames: a.frames ?? 30000, parallel: a.parallel,
+        starcraft: a.starcraft, engine: options.engine, play: playMap.path, rushPlay: rushMap.path, live: (line) => STDERR(visible(line)),
+      });
+      return ok(printBalance(r), balanceJson(r));
+    } finally { removeGameMap(playMap.path); removeGameMap(rushMap.path); }
   }));
 
   reg("doctor", {

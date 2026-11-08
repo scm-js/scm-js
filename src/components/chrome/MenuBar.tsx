@@ -46,6 +46,8 @@ import { useT } from "../../i18n/react";
 
 const REPO_URL = "https://github.com/scm-js/scm-js";
 const DOCS_URL = "https://docs.scmjs.dev";
+// The command line's install page: the download without Node, and the package managers.
+const CLI_DOCS_URL = "https://docs.scmjs.dev/cli/getting-started/#without-node";
 
 /* ── Menu model ─────────────────────────────────────────── */
 
@@ -516,6 +518,7 @@ function useMenus(): Menu[] {
         ...(isDesktop() ? [dlg(msg("Check for Updates…"), "update")] : []),
         dlg(msg("What's New…"), "whatsNew"),
         link(msg("Documentation"), DOCS_URL),
+        link(msg("Command Line…"), CLI_DOCS_URL),
         sep,
         // The whole of a bug report: the build, the game data source, the plugins and the
         // log. Report an Issue fills the form with it; this is for a log too long for a link.

@@ -5,7 +5,8 @@ first map, and then goes through each layer and dialog in turn. TrigScript, trig
 written as code, has [a guide of its own](trigscript.md); the technical side (file
 formats, game data, writing plugins, building from source) is covered in separate
 documents, listed in the [README](../README.md#documentation). Several tasks here also
-have a terminal form, in the [command line guide](cli.md).
+have a terminal form, in the [command line guide](cli.md); **Help ▸ Command Line…** opens
+its install page.
 
 > **Beta.** This editor needs to be extensively tested. Keep backups of maps you care about,
 > and check anything important in-game before you rely on it.

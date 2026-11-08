@@ -1,12 +1,7 @@
 # The `scmjs` command line
 
-<<<<<<< HEAD
-`cli/` is the npm package **`@scm-js/cli`** (its command is `scmjs`): `scmjs about | doctor | info | map info|check|open|new|generate|dump|find|fetch|set|resize|triggers|strings|sounds|diff|merge|build|run|unpack|pack|trace|cost|rush|test|preview |
-replay info|map|open|watch|export|share | plugin new|check|dev | bot new|init|build|update|run|ladder`, or `npx @scm-js/cli …`. npm refused the plain name `scmjs` on the first publish (2026-11-06,
-=======
 `cli/` is the npm package **`@scm-js/cli`** (its command is `scmjs`): `scmjs about | doctor | info | map info|check|open|new|generate|dump|find|fetch|set|resize|triggers|strings|sounds|diff|log|blame|merge|build|run|unpack|pack|trace|cost|rush|test [record]|preview|heatmap |
-replay info|open|watch | plugin new|check|dev | bot new|init|build|update|run|ladder`, or `npx @scm-js/cli …`. npm refused the plain name `scmjs` on the first publish (2026-11-06,
->>>>>>> origin/cli-map-heatmap
+replay info|map|open|watch|export|share | plugin new|check|dev | bot new|init|build|update|run|ladder`, or `npx @scm-js/cli …`. npm refused the plain name `scmjs` on the first publish (2026-11-06,
 E403 "too similar to scss, sockjs"), so the user chose the scope beside @scm-js/replay and @scm-js/plugin-api. The reader's page is `docs/cli.md`. The shape was the user's (2026-11-05): one command, a noun for
 each kind of thing (`map`, `replay`, `plugin`, `bot`), "an impressive UX tool … not overly engineered".
 
@@ -1415,7 +1410,6 @@ freed two of the 23 rows (a 24-row terminal keeps the globe on screen; `tests/cl
 description is the first rule (commander wraps a long one onto a second row, which the count sees), and a hidden
 command (`{ hidden: true }`: `completion`, `login`, `logout`, `help`) is the fallback.
 
-<<<<<<< HEAD
 ## A replay as a clip: `replay export` (`cli/src/export.ts`, `browser.ts`, `camera.ts`, `gif.ts`) — 2026-11-07
 
 `scmjs replay export <rep> [--out x.webm|.mp4|.gif] [--from --to m:ss] [--follow <player>|--at x,y|--all] [--speed]
@@ -1487,7 +1481,7 @@ command (`{ hidden: true }`: `completion`, `login`, `logout`, `help`) is the fal
   empties `--outDir` even outside the root: a staged `engine/` beside a rebuilt page vanished twice. scm-sim's
   `deploy-play.mjs` without `--upload` was refused by the auto-mode classifier here; the page was built with
   `vite build` + env and staged by hand (engine links + `dist-run/replay.mjs` + a `current.json`).
-=======
+
 ## Where things happened: `map heatmap` (`cli/src/heatmap.ts`, `heat.ts`) — 2026-11-07
 
 `scmjs map heatmap <map> <replays…|folders> [--what deaths|kills|buildings|paths] [--player n|name] [--until m:ss]
@@ -1701,5 +1695,3 @@ overview row. Docs: `docs/cli.md` "A map's history", "Who last changed what".
   with textconv does that); `map log --rev A...B` passes through to git, `map blame` refuses `...`.
 - **CLI strings are literals, not `t()`**: the i18n extractor reads `src/` only and no CLI module uses `t()` for its
   own words (plugin.ts's are the starter's text); followed that.
-
->>>>>>> origin/cli-map-heatmap

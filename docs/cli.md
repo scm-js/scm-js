@@ -1348,9 +1348,10 @@ of StarCraft and the engine](#commands-that-need-starcraft).
 ### Where things happened across many games
 
 `scmjs map heatmap map.scx replays/` plays every replay on that map in the game and draws
-where things happened as heat over the map's picture: where units died by default, or
-where they were killed, where buildings went up, or where the armies walked. Name the
-replays one by one or give folders; the `.rep` files in a folder are taken.
+where things happened as heat over the map's picture. By default that is where units died.
+It can also be where units were killed, where buildings went up, or where the armies
+walked. Name the replays one by one or give folders, and the `.rep` files in a folder are
+taken.
 
 ```sh
 scmjs map heatmap "Fighting Spirit.scx" replays/
@@ -1358,17 +1359,19 @@ scmjs map heatmap fs.scx replays/ --what buildings --out buildings.png
 scmjs map heatmap fs.scx replays/*.rep --what kills --player 1 --until 10:00
 ```
 
-Only replays played on this map count. A replay carries the map the game loaded, so it
-counts when that is the same map as the file, or a map with the same name and size (an
-earlier version of it, say); the others are listed as left out, with the map they were
-played on. `--force` takes them anyway. [`replay map`](#the-map-a-replay-was-played-on)
-gets you the map from one of the replays when you do not have the file.
+Only replays played on this map count. A replay carries the map the game loaded, so the
+replay counts when that is the same map as the file, or a map with the same name and size,
+such as an earlier version of it. The others are listed as left out, with the map they
+were played on, and `--force` takes them anyway.
+[`replay map`](#the-map-a-replay-was-played-on) gets you the map from one of the replays
+when you do not have the file.
 
 Each replay is played to its end, as [`replay watch`](#watching-a-replay-in-the-terminal)
-plays it, a few at once. A line says each one as it is done, with its races, its length
+plays it, a few at once. A line reports each one as it is done, with its races, its length
 and what it gave. A 35-minute game takes about 25 seconds. What each replay gave is kept
-in your cache folder by the replay's contents, so the next run plays only replays it has
-not seen; the other options (`--what`, `--player`, `--until`) need nothing played again.
+in your cache folder, keyed by the replay's contents, so the next run plays only the
+replays it has not seen. Changing `--what`, `--player` or `--until` needs nothing played
+again.
 
 | Option | What it does |
 | --- | --- |
@@ -1376,21 +1379,21 @@ not seen; the other options (`--what`, `--player`, `--until`) need nothing playe
 | `--what kills` | The same places, counted for the player who killed the unit; deaths with no killer are left out |
 | `--what buildings` | Where buildings were placed, a Drone's buildings and refineries on geysers included; what stood at the start is not |
 | `--what paths` | Where the armies walked: every second, each army unit that has moved to another tile. Workers are left out, or their mining would outshine everything |
-| `--player 2` | One player's: their number as the map's slots, or their name as the replays have it (`--player Flash`). For kills, the killer |
+| `--player 2` | One player's events, by number as the map's slots count them, or by name as the replays have it (`--player Flash`). For kills, that is the killer |
 | `--until 8:00` | Only what happened by then in each game |
-| `--out heat.png` | Writes a PNG at `--scale` pixels a tile, 4 by default, as `map preview` does; `--out -` to standard output |
+| `--out heat.png` | Writes a PNG at `--scale` pixels per tile, 4 by default, as `map preview` does. `--out -` writes it to standard output |
 | `--side-by-side` | The map as `map preview` draws it beside the heat |
-| `--parallel 2` | Replays played at once; by default half your processors, at most 4. Each takes about 750 MB of memory |
+| `--parallel 2` | How many replays are played at once: half your processors by default, at most 4. Each takes about 750 MB of memory |
 | `--json` | The counts per tile, the busiest first, and per unit type, with the replays taken and left out |
 
 The ground is drawn in grey so that no colour of the tileset reads as heat, with the
-mineral fields and geysers in grey and the start locations framed in white. The heat
+mineral fields and geysers in grey too and the start locations framed in white. The heat
 spreads each event over a tile or two and goes from dark violet where little happened to
-pale yellow where the most did. Under the picture is the count, the busiest tile and the
-units most counted. The terminal draws it as `map preview` does; `--width` sets its
+pale yellow where the most did. Under the picture are the count, the busiest tile and the
+units most counted. The terminal draws it as `map preview` does, and `--width` sets its
 columns.
 
-A replay the game cannot play is listed with the reason and the others still count; the
+A replay the game cannot play is listed with the reason, and the others still count. The
 command then exits with 1. It needs [your copy of StarCraft and the
 engine](#commands-that-need-starcraft).
 

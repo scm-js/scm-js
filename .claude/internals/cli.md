@@ -1,6 +1,6 @@
 # The `scmjs` command line
 
-`cli/` is the npm package **`@scm-js/cli`** (its command is `scmjs`): `scmjs about | doctor | info | map info|check|open|new|generate|dump|find|fetch|set|resize|triggers|strings|sounds|diff|log|blame|merge|build|run|unpack|pack|trace|cost|rush|test [record]|preview|heatmap |
+`cli/` is the npm package **`@scm-js/cli`** (its command is `scmjs`): `scmjs about | doctor | info | mcp | lsp | map info|check|open|new|generate|dump|find|fetch|set|resize|triggers|strings|sounds|diff|log|blame|merge|build|run|unpack|pack|trace|cost|rush|test [record]|preview|heatmap |
 replay info|map|open|watch|export|share | plugin new|check|dev | bot new|init|build|update|run|ladder`, or `npx @scm-js/cli …`. npm refused the plain name `scmjs` on the first publish (2026-11-06,
 E403 "too similar to scss, sockjs"), so the user chose the scope beside @scm-js/replay and @scm-js/plugin-api. The reader's page is `docs/cli.md`. The shape was the user's (2026-11-05): one command, a noun for
 each kind of thing (`map`, `replay`, `plugin`, `bot`), "an impressive UX tool … not overly engineered".
@@ -1409,6 +1409,100 @@ freed two of the 23 rows (a 24-row terminal keeps the globe on screen; `tests/cl
 `init [folder]` and `account show|login|logout` took. A new top-level row now needs a line freed again: a one-line
 description is the first rule (commander wraps a long one onto a second row, which the count sees), and a hidden
 command (`{ hidden: true }`: `completion`, `login`, `logout`, `help`) is the fallback.
+
+## TrigScript in a text editor: `lsp` (`cli/src/lsp.ts`, plugin `language.ts`) — 2026-11-07
+
+`scmjs lsp [--map <map|folder>]` is a Language Server Protocol server on stdio for TrigScript: diagnostics on
+open/change (250 ms debounce)/save, completion (+ resolve for signature and docs), hover, definition, document symbols.
+Hidden from the overview (the 23 rows, above); `scmjs help lsp` and docs/cli.md "TrigScript in your text editor".
+
+- **Where the language lives: the plugin**, `plugins/trigscript/language.ts` (`ScriptLanguage`, scm-js/plugin-trigscript#81;
+  needs a TrigScript release ≥ 4.2.0 vendored before this type-checks and builds — the pin bump is the merge step). It is a TypeScript `LanguageService` over the script laid out exactly as `compileScript` lays it out
+  (`trigscript.d.ts` from the map's names, `__trigscript__/<module>` for the stdlib, `__libraries__/<id>/…`, `lib.d.ts`
+  = the concatenated es2023 lib) with the compiler's options (`scriptCompilerOptions`, now exported and used by
+  `compileScript` itself), and `check()` = `compileScript(…, { sounds: false })`, so the errors *are* the build's.
+  Plain data, 1-based, no fs, `ts` passed in. Shared with Monaco so far: the options and `variableNote` (the hover of
+  a program's variable). Monaco keeps its own worker-side TS service (its layout is `node_modules/trigscript/…`); moving
+  the window onto `ScriptLanguage` in the compile worker is possible later, not done. The CLI file is only the protocol
+  and the file system.
+- **Trap: `paths` without `baseUrl` and an empty current directory.** `compileScript`'s host says `""`; module
+  resolution copes, but printing a type that names a library's module (a hover of `typeof import("waves/spawn")`) goes
+  through `getLocalModuleSpecifier`, which computes `getPathsBasePath(...) || baseUrl` → `undefined` → a TypeError
+  inside TypeScript. `language.ts` sets the internal `pathsBasePath: "."` on its copy of the options (`withBase`).
+  The compiler itself was left alone; an error message that prints such a type could hit the same thing.
+- **Which files are a script** (`scriptHomeOf`): the nearest folder above the file called `trigscript` is the script's
+  root, as `map unpack` writes the archive's `trigscript\` members; its map is the parent when that is an unpacked map
+  (`archive.json` or `staredit/scenario.chk`), else `--map`'s, else none (the fixed names). Without such a folder,
+  only `--map` makes a file a script: an unpacked map's own `trigscript/`, or for a map file the nearest folder above
+  with `main.ts`/`main.tsx`. Anything else gets nothing, so a client can attach the server to all TypeScript. The
+  files are read through the plugin's own `readFiles`/`readLibraries` over a synthetic member map (`trigscript\…`),
+  so the extensions and the `@libraries\<id>\library.json` rules are the build's; open documents override disk.
+  The map's names: `openMapBytes(scenario.chk)` + `mapNames` (build.ts) with the archive's member names from
+  `archive.json` (bytes not read; `soundList` needs names); re-read when the scenario's mtime/size changes. Location
+  boxes (tiles) go to the hover.
+- **Definitions outside the script's files** (stdlib, `trigscript.d.ts`, `lib.d.ts`, a `--map` file's library copies)
+  are written to `<tmpdir>/scmjs-lsp/<sha1(root)[:12]>/<virtual path>` and that file is answered; requests on those
+  files are routed back to their script (`shown`), so hover/definition work inside the stdlib. A library's copy in an
+  unpacked map is answered as the real file under `trigscript/@libraries/`.
+- **Protocol**: `vscode-languageserver` 11 + `vscode-languageserver-textdocument` 1.0.16, devDependencies bundled
+  in (+~450 KB: the bundle went 4.95 → 5.40 MB). `createConnection` gets a `StreamMessageReader/Writer`, not the
+  streams: given streams, the library calls `process.exit` when they end, which would kill a vitest worker in the
+  in-process test. The exit notification still exits (0 after shutdown); the command exits itself when stdin ends.
+  Their licence files are `License.txt`, which `scripts/lib/notices.mjs` did not look for (added).
+  Console goes to stderr as in `mcp`. One workspace per script root, made single-flight (an open and a request racing
+  had made two).
+- **Measured** (ums.scx unpacked, a script importing `trigscript/fog` and the example `waves` library): a check
+  ≈ 400–530 ms in the bundle (the first ~500, then ~350–450); `compileScript` alone ~200 ms warm for a small script
+  without the stdlib. Completion/hover/definition answer from the language service in a few ms.
+- **Tests**: `tests/cli-lsp.test.ts` speaks LSP (Content-Length frames) twice — in process over PassThrough pipes, and
+  to the built `cli/dist/scmjs.mjs` over stdio (skipped when not built; the child is spawned **without `VITEST*`**,
+  which main.ts reads as "imported by a test, do not run" — the first run hung on exactly that). Both skip when the
+  vendored plugin has no `language.ts`. Driven for real from **Vim 9.1** (`job_start` with `in_mode/out_mode: 'lsp'`,
+  headless): diagnostics, the fix in the buffer clearing them, completion after `locations.`, hovers, definitions into
+  `@libraries/waves/spawn.ts` and the cached stdlib, the outline, exit 0. Neovim is not installed here, so the
+  docs' Neovim/Helix snippets are unverified; the VS Code extension (`editors/vscode/` in the plugin) too.
+- **UX trap, documented**: VS Code's / `ts_ls`'s own TypeScript also checks these files without TrigScript's
+  declarations and calls `program`, `units` … unknown. Docs say to set `typescript.validate.enable: false` for the maps
+  folder (VS Code), or keep `ts_ls` off it. A later step could have `map unpack` write a `tsconfig.json` and the
+  declarations into the folder so a plain TypeScript server agrees.
+
+
+## `scmjs dap` — designed, not built (2026-11-07)
+
+Asked for as the stretch after `lsp`: a Debug Adapter Protocol server that runs a map in the engine with breakpoints on
+triggers or TrigScript lines, a step of a frame / a pass, and variables (switches, death counts, a program's
+variables). **Not started in code: the engine side is scm-sim work.** What exists and what is missing:
+
+- **The map runner** (`trace.ts` → scm-sim `src/exact/runMap.ts`, fetched by `engine.ts`) is one-way: argv in, JSON lines
+  out (start, progress, end with the folded trace/cost). It has no input channel, so it cannot pause, step, stop at a
+  trigger or answer a memory read. The play page can (`scmjs.play.control` pause/resume/step/pass/seek and the
+  per-pass `scmjs.play.triggers` lines, plugin-scm-sim `src/debug.ts`, scm-sim `web/handoff.ts`, live-plan D2), but
+  only over `postMessage`.
+- **TrigScript's debugger** (plugin `compiler/gameDebug.ts`, `debugModel.ts`) records one *test* run in the lifted game
+  through a `DebugHost` (a `GameHandle` with `keep/restore` and the cost and memory taps) into a `DebugRecording`, and
+  `DebugCursor` walks it forward and back by step/line/frame with breakpoints (`DebugPlace`), watches and the
+  programs' variables (`DebugProgram`). The host is the play page's; no Node runner implements `DebugHost`.
+
+The design, in two slices, each needing a scm-sim runner change first:
+
+1. **TrigScript lines (recorded).** scm-sim: a `debugRunner` (or `runMap --debug-test <id>`) that loads TrigScript's
+   `dist/gametest.js` beside the lifted game, implements `DebugHost` the way the play page does, runs one test and
+   writes the `DebugRecording` (typed arrays as base64) as its end line. scmjs: `dap.ts` = `compileScript` with tests
+   (the `modules` it returns are what the runner runs), the runner started as `trace.ts` starts the map runner, then a
+   `DebugCursor` over the record answering DAP: `setBreakpoints` → `DebugPlace`s (file = the script's path in an
+   unpacked map, as `lsp.ts` resolves it); `next`/`stepIn` → the cursor's step; a custom "step frame" request → the
+   next frame; `stepBack`/`reverseContinue` come free (`supportsStepBack`: the record goes both ways); `threads` = one per
+   program; `scopes`/`variables` = `DebugProgram.values`, plus the frame's text lines (`shown`). Death counts and
+   switches are not in the script's memory span the record keeps: the runner would add a per-frame snapshot of the
+   deaths table (`DEATHS_TABLE_ADDRESS`) and the switch dwords, or the record a "game reads" list.
+2. **Triggers (live).** scm-sim: the map runner reads JSON lines on stdin with the play page's control set
+   (`pause|resume|step|pass|seek`) and writes the page's per-pass triggers line. scmjs: `threads` = the trigger
+   owners (P1–P8), a stack frame = the trigger row being run, function breakpoints = trigger names or `#row`, source
+   breakpoints = lines of `map triggers export`'s text (the row each starts), `step` = a frame, a custom
+   `stepPass`; variables = switches and death counts read through a `read` control message.
+
+Both are DAP over stdio with the same framing as LSP (`Content-Length`), so `vscode-jsonrpc`'s stream reader/writer,
+already bundled for `lsp`, would carry it (DAP is not JSON-RPC, but the framing helpers or a 30-line reader do).
 
 ## A replay as a clip: `replay export` (`cli/src/export.ts`, `browser.ts`, `camera.ts`, `gif.ts`) — 2026-11-07
 

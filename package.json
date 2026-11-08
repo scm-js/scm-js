@@ -71,6 +71,8 @@
     "picocolors": "^1.1.1",
     "vite": "^8.2.2",
     "vitest": "^4.1.11",
+    "vscode-languageserver": "^11.0.0",
+    "vscode-languageserver-textdocument": "^1.0.16",
     "zod": "^4.6.7"
   },
   "engines": {

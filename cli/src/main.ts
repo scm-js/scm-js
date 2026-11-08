@@ -32,6 +32,7 @@ import { findInMap, KINDS, parseKinds, printHits } from "./find";
 import { DEFAULT_LIMIT, fetchJson, fetchMap, mapIdFrom, MAX_LIMIT, parseLimit, printFetched, printSearch, searchJson, searchMaps } from "./fetch";
 import { issueLine, mapReport, printIssues, printMapInfo, type MapReport } from "./map";
 import { serveStdio } from "./mcp";
+import { serveLsp } from "./lsp";
 import { openInScmjs, playInLobby } from "./open";
 import { checkPlugin, devPlugin, newPlugin, printPluginCheck, type PluginCheck } from "./plugin";
 import { printReplayInfo, replayReport } from "./replay";
@@ -1352,6 +1353,18 @@ computer, relative to the folder the tool started it in. Claude Code, in your ma
 Anything else takes the same thing as JSON:
   { "mcpServers": { "scmjs": { "command": "npx", "args": ["-y", "@scm-js/cli", "mcp"] } } }`)
   .action(async () => { await serveStdio(); });
+
+// Hidden from the overview, which holds 23 lines (banner.ts): an editor starts it, and docs/cli.md says how.
+program.command("lsp", { hidden: true }).description("a TrigScript language server, for text editors").helpGroup("This tool:")
+  .option("--map <map>", "the map that names a script outside an unpacked map: a map file, or a folder map unpack wrote")
+  .option("--stdio", "speak on standard input and output (the default; editors pass it)")
+  .addHelpText("after", `
+Speaks the Language Server Protocol on standard input and output, so VS Code, Neovim, Helix, Zed or any editor
+with an LSP client shows a TrigScript script's errors as map build would find them, completes the map's locations,
+units and switches, and goes to a definition in the standard library or a library. A script is the trigscript/
+folder of a map scmjs map unpack wrote; the map's names come from the scenario beside it. docs.scmjs.dev/cli has
+the setup for each editor. Needs TypeScript, as map build does.`)
+  .action(async (o: { map?: string }) => { await serveLsp({ map: o.map }); });
 
 program.command("about").description("this version, any newer one, and links").helpGroup("This tool:").addOption(json)
   .action(async (o: { json?: boolean }) => {

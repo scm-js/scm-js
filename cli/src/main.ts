@@ -494,11 +494,17 @@ is renumbered, so what the triggers hold stays right; blank slots at the end of 
 map.command("unpack").description("a map's archive as a folder: the scenario, its sounds, scripts and other files").argument("<map>").addOption(json)
   .option("--out <folder>", "the folder to write; by default one named after the map, beside it")
   .option("--list", "list the archive's members and write nothing")
+  .option("--text", "the scenario as a folder of text files (scenario/), for git, instead of staredit/scenario.chk")
   .addHelpText("after", `
 Each member becomes a file at its archive path (staredit/scenario.chk, staredit/wav/…, trigscript/…), and
 ${MANIFEST_FILE} records the map's name, how it was stored and the members without a name, so that scmjs map pack
-puts the archive back together as it was.`)
-  .action(async (file: string, o: { json?: boolean; out?: string; list?: boolean }) => {
+puts the archive back together as it was.
+
+With --text the scenario is written as text instead: scenario/map.json (size, tileset, players, forces),
+terrain.txt, units.tsv, locations.tsv, strings.txt, triggers.txt and the rest, and the sections the editor does
+not model as bytes under scenario/sections/. Edit the text and scmjs map pack builds the map from it; an
+untouched folder packs back into the same scenario, byte for byte. The scenario/ folder is replaced each time.`)
+  .action(async (file: string, o: { json?: boolean; out?: string; list?: boolean; text?: boolean }) => {
     const input = await readInput(file);
     expectKind(input, "map");
     if (o.list) {
@@ -510,9 +516,17 @@ puts the archive back together as it was.`)
     }
     const base = input.path === STDIO ? "stdin" : input.path;
     const dir = o.out ?? base.replace(/\.(scm|scx|chk)$/i, "") + (/\.(scm|scx|chk)$/i.test(base) ? "" : "-unpacked");
-    const r = await unpackMap(input.bytes, input.name, dir);
-    if (o.json) { print(JSON.stringify({ file: input.name, dir: r.dir, files: r.files, bytes: r.bytes, stored: r.stored, manifest: r.manifest }, null, 2)); return; }
-    print(`${mark.ok} ${pc.bold(input.name)}: ${plural(r.files, "file")}${r.stored ? pc.dim(` (${r.stored} without a name)`) : ""}${dot}${size(r.bytes)}${dot}${pc.dim("→")} ${pc.cyan(relative(process.cwd(), r.dir) || ".")}`, ...r.manifest.problems.map((p) => `${mark.warn} ${p}`));
+    const r = await unpackMap(input.bytes, input.name, dir, { text: !!o.text });
+    if (o.json) { print(JSON.stringify({ file: input.name, dir: r.dir, files: r.files, bytes: r.bytes, stored: r.stored, manifest: r.manifest, text: r.text }, null, 2)); return; }
+    const t = r.text;
+    const sections = (names: string[]) => names.map((n) => n.trim()).join(" ");
+    print(`${mark.ok} ${pc.bold(input.name)}: ${plural(r.files, "file")}${r.stored ? pc.dim(` (${r.stored} without a name)`) : ""}${dot}${size(r.bytes)}${dot}${pc.dim("→")} ${pc.cyan(relative(process.cwd(), r.dir) || ".")}`,
+      ...(t ? [
+        `  ${pc.dim("Scenario as text")}  ${plural(t.text.length + t.layout.length + t.records.length, "section")}${dot}${size(t.size)} in ${plural(t.files, "file")}`,
+        ...(t.layout.length || t.records.length ? [`  ${pc.dim("Bytes kept beside")}  ${sections([...t.layout, ...t.records])} ${pc.dim("(used while their text is unchanged)")}`] : []),
+        ...(t.bytes.length ? [`  ${pc.dim("Kept as bytes")}     ${t.bytes.map((b) => `${b.name.trim()}${pc.dim(` (${b.why})`)}`).join(", ")}`] : []),
+      ] : []),
+      ...r.manifest.problems.map((p) => `${mark.warn} ${p}`));
   });
 map.command("pack").description("the folder scmjs map unpack wrote, back into a map file").argument("<folder>").addOption(json)
   .option("--out <map>", `the file to write; by default the name ${MANIFEST_FILE} records, beside the folder`)
@@ -520,12 +534,13 @@ map.command("pack").description("the folder scmjs map unpack wrote, back into a 
   .addHelpText("after", `
 Every file in the folder goes in: the ones ${MANIFEST_FILE} names at their archive paths, and any added since at the
 path they have in the folder. The archive is compressed and encrypted as the map was, and written without a file list
-when the map had none. The packed file is opened as a map before it is written.`)
+when the map had none. A folder map unpack --text wrote has its scenario built from the text in scenario/. The packed
+file is opened as a map before it is written.`)
   .action(async (dir: string, o: { json?: boolean; out?: string; compression?: string }) => {
     if (o.compression && !["none", "pkware", "zlib"].includes(o.compression)) throw new CliError(`--compression takes none, pkware or zlib, not "${o.compression}"`, null, 2);
     const r = await packMap(dir, { out: o.out ?? null, compression: o.compression as "none" | "pkware" | "zlib" | undefined });
     if (o.json) { print(JSON.stringify(r, null, 2)); return; }
-    print(`${mark.ok} ${pc.bold(relative(process.cwd(), r.path) || r.path)}: ${plural(r.members + 1, "member")}${r.stored ? pc.dim(` (${r.stored} without a name)`) : ""}${r.added.length ? `${dot}${plural(r.added.length, "file")} added: ${r.added.join(", ")}` : ""}${dot}${r.compression}${r.encrypted ? ", encrypted" : ""}${dot}${size(r.bytes)}`);
+    print(`${mark.ok} ${pc.bold(relative(process.cwd(), r.path) || r.path)}: ${plural(r.members + 1, "member")}${r.fromText ? pc.dim(" (the scenario from text)") : ""}${r.stored ? pc.dim(` (${r.stored} without a name)`) : ""}${r.added.length ? `${dot}${plural(r.added.length, "file")} added: ${r.added.join(", ")}` : ""}${dot}${r.compression}${r.encrypted ? ", encrypted" : ""}${dot}${size(r.bytes)}`);
   });
 
 const sounds = map.command("sounds").description("a map's sounds, listed or written out as files")

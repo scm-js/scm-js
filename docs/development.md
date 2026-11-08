@@ -401,9 +401,10 @@ The suites open two sets of map files:
   disagree: run `npm run test:maps` and commit the result. Only generated maps go here.
 - **`fixtures/maps/`** holds Blizzard's own maps, on a machine that has them. The suites
   about terrain, doodads and what StarEdit itself writes need these, the extracted data in
-  `public/`, or both, and skip silently when the files are absent. CI has neither, so a
-  green CI run has not exercised them. Run them locally before touching a tileset decoder,
-  the doodad code, the isometric brush or anything under `src/formats/`.
+  `public/`, or both, and skip when the files are absent. CI has neither, so a green CI
+  run has not exercised them; the CI run's Summary page on GitHub lists every suite that
+  skipped, by name. Run them locally before touching a tileset decoder, the doodad code,
+  the isometric brush or anything under `src/formats/`.
 
 Two suites are worth knowing about:
 
@@ -702,7 +703,7 @@ ruleset.
 ## Docs site and screenshots
 
 [docs.scmjs.dev](https://docs.scmjs.dev) is built by `npm run build:docs`. The guides are
-the eleven `docs/*.md` files, split at their `##` headings into pages, with the `###`
+the thirteen `docs/*.md` files, split at their `##` headings into pages, with the `###`
 beneath as each page's contents. The API reference is generated from the bundled plugin
 typings, so a doc comment in `src/plugins/api.ts` is a paragraph on the site.
 
@@ -775,7 +776,7 @@ util-linux's `script`, so that picture is taken on Linux.
 
 ## Contributing
 
-- **Keep the documents current.** The eleven guides under `docs/` are the documentation
+- **Keep the documents current.** The thirteen guides under `docs/` are the documentation
   site and `README.md` is the repository's front page; a behaviour change that is not in
   them is undocumented. Write them for their readers, with `src/` paths only in a guide's
   closing *In the source* section. Keep the matching note in `.claude/internals/` in step
@@ -788,9 +789,10 @@ util-linux's `script`, so that picture is taken on Linux.
   adapted algorithms and tables, an entry there naming the source and licence, and the
   original notice kept.
 - **Run what CI runs**: `npm run verify` runs lint, the tests, the build and the browser
-  tests, and ends with a summary for the pull request of what passed and what could not
-  run on your machine. With the game data and fixture maps on disk the real-data suites
-  run too, and that is the run that counts for anything under `src/formats/`.
+  tests, and ends with a summary for the pull request: what passed, each test suite that
+  skipped (by file and name, with how many tests), and what could not run on your machine
+  at all. With the game data and fixture maps on disk the real-data suites run too, and
+  that is the run that counts for anything under `src/formats/`.
 - **Plugin API changes are additive.** `PLUGIN_API_VERSION` stays where it is for an
   addition. Document the addition in `docs/plugins.md` and with a doc comment in
   `src/plugins/api.ts`, which the reference is generated from. The example plugin at

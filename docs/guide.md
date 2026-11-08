@@ -2,13 +2,25 @@
 
 This guide is for map makers. It starts with getting the editor running, walks through a
 first map, and then goes through each layer and dialog in turn. TrigScript, triggers
-written as code, has [a guide of its own](trigscript.md); the technical side — file
-formats, game data, writing plugins, building from source — has documents of its own,
-listed in the [README](../README.md#documentation). Several tasks here also have a
-terminal form, in the [command line guide](cli.md).
+written as code, has [a guide of its own](trigscript.md); the technical side (file
+formats, game data, writing plugins, building from source) is covered in separate
+documents, listed in the [README](../README.md#documentation). Several tasks here also
+have a terminal form, in the [command line guide](cli.md).
 
 > **Beta.** This editor needs to be extensively tested. Keep backups of maps you care about,
 > and check anything important in-game before you rely on it.
+
+You do not need to read all of it. Pick the path that matches what you came to do:
+
+- **A first melee map.** [Getting started](#getting-started) to get the editor running,
+  then [Your first map](#your-first-map), which takes a blank map to a playable game in
+  six steps.
+- **A first scripted scenario.** [Your first map](#your-first-map) for the ground and the
+  bases, then [Triggers](#triggers) to write the rules in the Trigger Editor, or
+  TrigScript's [Quick start](trigscript.md#quick-start) to write them as code. Check them
+  with [Check Map](#check-map) and play them with [Test Map](#test-map).
+- **An existing project from SCMDraft 2.** [Coming from SCMDraft
+  2](#coming-from-scmdraft-2) says what carries over and what works differently.
 
 ## Getting started
 
@@ -134,10 +146,10 @@ in its own tab* in Preferences ▸ General; Open and New then replace the open m
 
 Every layer has its own selection and its own palette. Undo is Ctrl+Z and redo Ctrl+Y. The
 history is two hundred steps deep and shared across all the layers, so a terrain stroke
-and the units it stranded come back together. A dialog — player settings, triggers,
-strings — is its own OK / Apply / Cancel transaction, and each OK or Apply that changed
-something is one more undo step ("Edit triggers", "Edit settings"), in the same history as
-the strokes around it.
+and the units it stranded come back together. In a dialog such as Player Settings, the
+triggers or the strings, nothing changes until OK or Apply, and each OK or Apply that
+changed something is one more undo step ("Edit triggers", "Edit settings"), in the same
+history as the strokes around it.
 
 ## Classic or Remastered graphics
 
@@ -187,15 +199,15 @@ covered in more depth in the sections that follow.
 
 ### 1. Make the map
 
-Ctrl+N opens New Scenario. Pick a tileset — each is shown as its own ground — a size, and
-how many players. The terrain list under the size is what the whole map is filled with,
-and the preview shows the result at its real scale. *Place automatically* (off by default)
-lays down one start location per player in a ring; tick it for this map.
+Ctrl+N opens New Scenario. Pick a tileset (each is shown as a sample of its ground), a
+size, and how many players. The terrain list under the size is what the whole map is
+filled with, and the preview shows the result at its real scale. *Place automatically*
+(off by default) lays down one start location per player in a ring; tick it for this map.
 
 ![The New Scenario dialog](images/new-scenario.webp)
 
-Give the map a name and a description — both are what players see in the game lobby — and
-press Create.
+Give the map a name and a description, which players see in the game lobby, and press
+Create.
 
 ### 2. Shape the ground
 
@@ -262,7 +274,7 @@ as you edit.
 
 Ctrl+S saves. A new map opens the Save dialog the first time, where the name and the file
 format are chosen; `.scx` is a Brood War map. From then on Ctrl+S writes the file in place
-(Chrome, Edge, the desktop app) or downloads it (Firefox, Safari) — the notice at the
+(Chrome, Edge, the desktop app) or downloads it (Firefox, Safari); the notice at the
 bottom right says which.
 
 To try the map, press Ctrl+F5 (Tools ▸ Test Map). The game cannot be handed a map from the
@@ -274,6 +286,54 @@ Map](#test-map).
 
 That is a playable melee map. Triggers, briefings, custom unit settings and everything a
 Use Map Settings map needs are in the sections below.
+
+## Coming from SCMDraft 2
+
+Most of what you know from SCMDraft 2 applies here. This section covers what carries over,
+what is in a different place, and what to check before you move a map you care about.
+
+### What carries over
+
+- **Your maps.** Open the `.scx`, `.scm` or `.chk` file as it is; there is nothing to
+  convert. On save the editor rewrites only the parts of the file that changed (unless you
+  choose *Smallest that plays* when saving): your edits, and any fixes the Repair plugin
+  made to a damaged map when it opened (see [Damaged and protected
+  maps](#damaged-and-protected-maps)). Everything else, including sections and archive
+  files it does not understand, is saved exactly as it was.
+- **Text triggers.** The Text Trigger Editor uses SCMDraft's TrigEdit syntax, so trigger
+  text can be pasted in either direction. It is a plugin that starts off: turn on TrigEdit
+  in Plugins ▸ Manage Plugins… (see [The Text Trigger Editor](#the-text-trigger-editor)).
+- **`.trg` files.** File ▸ Import and Export read and write SCMDraft's `.trg` format. A
+  `.trg` stores string numbers rather than text, so use it only between copies of the same
+  map; use text triggers between different maps (see [Importing, exporting and checking
+  triggers](#importing-exporting-and-checking-triggers)).
+- **Undo depth.** The history keeps 200 steps by default, as SCMDraft does. You can change
+  this in Preferences.
+
+### What is different
+
+- **Layers have single-key shortcuts.** `T D U S L F C` switch between Terrain, Doodads,
+  Units, Sprites, Locations, Fog of War and Cut / Copy / Paste, and `[` and `]` change the
+  brush size. Every command can be given other keys on Preferences ▸ Hotkeys (see
+  [Keyboard and preferences](#keyboard-and-preferences)).
+- **Dialogs are in the undo history.** Each OK or Apply in Player Settings, the Trigger
+  Editor and the other dialogs is one undo step, in the same history as your terrain
+  strokes. A resize and a tileset change are one step each too.
+- **Saving depends on where the editor runs.** The desktop app and Chrome or Edge save
+  over the file you opened; the desktop app copies the old file to a `.bak` first. Firefox
+  and Safari download every save instead (see [Saving](#saving)).
+- **Plugins are different.** SCMDraft's plugins are Windows programs and do not run here.
+  scmJS has its own plugins, several of them on by default (see [Plugins](#plugins)).
+- **Symmetry has limits.** It does not mirror the Blend brush or pasting, and the Tile
+  brush does not flip edge tiles (see [What it does not do](#what-it-does-not-do)).
+
+### Before you move a project
+
+- Keep a copy of the map as SCMDraft last saved it.
+- Open the map and run [Check Map](#check-map). It lists what the game would refuse or
+  silently drop, which is worth knowing before you change anything.
+- Make one small change, save, and play the map in the game. Then open the saved file in
+  SCMDraft and check that SCMDraft still opens it as you expect.
 
 ## Terrain
 
@@ -316,9 +376,9 @@ editor's work.
   afterwards, or for ground under a doodad.
 - **Tile** is for the pieces the isometric brush will not give you: a single cliff tile, a
   doodad's tile, a corner the cliff sets do not have.
-- **Blend** is for joins the cliff sets never had — dirt into a doodad's base, one edge
-  set into another, a hand-laid shoreline. Click a tile to make it the anchor, and the
-  palette lists for each side the tiles whose opposite edge continues it, best seam first.
+- **Blend** is for joins the cliff sets never had: dirt into a doodad's base, one edge set
+  into another, a hand-laid shoreline. Click a tile to make it the anchor, and the palette
+  lists for each side the tiles whose opposite edge continues it, best seam first.
 
 These three leave the isometric record alone.
 
@@ -401,13 +461,13 @@ scrolls to the doodad you picked. Clearing the search (✕ or Esc) opens the pic
 category, so it stays in view; choosing a category from the list leaves the search and
 shows that category instead.
 
-A placed doodad stays whole — its tiles, its record and any canopy or door overlay — and
-removing one restores the ground underneath. When you want the tiles without the doodad —
-a ramp to touch up piece by piece, a cliff edge to paint into — right-click it and choose
-*Convert Doodad to Terrain* (the Properties panel has the same button). The tiles stay,
-the doodad goes, and an overlay stays on as an ordinary sprite. From then on the Terrain
-layer treats the cells as ground. *Place as terrain* in the palette does the same at
-placement, for ramps and cliff pieces you mean to work over by hand.
+A placed doodad stays whole (its tiles, its record and any canopy or door overlay), and
+removing one restores the ground underneath. When you want the tiles without the doodad,
+such as a ramp to touch up piece by piece or a cliff edge to paint into, right-click it
+and choose *Convert Doodad to Terrain* (the Properties panel has the same button). The
+tiles stay, the doodad goes, and an overlay stays on as an ordinary sprite. From then on
+the Terrain layer treats the cells as ground. *Place as terrain* in the palette does the
+same at placement, for ramps and cliff pieces you mean to work over by hand.
 
 ## Units
 
@@ -508,22 +568,22 @@ actions that look for units there see nothing, while a unit created there still 
 its centre. The map draws an inverted location with a dashed edge, and dragging one of its
 handles makes it an ordinary location again.
 
-A map has a fixed number of location slots — 64 in StarCraft 1.00 maps, 255 in hybrid and
+A map has a fixed number of location slots: 64 in StarCraft 1.00 maps, 255 in Hybrid and
 Brood War ones. A new location takes the lowest free slot, deleting one empties it, and
 triggers keep pointing at the slot they named.
 
-The 64th slot, numbered 63 in the editor, which counts slots from 0, is **Anywhere**, the
-location every trigger can pick, and the game and other editors depend on it covering
+The 64th slot is **Anywhere** (the editor counts slots from 0, so it shows as 63). It is
+the location every trigger can pick, and the game and other editors depend on it covering
 exactly the map. It is pinned at the top of the list with a lock, never drawn, never
 picked by a click, and cannot be moved, renamed or deleted. If a map's Anywhere has gone
 missing or no longer matches the map, the editor offers to put it back.
 
-A map built with euddraft (eudplib's build) has no readable locations in the file. Its
-loader is stored in the location table, scrambled, and the game puts the real locations
-back when the map starts. Drawn, those slots would cover the whole map, so the editor
-hides locations when it opens such a map and says so in a notice. Its *Show* button or the
-Locations eye brings them back. The next map with real locations shows them again, unless
-you have turned them on or off yourself in between.
+A map built with euddraft (eudplib's build) has no readable locations in the file.
+euddraft stores its loader in the location table, scrambled, and the game puts the real
+locations back when the map starts. If drawn, those slots would cover the whole map, so
+the editor hides locations when it opens such a map and says so in a notice. Its *Show*
+button or the Locations eye brings them back. The next map with real locations shows them
+again, unless you have turned them on or off yourself in between.
 
 ## Fog of war
 
@@ -565,17 +625,17 @@ different tileset is refused, since tile numbers mean something else there, whil
 objects still paste. The clip survives File ▸ Open, which is how a base moves between
 maps.
 
-A piece worth keeping past this map — a ramp, a bridge, a cliff corner — can be saved as a
-*stamp* (Edit ▸ Save as Stamp…, or the right-click menu on the marked area) and laid down
-on any later map from Tools ▸ Stamp Library…; see [Plugins](#plugins).
+A piece worth keeping for other maps, such as a ramp, a bridge or a cliff corner, can be
+saved as a *stamp* (Edit ▸ Save as Stamp…, or the right-click menu on the marked area) and
+laid down on any later map from Tools ▸ Stamp Library…; see [Plugins](#plugins).
 
 ## Triggers
 
 Triggers turn a map into a scenario: *when* these conditions hold, *for* these players,
 *do* these actions. A Use Map Settings map is built from them. A melee game ignores the
 map's triggers and applies its own rules, so a melee map needs none. (Blizzard's melee
-maps carry the three standard ones — defeat, victory, starting resources — for anyone who
-plays them as Use Map Settings.)
+maps carry the three standard triggers, for defeat, victory and starting resources, for
+anyone who plays them as Use Map Settings.)
 
 Several editors work on the same list of triggers, and you can switch between them freely:
 
@@ -603,15 +663,15 @@ actions.
 ![The Trigger Editor on Big Game Hunters' three melee triggers](images/trigger-editor.webp)
 
 The Players tab offers the owners the game hands triggers to: Players 1–8, All Players and
-the four forces. A trigger ticked for nothing else never runs, so the other groups (Player
-9–12, Current Player, Foes, Allies and the rest, which are arguments rather than owners)
-only show when a trigger already has one ticked, to be cleared.
+the four forces. A trigger ticked only for other groups never runs, so those groups
+(Player 9–12, Current Player, Foes, Allies and the rest, which are arguments rather than
+owners) only show when a trigger already has one ticked, so that it can be cleared.
 
 Every condition and action the game has is there, except that *Mission Briefing* is
 offered only in briefings, since in a trigger it is never true. Each argument gets a
-widget of its kind — a player pick, a unit type list, a location list, a number, a text
-box with the colour codes — and any value the lists do not include can still be typed as a
-raw number, which is how EUD values and unusual unit ids get in. An item can be disabled
+control to suit it (a player pick, a unit type list, a location list, a number, a text box
+with the colour codes), and any value the lists do not include can still be typed as a raw
+number, which is how EUD values and unusual unit ids get in. An item can be disabled
 without deleting it; a disabled one is kept in the file and skipped by the game. *Preserve
 trigger* is the flag that keeps a trigger firing more than once.
 
@@ -657,7 +717,9 @@ argument lists the slots by what they set and opens this editor on one.
 
 ### EUD
 
-For EUD work, the player pick next to a Deaths condition or Set Deaths action has an *EPD*
+An EUD trigger uses a player or unit value outside the game's tables to reach other parts
+of the game's memory ([EUD](triggers.md#eud) in the trigger reference has the details).
+For this, the player pick next to a Deaths condition or Set Deaths action has an *EPD*
 box: type a memory address and it becomes the player value that reaches it through the
 deaths table, and a raw value shows which address it reaches. Check Map points out the raw
 values so they are not mistaken for errors.
@@ -707,9 +769,9 @@ TrigScript has [a guide of its own](trigscript.md):
 
 ## Scenario settings
 
-The Scenario menu holds the map's own tables. Each dialog is its own OK / Apply / Cancel
-transaction, and what an OK or Apply wrote is one undo step: Ctrl+Z after closing the
-dialog takes the whole of it back, and Ctrl+Y puts it on again.
+The Scenario menu holds the map's own tables. Nothing in a dialog changes the map until OK
+or Apply, and what an OK or Apply wrote is one undo step: Ctrl+Z after closing the dialog
+takes the whole of it back, and Ctrl+Y puts it on again.
 
 ### Map Properties, Players, Forces, Colours
 
@@ -722,7 +784,9 @@ Changing the tileset lays the terrain again with a terrain you pick — tile num
 something else in every tileset — and drops the doodads, while units, sprites, locations,
 fog and triggers stay. You can also keep the tile numbers, to see what they draw in the
 new tileset. **Resize / Crop Map…** grows or trims the map about a corner or the centre.
-Both clear the undo history.
+Each is one undo step: Ctrl+Z puts back the old size or tileset, with the terrain, doodads
+and units the change removed. (On a shared map, both clear everyone's undo history
+instead.)
 
 ![Player Settings](images/player-settings.webp)
 
@@ -746,9 +810,10 @@ shows depends on the map's revision:
   colours from its own colour table, which the editor writes whenever a colour is not the
   slot's own.
 
-In Remastered, a custom RGB gives the player any colour, those ten included. Random and
-the player's own choice both show as Random in the lobby, the player's choice as a list
-the player can change, and a player left on Random gets a different colour each game.
+In Remastered, a custom RGB gives the player any colour, including the ten past the first
+twelve. Random and the player's own choice both show as Random in the lobby; with the
+player's own choice, it is a list the player can change. A player left on Random gets a
+different colour each game.
 
 ![Player Colors](images/player-colors.webp)
 
@@ -771,10 +836,10 @@ you untick it.
 
 ![The String Editor](images/string-editor.webp)
 
-Every piece of text a map carries — its name, the force names, location names, every
-trigger message — is a numbered string, and the **String Editor** lists them all with
-where each is used. Edits keep their number, so triggers and locations keep pointing where
-they did; *Delete unused* clears out what nothing refers to.
+Every piece of text a map carries (its name, the force names, location names, every
+trigger message) is a numbered string, and the **String Editor** lists them all with where
+each is used. Edits keep their number, so triggers and locations keep pointing where they
+did; *Delete unused* clears out what nothing refers to.
 
 The row of buttons inserts the game's colour codes, each drawn in the colour it produces,
 and the preview under the box shows the string the way the game draws it. The same codes
@@ -794,7 +859,7 @@ previews follow both.
 
 **File ▸ Export ▸ Strings (.txt)…** writes every string to a numbered text file, and
 **File ▸ Import ▸ Strings (.txt)…** reads such a file back, replacing the strings by
-number — a way to translate or proofread a map's text outside the editor.
+number. That is a way to translate or proofread a map's text outside the editor.
 
 **Text that looks garbled.** If a map's text opens as nonsense, often Korean or Japanese
 text in an older map, the editor guessed its encoding wrong. A map file does not say what
@@ -1002,8 +1067,9 @@ away underneath and can be left alone:
   zlib is smaller but only Remastered reads it (StarCraft 1.16.1 cannot open such a map);
   none is the largest and readable by anything. A map keeps the compression it was opened
   with. The sounds and the files plugins keep in the archive each have a tick, so a copy
-  for release can leave them out. Files in the archive the editor cannot name — common in
-  protected maps — are kept exactly as they were, and the fold says how many there are.
+  for release can leave them out. Files in the archive the editor cannot name, which are
+  common in protected maps, are kept exactly as they were, and the fold says how many
+  there are.
 - **Sections** (folded): every section the file will hold, with its size and whether it
   changed, was left out or was merged.
 
@@ -1027,11 +1093,12 @@ then on.
 Preferences ▸ General ▸ Saving turns this off.
 
 **Maps built on save.** A map with a TrigScript program is built by TrigScript as the file
-is written. The file you save is the one the game plays, and it carries the map as you see
-it in the editor inside, which is what comes back when you open it again. A notice shows
-while the build runs, with a button to save without waiting for it. If the build fails,
-the map is still saved and the notice says what went wrong; the file lacks the built part
-until a later save succeeds. Test Map builds the same way, and stops on a failure instead.
+is written. The file you save is the one the game plays. It also carries the map as you
+see it in the editor, and that is what comes back when you open the file again. A notice
+shows while the build runs, with a button to save without waiting for it. If the build
+fails, the map is still saved and the notice says what went wrong; the file lacks the
+built part until a later save succeeds. Test Map builds the same way, and stops on a
+failure instead.
 
 **Save to scmjs.dev…**, under File and under Account, keeps a copy of the map on your
 scmjs.dev account as a numbered revision with a note. It does not change where Ctrl+S
@@ -1045,7 +1112,7 @@ keeping maps in git.
 
 While a map has unsaved changes, the editor keeps a copy of it in the browser's storage
 (the app's own storage in the desktop app): every two minutes, and whenever the editor
-goes to the background — another tab, the window minimised. The copy is removed as soon as
+goes to the background (another tab, the window minimised). The copy is removed as soon as
 the map is saved or closed, so a copy only survives when the editor closed with work
 unsaved: a crash, a closed tab, a power cut.
 
@@ -1075,8 +1142,8 @@ To show how a map was made rather than how it ended up, the Timelapse plugin (Pl
 Browse Plugins…) records the map one change at a time and exports the recording as a GIF
 or a WebM video; see [Plugins](#plugins).
 
-Tools ▸ Statistics… counts what the map holds — units per player, resources, doodads,
-triggers, strings — and Ctrl+F finds a unit, location, sprite, string or trigger by name.
+Tools ▸ Statistics… counts what the map holds (units per player, resources, doodads,
+triggers, strings), and Ctrl+F finds a unit, location, sprite, string or trigger by name.
 
 ## Replays
 
@@ -1150,9 +1217,9 @@ While the Replay is shown, the editor keeps what still makes sense there:
 - pointing at a unit shows what the game's console would: its name, owner, hit points and
   what it is doing.
 
-What only applies to the map behind it — the layers, selecting, the clipboard, Find, the
-brush and the map's own toggles such as Units or Elevation — is left off the toolbar and
-greyed in the menus.
+Whatever applies only to the map behind it is left off the toolbar and greyed in the
+menus: the layers, selecting, the clipboard, Find, the brush and the map's own toggles
+such as Units or Elevation.
 
 ### Analysis
 
@@ -1216,10 +1283,10 @@ A few that need more than a line:
 
 - **Paint** lays down whatever the active layer's palette has picked, so it paints units,
   doodads, sprites, terrain or fog depending on the layer.
-- **Stamp Library** keeps named pieces — a ramp, a bridge, a cliff corner, a mineral line
-  — in the browser's storage. Click one and it hangs under the pointer, drawn with the
-  map's graphics; click to lay it down. Stamps can be searched, tagged, exported and
-  shared as a line of text.
+- **Stamp Library** keeps named pieces of map, such as a ramp, a bridge, a cliff corner or
+  a mineral line, in the browser's storage. Click one and it hangs under the pointer,
+  drawn with the map's graphics; click to lay it down. Stamps can be searched, tagged,
+  exported and shared as a line of text.
 - **Melee Wizard** lays out symmetric start locations, and mineral lines and geysers at
   the distance the game mines fastest from, with presets for main, natural and third, a
   symmetry check and a resource summary.
@@ -1229,6 +1296,7 @@ A few that need more than a line:
 - **scm-sim** is the game engine behind the play page. Besides Test in Browser and Debug
   Triggers in Browser, it is what Aftermath and Walkability use to have the game play a
   replay or walk a map. It works only in the editor at scmjs.dev.
+
 ![The Paint panel, drawing a line of the terrain palette's pick](images/paint.webp)
 
 Each plugin's own README, linked in the table, has the details.
@@ -1306,23 +1374,23 @@ The account page deletes all of it.
 
 ![My Maps: three maps on the account, one with two revisions](images/my-maps.webp)
 
-**Account ▸ My Maps…** — also File ▸ Open from scmjs.dev… — lists the maps on your
-account, newest change first, each with a picture, its tileset, size and player count, and
-how many revisions it has. The box above the list searches the names, tilesets, file names
-and notes. The map you last opened or saved from here is picked when the list arrives, and
-its revisions appear on the right: the number, the note you wrote, the file name, the size
-and when it was saved. Up and Down move through the list, and Enter opens the map.
+**Account ▸ My Maps…** (also File ▸ Open from scmjs.dev…) lists the maps on your account,
+newest change first, each with a picture, its tileset, size and player count, and how many
+revisions it has. The box above the list searches the names, tilesets, file names and
+notes. The map you last opened or saved from here is picked when the list arrives, and its
+revisions appear on the right: the number, the note you wrote, the file name, the size and
+when it was saved. Up and Down move through the list, and Enter opens the map.
 
 - **Open** puts the picked revision in the editor, asking first if the map you have open
   has unsaved changes.
 - **Download** saves the file to disk as it was uploaded.
 - The note can be added or edited later, and the map renamed.
-- A revision can be deleted, except the last one — delete the map to remove it.
+- A revision can be deleted, except the last one; to remove that, delete the map.
 
 ![Save to scmjs.dev: a second revision of Big Game Hunters with a note](images/save-to-scmjs.webp)
 
-**Account ▸ Save to scmjs.dev…** — also under File, beside Save Copy As — saves the open
-map to the account, as a new map or as the next revision of one you pick; the map it was
+**Account ▸ Save to scmjs.dev…** (also under File, beside Save Copy As) saves the open map
+to the account, as a new map or as the next revision of one you pick; the map it was
 opened from or last saved to is picked for you. Write a note saying what changed, and tick
 whether to include a one-pixel-per-tile picture for the list. The file is what File ▸ Save
 would write, with the save options you last confirmed, so what comes back is playable. It
@@ -1330,18 +1398,18 @@ is a copy: Ctrl+S goes on writing to the file on your disk, and nothing on the a
 changes until you save there again.
 
 Revisions are numbered in order and a number is never reused. Saving a file whose bytes
-are already on the account costs no storage — only the new note is kept. Storage is 250 MB
+are already on the account costs no storage; only the new note is kept. Storage is 250 MB
 per account, shown as a bar in both dialogs.
 
 ### Giving someone a copy
 
 A link can hand a map to anyone: whoever opens it gets a copy of the map in their own
-editor, without signing in. The copy is theirs — it opens as a new file, File ▸ Save asks
+editor, without signing in. The copy is theirs: it opens as a new file, File ▸ Save asks
 where to keep it, and nothing they change reaches your map. To edit a map together
 instead, see [Editing a map together](#editing-a-map-together).
 
-**Account ▸ Copy Link to This Map…** saves the open map to your account — as the next
-revision of the map it came from, or as a new map — and gives you the link, already on the
+**Account ▸ Copy Link to This Map…** saves the open map to your account (as the next
+revision of the map it came from, or as a new map) and gives you the link, already on the
 clipboard. The link opens the version you just saved, so a link you have posted somewhere
 does not change under the people who follow it; tick *Let the link follow my later saves*
 for one that opens whatever you save to that map next.
@@ -1362,9 +1430,9 @@ scmjs.dev, so a map saved without the game's graphics installed shows its size i
 
 In **My Maps**, the *Links* part of a map lists its links, how many times each was opened,
 and **Remove** for each; a removed link stops working at once and the map stays. *Link to
-#3* makes a link to the revision you are looking at, *Link to the newest* one that follows
-your saves. Deleting a revision removes the links to it, and deleting a map removes all of
-its links. A map can have ten links.
+#3* makes a link to the revision you are looking at, and *Link to the newest* makes one
+that follows your saves. Deleting a revision removes the links to it, and deleting a map
+removes all of its links. A map can have ten links.
 
 Opening a link starts the editor with an *Open a Copy* dialog showing the map's name,
 picture, size and who shared it; **Open a copy** opens it. **Account ▸ Open a Map Link…**
@@ -1392,9 +1460,9 @@ Sharing goes through scmjs.dev: the person who shares needs a signed-in
 **Account ▸ Share this Map…** asks for a name for the map (its own name to start with) and
 how long to **keep it open**, and copies it to scmjs.dev when you press **Start sharing**.
 The dialog then shows the link: **Copy** puts it on the clipboard for you to send. A cell
-appears in the status bar — *Shared · 3 people* — and clicking it opens the dialog again.
-Pasted into Discord, Slack or a forum, the link shows a card with the map's name, who
-shared it and, for a map kept open, its picture.
+such as *Shared · 3 people* appears in the status bar, and clicking it opens the dialog
+again. Pasted into Discord, Slack or a forum, the link shows a card with the map's name,
+who shared it and, for a map kept open, its picture.
 
 ![Share this Map before sharing starts: the name, Keep it open set to For a week, and what that means](images/share-keep.webp)
 
@@ -1453,8 +1521,8 @@ In **My Maps** a map kept open says so (*Shared · 2 editing*, or when it ends),
 **Join** opens it with whoever is there; **Open** still gives you a revision on its own.
 While you are in one of your maps kept open, a revision of it has **Put #N into the shared
 map**, which replaces the map for everyone with that revision: the way back if someone
-spoiled it. Everyone's undo history starts again, as after a resize, and the map as it was
-is not kept unless you saved it first.
+spoiled it. Everyone's undo history starts again, as after a resize on a shared map, and
+the map as it was is not kept unless you saved it first.
 
 ### Joining
 
@@ -1494,11 +1562,17 @@ and it is not saved with the map.
   status bar says when some of your change no longer applied. A dialog's OK writes its
   whole table, so if two people change the triggers at the same time, the second OK wins.
   When you see someone in the Trigger Editor, talk before you open it too.
+- **Your replaced version is kept.** If someone else's OK replaces triggers, a briefing or
+  settings you wrote, and they had not seen your version, a notice says so and stays until
+  you close it. **Put mine back** writes your version again, as one more undo step that
+  everyone receives; closing the notice keeps theirs. This works when everyone in the
+  session has an editor recent enough to say what each change was made from.
 - **Undo is yours.** Ctrl+Z takes back your own changes, not other people's, and leaves a
   tile alone once someone else has painted over it. Undoing your own OK puts a table back
   only if nobody has written it since.
 - **Resize, a tileset change and a raw section edit** replace the whole map for everyone,
-  and everyone's undo history starts again, as it does when you do them alone.
+  and everyone's undo history starts again. On a map you edit alone, a resize or a tileset
+  change is an ordinary undo step instead.
 
 ### Saving, and when it ends
 
@@ -1506,7 +1580,8 @@ Saving is each person's own: File ▸ Save writes your copy to your disk, and an
 map can save at any time. A map shared *until everyone leaves* is kept on scmjs.dev only
 while it is shared, and nothing of it is stored there afterwards; a map kept open is one
 of the sharer's maps in My Maps, and its revisions stay there after sharing ends. Everyone
-still has the map open in their editor when sharing ends, so nobody loses work — save it.
+still has the map open in their editor when sharing ends, so nobody loses work as long as
+they save it.
 
 A server restart ends a map shared until everyone leaves, but not a map kept open: the
 editors in it reconnect on their own when the server is back and carry on.
@@ -1580,13 +1655,14 @@ back, and the map if you can share it.
 about the open map. Ask a question or say what to change, and the assistant reads the map
 and edits it with the editor's own tools while you watch.
 
-- **What it reads:** everything — units and their properties, doodads, sprites, locations,
-  strings, switches, sounds, triggers and the trigger script, unit, upgrade and technology
-  settings, fog, terrain, Check Map results, your selection, and a screenshot of any area.
+- **What it reads:** everything, including units and their properties, doodads, sprites,
+  locations, strings, switches, sounds, triggers and the trigger script, unit, upgrade and
+  technology settings, fog, terrain, Check Map results, your selection, and a screenshot
+  of any area.
 - **What it changes:** nearly everything the editor can, from terrain and units to
-  triggers, players and forces, settings and the map's size. It draws terrain as shapes —
-  a plateau with a ramp that fits, a lane that stays walkable, a river with a bridge — and
-  can tell you whether units can walk from one place to another.
+  triggers, players and forces, settings and the map's size. It draws terrain as shapes,
+  such as a plateau with a ramp that fits, a lane that stays walkable or a river with a
+  bridge, and can tell you whether units can walk from one place to another.
 
 Each turn is folded into one block under your message. While it runs, the block shows the
 latest steps (**▸** a read, **✎** a change), and the map outlines what is about to change
@@ -1617,8 +1693,8 @@ two-lane tower defense". Set the size, tileset and number of players and press *
    that passes or fails on its own: the terrain and locations, players and forces, each
    system, the objectives and briefing, the name, and a Check Map at the end. Common
    layouts (corner camps, lanes, arenas, a bound's course, a town) are laid out by the
-   editor itself; others are drawn from the model's shapes. Common systems — spawns,
-   income, waves, lives, shops, leaderboards and the like — are built by the editor and
+   editor itself; others are drawn from the model's shapes. Common systems (spawns,
+   income, waves, lives, shops, leaderboards and the like) are built by the editor and
    shown in green; anything else is written in [TrigScript](#trigscript) and shown in
    gold.
 
@@ -1629,7 +1705,7 @@ When it finishes, **Review it…** or **Open the assistant** to keep going.
 ![Generate Map: the plan as a coloured grid, with the designer's notes](images/generate-map.webp)
 
 **Generate Map…** lays out a melee map from a description: the number of players, the kind
-of terrain, where the bases go and the symmetry. It shows a *plan* first — a rough grid of
+of terrain, where the bases go and the symmetry. It shows a *plan* first: a rough grid of
 terrain, the bases with their resources, ramps, a name and the designer's notes. **Apply**
 paints it with the isometric brush onto a new map, or onto the open map if it is the same
 size. **Refine** sends the plan back with your changes ("more room around the naturals")
@@ -1734,8 +1810,8 @@ Preferences (Ctrl+,) are kept in the browser. Nothing is written until OK or App
   nothing.
 
 **Editing**: the grid's spacing, colour and style, and what snaps to it (View ▸ Grid
-Settings… opens this page); what the palettes start on — the owner of placed units, the
-brush size, the size of a new location; and how many undo levels each map keeps.
+Settings… opens this page); what the palettes start on (the owner of placed units, the
+brush size, the size of a new location); and how many undo levels each map keeps.
 
 **View**: whether the mouse wheel scrolls (Ctrl+wheel zooms) or zooms, and whether a wheel
 zoom keeps the tile under the pointer in place; whether water and units animate and how
@@ -1747,7 +1823,7 @@ folder it writes into for StarCraft, in the desktop app whether the game starts 
 map is written, and how the browser plays the map.
 
 **Plugins**: what to do when an installed plugin has a newer version (tell you, do
-nothing, or install it — see [docs/plugins.md](plugins.md#keeping-a-plugin-up-to-date)),
+nothing, or install it; see [docs/plugins.md](plugins.md#keeping-a-plugin-up-to-date)),
 and each plugin's own settings page.
 
 **Storage**: where the game data comes from, and everything the editor keeps in the
@@ -1846,9 +1922,9 @@ off in Preferences), so **Reload** offers them back too.
 
 ### Copying a bug report
 
-**Help ▸ Copy Bug Report** puts the log on the clipboard with a short header above it —
-the version, the browser or desktop app, where the game data came from, the map's size and
-tileset, and the plugins with their versions — ready to paste into an issue, a forum post
+**Help ▸ Copy Bug Report** puts the log on the clipboard with a short header above it (the
+version, the browser or desktop app, where the game data came from, the map's size and
+tileset, and the plugins with their versions), ready to paste into an issue, a forum post
 or a message. A long session is trimmed to its most recent lines so the paste fits in an
 issue; when it is, the report says so.
 
@@ -1880,7 +1956,9 @@ rely on a feature.
   editors (triggers, the briefing, strings, sounds, switches, and the unit, upgrade and
   technology settings) ask before Escape, the close button or a click outside the dialog
   throws away changes you have not applied.
-- Resizing and changing the tileset clear the undo history.
+- A raw section edit (a plugin rewriting the file's sections, such as an edit in Section
+  Explorer) clears the undo history. So do a resize and a tileset change on a shared map;
+  on a map you edit alone each is one undo step.
 - A step that rewrites thousands of triggers (a TrigScript build, say) is kept, but the
   oldest steps are then dropped sooner than the undo-levels setting says, so the history
   does not grow without bound.

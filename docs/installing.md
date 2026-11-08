@@ -3,8 +3,9 @@
 scmJS runs in a web browser, as a desktop app for Windows, macOS and Linux, or from a
 container on your own server. Whichever you choose, the editor needs StarCraft's graphics,
 which are not shipped with it: on first use it asks for your StarCraft folder and reads
-them from there once. This page covers each way of running the editor and that first
-question, and the command line. The [user guide](guide.md) starts once the editor is open.
+them from there once. This page covers each way of running the editor, the command line,
+and that first question about the graphics. The [user guide](guide.md) starts once the
+editor is open.
 
 ## In the browser
 
@@ -156,9 +157,9 @@ replays. What each route gives you:
 | Blizzard's map editor download | Yes | No | No | Yes |
 
 Test Map and playing means Tools ▸ Test Map, which hands the map to the installed game,
-and Tools ▸ Test Map in Browser at scmjs.dev, which plays it on the site's play page from
-your own StarCraft files. Neither works from the map editor download. Replays means File ▸
-Open Replay… and watching the game play back.
+and Tools ▸ Test in Browser at scmjs.dev, which plays it on the site's play page from your
+own StarCraft files. Neither works from the map editor download. Replays means File ▸ Open
+Replay… and watching the game play back.
 
 If the editor was opened from a link (a shared map to join, or a copy of a map), that link
 is handled first, and the question about the graphics follows.
@@ -174,10 +175,10 @@ This is the card marked **Recommended** at the top of the dialog.
   it: the app finds it at start. Otherwise choose **Search this computer**, or **Choose
   the StarCraft folder…** to point at it yourself.
 
-Classic or Remastered is told from the folder. A Remastered folder turns on **View ▸
-Remastered Graphics**, which you can untick at any time for the classic look; the guide's
-[Classic or Remastered graphics](guide.md#classic-or-remastered-graphics) shows the
-difference.
+The editor tells classic from Remastered by the folder. A Remastered folder turns on
+**View ▸ Remastered Graphics**, which you can untick at any time for the classic look; the
+guide's [Classic or Remastered graphics](guide.md#classic-or-remastered-graphics) shows
+the difference.
 
 The editor copies what it needs and keeps it, so this happens once. In the browser the
 copy also keeps the files the site's play page runs the game from, so the game is set up

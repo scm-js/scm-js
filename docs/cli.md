@@ -591,7 +591,7 @@ The command waits until the editor is closed. If you saved a change, the text is
 as `import` reads it and the map is written. If you saved nothing, or only a comment, the
 map is left alone and the command says nothing changed.
 
-Text that does not read, such as a condition the map does not know or a strings line that
+Text that cannot be read, such as a condition the map does not know or a strings line that
 is not a number and a tab, is not imported and the map is left alone. The error gives the
 line. The file you edited is kept with your changes in it, and the command prints its path
 and the `import` command that brings it in once you have fixed it.
@@ -671,11 +671,12 @@ of the command: install it in the map's project (`npm install typescript`) or gl
 with an encoder the command fetches once, unless the project has `wasm-media-encoders`
 installed.
 
-Two things differ from the editor. The tests' world takes a unit type's hit points from
-the map's own unit settings, because the game's unit data the editor reads for the other
-types is not available to the command; a test that counts on a Marine's 40 hit points
-should set them in the map. And programs that other plugins add to a build are not built
-here: a map with Magenta's triggers is refused, and is built by saving it in the editor.
+Two things differ from the editor. In the tests, a unit type's hit points come only from
+the map's own unit settings: the editor falls back on the game's unit data for a type the
+map leaves at its defaults, and the command does not have that data. A test that counts on
+a Marine's 40 hit points should set them in the map. And programs that other plugins add
+to a build are not built here: a map with Magenta's triggers is refused, and is built by
+saving it in the editor.
 
 ### Running a plugin over a map
 

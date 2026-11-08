@@ -298,8 +298,9 @@ program(async () => {
 
 Give a player one `ui.lines` and put every piece in it, as the example does. The pieces
 show records of yours (`shop`, `talk`), and `choose` and `say` change those records, so
-the view follows. A view is drawn again only when something it reads changes, and once a
-second as it was, so a menu, a dialog and a meter cost nothing while nothing changes.
+the view follows. A view is drawn again only when something it reads changes, and
+otherwise once a second, unchanged, so a menu, a dialog and a meter cost nothing while
+nothing changes.
 
 `choose` moves the selection with W and S (or Up and Down) and picks with Space. It does
 not use Enter, which opens the chat in a game of several players. The text area has eleven
@@ -483,7 +484,7 @@ into the grid directly is not seen.
 | `number(n, x, y, color)` | A whole number's digits, 3 × 5 pixels each. |
 | `reveal(player)` | Let a player see the screen. |
 | `present()` | Show what was drawn. |
-| `<ScreenView screen width height />` | The same grid in a player's text area, a square a pixel, for a `ui.lines` view. |
+| `<ScreenView screen width height />` | The same grid in a player's text area, one square per pixel, for a `ui.lines` view. |
 
 ## Music
 
@@ -581,13 +582,13 @@ within 21 ms of its frame. The game plays 32 sounds at once, and a song that wou
 more is refused. Notes that overlap add up with no limiter, so keep volumes down.
 `music.render(song)` mixes a song into one sound when the script is built instead: every
 note exactly in time and only one sound playing, but nothing can change while it plays. A
-program plays to its own player; a program of every player plays to each.
+program plays to its own player; a per-player program plays to each.
 
 | Name | What it is |
 | --- | --- |
 | `synth(options)`, `fmSynth(options)`, `strings(options)`, `sampler(clip, root?)` | Instruments. `instrument.note(name, seconds)` is one note as a sound. |
 | `presets.supersaw()` … `presets.pluck()` | Instruments to start from, each taking the options of what it is made with. |
-| `drums(options?)`, `kit(hits)` | Drum kits: one made from nothing, or a clip a letter. |
+| `drums(options?)`, `kit(hits)` | Drum kits: one made from nothing, or one from a clip per letter. |
 | `track(instrument, pattern, options?)`, `song(options, ...tracks)` | A pattern for an instrument, and tracks played together. Options: `pan`, `volume`, `fx`, `reverb`; `bpm`, `steps`, `beats`, `swing`. |
 | `part(instrument, options?)`, `section(bars, parts, options?)`, `arrange(options, parts, ...sections)` | A song in sections. `section.with({ … })` is a section with some parts changed, `null` resting one. |
 | `chord(symbol, octave?)`, `chords(progression, template, options?)`, `over(notes, template)` | Chords by name, and a template that plays them. |
@@ -634,7 +635,7 @@ A library is TrigScript, like the script's own files, and runs with the same rig
 library in someone else's map is no different from that map's own script. A module joins
 the build only when something imports it.
 
-**Making a library** for your own maps is a plugin of your own that provides the modules.
-How is in the [TrigScript plugin's
-README](https://github.com/scm-js/plugin-trigscript#providing-a-library), and
+**Making a library** for your own maps means writing a plugin that provides the modules.
+The [TrigScript plugin's
+README](https://github.com/scm-js/plugin-trigscript#providing-a-library) explains how, and
 [Plugins](plugins.md) covers writing a plugin.

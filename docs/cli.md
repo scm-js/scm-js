@@ -1012,9 +1012,9 @@ built from and written that way, so build it again after merging.
 These commands start the map in the game itself, the engine of the play page, with the
 game's files from your copy of StarCraft ([what they
 need](#commands-that-need-starcraft)). Nobody has to play: the game runs as fast as the
-computer can run it. Or a replay's players play it: `--replay` gives the game the commands
-of a game that was played, so a bug report's replay can be traced and tested. A map in the
-original StarCraft 1.00 form is run as Brood War, as the editor would convert it. The
+computer can run it. Or the players of a recorded game play it: `--replay` gives the game
+the commands from a replay, so the game in a bug report can be traced and tested. A map in
+the original StarCraft 1.00 form is run as Brood War, as the editor would convert it. The
 Blizzard campaign maps are not something the engine runs yet. Each command exits with 2
 when the game could not start.
 
@@ -1068,17 +1068,17 @@ program's cost line by line.
 ### Triggers in a replay's game
 
 When someone sends a replay of a game where the map went wrong, `--replay` plays that game
-with the trace on: the players' own commands, people and computers as they played, to the
-end of the replay.
+with the trace on. The players' own commands drive it, people and computers as they
+played, to the end of the replay.
 
 ```sh
 scmjs map trace --replay report.rep --order
 ```
 
-The report is the one above, with the first and last firings as the game's clock (`m:ss`
-at Fastest, as the replay viewer counts it) and only the triggers the players in the game
-own. `--order` adds every firing in the order the game ran them: the time, the frame,
-whose copy of the trigger it was, and the trigger.
+The report is the one above, with two differences. The first and last firings are given on
+the game's clock, `m:ss` at Fastest as the replay viewer counts it, and only the triggers
+owned by the players in the game are listed. `--order` adds every firing in the order the
+game ran them: the time, the frame, whose copy of the trigger it was, and the trigger.
 
 ```
 $ scmjs map trace --replay 1631.rep --order
@@ -1119,15 +1119,15 @@ scmjs map trace fixed.scx --replay report.rep
 ```
 
 The command says first how the map differs from the one in the replay. A replay is only
-the players' commands, so a changed map can make it go out of step: when a unit a player
-clicked is not there, or a building cannot be placed, the game plays on with commands
-meant for another game. Changes to triggers alone usually keep it in step; changes to
-units, terrain or resources usually do not. The game checks each command against what it
-has, and the report says when and where the game parted from the replay. What fired before
-that point is what happened.
+the players' commands, so a changed map can make the game go out of step. When a unit a
+player clicked is not there, or a building cannot be placed, the game plays on with
+commands meant for another game. Changes to triggers alone usually keep it in step.
+Changes to units, terrain or resources usually do not. The game checks each command
+against what it has, and the report says when and where the game parted from the replay.
+What fired before that point is what happened.
 
 `scmjs map cost --replay` weighs the triggers of the replay's game in the same way.
-`--frames` stops the game sooner; left out, the whole replay is played. In a game that is
+`--frames` stops the game sooner. Left out, the whole replay is played. In a game that is
 not Use Map Settings, the game runs its own melee triggers rather than the map's, and the
 report says so.
 
@@ -1192,7 +1192,7 @@ A scenario has a `name`, and may have `frames`, `seed`, `setup`, `steps` and `ex
 2,400 unless the file or `--frames` says otherwise. `frames` and `seed` at the top of the
 file apply to every scenario that does not set its own.
 
-A scenario may name a `replay` instead of `setup` and `steps`. The replay's commands are
+A scenario may name a `replay` instead of `setup` and `steps`. The replay's commands drive
 the game, played on the map being tested, and the scenario plays to the replay's end
 unless `frames` says otherwise:
 
@@ -1207,10 +1207,10 @@ unless `frames` says otherwise:
 }
 ```
 
-The path is from the tests file's folder. `seed` does nothing here, as the game uses the
-replay's own. Such a scenario takes no `setup` or `steps`: anything added to the game
-would take it out of step with the replay. `scmjs map test record` writes these scenarios
-for you ([below](#a-test-from-a-replay)).
+The path is relative to the tests file's folder. `seed` does nothing here, because the
+game uses the replay's own. Such a scenario takes no `setup` or `steps`, since anything
+added to the game would take it out of step with the replay. `scmjs map test record`
+writes these scenarios for you ([below](#a-test-from-a-replay)).
 
 Things are named as the trigger window names them:
 
@@ -1334,9 +1334,9 @@ The expectations are a snapshot of the end of the game: how often each trigger t
 own fired (`0` for the ones that never did), the switches that are set and the named ones
 that are clear, the lines shown that were not chat, each player's outcome, whether the
 game ended, each player's men and buildings, minerals and gas, and every death count.
-Triggers, switches and units are named as the map names them where it can. Each
-expectation is one line of the file, so delete the lines you do not care about and keep
-the ones the test is for.
+Triggers, switches and units are named as the map names them, where the map has a name for
+them. Each expectation is one line of the file, so delete the lines you do not care about
+and keep the ones the test is for.
 
 | Option | What it does |
 | --- | --- |
@@ -1348,7 +1348,7 @@ the ones the test is for.
 From then on `scmjs map test` plays the replay against the map as it is now. After a
 change you meant to make, `scmjs map test map.scx -u` rewrites the expectations of
 replay-driven scenarios that no longer hold to what the game gives now. Only the values
-change: the expectations you deleted stay deleted, and a comparison such as `">= 3"` that
+change. The expectations you deleted stay deleted, and a comparison such as `">= 3"` that
 still holds is left alone. Scenarios with steps are never rewritten. If the map changed so
 much that the game parted from the replay, the report says when, as `map trace --replay`
 does.
@@ -1407,7 +1407,7 @@ flyer is refused (exit 2), as is a map with fewer than two start locations.
 
 `scmjs replay` reads replays from any version, from 1.16 to Remastered. To see which of
 the map's triggers fired in a replay, and when, see [Triggers in a replay's
-game](#triggers-in-a-replays-game); to make a test of one, [A test from a
+game](#triggers-in-a-replays-game). To make a test from one, see [A test from a
 replay](#a-test-from-a-replay).
 
 ### What a replay holds

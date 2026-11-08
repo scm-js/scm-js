@@ -47,6 +47,9 @@ export interface ExportOptions {
   starcraft?: string;
   browser?: string;
   play?: string;
+  /** In game frames, in place of `from`/`to` (map test's clips, which know the frame a scenario ended on). */
+  fromFrame?: number;
+  toFrame?: number;
 }
 
 /** The clip as settled from the options and the replay. */
@@ -146,8 +149,8 @@ export function planClip(input: Input, rep: Replay, o: ExportOptions, map: { wid
   const fps = parseFps(o.fps ?? String(d.fps), format);
   const speed = parseSpeed(o.speed ?? "1");
   const frames = Math.max(rep.header.frames, rep.commands.at(-1)?.frame ?? 0);
-  const from = o.from ? parseClock(o.from, "--from") : 0;
-  const to = o.to ? Math.min(frames, parseClock(o.to, "--to")) : frames;
+  const from = o.fromFrame ?? (o.from ? parseClock(o.from, "--from") : 0);
+  const to = Math.min(frames, o.toFrame ?? (o.to ? parseClock(o.to, "--to") : frames));
   if (from >= frames) throw new CliError(t("--from {from} is past the replay's end ({end})", { from: String(o.from), end: duration(frames * FRAME_MS) }), null, 2);
   if (to <= from) throw new CliError(t("--to {to} is not after --from {from}", { to: String(o.to), from: o.from ?? "0:00" }), null, 2);
   const chosen = [o.follow !== undefined, o.at !== undefined, !!o.all].filter(Boolean).length;

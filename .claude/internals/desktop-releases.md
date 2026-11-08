@@ -384,5 +384,9 @@ response — headers and `Set-Cookie` — into the dialog.
 `HTTP 404` and gh removed the release: the command line's `scmjs-windows-x64.zip` and the desktop's
 `scmJS-windows-x64.zip` differ only in case. The command's archives are `scmjs-cli-<os>-<arch>` since (cli.md). Everything
 else of 0.12.0 published (Pages, docs, npm, image); 0.12.1 is the release with the page. A release asset name must not
-collide with another's case-insensitively, and nothing checks that before the upload — the nightly's release job does
-not run on a plain push to main, so a pull request's dry run and the nightly both missed it.
+collide with another's case-insensitively. Nothing checked that before the upload — the nightly's release job does not
+run on a plain push to main, so a pull request's dry run and the nightly both missed it — until the release job's step
+"Asset names differ in more than case" (2026-11-08, branch `cli-action`): `ls assets | sort -f | uniq -di`, and any
+name that comes back fails the job with the pair named, before the checksums and `gh release create`. It runs only
+where the release job runs (a tag, a dispatch, the nightly), so a pull request still cannot see a clash; the header of
+`scripts/build-cli-binary.mjs` says why the command's archives are `scmjs-cli-…`.

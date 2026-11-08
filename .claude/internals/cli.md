@@ -2257,6 +2257,91 @@ too. Branch `cli-korean`. Reverses the first slice's "CLI strings are literals".
   such as "Invite Players", "My Maps"); `heatmap`'s "no such file" detection still keys on files.ts's English "No
   file " prefix (shows the full Korean message instead); the editor catalogue subset could shrink further if the
   plugin host stopped pulling UI modules in; `--lang` is not in the shell completion's value list.
+## The GitHub Action, `map test --clips`, plain-ground pictures (`action/`, `cli/src/clips.ts`) — 2026-11-08, branch `cli-action`
+
+One PR (#186) of three parts: the action, clips of failed tests, and the release job's asset-name guard
+(`desktop-releases.md`, end).
+
+**The action** (`action/action.yml` + `action/scripts/{find,install,run,report}.sh` + `action/README.md`, its page):
+`uses: scm-js/scm-js/action@v<release>` — GitHub runs an action from a subfolder, so no repository of its own; the
+README says how to move it to one (copy the folder, nothing names it). A **composite action of bash scripts**, not a
+JavaScript action: nothing to build or vendor (`dist/` with ncc), the logic is the CLI's, and `scmjs` itself is the
+dependency. Steps: `find.sh` (version: `latest` → `gh api …/releases/latest`, falling back to where github.com's
+`/releases/latest` redirects; the asset `scmjs-cli-<os>-<arch>` from `RUNNER_OS`/`RUNNER_ARCH`; the folder
+`$RUNNER_TOOL_CACHE/scmjs-cli/<v>/<os>-<arch>`) → `actions/cache` keyed `scmjs-cli-<v>-<asset>` → `install.sh`
+(download + `SHA256SUMS` line by awk, `sha256sum` or `shasum -a 256`, tar/unzip, `GITHUB_PATH`; `install: npm` writes
+a two-line `scmjs` wrapper around `npx -y -p @scm-js/cli@<v> [-p typescript@6]`; `none` checks PATH) → `run.sh` →
+upload-artifact (pictures) → upload-sarif → `report.sh`. Third-party actions are pinned by commit with the version in a
+comment (`tests/action.test.ts` holds that; build.yml itself uses `@v4` tags — the brief assumed otherwise).
+- **run.sh never fails**; it writes `$RUNNER_TEMP/scmjs-action/{body.md,status,changed}` and `report.sh` exits with
+  the status *after* the summary and the comment, so a failing check still gets its map's changes shown. `export
+  NO_COLOR=1` for the whole script: picocolors turns colour on under `GITHUB_ACTIONS`, and the first CI comment was
+  full of escape codes. **Bash 3.2-safe** (a Mac's): no mapfile/globstar/assoc arrays.
+- **Maps** = `git ls-files -co --exclude-standard -z -- ':(glob)<line>'…` (one glob a line — a line split on spaces
+  would break `my maps/*.scx`; default `:(icase)*.scx` etc.), filtered to map extensions and files that exist. git
+  rather than bash globs: `**` without bash 4, and ignored folders (node_modules) skipped for free.
+- **Check** three or four times (text in a group for the log, `--format github` for annotations whose exit code is the
+  verdict, `--json` for counts, `--format sarif`): each is ~0.2 s. `problems` = errors + warnings of the new findings +
+  `baseline.suppressed`; `new_problems` = the new ones. Baseline: the input, else `.scmjs-baseline.json` if present.
+- **Build**: which maps keep a script is **`map info --json`'s new `script` field** (`hasScript(doc.extras)`, null when
+  the build cannot tell; measured no cost on `map info`). An older scmjs lacks the field → a warning, nothing built.
+  TypeScript: the repository's `node_modules/typescript`, else `npm install --prefix $work/typescript typescript@6` and
+  the build run *from that folder* with the map's absolute path (`findTypeScript` looks from the cwd; a `-g` install
+  failed for permissions locally and is not needed). `TYPESCRIPT` in init.ts is held to the scripts by the test.
+- **Diff**: base = input, else `pull_request.base.sha`, else `github.event.before` (all zeros = none). Fetched with
+  `--depth=1` when the checkout lacks it. Changed maps = `git diff --name-only --no-renames -z <base>` (base vs the
+  *working tree*, so a step that edits a map before the action counts — the test relies on it) ∩ the maps; a deleted
+  path counts when the globs (bash `[[ == ]]`) would have taken it; new = not in the base tree. Per map: the text
+  (`map diff --rev`, exit 0 = "the same map (only the file's bytes differ)"), a jq summary of `--json` (header fields
+  by name, then `units +a −r ~c` per part, "sections only"), and with pictures `--picture --out
+  $work/pictures/<path>.png` (one artifact keeps the folders). The comment: marker `<!-- scmjs-action:maps -->` on line
+  one, found with `gh api …/issues/<n>/comments --paginate`, PATCHed or POSTed with `-F body=@file`; posted only when a
+  map changed or one exists to edit; details cut at 80 lines a map and ~45 KB in all (GitHub's limit is 65,536). A
+  fork's read-only token → a warning, not a failure. Artifact name `map-pictures-<job>` (`overwrite: true`; two uses
+  in one job need `artifact:`), linked by `artifact-url` (GitHub asks for a sign-in).
+- **Plain ground** (`preview.ts#plainShade`, `GameGraphics.tileset: Tileset | null`): with no game copy found and none
+  named, `map diff --picture` draws each tile a grey by its tile group (id >> 4, hashed into 80–119, blue +10; id 0
+  black as the editor's null tile) instead of refusing; `copy: null` in the JSON, a dim line in the terminal, "drawn
+  without the game" under a PNG. A named `--starcraft` that is not a copy is still refused. Made for the runner, which
+  has no game — without it `pictures: true` could never work there. Real terrain reads as fine noise (each variant
+  group differs); the generated test maps are all tile 0, so black. Preview/heatmap/share still need the copy.
+- **`scmjs init`** writes a `maps.yml` that uses the action (`uses: scm-js/scm-js/action@v<VERSION>` + `version:
+  <VERSION>`, `maps:` one glob or a block, `strict: true`, `pictures: true`, `build: true` only when a map keeps a
+  script, else commented; `pull-requests: write`), replacing the npx steps. `mapGlobs(prefix, files, quote = true)`:
+  unquoted for the action. A single glob is JSON-quoted when it starts with `*` (a YAML alias otherwise). The map test
+  comment line is now `scmjs map test <map> --format github --clips` on a self-hosted runner.
+- **Tested for real** by `.github/workflows/action-test.yml` (PRs touching `action/**`, `tests/maps/**`, itself):
+  `source` builds the CLI from the branch (`npm ci`, `build:cli`, a `node cli/dist/scmjs.mjs` wrapper, `install:
+  none`), changes `tests/maps/melee.scx` (name + resize top-left) and packs a scripted copy of ums.scx, runs the action
+  with pictures, SARIF and build, asserts the outputs, the PNG and the comment, then runs it again and asserts one
+  comment; `release` (matrix binary/npm) installs the newest release, writes a baseline with it and runs with strict.
+  The first push failed on the manifest (`Empty: ` in a plain description is a YAML mapping) — the tests now read
+  action.yml and both workflows with js-yaml (in node_modules through the tools, not a dependency; skipped without).
+  `tests/action.test.ts`: inputs/outputs == README tables, pins, scripts exist and pass `bash -n`, init's `with:` keys
+  are inputs.
+
+**`map test --clips [folder] [--clips-format gif|webm]`** (`clips.ts`): after the verdict (the summary line now
+prints before the clips), for each failed scenario with a kept replay, `exportReplay` (DI'd for tests) with the new
+`ExportOptions.fromFrame/toFrame` (frames, not m:ss) = `clipWindow(end frame, replay length)`: 8 s (190 frames)
+before to 2 s (48) after, inside the game. Named `<tests file minus .json>.<slug>.<kind>` (`ums.tests.x.gif`, `-2` on a
+clash) in `<map>.clips/` (stdin: cwd). `--clips` named `--clips` rather than `--video`: one file a failure, and the kind
+is its own option. `--clips foo.json` is taken as a tests file (optional value). **Missing machinery**: no browser
+found → one `▲ No clips: …` line, nothing tried; the first `CliError` from export (play page too old, browser crash,
+no game files) → the same line and the rest untried — such causes repeat for every clip. The exit code stays the
+tests'. A replay-driven scenario gets "no clip … it plays bug.rep" (its game is that replay; export draws it).
+`--json` adds `clips` + `clipsMissing`; `TestCaseReport.clip` is named in github/junit/sarif as `clip: <path>`.
+`IGNORE_LINES` gained `*.clips/` (and this repository's .gitignore). `tests/cli-clips.test.ts` (5).
+- **Measured** (WSL, Remastered copy, Playwright's Chromium with `~/.cache/scmjs-headless-libs` on
+  `LD_LIBRARY_PATH`): ums.scx with the sample's second scenario broken on purpose (carrier `is: 0`) plus the real third
+  failure — 3 scenarios in 10.0 s, two GIFs 640×360, 100 pictures, 8.0 s each (the games ended at 0:40 and 0:25, so no
+  "after"), 228 KB and 254 KB, whole command 25 s; WebM the same window 124 KB / 386 KB. Without the libraries: `▲ No
+  clips: The browser stopped (exit code 127) … libnspr4.so` once, the tests' result unchanged.
+
+**Leftovers**: the README and docs show `@v0.13.0` (the first release with `action/`; check the number at release);
+the action is untested on macOS/Windows runners (Windows needs `unzip` in Git Bash, which the hosted image has);
+per-picture links (an artifact is one zip; `archive: false` uploads one file an artifact, and a composite cannot loop
+`uses:`); pictures inline in the comment would need hosting outside GitHub; `map coverage` stays out (needs the game);
+the clips for a replay-driven scenario could use its replay with the map's own scenario swapped in.
 ## A melee map's layout: `map analyze` (`cli/src/analyze.ts`, `walk.ts`) — 2026-11-08
 
 `scmjs map analyze <map> [--json] [--picture out.png|-] [--scale n] [--all] [--starcraft dir]`, branch

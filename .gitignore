@@ -40,8 +40,9 @@ fixtures
 /trailer/build/
 # The patterns above have no trailing slash so that a symlink at the same path is ignored too (a worktree links them).
 
-# Replays of failed `scmjs map test` scenarios, kept beside the map they tested
+# Replays and clips of failed `scmjs map test` scenarios, kept beside the map they tested
 *.tests/
+*.clips/
 
 # Install recipes filled for a release (scripts/release-recipes.mjs)
 /packaging/out/

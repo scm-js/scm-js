@@ -23,6 +23,8 @@ export interface MapReport {
   builtBy: string[];
   /** The player slots (0–7) someone holds or that have units or a start location. */
   usedSlots: number[];
+  /** `map info` only: whether the map keeps a TrigScript script (`map build` builds it); null when this build cannot tell. */
+  script?: boolean | null;
 }
 
 export function mapReport(input: Input, doc: OpenedMap): MapReport {

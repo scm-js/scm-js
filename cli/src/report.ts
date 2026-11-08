@@ -90,12 +90,17 @@ export interface TestCaseReport {
   failures: { kind: string; what: string; actual: string }[];
   /** The replay kept of a scenario that failed. */
   replay: string | null;
+  /** The clip of its game `--clips` made. */
+  clip?: string | null;
 }
 /** A map's test run: the map as given, and its scenarios. */
 export interface TestReport { map: string; name: string; cases: TestCaseReport[] }
 
 const failureText = (f: TestCaseReport["failures"][number]) => `${f.what} — ${f.actual}`;
-const replayNote = (c: TestCaseReport) => (c.replay ? t("replay: {path} (scmjs replay open {path})", { path: reportPath(c.replay) }) : "");
+const replayNote = (c: TestCaseReport) => [
+  c.replay ? t("replay: {path} (scmjs replay open {path})", { path: reportPath(c.replay) }) : "",
+  c.clip ? t("clip: {path}", { path: reportPath(c.clip) }) : "",
+].filter(Boolean).join("\n");
 
 /** An error annotation per expectation that did not hold, on the scenario's line of its tests file. */
 export function githubTestAnnotations(reports: TestReport[]): string[] {

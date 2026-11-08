@@ -34,7 +34,9 @@ import { COMPRESSIONS, optimizeJson, optimizeMap, printOptimize, type Compressio
 import { expectKind, loadMapInput, loadReplayInput, readInput, STDIO, toStdout, type Input } from "./files";
 import { findInMap, KINDS, parseKinds, printHits } from "./find";
 import { DEFAULT_LIMIT, fetchJson, fetchMap, mapIdFrom, MAX_LIMIT, parseLimit, printFetched, printSearch, searchJson, searchMaps } from "./fetch";
-import { issueLine, mapReport, printIssues, printMapInfo, type MapReport } from "./map";
+import { baselineLine, baselineWritten, issueLine, mapReport, printIssues, printMapInfo, type MapReport } from "./map";
+import { baselineEntries, BASELINE_FILE, mapKey, matchBaseline, readBaseline, writeBaseline, type BaselineEntry } from "./baseline";
+import type { Issue } from "../../src/editor/validate";
 import { serveStdio } from "./mcp";
 import { serveLsp } from "./lsp";
 import { openInScmjs, playInLobby } from "./open";
@@ -45,7 +47,8 @@ import { mapFileFor, writeReplayMap } from "./replaymap";
 import { printReplayShare, shareReplay } from "./replayshare";
 import { exportReplay, exportSummary, type ExportOptions } from "./export";
 import { parseClock, watchReplay, watchSummary } from "./watch";
-import { FORMATS, githubAnnotations, githubTestAnnotations, junitTestXml, junitXml, sarifJson, sarifTestJson, type CheckReport, type Format, type TestReport } from "./report";
+import { FORMATS, githubAnnotations, githubCoverageAnnotations, githubTestAnnotations, junitCoverageXml, junitTestXml, junitXml, sarifCoverageJson, sarifJson, sarifTestJson, type CheckReport, type Format, type TestReport } from "./report";
+import { coverageForm, coverageJson, coverageScenario, printCoverage, runCoverage } from "./coverage";
 import { defaultOut, defaultTests, readMapForTests, readTests, recordLines, recordTest, runTests, testHeader, testJson, testSummary, updateTests, type PlannedScenario } from "./maptest";
 import { printRun, runOnMap } from "./run";
 import { previewMap, PNG_SCALES } from "./preview";
@@ -181,32 +184,64 @@ map.command("check").description("Check Map, as the editor's: errors, then warni
   .option("--all", "list notes too, not only errors and warnings")
   .option("--strict", "fail on warnings as well as errors")
   .option("--format <kind>", `${FORMATS.join(", ")}: github is workflow annotations, junit and sarif the files CI tools read`, "text")
+  .option("--baseline [file]", `report and fail only on findings the file does not hold (${BASELINE_FILE} by default)`)
+  .option("--write-baseline [file]", "write the maps' findings now as the baseline, and fail on none")
   .addHelpText("after", `
 Exits 1 when a map has errors (or warnings, with --strict): fit for a CI step. In a GitHub workflow,
   - run: npx @scm-js/cli map check maps/*.scx --strict --format github
-puts each finding on the pull request itself.`)
-  .action(async (files: string[], o: { json?: boolean; all?: boolean; strict?: boolean; format: string }) => {
+puts each finding on the pull request itself.
+
+A map with many old findings can still be held to that: --write-baseline keeps today's findings in
+${BASELINE_FILE}, and --baseline then fails only on new ones and counts the ones fixed since.
+  scmjs map check maps/*.scx --write-baseline
+  scmjs map check maps/*.scx --baseline --strict --format github`)
+  .action(async (files: string[], o: { json?: boolean; all?: boolean; strict?: boolean; format: string; baseline?: string | true; writeBaseline?: string | true }) => {
     if (!(FORMATS as readonly string[]).includes(o.format)) throw new CliError(`--format takes ${FORMATS.join(", ")}, not "${o.format}"`, null, 2);
     const format: Format = o.json ? "json" : (o.format as Format);
     const machine = format !== "text" && format !== "json";
+    // An optional value takes the next word, so `--baseline a.scx b.scx` would read a.scx as the baseline: a map is a map.
+    const fileOf = (v: string | true | undefined) => { if (typeof v === "string" && /\.(scm|scx|chk)$/i.test(v)) { files.unshift(v); return true; } return v; };
+    const asked = fileOf(o.baseline), writing = fileOf(o.writeBaseline);
+    const baselineFile = writing !== undefined ? (typeof writing === "string" ? writing : typeof asked === "string" ? asked : BASELINE_FILE) : asked !== undefined ? (typeof asked === "string" ? asked : BASELINE_FILE) : null;
+    if (baselineFile && files.includes(STDIO)) throw new CliError("A baseline keeps each map by its path: name the map's file rather than standard input.", null, 2);
+    const known = baselineFile && (asked !== undefined || existsSync(baselineFile)) ? readBaseline(baselineFile) : null;
+    const now: Record<string, BaselineEntry[]> = {};
     const reports = await eachFile(files, format === "json" || machine, async (input) => {
       expectKind(input, "map");
-      const r = mapReport(input, await loadMapInput(input));
-      const failed = r.issues.some((i) => i.level === "error" || (o.strict && i.level === "warn"));
+      const doc = await loadMapInput(input);
+      const r = mapReport(input, doc);
+      const key = baselineFile ? mapKey(baselineFile, input.path) : "";
+      const m = baselineFile ? matchBaseline(known?.maps[key], r.issues, doc.scenario) : null;
+      if (writing !== undefined) now[key] = baselineEntries(r.issues.filter((i) => o.all || i.level !== "info"), doc.scenario);
+      // Written down as known, nothing fails; else only what the baseline does not hold counts.
+      const issues = writing !== undefined ? [] : m ? m.fresh : r.issues;
+      const failed = issues.some((i) => i.level === "error" || (o.strict && i.level === "warn"));
       if (failed) process.exitCode = Math.max(Number(process.exitCode ?? 0), 1);
-      const lines = printIssues(r.issues, !!o.all);
-      const data: CheckReport = { file: input.path, name: r.name, issues: r.issues.filter((i) => o.all || i.level !== "info"), failed };
-      return { data, lines: [`${pc.bold(input.name)}  ${issueLine(r.issues)}`, ...lines] };
+      const listed = (list: Issue[]) => list.filter((i) => o.all || i.level !== "info");
+      const data: CheckReport = { file: input.path, name: r.name, issues: listed(issues), failed };
+      if (!m || !baselineFile) return { data, lines: [`${pc.bold(input.name)}  ${issueLine(r.issues)}`, ...printIssues(r.issues, !!o.all)] };
+      const shown = writing !== undefined ? listed(m.fresh) : listed(issues);
+      const baseline = { file: baselineFile, suppressed: listed(m.suppressed).length, fixed: m.fixed.length, new: shown.length, ...(writing !== undefined ? { written: now[key].length } : {}), fixedFindings: m.fixed.map(({ level, where, text }) => ({ level, where, text })) };
+      return { data: { ...data, baseline }, lines: writing !== undefined ? [baselineWritten(input.name, baseline, !!known?.maps[key])] : [`${pc.bold(input.name)}  ${baselineLine(shown, baseline)}`, ...printIssues(shown, !!o.all)] };
     }, false, machine) as { issues?: unknown[] }[];
+    // Nothing written when no map could be read: the file would only lose what it held.
+    if (writing !== undefined && baselineFile && Object.keys(now).length) {
+      writeBaseline(baselineFile, known, now);
+      const written = Object.values(now).reduce((n, l) => n + l.length, 0);
+      if (format === "text") print("", `${mark.ok} ${plural(written, "finding")} of ${plural(Object.keys(now).length, "map")} written to ${pc.cyan(baselineFile)}${dot}${pc.dim("a check with --baseline fails only on others")}`);
+    }
     if (machine) {
       const ok = reports.filter((r): r is CheckReport => !!r && !("error" in r));
       if (format === "github") print(...githubAnnotations(ok));
       else process.stdout.write(format === "junit" ? junitXml(ok) : sarifJson(ok, VERSION));
       return;
     }
-    if (format === "text" && files.length > 1) {
-      const bad = Number(process.exitCode ?? 0) ? reports.filter((r) => (r as { issues?: { level: string }[] }).issues?.some((i) => i.level === "error" || (o.strict && i.level === "warn"))).length : 0;
-      print("", bad ? `${mark.error} ${plural(bad, "map")} of ${files.length} failed the check` : `${mark.ok} ${plural(files.length, "map")} checked, none failed`);
+    if (format === "text" && writing === undefined && files.length > 1) {
+      const ok = reports.filter((r): r is CheckReport => !!r && !("error" in r));
+      const bad = ok.filter((r) => r.failed).length;
+      const b = known ? ok.reduce((n, r) => { const x = (r as CheckReport & { baseline?: { suppressed: number; fixed: number } }).baseline; return { suppressed: n.suppressed + (x?.suppressed ?? 0), fixed: n.fixed + (x?.fixed ?? 0) }; }, { suppressed: 0, fixed: 0 }) : null;
+      const known_ = b && (b.suppressed || b.fixed) ? pc.dim(`${dot}${plural(b.suppressed, "known finding")} left out${b.fixed ? `, ${num(b.fixed)} fixed since the baseline` : ""}`) : "";
+      print("", (bad ? `${mark.error} ${plural(bad, "map")} of ${files.length} failed the check` : `${mark.ok} ${plural(files.length, "map")} checked, none failed`) + known_);
     }
   });
 map.command("open").description("open a map in the scmJS app, or the editor in your browser").argument("<map>")
@@ -531,11 +566,17 @@ switch names. Keep the original to go on editing.
 map.command("unpack").description("a map's archive as a folder: the scenario, its sounds, scripts and other files").argument("<map>").addOption(json)
   .option("--out <folder>", "the folder to write; by default one named after the map, beside it")
   .option("--list", "list the archive's members and write nothing")
+  .option("--text", "the scenario as a folder of text files (scenario/), for git, instead of staredit/scenario.chk")
   .addHelpText("after", `
 Each member becomes a file at its archive path (staredit/scenario.chk, staredit/wav/…, trigscript/…), and
 ${MANIFEST_FILE} records the map's name, how it was stored and the members without a name, so that scmjs map pack
-puts the archive back together as it was.`)
-  .action(async (file: string, o: { json?: boolean; out?: string; list?: boolean }) => {
+puts the archive back together as it was.
+
+With --text the scenario is written as text instead: scenario/map.json (size, tileset, players, forces),
+terrain.txt, units.tsv, locations.tsv, strings.txt, triggers.txt and the rest, and the sections the editor does
+not model as bytes under scenario/sections/. Edit the text and scmjs map pack builds the map from it; an
+untouched folder packs back into the same scenario, byte for byte. The scenario/ folder is replaced each time.`)
+  .action(async (file: string, o: { json?: boolean; out?: string; list?: boolean; text?: boolean }) => {
     const input = await readInput(file);
     expectKind(input, "map");
     if (o.list) {
@@ -547,9 +588,17 @@ puts the archive back together as it was.`)
     }
     const base = input.path === STDIO ? "stdin" : input.path;
     const dir = o.out ?? base.replace(/\.(scm|scx|chk)$/i, "") + (/\.(scm|scx|chk)$/i.test(base) ? "" : "-unpacked");
-    const r = await unpackMap(input.bytes, input.name, dir);
-    if (o.json) { print(JSON.stringify({ file: input.name, dir: r.dir, files: r.files, bytes: r.bytes, stored: r.stored, manifest: r.manifest }, null, 2)); return; }
-    print(`${mark.ok} ${pc.bold(input.name)}: ${plural(r.files, "file")}${r.stored ? pc.dim(` (${r.stored} without a name)`) : ""}${dot}${size(r.bytes)}${dot}${pc.dim("→")} ${pc.cyan(relative(process.cwd(), r.dir) || ".")}`, ...r.manifest.problems.map((p) => `${mark.warn} ${p}`));
+    const r = await unpackMap(input.bytes, input.name, dir, { text: !!o.text });
+    if (o.json) { print(JSON.stringify({ file: input.name, dir: r.dir, files: r.files, bytes: r.bytes, stored: r.stored, manifest: r.manifest, text: r.text }, null, 2)); return; }
+    const t = r.text;
+    const sections = (names: string[]) => names.map((n) => n.trim()).join(" ");
+    print(`${mark.ok} ${pc.bold(input.name)}: ${plural(r.files, "file")}${r.stored ? pc.dim(` (${r.stored} without a name)`) : ""}${dot}${size(r.bytes)}${dot}${pc.dim("→")} ${pc.cyan(relative(process.cwd(), r.dir) || ".")}`,
+      ...(t ? [
+        `  ${pc.dim("Scenario as text")}  ${plural(t.text.length + t.layout.length + t.records.length, "section")}${dot}${size(t.size)} in ${plural(t.files, "file")}`,
+        ...(t.layout.length || t.records.length ? [`  ${pc.dim("Bytes kept beside")}  ${sections([...t.layout, ...t.records])} ${pc.dim("(used while their text is unchanged)")}`] : []),
+        ...(t.bytes.length ? [`  ${pc.dim("Kept as bytes")}     ${t.bytes.map((b) => `${b.name.trim()}${pc.dim(` (${b.why})`)}`).join(", ")}`] : []),
+      ] : []),
+      ...r.manifest.problems.map((p) => `${mark.warn} ${p}`));
   });
 map.command("pack").description("the folder scmjs map unpack wrote, back into a map file").argument("<folder>").addOption(json)
   .option("--out <map>", `the file to write; by default the name ${MANIFEST_FILE} records, beside the folder`)
@@ -557,12 +606,13 @@ map.command("pack").description("the folder scmjs map unpack wrote, back into a 
   .addHelpText("after", `
 Every file in the folder goes in: the ones ${MANIFEST_FILE} names at their archive paths, and any added since at the
 path they have in the folder. The archive is compressed and encrypted as the map was, and written without a file list
-when the map had none. The packed file is opened as a map before it is written.`)
+when the map had none. A folder map unpack --text wrote has its scenario built from the text in scenario/. The packed
+file is opened as a map before it is written.`)
   .action(async (dir: string, o: { json?: boolean; out?: string; compression?: string }) => {
     if (o.compression && !["none", "pkware", "zlib"].includes(o.compression)) throw new CliError(`--compression takes none, pkware or zlib, not "${o.compression}"`, null, 2);
     const r = await packMap(dir, { out: o.out ?? null, compression: o.compression as "none" | "pkware" | "zlib" | undefined });
     if (o.json) { print(JSON.stringify(r, null, 2)); return; }
-    print(`${mark.ok} ${pc.bold(relative(process.cwd(), r.path) || r.path)}: ${plural(r.members + 1, "member")}${r.stored ? pc.dim(` (${r.stored} without a name)`) : ""}${r.added.length ? `${dot}${plural(r.added.length, "file")} added: ${r.added.join(", ")}` : ""}${dot}${r.compression}${r.encrypted ? ", encrypted" : ""}${dot}${size(r.bytes)}`);
+    print(`${mark.ok} ${pc.bold(relative(process.cwd(), r.path) || r.path)}: ${plural(r.members + 1, "member")}${r.fromText ? pc.dim(" (the scenario from text)") : ""}${r.stored ? pc.dim(` (${r.stored} without a name)`) : ""}${r.added.length ? `${dot}${plural(r.added.length, "file")} added: ${r.added.join(", ")}` : ""}${dot}${r.compression}${r.encrypted ? ", encrypted" : ""}${dot}${size(r.bytes)}`);
   });
 
 const sounds = map.command("sounds").description("a map's sounds, listed or written out as files")
@@ -916,6 +966,40 @@ is kept in scmjs's cache, so a second run with more replays plays only the new o
     const { report, lines } = await heatmapMap(input, doc, replays, o, { live });
     if (o.json) print(JSON.stringify(report, null, 2));
     else say(piped, "", ...lines);
+  });
+
+map.command("coverage").description("which of the map's triggers fired in a folder of replays, how often, and which never did").argument("<map>").argument("[replays...]", "replays (.rep) or folders of them; a tests file (.json) counts its scenarios").addOption(json)
+  .option("--tests", "count the games of the map's tests (<map>.tests.json beside it) too")
+  .option("--strict", "exit 1 when a trigger a player in the games owned never fired")
+  .option("--format <kind>", `${FORMATS.join(", ")}: github is workflow annotations, junit and sarif the files CI tools read`, "text")
+  .option("--all", "list every trigger, those no player in the games owned too")
+  .option("--force", "take replays played on another map too")
+  .option("--parallel <n>", "games played at once (half the processors, at most 4, by default)")
+  .option("--starcraft <folder>", "your installation of StarCraft (SCMJS_STARCRAFT); found in the usual places otherwise")
+  .addOption(new Option("--engine <where>", "the play page's address, or a folder holding the engine (SCMJS_PLAY_URL)").hideHelp())
+  .addHelpText("after", `
+Each replay's game is played on the map in the game itself, as scmjs map trace --replay plays one, and every
+trigger's firings are counted. Prints each trigger with the games it fired in, how often in all and when first,
+then the ones that never fired and which condition said no last. Only Use Map Settings games of this map count
+(the same map, or one with the same name and size); a folder's replays are taken with its sub-folders'. A game
+whose players' commands parted from the map counts what fired before that, and is said. Needs your copy of
+StarCraft. Exits 1 with --strict when a trigger never fired, 2 when no replay could be counted.
+  scmjs map coverage td.scx replays/
+  scmjs map coverage td.scx replays/ --tests --strict --format github`)
+  .action(async (file: string, sources: string[], o: { json?: boolean; tests?: boolean; strict?: boolean; format: string; all?: boolean; force?: boolean; parallel?: string; starcraft?: string; engine?: string }) => {
+    if (!(FORMATS as readonly string[]).includes(o.format)) throw new CliError(`--format takes ${FORMATS.join(", ")}, not "${o.format}"`, null, 2);
+    const format: Format = o.json ? "json" : (o.format as Format);
+    const { input, doc } = await openForEdit(file);
+    const live = (line: string) => (format === "text" ? print(line) : process.stderr.write(visible(line) + "\n"));
+    const r = await runCoverage(input, doc, sources, o, live);
+    const scn = await coverageScenario(input);
+    if (o.strict && r.never) process.exitCode = Math.max(Number(process.exitCode ?? 0), 1);
+    const form = () => coverageForm(input.path, r, scn, !!o.strict);
+    if (format === "json") print(JSON.stringify(coverageJson(r, scn), null, 2));
+    else if (format === "github") print(...githubCoverageAnnotations([form()]));
+    else if (format === "junit") process.stdout.write(junitCoverageXml([form()]));
+    else if (format === "sarif") process.stdout.write(sarifCoverageJson([form()], VERSION));
+    else print("", ...printCoverage(r, scn, { all: !!o.all, strict: !!o.strict }));
   });
 
 map.command("play").description("a lobby on the play page with this map, and its invite link to send around").argument("<map>").addOption(json)
@@ -1456,8 +1540,8 @@ program.command("about").description("this version, any newer one, and links").h
     print(...(o.json ? [JSON.stringify(r, null, 2)] : printAbout(r)));
   });
 
-// tests/cli.test.ts imports the program to read its help; only the command runs it.
-if (!process.env.VITEST) {
+/** Runs the command line on `process.argv`. Not a top-level await: the single executable's bundle is CommonJS. */
+async function run() {
   try {
     // `scmjs` on its own is a request for the overview, not a mistake.
     if (process.argv.length <= 2) program.outputHelp();
@@ -1467,3 +1551,6 @@ if (!process.env.VITEST) {
     else { process.stderr.write(`${mark.error} ${pc.red("Something went wrong")}: ${e instanceof Error ? e.stack ?? e.message : e}\n${pc.dim("  Please report it: https://github.com/scm-js/scm-js/issues")}\n`); process.exitCode = 1; }
   }
 }
+
+// tests/cli.test.ts imports the program to read its help; only the command runs it.
+if (!process.env.VITEST) void run();

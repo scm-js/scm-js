@@ -106,10 +106,10 @@ program(() => {
 });
 `;
 
-/** ums.scx unpacked into a new folder, with the script and the library's copy in it. */
-async function unpackedMap(): Promise<{ dir: string; main: string; spawn: string }> {
+/** ums.scx unpacked into a new folder, with the script and the library's copy in it; `text`: the scenario as text. */
+async function unpackedMap(text = false): Promise<{ dir: string; main: string; spawn: string }> {
   const dir = join(mkdtempSync(join(tmpdir(), "scmjs-lsp-")), "ums");
-  await unpackMap(new Uint8Array(readFileSync(testMap("ums.scx"))), "ums.scx", dir);
+  await unpackMap(new Uint8Array(readFileSync(testMap("ums.scx"))), "ums.scx", dir, { text });
   const main = join(dir, "trigscript", "main.ts");
   mkdirSync(join(dir, "trigscript", "@libraries", "waves"), { recursive: true });
   writeFileSync(main, MAIN);
@@ -124,12 +124,12 @@ function position(text: string, needle: string, skip = 0) {
   return { line: before.length - 1, character: before[before.length - 1].length };
 }
 
-/** What an editor does, start to end; `client` is connected to a server. */
-function conversation(start: () => Promise<{ client: Client; stop: () => Promise<void> }>) {
+/** What an editor does, start to end; `client` is connected to a server. `asText`: the map's scenario is a folder of text. */
+function conversation(start: () => Promise<{ client: Client; stop: () => Promise<void> }>, asText = false) {
   let client: Client, stop: () => Promise<void>, map: Awaited<ReturnType<typeof unpackedMap>>, uri: string;
   let text = MAIN;
   beforeAll(async () => {
-    map = await unpackedMap();
+    map = await unpackedMap(asText);
     uri = pathToFileURL(map.main).href;
     ({ client, stop } = await start());
   }, 60_000);
@@ -214,6 +214,9 @@ describe.skipIf(!haveLanguage)("which files are a script", () => {
     expect(scriptHomeOf(main, null)).toEqual({ root: join(dir, "trigscript"), map: { kind: "folder", dir } });
     expect(scriptHomeOf(join(dir, "notes.txt"), null)).toBe(null);
     expect(scriptHomeOf(join(dir, "elsewhere.ts"), null)).toBe(null);
+    const asText = await unpackedMap(true);
+    expect(isUnpackedMap(asText.dir)).toBe(true);
+    expect(scriptHomeOf(asText.main, null)).toEqual({ root: join(asText.dir, "trigscript"), map: { kind: "folder", dir: asText.dir } });
   });
 
   it("is any .ts with --map naming a map file", async () => {
@@ -228,13 +231,15 @@ describe.skipIf(!haveLanguage)("which files are a script", () => {
   });
 });
 
-describe.skipIf(!haveLanguage)("scmjs lsp, in this process", () => {
+// In this process the map is unpacked as text (map unpack --text), so the names come from its text files; the built
+// command below reads the binary scenario.
+describe.skipIf(!haveLanguage)("scmjs lsp, in this process, a map unpacked as text", () => {
   conversation(async () => {
     const { serveLsp } = await import("../cli/src/lsp");
     const toServer = new PassThrough(), fromServer = new PassThrough();
     const done = serveLsp({ input: toServer, output: fromServer, log: (line) => { if (process.env.SCMJS_LSP_LOG) process.stderr.write(`${line}\n`); } });
     return { client: new Client(toServer, fromServer), stop: async () => { toServer.end(); await done; } };
-  });
+  }, true);
 });
 
 describe.skipIf(!haveBundle)("scmjs lsp, the built command over standard input and output", () => {

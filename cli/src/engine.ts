@@ -14,6 +14,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFile
 import { homedir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { gunzipSync } from "node:zlib";
+import { runnerEnv } from "./runtime";
 import { CliError, pc } from "./ui";
 
 /** Where the play page is, and so where the engine's files are (`SCMJS_PLAY_URL` for another). */
@@ -183,5 +184,6 @@ export function findGameCopy(named: string | undefined): { folder: string; kind:
  * pipe of JSON lines; its standard input a pipe too when `stdin` is asked for (a paced runner reads it), else closed.
  */
 export function startRunner(runner: string, args: string[], { node = process.execPath, stdin = false } = {}): ChildProcess {
-  return spawn(node, [runner, ...args], { stdio: [stdin ? "pipe" : "ignore", "pipe", "pipe"] });
+  // In the single executable `process.execPath` is scmjs itself, which runs the script as Node would when told to.
+  return spawn(node, [runner, ...args], { stdio: [stdin ? "pipe" : "ignore", "pipe", "pipe"], env: runnerEnv(node) });
 }

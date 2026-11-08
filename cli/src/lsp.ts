@@ -31,6 +31,7 @@ import type { ScriptDiagnostic, SourceRange } from "../../plugins/trigscript/com
 import { VERSION } from "./about";
 import { MANIFEST_FILE } from "./archive";
 import { loadTypeScript, mapNames, type TypeScriptModule } from "./build";
+import { folderSource, scenarioFromText, SECTIONS_FILE, TEXT_FOLDER } from "./source";
 import { CliError } from "./ui";
 
 /** Where the server's own words go: standard error, since standard output is the protocol (the client shows it as the server's log). */
@@ -58,8 +59,30 @@ export const SCRIPT_FOLDER = "trigscript";
 export const LIBRARIES_FOLDER = "@libraries";
 const SCENARIO_FILE = join("staredit", "scenario.chk");
 
-/** Whether a folder is an unpacked map: `archive.json`, or the scenario where the archive keeps it. */
-export const isUnpackedMap = (dir: string): boolean => existsSync(join(dir, MANIFEST_FILE)) || existsSync(join(dir, SCENARIO_FILE));
+/** Whether a folder is an unpacked map: `archive.json`, or the scenario where the archive keeps it, or as text. */
+export const isUnpackedMap = (dir: string): boolean => existsSync(join(dir, MANIFEST_FILE)) || existsSync(join(dir, SCENARIO_FILE)) || existsSync(join(dir, TEXT_FOLDER, SECTIONS_FILE));
+
+/** Whether an unpacked map keeps its scenario as text (`map unpack --text`). */
+const textScenario = (dir: string) => !existsSync(join(dir, SCENARIO_FILE)) && existsSync(join(dir, TEXT_FOLDER, SECTIONS_FILE));
+
+/** An unpacked map's scenario: the file, or built from the text, as map pack would. */
+async function folderScenario(dir: string): Promise<Uint8Array> {
+  return textScenario(dir) ? scenarioFromText(await folderSource(join(dir, TEXT_FOLDER))) : new Uint8Array(readFileSync(join(dir, SCENARIO_FILE)));
+}
+
+/** The newest change under a folder, for noticing an edit to any of the scenario's text files. */
+function newestUnder(dir: string): string {
+  let newest = 0, count = 0;
+  const walk = (at: string) => {
+    for (const e of readdirSync(at, { withFileTypes: true })) {
+      const path = join(at, e.name);
+      if (e.isDirectory()) walk(path);
+      else { newest = Math.max(newest, statSync(path).mtimeMs); count++; }
+    }
+  };
+  walk(dir);
+  return `${newest}:${count}`;
+}
 
 /** The map a script's names come from: an unpacked map's folder, or a map file. */
 export type MapSource = { kind: "folder"; dir: string } | { kind: "file"; path: string };
@@ -154,7 +177,7 @@ async function readMap(ts: TrigScript, map: MapSource): Promise<{ names: Awaited
     const doc = await openMapBytes(new Uint8Array(readFileSync(map.path)), basename(map.path));
     return { names: await mapNames(doc.scenario, doc.extras), places: placesOf(doc.scenario), libraries: ts.librarySources(ts.readLibraries(doc.extras)) as Record<string, Record<string, string>> };
   }
-  const doc = await openMapBytes(new Uint8Array(readFileSync(join(map.dir, SCENARIO_FILE))), "scenario.chk");
+  const doc = await openMapBytes(await folderScenario(map.dir), "scenario.chk");
   // The archive's other members, by name: the sounds' slots name them (soundList); their bytes are not needed.
   const members = new Map<string, Uint8Array>();
   try {
@@ -166,8 +189,11 @@ async function readMap(ts: TrigScript, map: MapSource): Promise<{ names: Awaited
 
 function stampOf(map: MapSource | null): string {
   if (!map) return "";
-  const path = map.kind === "file" ? map.path : join(map.dir, SCENARIO_FILE);
-  try { const s = statSync(path); return `${s.mtimeMs}:${s.size}`; } catch { return "gone"; }
+  try {
+    if (map.kind === "folder" && textScenario(map.dir)) return newestUnder(join(map.dir, TEXT_FOLDER));
+    const s = statSync(map.kind === "file" ? map.path : join(map.dir, SCENARIO_FILE));
+    return `${s.mtimeMs}:${s.size}`;
+  } catch { return "gone"; }
 }
 
 /** LSP's kinds for TypeScript's (`ts.ScriptElementKind`). */

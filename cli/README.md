@@ -27,6 +27,7 @@ Or without installing it: `npx @scm-js/cli info "(2)Destination.scx"`.
 
 Every command has `--help` and `--json`, and `-` reads a map from a pipe or writes one to it. The commands that play
 the game (`map trace`, `replay watch`, `bot run`) use your own installation of StarCraft. Needs Node.js 22.12 or
-newer.
+newer; without Node, each [release](https://github.com/scm-js/scm-js/releases/latest) has `scmjs` as one program
+with Node inside, for Windows, macOS and Linux ([Without Node](https://docs.scmjs.dev/cli/getting-started/#without-node)).
 
 The guide is at [docs.scmjs.dev/cli](https://docs.scmjs.dev/cli/). MIT licence.

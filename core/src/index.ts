@@ -27,6 +27,7 @@ export {
   type MapVersion, MAP_VERSIONS, mapVersionOf, isExpansion, isRemasteredRevision, setMapVersion,
   type TilesetIndex, tilesetIndex, setTextEncoding, setExtendedStrings,
   unitSettingsSections, upgradeSettingsSections, upgradeRestrictionSections, techSettingsSections, techRestrictionSections,
+  encodeSection,
 } from "../../src/formats/chk/scenario";
 export { createScenario, type CreateScenarioOptions, type GameKind, requiredSections, REQUIRED_SECTIONS } from "../../src/formats/chk/create";
 export { parseChk, serializeChk, type ChkFile, type ChkSection } from "../../src/formats/chk/reader";
@@ -39,6 +40,10 @@ export type { ConditionRecord, ActionRecord, TriggerRecord, ReadonlyTrigger } fr
 export { ConditionType, ActionType, PlayerGroup, Comparison, SwitchState, SwitchAction, SetModifier, ResourceType, UnitClass } from "../../src/formats/chk/sections/triggers";
 export { PlayerType, PlayerRace, ColorMode, ForceFlag, PLAYER_SLOTS, FORCE_SLOTS, type Forces, type PlayerRgb } from "../../src/formats/chk/sections/players";
 export type { UnitSettings, UnitAvailability, UpgradeSettings, UpgradeRestrictions, TechSettings, TechRestrictions } from "../../src/formats/chk/sections/settings";
+// Each settings table as a map has it before anyone opens its dialog (every entry on the game's own values).
+export { defaultUnitSettings, defaultUnitAvailability, defaultUpgradeSettings, defaultUpgradeRestrictions, defaultTechSettings, defaultTechRestrictions } from "../../src/formats/chk/sections/settings";
+// How many location slots MRGN holds in a file of a revision (64 below VER 63, 255 from it).
+export { locationSlots } from "../../src/formats/chk/sections/objects";
 export type { StringTable } from "../../src/formats/chk/sections/strings";
 export type { CuwpSlot } from "../../src/formats/chk/sections/cuwp";
 
@@ -94,6 +99,7 @@ export { displayColorHex } from "../../src/data/players";
 // ── Names and tables ──
 export { TILESETS, TILESET_BY_ID, MAP_SIZES, type TilesetId, type TilesetInfo } from "../../src/data/tilesets";
 export { UNIT_NAMES, UNIT_TYPE_COUNT, START_LOCATION, unitName, UPGRADE_NAMES, TECH_NAMES, upgradeName, techName, type RaceKey } from "../../src/data/units";
+export { WEAPON_NAMES, weaponName } from "../../src/data/weapons";
 export { PLAYER_TYPES, PLAYER_RACES, PLAYER_COLORS, playerTypeLabel, playerRaceLabel, playerColorHex, type PlayerColor } from "../../src/data/players";
 
 // ── Plugins ──

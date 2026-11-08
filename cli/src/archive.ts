@@ -7,12 +7,16 @@
  * `stored/`. Pack reads the folder back — the manifest's members, plus any file added to the folder since — and
  * writes the archive as the manifest says, so unpack then pack gives a map the editor and the game read the same.
  * Nothing is parsed or restored on the way: a built map unpacks into its built scenario and its `scmjs\` members.
+ *
+ * With `--text` the scenario is written as a folder of text instead of one binary file (`source.ts`), and the
+ * manifest (version 2) names that folder; pack rebuilds the scenario from it.
  */
-import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { openMapBytes, readArchive, writeArchiveBytes } from "../../src/editor/mapFile";
 import { SCENARIO_PATH, type ArchiveCompression, type StoredMembers } from "../../src/formats/mpq/scm";
 import { formatOf } from "../../src/editor/save";
+import { folderSource, scenarioFromText, scenarioToText, SECTIONS_FILE, TEXT_FOLDER, writeScenarioText, type TextReport } from "./source";
 import { CliError } from "./ui";
 
 export const MANIFEST_FILE = "archive.json";
@@ -22,10 +26,15 @@ const STORED_DIR = "stored";
 type StoredMemberRecord = Omit<StoredMembers["members"][number], "data"> & { file: string };
 
 export interface ArchiveManifest {
-  version: 1;
+  /** 1, or 2 when the scenario is a folder of text (`scenario.text`). */
+  version: 1 | 2;
   /** The map file's name, for `pack` to write beside the folder when `--out` says nothing. */
   fileName: string | null;
-  scenario: { compression: ArchiveCompression | "other" | null; encrypted: boolean; sectorSize: number | null };
+  scenario: {
+    compression: ArchiveCompression | "other" | null; encrypted: boolean; sectorSize: number | null;
+    /** The folder that holds the scenario as text, in place of `staredit/scenario.chk` (version 2). */
+    text?: string;
+  };
   /** Whether the archive carried a (listfile); one that did not is a protected map, and is written without one. */
   listfile: boolean;
   /** Every member read by name: its archive path and the file it is in. */
@@ -57,17 +66,30 @@ export async function listMembers(bytes: Uint8Array): Promise<{ members: MemberL
   return { members, listfile: a.files !== null || !a.origin, problems: a.problems };
 }
 
-export interface Unpacked { dir: string; files: number; bytes: number; stored: number; manifest: ArchiveManifest }
+export interface Unpacked {
+  dir: string; files: number; bytes: number; stored: number; manifest: ArchiveManifest;
+  /** With `text`: how the scenario came out, how many files it is and their size in bytes. */
+  text: (TextReport & { files: number; size: number }) | null;
+}
+
+export interface UnpackOptions {
+  /** The scenario as a folder of text (`scenario/`) instead of `staredit/scenario.chk`. */
+  text?: boolean;
+}
 
 /** The archive into `dir` (made if need be): its members as files and `archive.json`. */
-export async function unpackMap(bytes: Uint8Array, fileName: string, dir: string): Promise<Unpacked> {
+export async function unpackMap(bytes: Uint8Array, fileName: string, dir: string, options: UnpackOptions = {}): Promise<Unpacked> {
   const a = await readArchive(bytes);
   const out = resolve(dir);
-  const written: { file: string; data: Uint8Array }[] = [{ file: fileFor(SCENARIO_PATH), data: a.chk }];
+  const scenarioText = options.text ? scenarioToText(a.chk) : null;
+  const written: { file: string; data: Uint8Array }[] = scenarioText ? [] : [{ file: fileFor(SCENARIO_PATH), data: a.chk }];
   const members: ArchiveManifest["members"] = [];
   const taken = new Set<string>([fileFor(SCENARIO_PATH).toLowerCase(), MANIFEST_FILE]);
   for (const [name, data] of a.extras) {
     let file = fileFor(name);
+    if (scenarioText && file.toLowerCase().startsWith(`${TEXT_FOLDER}/`)) {
+      throw new CliError(`The map has a file ${name}, in the folder --text writes the scenario to`, "Unpack it without --text.");
+    }
     // Two names that differ only in case are two members; a file system may not agree.
     if (taken.has(file.toLowerCase())) { let n = 2; while (taken.has(`${file}.${n}`.toLowerCase())) n++; file = `${file}.${n}`; }
     taken.add(file.toLowerCase());
@@ -84,12 +106,20 @@ export async function unpackMap(bytes: Uint8Array, fileName: string, dir: string
     stored = { hashTable: a.stored.hashTable, sectorSize: a.stored.sectorSize, unreadable: a.stored.unreadable, members: records };
   }
   const manifest: ArchiveManifest = {
-    version: 1, fileName,
-    scenario: { compression: a.origin?.compression ?? null, encrypted: a.origin?.encrypted ?? false, sectorSize: a.origin?.sectorSize ?? null },
+    version: scenarioText ? 2 : 1, fileName,
+    scenario: { compression: a.origin?.compression ?? null, encrypted: a.origin?.encrypted ?? false, sectorSize: a.origin?.sectorSize ?? null, ...(scenarioText ? { text: TEXT_FOLDER } : {}) },
     listfile: a.files !== null || !a.origin, members, stored, problems: a.problems,
   };
+  let textBytes = 0;
   try {
     await mkdir(out, { recursive: true });
+    // One form of the scenario in the folder, never both: pack would take the other for a member.
+    if (scenarioText) {
+      await rm(join(out, fileFor(SCENARIO_PATH)), { force: true });
+      textBytes = await writeScenarioText(join(out, TEXT_FOLDER), scenarioText.files);
+    } else {
+      try { if ((await stat(join(out, TEXT_FOLDER, SECTIONS_FILE))).isFile()) await rm(join(out, TEXT_FOLDER), { recursive: true, force: true }); } catch { /* none */ }
+    }
     for (const w of written) {
       await mkdir(dirname(join(out, w.file)), { recursive: true });
       await writeFile(join(out, w.file), w.data);
@@ -98,7 +128,11 @@ export async function unpackMap(bytes: Uint8Array, fileName: string, dir: string
   } catch (e) {
     throw new CliError(`${out} could not be written (${(e as NodeJS.ErrnoException).code ?? e})`);
   }
-  return { dir: out, files: written.length, bytes: written.reduce((n, w) => n + w.data.length, 0), stored: a.stored?.members.length ?? 0, manifest };
+  return {
+    dir: out, files: written.length + (scenarioText?.files.size ?? 0), bytes: written.reduce((n, w) => n + w.data.length, 0) + textBytes,
+    stored: a.stored?.members.length ?? 0, manifest,
+    text: scenarioText ? { ...scenarioText.report, files: scenarioText.files.size, size: textBytes } : null,
+  };
 }
 
 export interface PackOptions {
@@ -108,7 +142,11 @@ export interface PackOptions {
   compression?: ArchiveCompression;
 }
 
-export interface Packed { path: string; bytes: number; members: number; stored: number; added: string[]; compression: ArchiveCompression; encrypted: boolean }
+export interface Packed {
+  path: string; bytes: number; members: number; stored: number; added: string[]; compression: ArchiveCompression; encrypted: boolean;
+  /** Whether the scenario was rebuilt from the folder's text. */
+  fromText: boolean;
+}
 
 /** Every file under `dir`, as paths relative to it with `/`. */
 async function filesUnder(dir: string, under = dir): Promise<string[]> {
@@ -134,8 +172,9 @@ export async function packMap(dirArg: string, options: PackOptions = {}): Promis
   let manifest: ArchiveManifest | null = null;
   try {
     const raw = JSON.parse(await readFile(join(dir, MANIFEST_FILE), "utf8")) as Partial<ArchiveManifest>;
-    if (raw.version !== 1 || !Array.isArray(raw.members)) throw new Error("not an archive.json this reads");
-    manifest = { version: 1, fileName: typeof raw.fileName === "string" ? raw.fileName : null, scenario: { compression: raw.scenario?.compression ?? null, encrypted: raw.scenario?.encrypted === true, sectorSize: raw.scenario?.sectorSize ?? null }, listfile: raw.listfile !== false, members: raw.members.filter((m): m is { name: string; file: string } => typeof m?.name === "string" && typeof m?.file === "string"), stored: raw.stored ?? null, problems: [] };
+    if ((raw.version !== 1 && raw.version !== 2) || !Array.isArray(raw.members)) throw new Error(typeof raw.version === "number" && raw.version > 2 ? `version ${raw.version}: a newer scmjs wrote it` : "not an archive.json this reads");
+    const text = raw.version === 2 && typeof raw.scenario?.text === "string" ? raw.scenario.text : undefined;
+    manifest = { version: raw.version, fileName: typeof raw.fileName === "string" ? raw.fileName : null, scenario: { compression: raw.scenario?.compression ?? null, encrypted: raw.scenario?.encrypted === true, sectorSize: raw.scenario?.sectorSize ?? null, ...(text ? { text } : {}) }, listfile: raw.listfile !== false, members: raw.members.filter((m): m is { name: string; file: string } => typeof m?.name === "string" && typeof m?.file === "string"), stored: raw.stored ?? null, problems: [] };
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw new CliError(`${join(dirArg, MANIFEST_FILE)} could not be read: ${e instanceof Error ? e.message : e}`, "Delete it to pack the folder's files as they are.");
   }
@@ -147,9 +186,13 @@ export async function packMap(dirArg: string, options: PackOptions = {}): Promis
     return new Uint8Array(await readFile(join(dir, actual)));
   };
   const scenarioFile = byLower.get(fileFor(SCENARIO_PATH).toLowerCase());
-  if (!scenarioFile) throw new CliError(`${dirArg} has no ${fileFor(SCENARIO_PATH)}`, "A map is its scenario; the folder scmjs map unpack writes has one.");
-  const chk = new Uint8Array(await readFile(join(dir, scenarioFile)));
-  const used = new Set<string>([scenarioFile.toLowerCase(), MANIFEST_FILE]);
+  // The scenario as text: the manifest says so, or (with no manifest) the folder has the text and no scenario file.
+  const textFolder = manifest?.scenario.text ?? (!scenarioFile && byLower.has(`${TEXT_FOLDER}/${SECTIONS_FILE}`) ? TEXT_FOLDER : null);
+  if (!scenarioFile && !textFolder) throw new CliError(`${dirArg} has no ${fileFor(SCENARIO_PATH)}`, "A map is its scenario; the folder scmjs map unpack writes has one.");
+  const chk = textFolder ? scenarioFromText(await folderSource(join(dir, textFolder))) : new Uint8Array(await readFile(join(dir, scenarioFile!)));
+  const used = new Set<string>([MANIFEST_FILE]);
+  if (textFolder) for (const f of all) { if (f.toLowerCase().startsWith(`${textFolder.toLowerCase()}/`)) used.add(f.toLowerCase()); }
+  else used.add(scenarioFile!.toLowerCase());
   const extras = new Map<string, Uint8Array>();
   for (const m of manifest?.members ?? []) {
     extras.set(m.name, await read(m.file));
@@ -187,12 +230,12 @@ export async function packMap(dirArg: string, options: PackOptions = {}): Promis
   try {
     await openMapBytes(bytes, basename(path));
   } catch (e) {
-    throw new CliError(`The packed file is not a map the editor reads: ${e instanceof Error ? e.message : e}`, `${fileFor(SCENARIO_PATH)} has to be a scenario.`);
+    throw new CliError(`The packed file is not a map the editor reads: ${e instanceof Error ? e.message : e}`, textFolder ? `The text in ${textFolder}/ has to make a scenario.` : `${fileFor(SCENARIO_PATH)} has to be a scenario.`);
   }
   try {
     await writeFile(path, bytes);
   } catch (e) {
     throw new CliError(`${path} could not be written (${(e as NodeJS.ErrnoException).code ?? e})`);
   }
-  return { path, bytes: bytes.length, members: extras.size, stored: stored?.members.length ?? 0, added, compression, encrypted };
+  return { path, bytes: bytes.length, members: extras.size, stored: stored?.members.length ?? 0, added, compression, encrypted, fromText: !!textFolder };
 }

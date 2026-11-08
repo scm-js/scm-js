@@ -67,6 +67,11 @@ Done 2026-11-07 (`map generate`, `cli.md` "A map from a seed"): the first export
 and `megatileHeight`/`groupBuildable`/`TileFlag` beside `loadTileset`. The walk stayed clean (doodads.ts reaches
 editor/sprites.ts; symmetry.ts reaches i18n, which the entry had already). docs/core.md has a "Terrain and doodads" row.
 
+Done 2026-11-07 (`map unpack --text`, `cli.md` "A map as a folder of text"): `encodeSection` (scenario.ts, was
+private — the bytes a save writes for one section from the model; the text folder encodes each section with it and
+assembles with `serializeChk`, not `serializeScenario`), `defaultUnitSettings` and the other five settings defaults,
+`locationSlots`, `WEAPON_NAMES`/`weaponName`. docs/core.md's table names them.
+
 Done 2026-11-07 (`map merge`, `cli.md` "Merging maps"): `unitSettingsSections`, `upgradeSettingsSections`,
 `upgradeRestrictionSections`, `techSettingsSections`, `techRestrictionSections` exported — which of a revision pair a
 direct write to the table marks dirty; docs/core.md "How an edit works" has a "By hand" paragraph for them. The

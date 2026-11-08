@@ -434,8 +434,12 @@ export function parseScenario(bytes: Uint8Array): Scenario {
 
 /* ── Serialising ─────────────────────────────────────────── */
 
-/** Encode one modelled section from the live scenario state. */
-function encodeSection(scn: Scenario, name: string): Uint8Array | null {
+/**
+ * Encode one modelled section from the live scenario state: the bytes a save would write for it,
+ * or null when the model has nothing to write (a section it does not model, or an optional one
+ * the file lacks).
+ */
+export function encodeSection(scn: Scenario, name: string): Uint8Array | null {
   switch (name) {
     case "DIM ": {
       const out = new Uint8Array(4);

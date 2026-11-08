@@ -38,13 +38,20 @@ import { CliError, dot, gameText, mark, num, pc, plural, size } from "./ui";
 
 /* ── The replays ────────────────────────────────────────────── */
 
-/** The replays a list of paths names: files as given, and the `.rep` files in a folder (not its sub-folders), by name. */
-export function replayFiles(paths: readonly string[]): string[] {
+/** The replays a list of paths names: files as given, and the `.rep` files in a folder by name — with `deep`, its sub-folders' too. */
+export function replayFiles(paths: readonly string[], deep = false): string[] {
   const out: string[] = [];
+  const folder = (p: string): string[] => {
+    const entries = readdirSync(p, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name, "en", { numeric: true }));
+    return [
+      ...entries.filter((e) => !e.isDirectory() && /\.rep$/i.test(e.name)).map((e) => join(p, e.name)),
+      ...(deep ? entries.filter((e) => e.isDirectory() && !e.name.startsWith(".")).flatMap((e) => folder(join(p, e.name))) : []),
+    ];
+  };
   for (const p of paths) {
-    let folder = false;
-    try { folder = p !== STDIO && statSync(p).isDirectory(); } catch { /* a missing file is said by readInput */ }
-    if (folder) out.push(...readdirSync(p).filter((n) => /\.rep$/i.test(n)).sort((a, b) => a.localeCompare(b, "en", { numeric: true })).map((n) => join(p, n)));
+    let isFolder = false;
+    try { isFolder = p !== STDIO && statSync(p).isDirectory(); } catch { /* a missing file is said by readInput */ }
+    if (isFolder) out.push(...folder(p));
     else out.push(p);
   }
   return out;

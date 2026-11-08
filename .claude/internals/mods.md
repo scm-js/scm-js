@@ -137,9 +137,13 @@ nor `gamefiles.ts` falls back to `SD/`).
   rule as `mod play` (sorted `gamename<TAB>sha256` lines of the changed files, first 16 hex digits), so the two agree.
   The editor's data-set hash (stamp, `scmjs\dataset.json`, `TestMapFile.dataSet.hash`) is `mod play`'s rule since
   the `mods` merge (`gamedata.md` "Hash"). Gaps left: the CLI's base is the person's game, the editor's the copy it
-  laid the set over (another data set's copy, if that was the base); the CLI probes a list-less archive by the game's
-  names, the editor by what its extraction asks; and the CLI counts any file under the mod's root, the editor files
-  under `GAME_FOLDERS`.
+  laid the set over (another data set's copy, if that was the base) — since 2026-11-08 then the copies under that and
+  the game's archives when the install has them, and the stamp's `hashUnbased` names what no base had; the CLI probes
+  a list-less archive by the game's names, the editor by what its extraction asks; and the CLI counts any file under
+  the mod's root, the editor files under `GAME_FOLDERS`. The copy now holds every `arr\` table (the Mod Editor's
+  `mapdata`/`portdata` mismatch); a copy made before still lacks two of them.
+- The Mod Editor plugin's API asks (reader `under`/`member`, `rehash`, `storedPath`, the worked-out manifest, folder
+  picks and drops) are in `plugins-host.md` "The Mod Editor's asks".
 - The runners' `--mod <folder>` and `current.json` `"mods": 1` are this side's assumption; M1/M0 must publish them.
 - `map run` (plugins, no engine) has no `--mod`; `map test|trace|cost` and `mod test` do.
 - iscript header comments (images using an id) are not written; table comments are.

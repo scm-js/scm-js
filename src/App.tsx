@@ -23,7 +23,7 @@ import { useDesktopFiles } from "./hooks/useDesktopFiles";
 import { useErrorCapture } from "./hooks/useErrorCapture";
 import { useUsageCounts } from "./hooks/useUsageCounts";
 import { droppedHandle } from "./services/mapIo";
-import { handFilesToPlugins } from "./plugins/fileTypes";
+import { handFilesToPlugins, takeDroppedFolders } from "./plugins/fileTypes";
 import { useOpenerHandoff } from "./hooks/useOpenerHandoff";
 import { TooltipProvider } from "./components/ui";
 import { Guarded } from "./components/ui/ErrorBoundary";
@@ -50,12 +50,16 @@ type Store = ReturnType<typeof useStore>;
  * be *called* inside the event — its answer may come later — and it is the first file's.
  */
 function openDropped(data: DataTransfer | null, guard: (p: PendingAction) => boolean, store: Store): boolean {
-  const files = data ? [...data.files] : [];
-  if (!files.length || !data) return false;
+  const all = data ? [...data.files] : [];
+  if (!all.length || !data) return false;
+  // A dropped folder goes to a plugin that opens folders, as its files with their paths; its placeholder among the files is not a map.
+  const { taken } = takeDroppedFolders(store, data);
+  const files = taken.size > 0 ? all.filter((_, i) => !taken.has(i)) : all;
+  if (!files.length) return true;
   const rest = handFilesToPlugins(store, files);
   const file = rest[0];
   if (!file) return true;
-  if (file === files[0]) void droppedHandle(data).then((handle) => guard({ action: "open", file, handle }));
+  if (file === all[0]) void droppedHandle(data).then((handle) => guard({ action: "open", file, handle }));
   else guard({ action: "open", file, handle: null });
   return true;
 }

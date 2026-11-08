@@ -8,11 +8,13 @@ import { decodeDat, encodeDat } from "../src/formats/dat/table";
 import type { DatTableName } from "../src/formats/dat/schema";
 import { decodeIscript } from "../src/formats/dat/iscript";
 import { decodeTblEntries } from "../src/formats/dat/tbl";
-import { extractUnits, type ReadMember } from "../src/gamedata/extract";
+import { EXTRA_TABLES, extractUnits, SOUND_TABLES, UNIT_TABLES, type ReadMember } from "../src/gamedata/extract";
+import { DAT_SCHEMAS } from "../src/formats/dat/schema";
+import { openArchives, readerFor } from "../src/gamedata/archives";
 import { namesFromAssets, unitCatalogue } from "../src/data/gameNames";
 import { dataSetUnitGroups, installNames, unitName, unitTypeCount } from "../src/data/units";
 import { CLASSIC_GROUP_LIMIT, decodeCv5, hasCreepFlag, loadTileset, megatileForTile, tileGroupOf, TILE_CREEP_FLAG } from "../src/formats/tileset/decode";
-import { changedFilesHash, extractOverCopy, hdOffImages, storedPathOf } from "../src/gamedata/overCopy";
+import { changedFiles, changedFilesHash, extractOverCopy, firstOf, hdOffImages, storedPathOf } from "../src/gamedata/overCopy";
 import { dataSetHash } from "../src/formats/mod/sources";
 import { Archive, Creator } from "mopaq";
 import type { ExtractRequest, ExtractResponse } from "../src/gamedata/extract.worker";
@@ -186,6 +188,33 @@ describe("a data set's hash", () => {
     expect(hash).toMatch(/^[0-9a-f]{16}$/);
     expect(await changedFilesHash(["arr\\weapons.dat"], (n) => own.get(n) ?? null, baseRead)).toBeNull();
   });
+
+  it("compares a file the copy underneath lacks with the game's, and lists the ones nothing had", async () => {
+    // A copy made before the extraction kept mapdata: it has portdata (the play set's) and no mapdata.
+    const copy = new Map([["arr/portdata.dat", bytes(5, 5)]]);
+    const game = new Map([["arr\\mapdata.dat", bytes(6, 6)], ["arr\\portdata.dat", bytes(5, 5)]]);
+    const copyRead = (n: string) => copy.get(storedPathOf(n)) ?? null;
+    const gameRead = (n: string) => game.get(n) ?? null;
+    // The mod ships the game's mapdata as it is, a portdata of its own, and a new picture.
+    const own = new Map([["arr\\mapdata.dat", bytes(6, 6)], ["arr\\portdata.dat", bytes(5, 9)], ["unit\\new\\thing.grp", bytes(1)]]);
+    const names = [...own.keys()];
+    const withGame = await changedFiles(names, (n) => own.get(n) ?? null, firstOf(copyRead, gameRead));
+    expect(withGame.unbased).toEqual(["unit\\new\\thing.grp"]);
+    expect(withGame.hash).toBe(await dataSetHash([{ name: "arr\\portdata.dat", bytes: bytes(5, 9) }, { name: "unit\\new\\thing.grp", bytes: bytes(1) }]));
+    // Without the game at hand the copy's gap counts: mapdata is hashed, and the stamp can say why.
+    const copyOnly = await changedFiles(names, (n) => own.get(n) ?? null, firstOf(copyRead, null));
+    expect(copyOnly.unbased).toEqual(["arr\\mapdata.dat", "unit\\new\\thing.grp"]);
+    expect(copyOnly.hash).not.toBe(withGame.hash);
+  });
+});
+
+describe("the extraction's tables", () => {
+  it("are every file the game keeps under arr\\: the eleven tables and their four string tables", () => {
+    const kept = new Set([...UNIT_TABLES, ...EXTRA_TABLES, ...SOUND_TABLES].filter((m) => m.startsWith("arr\\")));
+    const game = [...Object.values(DAT_SCHEMAS).map((s) => s.file), "arr\\images.tbl", "arr\\sfxdata.tbl", "arr\\portdata.tbl", "arr\\mapdata.tbl"];
+    expect(game.length).toBe(15);
+    for (const member of game) expect(kept.has(member), member).toBe(true);
+  });
 });
 
 const FIXTURE_DATA = join(import.meta.dirname, "..", "fixtures", "data");
@@ -225,7 +254,25 @@ describe.skipIf(!haveArchives)("a made data set installed through the editor's e
     expect(stamp.hash).toBe(await dataSetHash([
       { name: "arr/units.dat", bytes: unitsDat }, { name: "rez/unitnames.tbl", bytes: unitNames }, { name: "sound/made/new.wav", bytes: sound },
     ]));
+    // The two the game has not got are named as counted for want of a base; units.dat differs from the game's.
+    expect(stamp.hashUnbased).toEqual(["rez\\unitnames.tbl", "sound\\made\\new.wav"]);
   }, 180_000);
+});
+
+describe.skipIf(!haveArchives)("a copy extracted from the game's archives", () => {
+  it("keeps every arr\\ table, portraits and campaign maps among them, byte for byte", () => {
+    const archive = (name: string) => ({ name, bytes: new Uint8Array(readFileSync(join(FIXTURE_DATA, name))) });
+    const read = readerFor(openArchives([archive("StarDat.mpq"), archive("BrooDat.mpq")]).archives);
+    const { files } = extractUnits(read);
+    for (const member of ["arr\\portdata.dat", "arr\\portdata.tbl", "arr\\mapdata.dat", "arr\\mapdata.tbl", "arr\\orders.dat", "arr\\sfxdata.tbl"]) {
+      const kept = files.get(storedPathOf(member));
+      const game = read(member)!;
+      expect(kept, member).toBeDefined();
+      expect(kept!.length, member).toBe(game.length);
+      expect(kept!.every((b, i) => b === game[i]), member).toBe(true);
+    }
+    expect([...files.keys()].filter((p) => p.startsWith("arr/")).length).toBe(15);
+  }, 60_000);
 });
 
 describe("a stored copy's paths, for laying a data set over it", () => {

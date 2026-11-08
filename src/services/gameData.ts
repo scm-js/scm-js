@@ -143,6 +143,23 @@ export function attachReaderDataSet(store: Store, profile: GameDataProfile, read
 }
 
 /**
+ * Give the data set in memory in use a new hash, or none — what a map saved now and Test
+ * Map hand on — without reading anything again: the files did not change, or their change
+ * was already drawn (`reloadDataSet`), and only their digest arrived later. The source is
+ * replaced by one with the new hash (the `"gameData"` event fires); nothing decoded is
+ * dropped. Null, and nothing changes, when the source in use is not a data set in memory.
+ */
+export function rehashDataSet(store: Store, hash: string | null): AssetSource | null {
+  const current = store.get(gameDataSourceAtom) ?? currentAssetSource();
+  if (current?.kind !== "reader" || !current.reader) return null;
+  if ((current.reader.hash ?? null) === (hash || null)) return current;
+  const next: AssetSource = { ...current, reader: { read: current.reader.read, base: current.reader.base, ...(hash ? { hash } : {}) } };
+  setAssetSource(next);
+  store.set(gameDataSourceAtom, next);
+  return next;
+}
+
+/**
  * Drop everything decoded and draw again from the same source — after the files behind a
  * data set in memory changed. The tables, tilesets and pictures are read afresh.
  */

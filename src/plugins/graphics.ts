@@ -25,7 +25,9 @@ import { NO_UNIT } from "../formats/dat/dat";
 import { DEFAULT_IMAGE_OPTIONS, exportMapImage } from "../services/mapImage";
 import { SpriteFlag } from "../formats/chk/sections/objects";
 import { doodadOrigin } from "../formats/tileset/doodads";
-import { TILESET_FILENAMES } from "../formats/tileset/load";
+import { TILESET_FILENAMES, type TilesetFileName } from "../formats/tileset/load";
+import { decodeGrpImage, type GrpImage } from "../formats/dat/grpFile";
+import { paintGrpFrame } from "../formats/units/grpPicture";
 import { ALL_CLIP_PARTS, clipLocationBounds, type Clip } from "../editor/clipboard";
 import { boundsOf } from "../editor/locations";
 import type { GraphicsApi, PluginImage, RenderClipOptions, SpriteKind } from "./api";
@@ -236,6 +238,29 @@ export function createGraphicsApi(store: Store, bag: Bag): GraphicsApi {
 
     tileImage: (tileId) => cached("tile", tileId, (l) => buildTile(l, tileId)),
     doodadImage: (doodadId) => cached("doodad", doodadId, (l) => buildDoodad(l, doodadId)),
+
+    grpImage: async (bytes, frame, options = {}) => {
+      if (!(bytes instanceof Uint8Array)) throw new Error("graphics.grpImage needs the GRP's bytes as a Uint8Array");
+      const name = (options.palette ?? store.get(tilesetFileNameAtom)).toLowerCase();
+      if (!(TILESET_FILENAMES as readonly string[]).includes(name)) throw new Error(`graphics.grpImage: "${name}" is not a tileset (${TILESET_FILENAMES.join(", ")})`);
+      let grp: GrpImage;
+      try {
+        grp = decodeGrpImage(bytes);
+      } catch {
+        return null;
+      }
+      const tileset = await ensureTileset(name as TilesetFileName).catch(() => null);
+      if (!tileset || typeof document === "undefined") return null;
+      const owner = options.teamColor === undefined ? 0 : options.teamColor;
+      const team = owner === null ? null : teamOf(owner);
+      const assets = team && "row" in team ? await getUnitAssets().catch(() => null) : null;
+      const painted = paintGrpFrame(grp, frame, { palette: tileset.tileset.palette, team, teamColors: assets?.teamColors ?? null, flip: options.flipped === true, shadow: options.shadow === true });
+      if (!painted) return null;
+      const made = canvasOf(painted.width, painted.height);
+      if (!made) return null;
+      made.ctx.putImageData(new ImageData(painted.data as Uint8ClampedArray<ArrayBuffer>, painted.width, painted.height), 0, 0);
+      return { image: made.canvas, width: painted.width, height: painted.height };
+    },
 
     renderClip: (clip, options = {}) => {
       const name = TILESET_FILENAMES[clip.era];

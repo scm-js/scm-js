@@ -1945,6 +1945,40 @@ export interface GraphicsApi {
   requestIcons(): boolean;
   /** A GRP finished loading: anything drawn from one may look different now. */
   onImageLoaded(listener: () => void): Disposable;
+  /**
+   * Draw one frame of a GRP you hold — a mod's picture, one you made — the way the editor
+   * draws a unit's: through a tileset's palette, with the team colour slots in a player's
+   * colour, index 0 transparent. Either kind of GRP is read (the run-length one units use,
+   * and the uncompressed one of the interface pictures). The canvas is the GRP's whole box,
+   * as `unitImage`'s is. Resolves null when the bytes are no GRP, the frame is past its
+   * last, or there is no game data to take the palette from. A GRP drawn through
+   * `remapping` (fire, sparks) or Remastered's pictures are not drawn here.
+   *
+   * @example
+   * const grp = await api.gameData.read("unit/terran/marine.grp");
+   * const pic = grp && (await api.graphics.grpImage(grp, 0, { palette: "jungle", teamColor: 1 }));
+   * if (pic) panelBody.append(pic.image);
+   */
+  grpImage(grp: Uint8Array, frame: number, options?: GrpImageOptions): Promise<PluginImage | null>;
+}
+
+/** How `graphics.grpImage` draws a GRP. */
+export interface GrpImageOptions {
+  /**
+   * The tileset whose palette the picture is drawn through, by its file name: `badlands`,
+   * `platform`, `install`, `ashworld`, `jungle`, `desert`, `ice` or `twilight`. The open
+   * map's by default.
+   */
+  palette?: string;
+  /**
+   * The player whose colour the team slots (indices 8–15) take, as the open map colours
+   * its players; 0 by default. Null leaves them the palette's own.
+   */
+  teamColor?: number | null;
+  /** Mirrored left to right, as a unit facing the other way is drawn. */
+  flipped?: boolean;
+  /** As a shadow: a half-transparent black silhouette. */
+  shadow?: boolean;
 }
 
 /* ── Game data ──────────────────────────────────────────── */
@@ -2022,7 +2056,10 @@ export interface GameDataSource {
    * play` hands the play page (`docs/cli.md`, "Playing a mod on the play page").
    */
   hash?: string;
-  /** The data set this one was laid over (`GameDataFiles.base`), when it was. */
+  /**
+   * The data set this one was laid over, when it was: `GameDataFiles.base` for an installed
+   * set, and for a set in memory (`kind: "reader"`) the set in use when it was attached.
+   */
   base?: string;
 }
 
@@ -2049,11 +2086,47 @@ export interface GameDataFiles {
 }
 
 /**
+ * What a `GameDataReader` is told beside the path it is asked for.
+ */
+export interface GameDataReadContext {
+  /**
+   * The file as the game's archives name it, in lower case with backslashes:
+   * `arr\units.dat` for `arr/units.dat`, `rez\stat_txt.tbl` for `tileset/stat_txt.tbl`,
+   * `tileset\jungle\ofire.pcx` for `tileset/jungle.ofire.pcx`. A mod keeps its files under
+   * these names, so a reader can look the file up without knowing the copy's layout. Null
+   * for `unit/manifest.json` and `tileset/manifest.json`, the extraction's own lists.
+   */
+  member: string | null;
+  /**
+   * A file of the data set the reader was attached over, by its path in the extracted copy:
+   * the game's own file beneath a mod's, to compare with or to answer from. Null when that
+   * set has no such file. The same as `gameData.read(path, { under: true })`.
+   */
+  under(path: string): Promise<Uint8Array | null>;
+}
+
+/**
  * A data set that is a function in memory (`gameData.attach`): asked for a file by its path
  * in the extracted copy (`arr/units.dat`, `unit/zerg/drone.grp`), it answers the bytes, or
  * null to leave the file to the data set underneath. It may answer at once or with a promise.
+ * `file` names the same file as the game does and reads the set underneath.
+ *
+ * It need not answer `unit/manifest.json`: when it answers null the editor takes the list
+ * of the set underneath and works out from the reader's own files which tables are in
+ * GPTP's `.datex` layout and whether it brings unit names (`rez/unitnames.tbl`) and command
+ * card pictures (`unit/cmdbtns/uniticons.grp`). A reader that answers one is taken at its word.
  */
-export type GameDataReader = (path: string) => Uint8Array | null | undefined | Promise<Uint8Array | null | undefined>;
+export type GameDataReader = (path: string, file: GameDataReadContext) => Uint8Array | null | undefined | Promise<Uint8Array | null | undefined>;
+
+/** How `gameData.read` reads. */
+export interface GameDataReadOptions {
+  /**
+   * Read the data set under the one in use: when a set in memory is attached
+   * (`gameData.attach`), the set it was attached over — the game's own file beneath a mod's,
+   * without the reader being asked. The set in use when none is attached.
+   */
+  under?: boolean;
+}
 
 /**
  * The game data as a whole: which set of files the editor draws from, and installing,
@@ -2103,14 +2176,29 @@ export interface GameDataApi {
    * lower case with forward slashes (`arr/units.dat`, `tileset/jungle.cv5`,
    * `unit/zerg/drone.grp`). `tileset/manifest.json` and `unit/manifest.json` list what was
    * extracted. Null when the copy has no such file, or there is no game data.
+   *
+   * @example
+   * // A mod's units.dat against the game's beneath it, while the mod is attached.
+   * const mine = await api.gameData.read("arr/units.dat");
+   * const theirs = await api.gameData.read("arr/units.dat", { under: true });
    */
-  read(path: string): Promise<Uint8Array | null>;
+  read(path: string, options?: GameDataReadOptions): Promise<Uint8Array | null>;
+  /**
+   * Where a copy keeps a file the game's archives name `member` — the path `read` and a
+   * `GameDataReader` take: `arr\units.dat` is `arr/units.dat`, `rez\stat_txt.tbl` is
+   * `tileset/stat_txt.tbl`, `tileset\jungle\ofire.pcx` is `tileset/jungle.ofire.pcx`. Any case,
+   * either slash.
+   */
+  storedPath(member: string): string;
   /**
    * Draw from a data set that is a function in memory: every file is asked of `read` first,
    * and what it leaves (null) comes from the data set in use now. Nothing is stored and the
    * choice is not remembered — `select`, `install` or a reload leave it. The table and
    * picture editor's loop: change a file, `reload()`, see the map drawn with it. Units'
    * Remastered pictures are not drawn from such a data set (what it changed is not known).
+   * `options.hash` is what a map saved with the set records and Test Map hands on (sixteen
+   * hex digits by the rule of `GameDataSource.hash`); it can follow later with `rehash`.
+   * Attaching reads everything again, even with the same profile and function.
    * Resolves with the source in use afterwards.
    *
    * @example
@@ -2126,6 +2214,19 @@ export interface GameDataApi {
    * names) is dropped and the map is drawn again — after the files behind `attach` changed.
    */
   reload(): void;
+  /**
+   * Give the set in memory in use (`attach`) a new hash, or none with null, without reading
+   * anything again: for a hash worked out after the files were attached or redrawn. What a
+   * map saved from then on records and what Test Map hands on change; nothing is decoded
+   * afresh. The `"gameData"` event fires. Returns the source, or null (and nothing
+   * changes) when no set in memory is in use.
+   *
+   * @example
+   * // Draw from the edit at once, and name it when its digest is ready.
+   * api.gameData.reload();
+   * api.gameData.rehash(await digestOfChangedFiles());
+   */
+  rehash(hash: string | null): GameDataSource | null;
 }
 
 /* ── The numbers a record is written in ─────────────────── */
@@ -2908,9 +3009,35 @@ export interface PanelSpec {
 export interface FileTypeSpec {
   /** What the files are, for File ▸ Open's list of types ("StarCraft replay"). */
   name: string;
-  /** With the dot, any case: `[".rep"]`. */
+  /** With the dot, any case: `[".rep"]`. May be empty for a type that only opens folders (`openFolder`). */
   extensions: string[];
   open(files: File[]): void | Promise<void>;
+  /**
+   * A folder dropped on the editor, as its files with their paths. Each folder of a drop is
+   * offered on its own to the plugins that have `openFolder`, in the order they registered;
+   * the first whose `acceptsFolder` passes (or that has none) takes it. A folder none
+   * takes is left alone. Without `openFolder` a plugin is never offered a folder.
+   *
+   * @example
+   * api.ui.fileType({
+   *   name: "StarCraft mod", extensions: [".mpq"], open: openArchives,
+   *   acceptsFolder: (paths) => paths.some((p) => /(^|\/)arr\/units\.dat(ex)?$/i.test(p)),
+   *   openFolder: (files) => openLooseFiles(files),
+   * });
+   */
+  openFolder?(files: FolderFile[]): void | Promise<void>;
+  /** Whether a dropped folder is one `openFolder` opens, by its files' paths (`FolderFile.path`). */
+  acceptsFolder?(paths: readonly string[]): boolean;
+}
+
+/**
+ * One file of a folder the user picked or dropped, with where it is in the folder:
+ * `path` runs from the folder's parent with forward slashes, the folder's own name first
+ * (`My Mod/arr/units.dat`), as the browser's `webkitRelativePath` has it.
+ */
+export interface FolderFile {
+  path: string;
+  file: File;
 }
 
 /**
@@ -3499,9 +3626,15 @@ export interface PickedObject {
 }
 
 export interface PickFilesOptions {
-  /** `accept` for the file input, e.g. `"image/*"` or `".png,.jpg"`. */
+  /** `accept` for the file input, e.g. `"image/*"` or `".png,.jpg"`. Not used for a folder. */
   accept?: string;
   multiple?: boolean;
+  /**
+   * Pick a folder rather than files: `pickFiles` then resolves with every file in it and
+   * its subfolders as `FolderFile`s, with their paths. The browser's folder picker where it
+   * has one, else the file input's folder mode; an empty list when the user cancels.
+   */
+  directory?: boolean;
 }
 
 export interface UiApi {
@@ -3609,8 +3742,17 @@ export interface UiApi {
    * hears the pointer, but never takes it. As many as you like; they go with the plugin.
    */
   overlay(spec: OverlaySpec): OverlayHandle;
-  /** The browser's file picker; resolves with an empty list on cancel. */
-  pickFiles(options?: PickFilesOptions): Promise<File[]>;
+  /**
+   * The browser's file picker; resolves with an empty list on cancel. With `directory: true`
+   * the folder picker, resolving with the folder's files and their paths.
+   *
+   * @example
+   * const files = await api.ui.pickFiles({ directory: true });
+   * for (const { path, file } of files) api.log(`${path}: ${file.size} bytes`); // "My Mod/arr/units.dat: 19876 bytes"
+   */
+  pickFiles(options: PickFilesOptions & { directory: true }): Promise<FolderFile[]>;
+  pickFiles(options?: PickFilesOptions & { directory?: false }): Promise<File[]>;
+  pickFiles(options?: PickFilesOptions): Promise<File[] | FolderFile[]>;
   /**
    * Let the user drag a rectangle on the map. The viewport switches to a crosshair, draws
    * the marquee and takes the gesture ahead of the active layer's tools; resolves with

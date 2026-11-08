@@ -292,8 +292,9 @@ const IMA_STEP_TABLE = [
  * IMA ADPCM (format 0x11): per block, a 4-byte header per channel — the first sample as a
  * signed 16-bit value, then the step index — followed by 4-byte words of eight nibbles,
  * one word per channel in turn, low nibble first. What the game's own sound files are.
+ * `info` is the file's header (`parseWavHeader`); `decodeWav` picks this for format 0x11.
  */
-function decodeImaAdpcm(bytes: Uint8Array, info: WavInfo): PcmAudio {
+export function decodeImaAdpcm(bytes: Uint8Array, info: WavInfo): PcmAudio {
   const ch = info.channels;
   const perBlock = adpcmSamplesPerBlock(info);
   const frames = wavFrames(info);

@@ -11,6 +11,8 @@ import { browserStorage } from "../src/atoms/storage";
 
 const DATA = join(__dirname, "..", "fixtures", "data");
 const PUBLIC = join(__dirname, "..", "public");
+/** Files the extraction keeps since a date, which a public/ extracted before then lacks (every `arr\\` table: 2026-11-08). */
+const ADDED_SINCE = new Set(["arr/portdata.dat", "arr/portdata.tbl", "arr/mapdata.dat", "arr/mapdata.tbl"]);
 const archives = existsSync(DATA) ? readdirSync(DATA).filter((n) => /\.mpq$/i.test(n)) : [];
 const haveArchives = archives.some((n) => /^stardat/i.test(n)) && archives.some((n) => /^broodat/i.test(n));
 
@@ -58,13 +60,16 @@ describe.skipIf(!haveArchives)("extraction against the real archives", () => {
     if (!existsSync(join(PUBLIC, "unit", "manifest.json"))) return;
     const { files } = extractGameData(read);
     let compared = 0;
+    const absent: string[] = [];
     for (const [path, data] of files) {
       const onDisk = join(PUBLIC, path);
-      if (!existsSync(onDisk)) continue;
+      if (!existsSync(onDisk)) { absent.push(path); continue; }
       expect(Buffer.from(data).equals(readFileSync(onDisk)), path).toBe(true);
       compared++;
     }
-    expect(compared).toBe(files.size);
+    // An extraction older than the files the extraction has since been given lacks only those; `npm run extract` brings them.
+    expect(absent.filter((p) => !ADDED_SINCE.has(p)), "files public/ lacks").toEqual([]);
+    expect(compared + absent.length).toBe(files.size);
   });
 
   it("describes what came out", () => {

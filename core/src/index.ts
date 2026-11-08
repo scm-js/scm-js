@@ -75,7 +75,11 @@ export {
 } from "../../src/editor/settings";
 export { readSwitchNames } from "../../src/editor/switches";
 export { soundList, readWavs, applySounds, type SoundRow } from "../../src/editor/sounds";
-export { parseWavHeader, wavDuration, wavFormatLabel, type WavInfo } from "../../src/formats/wav";
+export {
+  parseWavHeader, wavDuration, wavFormatLabel, type WavInfo,
+  // The codec: any WAV the game or a sound tool writes read into floats (the game's IMA ADPCM included), and PCM written back.
+  decodeWav, decodePcmWav, decodeImaAdpcm, encodeWav, isPlainPcm, canDecodeWav, wavFrames, wavCodecName, WAV_FORMAT, type PcmAudio, type WavBits,
+} from "../../src/formats/wav";
 export { resizeScenario, type ResizeOptions, type ResizeResult } from "../../src/editor/resize";
 export { placeStartLocations, idealStarts, playableCount, DEFAULT_START_PLACEMENT, type StartLayout, type StartPlacementOptions, type StartPlacementResult } from "../../src/editor/startLocations";
 export { DEFAULT_PLACEMENT, type PlacementOptions } from "../../src/editor/placement";

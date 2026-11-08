@@ -133,7 +133,7 @@ export function extractTilesets(read: ReadMember, progress?: ExtractProgress): T
  * manifest's `datex` says which. DatExtend's other layout keeps the `.dat` name and is told
  * by its length (`table.ts#datShape`).
  */
-export const DATEX_TABLES: readonly DatTableName[] = ["units", "weapons", "flingy", "sprites", "images", "upgrades", "techdata", "orders"];
+export const DATEX_TABLES: readonly DatTableName[] = ["units", "weapons", "flingy", "sprites", "images", "upgrades", "techdata", "orders", "portdata", "mapdata"];
 /** A table's `.datex`, when the data set has one that is a whole number of GPTP's entries. */
 function datexOf(read: ReadMember, table: DatTableName): Uint8Array | null {
   const data = read(`arr\\${table}.datex`);
@@ -146,11 +146,15 @@ export const UNIT_TABLES = [
   "game\\tunit.pcx", "scripts\\iscript.bin",
 ];
 /**
- * Tables the editor never reads but copies when the archives have them, for plugins that
- * run the game's own code over the files (`api.gameData.read`): OpenBW, behind the
- * Walkability plugin's game pathing, will not start without the orders table.
+ * Tables the editor never reads but copies when the archives have them — with the ones
+ * above and `SOUND_TABLES`, every file the game keeps under `arr\` (fifteen in 1.16.1) —
+ * for plugins that read or run the game's own files (`api.gameData.read`): OpenBW, behind
+ * the Walkability plugin's game pathing, will not start without the orders table, and a mod
+ * editor compares a mod's portraits and campaign map list against the game's rather than
+ * counting them as new. A copy made before 2026-11-08 lacks `portdata` and `mapdata` (the
+ * play set has `portdata` at the same path).
  */
-export const EXTRA_TABLES = ["arr\\orders.dat"];
+export const EXTRA_TABLES = ["arr\\orders.dat", "arr\\portdata.dat", "arr\\portdata.tbl", "arr\\mapdata.dat", "arr\\mapdata.tbl"];
 /**
  * The game's list of its own sounds — which file each sound id plays — copied when the
  * archives have it. Only the list: the sounds themselves stay where they are. The sound

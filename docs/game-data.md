@@ -97,6 +97,7 @@ draws with, about 30 MB from the classic archives:
 | `arr/units.dat`, `flingy.dat`, `sprites.dat`, `images.dat`, `images.tbl` | the chain from a unit type to its picture |
 | `arr/weapons.dat`, `upgrades.dat`, `techdata.dat` | the defaults in the Unit, Upgrade and Technology Settings dialogs |
 | `arr/sfxdata.dat`, `sfxdata.tbl` | the list of the game's sounds, for the trigger sound picker |
+| `arr/orders.dat`, `portdata.dat`, `portdata.tbl`, `mapdata.dat`, `mapdata.tbl` | not read by the editor; kept so that every table the game has under `arr` is in the copy, for plugins that read the game's files |
 | `game/tunit.pcx` | team colours |
 | `scripts/iscript.bin` | animation scripts |
 | `unit/**/*.grp`, `unit/**/*.lo?` | about 750 sprite sheets and their overlay positions |
@@ -275,6 +276,14 @@ file the same as the game's is not part of the mod — and is worked out the sam
 page](cli.md#playing-a-mod-on-the-play-page)), so the editor, the command line and the
 play page give one mod the same hash. Files of the mod in the game's folders that the
 editor does not read, such as its sounds, count too.
+
+A file is compared with the copy the data set is laid over, then with the copy that one
+was laid over in turn, and then with the game's archives, when they are among the files
+installed. A file none of them has counts as the mod's own. So when the editor's hash and
+the command line's differ for the same mod, the usual cause is a copy made before the
+editor kept every table under `arr` (before November 2026): it lacks `portdata` and
+`mapdata`, and a mod that ships them unchanged has them counted. Installing the game's
+copy again fixes that.
 
 ### Names
 

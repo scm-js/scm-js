@@ -565,3 +565,21 @@ test targets. `api.data`'s tables are as wide as the data set (`UnitsDat.flingy`
 `api.names.units()` lists ids ≥ 233 after the classes, `api.names.unitGroups()` appends the data set's groups
 (`"<set> · Terran Units"`), and `api.graphics.icon("unit", id)` pictures types past 227 from `uniticons.grp` where the
 set has one. See `gamedata.md` "Data sets widened".
+
+**The Mod Editor's asks (2026-11-08, branch `mods-api`)**, all additive: `GameDataReader` takes a second argument
+`GameDataReadContext { member, under(path) }`; `GameDataReadOptions { under? }` on `gameData.read`;
+`gameData.storedPath(member)`; `gameData.rehash(hash | null)` (sync, null when no reader source); `GameDataSource.base`
+also for a reader. `PickFilesOptions.directory` + overloads (`{ directory: true }` → `FolderFile[]`, a third catch-all
+overload so a caller holding a plain `PickFilesOptions` still compiles; the host's implementation is cast to
+`UiApi["pickFiles"]`): `host.ts#pickFolder` = `showDirectoryPicker({ mode: "read", id: "plugin-folder" })` walked
+(`folders.ts#directoryHandleFiles`), AbortError → `[]`, any other error → logged, then `<input webkitdirectory>`
+(`folderInputFiles`). Paths from the folder's parent, folder name first, sorted. `FileTypeSpec.openFolder` /
+`acceptsFolder`: a type with `openFolder` registers even with no extensions (left out of `pickerFileTypes`);
+`fileTypes.ts#takeDroppedFolders` runs inside the drop (App's `openDropped`), takes the items whose
+`webkitGetAsEntry()` is a directory (indexes among the drop's *file* items = `DataTransfer.files` indexes), walks each
+(`entryFiles`: `readEntries` until empty — Chromium hands 100 at a time) and offers it to the first type (registration
+order) whose `acceptsFolder` passes; none takes it → a log line, the folder is dropped. With no folder-opening type
+nothing is taken and a folder drop behaves as before. Not done: the Open dialog's own drop zone (it reads one file).
+Proofs: `tests/dataset-reader.test.ts`, `tests/fileTypes.test.ts` ("a folder's files", "a dropped folder").
+Also `graphics.grpImage(bytes, frame, { palette, teamColor, flipped, shadow })` → `Promise<PluginImage | null>`
+(`graphics.ts`; throws on a palette that is no tileset file name; `tests/grp-picture.test.ts`) — see `gamedata.md`.

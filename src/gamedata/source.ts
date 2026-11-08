@@ -29,9 +29,22 @@ import { desktopBridge, type DesktopBridge } from "./desktop";
 import { hostTerms } from "../editor/platform";
 import { activeProfileId, DEFAULT_PROFILE, isDefaultProfile, type GameDataProfile } from "./profiles";
 import { profileOf, readStored, storedCopy, type StoredCopy } from "./store";
+import { cleanStoredPath, memberOfStored } from "./paths";
 import { t, translate } from "../i18n";
 
 export type SourceKind = "bundled" | "stored" | "reader" | "none";
+
+/** What a reader is told beside the stored path it is asked for (`DataSetReader.read`). */
+export interface DataSetReadContext {
+  /**
+   * The file as the game's archives name it, lower case with backslashes (`arr\units.dat`,
+   * `rez\stat_txt.tbl` for `tileset/stat_txt.tbl`); null for the lists the extraction
+   * writes itself (`unit/manifest.json`, `tileset/manifest.json`). `paths.ts#memberOfStored`.
+   */
+  member: string | null;
+  /** A file of the data set the reader lays over (`base`), by its stored path; null when it has none. */
+  under(path: string): Promise<Uint8Array | null>;
+}
 
 /**
  * A data set that is a function rather than a copy (`reader` sources): every file the
@@ -39,9 +52,12 @@ export type SourceKind = "bundled" | "stored" | "reader" | "none";
  * comes from `base`, the source in use when it was attached. Nothing is written to
  * storage, which is what makes it the edit-and-see loop of a table or picture editor: change
  * a file, `reloadDataSet`, see it drawn.
+ *
+ * `unit/manifest.json` is the reader's when it answers one; otherwise the base's, with
+ * `datex` and `optional` as the reader's files make them (`readerManifest.ts`).
  */
 export interface DataSetReader {
-  read(path: string): Promise<Uint8Array | null | undefined> | Uint8Array | null | undefined;
+  read(path: string, context: DataSetReadContext): Promise<Uint8Array | null | undefined> | Uint8Array | null | undefined;
   /** The source under it, for every file `read` leaves alone. */
   base: AssetSource | null;
   /** A digest of its files, when the caller knows one: what a map saved with it records. */
@@ -258,12 +274,54 @@ export async function fetchAsset(path: string, init?: RequestInit): Promise<Resp
 
 const notThere = () => new Response(null, { status: 404, statusText: "Not in the stored copy" });
 
+const bytesResponse = (data: Uint8Array) => new Response(data as Uint8Array<ArrayBuffer>, { status: 200, headers: { "content-length": String(data.length) } });
+
+/**
+ * One file of `source` as bytes, or null when it has none — a 404, a dev server's index
+ * page in a file's place, or no game data at all.
+ */
+export async function readFrom(source: AssetSource | null, path: string): Promise<Uint8Array | null> {
+  if (!source) return null;
+  let res: Response;
+  try {
+    res = await fetchFrom(source, path);
+  } catch (err) {
+    if (err instanceof GameDataUnavailableError) return null;
+    throw err;
+  }
+  if (!res.ok || res.headers.get("content-type")?.startsWith("text/html")) return null;
+  return new Uint8Array(await res.arrayBuffer());
+}
+
+/**
+ * One file of the data set *under* the session's source: what an attached reader lays
+ * over (`api.gameData.read(path, { under: true })`). The source itself when it is no reader.
+ */
+export async function readUnder(path: string): Promise<Uint8Array | null> {
+  const source = await resolveAssetSource();
+  return readFrom(source.kind === "reader" ? source.reader?.base ?? null : source, path);
+}
+
+/** What `read` is told beside `path`: the member's name, and a way to the set underneath. */
+export function readContext(reader: DataSetReader, path: string): DataSetReadContext {
+  return { member: memberOfStored(path), under: (p) => readFrom(reader.base, cleanStoredPath(p)) };
+}
+
 async function fetchFrom(source: AssetSource, path: string, init?: RequestInit): Promise<Response> {
   switch (source.kind) {
     case "reader": {
-      const data = await source.reader?.read(path);
-      if (data) return new Response(data as Uint8Array<ArrayBuffer>, { status: 200, headers: { "content-length": String(data.length) } });
-      return source.reader?.base ? fetchFrom(source.reader.base, path, init) : notThere();
+      const reader = source.reader;
+      if (!reader) return notThere();
+      const data = await reader.read(path, readContext(reader, path));
+      if (data) return bytesResponse(data);
+      if (cleanStoredPath(path) === "unit/manifest.json") {
+        // The reader brings tables at another width, or unit names and pictures, the copy's list does not know of.
+        const { parseManifest, readerUnitManifest } = await import("./readerManifest");
+        const ask = async (p: string) => (await reader.read(p, readContext(reader, p))) ?? null;
+        const manifest = await readerUnitManifest(parseManifest(await readFrom(reader.base, path)), ask);
+        return bytesResponse(new TextEncoder().encode(JSON.stringify(manifest, null, 2) + "\n"));
+      }
+      return reader.base ? fetchFrom(reader.base, path, init) : notThere();
     }
     case "bundled":
       return fetch(source.base + path, init);

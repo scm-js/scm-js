@@ -21,7 +21,7 @@
  * with their templates beside them (`extract.ts#ExtractText`), translated where shown.
  */
 import type { Params } from "../i18n";
-import { animPath } from "../formats/dat/anim.ts";
+import { storedPathOf } from "./paths.ts";
 import { decodeDat, type DatFile } from "../formats/dat/table.ts";
 import { DAT_SCHEMAS } from "../formats/dat/schema.ts";
 import { dataSetHashOfDigests, fileDigest, gameName } from "../formats/mod/sources.ts";
@@ -39,30 +39,11 @@ export type CopyReader = (path: string) => Promise<Uint8Array | null>;
 /** A member path as the overlay keys it: lower case, backslashes. */
 const key = (member: string) => member.replaceAll("/", "\\").replace(/^\\+/, "").toLowerCase();
 
-const RENAMED: Record<string, string> = {
-  "rez\\stat_txt.tbl": "tileset/stat_txt.tbl",
-  "hd2\\effect\\water_normal_1.dds.grp": "tileset/water_large.hd.grp",
-  "hd2\\effect\\water_normal_2.dds.grp": "tileset/water_fine.hd.grp",
-  "hd2\\effect\\noise.dds": "tileset/heat_noise.hd.dds",
-};
-
 /**
- * Where the extraction stores a member in a copy — the inverse of the names `extract.ts`
- * writes: `tileset\jungle\ofire.pcx` is `tileset/jungle.ofire.pcx`, Remastered's
- * `HD2\anim\main_007.anim` is `unit/hd/main_007.anim`, and most members are their own path.
+ * Where the extraction stores a member in a copy (`paths.ts`), here because the worker and
+ * the tests have always imported it from this module.
  */
-export function storedPathOf(member: string): string {
-  const k = key(member);
-  const renamed = RENAMED[k];
-  if (renamed) return renamed;
-  let m: RegExpMatchArray | null;
-  if ((m = k.match(/^tileset\\([a-z]+)\\([^\\]+)$/))) return `tileset/${m[1]}.${m[2]}`;
-  if ((m = k.match(/^hd2\\tileset\\([a-z]+)\.dds\.vr4$/))) return `tileset/${m[1]}.hd.vr4`;
-  if ((m = k.match(/^hd2\\tileset\\([a-z]+)\.tmsk$/))) return `tileset/${m[1]}.hd.tmsk`;
-  if ((m = k.match(/^hd2\\tileset\\([a-z]+)_mask\.dds\.grp$/))) return `tileset/${m[1]}.hd.mask`;
-  if ((m = k.match(/^hd2\\anim\\main_(\d+)\.anim$/))) return animPath(Number(m[1]));
-  return k.replaceAll("\\", "/");
-}
+export { storedPathOf };
 
 export interface OverCopyExtraction {
   result: GameDataExtraction;
@@ -197,18 +178,44 @@ export type MemberBytes = (member: string) => Uint8Array | null | Promise<Uint8A
  * over the set's own files that differ from the base's. `names` are the members the set may
  * have (its loose files, its archives' listed members, what the extraction asked for);
  * `own` answers from the set's own files only, `base` from what they are laid over (the
- * game's archives, or the copy underneath). A file the base has byte for byte is not part of
- * the mod and not hashed; a file the base lacks is. Files are read and digested one at a
- * time. Null when nothing differs.
+ * game's archives, or the copy underneath and, where that lacks a file, the game's
+ * archives when they are at hand). A file the base has byte for byte is not part of the mod
+ * and not hashed; a file the base lacks is, and is listed in `unbased` (sorted): counted as
+ * the set's own for want of anything to compare it with. Files are read and digested one
+ * at a time. `hash` is null when nothing differs.
  */
-export async function changedFilesHash(names: Iterable<string>, own: MemberBytes, base: MemberBytes): Promise<string | null> {
+export async function changedFiles(names: Iterable<string>, own: MemberBytes, base: MemberBytes): Promise<{ hash: string | null; unbased: string[] }> {
   const digests: { name: string; sha256: string }[] = [];
+  const unbased: string[] = [];
   for (const name of new Set([...names].map(gameName))) {
     const mine = await own(name);
     if (!mine) continue;
     const theirs = await Promise.resolve(base(name)).catch(() => null);
     if (theirs && sameBytes(mine, theirs)) continue;
+    if (!theirs) unbased.push(name);
     digests.push({ name, sha256: await fileDigest(mine) });
   }
-  return digests.length > 0 ? dataSetHashOfDigests(digests) : null;
+  unbased.sort();
+  return { hash: digests.length > 0 ? await dataSetHashOfDigests(digests) : null, unbased };
+}
+
+/** `changedFiles`' hash alone. */
+export async function changedFilesHash(names: Iterable<string>, own: MemberBytes, base: MemberBytes): Promise<string | null> {
+  return (await changedFiles(names, own, base)).hash;
+}
+
+/**
+ * Bases read in turn: the first that has a member answers. How the hash looks past a copy
+ * that lacks a file (a copy laid over another keeps only the editor's files) to the copy
+ * under that, then to the game's archives when the install was handed them.
+ */
+export function firstOf(...bases: (MemberBytes | null | undefined)[]): MemberBytes {
+  const list = bases.filter((b): b is MemberBytes => !!b);
+  return async (name) => {
+    for (const b of list) {
+      const got = await Promise.resolve(b(name)).catch(() => null);
+      if (got) return got;
+    }
+    return null;
+  };
 }

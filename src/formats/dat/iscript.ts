@@ -14,9 +14,11 @@
  * to confirm every reachable instruction decodes. These projects are format references;
  * their code is not included here. Sources and licenses: ../../../ATTRIBUTION.md
  *
- * This module has no imports on purpose: `scripts/extract-units.mjs` loads it straight
- * into Node (which strips the types) to work out which graphics the scripts can reach.
+ * This module imports only `iscriptText.ts`, which has no imports of its own, and with the
+ * `.ts` extension on purpose: `scripts/extract-units.mjs` loads it straight into Node
+ * (which strips the types) to work out which graphics the scripts can reach.
  */
+import { readIscriptHeaders } from "./iscriptText.ts";
 
 /** Animation slots, in header order. */
 export const Anim = {
@@ -157,26 +159,17 @@ function u16(data: Uint8Array, at: number): number {
   return data[at] | (data[at + 1] << 8);
 }
 
+/**
+ * The id table and each header's entry points. How many entry points a header has depends
+ * on the compiler that wrote the file: the game's own file and PyMS's give a type the
+ * counts of `ANIM_COUNT_BY_TYPE`, IceCC — which most mods' binaries come from — writes
+ * `type + 1` (`iscriptText.ts#readIscriptHeaders` tells them apart by where the headers sit).
+ */
 export function decodeIscript(data: Uint8Array): IscriptBin {
   if (data.length < 4) throw new Error("iscript.bin is too short");
+  const { headers: found } = readIscriptHeaders(data);
   const headers = new Map<number, IscriptHeader>();
-  let at = u16(data, 0);
-  while (at + 4 <= data.length) {
-    const id = u16(data, at);
-    const offset = u16(data, at + 2);
-    at += 4;
-    if (id === 0xffff) break;
-    if (offset + 8 > data.length) throw new Error(`iscript ${id}: header offset ${offset} is outside the file`);
-    if (data[offset] !== 0x53 || data[offset + 1] !== 0x43 || data[offset + 2] !== 0x50 || data[offset + 3] !== 0x45) {
-      throw new Error(`iscript ${id}: header at ${offset} is not "SCPE"`);
-    }
-    const type = data[offset + 4];
-    const count = ANIM_COUNT_BY_TYPE[type];
-    if (count === undefined) throw new Error(`iscript ${id}: unknown header type ${type}`);
-    const anims: number[] = [];
-    for (let a = 0; a < count; a++) anims.push(u16(data, offset + 8 + a * 2));
-    headers.set(id, { id, type, anims });
-  }
+  for (const h of found) headers.set(h.id, { id: h.id, type: h.type, anims: h.anims });
   return { data, headers };
 }
 

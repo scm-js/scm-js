@@ -22,6 +22,7 @@ const DIALOG_IDS = [...REGISTRY.matchAll(/^\s*(\w+): from\(/gm)].map((m) => m[1]
 const NEEDS_PAYLOAD: Record<string, string> = {
   confirmPlugin: "asks about one plugin, named in its payload",
   pluginDialog: "is a plugin's own dialog, described in its payload",
+  mapDataSet: "names the data set a map was made with, from its payload",
 };
 
 test("the registry was read", () => {

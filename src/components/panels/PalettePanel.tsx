@@ -52,7 +52,7 @@ import {
   viewFlagsAtom,
   type EditorLayer,
 } from "../../atoms/editorAtoms";
-import { gameDataRevisionAtom } from "../../atoms/gameDataAtoms";
+import { gameDataRevisionAtom, gameDataSourceAtom } from "../../atoms/gameDataAtoms";
 import { openDialogAtom } from "../../atoms/uiAtoms";
 import { locationsAtom, scenarioAtom, terrainRevisionAtom } from "../../atoms/documentAtoms";
 import { isAnywhereIntact, locationCapacity, locationName } from "../../editor/locations";
@@ -62,7 +62,7 @@ import { ALL_FOG_PLAYERS, FOG_PLAYERS, fogCount, playerBit } from "../../editor/
 import { useFogTools } from "../../hooks/useFogTools";
 import { TILESET_BY_ID } from "../../data/tilesets";
 import { displayColorHex } from "../../data/players";
-import { RACE_LABEL, UNIT_GROUPS, unitLabel, type RaceKey } from "../../data/units";
+import { dataSetUnitGroups, RACE_LABEL, UNIT_GROUPS, unitLabel, type RaceKey, type UnitGroup } from "../../data/units";
 import { SPRITE_COUNT, spriteCatalogue, spriteLabel } from "../../data/sprites";
 import { SpriteFlag } from "../../formats/chk/sections/objects";
 import type { SpriteKind } from "../../editor/sprites";
@@ -296,15 +296,19 @@ function UnitPalette() {
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState<Record<string, boolean>>({ "Terran Units": true, "Special": true });
   const dataRevision = useAtomValue(gameDataRevisionAtom);
+  const dataSet = useAtomValue(gameDataSourceAtom)?.profile.name ?? "";
+  const { loaded: assets } = useUnitAssets();
 
-  const groups = useMemo(() => {
+  const [groups, dataSetGroups] = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return UNIT_GROUPS
+    const matching = (list: readonly UnitGroup[]) => list
       .map((g) => ({ ...g, units: q ? g.units.filter((id) => unitLabel(id).toLowerCase().includes(q) || String(id) === q) : g.units }))
       .filter((g) => g.units.length > 0);
-    // The revision is a dependency for the names: they follow the loaded data set.
+    // The types a data set has past the game's 228, under a heading of its own.
+    return [matching(UNIT_GROUPS), matching(dataSetUnitGroups())];
+    // The revision and the tables are dependencies for the names and the data set's types: they follow the loaded data set.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query, dataRevision]);
+  }, [query, dataRevision, assets]);
 
   const races: RaceKey[] = ["terran", "zerg", "protoss", "neutral"];
 
@@ -359,6 +363,33 @@ function UnitPalette() {
             </div>
           );
         })}
+        {dataSetGroups.length > 0 && (
+          <div>
+            <div className="node group" title={t("Unit types this data set adds to the game's")}>
+              <span className="twisty" />
+              <span className="swatch" style={{ background: "#6fb07a" }} />
+              {dataSet}
+            </div>
+            {dataSetGroups.map((g) => {
+              const key = `dataset:${g.race}:${g.label}`;
+              const isOpen = query ? true : (open[key] ?? false);
+              return (
+                <div key={key}>
+                  <div className="node" style={{ paddingLeft: 12 }} onClick={() => setOpen({ ...open, [key]: !isOpen })}>
+                    <span className="twisty">{isOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}</span>
+                    <span className="dim">{translate(g.label)}</span>
+                    <span className="faint" style={{ marginLeft: "auto", fontSize: 10 }}>{g.units.length}</span>
+                  </div>
+                  {isOpen && g.units.map((id) => (
+                    <div key={id} className={`node ${active === id ? "selected" : ""}`} style={{ paddingLeft: 40 }} onClick={() => pick(id)} title={t("Unit #{id} — click to place", { id })}>
+                      {unitLabel(id)}
+                    </div>
+                  ))}
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
       <div className="palette-footer">
         <span>{placing ? <>{t("Placing {unitName}", { unitName: unitLabel(active) })}{" "}<span className="faint">{t("· Esc stops")}</span></> : <>{unitLabel(active)} <span className="mono">#{active}</span> <span className="faint">{t("· select mode")}</span></>}</span>
@@ -429,7 +460,7 @@ function SpritePalette() {
   }, [assets]);
   // `assets` for the names, which follow the loaded data set.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const unitGroups = useMemo<PickerGroup[]>(() => UNIT_GROUPS.map((g) => ({ label: g.label, items: g.units.map((id) => ({ id, label: unitLabel(id) })) })), [assets]);
+  const unitGroups = useMemo<PickerGroup[]>(() => [...UNIT_GROUPS, ...dataSetUnitGroups()].map((g) => ({ label: g.label, items: g.units.map((id) => ({ id, label: unitLabel(id) })) })), [assets]);
 
   const pick = (k: SpriteKind, id: number) => { setKind(k); (k === "pure" ? setActive : setActiveUnit)(id); setPlacing(true); };
   const activeId = kind === "pure" ? active : activeUnit;

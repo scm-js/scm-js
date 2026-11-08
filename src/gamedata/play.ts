@@ -193,6 +193,8 @@ export async function copyPlaySet(
   const total = PLAY_MEMBERS.length + pictures.length + sprites.length + sounds.length;
   let done = 0, files = 0, heard = 0, bytes = 0, lacking = false, lit = false;
   for (const member of PLAY_MEMBERS) {
+    // Kept with the editor's own files already (`arr\portdata.*`, since the extraction keeps every table): not twice.
+    if (has(stored(member))) { done++; continue; }
     const data = await read(member);
     if (data) { await write(stored(member), data); files++; bytes += data.length; }
     else if (PLAY_REQUIRED.includes(member)) lacking = true;

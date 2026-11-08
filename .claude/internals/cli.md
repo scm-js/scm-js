@@ -1,7 +1,7 @@
 # The `scmjs` command line
 
 `cli/` is the npm package **`@scm-js/cli`** (its command is `scmjs`): `scmjs about | doctor | info | mcp | lsp | map info|check|open|new|generate|dump|find|fetch|set|resize|triggers|strings|sounds|diff|log|blame|merge|build|run|unpack|pack|trace|cost|rush|balance|test [record]|preview|heatmap|coverage|optimize|analyze |
-replay info|map|open|watch|export|share | plugin new|check|dev | bot new|init|build|update|run|ladder`, or `npx @scm-js/cli …`. npm refused the plain name `scmjs` on the first publish (2026-11-06,
+replay info|map|open|watch|export|share | mod info|unpack|pack|check|diff|new|build|play|test | plugin new|check|dev | bot new|init|build|update|run|ladder`, or `npx @scm-js/cli …`. npm refused the plain name `scmjs` on the first publish (2026-11-06,
 E403 "too similar to scss, sockjs"), so the user chose the scope beside @scm-js/replay and @scm-js/plugin-api. The reader's page is `docs/cli.md`. The shape was the user's (2026-11-05): one command, a noun for
 each kind of thing (`map`, `replay`, `plugin`, `bot`), "an impressive UX tool … not overly engineered".
 
@@ -2411,3 +2411,28 @@ the analysis itself 20–140 ms (Spring Thaw 256 × 128, 4 starts: 135 ms; Big G
   natural is "nearest base on foot", so a map whose designers mean another base reads differently; chokes off the
   shortest walks (a second route's narrows) are not reported — the plugin's BWEM-style areas would be the next step;
   `map generate` could call `analyzeLayout` instead of its own `measureMap` (same numbers) but was left alone.
+
+## Mods: `scmjs mod` (`cli/src/mod/`) — 2026-11-08, slice M3 of the mods plan
+
+The whole design, the proofs and the traps are in **`mods.md`**. Here, what touches the rest of the command:
+- The first noun with **its own folder** (`cli/src/mod/*.ts`, imports `../../../src/…`); `tests/core.test.ts` now walks
+  `cli/src/**` recursively and matches `(../)+src/`, so the thin-layer rule holds there too.
+- **The overview's row** came from `about`, now `{ hidden: true }` (still listed in docs/cli.md's reference). The 23
+  lines are held again; the next row needs another freed.
+- `map test`'s action is the function `mapTestAction`, shared with `mod test <mod> <map>`; `map test|trace|cost` take
+  `--mod`, which writes the mod loose in a temp folder (`overlay.ts`) only after `modArgs` says the engine's runners
+  take one (`current.json` `"mods": 1`), and removes it after. On a Remastered copy a mod the runner reloads the
+  startup data for also gets the game's own pictures as a layer under it (`--mod <game> --mod <mod>`; the runner's
+  own Remastered reader has not got them); `mods.md` "Remastered copy and the engine's reload".
+- `mod play` has its own loopback page (`play.ts`), not `open.ts`'s `handOver`: it serves `/manifest`, `/file/<i>` and
+  `/map`, builds `File`s in the page and posts `scmjs.play` with `dataSet`; `tests/cli-mod.test.ts` stands in for the page.
+- MCP: six tools (`mod_info|check|diff|unpack|pack|new`), 31 in all with `map_analyze`; `mod_unpack`'s data leaves out the manifest.
+- **In Korean** (merged after the Korean slice): every printed word of `cli/src/mod/` and the `mod` commands in
+  main.ts goes through `t()`, as the rest; the files a mod command writes (mod.json, README, the tables' text) stay
+  English, as map unpack's do, and so does the play page hand-over's loopback page, as `open.ts`'s. **Left English**:
+  the findings of `mod check` and the lines of `mod diff`, which `src/formats/mod/{check,diff}.ts` make — the editor
+  does not show them, so they are not in its catalogue, and the CLI's catalogue reads `cli/src` only; translating them
+  means moving their words into `cli/src` (a table of rules to sentences) or a third tree.
+- `mapTestAction` carries #186's `--clips` too, but `mod test` does not offer it and `map test --mod --clips` draws
+  the clips on the play page without the mod (the replay is the modded game's): a clip of a mod that changes the
+  units can go out of step. Not guarded.

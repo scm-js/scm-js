@@ -73,6 +73,13 @@ export const SOURCES = [
     pageTitle: "StarCraft maps and replays on the command line",
   },
   {
+    id: "mods",
+    file: "docs/mods.md",
+    title: "Mods",
+    blurb: "A mod read as its makers ship it, kept as a folder of PyMS text and PNG sheets, checked, compared, packed back into the MPQ the launchers load, and played.",
+    pageTitle: "StarCraft mods as text",
+  },
+  {
     id: "core",
     file: "docs/core.md",
     title: "Library",

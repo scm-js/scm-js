@@ -1595,7 +1595,9 @@ and Walkability is the plugin to read.
 - **`pickObject`** resolves with the unit or location clicked, outlining what is under the
   pointer as it moves.
 - **`pickFiles`** opens the browser's file picker and resolves with the files, or an empty
-  list.
+  list. With `{ directory: true }` it asks for a folder instead and resolves with every
+  file in it as `{ path, file }`, where `path` runs from the folder's name with forward
+  slashes (`My Mod/arr/units.dat`).
 
 The map picks resolve `null` on Esc or a right-click. Only one runs at a time, and a new
 one cancels the previous.
@@ -1614,6 +1616,23 @@ api.ui.fileType({
   name: "StarCraft replay",
   extensions: [".rep"],
   open: (files) => api.log(`${files.length} replays: ${files.map((f) => f.name).join(", ")}`),
+});
+```
+
+A file type can also open folders. Give it `openFolder`, and a folder dropped on the
+editor comes to you as its files with their paths, in the same `{ path, file }` form as a
+folder pick. `acceptsFolder` looks at the paths first and says whether the folder is
+yours. When several plugins open folders, the first to register whose `acceptsFolder`
+agrees gets the folder, and a folder nobody takes is left alone. A type that only opens
+folders can have an empty `extensions`.
+
+```ts
+// A mod's folder dropped on the editor: one with the game's tables in it.
+api.ui.fileType({
+  name: "StarCraft mod",
+  extensions: [],
+  acceptsFolder: (paths) => paths.some((p) => /(^|\/)arr\/units\.dat(ex)?$/i.test(p)),
+  openFolder: (files) => api.log(`${files.length} files, the first ${files[0]?.path}`),
 });
 ```
 
@@ -2233,17 +2252,36 @@ Help ▸ Game Data…. The `"gameData"` event fires on every change.
   set they belong to, and `profiles()` lists every set with a copy here.
 - **Managing sets.** `install(profile, files, progress)` extracts a set from its archives
   and switches to it, `select(id)` switches, and `remove(id)` deletes a set's copy. The
-  game's own archives must be among a mod's files, since a mod only replaces files.
+  game's own archives must be among a mod's files, since a mod only replaces files, unless
+  `files.base` names a set whose copy the files are laid over instead. `profile.url` says
+  where the set's makers publish it; a map saved with the set records it.
+- **A set in memory.** `attach(profile, read, { hash })` draws from a function: every file
+  is asked of `read` first, and what it answers null for comes from the set in use.
+  Nothing is stored. After changing what `read` answers, `reload()` drops everything
+  decoded and draws the map again — the loop for a plugin that edits the tables or
+  pictures. `read` gets a second argument: `member`, the game's own name for the file
+  (`arr\units.dat`, or `rez\stat_txt.tbl` for `tileset/stat_txt.tbl`), and `under(path)`,
+  which reads the set the function was attached over, such as the game's file beneath a
+  mod's. `read` need not answer `unit/manifest.json`: the editor works out from what
+  `read` answers which tables are in GPTP's `.datex` layout and whether the set brings
+  unit names and command card pictures.
+- **The hash.** `hash` is what a map saved with the set records and what Test Map hands
+  on. When it is worked out after the files are attached or redrawn, `rehash(hash)` gives
+  it to the set in use without reading anything again.
 - **Reading files.** `read(path)` hands over one of the extracted files as bytes, for a
   plugin that reads the game's formats itself: `arr/units.dat`, `tileset/jungle.cv5`,
   `unit/zerg/drone.grp`. Paths are the archive's, in lower case with forward slashes, and
   `tileset/manifest.json` and `unit/manifest.json` list what was extracted. It answers
-  null for a file the copy does not have.
+  null for a file the copy does not have. `read(path, { under: true })` reads the set
+  under a set in memory, without asking its function. `storedPath(member)` turns the
+  game's name for a file into the path these take.
 
 A mod's files replace the game's in the same formats, so `data`, `tileset`, `graphics` and
-`names` follow them automatically. Mods that extend the game's table sizes are not
-covered. A plugin written only for the game's own data can check `profile().id`
-(`"starcraft"`) and turn itself off for anything else.
+`names` follow them automatically, at whatever width the mod's tables have: `data.units()`
+can hold more than 228 types, `names.unitGroups()` then ends with the set's own groups,
+and `graphics.icon` pictures the new types where the set has a sheet for them. A plugin
+written only for the game's own data can check `profile().id` (`"starcraft"`) and turn
+itself off for anything else.
 
 ```ts
 const source = api.gameData.source();
@@ -2252,6 +2290,15 @@ for (const set of await api.gameData.profiles()) api.log(`data set ${set.id}: ${
 
 const dat = await api.gameData.read("arr/units.dat");
 api.log(dat ? `units.dat is ${dat.length} bytes` : "no game data installed");
+```
+
+```ts
+// A table editor's loop: draw from the edited tables, and name them once their digest is known.
+const edited = new Map<string, Uint8Array>(); // by the game's names, as a mod keeps them
+await api.gameData.attach({ id: "draft", name: "Draft" }, (path, file) => (file.member && edited.get(file.member)) ?? null);
+// … after an edit:
+api.gameData.reload();
+api.gameData.rehash(await hashOfChanges(edited)); // your digest of the files that differ from the game's
 ```
 
 ### `api.consts`
@@ -2289,6 +2336,22 @@ The images the map view draws, for your own lists and previews.
   or a technology, as its command card shows it: yellow, or grey or white with
   `{ look: "disabled" }` or `{ look: "selected" }`. It suits a list or a tooltip better
   than a unit's picture from the map.
+- **Your own GRPs:** `grpImage(bytes, frame, { palette, teamColor })` draws one frame of a
+  GRP you hold, such as a mod's picture, the way the editor draws a unit: through a
+  tileset's palette (`"jungle"`; the open map's by default), with the team colour of a
+  player (0 by default, `null` for none). `flipped` mirrors it and `shadow` draws it as a
+  shadow. It resolves with a new canvas, or null when the bytes are not a GRP or there is
+  no game data for the palette.
+
+```ts
+// A mod's marine in player 2's colour on Ice, beside the game's own.
+const mine = await api.gameData.read("unit/terran/marine.grp");
+const theirs = await api.gameData.read("unit/terran/marine.grp", { under: true });
+for (const bytes of [mine, theirs]) {
+  const pic = bytes && (await api.graphics.grpImage(bytes, 0, { palette: "ice", teamColor: 1 }));
+  if (pic) api.log(`a ${pic.width} × ${pic.height} picture`);
+}
+```
 
 Rules for using them:
 

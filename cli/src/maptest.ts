@@ -32,7 +32,7 @@ import { PlayerType } from "../../src/formats/chk/sections/players";
 import { conditionDef } from "../../src/data/triggerDefs";
 import { plainText } from "../../src/editor/textColors";
 import { decodeText, type TextEncoding } from "../../src/formats/text/encoding";
-import { ensureEngine, findGameCopy, runnerFor, startRunner } from "./engine";
+import { ensureEngine, findGameCopy, modArgs, runnerFor, startRunner, type RunnerModReport } from "./engine";
 import { unitByName } from "./rush";
 import { gameClock, summarizeRows, type CopyLine, type ReplayCheck, type ReplayPlayerLine } from "./trace";
 import { t } from "./i18n";
@@ -55,6 +55,8 @@ export interface TestStartLine {
   map: { name: string; width: number; height: number; tileset: string }; copy: string; seed: number; rows: number; copies: number; remastered: boolean; localPlayer: number;
   /** A replay-driven scenario's replay: its length and players. */
   replay?: { name: string; frames: number; gameType: number; players: ReplayPlayerLine[] };
+  /** With `--mod`: what the game read of the mod, and the startup data read again. */
+  mod?: RunnerModReport;
   ms: { load: number; start: number };
 }
 export interface Observed {
@@ -539,6 +541,8 @@ export interface TestRunOptions {
   onEnd?: (p: PlannedScenario, start: TestStartLine, end: TestEndLine) => void;
   /** No line a scenario as it ends (`recordTest` says what it recorded instead). */
   quiet?: boolean;
+  /** A mod laid over the game: `folder` writes its files in the game's paths and says where (asked once the engine is known to take one). */
+  mod?: { layers: () => Promise<string[]>; report?: (m: RunnerModReport) => RunnerModReport };
 }
 
 export interface TestRun {
@@ -566,6 +570,8 @@ export async function runTests(mapName: string, scenarios: PlannedScenario[], me
   const game = findGameCopy(o.starcraft);
   const engine = await ensureEngine(o.engine, undefined, o.live ?? (() => {}));
   const runner = runnerFor(engine, "map");
+  // (The engine is asked first: a mod is written out only for runners that take one.)
+  const modFlag = o.mod ? (modArgs(engine, "?"), modArgs(engine, await o.mod.layers())) : [];
   const out: ScenarioResult[] = [];
   let first: TestStartLine | null = null;
   const taken = new Set<string>();
@@ -578,7 +584,8 @@ export async function runTests(mapName: string, scenarios: PlannedScenario[], me
       writeFileSync(spec, JSON.stringify(p.spec));
       // A replay-driven scenario plays the replay on the map (the runner's `--play`); its own game is the replay, so none is kept.
       const args = p.replay ? [map, "--test", spec, "--play", p.replay] : [map, "--test", spec, "--replay", rep, "--seed", String(p.seed)];
-      const { start, end } = await runScenario(runner, [...args, "--engine", engine.dir, "--starcraft", game.folder], engine.dir, o, !!p.replay);
+      const { start, end } = await runScenario(runner, [...args, ...modFlag, "--engine", engine.dir, "--starcraft", game.folder], engine.dir, o, !!p.replay);
+      if (start.mod && o.mod?.report) start.mod = o.mod.report(start.mod);
       if (!first) { first = start; o.onStart?.(start); }
       o.onEnd?.(p, start, end);
       const results = judge(p, end);
@@ -671,7 +678,7 @@ export function testSummary(run: Pick<TestRun, "scenarios" | "ms">): string {
 /** `map test --json`: every scenario with its results, and where the engine and the game came from. */
 export function testJson(mapFile: string, run: TestRun) {
   const failed = run.scenarios.filter((s) => !s.ok).length;
-  return { file: mapFile, passed: run.scenarios.length - failed, failed, scenarios: run.scenarios, engine: run.engine, game: run.game, ms: run.ms };
+  return { file: mapFile, passed: run.scenarios.length - failed, failed, scenarios: run.scenarios, engine: run.engine, game: run.game, ...(run.start?.mod ? { mod: run.start.mod } : {}), ms: run.ms };
 }
 
 /** The map file's scenario as the game runs it (a built map's built one) and its other members, for the copies. */

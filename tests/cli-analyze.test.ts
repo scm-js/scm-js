@@ -304,15 +304,15 @@ describe("the verdicts' thresholds", () => {
 
 describe("the walking speed", () => {
   it("is flingy.dat's top speed, or the walking animation's moves over its frames", () => {
-    // iscript.bin: an entry table at 2 naming script 5 at 10; a type-12 header (14 animations); Walking (11) at 46:
-    // move 4, wait 1, move 3, wait 1, goto 46.
+    // iscript.bin as the game's is laid out, the headers before the entry table: script 5's type-12 header (14
+    // animations) at 2; Walking (11) at 38: move 4, wait 1, move 3, wait 1, goto 38; the table at 50 naming script 5.
     const bin = new Uint8Array(64);
     const v = new DataView(bin.buffer);
-    v.setUint16(0, 2, true);
-    v.setUint16(2, 5, true); v.setUint16(4, 10, true); v.setUint16(6, 0xffff, true);
-    bin.set([0x53, 0x43, 0x50, 0x45, 12], 10);
-    v.setUint16(18 + 11 * 2, 46, true);
-    bin.set([0x29, 4, 0x05, 1, 0x29, 3, 0x05, 1, 0x07, 46, 0], 46);
+    v.setUint16(0, 50, true);
+    bin.set([0x53, 0x43, 0x50, 0x45, 12], 2);
+    v.setUint16(10 + 11 * 2, 38, true);
+    bin.set([0x29, 4, 0x05, 1, 0x29, 3, 0x05, 1, 0x07, 38, 0], 38);
+    v.setUint16(50, 5, true); v.setUint16(52, 2, true); v.setUint16(54, 0xffff, true);
     const tables = {
       units: { flingy: Uint8Array.from([0, 1]) },
       flingy: { sprite: Uint16Array.from([0, 0]), topSpeed: Uint32Array.from([1280, 1]), moveControl: Uint8Array.from([0, 2]) },

@@ -6,9 +6,10 @@
  * (`tileset/badlands.cv5`, `arr/units.dat`, `unit/…/marine.grp`, the two manifests) — to
  * bytes. Nothing here touches a file system or the network.
  *
- * This module imports only `iscript.ts` and `anim.ts`, which have no imports of their
- * own, so Node can run it under its built-in type stripping without a build step. Keep it
- * that way: the import specifiers carry the `.ts` extension for the same reason. That is also
+ * This module imports only `iscript.ts`, `anim.ts` and the table codec (`table.ts`,
+ * `schema.ts`), which import nothing but each other, so Node can run it under its built-in
+ * type stripping without a build step. Keep it that way: the import specifiers carry the
+ * `.ts` extension for the same reason. That is also
  * why its words are not translated here: the i18n module brings a JSON catalogue Node will
  * not import bare. Each step and error carries its English template and values beside the
  * English text (`ExtractText`), translated where they are shown (`install.ts#runWorker`); the
@@ -16,7 +17,9 @@
  */
 import type { Params } from "../i18n";
 import { animMember, animPath, imagesSharingGrp, slimAnim } from "../formats/dat/anim.ts";
-import { ANIM_COUNT_BY_TYPE, decodeIscript, IMAGE_SPAWN_OPS, Op, walkAnimation } from "../formats/dat/iscript.ts";
+import { decodeIscript, IMAGE_SPAWN_OPS, Op, walkAnimation } from "../formats/dat/iscript.ts";
+import { datShape, decodeDat, type DatFile } from "../formats/dat/table.ts";
+import type { DatTableName } from "../formats/dat/schema.ts";
 
 /** The member from whichever archive has it (later archives win), or null when none does. */
 export type ReadMember = (member: string) => Uint8Array | null;
@@ -123,22 +126,35 @@ export function extractTilesets(read: ReadMember, progress?: ExtractProgress): T
 
 /* ── Units ──────────────────────────────────────────────── */
 
-const UNIT_COUNT = 228;
-const SPRITE_COUNT = 517;
-const IMAGE_COUNT = 999;
-/** The Brood War units.dat; the original game's is shorter and the decoder does not take it. */
-const UNITS_DAT_SIZE = 19876;
+/**
+ * The tables the extraction reads at the width the data set has them. A data set made with
+ * GPTP's DatExtend carries `arr\<name>.datex` (every column at the full count, a few of them
+ * widened); where it has one that is read and stored in place of the `.dat`, and the
+ * manifest's `datex` says which. DatExtend's other layout keeps the `.dat` name and is told
+ * by its length (`table.ts#datShape`).
+ */
+export const DATEX_TABLES: readonly DatTableName[] = ["units", "weapons", "flingy", "sprites", "images", "upgrades", "techdata", "orders", "portdata", "mapdata"];
+/** A table's `.datex`, when the data set has one that is a whole number of GPTP's entries. */
+function datexOf(read: ReadMember, table: DatTableName): Uint8Array | null {
+  const data = read(`arr\\${table}.datex`);
+  return data && data.length > 0 && datShape(table, data.length, `${table}.datex`) ? data : null;
+}
+
 /** Tables the unit renderer cannot start without. MPQ paths, as the game names them. */
 export const UNIT_TABLES = [
   "arr\\units.dat", "arr\\weapons.dat", "arr\\upgrades.dat", "arr\\techdata.dat", "arr\\flingy.dat", "arr\\sprites.dat", "arr\\images.dat", "arr\\images.tbl",
   "game\\tunit.pcx", "scripts\\iscript.bin",
 ];
 /**
- * Tables the editor never reads but copies when the archives have them, for plugins that
- * run the game's own code over the files (`api.gameData.read`): OpenBW, behind the
- * Walkability plugin's game pathing, will not start without the orders table.
+ * Tables the editor never reads but copies when the archives have them — with the ones
+ * above and `SOUND_TABLES`, every file the game keeps under `arr\` (fifteen in 1.16.1) —
+ * for plugins that read or run the game's own files (`api.gameData.read`): OpenBW, behind
+ * the Walkability plugin's game pathing, will not start without the orders table, and a mod
+ * editor compares a mod's portraits and campaign map list against the game's rather than
+ * counting them as new. A copy made before 2026-11-08 lacks `portdata` and `mapdata` (the
+ * play set has `portdata` at the same path).
  */
-export const EXTRA_TABLES = ["arr\\orders.dat"];
+export const EXTRA_TABLES = ["arr\\orders.dat", "arr\\portdata.dat", "arr\\portdata.tbl", "arr\\mapdata.dat", "arr\\mapdata.tbl"];
 /**
  * The game's list of its own sounds — which file each sound id plays — copied when the
  * archives have it. Only the list: the sounds themselves stay where they are. The sound
@@ -152,6 +168,12 @@ export const SOUND_TABLES = ["arr\\sfxdata.dat", "arr\\sfxdata.tbl"];
  * A copy made before 2026-10-15 lacks them, and plugins then show names.
  */
 export const ICON_FILES = ["unit\\cmdbtns\\cmdicons.grp", "unit\\cmdbtns\\ticon.pcx"];
+/**
+ * Files a data set with more unit types than the game's 228 names and pictures them with,
+ * copied when present and listed in the manifest's `optional`: the names of every type by
+ * id, and a command card picture for each (GPTP's DatExtend convention).
+ */
+export const UNIT_EXTRA_FILES = ["rez\\unitnames.tbl", "unit\\cmdbtns\\uniticons.grp"];
 /** Images the engine creates without an opcode: damage flames/sparks/blood (450–493) and geyser smoke (430–439). */
 const ENGINE_IMAGES = [...Array.from({ length: 44 }, (_, i) => 450 + i), ...Array.from({ length: 10 }, (_, i) => 430 + i)];
 
@@ -168,6 +190,10 @@ export interface UnitManifest {
    * are in this list without being in `images`, kept for that reason alone).
    */
   hd?: number[];
+  /** The tables stored as `arr/<name>.datex` rather than `.dat` (`DATEX_TABLES`); absent when none is. */
+  datex?: string[];
+  /** The `UNIT_EXTRA_FILES` the copy has, as stored paths; absent when it has none. */
+  optional?: string[];
 }
 
 export interface UnitExtraction {
@@ -190,36 +216,52 @@ export class ExtractError extends Error {
 export const assetPath = (member: string) => member.toLowerCase().replaceAll("\\", "/");
 
 /**
- * The unit half: the tables, then every GRP and `.lo` file reachable from the 228 unit
- * types and the 517 sprites through their iscripts (the walk is what decides which of the
+ * The unit half: the tables, then every GRP and `.lo` file reachable from the unit types
+ * and the sprites (228 and 517 in the game's tables, as many as a data set's have) through their iscripts (the walk is what decides which of the
  * archive's thousands of graphics ship), plus `unit/manifest.json`. Throws `ExtractError`
- * when a table is missing or units.dat is not the Brood War layout — the archives are the
- * wrong ones, and nothing downstream would work.
+ * when a table is missing, is no layout of its table, or units.dat is the original game's
+ * — the archives are the wrong ones, and nothing downstream would work.
  */
 export function extractUnits(read: ReadMember, progress?: ExtractProgress): UnitExtraction {
   reportStep(progress, 0, msg("Reading the unit tables"));
   const tables = new Map<string, Uint8Array>();
-  for (const member of UNIT_TABLES) {
-    const data = read(member);
-    if (!data) throw new ExtractError(msg("{member} is missing from the archives."), { member });
+  const datex: string[] = [];
+  for (const wanted of UNIT_TABLES) {
+    const table = DATEX_TABLES.find((t) => wanted === `arr\\${t}.dat`);
+    const extended = table ? datexOf(read, table) : null;
+    const member = extended ? `arr\\${table}.datex` : wanted;
+    const data = extended ?? read(wanted);
+    if (!data) throw new ExtractError(msg("{member} is missing from the archives."), { member: wanted });
+    if (extended) datex.push(table!);
     tables.set(member, data);
   }
-  const units = tables.get("arr\\units.dat")!;
-  if (units.length !== UNITS_DAT_SIZE) {
-    throw new ExtractError(msg("units.dat is {size} bytes; expected the Brood War layout ({expected}). Is BrooDat.mpq present?"), { size: units.length, expected: UNITS_DAT_SIZE });
+  const table = (name: DatTableName): DatFile => {
+    const member = datex.includes(name) ? `arr\\${name}.datex` : `arr\\${name}.dat`;
+    const data = tables.get(member)!;
+    try {
+      return decodeDat(name, data, { fileName: member });
+    } catch {
+      // units.dat of no known width is most likely StarDat's alone: say what is wanted.
+      if (member === "arr\\units.dat") throw new ExtractError(msg("units.dat is {size} bytes; expected the Brood War layout ({expected}). Is BrooDat.mpq present?"), { size: data.length, expected: 19876 });
+      throw new ExtractError(msg("{member} is {size} bytes, which is no layout of the table the editor reads."), { member, size: data.length });
+    }
+  };
+  const unitsDat = table("units");
+  if (unitsDat.legacy) {
+    throw new ExtractError(msg("units.dat is {size} bytes; expected the Brood War layout ({expected}). Is BrooDat.mpq present?"), { size: tables.get("arr\\units.dat")!.length, expected: 19876 });
   }
 
   /*
-   * The walk from a unit to its picture, kept in sync with src/formats/dat/dat.ts:
-   *   units.dat graphics (u8, offset 0) → flingy.dat sprite (u16, offset 0)
-   *   → sprites.dat image (u16, offset 0) → images.dat grp (u32, offset 0, 1-based into images.tbl)
-   * Turrets and the like are units themselves, so walking all 228 covers subunits too.
+   * The walk from a unit to its picture, at whatever width the tables have:
+   *   units.dat graphics → flingy.dat sprite → sprites.dat image → images.dat grp (1-based into images.tbl)
+   * Turrets and the like are units themselves, so walking every type covers subunits too.
    */
   const u16 = (b: Uint8Array, o: number) => b[o] | (b[o + 1] << 8);
-  const u32 = (b: Uint8Array, o: number) => (u16(b, o) | (u16(b, o + 2) << 16)) >>> 0;
-  const flingy = tables.get("arr\\flingy.dat")!;
-  const sprites = tables.get("arr\\sprites.dat")!;
-  const images = tables.get("arr\\images.dat")!;
+  const flingy = table("flingy").columns.sprite;
+  const spritesDat = table("sprites");
+  const spriteImage = spritesDat.columns.image;
+  const imagesDat = table("images");
+  const imageCount = imagesDat.count;
   const tbl = tables.get("arr\\images.tbl")!;
   const tblCount = u16(tbl, 0);
   const latin1 = new TextDecoder("latin1");
@@ -230,32 +272,44 @@ export function extractUnits(read: ReadMember, progress?: ExtractProgress): Unit
     return latin1.decode(tbl.subarray(at, end));
   };
   const tblEntry = (index1: number) => (index1 > 0 && index1 <= tblCount ? tblString(index1 - 1) : null);
-  // images.dat fields, struct-of-arrays: grp u32 ×999, then 6 u8 columns, iscript u32, six .lo u32 columns.
-  const imageGrp = (i: number) => tblEntry(u32(images, i * 4));
-  const imageIscript = (i: number) => u32(images, IMAGE_COUNT * 10 + i * 4);
-  const imageLos = (i: number) =>
-    Array.from({ length: 6 }, (_, k) => tblEntry(u32(images, IMAGE_COUNT * (14 + k * 4) + i * 4))).filter((p): p is string => p !== null);
+  const ic = imagesDat.columns;
+  const overlays = [ic.shield_overlay, ic.attack_overlay, ic.damage_overlay, ic.special_overlay, ic.landing_dust_overlay, ic.lift_off_dust_overlay];
+  const imageGrp = (i: number) => tblEntry(ic.grp_file[i]);
+  const imageIscript = (i: number) => ic.iscript_id[i];
+  const imageLos = (i: number) => overlays.map((col) => tblEntry(col[i])).filter((p): p is string => p !== null);
 
-  const iscript = decodeIscript(tables.get("scripts\\iscript.bin")!);
+  // A script this cannot read (a mod's compiler, opcodes a plugin added) costs the images
+  // only it would have reached, not the extraction.
+  let iscript: ReturnType<typeof decodeIscript> | null = null;
+  try {
+    iscript = decodeIscript(tables.get("scripts\\iscript.bin")!);
+  } catch {
+    iscript = null;
+  }
 
   reportStep(progress, 0.05, msg("Walking the animation scripts"));
   const reachable = new Set<number>();
   const todo = [...ENGINE_IMAGES];
-  for (let unit = 0; unit < UNIT_COUNT; unit++) todo.push(u16(sprites, u16(flingy, units[unit] * 2) * 2));
+  const unitGraphics = unitsDat.columns.graphics;
+  for (let unit = 0; unit < unitsDat.count; unit++) todo.push(spriteImage[flingy[unitGraphics[unit]]] ?? 0);
   // Every sprites.dat entry too: the Sprites layer places any of them as a pure sprite, and
   // doodad overlays (tree canopies, Installation doors) are sprites no unit ever draws.
-  for (let sprite = 0; sprite < SPRITE_COUNT; sprite++) todo.push(u16(sprites, sprite * 2));
+  for (let sprite = 0; sprite < spritesDat.count; sprite++) todo.push(spriteImage[sprite]);
   while (todo.length > 0) {
     const image = todo.pop()!;
-    if (image >= IMAGE_COUNT || reachable.has(image)) continue;
+    if (image >= imageCount || reachable.has(image)) continue;
     reachable.add(image);
-    const header = iscript.headers.get(imageIscript(image));
-    if (!header) continue;
-    for (let anim = 0; anim < ANIM_COUNT_BY_TYPE[header.type]; anim++) {
-      walkAnimation(iscript, header.id, anim, (ins) => {
-        if (IMAGE_SPAWN_OPS.has(ins.op)) todo.push(ins.args[0]);
-        else if (ins.op === Op.imgulnextid) todo.push(image + 1);
-      });
+    const header = iscript?.headers.get(imageIscript(image));
+    if (!iscript || !header) continue;
+    for (let anim = 0; anim < header.anims.length; anim++) {
+      try {
+        walkAnimation(iscript, header.id, anim, (ins) => {
+          if (IMAGE_SPAWN_OPS.has(ins.op)) todo.push(ins.args[0]);
+          else if (ins.op === Op.imgulnextid) todo.push(image + 1);
+        });
+      } catch {
+        // An opcode this does not know: the rest of that animation is not followed.
+      }
     }
   }
 
@@ -271,8 +325,19 @@ export function extractUnits(read: ReadMember, progress?: ExtractProgress): Unit
   const missing: string[] = [];
   for (const [member, data] of tables) files.set(assetPath(member), data);
   for (const member of [...EXTRA_TABLES, ...SOUND_TABLES, ...ICON_FILES]) {
+    // orders.dat, like the tables above, at the width the data set has it.
+    const table = DATEX_TABLES.find((t) => member === `arr\\${t}.dat`);
+    const extended = table ? datexOf(read, table) : null;
+    if (extended) { files.set(assetPath(`arr\\${table}.datex`), extended); datex.push(table!); continue; }
     const data = read(member);
     if (data) files.set(assetPath(member), data);
+  }
+  const optional: string[] = [];
+  for (const member of UNIT_EXTRA_FILES) {
+    const data = read(member);
+    if (!data) continue;
+    files.set(assetPath(member), data);
+    optional.push(assetPath(member));
   }
   const wanted = [...grpPaths, ...loPaths].sort();
   wanted.forEach((rel, i) => {
@@ -297,7 +362,7 @@ export function extractUnits(read: ReadMember, progress?: ExtractProgress): Unit
   // An image with no file of its own is drawn from the file of another image of its GRP
   // (`imagesSharingGrp`). That one is usually reachable itself and already here; where it
   // is not, its file is taken too, under its own number, so the loader finds it there.
-  const grpColumn = Array.from({ length: IMAGE_COUNT }, (_, i) => u32(images, i * 4));
+  const grpColumn = ic.grp_file;
   for (const image of imageIds) {
     if (files.has(animPath(image))) continue;
     for (const other of imagesSharingGrp(grpColumn, image)) {
@@ -317,6 +382,8 @@ export function extractUnits(read: ReadMember, progress?: ExtractProgress): Unit
     overlays: [...loPaths].sort().map((p) => p.toLowerCase()),
     missing,
     ...(hd.length > 0 ? { hd } : {}),
+    ...(datex.length > 0 ? { datex } : {}),
+    ...(optional.length > 0 ? { optional } : {}),
   };
   files.set("unit/manifest.json", json(manifest));
   reportStep(progress, 1, msg("Unit graphics"));

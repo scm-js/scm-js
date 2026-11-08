@@ -14,11 +14,13 @@
  */
 import { isGameArchive, memberKey, sortArchives } from "./archives";
 import type { ExtractRequest, ExtractResponse } from "./extract.worker";
-import { DEFAULT_PROFILE, isDefaultProfile, normalizeProfile, type GameDataProfile } from "./profiles";
+import { DEFAULT_PROFILE, isDefaultProfile, isProfileId, normalizeProfile, type GameDataProfile } from "./profiles";
 import { BUILD_INFO, installRootOf, type PickedFile } from "./remasteredFolder";
-import { forgetStoredFolders, keepInMemory, type StoredCopy } from "./store";
+import { forgetStoredFolders, keepInMemory, storedCopy, type StoredCopy } from "./store";
+import { currentAssetSource } from "./source";
 import { findMembers, httpRangeReader, readZipDirectory, readZipMember, ZipError } from "./zip";
 import { t, translate } from "../i18n";
+import { GAME_FOLDERS } from "../formats/mod/sources";
 
 export type InstallProgress = (fraction: number, label: string) => void;
 
@@ -92,6 +94,12 @@ export interface GameDataFiles {
   archives: readonly { name: string; data: InstallBytes }[];
   /** Loose files by member path (`arr/units.dat`, `unit/terran/marine.grp`), read before any archive. */
   files?: readonly { path: string; data: InstallBytes }[];
+  /**
+   * Lay the files over the copy of this data set (an id; the game's own is `starcraft`)
+   * instead of over the game's archives, which are then not needed. Where the game's own
+   * files are this build's rather than a copy (a clone that extracted them), those are used.
+   */
+  base?: string;
 }
 
 /** The member prefixes an extraction ever asks for: anything else in a picked folder is not sent to the worker. */
@@ -104,8 +112,18 @@ export function isMemberPath(path: string): boolean {
 }
 
 /**
+ * Whether a loose file is in one of the game's folders at all (`sound\…`, `font\…` too): a
+ * mod's file, which the data set's hash covers even where the extraction does not read it.
+ */
+export function isGamePath(path: string): boolean {
+  const parts = memberKey(path).split("\\");
+  return parts.length > 1 && (GAME_FOLDERS as readonly string[]).includes(parts[0]);
+}
+
+/**
  * A folder pick as `GameDataFiles`: every `.mpq` is an archive, and every other file whose
- * path (relative to the picked folder) starts with a game data folder is a loose member.
+ * path (relative to the picked folder) starts with one of the game's folders is a loose
+ * member (the extraction reads those under `isMemberPath`; the rest count for the hash).
  * The picked folder's own name is the first segment of `webkitRelativePath` and is dropped,
  * so a mod's `mpq/arr/units.dat` is the member `arr\units.dat`.
  */
@@ -123,7 +141,7 @@ export function splitPickedFiles(files: readonly File[]): GameDataFiles {
     // `mpq` or a StarCraft folder both put the game folders one level down.
     for (let skip = 0; skip < Math.min(3, segments.length - 1); skip++) {
       const path = segments.slice(skip).join("/");
-      if (isMemberPath(path)) {
+      if (isGamePath(path)) {
         loose.push({ path, data: file });
         break;
       }
@@ -144,24 +162,47 @@ const bytesOf = async (data: InstallBytes): Promise<ArrayBuffer> =>
 
 /**
  * Extract a data set and store it under its id. The game's own archives must be among
- * `input.archives` (the same rule as `pickArchives`); a mod's archives and loose files are
- * laid over them. Installing under the default id is `installFromFiles` with extras.
+ * `input.archives` (the same rule as `pickArchives`) unless `input.base` names a copy to lay
+ * the files over instead; a mod's archives and loose files are laid over them. Installing
+ * under the default id is `installFromFiles` with extras.
  */
 export async function installDataSet(profile: GameDataProfile, input: GameDataFiles, progress?: InstallProgress): Promise<StoredCopy> {
   const normalized = normalizeProfile(profile);
   if (!normalized) throw new InstallError(t("\"{id}\" is not a usable data set id: lower-case letters, digits and hyphens, up to 40 characters.", { id: profile.id }));
+  const base = input.base !== undefined ? await baseOf(input.base) : undefined;
   const names = input.archives.map((a) => ({ name: a.name }));
-  pickArchives(names.map((n) => new File([], n.name))); // throws naming what is missing
+  if (!base) pickArchives(names.map((n) => new File([], n.name))); // throws naming what is missing
   progress?.(0, t("Reading the archives"));
   const archives: ExtractRequest["archives"] = [];
   for (const a of orderArchives(input.archives)) archives.push({ name: a.name, bytes: await bytesOf(a.data) });
   const overlay: NonNullable<ExtractRequest["overlay"]> = [];
+  // The mod's files the extraction does not read (its sounds, say) go along for the hash alone, as Blobs where they are.
+  const hashOnly: NonNullable<ExtractRequest["hashOnly"]> = [];
   for (const f of input.files ?? []) {
-    if (!isMemberPath(f.path)) continue;
-    overlay.push({ path: f.path, bytes: await bytesOf(f.data) });
+    if (isMemberPath(f.path)) overlay.push({ path: f.path, bytes: await bytesOf(f.data) });
+    else if (isGamePath(f.path)) hashOnly.push({ path: f.path, data: f.data instanceof Blob ? f.data : await bytesOf(f.data) });
   }
   const from = [...archives.map((a) => a.name), ...(overlay.length ? [t("{n, plural, one {# loose file} other {# loose files}}", { n: overlay.length })] : [])].join(" + ");
-  return runWorker(archives, from, progress, isDefaultProfile(normalized.id) ? undefined : normalized, overlay);
+  return runWorker(archives, from, progress, isDefaultProfile(normalized.id) ? undefined : normalized, overlay, undefined, false, base, hashOnly);
+}
+
+/**
+ * The copy a data set is laid over, as the worker reads it: a stored copy by its id, or —
+ * for the game's own data where this build serves it — the build's address. Throws when
+ * there is nothing to lay the files over.
+ */
+async function baseOf(id: string): Promise<NonNullable<ExtractRequest["base"]>> {
+  if (!isProfileId(id)) throw new InstallError(t("\"{id}\" is not a data set id.", { id }));
+  const copy = await storedCopy(id);
+  if (copy?.where === "opfs") {
+    // A copy made before the play set holds only the pictures its own units reach.
+    if ((copy.play?.version ?? 0) < 2) console.warn(`game data: the "${id}" copy has no play set, so pictures only a new unit type uses may be missing`);
+    return { profile: id };
+  }
+  if (copy?.where === "memory") throw new InstallError(t("The \"{id}\" data set is held for this session only, so nothing can be laid over it.", { id }));
+  const source = currentAssetSource();
+  if (isDefaultProfile(id) && source?.kind === "bundled" && source.base) return { url: new URL(source.base, location.href).href };
+  throw new InstallError(t("There is no copy of the \"{id}\" data set to lay these files over.", { id }));
 }
 
 /**
@@ -265,6 +306,8 @@ function runWorker(
   overlay: NonNullable<ExtractRequest["overlay"]> = [],
   remastered?: ExtractRequest["remastered"],
   lighting = false,
+  base?: ExtractRequest["base"],
+  hashOnly: NonNullable<ExtractRequest["hashOnly"]> = [],
 ): Promise<StoredCopy> {
   return new Promise((resolve, reject) => {
     let worker: Worker;
@@ -297,7 +340,7 @@ function runWorker(
       }
       resolve({ ...reply.stamp, where: reply.where });
     };
-    const req: ExtractRequest = { kind: "extract", archives, from, profile, overlay, ...(remastered ? { remastered } : {}), ...(lighting ? { lighting } : {}) };
+    const req: ExtractRequest = { kind: "extract", archives, from, profile, overlay, ...(remastered ? { remastered } : {}), ...(lighting ? { lighting } : {}), ...(base ? { base } : {}), ...(hashOnly.length ? { hashOnly } : {}) };
     worker.postMessage(req, [...archives.map((a) => a.bytes), ...overlay.map((o) => o.bytes)]);
   });
 }

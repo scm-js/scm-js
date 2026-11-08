@@ -97,6 +97,7 @@ draws with, about 30 MB from the classic archives:
 | `arr/units.dat`, `flingy.dat`, `sprites.dat`, `images.dat`, `images.tbl` | the chain from a unit type to its picture |
 | `arr/weapons.dat`, `upgrades.dat`, `techdata.dat` | the defaults in the Unit, Upgrade and Technology Settings dialogs |
 | `arr/sfxdata.dat`, `sfxdata.tbl` | the list of the game's sounds, for the trigger sound picker |
+| `arr/orders.dat`, `portdata.dat`, `portdata.tbl`, `mapdata.dat`, `mapdata.tbl` | not read by the editor; kept so that every table the game has under `arr` is in the copy, for plugins that read the game's files |
 | `game/tunit.pcx` | team colours |
 | `scripts/iscript.bin` | animation scripts |
 | `unit/**/*.grp`, `unit/**/*.lo?` | about 750 sprite sheets and their overlay positions |
@@ -177,12 +178,13 @@ some of them replaced, such as its own `units.dat`, graphics, sounds or `stat_tx
 Remastered installation added beside a classic copy is a data set too.
 
 To add one, open Help ▸ Game Data…, choose **Add a data set…**, give it a name and pick a
-folder. The folder holds the game's two archives, because a mod replaces files rather than
-bringing all of them, together with the mod's own files:
+folder. The folder holds the mod's own files, and either the game's two archives, which
+the mod's files are laid over, or nothing else, in which case they are laid over the copy
+you are drawing from now:
 
 ```
 MyMod/
-  StarDat.mpq          the game's archives, required
+  StarDat.mpq          the game's archives (or leave them out: the copy in use is the base)
   BrooDat.mpq
   patch_rt.mpq         applied over the two, if present
   mymod.mpq            a mod's own archive
@@ -202,14 +204,86 @@ one, and the choice is remembered. Switching drops everything decoded from the p
 files, since the same ids now mean different pictures, and loads again; an open map stays
 open and picks the new graphics up as they arrive.
 
+A data set laid over a copy holds only what the editor reads. The game's files for playing
+stay in the copy underneath. A copy made with them (see [Files for
+playing](#files-for-playing)) also has every picture the game's image table names; laid
+over an older copy, a new unit type drawn with a picture none of the game's own units uses
+can be missing.
+
 What a data set cannot be:
 
-- **A mod that extends the game's tables.** The table sizes (228 unit types, 130 weapons,
-  61 upgrades, 44 technologies), the tileset formats and the map file's fixed-width
-  sections are the game's. A mod with more unit types, a longer `.dat` layout or extended
-  tilesets is not supported.
 - **A mod made for Remastered's storage.** A data set is read from `.mpq` archives and
   loose files; a mod packaged in Remastered's own storage format is not supported.
+- **A mod that needs its own code to load its data.** A data set is files. What a mod's
+  plugin does when the game runs, such as new orders or a different interface, is not part
+  of drawing a map.
+
+### Data sets made from a mod
+
+Many mods change more than single files. A data set takes what the larger ones ship:
+
+- **Tables of any width.** `units.dat` and the other tables are read at whatever size the
+  file has: the game's own, DatExtend's expanded layout (the same `.dat` name, more
+  entries), or GPTP's `.datex` files (`arr\units.datex` and so on), which are used in
+  place of the `.dat` when a data set has them. A mod with more than 228 unit types gives
+  the editor more unit types.
+- **Names and pictures for the new types.** A type past the game's 228 is named from
+  `rez\unitnames.tbl` when the data set has one (entry N names type N, as GPTP reads it;
+  it then names the game's types too), and its command card picture comes from
+  `unit\cmdbtns\uniticons.grp` when there is one. Without a name file the new types are
+  listed as "Unit #N".
+- **The palette.** Types past 227 appear under their own heading named for the data set,
+  grouped by the race their group flags give and whether they are buildings. With a name
+  file, only the types it names are listed (mods leave the rest of a wide table filled
+  with copies). The types below 228 keep StarEdit's grouping.
+- **Placing, drawing and saving.** A new type is placed, drawn from its own pictures and
+  saved in the map's unit list like any other.
+- **Extended tilesets.** A tileset's files are read at any size: more than 1,024 tile
+  groups, `.vx4ex` megatile tables with 32-bit references, any number of megatiles. On a
+  tileset with more than 2,048 groups a tile's group takes twelve bits of the map's tile
+  value (on the game's own tilesets the top bit is the creep flag, as before), so a map
+  placing group 2,774 draws it.
+- **Remastered pictures.** On a data set laid over a Remastered copy, an image whose
+  picture or image-table row the data set changed is drawn from its classic picture even
+  with View ▸ Remastered Graphics on, since the 2x picture on file is of the original.
+
+What does not work yet:
+
+- **Settings for the new types.** A map's unit, upgrade and technology settings have a
+  fixed size in the file format: 228 unit types, 61 upgrades, 44 technologies. A type past
+  227 has no per-map settings; Unit Settings says so for it. Upgrades and technologies
+  past the game's are not listed.
+- **Plugins.** Plugins that read the tables see the wider tables, but most were written
+  for the game's sizes and may show only the game's types.
+- **Triggers.** The trigger editor lists the game's unit types, then the data set's from
+  233 on; ids 228 to 232 stay the game's None and unit classes.
+
+### A map remembers its data set
+
+When a map is saved while a data set other than the game's own is in use, it carries a
+small note naming it (a file `scmjs\dataset.json` inside the map's archive, with the data
+set's id, name, a hash of its files and, when known, where its makers publish it). The
+game and other editors ignore it. Opening such a map while another data set is in use, the
+editor asks once: to switch, when that data set is installed here, or, when it is not, it
+says where its makers publish it and offers Help ▸ Game Data…. Nothing is downloaded.
+
+Test Map passes the data set on in the same way, so a test target that plays the map, such
+as the play page, knows which files the map was made for.
+
+The hash covers the data set's own files that differ from the files they are laid over — a
+file the same as the game's is not part of the mod — and is worked out the same way as
+`scmjs mod play` works it out for the play page (see [Playing a mod on the play
+page](cli.md#playing-a-mod-on-the-play-page)), so the editor, the command line and the
+play page give one mod the same hash. Files of the mod in the game's folders that the
+editor does not read, such as its sounds, count too.
+
+A file is compared with the copy the data set is laid over, then with the copy that one
+was laid over in turn, and then with the game's archives, when they are among the files
+installed. A file none of them has counts as the mod's own. So when the editor's hash and
+the command line's differ for the same mod, the usual cause is a copy made before the
+editor kept every table under `arr` (before November 2026): it lacks `portdata` and
+`mapdata`, and a mod that ships them unchanged has them counted. Installing the game's
+copy again fixes that.
 
 ### Names
 
@@ -433,7 +507,7 @@ under `src/formats/`.
 | `src/pages/install.ts` | The installer page (`install.html`), the third: the play page frames it to have a Remastered folder installed. |
 | `src/gamedata/store.ts` | The browser's copies, in the Origin Private File System: `gamedata/` for the game's own, `gamedata-profiles/<id>/` per data set, a stamp file written last so a half-written copy counts as nothing. |
 | `src/gamedata/install.ts`, `zip.ts` | The install routes. `zip.ts` reads a zip's directory and single members over HTTP ranges with no zip library; `tests/zip.test.ts` drives it over a zip built in the test. |
-| `src/gamedata/extract.ts` | The extraction: archives in as a `ReadMember`, a map of paths to bytes out, no file system and no network. It imports only `iscript.ts`, so Node runs it without a build step. |
+| `src/gamedata/extract.ts` | The extraction: archives in as a `ReadMember`, a map of paths to bytes out, no file system and no network. It imports only the iscript and table codecs, so Node runs it without a build step. |
 | `src/gamedata/play.ts` | The files for playing: what the play page reads beyond the editor's files, copied after them. |
 | `src/gamedata/extract.worker.ts`, `scripts/extract-*.mjs`, `desktop/main.ts` | The three places the extraction runs: a browser worker, the Node scripts, the desktop's main process (which also holds the disk search and Test Map). |
 | `src/gamedata/remastered.ts` | A StarCraft: Remastered installation in the archives' place, over [kascade](https://github.com/jeany55/kascade); `tests/remastered.test.ts` checks the result against a direct extraction, and against a real installation when `SCM_REMASTERED_DIR` names one. |
@@ -441,6 +515,9 @@ under `src/formats/`.
 | `src/gamedata/remasteredDefault.ts` | Turning Remastered graphics on after the installer page made a Remastered copy. |
 | `src/gamedata/archives.ts`, `scripts/lib/archives.mjs` | Opening the archives with [mopaq](https://github.com/jeany55/mopaq), later archives winning, with a mod's loose files as an overlay; and finding them on disk. |
 | `src/gamedata/profiles.ts`, `src/services/gameData.ts` | Data sets: the id and name, the stored choice, and the switch that drops every decoded table and loads again. |
+| `src/gamedata/overCopy.ts` | A data set laid over a copy rather than the game's archives, the images whose Remastered pictures it turns off, and the digest of its files. |
+| `src/services/mapDataSet.ts` | The note a map keeps of its data set, and the question asked when it opens elsewhere. `tests/map-dataset.test.ts`. |
+| `src/formats/dat/table.ts`, `src/formats/dat/schema.ts` | Every table at any width (the game's, DatExtend's expanded layout, `.datex`); the editor's readers in `dat.ts` pick their columns from it. `tests/datasets-widths.test.ts`, and `tests/datasets-cosmonarchy.test.ts` over a mod's maps where `SCMJS_COSMONARCHY` points at them. |
 | `src/data/gameNames.ts` | The per-entry naming rule; `tests/names.test.ts` pins the differences against the real files. |
 | `src/formats/tileset/hd.ts` | Remastered's 2x terrain and where its water and lava are. `tests/hd-terrain.test.ts`. |
 | `src/components/viewport/effectPass.ts` | The WebGL pass that moves Remastered's water and lava over the terrain layer. |

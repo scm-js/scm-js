@@ -39,8 +39,8 @@ own with a note in `tried`. `AssetSource.profile` says which set answered. Switc
 (`resetUnitAssets`, `releaseAllTilesets`, `clearFrameCache`, `clearComposedImages`), resolves again
 and bumps `gameDataRevisionAtom` — `useUnitAssets` now re-reads `peekUnitAssets` on every bump
 rather than keeping what it had. `api.gameData` and the `"gameData"` event are the plugin side
-(`host.ts#gameDataApi`); `api.gameData.read(path)` (`host.ts#readGameFile`) hands a plugin one extracted file through `fetchAsset`, null for a missing one — a dev server's `text/html` fallback included. `extract.ts#EXTRA_TABLES` (`arr/orders.dat`) is copied though the editor never reads it: OpenBW, behind Walkability's game pathing, will not start without it, and a stored copy made before 2026-09-25 lacks it (the plugin says to reinstall). `extract.ts#ICON_FILES` (`unit/cmdbtns/cmdicons.grp` + `ticon.pcx`, 2026-10-15) are copied when present for `api.graphics.icon` (`plugins-host.md`); an older copy lacks them and plugins show names. A data set is a name over files in the game's formats: the table sizes,
-tileset formats and CHK layouts are the game's, and a mod that extends them is out of scope.
+(`host.ts#gameDataApi`); `api.gameData.read(path)` (`host.ts#readGameFile`) hands a plugin one extracted file through `fetchAsset`, null for a missing one — a dev server's `text/html` fallback included. `extract.ts#EXTRA_TABLES` (`arr/orders.dat`; since 2026-11-08 also `portdata.dat/.tbl` and `mapdata.dat/.tbl`, so with `UNIT_TABLES` and `SOUND_TABLES` the copy holds all fifteen `arr\` files 1.16.1 has — pinned by `tests/datasets-widths.test.ts` "the extraction's tables"; `DATEX_TABLES` gained `portdata`/`mapdata`) is copied though the editor never reads it: OpenBW, behind Walkability's game pathing, will not start without it, and a stored copy made before 2026-09-25 lacks it (the plugin says to reinstall). The Mod Editor compared a mod's `mapdata`/`portdata` against a copy without them and counted them as changed, which is why all of `arr\` is kept now; a copy or `public/` extracted before 2026-11-08 lacks the four (`tests/gamedata.test.ts`'s byte-for-byte comparison with `public/` tolerates exactly those, `ADDED_SINCE`; `npm run extract` brings them). The play set already had `portdata` at the same path, so `copyPlaySet` now skips it (`result.files.has`). `extract.ts#ICON_FILES` (`unit/cmdbtns/cmdicons.grp` + `ticon.pcx`, 2026-10-15) are copied when present for `api.graphics.icon` (`plugins-host.md`); an older copy lacks them and plugins show names. A data set is a name over files in the game's formats — at any width since M4 (below); the CHK's
+settings sections stay the format's.
 
 **Names from the data** (`data/gameNames.ts`): `stat_txt.tbl` (entries 0–227 the unit types as
 `Name\0Subname\0Category`, read by `decodeTblEntries`; the `label` columns of `weapons.dat` /
@@ -333,3 +333,99 @@ seven layers (diffuse + teamcolor) unless the lighting tick adds four more. The 
 docs give (browser copy ~140 MB classic, ~650 / ~850 MB Remastered (641 MB measured 2026-10-12); desktop ~30 / ~365 MB) come
 from the measurements above; the classic browser figure is 30 MB + ~95 MB sounds + the play set's
 small classic files, an estimate rather than a measured copy.
+
+## Data sets widened (M4, 2026-11-08)
+
+The mods plan's slice M4 (`scm-sim` branch mods-plan, `docs/mods-plan.md`, "Tier E"): the editor makes maps for a mod.
+
+- **Widths from the file.** `dat.ts`'s readers keep their API and take every column from `table.ts#decodeDat`, so a
+  table is the game's, DatExtend's expanded `.dat` or GPTP's `.datex` by its length (and name). `UnitsDat.flingy`,
+  `groundWeapon`, `airWeapon` became `Uint16Array` (the widened columns; readers unaffected); the count of a table is
+  `dat.ts#datCount(column)` (`units.flingy.length`) — no `count` field, so hand-built `UnitsDat` in tests still fit.
+  `NO_UNIT` (228) stays the subunit sentinel at any width; "is this a unit type" is `< datCount(units.flingy)`
+  (`sprites.ts#getUnitSprite`/`subunitOf`, `animate.ts`, `editor/units.ts`, `useSpriteTools`, `data/sprites.ts`).
+  `data/units.ts#unitTypeCount()` is the loaded count for code without the tables (`validate`, `triggers`, `host`'s
+  trigger list, which appends ids ≥ 233 after the classes so a place stays its value). The settings sections
+  (`sections/settings.ts` UNIx/PUNI/UPGx/TECx 228/130/61/44) keep the format's constants; Unit Settings shows "No
+  per-map settings for this unit…" for ids ≥ 228 instead of the form. Upgrade/tech lists stay at 61/44.
+- **Loader.** `units/load.ts` fetches `unit/manifest.json` first (`unitManifest`, one promise a data set, dropped by
+  `resetUnitAssets`); its `datex` list says which tables are stored as `arr/<t>.datex`, `optional` which of
+  `rez/unitnames.tbl` / `unit/cmdbtns/uniticons.grp` exist (asked only then: a dev server answers a missing file with
+  its page, and `fetchPart` now refuses `text/html` too). A bad `iscript.bin` costs animation, not the tables.
+- **iscript.** `decodeIscript` takes its headers from `iscriptText.ts#readIscriptHeaders` (IceCC's `type + 1` entry
+  points or PyMS's table, detected); `iscript.ts` imports only that file, with the `.ts` extension, for Node.
+- **Extraction.** `extract.ts` imports `table.ts` (which now imports `./schema.ts` with the extension — Node type
+  stripping). It prefers `arr\<t>.datex` for `DATEX_TABLES` when that is a whole number of entries, walks every
+  unit/sprite of the file's width, skips an animation whose opcode it cannot read (Cosmonarchy's `flagjmp` 0x3E), and
+  copies `UNIT_EXTRA_FILES`. The legacy (19192) units.dat is still refused with the BrooDat hint. Vanilla output is
+  byte-identical to before (manifests compared).
+- **Names and groups.** `unitnames.tbl` entry N names type N for every type where it has a non-`*` name (GPTP's
+  `get_unit_name_ext` reads it before stat_txt), through the same per-entry rule; past 227 without it, `Unit #N`.
+  `gameNames.ts#unitCatalogue` lists ids ≥ 228 (all of them without a name file, only the named ones with one —
+  Cosmonarchy's 3,000-row table is mostly template copies) with race from group flags and Building from the special
+  flags; `installNames(names, catalogue)`; `dataSetUnitGroups()` / `shownUnitGroups(name)` feed the palette (its own
+  section headed by the data set's name), the object dialogs, Unit Settings and `api.names.unitGroups` (labels
+  `"<set> · Terran Units"`). Ids < 228 keep `UNIT_GROUPS`. Icons: `iconFor` uses `uniticons.grp` for unit types when
+  the set has it.
+- **Tilesets.** `decode.ts#tileGroupOf(id, groupCount)`: twelve bits when the tileset has more than 2,048 groups,
+  else eleven with bit 15 the creep flag (`hasCreepFlag`); `megatileForTile`, the ground overlays, placement,
+  `tileInfo`, Check Map, statistics and the status bar pass the count. cv5/vf4/vr4/vx4ex were already any size.
+  Cosmonarchy's Jungle has 40,109 megatiles: the atlas is 2,176 × 21,318 (≈185 MB of pixels) and drew fine in
+  headless Chromium; a lazy atlas is the fix if a browser refuses it.
+- **Over a copy** (`gamedata/overCopy.ts`, worker-side): `GameDataFiles.base` / `ExtractRequest.base` = a stored
+  profile id, or the bundled URL for the default when this build serves it. The extraction runs until it asks for
+  nothing new (the Remastered pattern), the tables read up front; `storedPathOf` is the inverse of the extraction's
+  names. Such a copy writes no play set (stamp `base`); `hdOff` (images whose images.dat row or GRP bytes differ from
+  the base's, among those with a 2x sprite) goes in the stamp and `load.ts#classicOnly` honours it. The dialog's
+  folder route lays a folder without the two archives over the copy in use (or that copy's own base).
+- **In memory**: `AssetSource.kind "reader"` (`DataSetReader { read, base, hash? }`), `fetchAsset` asks `read` then
+  the base source; `services/gameData.ts#attachReaderDataSet` / `reloadDataSet`; never remembered; 2x sprites off.
+  **Mod Editor asks (2026-11-08, branch `mods-api`):** `read(path, { member, under })` — `member` from
+  `paths.ts#memberOfStored` (null for the two manifests), `under(p)` = `source.ts#readFrom(reader.base, p)`;
+  `readUnder(path)` (the base of a reader source, else the source) behind `api.gameData.read(path, { under: true })`.
+  `unit/manifest.json` the reader leaves null is the base's with `datex`/`optional` worked out by asking the reader
+  (`readerManifest.ts`, imported on demand: `.datex` of a whole number of entries wins as in `extract.ts#datexOf`, a
+  `.dat` alone takes the table out of `datex`, `UNIT_EXTRA_FILES` it answers go in `optional`); a reader answering the
+  manifest is taken at its word (plugin-mods' `manifestFor` still works). `rehashDataSet(store, hash|null)` replaces the
+  source with the same `read`/`base` and the new hash (setAssetSource + atom; no `dropDecodedData`, no revision bump;
+  `testDataSet`/`stampDataSet` read the atom, so they follow). `attach` still always reloads, even with the same
+  function — the plugin's "new hash ⇒ attach" path relies on it re-reading. `GameDataSource.base` for a reader = the
+  base's profile id. `paths.ts` holds `storedPathOf` (re-exported from `overCopy.ts`) and its inverse; `storedPathOf`
+  now renames only the extraction's own tileset subfiles (four remaps + `dddata.bin`) — the play set's
+  `tileset\<name>\dark.pcx` etc. stay at the game's path, which is where `play.ts` writes them (the old regex sent
+  them to `tileset/<name>.dark.pcx`, a path nothing writes).
+- **Hash** (aligned with `mod-cli` on the `mods` branch, 2026-11-08): `overCopy.ts#changedFilesHash` = core's
+  `dataSetHash` rule (`src/formats/mod/sources.ts`; via `dataSetHashOfDigests` + `fileDigest` so a file's bytes go
+  once digested) over the set's **own files that differ from the base**. The worker's names: the overlay's keys, every
+  member the extraction asked (an archive's listfile may be partial), the mod archives' listed members, and
+  `ExtractRequest.hashOnly` — loose files in `GAME_FOLDERS` the extraction does not read (`sound\…`), posted as Blobs
+  (`install.ts#isGamePath`; `splitPickedFiles` now keeps them). Own = overlay over the non-game archives; base = the
+  game's archives, or the copy underneath via `storedPathOf` — then (2026-11-08) the copies *it* was laid over
+  (`extract.worker.ts#copyChain`, stamps' `base`, up to 4) and the game's archives when the request carries them
+  (`overCopy.ts#firstOf`); `changedFiles` also answers `unbased` (hashed because no base had the file), kept as the
+  stamp's `hashUnbased` (sorted members) so a hash that disagrees with the CLI's can be traced. Null (no `hash` in the stamp) when nothing differs —
+  the game's own copy has none now. Proof: `tests/datasets-widths.test.ts` "a made data set installed through the
+  editor's extraction" runs the worker's `onmessage` in Node over `fixtures/data` and compares with `dataSetHash`.
+- **The map's member** `scmjs\dataset.json` (`services/mapDataSet.ts`): `stampDataSet` before `buildOutgoing` in
+  `saveDocument` (bytes the Save dialog built are dropped when it changed the extras), only for a non-default set,
+  never removed; `offerMapDataSet` after `openFileInto` and the Open dialog's own load → the `mapDataSet` dialog
+  (`NEEDS_PAYLOAD` in `dialogs.spec.ts`). The "Switch" / "Keep" buttons use `tc("data set", …)` because "Switch" is
+  already the trigger switch in Korean.
+- **Test Map**: `TestMapFile.dataSet {id,name,hash}` (`testMap.ts#testDataSet`); plugin-scm-sim (branch `mods`)
+  posts it as `dataSet` in `scmjs.play`. The play page's acceptance is M1's.
+- **Proofs**: `tests/datasets-widths.test.ts` (readers at three widths, grown tables made with `encodeDat`, tilesets
+  grown, the over-copy extraction against `public/`), `tests/map-dataset.test.ts`, `tests/dataset-reader.test.ts`,
+  `tests/datasets-cosmonarchy.test.ts` (`SCMJS_COSMONARCHY` / `SCMJS_COSMONARCHY_MAPS`: 404/404 open and save byte for
+  byte, unit ids to 657, groups to 4,094). In headless Chromium on the dev server: a 240-type set installed over the
+  bundled files through the dialog in ~7 s; Cosmonarchy (CMBW-editor.mpq + `mpq/`) in ~22 s, 1,202 GRPs, 4 missing.
+- **Open (from the Mod Editor's pictures-and-sounds part, 2026-11-08; no code yet):** the editor's own copy holds no
+  `sound\` files (only a copy with the play set has the game's sounds, at their game paths; a data set laid over a copy
+  keeps none), so a reader set or a plugin comparing a mod's WAVs against the game's has nothing to compare with from
+  the editor's files alone. And the editor's iscript reader knows only `scripts\iscript.bin`, while some mods split
+  iscript across several files chosen by the high word of the iscript id (GPTP-style); the extraction's walk and the
+  loaders would read only the first file's headers. Related, done on `mods-api`: `api.graphics.grpImage` (a plugin's
+  GRP bytes drawn the editor's way, `formats/units/grpPicture.ts#paintGrpFrame`, either GRP encoding via
+  `decodeGrpImage`, palette by tileset name through `ensureTileset`, team colour as `unitImage`'s; no remapping, no
+  Remastered pictures, new canvas each call, not cached) and core exporting the WAV codec (`decodeWav`, `encodeWav`,
+  `decodePcmWav`, `decodeImaAdpcm` — now exported from `formats/wav.ts` — `isPlainPcm`, `canDecodeWav`, `wavFrames`,
+  `wavCodecName`, `WAV_FORMAT`).

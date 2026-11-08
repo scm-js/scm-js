@@ -111,7 +111,8 @@ same release as the editor at [scmjs.dev/editor](https://scmjs.dev/editor/).
 | [docs/file-formats.md](docs/file-formats.md) | What the editor does with a map file: what it preserves, what Save can strip, revisions, protected maps |
 | [docs/chk-format.md](docs/chk-format.md) | Every section of the scenario file, byte by byte |
 | [docs/plugins.md](docs/plugins.md) | Writing and installing plugins; the plugin API |
-| [docs/cli.md](docs/cli.md) | The `scmjs` command line, by task: getting started, looking inside a map, making and changing maps, maps in git and CI, running a map's triggers in the game, replays, sharing, bots, plugins and AI tools, and a reference of every command |
+| [docs/cli.md](docs/cli.md) | The `scmjs` command line, by task: getting started, looking inside a map, making and changing maps, maps in git and CI, running a map's triggers in the game, replays, sharing, mods, bots, plugins and AI tools, and a reference of every command |
+| [docs/mods.md](docs/mods.md) | Mods: a mod read as its makers ship it, kept as a folder of PyMS text and PNG sheets, checked, compared, packed back into an MPQ and played |
 | [docs/core.md](docs/core.md) | `@scm-js/core`, the editor's map code as an npm package for scripts and tools of your own |
 | [docs/development.md](docs/development.md) | Running from source, the desktop app and the container, releases, contributing |
 | [ATTRIBUTION.md](ATTRIBUTION.md) | Provenance of adapted algorithms, tables and dependencies |

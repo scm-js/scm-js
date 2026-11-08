@@ -46,4 +46,5 @@ export type DialogId =
   | "pluginDialog"
   | "gameData"
   | "update"
-  | "whatsNew";
+  | "whatsNew"
+  | "mapDataSet";

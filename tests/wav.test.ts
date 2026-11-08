@@ -291,3 +291,33 @@ describe("wav decoders", () => {
     expect(decodeWav(new Uint8Array([1, 2, 3]))).toBeNull();
   });
 });
+
+describe("the WAV codec in @scm-js/core", () => {
+  it("is exported: a tone written as PCM and read back, and an IMA ADPCM block read", async () => {
+    const core = await import("../core/src/index");
+    const l = tone(512, 22050, 440);
+    const back = core.decodeWav(core.encodeWav([l], 22050, 16))!;
+    expect(back.sampleRate).toBe(22050);
+    expect(back.channels[0].length).toBe(512);
+    expect(Math.abs(back.channels[0][100] - l[100])).toBeLessThan(1e-3);
+    expect(core.isPlainPcm(core.parseWavHeader(core.encodeWav([l], 22050, 8))!)).toBe(true);
+    // One mono IMA ADPCM block of 36 bytes: the header (first sample 1000, step index 0), then 32 bytes of nibbles 0.
+    const block = new Uint8Array(36);
+    new DataView(block.buffer).setInt16(0, 1000, true);
+    const header = new Uint8Array(44 + block.length);
+    const dv = new DataView(header.buffer);
+    const ascii = (at: number, s: string) => { for (let i = 0; i < 4; i++) header[at + i] = s.charCodeAt(i); };
+    ascii(0, "RIFF"); dv.setUint32(4, header.length - 8, true); ascii(8, "WAVE");
+    ascii(12, "fmt "); dv.setUint32(16, 16, true);
+    dv.setUint16(20, core.WAV_FORMAT.imaAdpcm, true); dv.setUint16(22, 1, true); dv.setUint32(24, 22050, true);
+    dv.setUint32(28, 22050 * 36 / 65, true); dv.setUint16(32, 36, true); dv.setUint16(34, 4, true);
+    ascii(36, "data"); dv.setUint32(40, block.length, true);
+    header.set(block, 44);
+    const wav = header;
+    const info = core.parseWavHeader(wav)!;
+    expect(info.format).toBe(core.WAV_FORMAT.imaAdpcm);
+    const ima = core.decodeImaAdpcm(wav, info);
+    expect(ima.channels[0][0]).toBeCloseTo(1000 / 32768, 4);
+    expect(core.decodeWav(wav)?.channels[0].length).toBe(ima.channels[0].length);
+  });
+});

@@ -4,6 +4,7 @@ import { handFilesToPlugins, pickerFileTypes } from "../../plugins/fileTypes";
 import { FilePlus2, FolderOpen, ImageDown, Loader2, Save, TriangleAlert, Upload } from "lucide-react";
 import { fogViewPlayerAtom, gridSizeAtom, mapFilePathAtom, mapModifiedAtom, mapNameAtom, mapOriginAtom, saveOptionsAtom } from "../../atoms/editorAtoms";
 import { archiveExtrasAtom, archiveStoredAtom, loadDocumentAtom, recentFilesAtom, scenarioAtom } from "../../atoms/documentAtoms";
+import { offerMapDataSet } from "../../services/mapDataSet";
 import { closeDialogAtom, openDialogAtom, pushToastAtom, statusMessageAtom } from "../../atoms/uiAtoms";
 import { MAP_SIZES, terrainName, TILESETS, TILESET_BY_ID, type TilesetId } from "../../data/tilesets";
 import { DEFAULT_START_PLACEMENT, idealStarts } from "../../editor/startLocations";
@@ -193,6 +194,8 @@ export function OpenMapDialog({ entry }: DialogProps) {
     try {
       const doc = await openMapFile(file, handle);
       load({ ...doc, into });
+      // A map made for another data set says so, and offers to switch to it.
+      void offerMapDataSet(store, doc.extras);
       const warnings = doc.scenario.warnings.length;
       setStatus(
         t("Opened {name} — {w}×{h}", { name: file.name, w: doc.scenario.width, h: doc.scenario.height }) +

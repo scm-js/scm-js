@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { memberKey, openArchives, readerFor } from "../src/gamedata/archives";
 import { describeExtraction, ExtractError, extractGameData, extractTilesets, extractUnits, TILESET_NAMES } from "../src/gamedata/extract";
-import { isMemberPath, pickArchives, splitPickedFiles } from "../src/gamedata/install";
+import { isGamePath, isMemberPath, pickArchives, splitPickedFiles } from "../src/gamedata/install";
 import { activeProfileId, DEFAULT_PROFILE, isProfileId, normalizeProfile, PROFILE_KEY, profileIdFrom } from "../src/gamedata/profiles";
 import { locateGameData, type LocateDeps } from "../src/gamedata/source";
 import { clearStoredCopy, keepInMemory, listStoredCopies, profileDir, profileOf, readStored, storedCopy, type StoredCopy } from "../src/gamedata/store";
@@ -11,6 +11,8 @@ import { browserStorage } from "../src/atoms/storage";
 
 const DATA = join(__dirname, "..", "fixtures", "data");
 const PUBLIC = join(__dirname, "..", "public");
+/** Files the extraction keeps since a date, which a public/ extracted before then lacks (every `arr\\` table: 2026-11-08). */
+const ADDED_SINCE = new Set(["arr/portdata.dat", "arr/portdata.tbl", "arr/mapdata.dat", "arr/mapdata.tbl"]);
 const archives = existsSync(DATA) ? readdirSync(DATA).filter((n) => /\.mpq$/i.test(n)) : [];
 const haveArchives = archives.some((n) => /^stardat/i.test(n)) && archives.some((n) => /^broodat/i.test(n));
 
@@ -58,13 +60,16 @@ describe.skipIf(!haveArchives)("extraction against the real archives", () => {
     if (!existsSync(join(PUBLIC, "unit", "manifest.json"))) return;
     const { files } = extractGameData(read);
     let compared = 0;
+    const absent: string[] = [];
     for (const [path, data] of files) {
       const onDisk = join(PUBLIC, path);
-      if (!existsSync(onDisk)) continue;
+      if (!existsSync(onDisk)) { absent.push(path); continue; }
       expect(Buffer.from(data).equals(readFileSync(onDisk)), path).toBe(true);
       compared++;
     }
-    expect(compared).toBe(files.size);
+    // An extraction older than the files the extraction has since been given lacks only those; `npm run extract` brings them.
+    expect(absent.filter((p) => !ADDED_SINCE.has(p)), "files public/ lacks").toEqual([]);
+    expect(compared + absent.length).toBe(files.size);
   });
 
   it("describes what came out", () => {
@@ -297,8 +302,14 @@ describe("installing a data set from files", () => {
     const split = splitPickedFiles([
       file("Cosmonarchy/StarDat.mpq"), file("Cosmonarchy/BrooDat.mpq"), file("Cosmonarchy/mpq/arr/units.dat"),
       file("Cosmonarchy/mpq/unit/terran/marine.grp"), file("Cosmonarchy/README.md"), file("Cosmonarchy/plugins/gptp.qdp"),
+      file("Cosmonarchy/mpq/sound/misc/buzz.wav"),
     ]);
     expect(split.archives.map((a) => a.name)).toEqual(["StarDat.mpq", "BrooDat.mpq"]);
-    expect(split.files!.map((f) => f.path)).toEqual(["arr/units.dat", "unit/terran/marine.grp"]);
+    // The sound is the mod's too: the extraction does not read it, but the data set's hash covers it.
+    expect(split.files!.map((f) => f.path)).toEqual(["arr/units.dat", "unit/terran/marine.grp", "sound/misc/buzz.wav"]);
+    expect(isMemberPath("sound/misc/buzz.wav")).toBe(false);
+    expect(isGamePath("sound/misc/buzz.wav")).toBe(true);
+    expect(isGamePath("plugins/gptp.qdp")).toBe(false);
+    expect(isGamePath("sound")).toBe(false);
   });
 });

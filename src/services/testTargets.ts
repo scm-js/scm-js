@@ -56,7 +56,9 @@ export function startTest(store: Store, which: string = "chosen"): void {
   const map: Promise<TestMapFile | null> = import("./testMap").then(async (m) => {
     const bytes = await m.testMapBytes(store);
     const fileName = m.testFileName(store);
-    return bytes && fileName ? { bytes, name: fileName } : null;
+    // The data set in use goes with it, for a target that plays the map with the same files.
+    const dataSet = m.testDataSet(store);
+    return bytes && fileName ? { bytes, name: fileName, ...(dataSet ? { dataSet } : {}) } : null;
   });
   // The target may never look at the map; its failure is still told, once, below.
   map.catch(() => {});

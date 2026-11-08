@@ -15,7 +15,7 @@ import { ActionFlag, ActionType, ConditionFlag, ConditionType, PlayerGroup, Swit
 import { actionDef, AI_SCRIPT_CHOICES, aiScriptCode, aiScriptId, conditionDef, UNIT_CLASS_CHOICES } from "../data/triggerDefs";
 import { CREATING_ACTIONS, triggerCanCreate } from "./triggers";
 import { isRemasteredOnlyTile } from "../data/remasteredTiles";
-import { START_LOCATION, UNIT_TYPE_COUNT, unitLabel } from "../data/units";
+import { START_LOCATION, UNIT_TYPE_COUNT, unitLabel, unitTypeCount } from "../data/units";
 import { PLAYER_COLORS } from "../data/players";
 import { UnitClass } from "../formats/chk/sections/triggers";
 import type { DialogId } from "../components/dialogs/ids";
@@ -31,7 +31,7 @@ import { encodeText, remasteredReadsAsKorean } from "../formats/text/encoding";
 import { plainText } from "./textColors";
 import { TILESETS } from "../data/tilesets";
 import type { UnitsDat } from "../formats/dat/dat";
-import { TILE_CREEP_FLAG, tileGroupOf, type Tileset } from "../formats/tileset/decode";
+import { hasCreepFlag, tileGroupOf, type Tileset } from "../formats/tileset/decode";
 import { terrainFits } from "./placement";
 import { isResource, unitGeometry } from "./units";
 
@@ -362,7 +362,7 @@ export function validateScenario(scn: Scenario, ctx: ValidateContext = {}): Issu
     };
     const checkUnit = (value: number, what: string) => {
       const klass = (Object.values(UnitClass) as number[]).includes(value);
-      if (value >= UNIT_TYPE_COUNT && !klass) add("warn", t("{label}: {what} names unit type {value}, which the game does not have (types run to {v}, the classes {Any}–{Factories}).", { label, what, value, v: UNIT_TYPE_COUNT - 1, Any: UnitClass.Any, Factories: UnitClass.Factories }), where, target);
+      if (value >= unitTypeCount() && !klass) add("warn", t("{label}: {what} names unit type {value}, which the game does not have (types run to {v}, the classes {Any}–{Factories}).", { label, what, value, v: unitTypeCount() - 1, Any: UnitClass.Any, Factories: UnitClass.Factories }), where, target);
     };
     const checkPlayer = (value: number, what: string) => {
       if (value > 26) add("info", t("{label}: {what} uses player value {value} — beyond the game's groups, so a memory address (EUD) or a mistake.", { label, what, value }), where, target);
@@ -472,8 +472,8 @@ export function validateScenario(scn: Scenario, ctx: ValidateContext = {}): Issu
   // plain ground by Remastered and read past the table's end by 1.16.1.
   let creep = 0, outside = 0, firstOutside = -1;
   for (let i = 0; i < scn.tiles.length; i++) {
-    if (scn.tiles[i] & TILE_CREEP_FLAG) creep++;
-    if (ctx.tileset && tileGroupOf(scn.tiles[i]) >= ctx.tileset.groups.length && !isRemasteredOnlyTile(era, scn.tiles[i])) {
+    if (hasCreepFlag(scn.tiles[i], ctx.tileset?.groups.length)) creep++;
+    if (ctx.tileset && tileGroupOf(scn.tiles[i], ctx.tileset.groups.length) >= ctx.tileset.groups.length && !isRemasteredOnlyTile(era, scn.tiles[i])) {
       if (firstOutside < 0) firstOutside = i;
       outside++;
     }

@@ -48,11 +48,12 @@ import { flatTerrain, variationsOf } from "../formats/tileset/terrain";
 import { terrainTypes, tileInfo } from "../formats/tileset/palette";
 import { getUnitAssets, imageGrpPath, peekUnitAssets, requestGrp } from "../formats/units/load";
 import { gameDataRevisionAtom, gameDataSourceAtom } from "../atoms/gameDataAtoms";
-import { DEFAULT_PROFILE } from "../gamedata/profiles";
-import { currentAssetSource, fetchAsset, GameDataUnavailableError, type AssetSource } from "../gamedata/source";
-import { installDataSetInto, listDataSets, removeDataSet, switchDataSet } from "../services/gameData";
+import { DEFAULT_PROFILE, isProfileId } from "../gamedata/profiles";
+import { currentAssetSource, readFrom, readUnder, resolveAssetSource, type AssetSource } from "../gamedata/source";
+import { cleanStoredPath, storedPathOf } from "../gamedata/paths";
+import { attachReaderDataSet, installDataSetInto, listDataSets, rehashDataSet, reloadDataSet, removeDataSet, switchDataSet } from "../services/gameData";
 import { displayColorHex, PLAYER_RACES, PLAYER_TYPES, playerRaceLabel, playerTypeLabel } from "../data/players";
-import { TECH_NAMES, techName, UNIT_GROUPS, UNIT_NAMES, unitName, UPGRADE_NAMES, upgradeName } from "../data/units";
+import { dataSetUnitGroups, TECH_NAMES, techName, UNIT_GROUPS, UNIT_NAMES, unitName, unitTypeCount, UPGRADE_NAMES, upgradeName } from "../data/units";
 import { WEAPON_NAMES, weaponName } from "../data/weapons";
 import {
   ACTION_DEFS, actionDef, aiScriptName, BRIEFING_ACTION_DEFS, CHOICES, choiceLabel, choiceValue, CONDITION_DEFS, conditionDef, DEATHS_TABLE_ADDRESS, PLAYER_GROUP_CHOICES, UNIT_CLASS_CHOICES,
@@ -121,8 +122,9 @@ import {
   type ClipboardApi, type ClipSource, type CommitEvent,
   type PluginIcon, type PluginInfo, type PluginManifest, type PluginModule, type QueryApi, type RawEditResult, type SectionsApi, type StartLocation,
   type ContextMenuContext, type NewDocumentOptions, type OpenDocumentOptions, type SettingsApi, type TriggerListUpdate, type TriggerRecord, type TriggersApi, type UnitTypeView, type UpdateResult,
-  type UpdateTransaction, type ViewApi,
+  type UpdateTransaction, type ViewApi, type FolderFile, type PickFilesOptions, type UiApi,
 } from "./api";
+import { directoryHandleFiles, directoryPicker, folderInputFiles, isAbort } from "./folders";
 import { canonicalSpec, githubSource, HASH_REF, isPinned, listTags, loadPlugin, newestTag, parseSpec, previewPlugin, recordingDeps, resolveCommit, resolvePlugin, storedDeps, unpin, type LoaderDeps, type PluginPreview, type RepoTag } from "./loader";
 import { loadImage, readClipboardImage } from "./images";
 import { BUILTIN_PLUGINS } from "./builtin";
@@ -1649,32 +1651,67 @@ export function dataApi(): DataApi {
 
 /** `api.gameData`: the source and the data sets, over `services/gameData.ts`. */
 export function gameDataApi(store: Store): GameDataApi {
-  const publish = (s: AssetSource): GameDataSource => ({ kind: s.kind, label: s.label, profile: { ...s.profile }, desktop: s.desktop === true });
+  const publish = (s: AssetSource): GameDataSource => {
+    const hash = s.stored?.hash ?? s.reader?.hash;
+    const base = s.stored?.base ?? s.reader?.base?.profile.id;
+    return { kind: s.kind, label: s.label, profile: { ...s.profile }, desktop: s.desktop === true, ...(hash ? { hash } : {}), ...(base ? { base } : {}) };
+  };
   const source = () => store.get(gameDataSourceAtom) ?? currentAssetSource();
   return {
     source: () => { const s = source(); return s ? publish(s) : null; },
     profile: () => ({ ...(source()?.profile ?? DEFAULT_PROFILE) }),
     profiles: listDataSets,
-    install: async (profile, files, progress) => publish(await installDataSetInto(store, { id: profile.id, name: profile.name }, files, progress)),
+    install: async (profile, files, progress) => publish(await installDataSetInto(store, { id: profile.id, name: profile.name, ...(profile.url ? { url: profile.url } : {}) }, files, progress)),
+    attach: async (profile, read, options) => {
+      if (!isProfileId(profile.id)) throw new Error(`"${profile.id}" is not a data set id: lower-case letters, digits and hyphens, up to 40 characters.`);
+      if (typeof read !== "function") throw new Error("gameData.attach needs a function that reads a file");
+      return publish(attachReaderDataSet(store, profile, read, options?.hash));
+    },
+    reload: () => reloadDataSet(store),
+    rehash: (hash) => {
+      if (hash !== null && typeof hash !== "string") throw new Error("gameData.rehash takes a hash or null");
+      const next = rehashDataSet(store, hash);
+      return next ? publish(next) : null;
+    },
     select: async (id) => publish(await switchDataSet(store, id)),
     remove: (id) => removeDataSet(store, id),
-    read: readGameFile,
+    read: (path, options) => readGameFile(path, options?.under === true),
+    storedPath: (member) => storedPathOf(String(member)),
   };
 }
 
-async function readGameFile(path: string): Promise<Uint8Array | null> {
-  const clean = path.trim().replaceAll("\\", "/").replace(/^\/+/, "").toLowerCase();
-  if (!clean || clean.split("/").includes("..")) return null;
-  let res: Response;
-  try {
-    res = await fetchAsset(clean);
-  } catch (err) {
-    if (err instanceof GameDataUnavailableError) return null;
-    throw err;
+/**
+ * `ui.pickFiles({ directory: true })`: the browser's folder picker where it has one, else the
+ * file input's folder mode; the folder's files with their paths (`folders.ts`), or none on cancel.
+ */
+async function pickFolder(): Promise<FolderFile[]> {
+  if (typeof document === "undefined") return [];
+  const picker = directoryPicker();
+  if (picker) {
+    try {
+      return await directoryHandleFiles(await picker({ mode: "read", id: "plugin-folder" }));
+    } catch (err) {
+      if (isAbort(err)) return [];
+      // Refused (a page in a frame, a folder the browser keeps to itself): the input may still be allowed.
+      logWarn("plugins", "The folder picker failed; trying the file input's folder mode", { error: err instanceof Error ? err.message : String(err) });
+    }
   }
-  // A dev server answers a missing file with its index page.
-  if (!res.ok || res.headers.get("content-type")?.startsWith("text/html")) return null;
-  return new Uint8Array(await res.arrayBuffer());
+  return new Promise<FolderFile[]>((resolve) => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.multiple = true;
+    input.setAttribute("webkitdirectory", "");
+    input.addEventListener("change", () => resolve(folderInputFiles(input.files ? [...input.files] : [])), { once: true });
+    input.addEventListener("cancel", () => resolve([]), { once: true });
+    input.click();
+  });
+}
+
+async function readGameFile(path: string, under: boolean): Promise<Uint8Array | null> {
+  const clean = cleanStoredPath(path);
+  if (!clean || clean.split("/").includes("..")) return null;
+  // A dev server answers a missing file with its index page; `readFrom` takes that for none.
+  return under ? readUnder(clean) : readFrom(await resolveAssetSource(), clean);
 }
 
 /* ── Commands ───────────────────────────────────────────── */
@@ -2174,7 +2211,11 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
     names: {
       unit: (id) => UNIT_CLASS_CHOICES.find((c) => c.value === id)?.label ?? (id === UNIT_NAMES.length ? "None" : unitName(id)),
       // 228 is the game's "None", between the types and the classes: listed so that an entry's place is its value.
-      units: () => [...UNIT_NAMES.map((_, id) => ({ value: id, label: unitName(id) })), { value: UNIT_NAMES.length, label: "None" }, ...UNIT_CLASS_CHOICES.map((c) => ({ value: c.value, label: c.label }))],
+      // A data set with more types lists the rest after the classes, from 233, where their place is their value again.
+      units: () => [
+        ...UNIT_NAMES.map((_, id) => ({ value: id, label: unitName(id) })), { value: UNIT_NAMES.length, label: "None" }, ...UNIT_CLASS_CHOICES.map((c) => ({ value: c.value, label: c.label })),
+        ...Array.from({ length: Math.max(0, unitTypeCount() - 233) }, (_, i) => ({ value: 233 + i, label: unitName(233 + i) })),
+      ],
       upgrade: upgradeName,
       upgrades: () => UPGRADE_NAMES.map((_, id) => ({ value: id, label: upgradeName(id) })),
       tech: techName,
@@ -2418,7 +2459,11 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
       setDoodadPlacement: (patch) => store.set(doodadPlacementAtom, { ...store.get(doodadPlacementAtom), ...patch }),
       locationSnap: () => store.get(locationSnapAtom),
       setLocationSnap: (step) => store.set(locationSnapAtom, step),
-      unitGroups: () => UNIT_GROUPS.map((g) => ({ ...g, units: [...g.units] })),
+      // The types a data set has past the game's 228 follow, their groups named for the data set.
+      unitGroups: () => [
+        ...UNIT_GROUPS.map((g) => ({ ...g, units: [...g.units] })),
+        ...dataSetUnitGroups().map((g) => ({ ...g, label: `${(store.get(gameDataSourceAtom) ?? currentAssetSource())?.profile.name ?? ""} · ${g.label}`, units: [...g.units] })),
+      ],
       unitName,
       unitSize: (unitId) => {
         const g = unitGeometry(peekUnitAssets()?.units ?? null, unitId);
@@ -2506,7 +2551,7 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
           if (taken.has(ext)) { logWarn(info.name, `ui.fileType: ${ext} is already claimed by another plugin`); return false; }
           return true;
         });
-        if (extensions.length > 0) store.set(pluginFileTypesAtom, [...store.get(pluginFileTypesAtom), { key, plugin: info, spec, extensions }]);
+        if (extensions.length > 0 || typeof spec.openFolder === "function") store.set(pluginFileTypesAtom, [...store.get(pluginFileTypesAtom), { key, plugin: info, spec, extensions }]);
         return bag.add(() => store.set(pluginFileTypesAtom, store.get(pluginFileTypesAtom).filter((e) => e.key !== key)));
       },
       statusItem: (spec) => addStatusItem(store, bag, info, spec),
@@ -2531,7 +2576,7 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
       },
       mapTool: (spec) => startMapTool(store, bag, info, spec),
       overlay: (spec) => registerOverlay(store, bag, info, spec),
-      pickFiles: (options = {}) => new Promise<File[]>((resolve) => {
+      pickFiles: ((options: PickFilesOptions = {}) => (options.directory === true ? pickFolder() : new Promise<File[]>((resolve) => {
         if (typeof document === "undefined") { resolve([]); return; }
         const input = document.createElement("input");
         input.type = "file";
@@ -2540,7 +2585,7 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
         input.addEventListener("change", () => { const files = input.files ? [...input.files] : []; countReplays(files, "pick"); resolve(files); }, { once: true });
         input.addEventListener("cancel", () => resolve([]), { once: true });
         input.click();
-      }),
+      }))) as UiApi["pickFiles"],
       pickArea: (options) => pickOnMap(store, bag, info, "area", options) as Promise<Rect | null>,
       pickTile: (options) => pickOnMap(store, bag, info, "tile", options) as Promise<{ x: number; y: number } | null>,
       pickObject: (options) => pickOnMap(store, bag, info, "object", options) as Promise<PickedObject | null>,

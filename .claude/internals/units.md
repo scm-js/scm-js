@@ -176,3 +176,96 @@ Links and gas the game reads (2026-10-17 audit, OB1/OB3; runs O3/O3b/O7 in the l
   `pairRelated` when a related serial changes, so the dialog's one field sets both ends.
 - `makeUnit` gives Refinery/Extractor/Assimilator (`GAS_BUILDINGS`, or the ResourceContainer flag)
   5000 gas with the Resources bit; without it the game gives them 0.
+
+## Codecs for mods (M2)
+
+Added 2026-11-08 for the mods plan (`scm-sim` branch mods-plan, `docs/mods-plan.md`, slice M2): every data file a mod
+changes, read **and written**, beside the editor's old readers (`dat.ts`, `tbl.ts`, `grp.ts`, `pcx.ts`, `lo.ts`, `iscript.ts` decode only what the
+editor draws; since M4 `dat.ts` reads through `decodeDat` and `iscript.ts` through `readIscriptHeaders` — see
+`gamedata.md` "Data sets widened"). All are pure, no
+game data, exported from `@scm-js/core` (index.ts "Mods" block), and walk clean in `tests/core.test.ts`.
+
+- **One schema** (`schema.ts`, `DAT_SCHEMAS`): the eleven tables field by field in file order, PyMS's names (so PyDAT
+  TXT round-trips), `u8/u16/u32`, struct fields as `parts` (placement box, add-on position, extents), the standard
+  layout's sub-ranges (`first`/`count`: infestation and add-on 106–201, the selection sounds 0–105, sprites' bar and
+  circle 130–516), the two Brood War columns (`broodWar`, absent from the 19192-byte original units.dat), the widths
+  that change by layout, the PyDAT TXT coders (bool, flags with PyMS's bit names, hit points whole/fraction, supply
+  whole/half) and `ref` (what a value points at, for M3's `mod check`). Plain JSON — `JSON.stringify(DAT_SCHEMAS)` is
+  the publishable schema the plan's "verified schema" starts from.
+- **Three widths, from the length** (`table.ts`, `datShape`): the game's size → `dat`; `.datex` file name → GPTP's
+  layout; any other multiple of an entry → DatExtend's expanded layout as PyMS reads it, else `.datex`. Expanded and
+  `.datex` store every column at the full count; expanded widens only units' flingy to u16 (97 B a unit), `.datex`
+  also units' ground and air weapon and orders' weapon (99 B a unit, 23 an order — GPTP's `datext.cpp` table says 97
+  for units but its loader widens three columns, and Cosmonarchy's 297,000-byte units.datex is 3,000 × 99). GPTP reads
+  sfxdata.dat, not `.datex`; Cosmonarchy's is the expanded layout at 20,000 entries. PyMS's rules (units a multiple of
+  12, 250–912, 228–250 reserved) and GPTP's limits are informational in the schema, never applied. Columns are typed
+  arrays at the widest width (entry-major for structs), rows are objects, a field outside its sub-range is absent.
+- **PyDAT TXT** is PyMS's `_export` as read from AbstractDAT/DATCoders (not run — executing PyMS was refused here):
+  `Unit(0):`, tab, `name value`, blank line; portdata's `idle.*`/`talking.*` order via `textOrder`; orders' format name
+  `targeting` is exported `weapon_targeting`, which is our field name. One extension: a set flag bit beyond PyDAT's
+  bit count (sfxdata flags bits 6–7, availability bits 10–15) is written `flag_0x400 True` rather than dropped.
+- **TBL** (`tblFile.ts`): entries are spans to the next *distinct* offset (PyTBL's rule, shared/out-of-order offsets
+  read right), encoding guessed as `tbl.ts` does and kept for writing. PyTBL text: `<N>` for < 32 and `#<>`.
+- **GRP** (`grpFile.ts`): the game's encoder, measured: transparent runs always skip (≤127), runs of ≥4 equal pixels
+  repeat (≤63), else copy (≤63) — but a run is only measured as far as the copy still has room, so a run starting
+  near byte 60 of a copy is copied; trailing transparency is written; a frame equal to an earlier one shares its
+  offset. **All 833 GRPs images.tbl names are byte-identical.** Cosmonarchy's 1,569 GRPs (another encoder): 162
+  identical, the rest decode-equal, ours 4.3% larger in all (169.2 MB vs 162.3 MB).
+- **Uncompressed GRPs** (`GrpImage.raw`): the game's interface pictures store each frame as its `w × h` indices row
+  by row, no line table — same header and frame table, equal frames sharing. 22 of the game's (`dlgs\*.grp`,
+  `game\icons.grp`, `glue\chatroom\ichat.grp`, `glue\pal??\dlg.grp`, `glue\score??\iScore.grp`) and 37 of
+  Cosmonarchy's (those plus `game\{gas,mineral,supply}icons.grp`, `glue\dlg.grp`, `glue\dynamic\dlg.grp`,
+  `glue\create\icreate.grp`, `glue\score{ad,av}\iscore.grp`, `glue\score??\pIcons.grp`; boxes up to 512 × 256,
+  frames up to 184 × 18 / 128 × 56, 8-bit frame sizes throughout) — these were the 37 `mod unpack` kept as bytes
+  ("line N runs past the end", "an empty copy"). Nothing in the file says which kind: the drawing code knows (GPTP's
+  `graphics::FrameFormat::Rle`/`Raw` in `systems/graphics/grp.cpp`; the HUD cost icons are drawn `Raw`). So the
+  decoder tries run-length first and reads raw only when that **fails** and the frames pack exactly (each new frame
+  at the data's end, a reused one at an earlier frame's start, an empty one inside what came before, ending at the
+  file's last byte) — never raw-first: a 4 × 4 one-colour RLE frame is 16 bytes and packs both ways (the cli-mod
+  "kept as bytes" fixture is one). Sharing: equal frames share, and an empty frame points where the data then ends
+  (`game\icons.grp`'s 100 empty frames) — the RLE rule, reproduced unchanged — except the game's `dlgs\*.grp` store
+  their last frame twice and Cosmonarchy's `glue\dlg.grp` shares nothing, so decode records `shares` (each frame's
+  first frame at its offset) when the plain rule would not give the bytes back; the encoder honours a share only
+  while the frames are still equal. The PNG note carries `raw`/`shares`. **59/59 byte-identical**, through the
+  sheets too; the 997 RLE GRPs of the game (images.tbl's 833 + listfile names + Cosmonarchy's paths) unchanged.
+  GPTP's reader also takes an offset's high bit as "frame 256 wider" (`frame_view`); no file sets it, the decoder
+  refuses it by name. `mod info` reads sizes only, and raw is the game's own format, so it is not listed "extended".
+- **PCX** (`pcxFile.ts`): header kept; RLE per line; `thpbar.pcx` has an odd bytes-per-line (19), kept. 77/77 of the
+  game's PCXs tried are byte-identical. **LO** (`loFile.ts`): offsets kept; 8 of the game's 96 share frames, which PyLO
+  text cannot say — a first comment line `# scmjs: offsets …` carries them, so text round-trips too (96/96).
+- **iscript** (`iscriptText.ts`): PyICE/IceCC text, `cmd a b` or `cmd(a, b)`, IceCC raw lines `ub`/`uw`/`pw` and the
+  unknowns' other spellings (`unused_0c`). Assembled in IceCC's layout (table pointer, `00 00 FF FF 00 00`, code in
+  source order, headers in source order, table, `FF FF 00 00`) because that is what reproduces mods' binaries. **Header
+  size is compiler-dependent**: IceCC writes `type + 1` entry points (one fewer than PyMS for even types; types 3 and
+  25 exist), PyMS/the game use PyMS's table — the disassembler detects which (headers packed before the table under a
+  rule) and writes `# scmjs: entries pyms` when needed; the assembler warns when a listed entry point does not fit.
+  The game's file needs `# scmjs: preamble 00*1366 FFFF0000`, `headers inline` and a `table` order note. Unreached bytes
+  (the game's: single alignment zeros before headers) are `ub` lines. **Proof:** the game's iscript.bin and all six of
+  Cosmonarchy's `iscript_*.txt` → their `.bin` byte-identical, and each `.bin` → text → same bytes. Cosmonarchy's
+  dialect differences: `ub 62 / ub flags / pw Label` for GPTP's `flagjmp` (opcode 0x3E repurposed), `unused_0c`.
+- **AI scripts** (`aiscript.ts`): PyAI text (`script ID { … }`, `--Block--`/`:Block`, `name(args)` or `name a b`,
+  `#`/`;`, variables, `@` lines ignored), the game's 113 opcodes and aise's 113–164 with PyAI's argument types (enums,
+  flags, unit groups, points `Loc.N`/`ScriptArea`/`(x, y)`, areas `~ r`). Code in source order (PyAI orders by reach),
+  so files round-trip; notes: `aiscript preamble` (the game's has 1,504 zero bytes), `aiscript expanded` +
+  `long-jumps` (aise's trampoline table — Cosmonarchy's has 1,814), `file bwscript` (code below goes to bwscript.bin;
+  without notes, code reached only from bwscript scripts goes there), `bwscript order`. Not done: PyAI's idle_orders
+  flag syntax (written `IdleRaw(hex:bytes)`), unit names (numbers unless `names` are given). **Proof:** the game's
+  aiscript.bin + bwscript.bin and Cosmonarchy's (555 KB, expanded) both byte-identical. But Cosmonarchy's aise fork
+  ("aize", no public source found) adds opcode 0xA6 (layout read off the data: long block + name string, ours `op_a6`,
+  `inferred`) and redefines at least 0xA4 (a string-encoded sub-language: "var Exactly|wait …"), so ~60% of its code
+  is `raw_bytes` lines — lossless, not readable. The game's files decode fully (71 raw lines = padding zeros).
+- **.graft** (`graft.ts`): requirement files are the game's u16 requirement stream (leading 0; an entry ends at a
+  0xFFFF followed by a non-opcode, so upgrade levels stay together); buttons.graft is three u32 counts, 20-byte
+  buttons, 12-byte sets (count, first index, connected), 12-byte status entries (unit, status fn, display fn) — from
+  GPTP's `grafting.cpp`. Text is graftc's (README/format.txt); the disassembler cuts sets at every unit's range bounds
+  (430 sets + unreferenced runs in Cosmonarchy's). All six of Cosmonarchy's files byte-identical both ways.
+- **PNG ↔ GRP** (`../png.ts`, `grpPng.ts`): PNG via `CompressionStream("deflate")` (async, browser and Node 18+). A
+  sheet is an indexed PNG of the named palette (index 0 transparent) with `tEXt scmjs:grp` (palette name, frame size,
+  columns, each frame's box), so GRP → PNG → GRP is byte-identical (833/833 of the game's, 13 s in all, ≤0.6 s the
+  largest); other PNGs are quantised to the nearest palette colour (weighted RGB), reported per lost colour.
+- **Performance** (this machine): units.datex 3,000 × 99 decode+encode+text ≈ 0.6 s (10 MB of text); sfxdata 20,000
+  entries ≈ 0.4 s; the game's iscript.bin disassembly 53 ms; Cosmonarchy's aiscript.bin 81 ms to text, 180 ms back;
+  the largest Cosmonarchy GRP (3.2 MB) encodes in 0.46 s.
+- **Tests**: `tests/formats-{dat,tbl,graphics,iscript,aiscript,graft}.test.ts`; the game's files from
+  `fixtures/data/*.mpq` (`tests/support/modFiles.ts`), Cosmonarchy's from `SCMJS_COSMONARCHY` (the download's root);
+  both skip when absent.

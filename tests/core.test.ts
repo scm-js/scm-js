@@ -119,10 +119,12 @@ describe("@scm-js/core: the scmjs command is a thin layer over it", () => {
     const api = exported();
     const strays: string[] = [];
     const cli = join(root, "cli/src");
-    // Every module of the command (the list is read, not kept, so a new command needs no line here).
-    for (const name of readdirSync(cli).filter((f) => f.endsWith(".ts")).sort().map((f) => join(cli, f))) {
+    // Every module of the command, in its folders too (the list is read, not kept, so a new command needs no line here).
+    const modules = (readdirSync(cli, { recursive: true }) as string[]).filter((f) => f.endsWith(".ts")).sort().map((f) => join(cli, f));
+    expect(modules.some((f) => f.includes(`${join("cli", "src", "mod")}`))).toBe(true);
+    for (const name of modules) {
       const text = readFileSync(name, "utf8");
-      for (const m of text.matchAll(/import\s+(?:type\s+)?\{([^}]*)\}\s*from\s*["'](\.\.\/\.\.\/src\/[^"']+)["']/g)) {
+      for (const m of text.matchAll(/import\s+(?:type\s+)?\{([^}]*)\}\s*from\s*["']((?:\.\.\/)+src\/[^"']+)["']/g)) {
         const file = resolveModule(name, m[2]);
         if (name.endsWith(HOST_EXCEPTION.from) && file === join(root, HOST_EXCEPTION.module)) continue;
         if (name.endsWith(`/${I18N_EXCEPTION.from}`) && file === join(root, I18N_EXCEPTION.module)) continue;

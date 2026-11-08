@@ -1,8 +1,16 @@
 /**
  * Files out of the player's own copy of StarCraft, for the commands that draw with the game's graphics
- * (`scmjs map preview`). A Remastered installation keeps them in CASC storage, read with kascade; a 1.16.1 one in
- * StarDat.mpq, BrooDat.mpq and patch_rt.mpq, read with mopaq, the later archive winning as the game layers them.
- * Nothing is kept on disk: a tileset is a few megabytes and comes out of either in well under a second.
+ * (`scmjs map preview`) and the mod commands. A Remastered installation keeps them in CASC storage, read with kascade;
+ * a 1.16.1 one in StarDat.mpq, BrooDat.mpq and patch_rt.mpq, read with mopaq, the later archive winning as the game
+ * layers them. Nothing is kept on disk: a tileset is a few megabytes and comes out of either in well under a second.
+ *
+ * Both answer a member by the game's own name, one file a call. A Remastered storage holds the classic files at
+ * those names beside its own (`HD2\…`, `SD\…`, `Carbot\…`): every picture and overlay images.tbl names (the classic
+ * GRPs and `.lo?` files, byte for byte 1.16.1's), the interface pictures (`game\tunit.pcx`, the wireframes), the
+ * tables, and the sounds: Remastered's own WAVs at the classic names (1.16.1's are under `SD\`). Five of the 1,123
+ * names sfxdata lists are not there, four of them missing from 1.16.1 too; the fifth, `protoss\archon\parmin00.wav`,
+ * is only under `SD\`. The same names, read the same way, are the editor's play set (`src/gamedata/play.ts`);
+ * `mod/overlay.ts` lays the pictures under a mod for the engine's runner from here.
  */
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -54,7 +62,11 @@ export function archiveFiles(folder: string, paths = classicArchives(folder)): G
   };
 }
 
-/** Remastered: the installation's CASC storage, opened with kascade (~0.2 s for its indices). */
+/**
+ * Remastered: the installation's CASC storage, opened with kascade (~0.2 s for its indices). A member is read when
+ * asked for (any case, either slash; kascade looks the name up without case), null when the build does not list it or
+ * this install has not got it (another language's files).
+ */
 export async function storageFiles(folder: string): Promise<GameFiles> {
   const { Storage } = await import("kascade");
   const { nodeSource } = await import("kascade/node");

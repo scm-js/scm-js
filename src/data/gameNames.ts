@@ -19,7 +19,8 @@
  * `tests/names.test.ts`, so they cannot drift.
  */
 import type { UnitAssets } from "../formats/units/load";
-import { TECH_NAMES, UNIT_NAMES, UPGRADE_NAMES, type LoadedNames } from "./units";
+import { datCount, UnitFlag } from "../formats/dat/dat";
+import { TECH_NAMES, UNIT_NAMES, UPGRADE_NAMES, type LoadedNames, type RaceKey, type UnitCatalogue } from "./units";
 import { WEAPON_NAMES } from "./weapons";
 
 /**
@@ -217,14 +218,21 @@ function labelled(labels: ArrayLike<number> | undefined, statTxt: readonly (read
  * no `stat_txt.tbl` (an older extraction) — every slot null means the tables stand alone,
  * which is what Blizzard's own files come to.
  */
-export function namesFromAssets(assets: Pick<UnitAssets, "statTxt" | "weapons" | "upgrades" | "techs">): LoadedNames | null {
+export function namesFromAssets(assets: Pick<UnitAssets, "statTxt" | "weapons" | "upgrades" | "techs"> & Partial<Pick<UnitAssets, "units" | "unitNames">>): LoadedNames | null {
   const statTxt = assets.statTxt;
-  if (!statTxt) return null;
+  const extended = extendedUnitNames(assets);
+  if (!statTxt) {
+    if (!extended.some((n) => n !== null)) return null;
+    return { units: extended.map((n, id) => (n && id < UNIT_NAMES.length ? pick(n, gameUnitName(id)) : n)), weapons: [], upgrades: [], techs: [] };
+  }
   const units: (string | null)[] = [];
   for (let id = 0; id < UNIT_NAMES.length; id++) {
+    // A data set's unitnames.tbl names every type where it has an entry, as GPTP reads it; stat_txt.tbl otherwise.
+    const own = extended[id];
     const entry = statTxt[id];
-    units.push(entry ? pick(composeUnitName(entry), gameUnitName(id)) : null);
+    units.push(own ? pick(own, gameUnitName(id)) : entry ? pick(composeUnitName(entry), gameUnitName(id)) : null);
   }
+  for (let id = UNIT_NAMES.length; id < extended.length; id++) units.push(extended[id]);
   return {
     units,
     weapons: labelled(assets.weapons?.label, statTxt, WEAPON_NAMES.length, gameWeaponName),
@@ -236,4 +244,48 @@ export function namesFromAssets(assets: Pick<UnitAssets, "statTxt" | "weapons" |
 /** True when every slot is null: the data set names things exactly as the game's own does. */
 export function namesAreTheGames(names: LoadedNames | null): boolean {
   return !names || [names.units, names.weapons, names.upgrades, names.techs].every((list) => list.every((n) => n === null));
+}
+
+/**
+ * The names `rez\unitnames.tbl` gives the unit types, by id (null where it names none, or
+ * the data set has no such table): entry N is type N, GPTP's convention, for every type —
+ * the game's 228 included, which GPTP also names from it when it is there. `*` is no name.
+ * As long as units.dat has types, so a data set with more than 228 has names for the rest.
+ */
+function extendedUnitNames(assets: Partial<Pick<UnitAssets, "units" | "unitNames">>): (string | null)[] {
+  const count = Math.max(datCount(assets.units?.flingy), UNIT_NAMES.length);
+  const out: (string | null)[] = [];
+  for (let id = 0; id < count; id++) {
+    const entry = assets.unitNames?.[id];
+    const name = entry ? composeUnitName(entry) : "";
+    out.push(name && name !== "*" ? name : null);
+  }
+  return out;
+}
+
+/** A unit type's race by its units.dat group flags (bit 0 Zerg, 1 Terran, 2 Protoss), neutral for none. */
+export function raceOfFlags(groupFlags: number): RaceKey {
+  return groupFlags & 1 ? "zerg" : groupFlags & 2 ? "terran" : groupFlags & 4 ? "protoss" : "neutral";
+}
+
+/**
+ * What the loaded data has past the game's unit types (`units.ts#UnitCatalogue`): its
+ * count, and the types the palette lists — every one from 228 on when the data set names
+ * none of them, else the ones it names (a mod's table is usually wider than what it uses,
+ * the rest left as copies of a template with no name).
+ */
+export function unitCatalogue(assets: Pick<UnitAssets, "units"> & Partial<Pick<UnitAssets, "unitNames">>): UnitCatalogue | null {
+  const units = assets.units;
+  const count = datCount(units.flingy);
+  if (count <= UNIT_NAMES.length) return null;
+  const extended: { id: number; race: RaceKey; building: boolean }[] = [];
+  for (let id = UNIT_NAMES.length; id < count; id++) {
+    if (assets.unitNames) {
+      const entry = assets.unitNames[id];
+      const name = entry ? composeUnitName(entry) : "";
+      if (!name || name === "*") continue;
+    }
+    extended.push({ id, race: raceOfFlags(units.groupFlags[id] ?? 0), building: ((units.flags[id] ?? 0) & UnitFlag.Building) !== 0 });
+  }
+  return { count, extended };
 }

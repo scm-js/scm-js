@@ -86,6 +86,10 @@ its `memory` refs tell an EUD map). `cli.md` "Fair starts and smaller maps".
 
 Done 2026-11-07 (`map sounds`): `parseWavHeader`, `wavDuration`, `wavFormatLabel` and `WavInfo` from
 `formats/wav.ts` (pure; its one import is `t` for the format label's words). `cli.md` "Cheap wins".
+Done 2026-11-08 (branch `mods-api`, for the Mod Editor's sounds): the rest of the codec from the same module —
+`decodeWav`, `decodePcmWav`, `decodeImaAdpcm` (exported for this), `encodeWav`, `isPlainPcm`, `canDecodeWav`,
+`wavFrames`, `wavCodecName`, `WAV_FORMAT`, `PcmAudio`, `WavBits`; no new edge, so the layering test is unchanged.
+`tests/wav.test.ts` "the WAV codec in @scm-js/core".
 
 Done 2026-11-07 (the DX slice: `map new|dump|find`, `doctor`): added `flatTerrain`/`baseTerrain`/`DIRT`
 (`formats/tileset/terrain.ts` — works with a null tileset, dirt ids, so it is not "needs the tileset"),

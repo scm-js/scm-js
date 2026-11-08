@@ -7,9 +7,14 @@
  * Each file is a struct of arrays: every field is stored for all entries before the next
  * field starts. A few unit fields only exist for a sub-range of entries, and three of them
  * (placement box, add-on offset, extents) are arrays of small structs instead. The layout
- * below is the Brood War one (units.dat = 19876 bytes); the original game's 19192-byte
- * table just lacks the last two fields. Only what the editor needs is decoded.
+ * is the schema's (`schema.ts`) and the width is the file's (`table.ts#decodeDat`): the game's
+ * own tables (units.dat = 19876 bytes; the original game's 19192-byte table just lacks the
+ * last two fields), DatExtend's expanded ones and GPTP's `.datex` all read the same way,
+ * the columns as long as the file has entries. Only what the editor needs is picked out.
+ * The counts below are the game's own, which the CHK format's settings sections are sized by.
  */
+import { decodeDat, type DatFile } from "./table";
+import type { DatTableName } from "./schema";
 
 export const UNIT_TYPES = 228;
 export const FLINGY_TYPES = 209;
@@ -71,8 +76,8 @@ export const UnitFlag = {
 } as const;
 
 export interface UnitsDat {
-  /** flingy.dat index. */
-  flingy: Uint8Array;
+  /** flingy.dat index (a byte in the game's layout, a word in the extended ones). */
+  flingy: Uint16Array;
   /** First subunit (turret), or NO_UNIT. */
   subunit: Uint16Array;
   /** Starting facing 0–31 (0 = up, 8 = right, 16 = down), or RANDOM_DIRECTION. */
@@ -98,16 +103,16 @@ export interface UnitsDat {
   buildTime: Uint16Array;
   armor: Uint8Array;
   /** weapons.dat ids, or NO_WEAPON. */
-  groundWeapon: Uint8Array;
-  airWeapon: Uint8Array;
+  groundWeapon: Uint16Array;
+  airWeapon: Uint16Array;
   /** Bit 0 Zerg, 1 Terran, 2 Protoss, 3 men, 4 building, 5 factory, 6 independent, 7 neutral. */
   groupFlags: Uint8Array;
   /** StarEdit availability flags; all zero for the legacy layout. */
   availability: Uint16Array;
   /**
    * The unit's voice, as sfxdata.dat ids (0 for none): the one it says when trained, and
-   * first–last ranges for a click, repeated clicks and an order. Only the first
-   * `VOICED_UNITS` have ready / annoyed / yes sounds; every unit has a "what".
+   * first–last ranges for a click, repeated clicks and an order. In the game's layout only
+   * the first `VOICED_UNITS` have ready / annoyed / yes sounds (0 past them); every unit has a "what".
    */
   readySound: Uint16Array;
   whatSoundStart: Uint16Array;
@@ -170,114 +175,48 @@ export interface ImagesDat {
   lo: Uint32Array[];
 }
 
-/** Sequential reader over a struct-of-arrays file. */
-class Fields {
-  private at = 0;
-  private readonly data: Uint8Array;
-  private readonly view: DataView;
-
-  constructor(data: Uint8Array) {
-    this.data = data;
-    this.view = new DataView(data.buffer, data.byteOffset, data.byteLength);
-  }
-
-  get remaining(): number {
-    return this.data.length - this.at;
-  }
-
-  u8(count: number): Uint8Array {
-    const out = this.data.slice(this.at, this.at + count);
-    this.at += count;
-    return out;
-  }
-
-  u16(count: number): Uint16Array {
-    return this.u16Strided(count, 2, 0);
-  }
-
-  u32(count: number): Uint32Array {
-    const out = new Uint32Array(count);
-    for (let i = 0; i < count; i++) out[i] = this.view.getUint32(this.at + i * 4, true);
-    this.at += count * 4;
-    return out;
-  }
-
-  /** Read `count` u16s spaced `stride` bytes apart starting `offset` bytes in, without advancing. */
-  u16Strided(count: number, stride: number, offset: number): Uint16Array {
-    const out = new Uint16Array(count);
-    for (let i = 0; i < count; i++) out[i] = this.view.getUint16(this.at + offset + i * stride, true);
-    if (offset === 0 && stride === 2) this.at += count * 2;
-    return out;
-  }
-
-  skip(bytes: number) {
-    this.at += bytes;
-  }
+/**
+ * The table's entries, from any of its columns: the count the file had (228 units for the game's own table, any
+ * number for a mod's — `table.ts#datShape` reads the width off the file's length).
+ */
+export function datCount(table: { length: number } | null | undefined): number {
+  return table?.length ?? 0;
 }
 
-function expectSize(name: string, data: Uint8Array, ...sizes: number[]) {
-  if (!sizes.includes(data.length)) {
-    throw new Error(`${name} is ${data.length} bytes; expected ${sizes.join(" or ")}`);
-  }
+/** The whole table through `table.ts`; the subset readers below pick their columns from it. */
+function read(table: DatTableName, data: Uint8Array, fileName?: string): DatFile {
+  return decodeDat(table, data, fileName ? { fileName } : {});
 }
 
-export function decodeUnitsDat(data: Uint8Array): UnitsDat {
-  expectSize("units.dat", data, UNITS_DAT_SIZE, UNITS_DAT_SIZE_LEGACY);
-  const n = UNIT_TYPES;
-  const f = new Fields(data);
-  const flingy = f.u8(n);
-  const subunit = f.u16(n);
-  f.skip(n * 2); // subunit2
-  f.skip(96 * 2); // infestation (units 106–201)
-  f.skip(n * 4); // construction animation
-  const direction = f.u8(n);
-  const shieldEnable = f.u8(n);
-  const shieldAmount = f.u16(n);
-  const hitPoints = f.u32(n);
-  const elevation = f.u8(n);
-  f.skip(n * 7); // unknown, sublabel, 5 AI orders
-  const groundWeapon = f.u8(n);
-  f.skip(n); // max ground hits
-  const airWeapon = f.u8(n);
-  f.skip(n * 2); // max air hits, aiInternal
-  const flags = f.u32(n);
-  f.skip(n * 4); // acquisition range, sight, armour upgrade, size
-  const armor = f.u8(n);
-  f.skip(n); // right-click action
-  const readySound = f.u16(VOICED_UNITS);
-  const whatSoundStart = f.u16(n);
-  const whatSoundEnd = f.u16(n);
-  const annoyedSoundStart = f.u16(VOICED_UNITS);
-  const annoyedSoundEnd = f.u16(VOICED_UNITS);
-  const yesSoundStart = f.u16(VOICED_UNITS);
-  const yesSoundEnd = f.u16(VOICED_UNITS);
-  const placementWidth = f.u16Strided(n, 4, 0);
-  const placementHeight = f.u16Strided(n, 4, 2);
-  f.skip(n * 4);
-  f.skip(96 * 4); // add-on offsets (units 106–201)
-  const extentLeft = f.u16Strided(n, 8, 0);
-  const extentUp = f.u16Strided(n, 8, 2);
-  const extentRight = f.u16Strided(n, 8, 4);
-  const extentDown = f.u16Strided(n, 8, 6);
-  f.skip(n * 8);
-  f.skip(n * 2); // portrait
-  const mineralCost = f.u16(n);
-  const vespeneCost = f.u16(n);
-  const buildTime = f.u16(n);
-  f.skip(n * 2); // requirements
-  const groupFlags = f.u8(n);
-  f.skip(n * 4); // supply provided/required, space required/provided
-  f.skip(n * 2 * 3); // build score, destroy score, map string
-  let availability: Uint16Array = new Uint16Array(n);
-  if (f.remaining >= n * 3) {
-    f.skip(n); // Brood War flag
-    availability = f.u16(n);
-  }
+/** A struct column (placement box, extents) split into one array a part. */
+function part(col: ArrayLike<number>, parts: number, index: number, count: number): Uint16Array {
+  const out = new Uint16Array(count);
+  for (let i = 0; i < count; i++) out[i] = col[i * parts + index];
+  return out;
+}
+
+const u8 = (c: unknown) => c as Uint8Array;
+const u16 = (c: unknown) => c as Uint16Array;
+const u32 = (c: unknown) => c as Uint32Array;
+
+/**
+ * units.dat at any width: the game's 228 types (or the 19192-byte original, whose last two columns read 0),
+ * DatExtend's expanded layout, or GPTP's `.datex` when `fileName` ends so. Throws when the size fits no layout.
+ * Columns a layout stores only for a range of ids (the voices, 0–105) read 0 elsewhere.
+ */
+export function decodeUnitsDat(data: Uint8Array, fileName?: string): UnitsDat {
+  const file = read("units", data, fileName);
+  const c = file.columns;
+  const n = file.count;
   return {
-    flingy, subunit, direction, shieldEnable, shieldAmount, hitPoints, elevation, flags,
-    placementWidth, placementHeight, extentLeft, extentUp, extentRight, extentDown,
-    mineralCost, vespeneCost, buildTime, armor, groundWeapon, airWeapon, groupFlags, availability,
-    readySound, whatSoundStart, whatSoundEnd, annoyedSoundStart, annoyedSoundEnd, yesSoundStart, yesSoundEnd,
+    flingy: u16(c.graphics), subunit: u16(c.subunit1), direction: u8(c.unit_direction), shieldEnable: u8(c.shield_enabled),
+    shieldAmount: u16(c.shield_amount), hitPoints: u32(c.hit_points), elevation: u8(c.elevation_level), flags: u32(c.special_ability_flags),
+    placementWidth: part(c.staredit_placement_size, 2, 0, n), placementHeight: part(c.staredit_placement_size, 2, 1, n),
+    extentLeft: part(c.unit_extents, 4, 0, n), extentUp: part(c.unit_extents, 4, 1, n), extentRight: part(c.unit_extents, 4, 2, n), extentDown: part(c.unit_extents, 4, 3, n),
+    mineralCost: u16(c.mineral_cost), vespeneCost: u16(c.vespene_cost), buildTime: u16(c.build_time), armor: u8(c.armor),
+    groundWeapon: u16(c.ground_weapon), airWeapon: u16(c.air_weapon), groupFlags: u8(c.staredit_group_flags), availability: u16(c.staredit_availability_flags),
+    readySound: u16(c.ready_sound), whatSoundStart: u16(c.what_sound_start), whatSoundEnd: u16(c.what_sound_end),
+    annoyedSoundStart: u16(c.pissed_sound_start), annoyedSoundEnd: u16(c.pissed_sound_end), yesSoundStart: u16(c.yes_sound_start), yesSoundEnd: u16(c.yes_sound_end),
   };
 }
 
@@ -286,13 +225,9 @@ export interface SfxdataDat {
   file: Uint32Array;
 }
 
-/** Bytes per sound: the file (u32), priority, flags, length adjust (u16) and minimum volume, struct of arrays. */
-const SFXDATA_ENTRY = 9;
-
-/** The file column; the table is as long as the game has sounds (1144 in Brood War), so the count comes off the size. */
-export function decodeSfxdataDat(data: Uint8Array): SfxdataDat {
-  const n = Math.floor(data.length / SFXDATA_ENTRY);
-  return { file: new Fields(data).u32(n) };
+/** The file column; the table is as long as the data set has sounds (1144 in Brood War), the count off the size. */
+export function decodeSfxdataDat(data: Uint8Array, fileName?: string): SfxdataDat {
+  return { file: u32(read("sfxdata", data, fileName).columns.sound_file) };
 }
 
 export interface WeaponsDat {
@@ -303,21 +238,10 @@ export interface WeaponsDat {
   bonus: Uint16Array;
 }
 
-/** The label and the two columns Unit Settings shows as defaults; the layout is 42 bytes per weapon, struct of arrays. */
-export function decodeWeaponsDat(data: Uint8Array): WeaponsDat {
-  expectSize("weapons.dat", data, WEAPONS_DAT_SIZE);
-  const n = WEAPON_TYPES;
-  const f = new Fields(data);
-  const label = f.u16(n);
-  f.skip(n * 4); // graphics
-  f.skip(n); // explosion
-  f.skip(n * 2); // target flags
-  f.skip(n * 4 * 2); // min / max range
-  f.skip(n * 5); // damage upgrade, type, behaviour, remove after, explosive type
-  f.skip(n * 2 * 3); // inner / medium / outer splash
-  const damage = f.u16(n);
-  const bonus = f.u16(n);
-  return { label, damage, bonus };
+/** The label and the two columns Unit Settings shows as defaults, at the file's width. */
+export function decodeWeaponsDat(data: Uint8Array, fileName?: string): WeaponsDat {
+  const c = read("weapons", data, fileName).columns;
+  return { label: u16(c.label), damage: u16(c.damage_amount), bonus: u16(c.damage_bonus) };
 }
 
 export type Race = "zerg" | "terran" | "protoss" | null;
@@ -328,42 +252,24 @@ export function unitRace(units: UnitsDat, unitId: number): Race {
   return g & 1 ? "zerg" : g & 2 ? "terran" : g & 4 ? "protoss" : null;
 }
 
-export function decodeFlingyDat(data: Uint8Array): FlingyDat {
-  expectSize("flingy.dat", data, FLINGY_DAT_SIZE);
-  const n = FLINGY_TYPES;
-  const f = new Fields(data);
-  const sprite = f.u16(n);
-  const topSpeed = f.u32(n);
-  const acceleration = f.u16(n);
-  const haltDistance = f.u32(n);
-  const turnRadius = f.u8(n);
-  f.skip(n); // unused
-  const moveControl = f.u8(n);
-  return { sprite, topSpeed, acceleration, haltDistance, turnRadius, moveControl };
+export function decodeFlingyDat(data: Uint8Array, fileName?: string): FlingyDat {
+  const c = read("flingy", data, fileName).columns;
+  return {
+    sprite: u16(c.sprite), topSpeed: u32(c.speed), acceleration: u16(c.acceleration), haltDistance: u32(c.halt_distance),
+    turnRadius: u8(c.turn_radius), moveControl: u8(c.movement_control),
+  };
 }
 
-export function decodeSpritesDat(data: Uint8Array): SpritesDat {
-  expectSize("sprites.dat", data, SPRITES_DAT_SIZE);
-  return { image: new Fields(data).u16(SPRITE_TYPES) };
+export function decodeSpritesDat(data: Uint8Array, fileName?: string): SpritesDat {
+  return { image: u16(read("sprites", data, fileName).columns.image) };
 }
 
-export function decodeImagesDat(data: Uint8Array): ImagesDat {
-  expectSize("images.dat", data, IMAGES_DAT_SIZE);
-  const n = IMAGE_TYPES;
-  const f = new Fields(data);
-  const grp = f.u32(n);
-  const graphicTurns = f.u8(n);
-  f.skip(n * 3); // clickable, use full iscript, draw if cloaked
-  const drawFunction = f.u8(n);
-  const remapping = f.u8(n);
-  const iscript = f.u32(n);
-  const shield = f.u32(n);
-  const attack = f.u32(n);
-  const damage = f.u32(n);
-  const special = f.u32(n);
-  const landing = f.u32(n);
-  const liftOff = f.u32(n);
-  return { grp, graphicTurns, drawFunction, remapping, iscript, lo: [attack, damage, special, landing, liftOff, shield] };
+export function decodeImagesDat(data: Uint8Array, fileName?: string): ImagesDat {
+  const c = read("images", data, fileName).columns;
+  return {
+    grp: u32(c.grp_file), graphicTurns: u8(c.gfx_turns), drawFunction: u8(c.draw_function), remapping: u8(c.remapping), iscript: u32(c.iscript_id),
+    lo: [u32(c.attack_overlay), u32(c.damage_overlay), u32(c.special_overlay), u32(c.landing_dust_overlay), u32(c.lift_off_dust_overlay), u32(c.shield_overlay)],
+  };
 }
 
 /* ── upgrades.dat / techdata.dat ─────────────────────────── */
@@ -393,23 +299,12 @@ export interface UpgradesDat {
 }
 
 /** Struct of arrays: six u16 columns of cost, then requirements / icon / label u16s, then race, max repeats and the Brood War flag. */
-export function decodeUpgradesDat(data: Uint8Array): UpgradesDat {
-  expectSize("upgrades.dat", data, UPGRADES_DAT_SIZE);
-  const n = UPGRADE_TYPES;
-  const f = new Fields(data);
-  const mineralCost = f.u16(n);
-  const mineralFactor = f.u16(n);
-  const vespeneCost = f.u16(n);
-  const vespeneFactor = f.u16(n);
-  const timeCost = f.u16(n);
-  const timeFactor = f.u16(n);
-  f.skip(n * 2); // requirements
-  const icon = f.u16(n);
-  const label = f.u16(n);
-  f.skip(n); // race
-  const maxRepeats = f.u8(n);
-  const broodWar = f.u8(n);
-  return { mineralCost, mineralFactor, vespeneCost, vespeneFactor, timeCost, timeFactor, maxRepeats, broodWar, label, icon };
+export function decodeUpgradesDat(data: Uint8Array, fileName?: string): UpgradesDat {
+  const c = read("upgrades", data, fileName).columns;
+  return {
+    mineralCost: u16(c.mineral_cost_base), mineralFactor: u16(c.mineral_cost_factor), vespeneCost: u16(c.vespene_cost_base), vespeneFactor: u16(c.vespene_cost_factor),
+    timeCost: u16(c.research_time_base), timeFactor: u16(c.research_time_factor), maxRepeats: u8(c.max_repeats), broodWar: u8(c.broodwar_only), label: u16(c.label), icon: u16(c.icon),
+  };
 }
 
 /** The columns Technology Settings shows as defaults. */
@@ -428,18 +323,10 @@ export interface TechdataDat {
 }
 
 /** Struct of arrays: four u16 cost columns, then research / use requirements, icon and label u16s, race, an unused byte and the Brood War flag. */
-export function decodeTechdataDat(data: Uint8Array): TechdataDat {
-  expectSize("techdata.dat", data, TECHDATA_DAT_SIZE);
-  const n = TECH_TYPES;
-  const f = new Fields(data);
-  const mineralCost = f.u16(n);
-  const vespeneCost = f.u16(n);
-  const researchTime = f.u16(n);
-  const energyCost = f.u16(n);
-  f.skip(n * 2 * 2); // research requirements, use requirements
-  const icon = f.u16(n);
-  const label = f.u16(n);
-  f.skip(n * 2); // race, unused
-  const broodWar = f.u8(n);
-  return { mineralCost, vespeneCost, researchTime, energyCost, broodWar, label, icon };
+export function decodeTechdataDat(data: Uint8Array, fileName?: string): TechdataDat {
+  const c = read("techdata", data, fileName).columns;
+  return {
+    mineralCost: u16(c.mineral_cost), vespeneCost: u16(c.vespene_cost), researchTime: u16(c.research_time), energyCost: u16(c.energy_required),
+    broodWar: u8(c.broodwar_only), label: u16(c.label), icon: u16(c.icon),
+  };
 }

@@ -23,7 +23,7 @@ import { summarizeTrigger } from "../../src/formats/triggers/text";
 import { conditionDef } from "../../src/data/triggerDefs";
 import { createInterface } from "node:readline";
 import { FRAME_MS, type Replay } from "@scm-js/replay";
-import { cacheRoot, ensureEngine, findGameCopy, runnerFor, startRunner, type Engine } from "./engine";
+import { cacheRoot, ensureEngine, findGameCopy, runnerFor, startRunner, type Engine, modArgs, modWords, type RunnerModReport } from "./engine";
 import { VERSION } from "./about";
 import { assetFile, INSTALL } from "./runtime";
 import { diffMaps, summarizeDiff } from "./diff";
@@ -51,6 +51,8 @@ export interface TraceStartLine {
   /** With a replay: its length and players, and whether a map file was played in place of its own. */
   replay?: { name: string; frames: number; gameType: number; players: ReplayPlayerLine[] };
   replaced?: boolean;
+  /** With `--mod`: what the game read of the mod, and the startup data read again. */
+  mod?: RunnerModReport;
   ms: { load: number; start: number };
 }
 export interface TraceProgressLine { kind: "progress"; frame: number; passes: number; ms: { game: number } }
@@ -89,6 +91,8 @@ export interface MapRunOptions {
   /** Stops the run when it fires (an MCP client cancelling its request): the runner is killed and the run fails as cancelled. */
   signal?: AbortSignal;
   node?: string;
+  /** A mod laid over the game: `folder` writes its files in the game's paths and says where (asked once the engine is known to take one). */
+  mod?: { layers: () => Promise<string[]>; report?: (m: RunnerModReport) => RunnerModReport };
 }
 
 export interface MapRunOutcome {
@@ -181,7 +185,8 @@ async function runMap(map: string | null, what: "trace" | "cost", o: MapRunOptio
   const game = findGameCopy(o.starcraft);
   const engine = o.ready ?? await ensureEngine(o.engine, undefined, o.live ?? (() => {}));
   const runner = runnerFor(engine, "map");
-  const args = [...(map !== null ? [resolve(map)] : []), "--engine", engine.dir, "--starcraft", game.folder];
+  const modFlag = o.mod ? (modArgs(engine, "?"), modArgs(engine, await o.mod.layers())) : [];
+  const args = [...(map !== null ? [resolve(map)] : []), ...modFlag, "--engine", engine.dir, "--starcraft", game.folder];
   if (o.replay) args.push("--play", resolve(o.replay));
   if (o.order) args.push("--order");
   if (o.frames !== undefined) args.push("--frames", String(o.frames));
@@ -207,7 +212,9 @@ async function runMap(map: string | null, what: "trace" | "cost", o: MapRunOptio
       if (l.kind === "start") {
         // A runner from before `--play` ran the map with nobody playing: its start has no mode.
         if (o.replay && l.mode !== "replay") { older = true; child.kill(); break; }
+        if (l.mod && o.mod?.report) l.mod = o.mod.report(l.mod);
         start = l; o.live?.(wordStart(l));
+        if (l.mod) o.live?.(modWords(l.mod));
       }
       else if (l.kind === "progress") { progress.push(l); o.onProgress?.(l); o.live?.(`  ${pc.dim(`${start?.mode === "replay" ? `${gameClock(l.frame).padStart(5)}  ` : ""}${t("frame {frame}  {n, plural, one {# pass} other {# passes}} of the triggers", { frame: String(l.frame).padStart(6), n: l.passes })}`)}`); }
       else if (l.kind === "end") end = l;
@@ -303,7 +310,7 @@ export interface ReplayReport {
   orderDropped: number;
 }
 
-export interface TraceReport { file: string; rows: RowSummary[]; passes: number; frame: number; ended: boolean; reason: string | null; replay?: ReplayReport }
+export interface TraceReport { file: string; rows: RowSummary[]; passes: number; frame: number; ended: boolean; reason: string | null; replay?: ReplayReport; mod?: RunnerModReport }
 
 const USE_MAP_SETTINGS = 10;
 
@@ -323,7 +330,7 @@ export function replayReport(r: Pick<MapRunOutcome, "start" | "end">): ReplayRep
 export function traceReport(file: string, scn: Scenario, r: MapRunOutcome): TraceReport {
   const rows = readTriggers(scn).length;
   const replay = replayReport(r);
-  return { file, rows: summarizeRows(r.end.trace ?? [], rows), passes: r.end.passes, frame: r.end.frame, ended: r.end.ended, reason: r.end.reason, ...(replay ? { replay } : {}) };
+  return { file, rows: summarizeRows(r.end.trace ?? [], rows), passes: r.end.passes, frame: r.end.frame, ended: r.end.ended, reason: r.end.reason, ...(replay ? { replay } : {}), ...(r.start?.mod ? { mod: r.start.mod } : {}) };
 }
 
 /** `map trace --json`: the report, with where the engine and the game came from, every copy's line and the run's times. */
@@ -466,7 +473,7 @@ export function costReport(file: string, r: MapRunOutcome): CostReport {
 
 /** `map cost --json`: the report, with where the engine and the game came from, the frame-by-frame series and the run's times. */
 export function costJson(file: string, r: MapRunOutcome) {
-  return { ...costReport(file, r), engine: r.engine, game: r.game, series: r.end.cost, ms: r.end.ms };
+  return { ...costReport(file, r), ...(r.start?.mod ? { mod: r.start.mod } : {}), engine: r.engine, game: r.game, series: r.end.cost, ms: r.end.ms };
 }
 
 /** Milliseconds, with the digits a small number needs (a trigger of three records is a hundredth of a microsecond). */

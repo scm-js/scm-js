@@ -75,7 +75,11 @@ export {
 } from "../../src/editor/settings";
 export { readSwitchNames } from "../../src/editor/switches";
 export { soundList, readWavs, applySounds, type SoundRow } from "../../src/editor/sounds";
-export { parseWavHeader, wavDuration, wavFormatLabel, type WavInfo } from "../../src/formats/wav";
+export {
+  parseWavHeader, wavDuration, wavFormatLabel, type WavInfo,
+  // The codec: any WAV the game or a sound tool writes read into floats (the game's IMA ADPCM included), and PCM written back.
+  decodeWav, decodePcmWav, decodeImaAdpcm, encodeWav, isPlainPcm, canDecodeWav, wavFrames, wavCodecName, WAV_FORMAT, type PcmAudio, type WavBits,
+} from "../../src/formats/wav";
 export { resizeScenario, type ResizeOptions, type ResizeResult } from "../../src/editor/resize";
 export { placeStartLocations, idealStarts, playableCount, DEFAULT_START_PLACEMENT, type StartLayout, type StartPlacementOptions, type StartPlacementResult } from "../../src/editor/startLocations";
 export { DEFAULT_PLACEMENT, type PlacementOptions } from "../../src/editor/placement";
@@ -97,6 +101,46 @@ export { decodeIscript, type IscriptBin } from "../../src/formats/dat/iscript";
 export { walkSpeed, type SpeedTables } from "../../src/formats/dat/speed";
 export { unitGeometry, type UnitGeometry } from "../../src/editor/units";
 export { displayColorHex } from "../../src/data/players";
+
+// ── Mods: the game's data files read and written ──
+// Every table in all three layouts (the game's .dat, DatExtend's expanded .dat, GPTP's .datex) with the width from the
+// file's length; PyDAT TXT, PyTBL, PyLO, PyICE and PyAI text both ways; GRP, PCX, .lo?, .graft; PNG sheets of a GRP.
+export { DAT_SCHEMAS, DAT_TABLES, datTableOf, type DatSchema, type DatField, type DatTableName, type DatValueType, type DatTextCoder } from "../../src/formats/dat/schema";
+export {
+  decodeDat, encodeDat, datShape, datEntrySize, datStandardSize, emptyDat, datRow, datRows, setDatRow, datFromRows, datHas, fieldType, storedRange,
+  datToText, datFromText, parseDatText, DatTextError, type DatFile, type DatLayout, type DatRow, type DatShape, type DecodeDatOptions, type DatFromTextOptions, type DatTextEntry, type DatToTextOptions,
+} from "../../src/formats/dat/table";
+export { decodeTblFile, encodeTblFile, tblToText, tblFromText, tblEscape, tblUnescape, type TblFile } from "../../src/formats/dat/tblFile";
+export { decodeGrpImage, encodeGrpImage, encodeGrpFrame, encodeGrpLine, frameFromPicture, framePicture, opaqueBox, type GrpImage, type GrpFramePixels } from "../../src/formats/dat/grpFile";
+export { decodePcxImage, encodePcxImage, type PcxImage } from "../../src/formats/dat/pcxFile";
+export { decodeLoFile, encodeLoFile, loToText, loFromText, type LoOverlays, type EncodeLoOptions } from "../../src/formats/dat/loFile";
+export {
+  iscriptToText, iscriptFromText, readIscriptHeaders, iscriptEntryCount, ISCRIPT_OPCODES, ISCRIPT_ANIMS, ISCRIPT_TYPE_ANIMS, IscriptTextError,
+  type IscriptOpcode, type IscriptArgKind, type IscriptEntryRule, type IscriptHeaderInfo, type IscriptToTextOptions, type IscriptFromTextOptions,
+} from "../../src/formats/dat/iscriptText";
+export {
+  aiscriptToText, aiscriptFromText, aiStringText, AI_OPCODES, AI_ENUMS, AI_FLAGS, AI_SCRIPT_FLAGS, AiScriptTextError,
+  type AiOpcode, type AiArgKind, type AiNames, type AiScriptFiles, type AiScriptToTextOptions, type AiScriptFromTextOptions,
+} from "../../src/formats/dat/aiscript";
+export {
+  decodeReqGraft, encodeReqGraft, reqGraftToText, reqGraftFromText, decodeButtonGraft, encodeButtonGraft, buttonGraftToText, buttonGraftFromText, GraftTextError,
+  type ReqGraft, type ButtonGraft, type GraftButton,
+} from "../../src/formats/dat/graft";
+export { decodePng, encodePng, isPng, inflate, deflate, type PngImage, type EncodePngInput } from "../../src/formats/png";
+export { grpToPng, pngToGrp, sheetColumns, type GrpToPngOptions, type NamedPalette, type PngToGrpOptions, type QuantiseReport } from "../../src/formats/dat/grpPng";
+
+// ── Mods: a mod as a folder of text and pictures ──
+// What a mod comes in (a folder, an MPQ, a self-executing exe, a zip), the folder's form both ways with the check that
+// keeps a text only when it packs back to the same bytes, the lints across tables, and a changelog between two mods.
+export { GAME_FOLDERS, gameName, modRoot, programEnd, exeArchive, isMpq, isZip, isExe, readZip, dataSetHash, ModSourceError, type ExeArchive, type ZipMember } from "../../src/formats/mod/sources";
+export {
+  MOD_MANIFEST, MOD_FORMAT, MOD_FOLDERS, DEFAULT_PALETTE, emptyManifest, readManifest, folderPath, memberPath, placeOf, memberOf, aiNames, renderMember, renderAiScripts, packFile,
+  recordRendered, tidyManifest, ModFolderError,
+  type MemberForm, type ModTable, type ModCarried, type ModManifest, type ModNames, type RenderContext, type Rendered, type PackContext,
+} from "../../src/formats/mod/folder";
+export { loadModData, namesOf, entryText, flatRow, rowChanges, ownEntry, type ReadMember, type ModData } from "../../src/formats/mod/data";
+export { checkMod, GAME_ISCRIPT_LAST, type ModFinding, type CheckFiles } from "../../src/formats/mod/check";
+export { diffMods, type ModChange, type ModChangeKind, type DiffSide } from "../../src/formats/mod/diff";
 
 // ── Names and tables ──
 export { TILESETS, TILESET_BY_ID, MAP_SIZES, type TilesetId, type TilesetInfo } from "../../src/data/tilesets";

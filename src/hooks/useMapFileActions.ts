@@ -29,6 +29,7 @@ import { hostTerms } from "../editor/platform";
 import { count, extOf, sizeOf } from "../services/usage";
 import { buildStepName } from "../services/usageNames";
 import { t, translate } from "../i18n";
+import { offerMapDataSet, stampDataSet } from "../services/mapDataSet";
 
 export interface NewMapOptions {
   width: number;
@@ -122,6 +123,8 @@ export async function openFileInto(store: Store, file: File, handle: MapFileHand
     const doc = await openMapFile(file, handle);
     store.set(loadDocumentAtom, { ...doc, into: target, viewOnly });
     store.set(screenAtom, "editor");
+    // A map made for another data set says so, and offers to switch to it.
+    void offerMapDataSet(store, doc.extras);
     count("map.open", {
       ext: extOf(file.name), tileset: store.get(mapTilesetAtom), size: sizeOf(doc.scenario.width, doc.scenario.height),
       version: mapVersionOf(doc.scenario.fileVersion), tab: target === "tab", ...(viewOnly ? { viewOnly: true } : {}),
@@ -330,8 +333,10 @@ export async function saveDocument(store: Store, req: SaveRequest, write: SaveWr
     return false;
   }
   try {
+    // A map saved with a data set other than the game's own remembers which; bytes built before that are stale.
+    const stamped = stampDataSet(store);
     // The plugins' build steps run here; with none that apply this is `buildMapFile`. A step that fails never costs the save.
-    const built = await buildOutgoing(store, { options: req.options, fileName: req.fileName, purpose: "save", plain: req.bytes });
+    const built = await buildOutgoing(store, { options: req.options, fileName: req.fileName, purpose: "save", plain: stamped ? undefined : req.bytes });
     const bytes = built.bytes;
     // Save ▸ keep the file being replaced: `.bak` on the desktop, the browser's storage otherwise.
     const kept: { result: KeptPrevious | null } = { result: null };

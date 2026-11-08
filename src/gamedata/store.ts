@@ -48,6 +48,34 @@ export interface StoredStamp {
    * page shows replays from it and starts no game.
    */
   staredit?: true;
+  /**
+   * The data set whose copy this one was laid over (`install.ts#installDataSet` with
+   * `base`), instead of the game's archives. Such a copy has the editor's files only; the
+   * game's own files for playing stay in the copy underneath.
+   */
+  base?: string;
+  /**
+   * The data set's hash (`overCopy.ts#changedFilesHash`: core's `dataSetHash` over its own
+   * files that differ from the base's, sixteen hex digits, as `scmjs mod play` and the play
+   * page compute it): what a map made with this data set records, so that the same files can
+   * be recognised elsewhere. Absent when none of its files differs (the game's own copy).
+   */
+  hash?: string;
+  /**
+   * The data set's files the hash counted as its own because nothing underneath had them to
+   * compare with — neither the copy it was laid over (nor the copies under that) nor the
+   * game's archives, when the install was handed them. Members as the game names them,
+   * sorted. A mod's genuinely new files are here; so is a file of the game's that the base
+   * lacked (a copy made before the extraction kept it), which is then in the hash although
+   * it is the game's. Absent when every file the hash covers had something to compare with.
+   */
+  hashUnbased?: string[];
+  /**
+   * Images drawn from their GRP even with View ▸ Remastered Graphics on: the data set
+   * changed their picture or their images.dat row against the copy underneath, so the 2x
+   * sprite on file is of something else. Worked out at install.
+   */
+  hdOff?: number[];
 }
 
 export interface StoredCopy extends StoredStamp {

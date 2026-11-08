@@ -5,7 +5,7 @@
  * tileset a doodad graphic belongs to comes from its path. Everything derives from the
  * loaded unit tables, so the list is exactly what the installed data can draw.
  */
-import { NO_UNIT } from "../formats/dat/dat";
+import { datCount, NO_UNIT } from "../formats/dat/dat";
 import { imageGrpPath, type UnitAssets } from "../formats/units/load";
 import { unitName } from "./units";
 
@@ -51,13 +51,13 @@ export function spriteCatalogue(assets: UnitAssets): SpriteCatalogue {
   if (hit) return hit;
   // Which unit a sprite draws: the first unit type whose flingy points at it.
   const unitOf = new Map<number, number>();
-  for (let unit = 0; unit < NO_UNIT; unit++) {
+  for (let unit = 0; unit < datCount(assets.units.flingy); unit++) {
     const sprite = assets.flingy.sprite[assets.units.flingy[unit]];
     if (sprite !== undefined && !unitOf.has(sprite)) unitOf.set(sprite, unit);
   }
   const entries: SpriteEntry[] = [];
   const byGroup = new Map<string, number[]>();
-  const count = Math.min(SPRITE_COUNT, assets.sprites.image.length);
+  const count = assets.sprites.image.length;
   for (let id = 0; id < count; id++) {
     const imageId = assets.sprites.image[id];
     const unitId = unitOf.get(id) ?? NO_UNIT;
@@ -91,6 +91,6 @@ export function spriteCatalogue(assets: UnitAssets): SpriteCatalogue {
 
 /** "Terran Marine", "JUbush01", or "Sprite #n" when the tables are not loaded. */
 export function spriteLabel(assets: UnitAssets | null, id: number): string {
-  if (!assets || id < 0 || id >= SPRITE_COUNT) return `Sprite #${id}`;
+  if (!assets || id < 0 || id >= assets.sprites.image.length) return `Sprite #${id}`;
   return spriteCatalogue(assets).entries[id]?.label ?? `Sprite #${id}`;
 }

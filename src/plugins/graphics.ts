@@ -19,13 +19,15 @@ import { atlasSource, atlasTileSize } from "../formats/tileset/atlas";
 import { megatileForTile } from "../formats/tileset/decode";
 import { ensureTileset, peekTileset, type LoadedTileset } from "../formats/tileset/load";
 import { announceArrival, getUnitAssets, hdSprites, imageGrpPath, onGrpLoaded, peekUnitAssets, requestGrp, requestIconSheet, unitImageId, type UnitAssets } from "../formats/units/load";
-import { iconFrame, paintIcon } from "../formats/units/icons";
+import { iconFor, paintIcon } from "../formats/units/icons";
 import { getImageFrame, getUnitSprite, subunitOf, turretOffset } from "../formats/units/sprites";
 import { NO_UNIT } from "../formats/dat/dat";
 import { DEFAULT_IMAGE_OPTIONS, exportMapImage } from "../services/mapImage";
 import { SpriteFlag } from "../formats/chk/sections/objects";
 import { doodadOrigin } from "../formats/tileset/doodads";
-import { TILESET_FILENAMES } from "../formats/tileset/load";
+import { TILESET_FILENAMES, type TilesetFileName } from "../formats/tileset/load";
+import { decodeGrpImage, type GrpImage } from "../formats/dat/grpFile";
+import { paintGrpFrame } from "../formats/units/grpPicture";
 import { ALL_CLIP_PARTS, clipLocationBounds, type Clip } from "../editor/clipboard";
 import { boundsOf } from "../editor/locations";
 import type { GraphicsApi, PluginImage, RenderClipOptions, SpriteKind } from "./api";
@@ -237,6 +239,29 @@ export function createGraphicsApi(store: Store, bag: Bag): GraphicsApi {
     tileImage: (tileId) => cached("tile", tileId, (l) => buildTile(l, tileId)),
     doodadImage: (doodadId) => cached("doodad", doodadId, (l) => buildDoodad(l, doodadId)),
 
+    grpImage: async (bytes, frame, options = {}) => {
+      if (!(bytes instanceof Uint8Array)) throw new Error("graphics.grpImage needs the GRP's bytes as a Uint8Array");
+      const name = (options.palette ?? store.get(tilesetFileNameAtom)).toLowerCase();
+      if (!(TILESET_FILENAMES as readonly string[]).includes(name)) throw new Error(`graphics.grpImage: "${name}" is not a tileset (${TILESET_FILENAMES.join(", ")})`);
+      let grp: GrpImage;
+      try {
+        grp = decodeGrpImage(bytes);
+      } catch {
+        return null;
+      }
+      const tileset = await ensureTileset(name as TilesetFileName).catch(() => null);
+      if (!tileset || typeof document === "undefined") return null;
+      const owner = options.teamColor === undefined ? 0 : options.teamColor;
+      const team = owner === null ? null : teamOf(owner);
+      const assets = team && "row" in team ? await getUnitAssets().catch(() => null) : null;
+      const painted = paintGrpFrame(grp, frame, { palette: tileset.tileset.palette, team, teamColors: assets?.teamColors ?? null, flip: options.flipped === true, shadow: options.shadow === true });
+      if (!painted) return null;
+      const made = canvasOf(painted.width, painted.height);
+      if (!made) return null;
+      made.ctx.putImageData(new ImageData(painted.data as Uint8ClampedArray<ArrayBuffer>, painted.width, painted.height), 0, 0);
+      return { image: made.canvas, width: painted.width, height: painted.height };
+    },
+
     renderClip: (clip, options = {}) => {
       const name = TILESET_FILENAMES[clip.era];
       const l = name ? peekTileset(name) : null;
@@ -289,12 +314,13 @@ export function createGraphicsApi(store: Store, bag: Bag): GraphicsApi {
       const assets = peekUnitAssets();
       if (!sheet || typeof document === "undefined") return null;
       const look = options.look ?? "normal";
-      const frame = iconFrame(sheet.grp, kind, id, { upgrades: assets?.upgrades ?? null, techs: assets?.techs ?? null });
-      if (frame < 0) return null;
-      // By frame, not by kind and id: an upgrade and a technology often share a picture.
-      const key = `icon|${look}|${frame}`;
+      const found = iconFor(sheet, kind, id, { upgrades: assets?.upgrades ?? null, techs: assets?.techs ?? null });
+      if (!found) return null;
+      const { grp, frame } = found;
+      // By frame, not by kind and id: an upgrade and a technology often share a picture. A data set's own sheet of unit pictures is another sheet.
+      const key = `icon|${look}|${grp === sheet.grp ? "" : "u"}${frame}`;
       if (!composed.has(key)) {
-        const painted = paintIcon(sheet.grp, frame, sheet.colours, sheet.palette, look);
+        const painted = paintIcon(grp, frame, sheet.colours, sheet.palette, look);
         const made = canvasOf(painted.width, painted.height);
         if (!made) return null;
         made.ctx.putImageData(new ImageData(painted.pixels, painted.width, painted.height), 0, 0);

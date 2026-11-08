@@ -46,7 +46,12 @@ export interface EngineCurrent {
   /** The match runner (`scmjs bot ladder`: two bots, or a bot and the computer), in a deploy that has one. */
   matchRunner?: string;
   matchRunnerBytes?: number;
+  /** The version of the mod overlay the deploy's runners take (`--mod <folder>`); absent in a deploy from before mods. */
+  mods?: number;
 }
+
+/** The mod overlay version this command hands a runner: `--mod <folder>`, a folder of the mod's files in the game's paths. */
+export const MOD_OVERLAY = 1;
 
 /** The user's cache folder for scmjs: XDG's, Windows's local app data, else `~/.cache`. */
 export function cacheRoot(env = process.env, home = homedir()): string {
@@ -80,6 +85,8 @@ export interface Engine {
   runners: Partial<Record<RunnerKind, string>>;
   /** Bytes fetched this time; 0 when everything was cached. */
   fetched: number;
+  /** The mod overlay version its runners take; 0 when they take none. */
+  mods: number;
 }
 
 /**
@@ -94,13 +101,13 @@ export async function ensureEngine(at: string = process.env.SCMJS_PLAY_URL || PL
     if (existsSync(current)) {
       const c = JSON.parse(readFileSync(current, "utf8")) as EngineCurrent;
       const sub = existsSync(join(dir, c.build)) ? join(dir, c.build) : dir;
-      return { dir: sub, build: c.build, runner: c.runner, runners: runnersNamed(c), fetched: 0 };
+      return { dir: sub, build: c.build, runner: c.runner, runners: runnersNamed(c), fetched: 0, mods: modsOf(c) };
     }
     const files = existsSync(dir) ? readdirSafe(dir) : [];
     const runners: Engine["runners"] = {};
     for (const kind of Object.keys(RUNNERS) as RunnerKind[]) { const f = files.find((n) => RUNNERS[kind].file.test(n)); if (f) runners[kind] = f; }
     if (!Object.keys(runners).length) throw new CliError(t("{folder} holds no engine: no current.json and no run-<hash>.mjs beside the engine's files.", { folder: at }), t("Name the play page's address, or a folder scm-sim's deploy-play.mjs staged."));
-    return { dir, build: basename(dir), runner: runners.bot ?? "", runners, fetched: 0 };
+    return { dir, build: basename(dir), runner: runners.bot ?? "", runners, fetched: 0, mods: 0 };
   }
   const base = at.replace(/\/+$/, "");
   const current = JSON.parse(new TextDecoder().decode(await fetchBytes(`${base}/engine/current.json`))) as EngineCurrent;
@@ -122,7 +129,43 @@ export async function ensureEngine(at: string = process.env.SCMJS_PLAY_URL || PL
     renameSync(part, join(dir, name));
     fetched += bytes.length;
   }
-  return { dir, build: current.build, runner: current.runner, runners, fetched };
+  return { dir, build: current.build, runner: current.runner, runners, fetched, mods: modsOf(current) };
+}
+
+const modsOf = (c: EngineCurrent) => (typeof c.mods === "number" && c.mods > 0 ? c.mods : 0);
+
+/**
+ * The runner's arguments for a mod laid over the game (`--mod <folder>`, once a layer, the later winning), or a
+ * CliError when the engine's runners take no mod: a deploy from before mods. Nothing when there is no mod.
+ */
+export function modArgs(engine: Engine, folders: string | readonly string[] | null | undefined): string[] {
+  const layers = typeof folders === "string" ? [folders] : folders ?? [];
+  if (!layers.length) return [];
+  if (engine.mods < MOD_OVERLAY) throw new CliError(t("The game engine at {dir} (build {build}) cannot lay a mod over the game: --mod needs runners of mod overlay version {version} or newer (\"mods\": {version} in the play page's engine/current.json).", { dir: engine.dir, build: engine.build, version: MOD_OVERLAY }), t("A play page deployed with scm-sim's mod support has them; the next run fetches it (or name a newer one with --engine)."));
+  return layers.flatMap((f) => ["--mod", f]);
+}
+
+/** What a runner's `start` line says of the mod it laid over the game (scm-sim `src/exact/modRunner.ts`, `ModReport`). */
+export interface RunnerModReport {
+  /** The layers, in load order. */
+  paths: string[];
+  /** How many files the mod holds. */
+  files: number;
+  /** The mod's files the game read, by the game's names. */
+  read: string[];
+  /** The startup data read again (names served and refused), or null when the mod holds none of it. */
+  reloaded: { served: number; refused: string[]; heapBytes: number; ms: number } | null;
+  /** On a Remastered copy: how many of the game's own files the command laid under the mod for that reload (`mod/overlay.ts`). */
+  game?: number;
+}
+
+/** The mod's line under a run's first: what the game read of it, and the startup data read again. */
+export function modWords(m: RunnerModReport): string {
+  const read = t("{read} of the mod's {n, plural, one {# file} other {# files}} read", { read: m.read.length, n: m.files });
+  const r = m.reloaded;
+  const refused = r ? `${r.refused.slice(0, 3).join(", ")}${r.refused.length > 3 ? ` ${t("and {n} more", { n: r.refused.length - 3 })}` : ""}` : "";
+  const reload = !r ? "" : r.refused.length ? `; ${t("the startup data read again, refused {list}", { list: refused })}` : `; ${t("the startup data read again ({n, plural, one {# file} other {# files}})", { n: r.served })}`;
+  return `  ${pc.dim(`${t("mod:")} ${read}${reload}${m.game ? `, ${t("the game's own pictures from your Remastered copy under it")}` : ""}`)}`;
 }
 
 /** The runners `current.json` names, by kind. */

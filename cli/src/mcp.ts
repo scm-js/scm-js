@@ -36,6 +36,13 @@ import { encodePng } from "./png";
 import { DEFAULT_PNG_SCALE, loadGraphics, previewPng, tilesetOf } from "./preview";
 import { printRun, runOnMap } from "./run";
 import { costJson, gameMap, printCost, printTrace, removeGameMap, runMapInGame, traceJson, type MapRunOptions } from "./trace";
+import { checkModSource, printModCheck } from "./mod/check";
+import { diffModSources, printModDiff } from "./mod/diff";
+import { modInfo, printModInfo } from "./mod/info";
+import { newMod } from "./mod/new";
+import { gameFilesOrNull, openMod } from "./mod/open";
+import { MOD_COMPRESSIONS, packMod, readModFolder, type ModCompression } from "./mod/pack";
+import { unpackMod } from "./mod/unpack";
 import { CliError, pc, visible } from "./ui";
 
 /** Where a tool's words go while the server runs: standard error, since standard output is the protocol. */
@@ -102,7 +109,7 @@ const WIDTH = 140;
 export interface McpOptions { engine?: string; weigh?: string }
 
 /** What the client is told once, with the tool list: how the tools fit together. */
-export const INSTRUCTIONS = `scmJS: StarCraft: Brood War maps on this computer. Paths are files here, relative to the working directory. Start with map_info or map_dump to see what a map holds; map_check is Check Map (errors and warnings, as the editor's). Triggers and strings travel as text: map_triggers_export gives the trigger window's text form (https://docs.scmjs.dev/triggers/), which map_triggers_import takes back; strings are "<number><TAB><text>" lines. Tools that change a map write over it unless given "out"; they never renumber strings. Map text is never translated. map_preview shows the map as a picture, map_analyze reads a melee map's layout (starts, naturals, walks between starts, chokes) in a second, map_trace and map_cost run it in the game itself, and map_coverage counts which triggers fired over many replays; these need a copy of StarCraft on this computer, and doctor says whether one is there and what to install if not. replay_map writes the map a replay was played on. map_optimize makes a map smaller without changing what the game plays (a dry run unless told to write); map_balance plays games on a melee map with the person's own bots to see whether its start locations are fair, which takes minutes.`;
+export const INSTRUCTIONS = `scmJS: StarCraft: Brood War maps on this computer. Paths are files here, relative to the working directory. Start with map_info or map_dump to see what a map holds; map_check is Check Map (errors and warnings, as the editor's). Triggers and strings travel as text: map_triggers_export gives the trigger window's text form (https://docs.scmjs.dev/triggers/), which map_triggers_import takes back; strings are "<number><TAB><text>" lines. Tools that change a map write over it unless given "out"; they never renumber strings. Map text is never translated. map_preview shows the map as a picture, map_analyze reads a melee map's layout (starts, naturals, walks between starts, chokes) in a second, map_trace and map_cost run it in the game itself, and map_coverage counts which triggers fired over many replays; these need a copy of StarCraft on this computer, and doctor says whether one is there and what to install if not. replay_map writes the map a replay was played on. map_optimize makes a map smaller without changing what the game plays (a dry run unless told to write); map_balance plays games on a melee map with the person's own bots to see whether its start locations are fair, which takes minutes. Mods: mod_info says what a mod is, mod_unpack writes it as a folder of text and PNG sheets the person or you can edit, mod_check lints it, mod_diff reads two as a changelog (or one against the game), mod_pack makes the MPQ back, mod_new starts an empty one.`;
 
 /**
  * The server with every tool registered, and their names; `connect` it to a transport (stdio for the command, in
@@ -500,6 +507,83 @@ export function createMcpServer(options: McpOptions = {}): { server: McpServer; 
     if (existsSync(out) && !force) throw new CliError(`${out} is there already`, "force overwrites it, out names another file.", 2);
     const r = await writeReplayMap(await loadReplayInput(input), out);
     return ok([`${r.name || "Untitled"}: ${r.width} × ${r.height}, from ${input.name}`, written(r.written)], { file: input.name, ...r });
+  }));
+
+  // ── Mods ──
+  const modPath = z.string().describe("the mod: a folder of its files, an .mpq, a mod's self-executing .exe, a .zip, or a folder mod_unpack wrote");
+  const starcraft = z.string().optional().describe("the folder of the person's StarCraft installation, whose files are under the mod; found in the usual places otherwise");
+
+  reg("mod_info", {
+    title: "What a mod is",
+    description: "A StarCraft mod's name, files and sizes by kind (tables, scripts, pictures, sounds, terrain, strings, AI), which tables are wider than the game's and in which layout (DatExtend's expanded .dat, GPTP's .datex), the plugins and FireGraft files it carries (never run) and the game it is for, as `scmjs mod info` prints it.",
+    inputSchema: { path: modPath, starcraft },
+    annotations: { readOnlyHint: true },
+  }, tool(async ({ path: file, starcraft: sc }) => {
+    const r = modInfo(await openMod(file, await gameFilesOrNull(sc)));
+    return ok(printModInfo(r), r);
+  }));
+
+  reg("mod_check", {
+    title: "Check a mod",
+    description: "The lints across a mod's tables, strings, scripts and files (scmjs mod check): references past their tables, strings past their string table, images with no GRP or no iscript entry, button sets and requirements for things that are not there (errors); weapons and iscript entries the mod added that nothing uses, sound rows with no file, mixed extended layouts, units with one name (warnings). Each finding has where and why; `failed` is true when there is an error. What the mod leaves as the game had it is not judged.",
+    inputSchema: { path: modPath, all: z.boolean().optional().describe("list every finding in the text; the data always has them all"), starcraft },
+    annotations: { readOnlyHint: true },
+  }, tool(async ({ path: file, all, starcraft: sc }) => {
+    const base = await gameFilesOrNull(sc);
+    const r = await checkModSource(await openMod(file, base), base);
+    return ok(printModCheck(r, { all: !!all }), r);
+  }));
+
+  reg("mod_diff", {
+    title: "What changed between two mods",
+    description: "A changelog between two mods (scmjs mod diff), or with only `a`, between the game and the mod (everything the mod changes): table fields by name (\"Terran Marine: ground weapon damage 6 → 7\"), entries added, string table entries, iscript animations changed, and pictures, sounds and other files counted. Needs a copy of StarCraft for the one-mod form.",
+    inputSchema: { a: modPath, b: z.string().optional().describe("the other mod; without it, the game against `a`"), all: z.boolean().optional().describe("list every change in the text"), starcraft },
+    annotations: { readOnlyHint: true },
+  }, tool(async ({ a, b, all, starcraft: sc }) => {
+    const base = await gameFilesOrNull(sc);
+    const r = await diffModSources(await openMod(a, base), b ? await openMod(b, base) : null, base);
+    return ok(printModDiff(r, { all: !!all }), r);
+  }));
+
+  reg("mod_unpack", {
+    title: "A mod as a folder of text",
+    description: "Write a mod as a folder of text and pictures (scmjs mod unpack): tables as PyDAT text in tables/, string tables in strings/, iscript in iscript/, the AI scripts in ai/aiscript.txt, overlays in overlays/, .graft files in grafts/, GRPs as PNG sheets in graphics/, sounds in sounds/, everything else under files/, and mod.json. A text or picture is kept only when it packs back into the same bytes; mod.json says which files were kept as bytes and why. Edit the texts, then mod_pack. Refuses a folder that is there and is not an earlier unpack.",
+    inputSchema: { path: modPath, out: z.string().describe("the folder to write"), palette: z.string().optional().describe("the tileset whose palette the GRPs are drawn with (jungle by default)"), starcraft },
+    annotations: { destructiveHint: true },
+  }, tool(async ({ path: file, out: dir, palette, starcraft: sc }) => {
+    const base = await gameFilesOrNull(sc);
+    const r = await unpackMod(await openMod(file, base), dir, { base, palette });
+    const lines = [`${r.name}: ${r.members} files → ${shown(r.dir)}`, ...Object.entries(r.forms).map(([k, n]) => `  ${k}: ${n}`), ...r.kept.map((k) => `  kept as bytes, ${k.count}: ${k.why}`), ...r.notes];
+    const { manifest: _m, ...data } = r;
+    return ok(lines, data);
+  }));
+
+  reg("mod_pack", {
+    title: "A mod folder back into an MPQ",
+    description: "Pack a folder mod_unpack or mod_new wrote (scmjs mod pack): an MPQ the launchers load (MPQDraft, Chaoslauncher, FireGraft), or with `folder` the files loose in the game's paths (samase, the play page). The same folder gives the same bytes. Overwrites `out`.",
+    inputSchema: {
+      path: z.string().describe("the mod folder (with mod.json)"),
+      out: z.string().optional().describe("the MPQ to write; <folder>.mpq beside the folder by default"),
+      folder: z.string().optional().describe("write the files loose under this folder instead of an MPQ"),
+      compression: z.enum(MOD_COMPRESSIONS as [ModCompression, ...ModCompression[]]).optional().describe("zlib (the default), pkware or none"),
+      starcraft,
+    },
+    annotations: { destructiveHint: true },
+  }, tool(async ({ path: dir, out: to, folder, compression, starcraft: sc }) => {
+    noPipe(folder);
+    const manifest = await readModFolder(dir);
+    const r = await packMod(dir, manifest, { out: to, folder, compression, base: await gameFilesOrNull(sc) });
+    return ok([`Written ${shown(r.path)}: ${r.members} files, ${r.bytes} bytes${r.compression ? `, ${r.compression}` : ", loose"}`, ...r.quantised.map((q) => `${q.file}: ${q.pixels} pixels brought to the palette`), ...(r.left.length ? [`Left out: ${r.left.join(", ")}`] : [])], r);
+  }));
+
+  reg("mod_new", {
+    title: "A new mod folder",
+    description: "Start an empty mod folder (scmjs mod new): mod.json and a README. Put the game's files the mod changes under files/ at their paths, or the texts under tables/, strings/ and the rest, then mod_pack. Refuses a folder that is there and not empty.",
+    inputSchema: { path: z.string().describe("the folder to make"), name: z.string().optional().describe("the mod's name (the folder's by default)") },
+    annotations: { destructiveHint: true },
+  }, tool(async ({ path: dir, name }) => {
+    const r = await newMod(dir, name);
+    return ok([`${r.name}: ${r.files.join(", ")} in ${shown(r.dir)}`], r);
   }));
 
   return { server, tools };

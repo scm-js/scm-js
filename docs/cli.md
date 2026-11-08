@@ -3,7 +3,7 @@
 `scmjs` is scmJS in a terminal. It opens and writes maps with the editor's own code, so
 the editor and the command always agree about a map. Use it to look inside maps and
 replays, run Check Map in CI, keep maps in git, run a map's triggers in the game, share a
-map, and build plugins and bots.
+map, keep a mod as text, and build plugins and bots.
 
 ![The overview scmjs prints when run with no command](images/cli-overview.webp)
 
@@ -82,9 +82,9 @@ bots. For Claude Code, register the program itself: `claude mcp add scmjs -- scm
 ### The commands
 
 `scmjs` on its own, or `scmjs --help`, prints the overview above. Most commands sit under
-a noun: `map`, `replay`, `plugin`, `bot` and `account`. `scmjs map --help` lists the map
-commands, and every command has its own `--help` with its options and examples. The
-[command reference](#command-reference) lists them all on one page.
+a noun: `map`, `replay`, `mod`, `plugin`, `bot` and `account`. `scmjs map --help` lists
+the map commands, and every command has its own `--help` with its options and examples.
+The [command reference](#command-reference) lists them all on one page.
 
 A command that takes several files takes as many as you name, so a shell pattern works:
 
@@ -237,6 +237,9 @@ same in every language:
   formats, so `git diff` on a map reads the same on every computer.
 - The files a command writes: a baseline, a test file, the README and workflow
   `scmjs init` makes. A baseline written in Korean holds when the check runs in English.
+- A mod's folder as `mod unpack` and `mod new` write it, and, for now, the findings of
+  `mod check` and the lines of `mod diff`; the rest of the `mod` commands' output follows
+  the language.
 - In `--json`, the keys and the values that name things (a finding's level, a kind) are
   English; a sentence in it, such as a finding's text, is in the chosen language. The CI
   formats of `map check` do the same: rule ids in English, messages in the language.
@@ -2382,6 +2385,128 @@ app, or of the editor in your browser when the app is not installed, the same wa
 `scmjs replay share` gives a link that anyone opens to watch the replay: see [Sharing from
 the terminal](#a-link-to-a-replay).
 
+## Mods
+
+A mod is the game with other data: other tables, animation scripts, pictures, sounds,
+strings and AI. `scmjs mod` reads a mod as its makers ship it, unpacks it into a folder of
+text and pictures to edit and keep in git, checks it, compares two versions, packs it back
+into the MPQ the launchers load and hands it to the play page. The [mods guide](mods.md)
+has the folder's form and how it works with PyMS, MPQDraft, FireGraft and samase; this
+section is the commands.
+
+### What a mod holds
+
+```sh
+scmjs mod info "Cosmonarchy BW"
+scmjs mod info MyMod.mpq "My Mod.exe" mymod.zip
+```
+
+says what a mod is: its files and their sizes by kind, its tables and which are wider than
+the game's (DatExtend's expanded `.dat`, GPTP's `.datex`), its scripts, the plugins and
+FireGraft files it carries (kept, never run), a self-executing exe's archive and the game
+it is for. It reads a folder (the game's paths at its root or a folder down), an `.mpq`, a
+self-executing `.exe` (MPQDraft's or FireGraft's patcher, read and never run) or a `.zip`.
+`--json` prints the same as data.
+
+### A mod as a folder of text
+
+```sh
+scmjs mod unpack MyMod.mpq mymod
+scmjs mod pack mymod -o MyMod.mpq
+```
+
+`mod unpack` writes the tables as PyDAT's text, the string tables, iscript and AI as
+PyMS's text, the GRPs as PNG sheets (the units' sprite sheets and the uncompressed GRPs of
+the dialogs, score screens and icons alike) and the rest as they are, and `mod.json`. A
+file is written as text or a picture only when that packs back into the same bytes;
+anything else stays as it is under `files/`, and `mod.json` says which and why. `mod pack`
+puts the folder back into an MPQ (`--compression zlib`, `pkware` or `none`), or with
+`--folder <out>` into loose files in the game's paths. The same folder gives the same MPQ
+every time. `scmjs mod new
+<folder>` starts an empty one.
+
+### Checking and comparing mods
+
+```sh
+scmjs mod check mymod
+scmjs mod diff mymod
+scmjs mod diff v1.mpq mymod
+scmjs mod build mymod -o MyMod.mpq
+```
+
+`mod check` looks across the tables for what makes the game stop or draw nothing (a
+reference past its table, an image with no GRP, an image whose animation script is
+missing, a string past its table, a button set or requirement for something not there) and
+for what is probably a mistake (a weapon the mod added that no unit carries, a sound row
+with no file, units with one name). It exits 1 on an error. `mod diff` reads as a
+changelog, "Terran Marine: ground weapon damage 6 → 7", against your copy of the game when
+given one mod. `mod build` checks, then packs, and stops on an error unless `--force`.
+
+These commands read your copy of StarCraft when they find one, as the [commands that need
+StarCraft](#commands-that-need-starcraft) do, for the game's own files under the mod; they
+work without it and say what they could not look at.
+
+### Playing a mod on the play page
+
+```sh
+scmjs mod play mymod
+scmjs mod play MyMod.mpq --map "(2)Ridge.scx"
+```
+
+opens scmjs.dev/play in your browser and hands it the mod's files that differ from your
+copy of the game (all of them when none is found here). Nothing is uploaded: the page
+keeps the mod in your browser. The play page's support for mods arrives with its next
+release.
+
+The hand-over is the one `map play` uses: the command serves a page on 127.0.0.1, which
+opens the play page with `?handoff=1` and, each time that page says `scmjs.ready` or
+`scmjs.play.ready`, posts it:
+
+```js
+{
+  type: "scmjs.play",
+  dataSet: {
+    name: "My Mod",
+    hash: "3f9a0c2e5b7d1146",          // 16 hex digits
+    files: [{ path: "arr/weapons.dat", file: File }, …],
+  },
+  map: Uint8Array,                      // with --map: the map's bytes
+  name: "(2)Ridge.scx",                 // and its file name
+}
+```
+
+`path` is the game's path in lower case with forward slashes. `hash` is SHA-256 over a
+line `path<TAB>sha256 of the file` for each file handed over, the game's names with
+backslashes, sorted and joined with newlines; its first sixteen hex digits. A page that
+already keeps a mod with that hash can skip storing it again. The editor records the same
+hash for a data set made from the same files (see [Game
+data](game-data.md#a-map-remembers-its-data-set)). The page answers with
+`scmjs.play.started`, `scmjs.play.shown` or `scmjs.taken`, which end the wait, or
+`scmjs.play.error` with a `message`, which the command prints before it exits 1;
+`scmjs.waiting` messages are printed as they come. The command waits five minutes.
+
+### A mod in the game engine
+
+```sh
+scmjs mod test mymod ridge.scx
+scmjs map test ridge.scx --mod mymod
+scmjs map trace ridge.scx --mod MyMod.mpq
+```
+
+`mod test` is `map test` with the mod's files laid over the game's; `map test`,
+`map trace` and `map cost` take `--mod`. The engine's runners take a mod from the play
+page's next release; with an engine from before, the command names the version it needs
+and stops.
+
+A mod that changes animation scripts, pictures, overlays or the sound table makes the game
+read its startup data again before the game starts, and that opens every unit picture and
+overlay the image table names. With StarCraft: Remastered, the command reads those
+pictures out of your installation and lays them under the mod for the game, so such a mod
+runs on a Remastered copy as on a 1.16.1 one. They are the classic pictures, the same in
+both. The first line under the run says how many of the mod's files the game read and
+whether the startup data was read again without a missing file; `--json` has the same
+under `mod`.
+
 ## Sharing from the terminal
 
 These commands use your [scmjs.dev account](guide.md#your-scmjsdev-account). Nothing else
@@ -2707,6 +2832,7 @@ with the command's text and its `--json` data:
 | `map_trace`, `map_cost`, `map_coverage` | The triggers run in the game, what they cost, and which fired across many replays |
 | `map_balance` | Games played on a melee map with your bots, to see whether its starts are fair; it takes minutes |
 | `replay_info`, `replay_map` | What a replay holds, and its map written out |
+| `mod_info`, `mod_check`, `mod_diff`, `mod_unpack`, `mod_pack`, `mod_new` | [Mods](#mods): what a mod is, its check, a changelog, the folder of text and back, a new one |
 | `doctor` | What this computer has, so the model knows what it can call |
 
 A map reads as the editor reads it, so what the model is told is what the editor would
@@ -2928,6 +3054,20 @@ gives its options.
 | [`scmjs replay open <replay>`](#opening-a-replay-in-scmjs) | Opens the replay in scmJS's replay viewer |
 | [`scmjs replay share <replay>`](#a-link-to-a-replay) | A link that opens the replay in the editor |
 
+### `scmjs mod`
+
+| Command | What it does |
+| --- | --- |
+| [`scmjs mod info <mods…>`](#what-a-mod-holds) | What a mod is: files by kind, tables and their layouts, plugins and FireGraft files, the game it is for |
+| [`scmjs mod unpack <mod> <folder>`](#a-mod-as-a-folder-of-text) | The mod as a folder of text and PNG sheets; what would not come back the same is kept as bytes |
+| [`scmjs mod pack <folder>`](#a-mod-as-a-folder-of-text) | The folder back into an MPQ, or `--folder` loose files in the game's paths |
+| [`scmjs mod new <folder>`](#a-mod-as-a-folder-of-text) | An empty mod folder: `mod.json` and a README |
+| [`scmjs mod check <mods…>`](#checking-and-comparing-mods) | Mistakes across the tables: references, pictures, scripts, sounds, buttons, requirements |
+| [`scmjs mod diff <a> [b]`](#checking-and-comparing-mods) | A changelog between two mods, or what one changes in the game |
+| [`scmjs mod build <folder>`](#checking-and-comparing-mods) | Check, then pack; stops on an error unless `--force` |
+| [`scmjs mod play <mod>`](#playing-a-mod-on-the-play-page) | The mod's changed files handed to the play page; `--map` starts a map with it |
+| [`scmjs mod test <mod> <map> [tests…]`](#a-mod-in-the-game-engine) | `map test` with the mod laid over the game; `map test`, `trace` and `cost` take `--mod` |
+
 ### `scmjs plugin` and `scmjs bot`
 
 | Command | What it does |
@@ -3053,6 +3193,8 @@ from a clone with `npm run cli -- <command>`, or build it with `npm run build:cl
 | `cli/src/runtime.ts`, `cli/src/sea.ts` | The npm package and the single program told apart: how each updates, the package manager read off the program's folder, a runner started by the program as Node would run it, the weigher written out of it |
 | `scripts/build-cli-binary.mjs`, `scripts/check-cli-binary.mjs` | The single programs: the bundle again as CommonJS, injected into Node's own executable for each system and packed for the release; the commands run against one with no Node on PATH |
 | `packaging/` | The Scoop, winget and Homebrew recipes, filled for a release by `scripts/release-recipes.mjs` |
+| `cli/src/mod/` | `scmjs mod`: a mod opened from a folder, MPQ, exe or zip; the folder unpacked and packed, info, check, diff, new, the play page's hand-over, the engine's overlay |
+| `src/formats/mod/` | The mod folder's form and its check-by-packing, the lints, the changelog, the exe and zip readers ([mods.md](mods.md)) |
 | `cli/src/plugin.ts` | A new plugin's files, the plugin check, and the server `plugin dev` runs |
 | `src/plugins/devLink.ts` | The editor's half of `plugin dev`: only a plugin served on this computer is taken |
 | `cli/src/ui.ts` | Colour, marks, aligned rows, and StarCraft's text colours in a terminal |

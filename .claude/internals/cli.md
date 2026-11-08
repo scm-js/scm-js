@@ -1,6 +1,6 @@
 # The `scmjs` command line
 
-`cli/` is the npm package **`@scm-js/cli`** (its command is `scmjs`): `scmjs about | doctor | info | map info|check|open|new|generate|dump|find|fetch|set|resize|triggers|strings|sounds|diff|merge|build|run|unpack|pack|trace|cost|rush|test|preview |
+`cli/` is the npm package **`@scm-js/cli`** (its command is `scmjs`): `scmjs about | doctor | info | map info|check|open|new|generate|dump|find|fetch|set|resize|triggers|strings|sounds|diff|log|blame|merge|build|run|unpack|pack|trace|cost|rush|test|preview |
 replay info|open|watch | plugin new|check|dev | bot new|init|build|update|run|ladder`, or `npx @scm-js/cli …`. npm refused the plain name `scmjs` on the first publish (2026-11-06,
 E403 "too similar to scss, sockjs"), so the user chose the scope beside @scm-js/replay and @scm-js/plugin-api. The reader's page is `docs/cli.md`. The shape was the user's (2026-11-05): one command, a noun for
 each kind of thing (`map`, `replay`, `plugin`, `bot`), "an impressive UX tool … not overly engineered".
@@ -1409,3 +1409,77 @@ freed two of the 23 rows (a 24-row terminal keeps the globe on screen; `tests/cl
 `init [folder]` and `account show|login|logout` took. A new top-level row now needs a line freed again: a one-line
 description is the first rule (commander wraps a long one onto a second row, which the count sees), and a hidden
 command (`{ hidden: true }`: `completion`, `login`, `logout`, `help`) is the fallback.
+
+## A map's history: `map log`, `map blame` (`cli/src/history.ts`, `maplog.ts`, `blame.ts`) — 2026-11-07
+
+`scmjs map log <map> [--rev X|A..B] [-n N] [--json]` and `scmjs map blame <map> [--triggers|--locations|--strings|
+--units|--settings] [--trigger N|--location NAME|--string N] [--rev X|A..B] [--json]`. Verbs under `map`, so no
+overview row. Docs: `docs/cli.md` "A map's history", "Who last changed what".
+
+- **The git layer** (`history.ts`): `locate(file)` = `git -C <file's dir> rev-parse --show-toplevel --show-prefix`
+  → `{root, path: prefix + basename}`; **`--show-prefix` rather than `relative(root, resolve(file))`**, so a folder
+  reached through a symbolic link still gives git's path (`revisionInput` now uses it too; its messages kept).
+  `commitsTouching` = `git log --parents --format=%x1e%H%x1f%P%x1f%an%x1f%ae%x1f%aI%x1f%s [--topo-order] [-n] <rev> --
+  <path>`: **`--parents` turns on parent rewriting, so `%P` names the nearest ancestors that touched the file**
+  (checked in a throwaway repo: without it `%P` is the real parents), and with a range the parents outside it are
+  still printed — that is how blame finds the range's edge. A revision starting with `-` is refused (it would be an
+  option of git's). `blobIds` = one `git cat-file --batch-check` for every `<commit>:<path>` (missing → null).
+  `Versions` reads blobs through `git cat-file --batch`, **24 at a time in the order they will be wanted** (`expect`),
+  and parses each once (`loadMapInput`), keeping `keep` parsed maps (log 3, blame 1 — blame keeps snapshots instead).
+  spawnSync's `input` is a Buffer: `encoding: "buffer"` with a string input throws ERR_UNKNOWN_ENCODING (first run).
+- **`map log`** (`mapLog`): the commits `git log <rev> -- <path>` lists (no `--topo-order`; `-n` asks git for N+1
+  to know there are more), each compared with its **rewritten first parent**'s version (same bytes as the real first
+  parent's for this path). No version → "map added: 64 × 64 Badlands, 21 units, …" (`describeMap`); none now → "map
+  removed"; same blob → "no change to the map"; a version that does not parse → `unreadable`, the rest go on.
+  `describeChange` runs `diffMaps` and words it: header fields (name/description changed, `resized a → b`, tileset,
+  version, encoding), players + forces (one → `Player 2 race Zerg → Protoss`, more → "N player settings changed"),
+  units by `unitCounts` (multiset by `unitKey`, then pairs: same record but x/y = **moved**, same kind + owner =
+  **changed**), locations/strings by the diff's change kinds, triggers and briefing by **`listCounts`**: multiset
+  added/removed (as map diff), then an added and a removed in the same LCS gap (`lcsMatch` from merge.ts) are one
+  **changed**; nothing added/removed but another order = "triggers reordered". **Strings that are names** (SPRP
+  name/description, every MRGN `nameIndex`, FORC names, either version) are not counted as strings — "description
+  changed · 1 string changed" said one thing twice (first run). Then each changed section no phrase spoke for
+  (`said`) in words (`SECTION_WORDS`: terrain, doodads, unit settings, …; else "XXXX section changed"); **section
+  names are padded to four (`"STR "`) — trim before looking up** (first run printed "STR  section changed"). Nothing
+  at all → "saved again; the map is the same".
+- **`map blame`** (`blameMap`): items per kind (`Item {id, content, label, text}`; same thing in two versions ⇔
+  id and content equal): triggers id = content = `fingerprintTrigger` (multiset, so a reorder is no change — the
+  task's rule, map diff's matching); locations id = slot, content = name + rect + flags (`locationText`'s
+  fields); strings id = number, non-empty only (map diff's null = "" rule); units one item per `unitId:owner`,
+  content = sha1 of the sorted `unitKey`s; settings by label: header fields, a row per player and force, section
+  groups by bytes (`sectionBytes`: Terrain = MTXM+TILE+ISOM, Doodads, Sprites, Fog, UNIS/UNIx, UPGS/UPGx, TECS/TECx,
+  PUNI, UPGR/PUPx, PTEC/PTEx, SWNM, WAV) and each archive member by sha1. **The walk is git blame's**: items of the
+  top version pending at the first node; nodes in `--topo-order` (children first); at a node, for each rewritten
+  parent in order, `matchItems` (first-come, one parent item per child item) hands matched items to the parent;
+  what no parent takes is this commit's. So a change made on a branch and merged lands on the branch's commit
+  (tested). Same blob on an edge → everything passes, nothing parsed. **Stops as soon as nothing is pending**, so
+  only as much history is read as the answer needs (`walked` in the JSON). With `A..B`, items pending at a parent
+  outside the list settle on that commit with `boundary` (printed `^` + 7 hex, as git); its author/date from one
+  `git show -s`. **Uncommitted**: without `--rev` and with the file on disk, the disk bytes are the top; if they differ
+  from `HEAD:<path>` a node `0000…` with parent = the first listed commit comes first, and what it keeps is "Not
+  committed yet" (date = the file's mtime). With `--rev X` the file on disk is not read.
+  Trigger summaries (`summarizeTrigger`) are made only for the top version (`shown`): the rest need the fingerprint.
+- **Output**: git blame's shape, `hash8 (author date label) text` — author column one width for all kinds shown
+  (max 24, by terminal columns), labels padded per kind (numbers right-aligned), the text cut to the terminal width
+  (120 when piped). Default view = triggers, or settings when the map has none (both computed, one dropped).
+  `--trigger N` (1-based, the list's order), `--location` (name, any case, or `#n`), `--string N` → one item: the
+  commit's hash, author, date and subject, then the trigger's whole text (`triggersToText`) or the item's text.
+- **Measured** (WSL2, built bundle, `/usr/bin/time`): the docs' demo (ums.scx, 8 commits) `map log` 0.5 s. A 201-commit
+  history of `(8)StarCraft Fortress.scm` (399 KB, 87 triggers, a string edit per commit, made in the scratchpad):
+  `map log` 3.5 s (~17 ms a commit: two parses, one cached, plus `diffMaps`' two serialisations), `-n 10` 0.34 s,
+  `map blame` 2.4 s (walks all 201: the oldest triggers are unchanged since the first commit, so every version must
+  be read, as git blame must), all five kinds 2.5 s, `--rev HEAD~20..HEAD` 0.43 s; `map info` alone 0.17 s. Peak RSS
+  ~400 MB on the full log (V8 not collecting between parses; the batch itself is ~10 MB).
+- **Tests** (`tests/cli-map-log.test.ts`, 12): `counted`, `listCounts`, `unitCounts`, `matchItems`, `splitRange`;
+  a temp repository (skipped without git) from ums.scx via `setHeader`, `importTriggers`, `resizeMap`, `importStrings`,
+  a commit touching another file only, a reorder, a branch + **a merge made by hand** (git cannot merge the binary
+  without the driver: `checkout --ours`, apply the side's change, commit) — log words, `-n`, ranges, blame per kind,
+  the merge followed to the branch, uncommitted, the range edge, the early stop, and the errors (not a repository,
+  not committed, no such file, bad revision, `--all` as a revision).
+- **Not done**: renames are not followed (`--follow` linearises and hides merges; the history starts at the name the
+  file has, documented); briefing triggers have no blame kind; no MCP tool; trigger text edits blame the string, not
+  the trigger (map diff's matching — documented); `map log` has no per-commit `--stat` of the full diff (`git show`
+  with textconv does that); `map log --rev A...B` passes through to git, `map blame` refuses `...`.
+- **CLI strings are literals, not `t()`**: the i18n extractor reads `src/` only and no CLI module uses `t()` for its
+  own words (plugin.ts's are the starter's text); followed that.
+

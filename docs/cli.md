@@ -897,6 +897,117 @@ as changed. Maps of two tilesets cannot be drawn as one picture: they are drawn 
 side with nothing marked, and the command says so. The exit code is the comparison's,
 picture or not.
 
+### A map's history
+
+`scmjs map log` lists the commits that changed a map, newest first, and says under each
+one what it changed in the map, in the words `map diff` would use:
+
+```
+$ scmjs map log maps/ridge.scx
+maps/ridge.scx · 8 commits
+
+d5587bc  2026-11-07 09:00  Jeany  Tidy the trigger order
+         triggers reordered
+
+dbf21a0  2026-11-06 14:00  Mina   Rename Middle to Ridge top
+         1 location changed
+
+daa8752  2026-11-06 08:30  Jeany  Say what to do
+         description changed
+
+d25740d  2026-11-05 13:10  Mina   Spread the minerals
+         2 units moved, 1 removed
+
+68033b5  2026-11-04 16:40  Mina   Room for a third base
+         resized 64 × 64 → 96 × 96 · 1 location changed
+
+d38a14e  2026-11-03 09:05  Jeany  Waves, and four marines to win
+         3 triggers added, 1 changed · 3 strings added
+
+55d0fd9  2026-11-02 11:20  Mina   Call it Ridge
+         name changed
+
+3927771  2026-11-01 10:00  Jeany  Start Ridge from the test scenario
+         map added: 64 × 64 Badlands, 21 units, 4 locations, 3 triggers
+```
+
+Each commit is compared with the version before it. A trigger that was replaced in the
+same place counts as changed. One that only moved in the list is not counted at all, and
+when that is all a commit did, the entry says the triggers were reordered. A unit in a new
+place with nothing else different has moved. A string that is a name (the map's, a
+location's or a force's) is counted as a change to that name, not as a string as well. A
+commit that saved the file again without changing the map says so. For the details of one
+commit, `git show <commit>` shows its changes as text, once the map's text form is set up
+as [Reading maps in git diff](#reading-maps-in-git-diff) describes.
+
+`-n 5` shows the newest five commits. `--rev` takes what `map diff --rev` takes, and a
+range as well. `--rev main..HEAD` lists what this branch did to the map. A merge is
+compared with its first parent, so the entry shows what the merge brought in. `--json`
+gives each commit's hash, parents, author, date, subject and the list of changes.
+
+### Who last changed what
+
+`scmjs map blame` is `git blame` for a map. Instead of a line of text, each row is a
+trigger, a location, a string, a group of units or a setting, with the commit, author and
+date that last changed it. With no option it shows the triggers, or the settings when the
+map has no triggers:
+
+```
+$ scmjs map blame maps/ridge.scx
+Triggers (6) · maps/ridge.scx
+39277712 (Jeany 2026-11-01 1) Player 1: Always() → Display Text Message(Always Display, "Hold the ridge."); …
+d38a14e1 (Jeany 2026-11-03 2) Player 1: Bring("Player 1", "Terran Marine", "Ridge top", At least, 4) → …
+39277712 (Jeany 2026-11-01 3) Force 1: Switch("Alarm raised", set) → Victory()
+d38a14e1 (Jeany 2026-11-03 4) Player 2: Elapsed Time(At least, 60) → Display Text Message(Always Display, …
+d38a14e1 (Jeany 2026-11-03 5) Player 2: Elapsed Time(At least, 180) → Display Text Message(Always Display, …
+d38a14e1 (Jeany 2026-11-03 6) Player 2: Elapsed Time(At least, 120) → Display Text Message(Always Display, …
+```
+
+`--locations`, `--strings`, `--units` and `--settings` show the other kinds, and can be
+given together. Units get one row for each kind of unit and owner, and the row counts as
+changed when one of them was added, removed, moved or edited. Settings are the name,
+description, size, tileset and version, each player and force, the terrain, doodads and
+sprites, the unit, upgrade and tech settings and availability, the switch names, the sound
+list and each file in the archive.
+
+```
+$ scmjs map blame maps/ridge.scx --locations
+Locations (4) · maps/ridge.scx
+39277712 (Jeany 2026-11-01 Base     ) #0  192,1600–512,1856
+39277712 (Jeany 2026-11-01 Nest     ) #1  1536,192–1856,512
+dbf21a0c (Mina  2026-11-06 Ridge top) #2  896,896–1152,1152
+68033b5d (Mina  2026-11-04 Anywhere ) #63  0,0–3072,3072
+```
+
+Things are matched between versions the way `map diff` matches them. Triggers and units
+are matched by what they are, so moving a trigger up the list does not change it.
+Locations and strings are matched by their number, and settings by name. A trigger's text
+is a string, so editing what a trigger says changes the string, not the trigger, and
+`--strings` shows who did that.
+
+`--trigger 4` shows one trigger with its whole text and the commit's subject.
+`--location "Ridge top"`, by name or by number, and `--string 16` do the same for a
+location and a string.
+
+Without `--rev` the map is read as it is on disk. What differs from the last commit is
+marked as `git blame` marks it, with a hash of zeros:
+
+```
+$ scmjs map blame maps/ridge.scx --strings
+…
+00000000 (Not committed yet 2026-11-07 16) Hold the ridge.
+```
+
+`--rev HEAD~3` blames the map as that revision has it. `--rev v1.0..HEAD` looks only at
+the commits since `v1.0`. Anything older is put on the commit at the start of the range,
+with a `^` before its hash, as `git blame` does. Changes made on a branch and merged are
+put on the branch's commit, not on the merge. `--json` gives every row with its commit.
+
+Both commands work from any folder of the repository, read every version of the map from
+git once, and stop with a message when the file is not in a repository or has not been
+committed. Neither follows a map that was renamed, so the history starts at the commit
+that gave the map its present name.
+
 ### Merging two versions of a map
 
 When two people change copies of one map, `scmjs map merge` puts both sets of changes into
@@ -1754,6 +1865,8 @@ gives its options.
 | [`scmjs map build <map>`](#building-a-trigscript-map) | Builds the map's TrigScript script into it, as Save does |
 | [`scmjs map run <plugin> <map>`](#running-a-plugin-over-a-map) | Runs a plugin, or a script written like one, over the map |
 | [`scmjs map diff <a> <b>`](#comparing-two-maps) | What changed between two maps, or since a git revision with `--rev`; `--picture` shows where |
+| [`scmjs map log <map>`](#a-maps-history) | The commits that changed the map, each with what it changed in the map's terms |
+| [`scmjs map blame <map>`](#who-last-changed-what) | The commit, author and date that last changed each trigger, location, string, unit group or setting |
 | [`scmjs map merge <base> <ours> <theirs>`](#merging-two-versions-of-a-map) | Two versions of a map merged with their common ancestor, as git's merge driver |
 | [`scmjs map trace <map>`](#which-triggers-fire) | Runs the triggers in the game: which fired, how often, which never did and why |
 | [`scmjs map cost <map>`](#what-the-triggers-cost) | What the triggers cost Remastered each frame, and the costliest |
@@ -1810,6 +1923,8 @@ scmjs map preview map.scx --out map.png         # a picture
 scmjs map find "Marine" maps/*.scx              # search
 scmjs map triggers edit map.scx                 # triggers in your text editor
 scmjs map diff --rev HEAD~1 map.scx --picture   # what the last commit changed, and where
+scmjs map log map.scx                           # the map's history, in the map's terms
+scmjs map blame map.scx                         # who last changed each trigger
 scmjs map generate "(2)Duel.scx" --seed 7       # a melee map to play
 scmjs map trace map.scx                         # which triggers fire in the game
 scmjs map test map.scx                          # run map.tests.json in the game
@@ -1831,6 +1946,9 @@ from a clone with `npm run cli -- <command>`, or build it with `npm run build:cl
 | `cli/src/files.ts` | What kind of file was named, a map or replay read out of it, and `-` as standard input and output |
 | `cli/src/diff.ts` | What changed between two maps, by group, and the section comparison underneath; a map read from a git revision |
 | `cli/src/diffpicture.ts` | `map diff --picture`: the second map drawn with the changes marked, side by side, in the terminal or as a PNG |
+| `cli/src/history.ts` | A map's versions in git: the commits that changed the file, the blob ids of all of them in one call, the blobs read in batches and each parsed once |
+| `cli/src/maplog.ts` | `map log`: each commit compared with its parent's version, the comparison put in a few words |
+| `cli/src/blame.ts` | `map blame`: the items of each kind, matched between versions as `map diff` matches them, and git blame's walk from the newest version back |
 | `cli/src/merge.ts` | The three-way merge: each part's rule, the ordered list merge for triggers, units matched without ids, the string table numbered again; git's three versions of a stopped file |
 | `cli/src/edit.ts` | The header set, the map resized and the unused strings dropped, over the open document |
 | `cli/src/report.ts` | Check Map's findings, and a map test's failures, as GitHub annotations, JUnit XML and SARIF |

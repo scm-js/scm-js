@@ -207,7 +207,7 @@ function conversation(start: () => Promise<{ client: Client; stop: () => Promise
   });
 }
 
-describe("which files are a script", () => {
+describe.skipIf(!haveLanguage)("which files are a script", () => {
   it("is the trigscript folder of an unpacked map, named by the map beside it", async () => {
     const { dir, main } = await unpackedMap();
     expect(isUnpackedMap(dir)).toBe(true);

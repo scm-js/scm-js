@@ -1,6 +1,6 @@
 # The `scmjs` command line
 
-`cli/` is the npm package **`@scm-js/cli`** (its command is `scmjs`): `scmjs about | doctor | info | mcp | lsp | map info|check|open|new|generate|dump|find|fetch|set|resize|triggers|strings|sounds|diff|log|blame|merge|build|run|unpack|pack|trace|cost|rush|balance|test [record]|preview|heatmap|coverage|optimize |
+`cli/` is the npm package **`@scm-js/cli`** (its command is `scmjs`): `scmjs about | doctor | info | mcp | lsp | map info|check|open|new|generate|dump|find|fetch|set|resize|triggers|strings|sounds|diff|log|blame|merge|build|run|unpack|pack|trace|cost|rush|balance|test [record]|preview|heatmap|coverage|optimize|analyze |
 replay info|map|open|watch|export|share | plugin new|check|dev | bot new|init|build|update|run|ladder`, or `npx @scm-js/cli …`. npm refused the plain name `scmjs` on the first publish (2026-11-06,
 E403 "too similar to scss, sockjs"), so the user chose the scope beside @scm-js/replay and @scm-js/plugin-api. The reader's page is `docs/cli.md`. The shape was the user's (2026-11-05): one command, a noun for
 each kind of thing (`map`, `replay`, `plugin`, `bot`), "an impressive UX tool … not overly engineered".
@@ -2274,3 +2274,72 @@ the action is untested on macOS/Windows runners (Windows needs `unzip` in Git Ba
 per-picture links (an artifact is one zip; `archive: false` uploads one file an artifact, and a composite cannot loop
 `uses:`); pictures inline in the comment would need hosting outside GitHub; `map coverage` stays out (needs the game);
 the clips for a replay-driven scenario could use its replay with the map's own scenario swapped in.
+## A melee map's layout: `map analyze` (`cli/src/analyze.ts`, `walk.ts`) — 2026-11-08
+
+`scmjs map analyze <map> [--json] [--picture out.png|-] [--scale n] [--all] [--starcraft dir]`, branch
+`cli-map-analyze`. Starts, mains, naturals, every pair's ground and air distance, the narrowest points, terrain shares
+and verdicts, **without the engine**: the tileset from the copy (`openGameFiles` → `readTileset`, `readUnitsDat`,
+`readSpeedTables`) and pure TypeScript after that. Whole command 0.4–0.8 s (the copy's kascade open ~0.2–0.5 s of it);
+the analysis itself 20–140 ms (Spring Thaw 256 × 128, 4 starts: 135 ms; Big Game Hunters, 8 starts: ~100 ms).
+
+- **Grid: minitiles (8 px), octile.** `walk.ts` = the Walkability plugin's pieces copied with attribution (EDT clearance
+  by Felzenszwalb–Huttenlocher, `passageWidth`, Dial's algorithm 5/7 with no corner cutting) plus `pathTo` (back down the
+  distances, straight steps first), `distancesWithin` (a bounded walk into a Map), `withoutSpecks`, `narrowestOn`.
+  Tile resolution was rejected: VF4 walkability is per minitile, and ramps/doodad feet are a few minitiles. **Unit
+  size**: a cell is walked when its clearance > 1 (`UNIT_RADIUS`, the plugin's Small default; generate.ts's 3 × 3
+  erosion is the Chebyshev version). Tried radius 0 / 1.5 / 2 against the game: 4.2% / 3.4% / 3.1% mean gap vs 3.6% at
+  1 — not worth departing from the plugin's default. **Blockers**: every unit or unit-sprite (THG2 without the
+  PureSprite bit) whose units.dat flags say building and not flyer, by its collision extents (+1), so resources,
+  neutral and player buildings, doors and traps; without units.dat only fields/geysers (bases.ts sizes). Start
+  locations do not block (no town hall is placed, unlike the rush's Nexus).
+- **Narrow = `passageWidth`** (the shortest of four wall-to-wall lines through the cell) along the shortest path,
+  ends (3 tiles) left out, on a wall grid where closed patches standing alone under 16 tiles in area are opened
+  (`ROCK_TILES`). The first version measured only terrain specks under one tile and named a 1.3-tile "choke" on Spring
+  Thaw between a cliff and a 27-cell rock, and a 1-tile one on Big Game Hunters between a base's field line and its
+  geyser; opening every standalone patch < 16 tiles (rocks, doodads, a lone geyser or a few fields) fixed both while a
+  cliff, a field line touching it, or a building still counts. The widest-route bottleneck (the plugin's maximin) was
+  not used: the brief asked for the narrowest point on the shortest walk.
+- **Bases**: resources within `BASE_LINK` 12 tiles are one base when the walk between them (radius-0 open grid,
+  `distancesWithin` from each one's nearest open cell) is ≤ straight + 6 tiles; fields < 100 minerals are walls;
+  a base needs a geyser or ≥ 3 fields. The first rule (fields 6 tiles, geysers to the nearest field ≤ 10) split
+  Spring Thaw's bases whose hall stands between two field groups 12 tiles apart, and left a geyser 10.5 tiles off as
+  its own base. **Main** = every base whose middle is within 12 tiles (balance's `MAIN_RADIUS`) of its nearest start;
+  the numbers shown are `balance.ts#mainResources` (reused; its signature now takes `Pick<OpenedMap, "scenario">`).
+  "Only the nearest base is the main" gave Big Game Hunters (mains in two groups) a natural 5 tiles away. **Natural** =
+  the nearest non-main base by ground to its "hall spot" (the cell nearest the resources' middle with clearance ≥ 6
+  cells). Spring Thaw and Binary Burghs pick bases 50–90 tiles away: their mains have no base near on foot, so this is
+  the honest answer, not a bug.
+- **Way out** (JSON `wayOut`) = narrowest point on start → natural; a pair's narrowest within 4 tiles of one is labelled
+  `wayOutOf`. **Seconds** = px / `walkSpeed` × 0.042 for Zergling, Marine, Zealot (see units.md for `walkSpeed`; needs
+  units/flingy/sprites/images.dat + iscript.bin from the copy, else tiles only and the text says so).
+- **Verdicts** (`verdictsOf`, thresholds exported): pairs ≤ `FAIR_WITHIN` 8% (generate's tolerance); with ≥ 3 starts
+  the rank comparison (`rankSpread`: each start's sorted walks, rank by rank) decides, since a square of four has near
+  and far pairs by design; naturals ≥ 5 tiles from the median (two starts: the larger against the smaller, `apartFrom`
+  — a median of two flagged both); no gas where others have it; shared natural; way out ±1 tile; a pair's narrowest
+  < 2 tiles; raised (mid + high) ground ±15 points within 12 tiles ("high" alone was 0% on every generated map: Jungle's
+  High Dirt is the middle level).
+- **Cross-check with `map rush`** (Zergling, Remastered copy, engine 1248410ad2a0 from the cache; scratch script):
+  same start point (`testPoint`: 5 tiles toward the middle) to the target start, minus the rush's `off`: mean 3.6%
+  shorter than the game, max 13.1% (`map generate --seed 7 --players 2`, an open diagonal); per map Binary Burghs 3.2,
+  Spring Thaw 4.4, Big Game Hunters 2.9 (56 walks), Isolation 3.4, Crescent Moon 3.5, Ice Floes 6.8 (one walk; 1 → 2
+  "stopped" in the game), Zoo Keeper 2.6 (most of its walks stop or are apart in the game too), generated 4p 5.2,
+  generated 2p 10.8. **The command's own figure (centre to centre) against the game's walk: mean |diff| 2.5%, max 8.3%,
+  mean +1.6%** over the 103 walks — the start/end offsets roughly cancel. The gap is the game's region-to-region
+  pathing (longer than octile-optimal, most on open diagonals) and acceleration/turning; documented, not corrected.
+  Zergling seconds run about 0–8% under the rush's (14% on the open 2-player generated map). `map generate`'s own
+  `measureMap` numbers for (4)Crossing seed 2026 (141/93/123) are this command's exactly (same metric).
+- Core gained `tileGroupOf`, `decodeFlingyDat`, `decodeSpritesDat`, `decodeImagesDat`, `decodeIscript`, `walkSpeed`
+  (+ types); doctor's READY row is `map preview|generate|analyze`; MCP `map_analyze` (read-only; `picture` adds the
+  PNG as image content).
+- Tests: `tests/cli-analyze.test.ts` (21): octile costs, the wall with a gap (detour, crossing only in the gap,
+  narrowest = the gap's 4 cells), corners, clearance, specks, bounded walk, ground from flags; spread/median/apartFrom/
+  rankSpread/sideOf; clustering with and without the ground predicate; blockers; a 64 × 64 map with a made-up tileset
+  (wall with a one-tile gap: naturals, the choke verdict at (32, 40), no gas, the picture's walk through the gap); the
+  verdicts' thresholds on both sides; `walkSpeed` over a hand-built iscript.bin; the command through a stand-in
+  1.16.1 copy (refusals, report, PNG) and the committed melee map. cli-mcp: names + read-only + scale refusal + a
+  real-copy call (`skipIf`); cli-doctor pins the row.
+- **Leftovers**: no screenshot in docs (`scripts/cli-screenshots.mjs` not run for it); the picture has no start
+  numbers (no font, as preview); unit size is fixed (no `--unit`); speed upgrades and acceleration not modelled; the
+  natural is "nearest base on foot", so a map whose designers mean another base reads differently; chokes off the
+  shortest walks (a second route's narrows) are not reported — the plugin's BWEM-style areas would be the next step;
+  `map generate` could call `analyzeLayout` instead of its own `measureMap` (same numbers) but was left alone.

@@ -145,7 +145,7 @@ What it looks for:
 | scmjs.dev | `map share`, `replay share` and `map play` |
 | Browser | `replay export`, which draws its clips in Chrome, Chromium or Edge |
 | ffmpeg | `replay export` to an `.mp4`; a `.webm` or a `.gif` does without it |
-| StarCraft | `map preview`, `map generate` and every command that runs the game |
+| StarCraft | `map preview`, `map analyze`, `map generate` and every command that runs the game |
 | Game engine | `map trace`, `map cost`, `map rush`, `map test`, `map balance`, `replay watch`, `replay export`, `bot run`, `bot ladder` |
 
 A dot instead of a tick means the thing is not there and nothing is wrong: ffmpeg, the
@@ -167,10 +167,11 @@ program carries its own).
 
 ### Commands that need StarCraft
 
-`map preview` draws a map with the game's graphics and `map generate` lays its ground with
-the game's tilesets. `map trace`, `map cost`, `map coverage`, `map rush`, `map test`,
-`map heatmap`, `map balance`, `replay watch`, `replay export`, `bot run` and `bot ladder`
-run the game itself. They need two things on your computer:
+`map preview` draws a map with the game's graphics, `map analyze` reads which ground is
+walkable from the game's tilesets, and `map generate` lays its ground with them.
+`map trace`, `map cost`, `map coverage`, `map rush`, `map test`, `map heatmap`,
+`map balance`, `replay watch`, `replay export`, `bot run` and `bot ladder` run the game
+itself. They need two things on your computer:
 
 - Your copy of StarCraft, Remastered or 1.16.1. It is found in the usual places; otherwise
   name its folder with `--starcraft <folder>` or the `SCMJS_STARCRAFT` setting. Nothing of
@@ -1925,6 +1926,114 @@ Each replay takes about a second for every minute or two of play, so a folder of
 games takes a few minutes. Like the other commands that run the game, it needs your copy
 of StarCraft, so in CI it runs only on a machine that has one.
 
+### A map's layout
+
+`scmjs map analyze` reads a melee map's layout without running the game, in about a
+second: where each start is, its main and its natural, how far every pair of starts is
+apart on foot beside the straight line, the narrowest points on the way, and how much of
+the map is walkable, buildable and raised ground. It needs [your copy of
+StarCraft](#commands-that-need-starcraft) for the map's tileset, which says which ground
+is walkable and at what height, but not the game engine.
+
+```
+$ scmjs map analyze "(4)Crossing.scx" --picture crossing.png
+✔ (4)Crossing  128 × 128 · desert · 4 start locations · 10 bases · StarCraft: Remastered 1.23.10.13515 · 0.7 s
+
+  Start                      Main            Natural                      Way out         Height
+  1 top left, 11 o'clock     9 fields + gas  33 (air 31)  7 fields + gas  3.5 at 35, 23   on mid, raised 86%
+  2 bottom right, 4 o'clock  9 fields + gas  33 (air 31)  7 fields + gas  3.5 at 92, 103  on mid, raised 87%
+  3 top right, 1 o'clock     9 fields + gas  33 (air 31)  7 fields + gas  3.5 at 92, 23   on mid, raised 87%
+  4 bottom left, 8 o'clock   9 fields + gas  33 (air 31)  7 fields + gas  3.5 at 35, 103  on mid, raised 87%
+
+  Pair   Ground              Ratio  Zergling  Marine  Zealot  Narrowest
+  1 ↔ 2  141 tiles  air 119  1.18×  33.9 s    47.2 s  47.2 s  3.5 at 35, 23, 1's way out
+  1 ↔ 3  93 tiles   air 88   1.06×  22.5 s    31.3 s  31.3 s  3.5 at 36, 22, 1's way out
+  1 ↔ 4  123 tiles  air 80   1.54×  29.6 s    41.3 s  41.3 s  3.5 at 35, 23, 1's way out
+  2 ↔ 3  124 tiles  air 80   1.54×  29.8 s    41.5 s  41.5 s  3.5 at 91, 102, 2's way out
+  2 ↔ 4  92 tiles   air 88   1.04×  22.1 s    30.8 s  30.8 s  3.5 at 91, 102, 2's way out
+  3 ↔ 4  141 tiles  air 119  1.18×  33.9 s    47.2 s  47.2 s  3.5 at 92, 23, 3's way out
+  Shortest 2 ↔ 4, longest 1 ↔ 2: 53% apart
+
+  Terrain  walkable 93.3% (high 0%, mid 12.4%, low 87.6%) · buildable 91.7% · unwalkable 6.7%
+
+✔ Every start's walks to its opponents match the others', nearest to farthest, within 2%; near and far pairs differ by 53%.
+✔ Every main has 9 mineral fields and 1 geyser, 13,500 minerals and 5,000 gas.
+✔ Naturals 33 tiles from their mains by ground.
+✔ Every main's way out is 3.5 tiles at its narrowest.
+
+  Picture: 512 × 512 PNG, 4 pixels a tile, written to crossing.png · 93 KB
+```
+
+Distances are in tiles (32 pixels) and places are tile coordinates from the top left.
+
+| Column | Means |
+| --- | --- |
+| Start | The player, which third of the map the start is in, and its place as a clock face from the middle, as [`map rush`](#rush-distances) gives it |
+| Main | The mineral fields and geysers nearest this start and within 12 tiles of it, as [`map balance`](#is-the-map-fair-to-every-start) counts them |
+| Natural | The nearest other base on foot that is nobody's main: how far it is walked from the start location and in a straight line, and what it holds. A base is a group of resources close together that a unit walks between directly (a main and a natural below its cliff stay two bases); fields holding fewer than 100 minerals are a wall, not a base |
+| Way out | The narrowest point on the walk from the start to its natural, in tiles across, and where it is: the main's ramp, as a rule |
+| Height | The start's own ground height, and how much of the walkable ground within 12 tiles of it is raised (mid or high). In some tilesets the "high" terrain is the middle level, so raised ground is what is compared |
+| Ground, air, ratio | The walk between two starts, the straight line, and the one over the other |
+| Zergling, Marine, Zealot | The walk's time at Fastest for each, at the unit's speed in your copy's game data, without upgrades |
+| Narrowest | The narrowest point on that walk, and whose way out it is when it is one |
+
+With more than four starts, a table of the ground distances takes the place of the pairs,
+followed by the shortest and longest pair; `--all` lists every pair, and every base on the
+map with whose main or natural it is. `--json` gives everything as data: the starts, every
+pair with both distances and the seconds, the narrowest points with their places, the
+bases, the terrain shares and the verdicts.
+
+**How the ground is walked.** The map is read as a grid of minitiles, sixteen to a tile,
+each walkable or not by the tileset, the way the game's own pathing reads it; a grid of
+whole tiles would close one-tile passages and open cliffs a unit cannot climb. Buildings
+and resources the map places, pre-placed neutral buildings and the units a doodad brings
+(doors, traps) stand in the way; units that move do not. A walk keeps one minitile off
+every wall, about the room a Zergling or a Marine needs, and goes straight or diagonally
+from minitile to minitile (a diagonal step costing 1.4 straight ones), never across a
+wall's corner. Walks are measured from start location to start location.
+
+**What narrow means.** At each point of a walk, the passage is as wide as the shortest
+straight line through it from wall to wall, across, down or along either diagonal. The
+narrowest such point on a walk, leaving out the first and last three tiles, is its
+narrowest point. A patch of unwalkable ground standing on its own and smaller than 16
+tiles (a rock, a doodad, a lone geyser) is not counted as a wall, since a unit walks round
+it on either side; a cliff, a mineral line against it, or a building is.
+
+**The verdicts** are facts with their numbers, marked ▲ when they pass a line:
+
+| Verdict | Marked when |
+| --- | --- |
+| Ground distances | The pairs differ by more than 8% (the tolerance [`map generate`](#how-a-generated-map-is-balanced) holds its maps to). With three or more starts, each start's walks to the others are also compared nearest first: a square of four starts has near and far pairs by design, and is fair when every start's nearest, second and third opponents are as far as everyone else's |
+| Islands | No ground joins two starts |
+| Mains | A start's main has another number of fields or geysers, or other amounts |
+| Naturals | A start has none, shares its natural with another start, has one 5 tiles or more farther or nearer than the starts' middle (than the other start's, with two), or has no gas there while others do |
+| Way out | A start's way out is a tile or more wider or narrower than the starts' middle |
+| Chokes | A walk between two starts goes through a passage under 2 tiles wide, where a Dragoon or a Siege Tank barely gets through |
+| Height | A start has 15 points more or less raised ground round it than the starts' middle |
+
+**The picture.** `--picture` writes the map as [`map preview`](#a-picture-of-a-map) draws
+it, at `--scale` pixels a tile (4 by default), with the analysis over it. It has no words,
+so here is what it shows:
+
+| Drawn | Means |
+| --- | --- |
+| White lines | The walk between every pair of starts |
+| Yellow lines | Each start's walk to its natural |
+| Circles in a player's colour | That player's natural |
+| Orange squares | Each main's way out, as wide as the passage |
+| Red squares | The narrowest point of a walk between starts, where it is not a way out |
+
+**Against the game.** These walks are not the game's: the game's pathfinder goes from
+region to region and turns as a unit turns, which [`map rush`](#rush-distances) measures
+by walking a unit in the game. Over nine maps (seven of Blizzard's and two from
+`map generate`, 103 walks with a Zergling), the ground distance here was within 2.5% of
+the game's walk on average and 8% at most. The game's walk is usually a little longer, so
+the seconds here are a few percent quicker than `map rush`'s. Use this command to see a
+layout in a second while you work, and `map rush` to time it in the game.
+
+The command exits with 2 for a map with fewer than two start locations, and with 1 when no
+copy of the game is found.
+
 ### Rush distances
 
 `scmjs map rush` measures how long a rush takes between each pair of start locations. The
@@ -1974,6 +2083,8 @@ and fifteen for an eight-player map of 256 × 256. `--seed` changes the game's l
 as a unit stepping round another; the default is the one the editor's Walkability plugin
 uses, so the two agree. `--json` gives every walk and the table as data. A building or a
 flyer is refused (exit 2), as is a map with fewer than two start locations.
+[`map analyze`](#a-maps-layout) gives the same distances in a second without the game,
+within a few percent, beside the map's naturals and narrow points.
 
 ### Is the map fair to every start
 
@@ -2562,6 +2673,7 @@ with the command's text and its `--json` data:
 | `map_set`, `map_resize`, `map_new`, `map_build`, `map_run` | The Scenario menu's edits, a new map, the TrigScript build, a plugin run over the map |
 | `map_optimize` | The map made smaller; a dry run unless the model asks to write |
 | `map_preview` | The answer is the picture itself, so a model that can see images sees the map |
+| `map_analyze` | A melee map's layout: starts, naturals, the walks between starts and their narrowest points, and the verdicts; the picture too when asked |
 | `map_trace`, `map_cost`, `map_coverage` | The triggers run in the game, what they cost, and which fired across many replays |
 | `map_balance` | Games played on a melee map with your bots, to see whether its starts are fair; it takes minutes |
 | `replay_info`, `replay_map` | What a replay holds, and its map written out |
@@ -2573,9 +2685,9 @@ your maps in git or give the tool copies. `map_run` runs a plugin, which is code
 your privileges, as `scmjs map run` does; the AI tool asks you before it calls a tool, and
 you can leave that one unapproved.
 
-`map_preview`, `map_trace`, `map_cost` and `map_coverage` need [your copy of the
-game](#commands-that-need-starcraft), and the runs fetch the engine the first time; a
-trace or cost run takes a few seconds and plays at most ten minutes of game.
+`map_preview`, `map_analyze`, `map_trace`, `map_cost` and `map_coverage` need [your copy
+of the game](#commands-that-need-starcraft), and the runs fetch the engine the first time;
+a trace or cost run takes a few seconds and plays at most ten minutes of game.
 `map_coverage` plays whole replays, so it takes as long as the command does. `doctor`
 tells the model whether the game and the engine are there and what you would need to
 install, so it can say so rather than fail. When the game is not in one of the usual
@@ -2760,6 +2872,7 @@ gives its options.
 | [`scmjs map test <map> [tests…]`](#testing-a-maps-triggers) | Plays the map's test scenarios in the game, with a replay of each that fails and, with `--clips`, a GIF of its end; `-u` rewrites what a replay's scenario expects |
 | [`scmjs map test record <map> <rep>`](#a-test-from-a-replay) | A test scenario from a replay, its expectations taken from the end of the game |
 | [`scmjs map coverage <map> <replays…>`](#which-triggers-fired-across-many-games) | Plays many replays on the map: which triggers fired in how many games, and which never did |
+| [`scmjs map analyze <map>`](#a-maps-layout) | A melee map's layout in a second: starts, mains, naturals, the walks between starts, their narrowest points, the ground's shares and verdicts; `--picture` draws them |
 | [`scmjs map rush <map>`](#rush-distances) | The time to walk between the start locations, by the game's own pathing |
 | [`scmjs map balance <map> --bots <bots…>`](#is-the-map-fair-to-every-start) | Games played on the map with your bots, a row a start location: win rate, length, first contact, rush distance, resources, and a verdict |
 | [`scmjs map heatmap <map> <replays…>`](#where-things-happened-across-many-games) | Where units died, buildings went up or armies walked in many replays, as heat over the map |
@@ -2821,6 +2934,7 @@ scmjs map diff --rev HEAD~1 map.scx --picture   # what the last commit changed, 
 scmjs map log map.scx                           # the map's history, in the map's terms
 scmjs map blame map.scx                         # who last changed each trigger
 scmjs map generate "(2)Duel.scx" --seed 7       # a melee map to play
+scmjs map analyze map.scx --picture layout.png  # starts, naturals, walks and chokes, in a second
 scmjs map balance map.scx --bots mybot.scmbot   # is every start fair? games from each
 scmjs map optimize map.scx --dry-run            # what would make the map smaller
 scmjs map trace map.scx                         # which triggers fire in the game
@@ -2899,6 +3013,8 @@ from a clone with `npm run cli -- <command>`, or build it with `npm run build:cl
 | `cli/src/heatmap.ts`, `cli/src/heat.ts` | A heatmap from replays: the replays matched to the map, played a few at once by the replay runner's event mode and kept in the cache, the events chosen, counted per tile, spread and drawn as a heat ramp |
 | `cli/src/balance.ts` | `map balance`: the games played on the match runner, each replay's events read for the starts dealt and the first contact, the main's resources, the rows and the verdict |
 | `cli/src/rush.ts` | The walks between the start locations: the unit found by name, the map runner run in its rush mode, the table of the starts |
+| `cli/src/analyze.ts`, `cli/src/walk.ts` | `map analyze`: the ground as minitiles with buildings and resources on it, the walks and their narrowest points, the bases grouped, the naturals, the verdicts and the picture |
+| `src/formats/dat/speed.ts` | A unit's walking speed from the game's tables: flingy.dat's top speed, or its walking animation's moves |
 | `cli/src/preview.ts`, `cli/src/png.ts` | A map's picture: the terrain from the tileset, reduced to the scale asked, the units, resources and start locations over it, and the PNG written by hand |
 | `cli/src/paint.ts` | The picture in a terminal: colour half blocks, the 256-colour fallback, ASCII shades, kitty's and iTerm2's picture protocols |
 | `cli/src/gamefiles.ts` | Files out of your copy of the game: a Remastered installation's storage, a 1.16.1 copy's archives in the game's order |

@@ -90,9 +90,11 @@ export { baseTerrain, flatTerrain, DIRT, type BaseTerrain, type TerrainFill } fr
 
 // ── The game's own files, decoded ──
 // The library carries none of them: these read what a person brings from their own copy of the game (`scmjs map preview`).
-export { loadTileset, megatileForTile, drawMegatile, MEGATILE_PX, megatileHeight, groupBuildable, TileFlag, type Tileset, type TilesetFiles } from "../../src/formats/tileset/decode";
+export { loadTileset, megatileForTile, drawMegatile, MEGATILE_PX, megatileHeight, groupBuildable, tileGroupOf, TileFlag, type Tileset, type TilesetFiles } from "../../src/formats/tileset/decode";
 export { buildDoodadCatalogue, type DoodadCatalogue, type DoodadDef } from "../../src/formats/tileset/doodads";
-export { decodeUnitsDat, type UnitsDat } from "../../src/formats/dat/dat";
+export { decodeUnitsDat, decodeFlingyDat, decodeSpritesDat, decodeImagesDat, type UnitsDat, type FlingyDat, type SpritesDat, type ImagesDat } from "../../src/formats/dat/dat";
+export { decodeIscript, type IscriptBin } from "../../src/formats/dat/iscript";
+export { walkSpeed, type SpeedTables } from "../../src/formats/dat/speed";
 export { unitGeometry, type UnitGeometry } from "../../src/editor/units";
 export { displayColorHex } from "../../src/data/players";
 

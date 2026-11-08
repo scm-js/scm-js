@@ -53,6 +53,7 @@ import { coverageForm, coverageJson, coverageScenario, printCoverage, runCoverag
 import { defaultOut, defaultTests, readMapForTests, readTests, recordLines, recordTest, runTests, testHeader, testJson, testSummary, updateTests, type PlannedScenario } from "./maptest";
 import { printRun, runOnMap } from "./run";
 import { previewMap, PNG_SCALES } from "./preview";
+import { analyzeMap } from "./analyze";
 import { heatmapMap, type HeatmapOptions as HeatmapFlags } from "./heatmap";
 import { printGenerated, runGenerate, type GenerateFlags } from "./generatecmd";
 import { GEN_PLAYERS, GEN_STYLES, GEN_SYMMETRIES } from "./generate";
@@ -788,6 +789,29 @@ Exits 2 when the game could not start.`)
     const r = await runRush(game.path, { unit, seed: whole(o.seed, "seed"), limit: whole(o.limit, "limit", 1), starcraft: o.starcraft, engine: o.engine, live: o.json ? undefined : (line) => print(line) });
     if (o.json) print(JSON.stringify(rushJson(input.name, r), null, 2));
     else print("", ...printRush(input.name, r));
+  });
+
+map.command("analyze").description("a melee map's layout: starts, mains, naturals, walks, chokes and ground, without running the game").argument("<map>").addOption(json)
+  .option("--picture <file.png>", "also draw the map with the walks, chokes and naturals on it; - for standard output")
+  .option("--scale <n>", `the picture's pixels a tile: ${PNG_SCALES.join(", ")} (4 by default)`)
+  .option("--all", "every pair of starts and every base, not only the shortest and longest")
+  .option("--starcraft <folder>", "your installation of StarCraft (SCMJS_STARCRAFT); found in the usual places otherwise")
+  .addHelpText("after", `
+Reads the ground as a unit walks it, from the tileset of your copy of StarCraft (which minitiles are walkable, at
+which height), with buildings and resources in the way, and reports each start's main and natural, the walk between
+every pair of starts beside the straight line (in tiles, and in seconds for a Zergling, Marine and Zealot), the
+narrowest point on each walk and on each main's way to its natural, how much of the map is walkable, buildable and
+high ground, then a few verdicts. Nothing runs in the game, so it takes about a second; map rush has the game walk.
+Exits 2 for a map with fewer than two start locations.
+  scmjs map analyze "(4)Crossing.scx"
+  scmjs map analyze "(4)Crossing.scx" --picture crossing.png`)
+  .action(async (file: string, o: { json?: boolean; picture?: string; scale?: string; all?: boolean; starcraft?: string }) => {
+    const piped = o.picture === STDIO;
+    if (piped && o.json) throw new CliError("--json and the picture both want standard output", "Write the PNG to a file with --picture, or leave --json off.", 2);
+    const { input, doc } = await openForEdit(file);
+    const { report, lines } = await analyzeMap(input, doc, o);
+    if (o.json) print(JSON.stringify(report, null, 2));
+    else say(piped, ...lines);
   });
 
 map.command("balance").description("is the map fair to every start? games played over and over, a row a start location").argument("<map>").addOption(json)
@@ -1533,8 +1557,9 @@ program.command("mcp").description("these commands as an MCP server, for AI tool
 Speaks the Model Context Protocol on standard input and output, so an AI tool that runs on this computer (Claude
 Code, Cursor, VS Code, …) can read, check, search, compare and change maps with the same code these commands use:
 map_info, map_check, map_dump, map_find, map_diff, map_triggers_export|import, map_strings_export|import|prune,
-map_set, map_resize, map_new, map_build, map_run, map_preview (the picture itself), map_trace, map_cost, replay_info,
-replay_map and doctor. map_preview, map_trace and map_cost need a copy of StarCraft here, as the commands do; doctor
+map_set, map_resize, map_new, map_build, map_run, map_preview (the picture itself), map_analyze, map_trace, map_cost,
+replay_info, replay_map and doctor. map_preview, map_analyze, map_trace and map_cost need a copy of StarCraft here, as
+the commands do; doctor
 says whether there is one. Paths are files on this
 computer, relative to the folder the tool started it in. Claude Code, in your maps folder:
   claude mcp add scmjs -- npx -y @scm-js/cli mcp

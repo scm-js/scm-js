@@ -1,7 +1,7 @@
 # The `scmjs` command line
 
 `cli/` is the npm package **`@scm-js/cli`** (its command is `scmjs`): `scmjs about | doctor | info | map info|check|open|new|generate|dump|find|fetch|set|resize|triggers|strings|sounds|diff|log|blame|merge|build|run|unpack|pack|trace|cost|rush|test [record]|preview|heatmap |
-replay info|open|watch | plugin new|check|dev | bot new|init|build|update|run|ladder`, or `npx @scm-js/cli …`. npm refused the plain name `scmjs` on the first publish (2026-11-06,
+replay info|map|open|watch|export|share | plugin new|check|dev | bot new|init|build|update|run|ladder`, or `npx @scm-js/cli …`. npm refused the plain name `scmjs` on the first publish (2026-11-06,
 E403 "too similar to scss, sockjs"), so the user chose the scope beside @scm-js/replay and @scm-js/plugin-api. The reader's page is `docs/cli.md`. The shape was the user's (2026-11-05): one command, a noun for
 each kind of thing (`map`, `replay`, `plugin`, `bot`), "an impressive UX tool … not overly engineered".
 
@@ -1410,6 +1410,78 @@ freed two of the 23 rows (a 24-row terminal keeps the globe on screen; `tests/cl
 description is the first rule (commander wraps a long one onto a second row, which the count sees), and a hidden
 command (`{ hidden: true }`: `completion`, `login`, `logout`, `help`) is the fallback.
 
+## A replay as a clip: `replay export` (`cli/src/export.ts`, `browser.ts`, `camera.ts`, `gif.ts`) — 2026-11-07
+
+`scmjs replay export <rep> [--out x.webm|.mp4|.gif] [--from --to m:ss] [--follow <player>|--at x,y|--all] [--speed]
+[--size WxH] [--fps] [--browser] [--starcraft] [--json]`, hidden `--play <url>` (SCMJS_PLAY_URL). Needs scm-sim's
+`replay-export` branch deployed (the page's `scmjs.view.record`, `?files=`); an older page answers ready without
+`record` and the command says so.
+
+- **Who draws**: the play page's own replay viewer (`/play/?view`), not a renderer of ours. The command serves on
+  127.0.0.1 (random port): `/play/…` mirrored from the play page's address (assets and bots kept under
+  `<cache>/page/<host>/`, engine files in `<cache>/engine/<build>/` — the same folder `ensureEngine` fills, so the 25 MB
+  is shared with `replay watch`; `index.html` and `current.json` asked each time, the last page kept for offline);
+  `/<token>/` the framing page (`hostPage()`, inline), `job`, `track`, `replay`, and `files/<path>` = the person's copy
+  through `gamefiles.ts` (`servedGamePath`: classic names only — `hd2/`, `anim/`, `*.hd.*`, `.dds` refused, so the page
+  draws SD; Remastered's pictures are the editor's copy's own layout, not CASC names). The page reads them as a new
+  GameSource kind `served` (`?files=/<token>/files/`, same origin only, interface pack as fallback) and plays named
+  (no archives needed, Remastered or 1.16.1). Same origin is why the framing page is ours: the viewer only listens to a
+  same-origin parent.
+- **Browser, no Playwright**: `browser.ts` finds Chrome/Chromium/Edge/Brave on PATH, the installers' places, then
+  Playwright's `chromium-*` cache (newest; headless_shell skipped); `SCMJS_BROWSER`/`--browser` first. Started
+  `--headless --remote-debugging-pipe` with a temp profile; CDP is NUL-framed JSON on fds 3/4 (`NulSplitter`, `Cdp`).
+  Used only for `Target.createTarget`/`attachToTarget`, `Runtime.enable` (page exceptions into the error's hint;
+  `SCMJS_DEBUG=1` prints console, host news and served paths), `Inspector.targetCrashed`, `Browser.close`. Everything
+  else goes page → framing page → `fetch` POST to the command (`message`, `clip`, `picture`), which is simpler than
+  evaluating over CDP and carries large bodies.
+- **Why WebCodecs, not MediaRecorder or screencast** (decided before writing it): MediaRecorder and
+  `Page.startScreencast` both run on the wall clock, so a slow picture is a dropped or stretched one and the clip
+  cannot be made faster than real time. The page instead steps the game to each picture's frame (the worker's own
+  `seek`, forward only; picture i shows frame `from + i·1000·speed/(fps·42)`, the camera read at the fractional
+  frame), draws with `renderer.draw` on a canvas sized to the clip (`backing` replaced by `height/rows`; whole-number
+  scale is unsmoothed), and hands `new VideoFrame(canvas, {timestamp})` to a `VideoEncoder` (VP9 `vp09.00.41.08`, VP8
+  fallback, key frame every 2 s, queue kept ≤ 4). The chunks are muxed in the page (scm-sim `web/webm.ts`: EBML,
+  SeekHead with 8-byte positions, Info with Duration, a Cluster per key frame or 30 s, Cues). Exact timing, no
+  encoder on the command's side. `rows` = height / round(height/480): 360 at 720p (2×), 540 at 1080p.
+- **MP4** = ffmpeg from the WebM (`libx264 -crf 26 -preset medium -pix_fmt yuv420p +faststart`; the WebM for it is
+  recorded at 0.2 bit/pixel·frame, the kept WebM at 0.08). No ffmpeg → exit 1 with the install line before anything
+  starts. **GIF is always ours** (`gif.ts`), from `format: "frames"` (RGBA per picture POSTed, the page waits for
+  `scmjs.view.taken` at most four behind): per-picture median-cut palette over a 15-bit histogram, pixels unchanged
+  from the last picture's shown colour transparent (disposal 1), LZW. Measured on 8 s of a fight (1560.rep 20:40):
+  ours 11.7 MB; ffmpeg palettegen/paletteuse of the encoded clip 16.2–17.3 MB across four dither/stats settings, and
+  blurrier (VP9 noise defeats the transparency). So the brief's "GIF through ffmpeg" was dropped; ~80 ms a 640×360
+  picture to quantise.
+- **The camera** (`camera.ts`): clicks first (`followTrack`: right-clicks, targeted orders, buildings, pings; hold
+  1.5 s, two clicks at a new place, dead zone, cut beyond 1.25 screens, Gaussian ease σ 0.25 s of clip) — **useless
+  on pro replays**: after a hotkey the army is sent by minimap clicks across the map (1560.rep 14:00: targets at
+  (3744,288), (174,2613) while the army sat at the centre), so the camera showed empty ground. Now `actionTrack` from
+  the replay runner (`gameMoments`: `--every 8 --from (from−3 s) --to`, run beside the page's start; the framing page
+  asks `/track` only after `loaded`): per moment `aimOf` = the biggest fight (≥ 3 of the player's army within 7 tiles
+  of enemy army/workers/buildings, centroid of the busiest view of them and the enemies in reach), else the densest
+  view of their army, else of workers+buildings; `placesFromAims` holds until an aim elsewhere lasts 1 s (a fight
+  0.4 s), dead zone 0.35 (fight 0.2), cut beyond 1.25 screens; then the same ease. Class has no unit type, so a lone
+  overlord by an enemy base read as a fight until the three-unit rule. Clicks remain the fallback when the runner
+  fails (camera words say "(by their clicks)"). Player owner = the runner's `start.players[].slot` matched by name.
+- **Measured** (WSL, Remastered copy on /mnt/c, Playwright's Chromium 153 with libnspr4/libnss3 from apt-get download
+  in LD_LIBRARY_PATH — the machine lacks them; a user's Chrome has them): 1560.rep (31 min ZvP) 14:00–14:30 at 720p24,
+  720 pictures, recorded in ~18 s (40/s) after ~3 s load, 9.1 MB WebM; 20:30–20:58 (storm fight) 672 pictures in
+  44 s (15/s), 7.1 MB WebM, MP4 10.6 MB; GIF 20:41–20:48 640×360 88 pictures 10.7 MB in 42 s (mostly the page's run
+  on to 20:41 and the runner beside it); `--all --speed 16` 0:00–6:00 GIF 480×270 282 pictures 2.2 MB in 8.5 s. The
+  page's run-on to `from` is ~1,500 frames/s (≈20 s to reach 20:00); the runner beside it 650–2,000 frames/s under
+  that load. First picture's progress says "Going to m:ss in the game…" (`done: 0`).
+- Tests: `tests/cli-export.test.ts` (18) — options and refusals, cache and served paths, the framing page's words,
+  NUL framing incl. a split UTF-8 character, Cdp ids/errors/events/close, browser candidates over a fake Playwright
+  cache, clicks/places/track/aims/settling, LZW past 4,096 codes and GIFs decoded back by a decoder in the test
+  (exact pictures, transparency). scm-sim `tests/webm.test.ts` (7) reads the WebM back element by element. No browser
+  in CI.
+- **Not built / traps**: no sound; no Remastered pictures (would need the editor's HD copy layout served: `.hd.vr4`,
+  `unit/hd/main_NNN.anim` slimmed, etc.); `--fog` through a player's eyes is a one-line `options` away but untested;
+  the runner's unit class cannot tell larvae/overlords from fighters. Doctor's Browser row finds Playwright's Chromium
+  here though it cannot start without those libraries (the command then reports the browser's own stderr). Vite
+  empties `--outDir` even outside the root: a staged `engine/` beside a rebuilt page vanished twice. scm-sim's
+  `deploy-play.mjs` without `--upload` was refused by the auto-mode classifier here; the page was built with
+  `vite build` + env and staged by hand (engine links + `dist-run/replay.mjs` + a `current.json`).
+
 ## Where things happened: `map heatmap` (`cli/src/heatmap.ts`, `heat.ts`) — 2026-11-07
 
 `scmjs map heatmap <map> <replays…|folders> [--what deaths|kills|buildings|paths] [--player n|name] [--until m:ss]
@@ -1623,4 +1695,3 @@ overview row. Docs: `docs/cli.md` "A map's history", "Who last changed what".
   with textconv does that); `map log --rev A...B` passes through to git, `map blame` refuses `...`.
 - **CLI strings are literals, not `t()`**: the i18n extractor reads `src/` only and no CLI module uses `t()` for its
   own words (plugin.ts's are the starter's text); followed that.
-

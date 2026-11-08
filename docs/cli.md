@@ -88,13 +88,16 @@ What it looks for:
 | Desktop app | `map open` and `replay open`, which use the browser without it |
 | Claude Code | `scmjs mcp`, when you use it from Claude Code |
 | scmjs.dev | `map share`, `replay share` and `map play` |
+| Browser | `replay export`, which draws its clips in Chrome, Chromium or Edge |
+| ffmpeg | `replay export` to an `.mp4`; a `.webm` or a `.gif` does without it |
 | StarCraft | `map preview`, `map generate` and every command that runs the game |
-| Game engine | `map trace`, `map cost`, `map rush`, `map test`, `replay watch`, `bot run`, `bot ladder` |
+| Game engine | `map trace`, `map cost`, `map rush`, `map test`, `replay watch`, `replay export`, `bot run`, `bot ladder` |
 
-A dot instead of a tick means the thing is not there and nothing is wrong: the desktop
-app, Claude Code and a scmjs.dev sign-in are all optional. Only a missing thing has lines
-under it. The Claude Code line looks for `scmjs mcp` among the servers Claude Code knows,
-for every folder or for this one, and says so when Claude Code is not installed.
+A dot instead of a tick means the thing is not there and nothing is wrong: ffmpeg, the
+desktop app, Claude Code and a scmjs.dev sign-in are all optional. Only a missing thing
+has lines under it. The Claude Code line looks for `scmjs mcp` among the servers Claude
+Code knows, for every folder or for this one, and says so when Claude Code is not
+installed.
 
 The game engine line names the engine's build. Each command that plays the game drives the
 engine with a runner of its own; an engine fetched before the play page had a runner lacks
@@ -108,8 +111,8 @@ nothing, and exits with 1 only when Node itself is too old.
 
 `map preview` draws a map with the game's graphics and `map generate` lays its ground with
 the game's tilesets. `map trace`, `map cost`, `map rush`, `map test`, `map heatmap`,
-`replay watch`, `bot run` and `bot ladder` run the game itself. They need two things on
-your computer:
+`replay watch`, `replay export`, `bot run` and `bot ladder` run the game itself. They need
+two things on your computer:
 
 - Your copy of StarCraft, Remastered or 1.16.1. It is found in the usual places; otherwise
   name its folder with `--starcraft <folder>` or the `SCMJS_STARCRAFT` setting. Nothing of
@@ -1654,6 +1657,59 @@ A replay the game cannot play is listed with the reason, and the others still co
 command then exits with 1. It needs [your copy of StarCraft and the
 engine](#commands-that-need-starcraft).
 
+### A video or GIF of a replay
+
+`scmjs replay export game.rep` makes a video of the replay with the game's own pictures,
+to share where nobody has the game, such as a Discord channel, a forum post or a web page.
+The play page's replay viewer draws it in a browser already on your computer, Chrome,
+Chromium or Edge started without a window, with the pictures from your own copy of
+StarCraft.
+
+```sh
+scmjs replay export game.rep --from 14:00 --to 14:30           # game.webm beside the replay
+scmjs replay export game.rep --out fight.mp4 --follow 2 --from 20:30 --to 20:58
+scmjs replay export game.rep --out game.gif --all --speed 16 --to 6:00
+```
+
+The game is stepped picture by picture rather than played and filmed, so the clip plays at
+the speed you ask whatever your computer's pace, with no picture dropped. A 720p clip
+takes about as long to make as it lasts, less for a quiet part of the game and more for a
+big fight. Before that, the game has to run on to `--from`, which takes about twenty
+seconds to reach twenty minutes into a game.
+
+| Option | What it does |
+| --- | --- |
+| `--out clip.webm` | The file: `.webm`, `.mp4` or `.gif`. By default the replay's name with `.webm`, beside it |
+| `--from 4:30`, `--to 5:00` | Where the clip starts and ends in the game; the whole game by default |
+| `--follow <player>` | The camera stays on that player's play. Name them, give the start of the name, or a number as `replay info` lists the players. The first person in the replay by default |
+| `--at 64,40` | The camera holds on this tile |
+| `--all` | The whole map, scaled to fit |
+| `--speed 4` | Four times the game's Fastest. The default is 1, the game's own pace |
+| `--size 1920x1080` | The clip's size in pixels: 1280x720 by default, 640x360 for a GIF |
+| `--fps 30` | Pictures per second, 24 by default and 12 for a GIF. A GIF counts in hundredths of a second, so 12 becomes 12.5 |
+| `--browser <path>` | The browser to draw with, or the `SCMJS_BROWSER` setting. Otherwise one is found in the usual places |
+| `--json` | The file, its size and the time each part took, as JSON |
+
+Following a player, the camera goes where their army is, and to the biggest fight the army
+is in. To know that, the engine runs the game through first and reports every unit, as it
+does for `replay watch`. The camera holds still while what it shows stays near the middle
+of the screen, pans to a place within reach, cuts to one further away, and does not chase
+a lone scout. The view shows as much of the map as the game's own screen does, at a whole
+number of pixels for each of the game's, two at 720p, so the pictures stay sharp.
+
+A `.webm` (VP9) or a `.gif` needs nothing more. An `.mp4` (H.264) is made from the `.webm`
+with [ffmpeg](https://ffmpeg.org/download.html) when it is installed. Without it the
+command says so and makes nothing. The GIF is made from the pictures as drawn, each with a
+palette of its own, which keeps the game's colours exact. A GIF of a camera that moves is
+large, so keep it short: eight seconds of a fight at 640x360 is about 12 MB. A 30-second
+720p `.webm` is about 8 to 10 MB. Progress is shown as it goes, and the file's name and
+size are printed at the end.
+
+The pictures are the classic game's, whichever copy you have. Remastered's own pictures
+are not drawn yet, and there is no sound. Besides your copy of StarCraft, the command
+needs [the engine](#commands-that-need-starcraft) and the play page itself, both fetched
+once from scmjs.dev and kept.
+
 ### Opening a replay in scmJS
 
 `scmjs replay open game.rep` opens the replay in the replay viewer of the scmJS desktop
@@ -2092,6 +2148,7 @@ gives its options.
 | [`scmjs replay info <replays…>`](#what-a-replay-holds) | Who played, on which map, for how long and at what APM |
 | [`scmjs replay map <replay>`](#the-map-a-replay-was-played-on) | The map the replay was played on, as a map file |
 | [`scmjs replay watch <replay>`](#watching-a-replay-in-the-terminal) | Plays the replay in the terminal |
+| [`scmjs replay export <replay>`](#a-video-or-gif-of-a-replay) | A video or GIF of the replay with the game's own pictures |
 | [`scmjs replay open <replay>`](#opening-a-replay-in-scmjs) | Opens the replay in scmJS's replay viewer |
 | [`scmjs replay share <replay>`](#a-link-to-a-replay) | A link that opens the replay in the editor |
 
@@ -2135,6 +2192,7 @@ scmjs map test map.scx                          # run map.tests.json in the game
 scmjs map trace --replay bug.rep --order        # which triggers fired in a played game, and when
 scmjs replay watch game.rep                     # a replay in the terminal
 scmjs map heatmap map.scx replays/ --out h.png  # where units died in those games
+scmjs replay export game.rep --to 0:30          # its first half minute, as game.webm
 scmjs map share map.scx --qr                    # a link, and a code for a phone
 scmjs init                                      # this folder of maps, ready for git
 ```
@@ -2166,7 +2224,7 @@ from a clone with `npm run cli -- <command>`, or build it with `npm run build:cl
 | `cli/src/bases.ts` | Where a base's resources go: the Melee Wizard plugin's layout |
 | `src/editor/isom.ts` | The isometric brush, which `map generate` paints with |
 | `cli/src/init.ts` | A folder of maps set up for git and GitHub: the lines and files it lacks, the workflow and README made from the maps, the git settings |
-| `cli/src/doctor.ts` | The checks: Node, npm's newest, TypeScript, Docker, StarCraft, the engine cache, the desktop app, and what each one is for |
+| `cli/src/doctor.ts` | The checks: Node, npm's newest, TypeScript, Docker, a browser, ffmpeg, StarCraft, the engine cache, the desktop app, and what each one is for |
 | `cli/src/archive.ts` | The archive as a folder and back: member names as file names, the manifest, the members without a name |
 | `cli/src/texteditor.ts` | `triggers edit` and `strings edit`: the editor chosen and started, the file kept when the text does not read |
 | `cli/src/sounds.ts` | The map's sounds: the WAV table joined with the archive's members, their lengths, the files written |
@@ -2186,6 +2244,10 @@ from a clone with `npm run cli -- <command>`, or build it with `npm run build:cl
 | `cli/src/botrun.ts` | A bot's game with no page: scm-sim's bot runner run and its lines worded |
 | `cli/src/ladder.ts` | The ladder: the sides read off the command line, the schedule and the replays' names, scm-sim's match runner run for each game, Elo, the standing and the head-to-head |
 | `cli/src/watch.ts` | A replay in the terminal: the braille minimap, its colours and the lines around it, the replay's chat and APM, and the runner paced a picture at a time |
+| `cli/src/export.ts` | A replay's clip: the options settled, the play page and the game's files served on the loopback address, the page asked to record, the MP4 made with ffmpeg |
+| `cli/src/browser.ts` | Finding Chrome, Chromium or Edge, starting it without a window, and the DevTools protocol on its pipe |
+| `cli/src/camera.ts` | The camera that follows a player: aims from the game's units (the army, the biggest fight), or the player's clicks, made into a smoothed track |
+| `cli/src/gif.ts` | The GIF writer: a palette a picture by median cut, unchanged pixels left transparent, LZW |
 | `cli/src/trace.ts` | A map's triggers run in the game: scm-sim's map runner run, its trace and cost worded against the map's own triggers; a replay's game, the map given compared with the replay's, the firings in order |
 | `cli/src/maptest.ts` | A map's tests: the tests file read and resolved against the map's names, the setup and timed steps made triggers of a copy, the map runner run in its test mode for each scenario, the end judged and the failed scenarios' replays kept; scenarios that play a replay, recorded from one and rewritten with `-u` |
 | `cli/src/heatmap.ts`, `cli/src/heat.ts` | A heatmap from replays: the replays matched to the map, played a few at once by the replay runner's event mode and kept in the cache, the events chosen, counted per tile, spread and drawn as a heat ramp |

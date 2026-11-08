@@ -64,9 +64,12 @@ describe.skipIf(!hasGit)("map log and map blame in a repository", () => {
     return r.stdout.trim();
   };
   let day = 1;
+  // Identity in the environment: a CI runner has none configured, and git merge refuses to start without one.
+  const as = (who: string, date?: string) => ({ ...process.env, GIT_AUTHOR_NAME: who, GIT_AUTHOR_EMAIL: `${who}@x`, GIT_COMMITTER_NAME: who, GIT_COMMITTER_EMAIL: `${who}@x`, ...(date ? { GIT_AUTHOR_DATE: date, GIT_COMMITTER_DATE: date } : {}) });
   const commit = (who: string, subject: string) => {
     const date = `2026-11-0${day++}T10:00:00+09:00`;
-    spawnSync("git", ["-C", dir, "commit", "-qam", subject], { env: { ...process.env, GIT_AUTHOR_NAME: who, GIT_AUTHOR_EMAIL: `${who}@x`, GIT_COMMITTER_NAME: who, GIT_COMMITTER_EMAIL: `${who}@x`, GIT_AUTHOR_DATE: date, GIT_COMMITTER_DATE: date } });
+    const r = spawnSync("git", ["-C", dir, "commit", "-qam", subject], { encoding: "utf8", env: as(who, date) });
+    if (r.status !== 0) throw new Error(r.stderr || r.stdout);
     hashes[subject] = git("rev-parse", "HEAD");
   };
   const edit = async (fn: (doc: Awaited<ReturnType<typeof openMapBytes>>) => void) => {
@@ -106,11 +109,14 @@ describe.skipIf(!hasGit)("map log and map blame in a repository", () => {
     commit("Mina", "description");
     // git cannot merge the binary file on its own (no driver here): the merge is made by hand, main's map with the
     // side's change, as the merge driver would write it.
-    spawnSync("git", ["-C", dir, "merge", "-q", "--no-edit", "side"], { encoding: "utf8" });
+    spawnSync("git", ["-C", dir, "merge", "-q", "--no-edit", "side"], { encoding: "utf8", env: as("Jeany") });
+    // It must have stopped on the map, mid-merge: otherwise the commit below would not be a merge at all.
+    expect(git("rev-parse", "-q", "--verify", "MERGE_HEAD")).toBe(hashes.side);
     git("checkout", "-q", "--ours", "maps/ridge.scx");
     await edit((doc) => { importStrings(doc, "s.txt", "12\tRidge top\n"); });
     git("add", "maps/ridge.scx");
     commit("Jeany", "merge");
+    expect(git("rev-parse", "HEAD^2")).toBe(hashes.side);
   });
 
   it("logs each commit that touched the map, in the map's terms", async () => {

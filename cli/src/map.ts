@@ -104,3 +104,20 @@ function wrap(text: string, width: number, most = 4): string {
   if (line) lines.push(line);
   return lines.slice(0, most).join("\n") + (lines.length > most ? " …" : "");
 }
+
+/** What a check held against a baseline says beside the map's name. */
+export interface BaselineCounts { suppressed: number; fixed: number; new: number }
+
+/** The map's line with a baseline: its new findings, then how many were known and how many are fixed since. */
+export function baselineLine(fresh: Issue[], b: BaselineCounts): string {
+  const n = issueCounts(fresh);
+  const head = !n.error && !n.warn ? `${mark.ok} ${pc.green("no new problems")}` : issueLine(fresh).replace(/(errors?|warnings?)/g, "new $1");
+  const known = [b.suppressed && `${num(b.suppressed)} known`, b.fixed && pc.green(`${num(b.fixed)} fixed since the baseline`)].filter(Boolean).join(", ");
+  return `${head}${known ? pc.dim(dot) + pc.dim(known) : ""}`;
+}
+
+/** The map's line when its findings are written as the baseline: how many, and what changed from the one before. */
+export function baselineWritten(name: string, b: BaselineCounts & { written?: number }, before: boolean): string {
+  const changed = before ? [b.new && `${num(b.new)} new`, b.fixed && `${num(b.fixed)} fixed and dropped`].filter(Boolean).join(", ") : "";
+  return `${pc.bold(name)}  ${plural(b.written ?? 0, "finding")} in the baseline${changed ? pc.dim(` (${changed})`) : before ? pc.dim(" (as before)") : ""}`;
+}

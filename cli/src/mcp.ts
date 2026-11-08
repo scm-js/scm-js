@@ -31,6 +31,8 @@ import { coverageJson, coverageScenario, printCoverage, runCoverage } from "./co
 import { printReplayInfo, replayReport } from "./replay";
 import { mapFileFor, writeReplayMap } from "./replaymap";
 import { openGameFiles } from "./gamefiles";
+import { analyzeLayout, layoutLines, layoutPicture, layoutReport, loadLayoutFiles } from "./analyze";
+import { encodePng } from "./png";
 import { DEFAULT_PNG_SCALE, loadGraphics, previewPng, tilesetOf } from "./preview";
 import { printRun, runOnMap } from "./run";
 import { costJson, gameMap, printCost, printTrace, removeGameMap, runMapInGame, traceJson, type MapRunOptions } from "./trace";
@@ -100,7 +102,7 @@ const WIDTH = 140;
 export interface McpOptions { engine?: string; weigh?: string }
 
 /** What the client is told once, with the tool list: how the tools fit together. */
-export const INSTRUCTIONS = `scmJS: StarCraft: Brood War maps on this computer. Paths are files here, relative to the working directory. Start with map_info or map_dump to see what a map holds; map_check is Check Map (errors and warnings, as the editor's). Triggers and strings travel as text: map_triggers_export gives the trigger window's text form (https://docs.scmjs.dev/triggers/), which map_triggers_import takes back; strings are "<number><TAB><text>" lines. Tools that change a map write over it unless given "out"; they never renumber strings. Map text is never translated. map_preview shows the map as a picture, map_trace and map_cost run it in the game itself, and map_coverage counts which triggers fired over many replays; these need a copy of StarCraft on this computer, and doctor says whether one is there and what to install if not. replay_map writes the map a replay was played on. map_optimize makes a map smaller without changing what the game plays (a dry run unless told to write); map_balance plays games on a melee map with the person's own bots to see whether its start locations are fair, which takes minutes.`;
+export const INSTRUCTIONS = `scmJS: StarCraft: Brood War maps on this computer. Paths are files here, relative to the working directory. Start with map_info or map_dump to see what a map holds; map_check is Check Map (errors and warnings, as the editor's). Triggers and strings travel as text: map_triggers_export gives the trigger window's text form (https://docs.scmjs.dev/triggers/), which map_triggers_import takes back; strings are "<number><TAB><text>" lines. Tools that change a map write over it unless given "out"; they never renumber strings. Map text is never translated. map_preview shows the map as a picture, map_analyze reads a melee map's layout (starts, naturals, walks between starts, chokes) in a second, map_trace and map_cost run it in the game itself, and map_coverage counts which triggers fired over many replays; these need a copy of StarCraft on this computer, and doctor says whether one is there and what to install if not. replay_map writes the map a replay was played on. map_optimize makes a map smaller without changing what the game plays (a dry run unless told to write); map_balance plays games on a melee map with the person's own bots to see whether its start locations are fair, which takes minutes.`;
 
 /**
  * The server with every tool registered, and their names; `connect` it to a transport (stdio for the command, in
@@ -455,6 +457,35 @@ export function createMcpServer(options: McpOptions = {}): { server: McpServer; 
     const facts = { file: input.name, name: mapReport(input, doc).name, size: { width: doc.scenario.width, height: doc.scenario.height }, tileset: tilesetOf(doc.scenario), picture: { width: drawn.picture.width, height: drawn.picture.height, scale: s, bytes: drawn.png.length }, drawn: drawn.counts, ms: Math.round(performance.now() - t0) };
     const text = `${input.name}: ${facts.size.width} × ${facts.size.height}, ${facts.tileset}, drawn at ${s} px a tile (${facts.picture.width} × ${facts.picture.height}); ${facts.drawn.starts} start locations, ${facts.drawn.units} units, ${facts.drawn.buildings} buildings, ${facts.drawn.minerals} mineral fields, ${facts.drawn.geysers} geysers`;
     return { content: [{ type: "image", data: Buffer.from(drawn.png).toString("base64"), mimeType: "image/png" }, { type: "text", text }], structuredContent: facts };
+  }));
+
+  reg("map_analyze", {
+    title: "A melee map's layout",
+    description: "A melee map's layout without running the game (scmjs map analyze): each start location's place, its main's fields and geysers, its natural (the nearest other base on foot) with the ground and straight-line distance, the ground walk between every pair of starts beside the straight line (tiles, and seconds for a Zergling, Marine and Zealot), the narrowest passage on each walk and on each main's way out, the walkable, buildable and high-ground shares, and verdicts (a ✔/▲/ℹ line each, with the rule's threshold in the docs). Walks are over the tileset's walkable minitiles with buildings and resources in the way; they agree with the game's own walks (map rush) within a few percent. With `picture`, also a PNG: the map with the walks in white, the walks to the naturals in yellow, naturals circled in the player's colour, each way out boxed in orange and other narrow points in red. Needs a copy of StarCraft (Remastered or 1.16.1) on this computer for the tileset; doctor says whether one is there.",
+    inputSchema: {
+      path,
+      all: z.boolean().optional().describe("every pair of starts and every base in the text, not only the shortest and longest pair on a map of five starts or more"),
+      picture: z.boolean().optional().describe("also return the map as a PNG with the walks, naturals and narrow points drawn on it"),
+      scale: z.number().int().min(1).max(8).optional().describe("the picture's pixels a tile: 1, 2, 4 or 8 (4 by default)"),
+      starcraft: z.string().optional().describe("the folder of the person's StarCraft installation, when doctor did not find one in the usual places"),
+    },
+    annotations: { readOnlyHint: true },
+  }, tool(async ({ path: file, all, picture, scale, starcraft }) => {
+    const s = scale ?? DEFAULT_PNG_SCALE;
+    if (![1, 2, 4, 8].includes(s)) throw new CliError(`scale takes 1, 2, 4 or 8, not ${s}`, null, 2);
+    const { input, doc } = await openMap(file);
+    const t0 = performance.now();
+    const files = await openGameFiles(starcraft, "Which ground is walkable comes from the person's installation's tileset");
+    const layoutFiles = await loadLayoutFiles(doc.scenario, files);
+    const t1 = performance.now();
+    const layout = analyzeLayout(doc.scenario, layoutFiles);
+    const report = layoutReport(input, doc.scenario, files, layout, { copy: Math.round(t1 - t0), analyze: Math.round(performance.now() - t1), total: Math.round(performance.now() - t0) });
+    const result = ok(layoutLines(report, files, !!all), report);
+    if (picture) {
+      const pic = layoutPicture(doc, layoutFiles, layout, s);
+      result.content.unshift({ type: "image", data: Buffer.from(encodePng(pic.pixels, pic.width, pic.height)).toString("base64"), mimeType: "image/png" });
+    }
+    return result;
   }));
 
   reg("replay_map", {

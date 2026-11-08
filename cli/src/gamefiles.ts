@@ -7,7 +7,9 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { Archive } from "mopaq";
-import { decodeUnitsDat, type UnitsDat } from "../../src/formats/dat/dat";
+import { decodeFlingyDat, decodeImagesDat, decodeSpritesDat, decodeUnitsDat, type UnitsDat } from "../../src/formats/dat/dat";
+import { decodeIscript } from "../../src/formats/dat/iscript";
+import type { SpeedTables } from "../../src/formats/dat/speed";
 import { loadTileset, type Tileset } from "../../src/formats/tileset/decode";
 import { findGameCopy } from "./engine";
 import { t } from "./i18n";
@@ -102,6 +104,21 @@ export async function readUnitsDat(files: GameFiles): Promise<UnitsDat | null> {
   try {
     const bytes = await files.read("arr\\units.dat");
     return bytes ? decodeUnitsDat(bytes) : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * What a unit's walking speed is read from (`walkSpeed`): units.dat, flingy.dat, sprites.dat, images.dat and
+ * iscript.bin; null when the copy lacks one or one cannot be read.
+ */
+export async function readSpeedTables(files: GameFiles, units?: UnitsDat | null): Promise<SpeedTables | null> {
+  try {
+    const [u, flingy, sprites, images, iscript] = await Promise.all(["arr\\units.dat", "arr\\flingy.dat", "arr\\sprites.dat", "arr\\images.dat", "scripts\\iscript.bin"].map((m, i) => (i === 0 && units ? null : files.read(m))));
+    const table = units ?? (u ? decodeUnitsDat(u) : null);
+    if (!table || !flingy || !sprites || !images || !iscript) return null;
+    return { units: table, flingy: decodeFlingyDat(flingy), sprites: decodeSpritesDat(sprites), images: decodeImagesDat(images), iscript: decodeIscript(iscript) };
   } catch {
     return null;
   }

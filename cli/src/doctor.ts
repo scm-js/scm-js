@@ -83,7 +83,7 @@ export function starcraftCheck(): Check {
     return { what: "StarCraft", state: "ok", detail: `${kind === "remastered" ? t("Remastered") : "1.16.1"}${pc.dim(` · ${folder}`)}`, path: folder };
   } catch (e) {
     if (!(e instanceof CliError)) throw e;
-    return { what: "StarCraft", state: "warn", detail: t("not found"), fix: t("scmjs bot run … --starcraft <folder>   (or SCMJS_STARCRAFT=<folder>)"), note: t("bot run, replay watch, replay export, map trace, map cost, map preview and map generate use your own installation's files.") };
+    return { what: "StarCraft", state: "warn", detail: t("not found"), fix: t("scmjs bot run … --starcraft <folder>   (or SCMJS_STARCRAFT=<folder>)"), note: t("bot run, replay watch, replay export, map trace, map cost, map preview, map analyze and map generate use your own installation's files.") };
   }
 }
 
@@ -238,7 +238,7 @@ const READY: { commands: string; needs: Need[] }[] = [
   { commands: "replay info|open", needs: [] },
   { commands: "mcp", needs: [] },
   { commands: "map build", needs: ["TypeScript"] },
-  { commands: "map preview|generate", needs: ["StarCraft"] },
+  { commands: "map preview|generate|analyze", needs: ["StarCraft"] },
   { commands: "bot new|build", needs: ["Docker"] },
   { commands: RUNNER_COMMANDS.bot, needs: ["StarCraft", "bot"] },
   { commands: RUNNER_COMMANDS.replay, needs: ["StarCraft", "replay"] },

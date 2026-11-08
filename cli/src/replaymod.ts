@@ -19,7 +19,7 @@ import { t, translate } from "./i18n";
 import { iscriptMembers, modTables } from "./mod/check";
 import { gameFilesOrNull, openMod } from "./mod/open";
 import { reader, type ModSource } from "./mod/source";
-import { CliError, dot, duration, mark, num, pc, table } from "./ui";
+import { CliError, dot, duration, mark, num, pc, table, visible } from "./ui";
 
 /** The hashes a replay may name the mod by. */
 export interface ModHashes {
@@ -53,7 +53,7 @@ export async function sourceHashes(source: ModSource, base: GameFiles | null): P
 export const isTaggedMod = (wanted: string, h: ModHashes): boolean => [h.hash, h.withoutPlugins, h.all, h.changed].includes(wanted);
 
 /** The mod a replay says it was played with, in one line: "Cosmonarchy BW · 1f2e3d4c5b6a7980". */
-export const modWords = (tag: ModTag) => `${tag.dataSet.name || t("a mod")}${dot}${tag.dataSet.hash}`;
+export const modWords = (tag: ModTag) => `${tag.dataSet.name || t("a mod")}${visible(dot)}${tag.dataSet.hash}`;
 
 /**
  * Refuses a replay of a mod for a command that plays the replay in the game engine, which would play it with the

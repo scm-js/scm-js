@@ -37,6 +37,7 @@ import type { TestWorld } from "../../plugins/trigscript/compiler/testing";
 import type { ScriptSettings } from "../../plugins/trigscript/script";
 import { outputFormat, writeBack, writeOutput } from "./exchange";
 import { STDIO, toStdout } from "./files";
+import { INSTALL } from "./runtime";
 import { CliError, dot, mark, pc, plural, size } from "./ui";
 
 /**
@@ -88,7 +89,7 @@ const LIB_ENTRY = "lib.es2023.d.ts";
 
 /**
  * TypeScript from the map's project (`from`, the working directory), else from beside this command (a clone, or a
- * global install next to a global TypeScript), else from npm's global folder. A CliError, with the install line,
+ * global install next to a global TypeScript; not for the single executable), else from npm's global folder. A CliError, with the install line,
  * when there is none.
  */
 export async function loadTypeScript(from = process.cwd()): Promise<TypeScriptModule> {
@@ -106,7 +107,9 @@ export async function loadTypeScript(from = process.cwd()): Promise<TypeScriptMo
 export function findTypeScript(from: string): string | null {
   const tries: (() => string)[] = [
     () => createRequire(join(resolve(from), "package.json")).resolve("typescript"),
-    () => createRequire(import.meta.url).resolve("typescript"),
+    // Beside the command: a clone, or a global install next to a global TypeScript. The single executable has no
+    // folder of packages beside it, so it looks in the project and npm's global folder only.
+    () => { if (INSTALL === "binary") throw new Error("no folder beside"); return createRequire(import.meta.url).resolve("typescript"); },
     () => {
       const root = execFileSync(process.platform === "win32" ? "npm.cmd" : "npm", ["root", "-g"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], shell: process.platform === "win32" }).trim();
       return createRequire(join(root, "package.json")).resolve("typescript");

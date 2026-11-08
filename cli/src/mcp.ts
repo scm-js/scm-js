@@ -3,7 +3,7 @@
  * (Claude Code, Cursor, VS Code, anything that speaks MCP) can read, check, search, compare and change maps the
  * way the terminal does — the same functions the commands call, with the result as text for the model and the
  * command's `--json` shape beside it. The client starts this as a child process and talks JSON-RPC over the pipe, and
- * every write goes to a file the client named. The map tools never touch the network; `map_trace` and `map_cost` fetch
+ * every write goes to a file the client named. The map tools never touch the network; `map_trace`, `map_cost` and `map_coverage` fetch
  * the game engine from the play page the first time, as their commands do, and `doctor` asks npm for a newer scmjs.
  */
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -22,7 +22,9 @@ import { ANCHORS, ENCODINGS, parseAnchor, pruneStrings, resizeMap, setHeader, VE
 import { exportStrings, exportTriggers, importStrings, importTriggers, writeBack } from "./exchange";
 import { expectKind, loadMapInput, loadReplayInput, readInput, type Input } from "./files";
 import { findInMap, KINDS, parseKinds, printHits } from "./find";
-import { issueLine, mapReport, printIssues, printMapInfo } from "./map";
+import { baselineLine, issueLine, mapReport, printIssues, printMapInfo } from "./map";
+import { mapKey, matchBaseline, readBaseline } from "./baseline";
+import { coverageJson, coverageScenario, printCoverage, runCoverage } from "./coverage";
 import { printReplayInfo, replayReport } from "./replay";
 import { mapFileFor, writeReplayMap } from "./replaymap";
 import { openGameFiles } from "./gamefiles";
@@ -95,7 +97,7 @@ const WIDTH = 140;
 export interface McpOptions { engine?: string; weigh?: string }
 
 /** What the client is told once, with the tool list: how the tools fit together. */
-export const INSTRUCTIONS = `scmJS: StarCraft: Brood War maps on this computer. Paths are files here, relative to the working directory. Start with map_info or map_dump to see what a map holds; map_check is Check Map (errors and warnings, as the editor's). Triggers and strings travel as text: map_triggers_export gives the trigger window's text form (https://docs.scmjs.dev/triggers/), which map_triggers_import takes back; strings are "<number><TAB><text>" lines. Tools that change a map write over it unless given "out"; they never renumber strings. Map text is never translated. map_preview shows the map as a picture, and map_trace and map_cost run it in the game itself; all three need a copy of StarCraft on this computer, and doctor says whether one is there and what to install if not. replay_map writes the map a replay was played on.`;
+export const INSTRUCTIONS = `scmJS: StarCraft: Brood War maps on this computer. Paths are files here, relative to the working directory. Start with map_info or map_dump to see what a map holds; map_check is Check Map (errors and warnings, as the editor's). Triggers and strings travel as text: map_triggers_export gives the trigger window's text form (https://docs.scmjs.dev/triggers/), which map_triggers_import takes back; strings are "<number><TAB><text>" lines. Tools that change a map write over it unless given "out"; they never renumber strings. Map text is never translated. map_preview shows the map as a picture, map_trace and map_cost run it in the game itself, and map_coverage counts which triggers fired over many replays; these need a copy of StarCraft on this computer, and doctor says whether one is there and what to install if not. replay_map writes the map a replay was played on.`;
 
 /**
  * The server with every tool registered, and their names; `connect` it to a transport (stdio for the command, in
@@ -119,14 +121,20 @@ export function createMcpServer(options: McpOptions = {}): { server: McpServer; 
 
   reg("map_check", {
     title: "Check Map",
-    description: "Check Map as the editor runs it: errors, then warnings, each with where it is; notes too with `all`. `failed` is true when there is an error.",
-    inputSchema: { path, all: z.boolean().optional().describe("list notes as well as errors and warnings") },
+    description: "Check Map as the editor runs it: errors, then warnings, each with where it is; notes too with `all`. `failed` is true when there is an error. With `baseline`, a file `scmjs map check --write-baseline` wrote, only the findings it does not hold are listed and can fail the map; `baseline` in the data says how many were known and how many are fixed since.",
+    inputSchema: { path, all: z.boolean().optional().describe("list notes as well as errors and warnings"), baseline: z.string().optional().describe("a baseline file (.scmjs-baseline.json): list only the findings it does not hold") },
     annotations: { readOnlyHint: true },
-  }, tool(async ({ path: file, all }) => {
+  }, tool(async ({ path: file, all, baseline }) => {
+    noPipe(baseline);
     const { input, doc } = await openMap(file);
     const r = mapReport(input, doc);
-    const issues = r.issues.filter((i) => all || i.level !== "info");
-    return ok([`${input.name}  ${issueLine(r.issues)}`, ...printIssues(r.issues, !!all)], { file: input.path, name: r.name, issues, failed: r.issues.some((i) => i.level === "error") });
+    const listed = (list: typeof r.issues) => list.filter((i) => all || i.level !== "info");
+    if (!baseline) return ok([`${input.name}  ${issueLine(r.issues)}`, ...printIssues(r.issues, !!all)], { file: input.path, name: r.name, issues: listed(r.issues), failed: r.issues.some((i) => i.level === "error") });
+    const known = readBaseline(baseline);
+    const m = matchBaseline(known.maps[mapKey(baseline, input.path)], r.issues, doc.scenario);
+    const fresh = listed(m.fresh);
+    const counts = { file: baseline, suppressed: listed(m.suppressed).length, fixed: m.fixed.length, new: fresh.length, fixedFindings: m.fixed.map(({ level, where, text }) => ({ level, where, text })) };
+    return ok([`${input.name}  ${baselineLine(fresh, counts)}`, ...printIssues(fresh, !!all)], { file: input.path, name: r.name, issues: fresh, failed: fresh.some((i) => i.level === "error"), baseline: counts });
   }));
 
   reg("map_dump", {
@@ -340,6 +348,26 @@ export function createMcpServer(options: McpOptions = {}): { server: McpServer; 
   }, tool(async (a, extra) => {
     const { input, doc, r, note } = await play("cost", a, extra);
     return ok([...note, ...printCost(input.name, doc.scenario, r, { all: !!a.all, width: WIDTH })], costJson(input.name, r));
+  }));
+
+  reg("map_coverage", {
+    title: "Which triggers fired in many games",
+    description: `Play each replay's game on the map in the game itself, as map_trace plays a replay, and count every trigger's firings over all of them (scmjs map coverage): for each trigger the games it fired in, how often in all and when first, then the triggers a player owned that never fired in any game, each with the condition that said no last. Replays are files or folders (sub-folders too); only Use Map Settings games of this map count (the same map, or one with the same name and size; \`force\` takes others). \`tests\` counts the map's tests (map.tests.json beside it) as games too. A game whose commands parted from the map counts only what fired before that, and the result says so. ${needs.replace(" Takes a few seconds for the default run.", "")} A replay takes about as many seconds as it has minutes of play, a few at once.`,
+    inputSchema: {
+      path,
+      replays: z.array(z.string()).describe("replay files (.rep) or folders of them; a tests file (.json) counts its scenarios"),
+      tests: z.boolean().optional().describe("count the games of the map's tests (<map>.tests.json beside it) too"),
+      force: z.boolean().optional().describe("take replays played on another map too"),
+      starcraft: z.string().optional().describe("the folder of the person's StarCraft installation, when doctor did not find one in the usual places"),
+      all: z.boolean().optional().describe("list every trigger, those no player in the games owned too"),
+    },
+    annotations: { readOnlyHint: true },
+  }, tool(async ({ path: file, replays, tests, force, starcraft, all }, extra) => {
+    noPipe(...replays);
+    const { input, doc } = await openMap(file);
+    const r = await runCoverage(input, doc, replays, { tests, force, starcraft, engine: options.engine, signal: extra.signal }, (line) => STDERR(visible(line)));
+    const scn = await coverageScenario(input);
+    return ok(printCoverage(r, scn, { all: !!all, width: WIDTH }), coverageJson(r, scn));
   }));
 
   reg("doctor", {

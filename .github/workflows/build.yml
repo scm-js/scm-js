@@ -6,15 +6,17 @@
 #             covers desktop/ through tsconfig.desktop.json, so a main-process type error
 #             is caught here too). Only the packaging step waits for the nightly.
 #
-#             A pull request runs the `channel` and `web` jobs and nothing else, and both
-#             are read-only (`permissions: contents: read` on the job). That is the whole
+#             A pull request runs the `channel` and `web` jobs, and `cli-binary` keeping its
+#             executables as an artifact, and nothing else; all three are read-only
+#             (`permissions: contents: read` on the job). That is the whole
 #             of what keeps a pull request from writing anything, so it rests on two
 #             things staying true: `channel` answers `ci` for a pull request before it
 #             looks at anything else, and `plugin-api` — the one publishing job the `ci`
 #             channel runs — says "not a pull request" in its own `if`. A job added later
 #             that runs on `ci` needs the same two questions asked of it.
 #   nightly   a daily cron (and manual dispatch) — installers for Windows, macOS and
-#             Linux plus a zip of the web bundle, on ONE rolling prerelease whose tag
+#             Linux, the `scmjs` command as a single executable for each (with a
+#             SHA256SUMS over every asset) plus a zip of the web bundle, on ONE rolling prerelease whose tag
 #             `nightly` is force-moved to the commit it was built from and whose assets
 #             are replaced in place. It is never deleted and never recreated, so the
 #             download counts survive and nobody watching releases is re-notified. The
@@ -52,6 +54,8 @@
 #   https://github.com/scm-js/scm-js/releases/latest/download/scmJS-linux-amd64.deb
 #   https://github.com/scm-js/scm-js/releases/latest/download/scmJS-macos-arm64.dmg
 #   https://github.com/scm-js/scm-js/releases/download/nightly/scmJS-windows-x64-setup.exe
+#   https://github.com/scm-js/scm-js/releases/latest/download/scmjs-windows-x64.zip  (the command line;
+#     scmjs-macos-arm64.tar.gz, scmjs-macos-x64.tar.gz, scmjs-linux-x64.tar.gz and SHA256SUMS too)
 #
 # That is why `electron-builder.yml` names the assets without the version in them: the
 # redirect can only work against a fixed file name. The version is in the release title,
@@ -146,6 +150,9 @@ concurrency:
 
 env:
   NODE_VERSION: 22
+  # The Node the single executables of `scmjs` carry (`cli-binary`): 24 or newer, whose
+  # single executable imports files from disk (TypeScript, plugins, the engine's runners).
+  SEA_NODE_VERSION: 24
 
 jobs:
   channel:
@@ -483,6 +490,58 @@ jobs:
           node dist/scmjs.mjs --version
           npm publish
 
+  # The command line as single executables with Node inside, for people without Node
+  # (docs/cli.md "Without Node", scripts/build-cli-binary.mjs): Node's single executable
+  # applications. One runner per OS, because a blob with V8's code cache is made by the
+  # target's own Node and a macOS executable is signed (ad hoc) on a Mac; the Apple-silicon
+  # runner makes the Intel one too, its Node run under Rosetta (without Rosetta the blob
+  # is made portable, without the cache). Each runner runs scripts/check-cli-binary.mjs
+  # over what it can run: the map commands, `map build` with TypeScript from a project,
+  # `map run`, `mcp`, and a script run as Node the way the game's runners are, with no
+  # Node on PATH. On a pull request the archives stay an artifact (this job is read-only,
+  # as `web` is) so they can be tried before merging; on the nightly and stable channels
+  # the `release` job attaches them beside the installers. npm's `cli` job is separate
+  # and unchanged: the package and the executables are built from one source.
+  cli-binary:
+    name: Command line executable (${{ matrix.os }})
+    needs: channel
+    if: needs.channel.outputs.channel == 'nightly' || needs.channel.outputs.channel == 'stable' || github.event_name == 'pull_request'
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            targets: linux-x64
+          - os: windows-latest
+            targets: win-x64
+          - os: macos-latest
+            targets: darwin-arm64,darwin-x64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.SEA_NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+      - run: npm version --no-git-tag-version --allow-same-version "${{ needs.channel.outputs.version }}"
+      # Vendors the plugins first when `plugins/` is missing, as build-cli.mjs does; the
+      # token keeps that off the anonymous rate limit.
+      - run: node scripts/build-cli-binary.mjs --target ${{ matrix.targets }} --archive --check
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cli-binary-${{ matrix.os }}
+          path: |
+            cli/dist/bin/*.tar.gz
+            cli/dist/bin/*.zip
+          if-no-files-found: error
+
   # `@scm-js/core`, the editor's map code as a library (core/, docs/core.md), on npm. Built
   # from the same source as the editor and the command, versioned with them and published
   # the same way as `cli` above: stable channel only, version checked against the release,
@@ -787,7 +846,7 @@ jobs:
 
   release:
     name: Release (${{ needs.channel.outputs.tag }})
-    needs: [channel, web, desktop]
+    needs: [channel, web, desktop, cli-binary]
     if: needs.channel.outputs.channel == 'nightly' || needs.channel.outputs.channel == 'stable'
     runs-on: ubuntu-latest
     steps:
@@ -795,9 +854,18 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           path: assets
-          # The web zip and the installers only — not the Pages artifact the web job also uploads.
-          pattern: "{web-zip,desktop-*}"
+          # The web zip, the installers and the command's executables — not the Pages
+          # artifact the web job also uploads.
+          pattern: "{web-zip,desktop-*,cli-binary-*}"
           merge-multiple: true
+      # One checksum file over every asset, in sha256sum's own form (`sha256sum -c
+      # SHA256SUMS` checks a download; Scoop's manifest reads the executable's line).
+      - run: |
+          cd assets
+          rm -f SHA256SUMS
+          sha256sum -- * > "$RUNNER_TEMP/SHA256SUMS"
+          mv "$RUNNER_TEMP/SHA256SUMS" SHA256SUMS
+          cat SHA256SUMS
       - run: ls -la assets
       - name: Publish
         shell: bash

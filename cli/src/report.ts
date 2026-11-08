@@ -133,3 +133,68 @@ export function sarifTestJson(reports: TestReport[], version: string): string {
   };
   return JSON.stringify(log, null, 2) + "\n";
 }
+
+/* ── `scmjs map coverage`'s triggers in the same forms ──────── */
+
+/** One trigger of a coverage run, as the formats need it. */
+export interface CoverageCase {
+  /** The trigger's number, as map trace prints it (1-based). */
+  number: number;
+  text: string;
+  games: number;
+  fired: number;
+  /** Why it never fired, for one that did not. */
+  why: string | null;
+}
+/** A map's coverage: the map as given, the games counted, the triggers a player in them owned, the games that parted from the map. */
+export interface CoverageForm { map: string; name: string; games: number; strict: boolean; cases: CoverageCase[]; parted: { name: string; clock: string }[] }
+
+const neverText = (r: CoverageForm, c: CoverageCase) => `Trigger #${c.number} never fired in ${r.games} game${r.games === 1 ? "" : "s"}: ${c.text}${c.why ? `\n${c.why}` : ""}`;
+const partedText = (p: CoverageForm["parted"][number]) => `${p.name} parted from the map at ${p.clock}: what fired after that is not counted`;
+
+/** A warning annotation per trigger that never fired (an error with `--strict`), a notice per game that parted from the map. */
+export function githubCoverageAnnotations(reports: CoverageForm[]): string[] {
+  return reports.flatMap((r) => [
+    ...r.cases.filter((c) => !c.fired).map((c) => annotation(r.strict ? "error" : "warning", { file: reportPath(r.map), title: `${r.name || reportPath(r.map)} · trigger #${c.number}` }, neverText(r, c))),
+    ...r.parted.map((p) => annotation("notice", { file: reportPath(r.map), title: `${r.name || reportPath(r.map)} · ${p.name}` }, partedText(p))),
+  ]);
+}
+
+/** JUnit XML: a test suite per map, a test case per trigger; one that never fired is skipped (failed with `--strict`). */
+export function junitCoverageXml(reports: CoverageForm[]): string {
+  const all = reports.flatMap((r) => r.cases), never = all.filter((c) => !c.fired).length;
+  const strict = reports.some((r) => r.strict);
+  const out = [`<?xml version="1.0" encoding="UTF-8"?>`, `<testsuites name="scmjs map coverage" tests="${all.length}" ${strict ? "failures" : "skipped"}="${never}">`];
+  for (const r of reports) {
+    const n = r.cases.filter((c) => !c.fired).length;
+    out.push(`  <testsuite name="${xml(r.name || reportPath(r.map))}" tests="${r.cases.length}" ${r.strict ? "failures" : "skipped"}="${n}">`);
+    for (const c of r.cases) {
+      const name = xml(`#${c.number} ${c.text}`);
+      if (c.fired) { out.push(`    <testcase name="${name}" classname="${xml(reportPath(r.map))}" file="${xml(reportPath(r.map))}"><system-out>${xml(`fired ${c.fired} time${c.fired === 1 ? "" : "s"} in ${c.games} of ${r.games} games`)}</system-out></testcase>`); continue; }
+      out.push(`    <testcase name="${name}" classname="${xml(reportPath(r.map))}" file="${xml(reportPath(r.map))}">`);
+      out.push(r.strict ? `      <failure message="never fired">${xml(neverText(r, c))}</failure>` : `      <skipped message="${xml(neverText(r, c).split("\n")[0])}"/>`);
+      out.push(`    </testcase>`);
+    }
+    if (r.parted.length) out.push(`    <system-out>${xml(r.parted.map(partedText).join("\n"))}</system-out>`);
+    out.push(`  </testsuite>`);
+  }
+  out.push(`</testsuites>`, "");
+  return out.join("\n");
+}
+
+/** SARIF 2.1.0: a result per trigger that never fired (a warning, an error with `--strict`), a note per game that parted. */
+export function sarifCoverageJson(reports: CoverageForm[], version: string): string {
+  const at = (r: CoverageForm) => [{ physicalLocation: { artifactLocation: { uri: reportPath(r.map), uriBaseId: "%SRCROOT%" } } }];
+  const results = reports.flatMap((r) => [
+    ...r.cases.filter((c) => !c.fired).map((c) => ({ ruleId: "scmjs/coverage-never-fired", level: r.strict ? "error" : "warning", message: { text: `${r.name || reportPath(r.map)}: ${neverText(r, c)}` }, locations: at(r) })),
+    ...r.parted.map((p) => ({ ruleId: "scmjs/coverage-parted", level: "note", message: { text: `${r.name || reportPath(r.map)}: ${partedText(p)}` }, locations: at(r) })),
+  ]);
+  const log = {
+    $schema: "https://json.schemastore.org/sarif-2.1.0.json", version: "2.1.0",
+    runs: [{ tool: { driver: { name: "scmjs map coverage", version, informationUri: "https://docs.scmjs.dev/cli/", rules: [
+      { id: "scmjs/coverage-never-fired", name: "never fired", shortDescription: { text: "A trigger a player owned that fired in none of the games" } },
+      { id: "scmjs/coverage-parted", name: "parted", shortDescription: { text: "A game whose players' commands parted from the map" } },
+    ] } }, results }],
+  };
+  return JSON.stringify(log, null, 2) + "\n";
+}

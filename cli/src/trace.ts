@@ -23,7 +23,9 @@ import { summarizeTrigger } from "../../src/formats/triggers/text";
 import { conditionDef } from "../../src/data/triggerDefs";
 import { createInterface } from "node:readline";
 import { FRAME_MS, type Replay } from "@scm-js/replay";
-import { ensureEngine, findGameCopy, runnerFor, startRunner } from "./engine";
+import { cacheRoot, ensureEngine, findGameCopy, runnerFor, startRunner, type Engine } from "./engine";
+import { VERSION } from "./about";
+import { assetFile, INSTALL } from "./runtime";
 import { diffMaps, summarizeDiff } from "./diff";
 import { GAME_TYPES } from "./replay";
 import { CliError, columns, dot, duration, mark, num, pc, plural, table } from "./ui";
@@ -71,6 +73,8 @@ export interface MapRunOptions {
   starcraft?: string;
   /** The play page's address, or a folder holding the engine. */
   engine?: string;
+  /** An engine already found, for several games in a row (`map coverage`): the page is asked once, not each game. */
+  ready?: Engine;
   /** The weigher's module, instead of the `weigh.mjs` beside the command. */
   weigh?: string;
   /** A replay whose commands are the game (the runner's `--play`); the map given is then played in place of its own, or none is given. */
@@ -94,11 +98,19 @@ export interface MapRunOutcome {
   end: TraceEndLine;
 }
 
-/** The weigher's module: named, or `weigh.mjs` beside the command (the build writes it; the source tree has none). */
+/**
+ * The weigher's module: named, or `weigh.mjs` beside the command (the build writes it; the source tree has none), or,
+ * in the single executable, the copy it carries written out to the cache folder.
+ */
 export function weighModule(named?: string): string {
   if (named) {
     if (!existsSync(named)) throw new CliError(`No file ${named}`, null, 2);
     return resolve(named);
+  }
+  if (INSTALL === "binary") {
+    const file = assetFile("weigh.mjs", join(cacheRoot(), "weigh"), VERSION);
+    if (!file) throw new CliError("This scmjs carries no weigher (weigh.mjs).", "scripts/build-cli-binary.mjs puts it inside the executable.");
+    return file;
   }
   const beside = fileURLToPath(new URL("./weigh.mjs", import.meta.url));
   if (!existsSync(beside)) throw new CliError("The weigher is not beside the command (weigh.mjs).", "npm run build:cli writes it next to scmjs.mjs; the published package carries it.");
@@ -164,7 +176,7 @@ async function runMap(map: string | null, what: "trace" | "cost", o: MapRunOptio
   if (o.replay && !existsSync(o.replay)) throw new CliError(`No file ${o.replay}`, null, 2);
   const weigh = what === "cost" ? weighModule(o.weigh) : null;
   const game = findGameCopy(o.starcraft);
-  const engine = await ensureEngine(o.engine, undefined, o.live ?? (() => {}));
+  const engine = o.ready ?? await ensureEngine(o.engine, undefined, o.live ?? (() => {}));
   const runner = runnerFor(engine, "map");
   const args = [...(map !== null ? [resolve(map)] : []), "--engine", engine.dir, "--starcraft", game.folder];
   if (o.replay) args.push("--play", resolve(o.replay));

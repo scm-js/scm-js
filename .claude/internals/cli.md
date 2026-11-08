@@ -1,6 +1,6 @@
 # The `scmjs` command line
 
-`cli/` is the npm package **`@scm-js/cli`** (its command is `scmjs`): `scmjs about | doctor | info | mcp | lsp | map info|check|open|new|generate|dump|find|fetch|set|resize|triggers|strings|sounds|diff|log|blame|merge|build|run|unpack|pack|trace|cost|rush|test [record]|preview|heatmap |
+`cli/` is the npm package **`@scm-js/cli`** (its command is `scmjs`): `scmjs about | doctor | info | mcp | lsp | map info|check|open|new|generate|dump|find|fetch|set|resize|triggers|strings|sounds|diff|log|blame|merge|build|run|unpack|pack|trace|cost|rush|test [record]|preview|heatmap|coverage |
 replay info|map|open|watch|export|share | plugin new|check|dev | bot new|init|build|update|run|ladder`, or `npx @scm-js/cli …`. npm refused the plain name `scmjs` on the first publish (2026-11-06,
 E403 "too similar to scss, sockjs"), so the user chose the scope beside @scm-js/replay and @scm-js/plugin-api. The reader's page is `docs/cli.md`. The shape was the user's (2026-11-05): one command, a noun for
 each kind of thing (`map`, `replay`, `plugin`, `bot`), "an impressive UX tool … not overly engineered".
@@ -38,6 +38,8 @@ command's output changes, with `--play-url` at a staged scm-sim deploy when the 
   throws on a package with no licence file); `cli/LICENSE` is a copy of the root one. Today: @scm-js/replay,
   commander, fflate (via mopaq), mopaq, picocolors; ATTRIBUTION.md has a table for them. Added 2026-11-06 just
   before the first publish, which had gone without either (the publish failed on 2FA first). commander 15 needs Node ≥ 22.12 (`engines`).
+  The Vite builds live in `scripts/lib/cli-bundle.mjs` (`bundleCli`, `bundleWeigh`), shared with the single
+  executable's CommonJS build ("Without Node" below); the npm bundle differs only by the `__SCMJS_INSTALL__` define.
 - **Type-checked** by `tsconfig.cli.json` (in `tsc -b`'s references): `types: node, vite/client`, `cli/src` only
   (it pulls in the `src/` files it imports). `tests/cli.test.ts` covers the pieces; `npm run cli -- …` runs it.
 - **Output** (`cli/src/ui.ts`): picocolors decides colour (`NO_COLOR`, `FORCE_COLOR`, `--no-color`, a pipe). Marks
@@ -1871,3 +1873,198 @@ line merges and a PR reads the real change. Branch `cli-map-source`. `map dump` 
   first pack would change those sections); `map diff` between two folders (today: pack both); `init` does not offer the
   folder workflow (docs mention it as the alternative); resizing by editing the text is refused by the grids' shape
   checks (use `map resize`); ISOM as hex words is mergeable but not readable — a diamond-per-cell form would be.
+## Without Node: single executables (`cli/src/runtime.ts`, `sea.ts`, `scripts/build-cli-binary.mjs`) — 2026-11-07
+
+The user's ask: "most Windows map makers do not have Node installed" — one executable per platform on the
+GitHub release, with install recipes. PR on branch `cli-binary`.
+
+**The spike** (Linux x64 under WSL2, Node v24.13.0, Bun 1.4.4; wall time per run over 10 runs, `tests/maps/melee.scx`):
+
+| Option | Worked | Size (Linux; packed) | `--version` | `info melee.scx` |
+| --- | --- | --- | --- | --- |
+| npm bundle on Node (baseline) | — | 5.5 MB | 148 ms | 182 ms |
+| **Node SEA, V8 code cache** | every check below, Windows exe too | 122.9 MB; tar.gz 42.0 MB (Windows exe 91.2 MB, zip 34.2 MB) | **74 ms** | **102 ms** |
+| Node SEA, no code cache | the same | 120.9 MB | 136 ms | 169 ms |
+| `bun build --compile` | map info/check/dump, `map run` plugin, runners (trace, cost) under Bun | 114 MB; gz 53 MB (Windows 120.6 MB) | 131 ms | 150 ms |
+| `bun build --compile --bytecode` | (not re-run beyond startup) | 126.6 MB | 29 ms | 43 ms |
+| Deno compile | not tried: 1 and 2 both worked | | | |
+
+`about` is 503 ms (npm) vs 455 ms (SEA): the npm registry call dominates. **Chose Node SEA**: the runners are the
+lifted game, and under Bun they would run on JavaScriptCore rather than the V8 the play page, the tests and every
+replay check run on (Math functions and number formatting are implementation-defined, so a replay's exactness is
+not a given across engines); every Node API the command uses is Node's own. Bun's two advantages — 45 ms faster
+start with bytecode, and cross-compiling all four from one machine — did not outweigh a second runtime under the
+game. SEA's own cost: three runners in CI, ~120 MB a file (the Node executable).
+
+**How it is built** (`npm run build:cli-binary`, `node scripts/build-cli-binary.mjs [--target linux-x64,darwin-arm64,darwin-x64,win-x64] [--archive] [--check] [--download] [--no-code-cache]`):
+1. `bundleCli({ install: "binary" })` → `cli/dist/bin/.work/scmjs.cjs`: **CommonJS** (SEA runs only CJS), entry
+   `cli/src/sea.ts`, `__SCMJS_INSTALL__ = "binary"`; `weigh.mjs` built as for npm.
+2. Per target, the Node executable: this computer's own (`process.execPath`) for the host target, else the
+   official one of **the same version** from nodejs.org, checked against `SHASUMS256.txt` and cached in
+   `~/.cache/scmjs-build/node/<version>/<target>/` (`SCMJS_BUILD_CACHE`).
+3. The blob (`--experimental-sea-config`): `assets: { "weigh.mjs" }`, `disableExperimentalSEAWarning`, and
+   `useCodeCache: true` **only when made by the target's own Node** (code cache is V8- and flag-specific), i.e.
+   the host, or darwin-x64 on Apple silicon through Rosetta; otherwise a portable blob any Node of that version
+   reads (a Windows exe built from Linux was run through WSL interop: map info/about/trace/cost all fine).
+4. `npx --yes postject@1.0.0-alpha.6 … NODE_SEA_BLOB … --sentinel-fuse NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2`
+   (`--macho-segment-name NODE_SEA` on macOS) — npx, not a devDependency: postject is in the lock only as an
+   optional transitive of electron-builder, and making it direct meant hand-editing the lock. macOS: `codesign
+   --remove-signature` before and `codesign --sign -` (ad hoc) after, so **a Mac target needs a Mac**.
+5. `--version` of the result must say the package version (when it runs here); `--archive` packs
+   `scmjs[.exe]` + `LICENSE` + `THIRD-PARTY-NOTICES.txt` (the bundle's notices **plus Node's own LICENSE**, fetched
+   from `raw.githubusercontent.com/nodejs/node/<version>/LICENSE` — V8, ICU, OpenSSL… ship inside) into
+   `scmjs-<windows|macos|linux>-<arch>.{zip|tar.gz}` (the desktop's naming) and writes a local `SHA256SUMS`. The
+   zip is written by hand (`zlib.crc32` + `deflateRawSync`, no fflate import — it is only transitive via mopaq).
+   Archives rather than bare executables: the exec bit survives a browser download and they are a third the size.
+6. `--check` runs `scripts/check-cli-binary.mjs <exe>` — the hand/CI check: **no `node` or `npm` on PATH** (every
+   PATH folder holding one dropped), a temp folder, and: --version, the overview, `about`/`doctor --json` say
+   `install.kind: "binary"`, map info (file and stdin), check over tests/maps, new, dump, find, set+diff,
+   unpack+pack round trip, triggers export, preview refusing a non-game folder, `map run` with a .js plugin,
+   **`map build` with TypeScript from a project's node_modules** (a link to the clone's), `map build` without
+   TypeScript failing with the install line, a script run as Node with a file Worker (as runners do), `mcp`
+   initialize + tools/list; `--replay <file>` adds replay info/map, `--game` adds `map trace`/`map cost` in the
+   game. All pass on Linux (2026-11-07), including `--game` with the cached engine 1248410ad2a0 and Remastered.
+
+**What differs at run time** (all in `runtime.ts`):
+- **`import()` from disk works in SEA on Node 24** (TypeScript, `map run`'s plugin modules, runners) — checked
+  directly; the build refuses Node < 24 rather than finding out what 22 does. `vm`'s
+  `USE_MAIN_CONTEXT_DEFAULT_LOADER` also worked but is not needed.
+- **Runners**: `startRunner` spawns `process.execPath`, which in SEA is scmjs itself. `runnerEnv` adds
+  `SCMJS_RUN_AS_NODE=1` (only when the "node" is `process.execPath` and this is the binary; `--node` elsewhere is
+  left alone); `sea.ts` sees it and calls `runAsNode`, which **rewrites argv**: SEA's is `[exe, exe-as-typed,
+  script, …]`, Node's `[node, script, …]`, and the runners decide they are the main module by
+  `import.meta.url === pathToFileURL(process.argv[1])`, so `scriptArgv` drops index 1 and resolves the script. The
+  CLI is a lazy `import("./main")` in `sea.ts`, so a runner's process never builds the command tree. The variable is
+  inherited by the runner's children (as `ELECTRON_RUN_AS_NODE` is); runners spawn none today.
+- **`weigh.mjs`** (map cost hands its path to the map runner): `assetFile` writes the SEA asset to
+  `cacheRoot()/weigh/<version>-weigh.mjs` (compared each run, written via a `.part` rename) — `process.getBuiltinModule("node:sea")`, no static import of `node:sea`.
+- **TypeScript**: `findTypeScript` skips "beside the command" in the binary; the project (cwd) and `npm root -g`
+  remain (no npm → caught → "TrigScript compiles with TypeScript…"). doctor's TypeScript note adds that npm comes
+  with Node.
+- **`about`**: `install: { kind, manager, path, update }` in the JSON, an `Installed` row (`npm package` /
+  `single executable[, from Scoop|winget|Homebrew]` + path), Node marked `(inside scmjs)`, and **Newest** offers
+  `updateCommand(install)`: npm's line, `scoop update scmjs`, `winget upgrade scm-js.scmjs`, `brew upgrade scmjs`,
+  or `download it again from https://github.com/scm-js/scm-js/releases/latest`. The manager is read off the
+  executable's path (`managerOf`: `/scoop/apps|shims/`, `/microsoft/winget/`, `/cellar/|/homebrew/|/linuxbrew/`).
+  "Newest" still asks npm: both kinds are released together with one version.
+- **`doctor`**: the scmjs check's detail gains ` · single executable[, from …]` (so the title line says it; npm
+  says nothing more, keeping the docs' sample), its fix is `updateCommand`; `nodeCheck(_, "binary")` is never bad;
+  `doctorReport`/`doctorJson` carry `install`; Claude Code's fix is `mcpAddLine` (`claude mcp add scmjs -- scmjs
+  mcp` from a package manager, else the executable's own path, quoted when it has spaces; Scoop's/Homebrew's
+  versioned folders would break a path on update). `versionCheck(latest?, install?)` takes both for tests;
+  "is on npm" became "is out".
+- **No top-level await anywhere in `cli/src`** (CJS): `main.ts`'s run is `void run()` now;
+  `tests/cli-binary.test.ts` walks every module with TypeScript's parser for an `await` outside a function.
+
+**CI** (`build.yml` `cli-binary`, see `desktop-releases.md`): three runners, `--archive --check`, artifacts
+`cli-binary-<os>`; on PRs as a dry run; `release` attaches them and writes `SHA256SUMS` over all assets.
+**Recipes** (`packaging/`, `packaging/README.md`): Scoop manifest (autoupdate, hash from `$baseurl/SHA256SUMS`
+by `$sha256\s+\*?$basename`), winget 1.9.0 manifests (zip + nested portable, alias `scmjs`; `winget validate`
+passed on Windows 11 through WSL), Homebrew formula (on_macos arm/intel, on_linux intel, `bin.install`, test
+`--version`, livecheck github_latest); `@VERSION@`-style placeholders filled by `scripts/release-recipes.mjs`
+(`scripts/lib/recipes.mjs`, `tests/release-recipes.test.ts`) into ignored `packaging/out/v<version>/`.
+
+**Traps**
+- postject on Linux prints `warning: Can't find string offset for section name '.note.100'` many times; harmless,
+  hidden unless postject fails.
+- A distribution's own Node may lack the SEA fuse (postject then cannot find the sentinel): `--download` uses the
+  official build for the host too. `/usr/bin/node` on this machine (NodeSource) has it.
+- `cli/dist/bin/` sits inside the npm package's `dist/`; `npm pack`'s prepack empties `cli/dist` first, and the CI
+  `cli` job never builds executables, so none can be published to npm. Never commit `cli/dist`.
+- The npm bundle's behaviour is unchanged (`__SCMJS_INSTALL__` is "npm", folded to constants); diffed after the
+  refactor, the only changes were the new code.
+
+**Leftovers**: signing (Authenticode, Developer ID + notarization) — the hook is after the injection; Linux arm64
+and Windows arm64 executables (SEA needs a runner of each; GitHub has `ubuntu-24.04-arm` and `windows-11-arm`);
+`useSnapshot` (startup) not tried; the Scoop bucket and Homebrew tap repositories do not exist yet, and the docs
+already give their commands.
+## Many games and old maps: `map coverage`, `map check --baseline` (`coverage.ts`, `baseline.ts`) — 2026-11-07
+
+`scmjs map coverage <map> [replays…] [--tests] [--strict] [--format text|json|github|junit|sarif] [--all] [--force]
+[--parallel n] [--starcraft]` and `scmjs map check … --baseline [file] | --write-baseline [file]`. One PR (branch
+`cli-coverage-baseline`); no scm-sim change — the map runner's `--play` + `--order` already said everything needed.
+Docs: `docs/cli.md` "A baseline for old maps" (under Checking a map) and "Which triggers fired across many games"
+(Running a map in the game, after "A test from a replay"), reference rows, cheat sheet, AI tools row, exit codes.
+
+- **Coverage = `map trace --replay` per replay, added up.** `runCoverage`: `replayFiles(paths, deep = true)` (new
+  `deep` parameter on heatmap's walker; heatmap itself still takes a folder's own files only), dedupe by sha256,
+  `matchReplay` against `mapIdentity` (same scenario, else same name + size; `--force` takes the rest) — heatmap's rule,
+  so a newer version of a map still takes the old replays — then **non-UMS replays are left out before anything runs**
+  (`header.gameType !== 10`: in melee the game runs its own triggers; the trace would hold only row −1 copies, and
+  39 of the 42 psistorm replays are melee/1v1/TvB). Each taken replay → `gameMap` (a 1.00 map converted per run, since
+  `runMapInGame` deletes its temp copy) → `runMapInGame(map, "trace", { replay, order: true, every: 0, ready })`.
+  **`MapRunOptions.ready`** (new, additive): an `Engine` found once, so N games ask the page's `current.json` once and
+  parallel workers never race the first fetch into the cache. Workers as heatmap's (`defaultParallel`: half the CPUs,
+  ≤ 4, a game per GB). A CliError matching /from before/ (older runner) aborts the whole run; any other error is that
+  replay's: listed under left out, `exitCode = 1` (heatmap's convention); none played at all → CliError.
+- **Rows owned vs not**: `gameRows` folds a game's `CopyLine`s per map row; `addGames` sums games-fired-in, firings,
+  first firing + `firstIn`, latest `lastFail` + its game. The table, the counts and `--strict` cover only rows a player
+  in at least one game had a copy of (`players.length`), as `map trace --replay` lists only owned rows — a 1,713-row
+  EUD map (투혼) has 5 owned; "N more owned by no player in these games" is said, `--all` lists them, the JSON has
+  `owned: false`. Decided: a trigger for P8 cannot be expected to fire when no game had a P8, so it does not fail
+  `--strict`.
+- **A parted game counts up to the parting.** Always asking `--order` (≤ 10,000 kept by the runner) lets
+  `gameRows(lines, rows, parted, order)` count firings with `frame < parted` and the first one; past what the order
+  kept, a copy whose `firstFired < parted` counts once. `lastFail` after the parting is not used for "why". Test
+  scenarios driven by a replay have no order: the `firstFired` rule only. Games that parted get ▲ in their line and a
+  summary line; github/sarif carry a notice/note per parted game, junit a `<system-out>`.
+- **`--tests`** = `<map>.tests.json` beside the map; any `.json` among the sources is a tests file too. `readTests` +
+  `runTests({ quiet, out: <temp>, onEnd })`: `onEnd` hands the raw end, folded with `shift = p.before.length` (the
+  setup's triggers come first); pass/fail is ignored (map test's job); the failed scenarios' replays go to a temp
+  folder that is removed. Tests run after the replays, one at a time (runTests is sequential), and runTests asks
+  `ensureEngine` again itself (one more `current.json` fetch; not threaded through to keep maptest.ts untouched).
+- **Output**: a skipped line per reason (heatmap's `skippedLines`), the header, a line per game as it ends (`k/K ✔|▲|✖
+  name  m:ss · n players · n triggers fired [· parted at m:ss, counted to there] · s`), then the summary `✔|▲|✖ map:
+  F of N triggers fired in K games; L never fired · X more owned by no player…`, the table (#, Games k/K, Fired, First
+  as the game clock, Players from the copies, the trigger window line via trace's `rowText`), cut at 40, then "Never
+  fired" with `neverWhy` (the condition, the game, the clock). Test games are named `test "<name>"` (`gameName`). In
+  machine formats the live lines go to stderr. `coverageJson` adds per row `number`, `owned`, `firstClock`, `owners`
+  (summarizeTrigger's players), plain `text`, `why`. CI forms in report.ts (`CoverageForm`): github warning per
+  never-fired (error with `--strict`), junit a case per owned trigger (never fired = `<skipped>`, `<failure>` with
+  strict), SARIF rules `scmjs/coverage-never-fired` and `scmjs/coverage-parted`.
+- **Measured** (Remastered copy, the engine of scmjs.dev/play build 1248410ad2a0 from the cache, 24 cores): 투혼 map
+  from 1631.rep over the 39 psistorm replays: 38 left out (36 other maps, 3 1v1 on 투혼), 1631 played in 7.3 s, 8.6 s
+  wall; the result matches `map trace --replay 1631.rep` (4 of 5 fired, #1711 never). Fighting Spirit map from 1603.rep
+  with `--force`: 6 UMS replays, 4 at a time, 31 s wall (1603: 34 min of play in 30.5 s); the five from other maps
+  parted at 0:00–1:46 and were counted only to there. ums.scx `--tests`: three scenarios in 7.4 s, #2 never fired.
+- **`map check --baseline`** (`baseline.ts`): the file is `{ about, version: 1, maps: { "<path from the file's folder,
+  />": [{ level, where, text, id? }] } }`, maps sorted, entries sorted by where then identity (diffs well), `id` only
+  when it differs from `text`. Default `.scmjs-baseline.json` in the cwd. **Identity** (`findingId`, matched with
+  `where` as a multiset — each known entry answers for one finding): `Issue` carries only `{level, text, where,
+  target?}`, no rule code, and the target index shifts, so the text is the key with the moving parts taken out:
+  every `Trigger N` / `Briefing N` in the text (whether or not `target` is the trigger — the CUWP "uses slot" notes
+  point at the dialog) becomes `Trigger @<sha1 of formatTrigger(t, triggerNames(scn))[0..8]>`; counts before
+  `units|unit types|strings|tiles|mineral fields|triggers|start locations|bytes` (optionally `more`/`other`/`placed`)
+  and `N%` become `#`; `(the first …)` examples are dropped. **Why the trigger's text and not `fingerprintTrigger`**:
+  the first try used the fingerprint, and a `triggers export|import` round trip on Wakka Wakka (140 triggers, 81
+  findings) changed 75 of them — the import re-interns strings (`a.text` 131 → 65) and normalises flag bits (0 → 16,
+  8 → 16) — so every known trigger finding came back as new. The text form names strings by content, which survives
+  renumbering; with it, two triggers prepended to Wakka Wakka leave all 81 known and report only the one new finding.
+  The price: editing the trigger, or renaming a location/switch it names, makes its findings new (documented as
+  "look at them again"). Level is not in the key (a level change with the same text is the same finding). Kept as
+  is: locations, players, switch numbers, unit name + position (they name the thing).
+- **The command** (main.ts): `--baseline [file]` and `--write-baseline [file]` are optional-value options, so
+  `--baseline a.scx b.scx` would take the map as the file: a value ending `.scm|.scx|.chk` is pushed back into the maps
+  and the default file used. A missing file with `--baseline` → exit 2 naming `--write-baseline`; with
+  `--write-baseline` a missing file is fine and an existing one is read first, so the per-map line says what changed
+  (`(1 new, 1 fixed and dropped)`) and the other maps in the file are kept. Nothing is written when no map could be
+  read. Standard input is refused (a map is keyed by its path). Write mode exits 0. `failed` and the exit code are
+  computed on the new findings only; `--format github|junit|sarif` get `issues` = new only; `--json` adds `baseline:
+  { file, suppressed, fixed, new, fixedFindings, written? }`. Fixed = known entries no current finding (notes
+  included, so a baseline written with `--all` does not report its notes as fixed when checked without it). Text: `✔
+  no new problems · N known, M fixed since the baseline`, `▲ 1 new warning · …`, and the multi-map summary adds `N
+  known findings left out, M fixed since the baseline`.
+- **MCP**: `map_check` gained `baseline` (read only; writing stays the command's), `map_coverage` (path, replays[],
+  tests, force, starcraft, all; lines to stderr, `coverageJson` as data; the client's cancel stops the games through
+  `signal`) — 22 tools. No progress notifications for coverage (a game's progress lines are off: `every: 0`).
+- **Tests**: `tests/cli-baseline.test.ts` (6: identity, matching, the file, and the command end to end through the
+  exported `program.parseAsync(args, { from: "user" })` with stdout/stderr spied — the first CLI test to drive whole
+  commands that way; commander 15 resets option values between parses), `tests/cli-coverage.test.ts` (6: folding with
+  and without a parting, adding up, the run over `FAKE_RUNNER` with replays written by `@scm-js/replay/write` incl. a
+  sub-folder, a duplicate, a melee one, another map's, a non-replay; the CI forms; tests over `FAKE_TEST_RUNNER`; the
+  refusals, `--force`, an older runner, a refused map), `tests/cli-mcp.test.ts` +2 and the tool list.
+- **Not built**: a per-game breakdown in text (the JSON has each game's count; per-row per-game is not kept); caching
+  a replay's trace by its hash and the map's (heatmap caches events; coverage plays every replay each run — a cache
+  keyed by replay + map scenario hash would make re-runs after a trigger edit still replay everything, since the map
+  changed, so it would only help unchanged maps); progress over MCP; `--since <baseline>` style coverage ratchets;
+  `map check --baseline` across renamed maps (the key is the path).

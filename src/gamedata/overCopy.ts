@@ -24,7 +24,8 @@ import type { Params } from "../i18n";
 import { storedPathOf } from "./paths.ts";
 import { decodeDat, type DatFile } from "../formats/dat/table.ts";
 import { DAT_SCHEMAS } from "../formats/dat/schema.ts";
-import { dataSetHashOfDigests, fileDigest, gameName } from "../formats/mod/sources.ts";
+import { fileDigest, gameName } from "../formats/mod/sources.ts";
+import { isFiregraftProject, isModCode, isPluginFile, modHashOfDigests, type Digest, type ModHash } from "../formats/mod/hash.ts";
 import {
   DATEX_TABLES, EXTRA_TABLES, extractGameData, ExtractError, ICON_FILES, reportStep, SOUND_TABLES, UNIT_EXTRA_FILES, UNIT_TABLES,
   type ExtractProgress, type GameDataExtraction, type ReadMember,
@@ -174,48 +175,28 @@ export async function hdOffImages(over: OverCopyExtraction, copy: CopyReader): P
 export type MemberBytes = (member: string) => Uint8Array | null | Promise<Uint8Array | null>;
 
 /**
- * The data set's hash: core's `dataSetHash` — the one `scmjs mod play` hands the play page —
- * over the set's own files that differ from the base's. `names` are the members the set may
- * have (its loose files, its archives' listed members, what the extraction asked for);
- * `own` answers from the set's own files only, `base` from what they are laid over (the
- * game's archives, or the copy underneath and, where that lacks a file, the game's
- * archives when they are at hand). A file the base has byte for byte is not part of the mod
- * and not hashed; a file the base lacks is, and is listed in `unbased` (sorted): counted as
- * the set's own for want of anything to compare it with. Files are read and digested one
- * at a time. `hash` is null when nothing differs.
+ * The data set's hash: core's `modHashOfDigests` — the mod's hash, as the play page and the
+ * command line work it out — over **every** file the set provides, never compared with the copy
+ * it is laid over (two people with different copies name the same mod alike). `names` are the
+ * members the set has (its loose files, its archives' listed members, or the names looked for
+ * in an archive with no list); `own` answers from the set's own files only (null: not there, as
+ * a member an archive lists and does not hold). A plugin or FireGraft file among the names is
+ * not a game file: a FireGraft project in the mod's archive is a line of its own, a plugin there
+ * is not (the play page does not load it). `code` is the plugins and FireGraft files the set
+ * carries as files. Files are read and digested one at a time. Null when the set has no game
+ * file at all.
  */
-export async function changedFiles(names: Iterable<string>, own: MemberBytes, base: MemberBytes): Promise<{ hash: string | null; unbased: string[] }> {
-  const digests: { name: string; sha256: string }[] = [];
-  const unbased: string[] = [];
-  for (const name of new Set([...names].map(gameName))) {
-    const mine = await own(name);
-    if (!mine) continue;
-    const theirs = await Promise.resolve(base(name)).catch(() => null);
-    if (theirs && sameBytes(mine, theirs)) continue;
-    if (!theirs) unbased.push(name);
-    digests.push({ name, sha256: await fileDigest(mine) });
+export async function dataSetHashOf(names: Iterable<string>, own: MemberBytes, code: readonly { name: string; bytes: Uint8Array }[] = []): Promise<ModHash | null> {
+  const files: Digest[] = [], plugins: Digest[] = [], firegraft: Digest[] = [];
+  for (const c of code) {
+    if (isPluginFile(c.name)) plugins.push({ name: c.name, sha256: await fileDigest(c.bytes) });
+    else if (isFiregraftProject(c.name)) firegraft.push({ name: c.name, sha256: await fileDigest(c.bytes) });
   }
-  unbased.sort();
-  return { hash: digests.length > 0 ? await dataSetHashOfDigests(digests) : null, unbased };
-}
-
-/** `changedFiles`' hash alone. */
-export async function changedFilesHash(names: Iterable<string>, own: MemberBytes, base: MemberBytes): Promise<string | null> {
-  return (await changedFiles(names, own, base)).hash;
-}
-
-/**
- * Bases read in turn: the first that has a member answers. How the hash looks past a copy
- * that lacks a file (a copy laid over another keeps only the editor's files) to the copy
- * under that, then to the game's archives when the install was handed them.
- */
-export function firstOf(...bases: (MemberBytes | null | undefined)[]): MemberBytes {
-  const list = bases.filter((b): b is MemberBytes => !!b);
-  return async (name) => {
-    for (const b of list) {
-      const got = await Promise.resolve(b(name)).catch(() => null);
-      if (got) return got;
-    }
-    return null;
-  };
+  for (const name of new Set([...names].map(gameName))) {
+    if (isModCode(name) && !isFiregraftProject(name)) continue;
+    const mine = await Promise.resolve(own(name)).catch(() => null);
+    if (!mine) continue;
+    (isFiregraftProject(name) ? firegraft : files).push({ name, sha256: await fileDigest(mine) });
+  }
+  return files.length > 0 ? modHashOfDigests({ files, plugins, firegraft }) : null;
 }

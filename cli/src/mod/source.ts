@@ -8,9 +8,8 @@ import { readdir, readFile, stat } from "node:fs/promises";
 import { basename, join, relative, resolve } from "node:path";
 import { Archive } from "mopaq";
 import { exeArchive, gameName, isMpq, isZip, modRoot, readZip, ModSourceError } from "../../../src/formats/mod/sources";
+import { probeNames } from "../../../src/formats/mod/hash";
 import { MOD_MANIFEST, readManifest, type ModManifest } from "../../../src/formats/mod/folder";
-import { DAT_SCHEMAS, DAT_TABLES } from "../../../src/formats/dat/schema";
-import { decodeTblFile } from "../../../src/formats/dat/tblFile";
 import type { GameFiles } from "../gamefiles";
 import { t } from "../i18n";
 import { CliError } from "../ui";
@@ -50,6 +49,8 @@ export interface ModSource {
   manifest: ModManifest | null;
   /** Archives with no file list, read by the names the game uses. */
   probed: string[];
+  /** Members an archive lists and does not hold (by game name, with the archive's): not the mod's files. */
+  unheld: string[];
 }
 
 /** A source's files read by the game's name, any case, or null. */
@@ -62,8 +63,9 @@ interface Piece { path: string; size: number; read(): Promise<Uint8Array> }
 
 async function walk(dir: string, prefix = ""): Promise<Piece[]> {
   const out: Piece[] = [];
-  // (A dot folder is a tool's own — git's, an editor's — never the game's.)
-  const entries = (await readdir(dir, { withFileTypes: true })).filter((e) => !e.name.startsWith("."));
+  // (A dot folder is a tool's own — git's, an editor's — never the game's. A dot file is the mod's as any other file is:
+  // the play page counts it, so the hash does.)
+  const entries = (await readdir(dir, { withFileTypes: true })).filter((e) => !(e.isDirectory() && e.name.startsWith(".")));
   entries.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
   for (const e of entries) {
     const full = join(dir, e.name), path = prefix ? `${prefix}/${e.name}` : e.name;
@@ -71,18 +73,6 @@ async function walk(dir: string, prefix = ""): Promise<Piece[]> {
     else if (e.isFile()) { const s = await stat(full); out.push({ path, size: s.size, read: async () => new Uint8Array(await readFile(full)) }); }
   }
   return out;
-}
-
-/** The names the game reads, to look for in an archive that has no list of its files. */
-function probeNames(archive: Archive): string[] {
-  const names = new Set<string>();
-  for (const t of DAT_TABLES) { names.add(DAT_SCHEMAS[t].file); names.add(`${DAT_SCHEMAS[t].file}ex`); }
-  for (const n of ["rez\\stat_txt.tbl", "rez\\unitnames.tbl", "arr\\images.tbl", "arr\\sfxdata.tbl", "arr\\portdata.tbl", "arr\\mapdata.tbl", "scripts\\iscript.bin", "scripts\\aiscript.bin", "scripts\\bwscript.bin", "unit\\cmdbtns\\cmdicons.grp", "unit\\cmdbtns\\ticon.pcx", "unit\\cmdbtns\\uniticons.grp", "game\\tunit.pcx", "game\\tselect.pcx", "game\\tminimap.pcx", "game\\tblink.pcx", "triggers\\melee.trg"]) names.add(n);
-  for (const t of ["badlands", "platform", "install", "ashworld", "jungle", "desert", "ice", "twilight"]) for (const ext of ["cv5", "vf4", "vr4", "vx4", "vx4ex", "wpe", "grp", "dddata.dat"]) names.add(ext.includes(".") ? `tileset\\${t}\\${ext}` : `tileset\\${t}.${ext}`);
-  for (const [tbl, under] of [["arr\\images.tbl", "unit\\"], ["arr\\sfxdata.tbl", "sound\\"]] as const) {
-    try { for (const s of decodeTblFile(archive.readFile(tbl)).strings) { const p = s.replace(/\0[\s\S]*$/, ""); if (p) names.add(under + p); } } catch { /* not in this archive */ }
-  }
-  return [...names].filter((n) => { try { return !!archive.fileInfo(n); } catch { return false; } });
 }
 
 /** Opens what the person named. A mod folder is packed in memory by `pack` (handed in, to keep the modules apart). */
@@ -115,7 +105,7 @@ export async function gameSource(files: GameFiles, names: readonly string[]): Pr
 }
 
 export function emptySource(path: string, kind: SourceKind, name: string): ModSource {
-  return { path, kind, name, layers: [], files: new Map(), plugins: [], firegraft: [], exes: [], duplicates: [], left: [], manifest: null, probed: [] };
+  return { path, kind, name, layers: [], files: new Map(), plugins: [], firegraft: [], exes: [], duplicates: [], left: [], manifest: null, probed: [], unheld: [] };
 }
 
 async function fromPieces(path: string, kind: SourceKind, name: string, pieces: Piece[]): Promise<ModSource> {
@@ -128,9 +118,12 @@ async function fromPieces(path: string, kind: SourceKind, name: string, pieces: 
       const leaf = p.path.split("/").pop()!.toLowerCase();
       if (/\.(qdp|bwl)$/.test(leaf)) { source.plugins.push({ name: p.path, bytes: p.size, read: p.read, layer: p.path }); continue; }
       if (/\.(fgp|fgd)$/.test(leaf)) { source.firegraft.push({ name: p.path, bytes: p.size, read: p.read, layer: p.path }); continue; }
+      // (A program's library is never one of the game's files, wherever it is: the play page leaves it out too.)
+      if (leaf.endsWith(".dll")) { source.left.push(p.path); continue; }
       if (leaf === "mod.json" && p.path.split("/").length <= 2) {
         try { const n = JSON.parse(new TextDecoder().decode(await p.read())).name; if (typeof n === "string" && n.trim()) modName = n.trim(); } catch { /* not ours to read */ }
-        continue;
+        // (Beside the game's folders it is left out below, as a read-me is; under them it is a file of the mod's.)
+        if (!p.path.includes("/")) continue;
       }
       if (!/\.(zip|mpq|exe)$/.test(leaf)) { loose.push(p); continue; }
       const bytes = await p.read();
@@ -154,14 +147,18 @@ async function fromPieces(path: string, kind: SourceKind, name: string, pieces: 
 
   for (const { label, archive } of archives) {
     source.layers.push(label);
-    // A list of the archive's files may be partial (Blizzard's own are): the names the game reads are looked for too.
-    const listed = (archive.files() ?? []).filter((n) => !n.startsWith("("));
-    if (!listed.length) source.probed.push(label);
-    const seen = new Set(listed.map(gameName));
-    const names = [...listed, ...probeNames(archive).filter((n) => !seen.has(gameName(n)))];
+    // The archive's list of its files is the mod's files, as the play page reads it; only an archive with no list is
+    // looked into by the names the game reads (and those its own image, sound and portrait tables name).
+    let names = (archive.files() ?? []).filter((n) => !n.startsWith("("));
+    if (!names.length) {
+      source.probed.push(label);
+      names = probeNames((n) => { try { return archive.fileInfo(n) ? archive.readFile(n) : null; } catch { return null; } });
+    }
     for (const n of names) {
-      const info = archive.fileInfo(n);
-      if (!info) continue;
+      // (A name the list holds and the archive does not — a patcher lists files it never packed — is left out.)
+      let info: ReturnType<Archive["fileInfo"]> = null;
+      try { info = archive.fileInfo(n); } catch { info = null; }
+      if (!info) { if (!source.probed.includes(label)) source.unheld.push(`${gameName(n)} (${label})`); continue; }
       const read = async () => archive.readFile(n);
       const lower = gameName(n);
       if (/\.(qdp|bwl)$/.test(lower)) { source.plugins.push({ name: n.split("\\").pop()!, bytes: info.uncompressedSize, read, member: n, layer: label }); continue; }
@@ -174,8 +171,9 @@ async function fromPieces(path: string, kind: SourceKind, name: string, pieces: 
   for (const p of loose) {
     if (root && !p.path.startsWith(root + "/")) { source.left.push(p.path); continue; }
     const rel = root ? p.path.slice(root.length + 1) : p.path;
-    // A file beside the game's folders (a read-me, notes) is not one of the game's.
-    if (!rel.includes("/")) { source.left.push(p.path); continue; }
+    // A file beside the game's folders (a read-me, notes) is not one of the game's, nor are a plugin's own files beside it.
+    const top = rel.split("/")[0].toLowerCase();
+    if (!rel.includes("/") || top === "plugins" || top === "firegraft") { source.left.push(p.path); continue; }
     const lower = gameName(rel);
     const was = source.files.get(lower);
     if (was && was.layer === (root ? `${root}/` : "./")) source.duplicates.push(`${was.name} and ${rel.replace(/\//g, "\\")}`);

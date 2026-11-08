@@ -43,6 +43,7 @@ import { serveLsp } from "./lsp";
 import { openInScmjs, playInLobby } from "./open";
 import { checkPlugin, devPlugin, newPlugin, printPluginCheck, type PluginCheck } from "./plugin";
 import { printReplayInfo, replayReport } from "./replay";
+import { buildOrders, checkPlayedMod, refuseModReplay, replayNamer, type ReplayNameOptions } from "./replaymod";
 import { SCMSCX, scmscx } from "./scmscx";
 import { mapFileFor, writeReplayMap } from "./replaymap";
 import { printReplayShare, shareReplay } from "./replayshare";
@@ -67,6 +68,7 @@ import { diffModSources, printModDiff } from "./mod/diff";
 import { modInfo, printModInfo } from "./mod/info";
 import { newMod } from "./mod/new";
 import { gameFilesOrNull, openMod } from "./mod/open";
+import { sourceHash } from "./mod/hash";
 import { modOverlay } from "./mod/overlay";
 import { modWords } from "./engine";
 import { MOD_COMPRESSIONS, packMod, readModFolder, type ModCompression } from "./mod/pack";
@@ -114,9 +116,15 @@ async function mapInfo(input: Input) {
   const data: MapReport = { ...mapReport(input, doc), script: await hasScript(doc.extras) };
   return { data, lines: printMapInfo(data) };
 }
-async function replayInfo(input: Input) {
+async function replayInfo(input: Input, o: ReplayNameOptions = {}) {
   expectKind(input, "replay");
-  const data = replayReport(input, await loadReplayInput(input));
+  const rep = await loadReplayInput(input);
+  const data = replayReport(input, rep);
+  if (o.mod || o.builds) {
+    const names = await replayNamer(rep, input.name, { mod: o.mod, starcraft: o.starcraft, costs: !!o.builds, warn: (line) => process.stderr.write(`${mark.warn} ${line}\n`) });
+    data.names = names.from;
+    if (o.builds) data.builds = buildOrders(rep, names);
+  }
   return { data, lines: printReplayInfo(data) };
 }
 /** A bot file's header (the scm-sim toolchain's `.scmbot`). */
@@ -755,6 +763,7 @@ plugin changed it. Exits 1 when the plugin does not load or throws.`))
     expectKind(replayInput, "replay");
     if (replayInput.path === STDIO) throw new CliError(t("--replay takes a replay file, not standard input."), null, 2);
     const rep = await loadReplayInput(replayInput);
+    await checkPlayedMod(rep, replayInput.name, o.mod, o.starcraft, (line) => process.stderr.write(`${mark.warn} ${line}\n`));
     const named = file ? await openForEdit(file) : null;
     const run = await replayRun(rep, named && { doc: named.doc, path: named.input.path, name: named.input.name, bytes: named.input.bytes });
     if (!o.json) {
@@ -991,6 +1000,7 @@ the map as it is then, and scmjs map test -u writes in what has changed.`) + `
       expectKind(replayInput, "replay");
       if (input.path === STDIO || replayInput.path === STDIO) throw new CliError(t("map test record writes beside the map and names the replay's file: give both as files."), null, 2);
       const rep = await loadReplayInput(replayInput);
+      refuseModReplay(rep, replayInput.name, "map test record");
       const players = rep.players.filter((p) => p.type === 1 || p.type === 2).map((p) => ({ slot: p.index, name: p.name, computer: p.type === 1 }));
       const map = await readMapForTests(input.bytes);
       const r = await recordTest(input.name, map, { path: replayInput.path, frames: rep.header.frames, players }, o.tests ?? defaultTests(input.path), {
@@ -1293,7 +1303,16 @@ their editor. --edit opens the map for editing together instead; whoever opens t
 
   const replay = program.command("replay").description(t("read and open replays")).helpGroup(t("Maps and replays:"));
   replay.command("info").description(t("who played, on what map, for how long, at what APM")).argument("<replays...>").addOption(json)
-    .action(async (files: string[], o: { json?: boolean }) => void await eachFile(files, !!o.json, replayInfo));
+    .option("--builds", t("what each player ordered: units, buildings, upgrades and technologies, by name, with their cost"))
+    .option("--mod <mod>", t("the mod the replay was played with, for its names and costs: a mod folder, an .mpq, a mod's .exe or .zip"))
+    .option("--starcraft <folder>", t("your installation of StarCraft (SCMJS_STARCRAFT), for the game's costs and the files under a mod; found in the usual places otherwise"))
+    .addHelpText("after", "\n" + t(`A replay saved by scmJS from a game of a mod says which mod it was (the Mod line): its name, the hash of its data
+set, its makers' link and the plugins that ran. --mod names the mod's folder for the names and costs of its units,
+upgrades and technologies, and is refused when its data set is not the one the replay names. Without it, a mod's
+replay shows ids, never the game's names for them.`) + `
+  scmjs replay info game.rep --builds
+  scmjs replay info game.rep --builds --mod "My Mod"`)
+    .action(async (files: string[], o: { json?: boolean } & ReplayNameOptions) => void await eachFile(files, !!o.json, (input) => replayInfo(input, o)));
   replay.command("map").description(t("the map the replay was played on, written out as a map file")).argument("<replay>").addOption(json)
     .option("--out <map>", t("the file to write (.scx, .scm or .chk); the replay's name with .scx by default; - for standard output"))
     .option("--force", t("overwrite a file that is there"))
@@ -1346,6 +1365,7 @@ pipe or a file it prints a line per minute of game instead (--every), or JSON li
       const input = await readInput(file);
       expectKind(input, "replay");
       const replay = await loadReplayInput(input);
+      refuseModReplay(replay, input.name, "replay watch");
       const speed = Number(o.speed);
       if (!(speed > 0 && speed <= 64)) throw new CliError(t("--speed takes a number from 0.25 to 64, not \"{value}\"", { value: o.speed }), null, 2);
       const every = Number(o.every);
@@ -1380,6 +1400,7 @@ made from the .webm with ffmpeg, when it is installed. The camera follows where 
       const input = await readInput(file);
       expectKind(input, "replay");
       const replay = await loadReplayInput(input);
+      refuseModReplay(replay, input.name, "replay export");
       const tty = !!process.stderr.isTTY && !o.json;
       let shown = 0;
       const r = await exportReplay(input, replay, o, (line, done) => {
@@ -1442,7 +1463,7 @@ play page. docs.scmjs.dev/mods has the folder's form.`));
     .addOption(starcraftOption())
     .action(async (paths: string[], o: { json?: boolean; starcraft?: string }) => {
       const base = await gameFilesOrNull(o.starcraft);
-      await eachMod(paths, !!o.json, async (path) => { const r = modInfo(await openMod(path, base)); return { data: r, lines: printModInfo(r) }; });
+      await eachMod(paths, !!o.json, async (path) => { const source = await openMod(path, base); const r = modInfo(source, await sourceHash(source)); return { data: r, lines: printModInfo(r) }; });
     });
 
   modCmd.command("unpack").description(t("a mod as a folder of text and pictures, to edit and keep in git")).argument("<mod>", t("a folder, an .mpq, a mod's .exe or a .zip")).argument("<folder>", t("the folder to write")).addOption(json)
@@ -1563,17 +1584,18 @@ Exits 1 when there is an error.`))
     .option("--map <file>", t("start this map with the mod (otherwise the page offers its maps)"))
     .addOption(starcraftOption())
     .addOption(new Option("--play <url>", t("the play page's address (SCMJS_PLAY_URL)")).hideHelp())
-    .addHelpText("after", "\n" + t(`Opens scmjs.dev/play in your browser and hands it the mod's files that differ from your own copy of the game (all of
-them when no copy is found here), with a hash the page knows the mod by. Nothing is uploaded: the page keeps the mod
-in your browser. Waits up to five minutes for the page.`))
+    .addHelpText("after", "\n" + t(`Opens scmjs.dev/play in your browser and hands it every file of the mod, its plugins and FireGraft files with them,
+and the mod's hash, which the page works out again from the same files. The page keeps the files that differ from
+your copy of the game. Nothing is uploaded: the page keeps the mod in your browser. Waits up to five minutes for the
+page.`))
     .action(async (path: string, o: { json?: boolean; map?: string; starcraft?: string; play?: string }) => {
       const base = await gameFilesOrNull(o.starcraft);
-      const set = await playSet(await openMod(path, base), base);
+      const set = await playSet(await openMod(path, base));
       const map = o.map ? await readInput(o.map) : null;
       if (map) expectKind(map, "map");
-      if (!o.json) print(`${pc.bold(set.name)}: ${t("{n, plural, one {# file} other {# files}} to hand over", { n: set.files.length })}${set.against ? pc.dim(` ${t("({n} the same as {game})", { n: num(set.same), game: set.against })}`) : pc.dim(` ${t("(no copy of the game here to compare with: all of them)")}`)}${dot}${pc.dim(t("hash {hash}", { hash: set.hash }))}`);
+      if (!o.json) print(`${pc.bold(set.name)}: ${t("{n, plural, one {# file} other {# files}} to hand over", { n: set.total.files })}${set.plugins + set.firegraft ? pc.dim(` ${t("(and {n, plural, one {# plugin or FireGraft file} other {# plugins and FireGraft files}})", { n: set.plugins + set.firegraft })}`) : ""}${dot}${size(set.total.bytes)}${dot}${pc.dim(t("hash {hash}", { hash: set.hash }))}`);
       const r = await playOnPage(set, { map: map && { name: map.name, bytes: map.bytes }, play: o.play, live: o.json ? undefined : (line) => print(line) });
-      if (o.json) { print(JSON.stringify({ name: set.name, hash: set.hash, files: set.files.map((f) => ({ path: f.path, bytes: f.bytes.length })), against: set.against, ...r }, null, 2)); }
+      if (o.json) { print(JSON.stringify({ name: set.name, hash: set.hash, withoutPlugins: set.withoutPlugins, files: set.files.map((f) => ({ path: f.path, bytes: f.bytes.length })), ...r }, null, 2)); }
       else if (r.error) throw new CliError(t("The play page said: {error}", { error: r.error }), null, 1);
       else print(`${mark.ok} ${r.shown ? t("On the play page's setup screen") : t("Playing on the play page")}`);
       if (r.error) process.exitCode = 1;

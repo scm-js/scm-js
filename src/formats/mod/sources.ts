@@ -21,15 +21,15 @@ export const gameName = (path: string): string => path.replace(/\//g, "\\").repl
 
 /**
  * The folder of a set of paths the game's paths start in: the one that holds `arr/`, else the one holding the most
- * files under the game's folders; "" is the root. Paths use forward slashes.
+ * files under the game's folders, the shallower on a tie; "" is the root. Paths use forward slashes. At any depth, as
+ * the play page looks (a zip's `Mod 1.2/mpq/arr/…`); a game folder's name deeper in a root (`unit/terran/unit/`)
+ * scores fewer files than the root itself, so it does not win.
  */
 export function modRoot(paths: readonly string[]): string {
   const score = new Map<string, number>(), hasArr = new Set<string>();
   for (const p of paths) {
     const parts = p.split("/");
-    // The root or one folder down (Cosmonarchy keeps its files under mpq/), never deeper: a folder deeper than that
-    // is the mod's own (unit/terran/ under a root is not a second root).
-    for (let i = 0; i < Math.min(parts.length - 1, 2); i++) {
+    for (let i = 0; i < parts.length - 1; i++) {
       const folder = parts[i].toLowerCase();
       if (!GAME_FOLDERS.includes(folder) || folder === "maps") continue;
       const root = parts.slice(0, i).join("/");
@@ -174,9 +174,10 @@ const hex = (b: ArrayBuffer) => [...new Uint8Array(b)].map((x) => x.toString(16)
 const sha256 = async (bytes: Uint8Array) => hex(await crypto.subtle.digest("SHA-256", bytes as Uint8Array<ArrayBuffer>));
 
 /**
- * A data set's hash, as the play page computes one over the files it is given: a line `name<TAB>sha256` a file (the
- * game's name, lower case with backslashes), sorted by name, joined with newlines, hashed again; the first sixteen hex
- * digits. The same files give the same hash wherever it is computed.
+ * The hash of game files alone, by the mod hash's rule (`hash.ts`): a line `name<TAB>sha256` a file (the game's name,
+ * lower case with backslashes), sorted by name, joined with newlines, hashed again; the first sixteen hex digits. A
+ * mod's hash also has lines for its plugins and FireGraft project: `modHash` / `modHashOfDigests` in `hash.ts`; for a
+ * mod without either the two agree.
  */
 export async function dataSetHash(files: readonly { name: string; bytes: Uint8Array }[]): Promise<string> {
   const digests: { name: string; sha256: string }[] = [];

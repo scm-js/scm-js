@@ -19,6 +19,7 @@ import { conditionDef } from "../../src/data/triggerDefs";
 import { plainText } from "../../src/editor/textColors";
 import { ensureEngine, findGameCopy, type Engine } from "./engine";
 import { loadReplayInput, readInput, STDIO, type Input } from "./files";
+import { modReplayReason } from "./replaymod";
 import { matchReplay, type MatchKind } from "./heat";
 import { defaultParallel, mapIdentity, replayFiles, replayMapIdentity, sha256, skippedLines } from "./heatmap";
 import { defaultTests, readTests, runTests, type PlannedScenario } from "./maptest";
@@ -202,6 +203,8 @@ export async function runCoverage(input: Input, doc: OpenedMap, sources: readonl
       if (hashes.has(hash)) { skipped.push({ file: name, reason: t("the same replay as one before it") }); continue; }
       hashes.add(hash);
       const rep = await loadReplayInput(rin);
+      const modded = modReplayReason(rep);
+      if (modded) { skipped.push({ file: name, reason: modded }); continue; }
       const m = matchReplay(mine, replayMapIdentity(rep), !!o.force);
       if (!m.match) { skipped.push({ file: name, reason: m.reason }); continue; }
       if (rep.header.gameType !== USE_MAP_SETTINGS) { skipped.push({ file: name, reason: t("not Use Map Settings: in a {kind} game the game runs its own triggers, not the map's", { kind: translate(GAME_TYPES[rep.header.gameType] ?? "melee") }) }); continue; }

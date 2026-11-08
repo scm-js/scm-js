@@ -2051,9 +2051,10 @@ export interface GameDataSource {
   /** Set when the desktop app extracted the files from a StarCraft installation. */
   desktop: boolean;
   /**
-   * The data set's hash, where one is known: what a map saved with it records. Sixteen hex
-   * digits over the files of the set that differ from the game's, by the rule `scmjs mod
-   * play` hands the play page (`docs/cli.md`, "Playing a mod on the play page").
+   * The data set's hash, where one is known: what a map saved with it records. The mod's
+   * hash, as the play page and `scmjs mod info` work it out (`docs/mods.md`, "The mod's
+   * hash"): sixteen hex digits over every file the set provides — its game files, the
+   * plugins it carries and its FireGraft project — never compared with anyone's copy.
    */
   hash?: string;
   /**
@@ -2224,7 +2225,7 @@ export interface GameDataApi {
    * @example
    * // Draw from the edit at once, and name it when its digest is ready.
    * api.gameData.reload();
-   * api.gameData.rehash(await digestOfChangedFiles());
+   * api.gameData.rehash(await modHashOfTheFiles());
    */
   rehash(hash: string | null): GameDataSource | null;
 }

@@ -12,6 +12,8 @@ fifteenth guide) and the "Mods" page of `docs/cli.md`.
     `exeArchive` (FireGraft `PEGF` overlay first, then SEMPQ at 512-byte boundaries after the PE's last section, then
     any `MPQ\x1A` with a sane header), `readZip` (central directory, stored + deflate via
     `DecompressionStream("deflate-raw")`, no zip64/encryption), `dataSetHash`.
+  - `src/formats/mod/hash.ts` — the mod hash (`modHash`, `modHashOfDigests`, `hashLines`, the line forms) and
+    `probeNames` for a list-less archive; "The mod hash, one rule" below.
   - `src/formats/mod/folder.ts` — the form: `placeOf(member)` (rule: member → folder file), `memberOf(file, manifest)`
     (inverse, with `manifest.members` overrides), `renderMember` / `renderAiScripts` (unpack, checked), `packFile`
     (pack), `recordRendered` + `tidyManifest` (the manifest), `ModManifest` (`mod.json`).
@@ -82,14 +84,17 @@ datex tables together (sfxdata excluded: GPTP reads sfxdata.dat).
    PNG**, 1,441 GRPs kept ("another encoder"), 37 GRPs refused at the time (uncompressed GRPs, the interface pictures'
    own format — read and written since 5e631bc, so 206 come out as PNG now; `units.md` has the finding), 3,516
    WAVs, 2,265 other files. Pack 13.1 s: **7,767 of 7,767 members byte-identical**, plus the two FireGraft files back
-   in as members; the MPQ (zlib) 774 MB in 52 s.
+   in as members; the MPQ (zlib) 774 MB in 52 s. (Since `mod-hash` the two dot files count: 7,769, 2,267 other
+   files; the unpacked folder hashes as the release, `ac3f86533e4b5a31`.)
 3. `tests/cli-mod.test.ts` (15; 12 without data), `tests/cli-mcp.test.ts` "the mod tools".
 
 ## Traps
 
 - `/\.datex?$/` means ".date" + optional "x" — it does not match `.dat`. Use `/\.dat(?:ex)?$/` (cost a debugging run).
-- A Blizzard archive's `(listfile)` is partial (BrooDat lists 22 files): `source.ts` always probes the game's names
-  too (tables, TBLs, scripts, images.tbl/sfxdata.tbl paths, tilesets).
+- A Blizzard archive's `(listfile)` is partial (BrooDat lists 22 files). `source.ts` probed the game's names in every
+  archive until `mod-hash`; now, as the play page, a listed archive is its list and only a list-less one is probed, so
+  BrooDat.mpq named as a mod reads as its 22 listed files. The proofs over the game's own data use `gameSource` (names
+  given), not this.
 - Building the CLI stamps `cli/package.json`'s version; restore it before handing back (`git checkout cli/package.json`).
 - The overview holds 23 lines: `mod` took `about`'s row (`about` is hidden there, still works and is in the docs; hidden also drops it from shell completion, `tests/cli-maps.test.ts` says so).
 - `tests/core.test.ts` now walks `cli/src/**` (it read only `cli/src/*.ts` before, so subfolder imports were unchecked).
@@ -130,18 +135,78 @@ mod reloads; then this layer is redundant (harmless: same bytes). Sounds by name
 still refused by the runner. `protoss\archon\parmin00.wav` is only under `SD/` in Remastered (neither the play set
 nor `gamefiles.ts` falls back to `SD/`).
 
+## Replays of a mod (R1, 2026-11-08)
+
+A replay's `SCMJ` section names the mod by its hash. `scmjs replay info --mod`, `map trace|cost --replay --mod` check a
+mod against it with `cli/src/replaymod.ts#sourceHashes` / `isTaggedMod`: the one rule below (with or without plugins),
+and R1's two older forms (game files alone; those differing from the person's copy) for replays tagged before it.
+Details and the loader proof: `cli.md` "A replay's mod".
+
+## The mod hash, one rule (2026-11-08, branch `mod-hash`)
+
+Decided 2026-11-08 (mods plan, "R1, as built": the old rule compared a mod with the person's own copy, so one release
+hashed three ways). Implemented by the play page (scm-sim `lift-ts`: `src/mods/inspect.ts` `hashLines`/`pluginLine`/
+`firegraftLine`/`runningHash`, `web/modDrop.ts#buildMod`); here `src/formats/mod/hash.ts` (core: `modHash`,
+`modHashOfDigests`, `hashLines`, `pluginLine`, `firegraftLine`, `probeNames`), `cli/src/mod/hash.ts#sourceHash`, the
+editor's `overCopy.ts#dataSetHashOf` (`gamedata.md` "Hash"), Aftermath's `modreplay.ts` (loose files only).
+
+- One line per game name the mod lays over the game: loose files under its root and the members of its archives (an
+  `.mpq`, the archive in a loader exe), lower case, backslashes. An archive's **list** is its files; only a list-less
+  archive is probed (`probeNames` = the page's `namesToProbe` list + the archive's own images/sfxdata/portdata.tbl
+  paths; the page also reads the person's copy's three tables there — the one place its set can depend on a copy). A
+  listed member the archive does not hold (`fileInfo` null) is left out (`ModSource.unheld`, printed by `mod info`). An
+  archive member `.qdp/.bwl/.fgp/.fgd` is never a game name.
+- One line per plugin carried **as a file** (`.qdp`/`.bwl` anywhere in the folder): `plugins\<leaf>` lower case,
+  first wins by leaf. A plugin *inside* the mod's archive is no line (the page does not load it).
+- One line per FireGraft project `.fgp` (loose, or a member): `<leaf>` lower case. `.fgd` is no line.
+- `name\tsha256`, sorted by name, joined `\n`, SHA-256, 16 hex. Without plugins = the same minus the plugin lines
+  (the `.fgp` line stays): what a page running none presents (`runningHash` with nothing running).
+- Loose-file rule, as the page's: `modRoot` now looks at any depth (the page's; it was root-or-one-down); under the
+  root, a file beside the game's folders, under a top `plugins/` or `firegraft/`, or a `.dll` is left out; `mod.json`
+  at the top is the name, deeper it is a file. **Dot files count** (the page counts them); dot *folders* are still
+  skipped here (`walk`, pack's `folderFiles`) — the page's drop walk does not skip them, so a `.git/` *under the mod's
+  root* would be hashed there and not here (a page-side fix to ask for). Pack keeps dot files now (`files/lua/.gitignore`
+  round-trips) and leaves a top-level dot file out of "left".
+- A mod folder (`mod unpack` output) packed in memory keeps code members (`Firegraft\*.fgp` back in as members) out of
+  `source.files`, so it hashes as the release it came from.
+
+**Test vector.** Cosmonarchy's release folder (read-only, `SCM_COSMONARCHY` or `SCMJS_COSMONARCHY/release`):
+**`ac3f86533e4b5a31`**, without plugins **`b13e467fb5abb298`** — page's `buildMod` and `scmjs mod info` alike, and the
+unpacked folder too. 7,777 lines: 7,769 game names + 7 plugin lines + `cosmonarchy bw.fgp` (the brief's "7,762 game
+names" was the page's `built.lines` (7,770, which holds the `.fgp`) less 8). The CLI counted 7,767 before; the
+line-by-line diff of the game names (page vs CLI) was exactly two, both dot files the CLI's walk skipped:
+
+```
+433d432   < lua\.gitignore
+7366d7364 < unit\cmdbtns\.cmdicons.grp-ojvamg
+```
+
+Not the six phantom members (both left them out already: `fileInfo` null), not case, not `.qdp`/`.fgp` counted as game
+names. `plugins\apply`, `plugins\pluginlist.txt` and five `firegraft\*.txt` are game names (members of the exe's
+archive), on both sides.
+
+**`mod play` hands every file** (no comparison with the copy any more; the page keeps those that differ), loose
+plugins under `plugins/`, FireGraft files under `firegraft/`, and the game names the page would not take loose
+(`play.ts#notLoose`: no folder, top `plugins\`/`firegraft\`, `.dll`/archive/code extensions — Cosmonarchy's 7 above)
+inside one stored MPQ `scmjs-members.mpq`. Proof: the hand-over run through the page's own `buildMod` (pieces as
+`inputFromHanded` makes them) gives `ac3f86533e4b5a31` / `b13e467fb5abb298` for the release and the made mod's pinned
+values. Without the MPQ the page's hash of a hand-over lost those 7 lines.
+
+**Made mod** (`tests/mod-hash.test.ts`, no game data): loose `arr/units.dat`, `lua/.gitignore`, `plugins/x.qdp`,
+`y.fgp`, `y.fgd`, `README.md`, and `made.mpq` (`rez\stat_txt.tbl`, `sound\made\new.wav`, `plugins\apply`); the page's
+tool on the same folder: **`a8069f18058ec876`** / **`ac98e7b447476c80`**, pinned. The test checks the CLI (folder,
+unpacked folder), the editor's `dataSetHashOf`, `playSet`, and the replay forms against them.
+
+Known gaps: `mod pack --folder` writes members loose, so a loose copy of a mod whose archive held `plugins\…`,
+`firegraft\…` or top-level members, or whose plugins were loose beside it, hashes otherwise on the page (only an MPQ
+carries those); the editor's folder route takes loose files only under `GAME_FOLDERS` (the page: anything under the
+root) and orders own archives by name (the page: as given); the page's `GAME_FOLDERS` lacks `datreq`, `samase`,
+`lua`, `config` for finding the root (scoring only).
+
 ## Open
 
-- The play page's side of `scmjs.play.dataSet` (M1, scm-sim's `mods-plan`): the message shape is in `docs/cli.md`
-  "Playing a mod on the play page"; the page keeps and hashes only the files that differ from the game's, by the same
-  rule as `mod play` (sorted `gamename<TAB>sha256` lines of the changed files, first 16 hex digits), so the two agree.
-  The editor's data-set hash (stamp, `scmjs\dataset.json`, `TestMapFile.dataSet.hash`) is `mod play`'s rule since
-  the `mods` merge (`gamedata.md` "Hash"). Gaps left: the CLI's base is the person's game, the editor's the copy it
-  laid the set over (another data set's copy, if that was the base) — since 2026-11-08 then the copies under that and
-  the game's archives when the install has them, and the stamp's `hashUnbased` names what no base had; the CLI probes
-  a list-less archive by the game's names, the editor by what its extraction asks; and the CLI counts any file under
-  the mod's root, the editor files under `GAME_FOLDERS`. The copy now holds every `arr\` table (the Mod Editor's
-  `mapdata`/`portdata` mismatch); a copy made before still lacks two of them.
+- The hash is one rule everywhere since `mod-hash` ("The mod hash, one rule" above, with its known gaps). The copy
+  now holds every `arr\` table (the Mod Editor's `mapdata`/`portdata` mismatch); no longer matters for the hash.
 - The Mod Editor plugin's API asks (reader `under`/`member`, `rehash`, `storedPath`, the worked-out manifest, folder
   picks and drops) are in `plugins-host.md` "The Mod Editor's asks".
 - The runners' `--mod <folder>` and `current.json` `"mods": 1` are this side's assumption; M1/M0 must publish them.

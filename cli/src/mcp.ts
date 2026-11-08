@@ -29,6 +29,7 @@ import { baselineLine, issueLine, mapReport, printIssues, printMapInfo } from ".
 import { mapKey, matchBaseline, readBaseline } from "./baseline";
 import { coverageJson, coverageScenario, printCoverage, runCoverage } from "./coverage";
 import { printReplayInfo, replayReport } from "./replay";
+import { buildOrders, replayNamer } from "./replaymod";
 import { mapFileFor, writeReplayMap } from "./replaymap";
 import { openGameFiles } from "./gamefiles";
 import { analyzeLayout, layoutLines, layoutPicture, layoutReport, loadLayoutFiles } from "./analyze";
@@ -41,6 +42,7 @@ import { diffModSources, printModDiff } from "./mod/diff";
 import { modInfo, printModInfo } from "./mod/info";
 import { newMod } from "./mod/new";
 import { gameFilesOrNull, openMod } from "./mod/open";
+import { sourceHash } from "./mod/hash";
 import { MOD_COMPRESSIONS, packMod, readModFolder, type ModCompression } from "./mod/pack";
 import { unpackMod } from "./mod/unpack";
 import { CliError, pc, visible } from "./ui";
@@ -433,14 +435,26 @@ export function createMcpServer(options: McpOptions = {}): { server: McpServer; 
 
   reg("replay_info", {
     title: "What a replay holds",
-    description: "Who played a replay (.rep), their races, colours, teams and APM, on which map, for how long, when, and at what speed, as `scmjs replay info` prints it.",
-    inputSchema: { path: z.string().describe("the replay file (.rep)") },
+    description: "Who played a replay (.rep), their races, colours, teams and APM, on which map, for how long, when, and at what speed, as `scmjs replay info` prints it, and the mod it was played with when the replay says (`mod`: the data set's name, hash and link, the plugins that ran; null for the game itself). `builds` adds what each player ordered (units, buildings, upgrades, technologies) by name with their cost. A mod's replay names them only with `mod`, the mod's folder (or .mpq, .exe, .zip), which is refused when its data set's hash is not the replay's; without it the orders are ids.",
+    inputSchema: {
+      path: z.string().describe("the replay file (.rep)"),
+      builds: z.boolean().optional().describe("also list what each player ordered, by name, with its cost"),
+      mod: z.string().optional().describe("the mod the replay was played with, for its names and costs: a folder, an .mpq, a mod's .exe or .zip"),
+      starcraft: z.string().optional().describe("the folder of the person's StarCraft installation, for the game's costs and the files under a mod; found in the usual places otherwise"),
+    },
     annotations: { readOnlyHint: true },
-  }, tool(async ({ path: file }) => {
+  }, tool(async ({ path: file, builds, mod, starcraft }) => {
     const input = await readInput(file);
     expectKind(input, "replay");
-    const r = replayReport(input, await loadReplayInput(input));
-    return ok(printReplayInfo(r), r);
+    const rep = await loadReplayInput(input);
+    const r = replayReport(input, rep);
+    const warnings: string[] = [];
+    if (mod || builds) {
+      const names = await replayNamer(rep, input.name, { mod, starcraft, costs: !!builds, warn: (line) => warnings.push(line) });
+      r.names = names.from;
+      if (builds) r.builds = buildOrders(rep, names);
+    }
+    return ok([...warnings, ...printReplayInfo(r)], r);
   }));
 
   reg("map_preview", {
@@ -515,11 +529,12 @@ export function createMcpServer(options: McpOptions = {}): { server: McpServer; 
 
   reg("mod_info", {
     title: "What a mod is",
-    description: "A StarCraft mod's name, files and sizes by kind (tables, scripts, pictures, sounds, terrain, strings, AI), which tables are wider than the game's and in which layout (DatExtend's expanded .dat, GPTP's .datex), the plugins and FireGraft files it carries (never run) and the game it is for, as `scmjs mod info` prints it.",
+    description: "A StarCraft mod's name, files and sizes by kind (tables, scripts, pictures, sounds, terrain, strings, AI), which tables are wider than the game's and in which layout (DatExtend's expanded .dat, GPTP's .datex), the plugins and FireGraft files it carries (never run), the game it is for, and its hash (`hash`: the name the play page and a replay know the mod by, over every file it provides, its plugins and its FireGraft project; `withoutPlugins`: the same without the plugins, what a page that runs none of them presents), as `scmjs mod info` prints it.",
     inputSchema: { path: modPath, starcraft },
     annotations: { readOnlyHint: true },
   }, tool(async ({ path: file, starcraft: sc }) => {
-    const r = modInfo(await openMod(file, await gameFilesOrNull(sc)));
+    const source = await openMod(file, await gameFilesOrNull(sc));
+    const r = modInfo(source, await sourceHash(source));
     return ok(printModInfo(r), r);
   }));
 

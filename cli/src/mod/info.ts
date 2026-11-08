@@ -1,13 +1,15 @@
 /**
  * `scmjs mod info <mpq|folder|exe|zip>`: what a mod is — its name, files and sizes by kind, which tables are wider than
  * the game's and in which layout, what it carries that is not run (plugins, FireGraft files), its maps, and the game it
- * is for. Read from names and sizes, plus each table's size; nothing is run.
+ * is for, and the mod's hash (the name the play page and a replay know it by: `hash.ts`). Read from names and sizes,
+ * plus each table's size, and every file's bytes for the hash; nothing is run.
  */
 import { DAT_SCHEMAS, datTableOf } from "../../../src/formats/dat/schema";
 import { datShape } from "../../../src/formats/dat/table";
 import { gameName } from "../../../src/formats/mod/sources";
 import { t } from "../i18n";
 import { dot, num, pc, rows, size } from "../ui";
+import type { SourceHash } from "./hash";
 import { shownPath, type ModSource } from "./source";
 
 /** The kinds of file a mod changes, in the order they are named (the play page names them alike). */
@@ -52,6 +54,11 @@ export interface ModInfo {
   duplicates: string[];
   left: string[];
   probed: string[];
+  /** Members an archive lists and does not hold: left out. */
+  unheld: string[];
+  /** The mod's hash, and without its plugins' lines (null when not worked out). */
+  hash: string | null;
+  withoutPlugins: string | null;
 }
 
 /** The layout a table is in, in words. */
@@ -59,7 +66,7 @@ function howWords(layout: "expanded" | "datex"): string {
   return layout === "expanded" ? t("DatExtend's expanded layout (PyMS)") : t("GPTP's .datex layout");
 }
 
-export function modInfo(source: ModSource): ModInfo {
+export function modInfo(source: ModSource, hash: SourceHash | null = null): ModInfo {
   const kinds: ModInfo["kinds"] = {};
   let bytes = 0;
   for (const f of source.files.values()) {
@@ -92,7 +99,8 @@ export function modInfo(source: ModSource): ModInfo {
     plugins: source.plugins.map((p) => ({ name: p.name.split(/[\\/]/).pop()!, bytes: p.bytes })),
     firegraft: source.firegraft.map((p) => ({ name: p.name.split(/[\\/]/).pop()!, bytes: p.bytes })),
     exes: source.exes, maps: [...source.files.values()].filter((f) => kindOf(f.name) === "maps").map((f) => f.name).sort(),
-    game, duplicates: source.duplicates, left: source.left, probed: source.probed,
+    game, duplicates: source.duplicates, left: source.left, probed: source.probed, unheld: source.unheld,
+    hash: hash?.hash ?? null, withoutPlugins: hash?.withoutPlugins ?? null,
   };
 }
 
@@ -141,8 +149,11 @@ export function printModInfo(r: ModInfo): string[] {
     ...r.exes.map((e) => ["Exe", t("{file}: {what}, its archive at byte {at}", { file: e.file, what: e.kind === "firegraft" ? patcher(e) : t("MPQDraft's self-executing MPQ"), at: num(e.at) })] as [string, string]),
     [t("Maps"), r.maps.length ? `${t("{n, plural, one {# map} other {# maps}}", { n: r.maps.length })}${r.maps.length <= 4 ? `: ${r.maps.map((m) => m.split("\\").pop()).join(", ")}` : ""}` : null],
     [t("Layers"), r.layers.length > 1 ? r.layers.map(shownPath).join(pc.dim(` ${t("then")} `)) : null],
+    [t("Hash"), r.hash],
+    [t("Without plugins"), r.hash && r.withoutPlugins && r.withoutPlugins !== r.hash ? `${r.withoutPlugins} ${pc.dim(t("(a page that runs none of the plugins)"))}` : null],
   ]));
   if (r.probed.length) lines.push("", `${pc.yellow("▲")} ${t("{archives} has no list of its files: only the names the game reads were looked for", { archives: r.probed.join(", ") })}`);
+  if (r.unheld.length) lines.push("", pc.dim(t("Listed by its archive and not in it, left out: {list}", { list: `${r.unheld.slice(0, 3).join(", ")}${r.unheld.length > 3 ? ` ${t("and {n} more", { n: num(r.unheld.length - 3) })}` : ""}` })));
   if (r.duplicates.length) lines.push("", `${pc.yellow("▲")} ${t("{n, plural, one {# file} other {# files}} twice, in another case: {list}", { n: r.duplicates.length, list: `${r.duplicates.slice(0, 3).join("; ")}${r.duplicates.length > 3 ? " …" : ""}` })}`);
   if (r.left.length) lines.push("", pc.dim(r.left.length > 6
     ? t("Not the game's, left out: {list} and {more} more", { list: r.left.slice(0, 6).map((l) => l.split("/").pop()).join(", "), more: num(r.left.length - 6) })

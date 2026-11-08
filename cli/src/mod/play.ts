@@ -1,53 +1,85 @@
 /**
  * `scmjs mod play <source> [--map <file>]`: the mod on the play page. The command serves a page on the loopback
- * address for a moment; that page opens the play page and, when it says it is ready, posts it the mod's **changed
- * files** — those that differ from the person's own game, or all of them when no copy was found here — as
+ * address for a moment; that page opens the play page and, when it says it is ready, posts it **every file of the
+ * mod** — the play page compares them with the person's own game itself and keeps those that differ — as
  *
  *   { type: "scmjs.play", dataSet: { name, hash, files: [{ path, file }] }, map?, name? }
  *
- * `path` is the game's path in lower case with forward slashes (`arr/weapons.dat`), `file` a `File` of its bytes;
- * `hash` is `dataSetHash` over the same files (sixteen hex digits), so a page that already keeps that mod can say so
- * and skip storing it again. With `--map`, `map` is the map's bytes and `name` its file name, as the play page's
+ * `path` is the game's path in lower case with forward slashes (`arr/weapons.dat`), a plugin the mod carries as a file
+ * under `plugins/`, a FireGraft file under `firegraft/`; `file` a `File` of its bytes. The game files the page would
+ * not take as loose files (one under `plugins\` or `firegraft\`, one beside the game's folders, a `.dll` or an archive's
+ * name — members of the mod's own archive, such as Cosmonarchy's `plugins\apply`) go in one small MPQ,
+ * `scmjs-members.mpq`, which the page opens as it opens the mod's own. `hash` is the mod's hash
+ * (core's `modHashOfDigests`, sixteen hex digits), which the page works out again from the same files and arrives at,
+ * so a page that already keeps that mod can say so and skip storing it again. With `--map`, `map` is the map's bytes and `name` its file name, as the play page's
  * hand-over has always taken a map. Every `scmjs.*` message the play page sends back is forwarded to the command;
  * `scmjs.play.started`, `scmjs.play.shown` or `scmjs.taken` end the wait, `scmjs.play.error` ends it with the page's
  * words. Nothing of the mod leaves this computer: the page is on the person's own browser.
  */
 import { createServer } from "node:http";
+import { Creator } from "mopaq";
 import { randomBytes } from "node:crypto";
-import { dataSetHash, gameName } from "../../../src/formats/mod/sources";
-import type { GameFiles } from "../gamefiles";
+import { gameName } from "../../../src/formats/mod/sources";
 import { openBrowser, PLAY_PAGE_URL } from "../open";
 import { t } from "../i18n";
 import { CliError, mark, pc } from "../ui";
+import { modHashOfDigests } from "../../../src/formats/mod/hash";
+import { fileDigest } from "../../../src/formats/mod/sources";
 import type { ModSource } from "./source";
 
 export interface PlayFile { path: string; name: string; bytes: Uint8Array }
 
 export interface PlaySet {
   name: string;
+  /** The mod's hash, and without its plugins' lines (what a page that runs none of them presents). */
   hash: string;
+  withoutPlugins: string;
   files: PlayFile[];
-  /** Every file of the mod, and how many of them the person's game has the same. */
+  /** The mod's game files, and their bytes. */
   total: { files: number; bytes: number };
-  same: number;
-  /** The copy of the game the files were compared with; null: none found, all are handed over. */
-  against: string | null;
+  /** The plugins and FireGraft files handed over with them. */
+  plugins: number;
+  firegraft: number;
 }
 
-/** The files to hand over: the mod's that differ from the person's game (all of them without one). */
-export async function playSet(source: ModSource, base: GameFiles | null): Promise<PlaySet> {
-  const files: PlayFile[] = [];
-  let bytes = 0, same = 0;
+/**
+ * The files to hand over: every game file of the mod, the plugins it carries as files and its FireGraft files — what
+ * the page's own hash is worked out from, so the page names the mod as this does.
+ */
+export async function playSet(source: ModSource): Promise<PlaySet> {
+  const files: PlayFile[] = [], members: PlayFile[] = [];
+  const digests: { game: { name: string; sha256: string }[]; plugins: { name: string; sha256: string }[]; firegraft: { name: string; sha256: string }[] } = { game: [], plugins: [], firegraft: [] };
+  let bytes = 0, count = 0;
   for (const f of [...source.files.values()].sort((a, b) => (gameName(a.name) < gameName(b.name) ? -1 : 1))) {
-    const data = await f.read();
-    bytes += data.length;
-    const theirs = base ? await base.read(f.name) : null;
-    if (theirs && theirs.length === data.length && theirs.every((b, i) => b === data[i])) { same++; continue; }
-    files.push({ path: gameName(f.name).replace(/\\/g, "/"), name: f.name, bytes: data });
+    let data: Uint8Array;
+    try { data = await f.read(); } catch { continue; }
+    bytes += data.length; count++;
+    digests.game.push({ name: f.name, sha256: await fileDigest(data) });
+    (notLoose(gameName(f.name)) ? members : files).push({ path: gameName(f.name).replace(/\\/g, "/"), name: f.name, bytes: data });
   }
-  if (!files.length) throw new CliError(base ? t("{name} changes nothing of the game here: every file is the same as {copy}.", { name: source.name, copy: base.label }) : t("{name} changes nothing of the game here: every file is the same as the game's.", { name: source.name }), null, 1);
-  return { name: source.name, hash: await dataSetHash(files.map((f) => ({ name: f.name, bytes: f.bytes }))), files, total: { files: source.files.size, bytes }, same, against: base?.label ?? null };
+  if (!count) throw new CliError(t("{name} has no game files to hand over.", { name: source.name }), null, 1);
+  if (members.length) {
+    const mpq = new Creator({ listfile: true });
+    for (const m of members) mpq.addFile(m.name, m.bytes, { compress: false });
+    files.push({ path: HANDED_MEMBERS, name: HANDED_MEMBERS, bytes: await mpq.writeAsync() });
+  }
+  const leaf = (n: string) => n.split(/[\\/]/).pop()!;
+  // (A plugin inside the mod's archive is not one the page loads, nor a line of the hash: it is not handed over.)
+  const plugins = source.plugins.filter((p) => !p.member), firegraft = source.firegraft;
+  for (const p of plugins) { const b = await p.read(); digests.plugins.push({ name: p.name, sha256: await fileDigest(b) }); files.push({ path: `plugins/${leaf(p.name)}`, name: leaf(p.name), bytes: b }); }
+  for (const p of firegraft) { const b = await p.read(); digests.firegraft.push({ name: p.name, sha256: await fileDigest(b) }); files.push({ path: `firegraft/${leaf(p.name)}`, name: leaf(p.name), bytes: b }); }
+  const h = await modHashOfDigests({ files: digests.game, plugins: digests.plugins, firegraft: digests.firegraft });
+  return { name: source.name, hash: h.hash, withoutPlugins: h.withoutPlugins, files, total: { files: count, bytes }, plugins: plugins.length, firegraft: firegraft.length };
 }
+
+/** The MPQ the game files the page would not take loose are handed over in. */
+export const HANDED_MEMBERS = "scmjs-members.mpq";
+
+/**
+ * A game name the play page would not take as a loose file: beside the game's folders, under `plugins\` or
+ * `firegraft\` (a plugin's own files there are left out of a folder), a library, or an archive's or a plugin's name.
+ */
+export const notLoose = (name: string): boolean => !name.includes("\\") || /^(plugins|firegraft)\\/.test(name) || /\.(dll|zip|mpq|exe|qdp|bwl|fgp|fgd)$/.test(name);
 
 /** What the play page said. */
 export interface PlayOutcome { started: boolean; shown: boolean; error: string | null; said: { type: string; [key: string]: unknown }[] }

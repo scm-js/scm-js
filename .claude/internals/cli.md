@@ -2436,3 +2436,39 @@ The whole design, the proofs and the traps are in **`mods.md`**. Here, what touc
 - `mapTestAction` carries #186's `--clips` too, but `mod test` does not offer it and `map test --mod --clips` draws
   the clips on the play page without the mod (the replay is the modded game's): a clip of a mod that changes the
   units can go out of step. Not guarded.
+
+## A replay's mod (R1 of the capstone, 2026-11-08, branch `replay-tag`)
+
+scm-sim `docs/mods-plan.md` "Capstone (M10)", decision 3 and slice R1. `@scm-js/replay` 1.1.0 (branch `scmj` in
+~/github/replay, worktree replay-tag; **the root `package.json` points at `file:../replay-tag` until it is
+published** — switch it back to `^1.1.0`) reads an `SCMJ` tagged section into `Replay.mod` (`ModTag`: v, dataSet
+{hash, name, url}, plugins [{name, sha256}], firegraft, noplugins, engine, madeBy; unknown fields kept), and writes it
+(`appendModTag`, unpacked raw chunks, browser-safe). Framing: tag, u32 byte length, then a 4-byte size section and the
+payload section (as the commands/map are framed) — the length is there because both existing readers (1.0.1 and
+scm-sim's `rep.ts`) skip a Remastered tagged section by it. In a legacy file it follows the map directly.
+
+**The loader proof** (2026-11-08, scm-sim-lift `scripts/exact-replay.ts`, lifted 0x4DF570): 1556, 1544 (70,255
+frames), legacy_cp949, legacy_cp1252 and things.rep, each untagged and with an SCMJ section appended: identical seed,
+units, resources and hash at every printed frame and at the end, same end reason. A negative control (the header
+section's checksum flipped) is refused by the loader ("could not load the replay"), so the loader does read the bytes
+handed to it; it reads the four sections and nothing after.
+
+`cli/src/replaymod.ts`:
+- `replay info`: `Mod` row (name · hash · link) and `Plugins` row from the tag ("none" without); `--builds` (per
+  player, each unit/building/upgrade/tech ordered: first frame, order count, one's cost — orders, not outcomes:
+  Probe ×186 is spam) and `--mod <mod>` (names + costs via `openMod` → `loadModData` → `namesOf`, the mod's tables
+  over the person's copy). Vanilla names are the editor's `gameUnitName` etc. (translated); costs from the copy's
+  tables when one is found, else left out. **A tagged replay with no `--mod` shows ids, never the game's names.**
+- The check (`checkReplayMod`): `sourceHashes` → `ModHashes {hash, withoutPlugins, all, changed}`; `isTaggedMod`
+  accepts any of the four. `hash`/`withoutPlugins` = the one rule (`mods.md` "The mod hash, one rule"); `all` (game
+  files alone) and `changed` (those differing from the person's copy; null without one) are the forms R1 tagged with,
+  kept so replays tagged before 2026-11-08 still match. Mismatch → CliError naming `hash` and the tag's, hint = the
+  makers' link. Untagged + `--mod` → a warning on stderr, then the mod's names. Opened and hashed once per (path,
+  starcraft) per process (Cosmonarchy's release: ~5 s, 7,769 files; `ac3f86533e4b5a31`).
+- `refuseModReplay`: `replay watch`, `replay export`, `map test record`; `modReplayReason` makes `map heatmap` and
+  `map coverage` skip one. `checkPlayedMod` for `map trace|cost --replay`: tag needs `--mod`, same hash, and no
+  plugins (`!noplugins && plugins.length` refused: the runners lay files, run no plugin). Untagged replays: unchanged.
+- MCP `replay_info` gained `builds`, `mod`, `starcraft`; warnings go into the text.
+- Tests: `tests/cli-replay-mod.test.ts` (9, no game data: a two-file mod of units.dat + unitnames.tbl made by the codecs).
+- Not done: `replay watch|export` with a mod (needs the replay runner / viewer to take a data set: R2); the hash rule
+  will gain the plugins and the project in step 7a — `sourceHashes` must follow.

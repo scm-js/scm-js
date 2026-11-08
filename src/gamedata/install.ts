@@ -20,7 +20,8 @@ import { forgetStoredFolders, keepInMemory, storedCopy, type StoredCopy } from "
 import { currentAssetSource } from "./source";
 import { findMembers, httpRangeReader, readZipDirectory, readZipMember, ZipError } from "./zip";
 import { t, translate } from "../i18n";
-import { GAME_FOLDERS } from "../formats/mod/sources";
+import { exeArchive, GAME_FOLDERS } from "../formats/mod/sources";
+import { isModCode } from "../formats/mod/hash";
 
 export type InstallProgress = (fraction: number, label: string) => void;
 
@@ -94,6 +95,8 @@ export interface GameDataFiles {
   archives: readonly { name: string; data: InstallBytes }[];
   /** Loose files by member path (`arr/units.dat`, `unit/terran/marine.grp`), read before any archive. */
   files?: readonly { path: string; data: InstallBytes }[];
+  /** The plugins (`.qdp`, `.bwl`) and FireGraft files the mod carries: never run, only part of its hash. */
+  code?: readonly { path: string; data: InstallBytes }[];
   /**
    * Lay the files over the copy of this data set (an id; the game's own is `starcraft`)
    * instead of over the game's archives, which are then not needed. Where the game's own
@@ -121,22 +124,31 @@ export function isGamePath(path: string): boolean {
 }
 
 /**
- * A folder pick as `GameDataFiles`: every `.mpq` is an archive, and every other file whose
- * path (relative to the picked folder) starts with one of the game's folders is a loose
- * member (the extraction reads those under `isMemberPath`; the rest count for the hash).
+ * A folder pick as `GameDataFiles`: every `.mpq` is an archive, and so is a mod's loader
+ * `.exe` (its appended archive is read at install, an exe with none is passed over); a
+ * plugin or FireGraft file anywhere is the mod's code (hashed, never run); and every other
+ * file whose path (relative to the picked folder) starts with one of the game's folders is a
+ * loose member (the extraction reads those under `isMemberPath`; the rest count for the hash).
  * The picked folder's own name is the first segment of `webkitRelativePath` and is dropped,
  * so a mod's `mpq/arr/units.dat` is the member `arr\units.dat`.
  */
 export function splitPickedFiles(files: readonly File[]): GameDataFiles {
   const archives: { name: string; data: InstallBytes }[] = [];
   const loose: { path: string; data: InstallBytes }[] = [];
+  const code: { path: string; data: InstallBytes }[] = [];
   for (const file of files) {
     const rel = (file as File & { webkitRelativePath?: string }).webkitRelativePath || file.name;
     const segments = rel.split(/[\\/]/).filter(Boolean);
-    if (/\.mpq$/i.test(file.name)) {
+    if (/\.(mpq|exe)$/i.test(file.name)) {
       archives.push({ name: file.name, data: file });
       continue;
     }
+    if (isModCode(file.name)) {
+      code.push({ path: segments.slice(1).join("/") || file.name, data: file });
+      continue;
+    }
+    // (A program's library is never one of the game's files.)
+    if (/\.dll$/i.test(file.name)) continue;
     // Drop the picked folder's name, then look for a member path; a mod folder named
     // `mpq` or a StarCraft folder both put the game folders one level down.
     for (let skip = 0; skip < Math.min(3, segments.length - 1); skip++) {
@@ -147,7 +159,7 @@ export function splitPickedFiles(files: readonly File[]): GameDataFiles {
       }
     }
   }
-  return { archives, files: loose };
+  return { archives, files: loose, ...(code.length ? { code } : {}) };
 }
 
 /** The archives in the game's order: `StarDat`, `BrooDat`, then the rest as given. */
@@ -174,7 +186,13 @@ export async function installDataSet(profile: GameDataProfile, input: GameDataFi
   if (!base) pickArchives(names.map((n) => new File([], n.name))); // throws naming what is missing
   progress?.(0, t("Reading the archives"));
   const archives: ExtractRequest["archives"] = [];
-  for (const a of orderArchives(input.archives)) archives.push({ name: a.name, bytes: await bytesOf(a.data) });
+  for (const a of orderArchives(input.archives)) {
+    const bytes = await bytesOf(a.data);
+    if (!/\.exe$/i.test(a.name)) { archives.push({ name: a.name, bytes }); continue; }
+    // A mod's loader: the archive appended to the program is the mod's (FireGraft's patcher, MPQDraft's); a program with none is not.
+    const found = exeArchive(new Uint8Array(bytes));
+    if (found) archives.push({ name: a.name, bytes: found.archive.slice().buffer as ArrayBuffer });
+  }
   const overlay: NonNullable<ExtractRequest["overlay"]> = [];
   // The mod's files the extraction does not read (its sounds, say) go along for the hash alone, as Blobs where they are.
   const hashOnly: NonNullable<ExtractRequest["hashOnly"]> = [];
@@ -182,8 +200,10 @@ export async function installDataSet(profile: GameDataProfile, input: GameDataFi
     if (isMemberPath(f.path)) overlay.push({ path: f.path, bytes: await bytesOf(f.data) });
     else if (isGamePath(f.path)) hashOnly.push({ path: f.path, data: f.data instanceof Blob ? f.data : await bytesOf(f.data) });
   }
+  const code: NonNullable<ExtractRequest["code"]> = [];
+  for (const f of input.code ?? []) code.push({ path: f.path, data: f.data instanceof Blob ? f.data : await bytesOf(f.data) });
   const from = [...archives.map((a) => a.name), ...(overlay.length ? [t("{n, plural, one {# loose file} other {# loose files}}", { n: overlay.length })] : [])].join(" + ");
-  return runWorker(archives, from, progress, isDefaultProfile(normalized.id) ? undefined : normalized, overlay, undefined, false, base, hashOnly);
+  return runWorker(archives, from, progress, isDefaultProfile(normalized.id) ? undefined : normalized, overlay, undefined, false, base, hashOnly, code);
 }
 
 /**
@@ -308,6 +328,7 @@ function runWorker(
   lighting = false,
   base?: ExtractRequest["base"],
   hashOnly: NonNullable<ExtractRequest["hashOnly"]> = [],
+  code: NonNullable<ExtractRequest["code"]> = [],
 ): Promise<StoredCopy> {
   return new Promise((resolve, reject) => {
     let worker: Worker;
@@ -340,7 +361,7 @@ function runWorker(
       }
       resolve({ ...reply.stamp, where: reply.where });
     };
-    const req: ExtractRequest = { kind: "extract", archives, from, profile, overlay, ...(remastered ? { remastered } : {}), ...(lighting ? { lighting } : {}), ...(base ? { base } : {}), ...(hashOnly.length ? { hashOnly } : {}) };
+    const req: ExtractRequest = { kind: "extract", archives, from, profile, overlay, ...(remastered ? { remastered } : {}), ...(lighting ? { lighting } : {}), ...(base ? { base } : {}), ...(hashOnly.length ? { hashOnly } : {}), ...(code.length ? { code } : {}) };
     worker.postMessage(req, [...archives.map((a) => a.bytes), ...overlay.map((o) => o.bytes)]);
   });
 }

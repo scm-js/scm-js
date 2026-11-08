@@ -352,15 +352,15 @@ describe("scmjs mod diff", () => {
 /* ── Play, test ────────────────────────────────────────────────────────── */
 
 describe("scmjs mod play", () => {
-  it("hands the play page the files that differ from the game, with the data set's hash", async () => {
+  it("hands the play page every file of the mod, with the mod's hash", async () => {
     process.env.BROWSER = "none";
     const base = asGame(madeGame());
     const dir = tmp("play"); writeFolder(dir, madeMod());
-    const set = await playSet(await openMod(dir, base), base);
-    // The stat_txt.tbl and palette are the game's own: not handed over.
-    expect(set.same).toBe(2);
+    const set = await playSet(await openMod(dir, base));
+    // The stat_txt.tbl and palette are the game's own and handed over all the same: the page compares, and hashes all.
     expect(set.files.map((f) => f.path)).toContain("arr/weapons.dat");
-    expect(set.files.map((f) => f.path)).not.toContain("rez/stat_txt.tbl");
+    expect(set.files.map((f) => f.path)).toContain("rez/stat_txt.tbl");
+    expect(set.total.files).toBe(madeMod().size);
     expect(set.hash).toMatch(/^[0-9a-f]{16}$/);
     expect(set.hash).toBe(await dataSetHash(set.files.map((f) => ({ name: f.name, bytes: f.bytes }))));
     let page = "";
@@ -381,8 +381,7 @@ describe("scmjs mod play", () => {
   it("says the play page's refusal", async () => {
     process.env.BROWSER = "none";
     const dir = tmp("refused"); writeFolder(dir, madeMod());
-    const set = await playSet(await openMod(dir, null), null);
-    expect(set.against).toBeNull();
+    const set = await playSet(await openMod(dir, null));
     expect(set.files.length).toBe(madeMod().size);
     let page = "";
     const done = playOnPage(set, { play: "http://play.test/", onAddress: (a) => { page = a; }, timeout: 10_000 });

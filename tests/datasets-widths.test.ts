@@ -14,7 +14,7 @@ import { openArchives, readerFor } from "../src/gamedata/archives";
 import { namesFromAssets, unitCatalogue } from "../src/data/gameNames";
 import { dataSetUnitGroups, installNames, unitName, unitTypeCount } from "../src/data/units";
 import { CLASSIC_GROUP_LIMIT, decodeCv5, hasCreepFlag, loadTileset, megatileForTile, tileGroupOf, TILE_CREEP_FLAG } from "../src/formats/tileset/decode";
-import { changedFiles, changedFilesHash, extractOverCopy, firstOf, hdOffImages, storedPathOf } from "../src/gamedata/overCopy";
+import { dataSetHashOf, extractOverCopy, hdOffImages, storedPathOf } from "../src/gamedata/overCopy";
 import { dataSetHash } from "../src/formats/mod/sources";
 import { Archive, Creator } from "mopaq";
 import type { ExtractRequest, ExtractResponse } from "../src/gamedata/extract.worker";
@@ -177,34 +177,23 @@ describe.skipIf(!haveCopy)("a data set laid over a copy instead of the game's ar
 
 describe("a data set's hash", () => {
   const bytes = (...b: number[]) => new Uint8Array(b);
-  const base = new Map([["arr\\weapons.dat", bytes(9, 9)], ["arr\\units.dat", bytes(1, 1)]]);
-  const baseRead = (n: string) => base.get(n) ?? null;
 
-  it("is core's dataSetHash over the files that differ from the base, whatever their order or slashes", async () => {
+  it("is core's mod hash over every file the set has, whatever their order or slashes, never compared with a copy", async () => {
     const own = new Map([["arr\\units.dat", bytes(1, 2)], ["arr\\weapons.dat", bytes(9, 9)], ["rez\\unitnames.tbl", bytes(3)]]);
-    const hash = await changedFilesHash(["rez/unitnames.tbl", "ARR\\Units.dat", "arr/weapons.dat", "arr/flingy.dat"], (n) => own.get(n) ?? null, baseRead);
-    // weapons.dat is the base's byte for byte and flingy.dat is not the set's: neither is in it.
-    expect(hash).toBe(await dataSetHash([{ name: "arr\\units.dat", bytes: bytes(1, 2) }, { name: "rez\\unitnames.tbl", bytes: bytes(3) }]));
-    expect(hash).toMatch(/^[0-9a-f]{16}$/);
-    expect(await changedFilesHash(["arr\\weapons.dat"], (n) => own.get(n) ?? null, baseRead)).toBeNull();
+    const h = await dataSetHashOf(["rez/unitnames.tbl", "ARR\\Units.dat", "arr/weapons.dat", "arr/flingy.dat"], (n) => own.get(n) ?? null);
+    // flingy.dat is not the set's: not in it. weapons.dat is, whatever the game's is.
+    expect(h?.hash).toBe(await dataSetHash([{ name: "arr\\units.dat", bytes: bytes(1, 2) }, { name: "arr\\weapons.dat", bytes: bytes(9, 9) }, { name: "rez\\unitnames.tbl", bytes: bytes(3) }]));
+    expect(h?.hash).toMatch(/^[0-9a-f]{16}$/);
+    expect(await dataSetHashOf(["arr\\flingy.dat"], (n) => own.get(n) ?? null)).toBeNull();
   });
 
-  it("compares a file the copy underneath lacks with the game's, and lists the ones nothing had", async () => {
-    // A copy made before the extraction kept mapdata: it has portdata (the play set's) and no mapdata.
-    const copy = new Map([["arr/portdata.dat", bytes(5, 5)]]);
-    const game = new Map([["arr\\mapdata.dat", bytes(6, 6)], ["arr\\portdata.dat", bytes(5, 5)]]);
-    const copyRead = (n: string) => copy.get(storedPathOf(n)) ?? null;
-    const gameRead = (n: string) => game.get(n) ?? null;
-    // The mod ships the game's mapdata as it is, a portdata of its own, and a new picture.
-    const own = new Map([["arr\\mapdata.dat", bytes(6, 6)], ["arr\\portdata.dat", bytes(5, 9)], ["unit\\new\\thing.grp", bytes(1)]]);
-    const names = [...own.keys()];
-    const withGame = await changedFiles(names, (n) => own.get(n) ?? null, firstOf(copyRead, gameRead));
-    expect(withGame.unbased).toEqual(["unit\\new\\thing.grp"]);
-    expect(withGame.hash).toBe(await dataSetHash([{ name: "arr\\portdata.dat", bytes: bytes(5, 9) }, { name: "unit\\new\\thing.grp", bytes: bytes(1) }]));
-    // Without the game at hand the copy's gap counts: mapdata is hashed, and the stamp can say why.
-    const copyOnly = await changedFiles(names, (n) => own.get(n) ?? null, firstOf(copyRead, null));
-    expect(copyOnly.unbased).toEqual(["arr\\mapdata.dat", "unit\\new\\thing.grp"]);
-    expect(copyOnly.hash).not.toBe(withGame.hash);
+  it("has a line for each plugin and the FireGraft project, and a hash without the plugins beside it", async () => {
+    const own = new Map([["arr\\units.dat", bytes(1)], ["firegraft\\mod.fgp", bytes(2)], ["plugins\\inside.qdp", bytes(3)]]);
+    const h = await dataSetHashOf(own.keys(), (n) => own.get(n) ?? null, [{ name: "plugins/gptp.qdp", bytes: bytes(4) }, { name: "mod.fgd", bytes: bytes(5) }]);
+    expect(h?.lines.map((l) => l.split("\t")[0])).toEqual(["arr\\units.dat", "mod.fgp"]);
+    // A plugin inside the set's archive is no line (the play page does not load it); one carried as a file is.
+    expect(h?.pluginLines.map((l) => l.split("\t")[0])).toEqual(["plugins\\gptp.qdp"]);
+    expect(h?.withoutPlugins).not.toBe(h?.hash);
   });
 });
 
@@ -251,11 +240,12 @@ describe.skipIf(!haveArchives)("a made data set installed through the editor's e
     expect(reply.kind).toBe("done");
     const stamp = (reply as Extract<ExtractResponse, { kind: "done" }>).stamp;
     expect(datCount(decodeUnitsDat(new Uint8Array((reply as Extract<ExtractResponse, { kind: "done" }>).files!.find(([p]) => p === "arr/units.dat")![1])).flingy)).toBe(MADE_UNITS);
+    // Every file of the set's own, the weapons table it ships as the game has it among them.
     expect(stamp.hash).toBe(await dataSetHash([
       { name: "arr/units.dat", bytes: unitsDat }, { name: "rez/unitnames.tbl", bytes: unitNames }, { name: "sound/made/new.wav", bytes: sound },
+      { name: "arr/weapons.dat", bytes: game.readFile("arr\\weapons.dat") },
     ]));
-    // The two the game has not got are named as counted for want of a base; units.dat differs from the game's.
-    expect(stamp.hashUnbased).toEqual(["rez\\unitnames.tbl", "sound\\made\\new.wav"]);
+    expect(stamp.hashUnbased).toBeUndefined();
   }, 180_000);
 });
 

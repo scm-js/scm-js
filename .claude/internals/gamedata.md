@@ -394,18 +394,19 @@ The mods plan's slice M4 (`scm-sim` branch mods-plan, `docs/mods-plan.md`, "Tier
   now renames only the extraction's own tileset subfiles (four remaps + `dddata.bin`) — the play set's
   `tileset\<name>\dark.pcx` etc. stay at the game's path, which is where `play.ts` writes them (the old regex sent
   them to `tileset/<name>.dark.pcx`, a path nothing writes).
-- **Hash** (aligned with `mod-cli` on the `mods` branch, 2026-11-08): `overCopy.ts#changedFilesHash` = core's
-  `dataSetHash` rule (`src/formats/mod/sources.ts`; via `dataSetHashOfDigests` + `fileDigest` so a file's bytes go
-  once digested) over the set's **own files that differ from the base**. The worker's names: the overlay's keys, every
-  member the extraction asked (an archive's listfile may be partial), the mod archives' listed members, and
-  `ExtractRequest.hashOnly` — loose files in `GAME_FOLDERS` the extraction does not read (`sound\…`), posted as Blobs
-  (`install.ts#isGamePath`; `splitPickedFiles` now keeps them). Own = overlay over the non-game archives; base = the
-  game's archives, or the copy underneath via `storedPathOf` — then (2026-11-08) the copies *it* was laid over
-  (`extract.worker.ts#copyChain`, stamps' `base`, up to 4) and the game's archives when the request carries them
-  (`overCopy.ts#firstOf`); `changedFiles` also answers `unbased` (hashed because no base had the file), kept as the
-  stamp's `hashUnbased` (sorted members) so a hash that disagrees with the CLI's can be traced. Null (no `hash` in the stamp) when nothing differs —
-  the game's own copy has none now. Proof: `tests/datasets-widths.test.ts` "a made data set installed through the
-  editor's extraction" runs the worker's `onmessage` in Node over `fixtures/data` and compares with `dataSetHash`.
+- **Hash** (the one mod hash, 2026-11-08 branch `mod-hash`; `mods.md` "The mod hash, one rule"):
+  `overCopy.ts#dataSetHashOf(names, own, code)` = core's `modHashOfDigests` over **every** own file — never compared
+  with the base (the old `changedFiles`/`firstOf`/`copyChain`/`hashUnbased` are gone; `hashUnbased` stays in
+  `StoredStamp` only so old stamps read). Names: the overlay's keys, `ExtractRequest.hashOnly` (loose files in
+  `GAME_FOLDERS` the extraction does not read, `install.ts#isGamePath`), and each own archive's **listed** members, or
+  `hash.ts#probeNames` for an archive with no list — no longer `asked` (what the extraction read), which made a listed
+  archive's unlisted members count where the page does not. Code: `ExtractRequest.code` (loose `.qdp`/`.bwl`/`.fgp`/
+  `.fgd` from `splitPickedFiles`, anywhere in the pick) → plugin and project lines; an own archive's `.fgp` member is a
+  project line, its `.qdp`/`.fgd` members nothing. `splitPickedFiles` also takes `.exe` as an archive (installDataSet
+  keeps `exeArchive(bytes).archive`, drops an exe with none) and skips `.dll`. Base-only (the game's own copy): no own
+  file → no hash, as before. Proof: the worker's `onmessage` in Node over `fixtures/data` + Cosmonarchy's release
+  folder as `splitPickedFiles` gives it → stamp `ac3f86533e4b5a31` (the page's), 2 s; `tests/datasets-widths.test.ts`
+  "a made data set installed through the editor's extraction" (now counts the weapons.dat it ships unchanged).
 - **The map's member** `scmjs\dataset.json` (`services/mapDataSet.ts`): `stampDataSet` before `buildOutgoing` in
   `saveDocument` (bytes the Save dialog built are dropped when it changed the extras), only for a non-default set,
   never removed; `offerMapDataSet` after `openFileInto` and the Open dialog's own load → the `mapDataSet` dialog

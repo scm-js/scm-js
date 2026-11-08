@@ -25,6 +25,7 @@ import { GAP_COLOR, GEYSER_LANDMARK, START_LANDMARK } from "./diffpicture";
 import { cacheRoot, ensureEngine, findGameCopy, runnerFor, startRunner } from "./engine";
 import { writeOutput, type Written } from "./exchange";
 import { loadReplayInput, readInput, STDIO, type Input } from "./files";
+import { modReplayReason } from "./replaymod";
 import { openGameFiles, type GameFiles } from "./gamefiles";
 import {
   drawHeat, emptyEvents, EVENTS_VERSION, greyGround, HEAT_WHAT, heatField, heatPoints, matchReplay, rampStrip, SPREAD, takeEvent, tileCounts,
@@ -324,6 +325,8 @@ export async function heatmapMap(
       if (hashes.has(hash)) { skipped.push({ file: name, reason: t("the same replay as one before it") }); continue; }
       hashes.add(hash);
       const rep = await loadReplayInput(rin);
+      const modded = modReplayReason(rep);
+      if (modded) { skipped.push({ file: name, reason: modded }); continue; }
       const m = matchReplay(mine, replayMapIdentity(rep), !!o.force);
       if (!m.match) { skipped.push({ file: name, reason: m.reason }); continue; }
       taken.push({ file: name, path, hash, match: m.match });

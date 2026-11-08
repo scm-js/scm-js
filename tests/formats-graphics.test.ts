@@ -48,7 +48,67 @@ describe("GRP", () => {
     expect(rgba[3]).toBe(0);
     expect(sameBytes(encodeGrpImage(decodeGrpImage(bytes)), bytes)).toBe(true);
   });
+
+  it("reads and writes an uncompressed GRP (the game's interface pictures): frames as they are, shared and empty ones kept", async () => {
+    const bytes = rawGrp(30, 20, [
+      { box: [0, 0, 4, 3], data: 0 }, { box: [2, 1, 5, 2], data: 1 }, { box: [0, 0, 4, 3], data: 0 },
+      { box: [0, 0, 0, 0], data: 2 }, { box: [1, 1, 3, 3], data: 2 },
+    ], [Uint8Array.from({ length: 12 }, (_, i) => (i % 5 ? 40 + i : 0)), new Uint8Array(10).fill(9), Uint8Array.from({ length: 9 }, (_, i) => 200 + i)]);
+    const image = decodeGrpImage(bytes);
+    expect(image.raw).toBe(true);
+    expect(image.shares).toBeUndefined();
+    expect(Array.from(image.frames[1].pixels)).toEqual(Array(10).fill(9));
+    expect(Array.from(image.frames[0].pixels.subarray(0, 6))).toEqual([0, 41, 42, 43, 44, 0]);
+    expect(sameBytes(encodeGrpImage(image), bytes)).toBe(true);
+    const pal = testPalette();
+    const { grp } = await pngToGrp(await grpToPng(bytes, pal), pal);
+    expect(sameBytes(grp, bytes)).toBe(true);
+    // The same pictures run-length encoded are other bytes: the flag is what keeps it uncompressed.
+    expect(sameBytes(encodeGrpImage({ ...image, raw: undefined }), bytes)).toBe(false);
+  });
+
+  it("keeps an uncompressed GRP's sharing when its maker stored an equal frame twice, until the frame is edited", async () => {
+    const a = new Uint8Array(6).fill(7), b = new Uint8Array(6).fill(8);
+    const bytes = rawGrp(8, 8, [{ box: [0, 0, 3, 2], data: 0 }, { box: [0, 0, 3, 2], data: 1 }, { box: [0, 0, 3, 2], data: 2 }, { box: [0, 0, 3, 2], data: 0 }], [a, b, a]);
+    const image = decodeGrpImage(bytes);
+    expect(image.shares).toEqual([0, 1, 2, 0]);
+    expect(sameBytes(encodeGrpImage(image), bytes)).toBe(true);
+    const pal = testPalette();
+    expect(sameBytes((await pngToGrp(await grpToPng(image, pal), pal)).grp, bytes)).toBe(true);
+    // Without the note every equal frame shares; frame 3 edited no longer shares frame 0's data.
+    expect(encodeGrpImage({ ...image, shares: undefined }).length).toBe(bytes.length - 6);
+    const edited = { ...image, frames: image.frames.map((f, i) => (i === 3 ? { ...f, pixels: new Uint8Array(6).fill(1) } : f)) };
+    const back = decodeGrpImage(encodeGrpImage(edited));
+    expect(back.frames.map((f) => f.pixels[0])).toEqual([7, 8, 7, 1]);
+  });
+
+  it("names the wide-frame flag GPTP reads in an offset's high bit, rather than reading past the file", () => {
+    const bytes = encodeGrpImage(sampleGrp());
+    new DataView(bytes.buffer).setUint32(6 + 4, 0x80000000 | new DataView(bytes.buffer).getUint32(6 + 4, true), true);
+    expect(() => decodeGrpImage(bytes)).toThrow(/high bit set, which GPTP reads as a frame wider than 255 pixels/);
+  });
 });
+
+/**
+ * An uncompressed GRP made by hand: each frame's box and which of `data` it points at, packed in first-use order; an
+ * empty frame points where the data so far ends (where the game's files point theirs).
+ */
+function rawGrp(width: number, height: number, frames: { box: [number, number, number, number]; data: number }[], data: Uint8Array[]): Uint8Array {
+  const at: number[] = [];
+  const offsets: number[] = [];
+  let end = 6 + frames.length * 8;
+  for (const f of frames) {
+    const n = f.box[2] * f.box[3];
+    if (n && at[f.data] === undefined) { at[f.data] = end; end += n; }
+    offsets.push(n ? at[f.data] : end);
+  }
+  const out = new Uint8Array(end);
+  const view = new DataView(out.buffer);
+  view.setUint16(0, frames.length, true); view.setUint16(2, width, true); view.setUint16(4, height, true);
+  frames.forEach((f, i) => { out.set(f.box, 6 + i * 8); view.setUint32(6 + i * 8 + 4, offsets[i], true); });
+  data.forEach((d, i) => { if (at[i] !== undefined) out.set(d, at[i]); });
+  return out;
+}
 
 describe("PCX", () => {
   it("writes an 8-bit image that the editor's reader reads", () => {
@@ -124,9 +184,27 @@ describe.skipIf(!haveGameArchives)("the game's pictures (fixtures/data)", () => 
       const bytes = gameFile(p);
       if (!bytes) continue;
       n++;
-      expect(sameBytes(encodeGrpImage(decodeGrpImage(bytes)), bytes), p).toBe(true);
+      const image = decodeGrpImage(bytes);
+      expect(image.raw, p).toBeUndefined();
+      expect(sameBytes(encodeGrpImage(image), bytes), p).toBe(true);
     }
     expect(n).toBeGreaterThan(800);
+  });
+
+  it("the game's uncompressed interface GRPs read as uncompressed and encode back byte for byte", () => {
+    const names = ["dlgs\\protoss.grp", "dlgs\\terran.grp", "dlgs\\zerg.grp", "game\\icons.grp", "glue\\chatroom\\ichat.grp",
+      ...["mm", "nl", "pd", "pv", "rp", "rt", "rz", "td", "tv", "zd", "zv"].map((p) => `glue\\pal${p}\\dlg.grp`),
+      ...["pd", "pv", "td", "tv", "zd", "zv"].map((p) => `glue\\score${p}\\iScore.grp`)];
+    let n = 0;
+    for (const name of names) {
+      const bytes = gameFile(name);
+      if (!bytes) continue;
+      n++;
+      const image = decodeGrpImage(bytes);
+      expect(image.raw, name).toBe(true);
+      expect(sameBytes(encodeGrpImage(image), bytes), name).toBe(true);
+    }
+    expect(n).toBe(22);
   });
 
   it("every .lo? file comes back byte for byte, in binary and through PyLO text", () => {
@@ -184,4 +262,20 @@ describe.skipIf(!haveCosmonarchy)("a mod's GRPs (SCMJS_COSMONARCHY)", () => {
       });
     }
   }, 30_000);
+
+  it("its uncompressed interface GRPs (dialogs, score screens, HUD icons) come back byte for byte, through their sheets too", async () => {
+    const walk = (dir: string): string[] => readdirSync(cosmonarchyPath(dir)).flatMap((n) => statSync(cosmonarchyPath(`${dir}/${n}`)).isDirectory() ? walk(`${dir}/${n}`) : [`${dir}/${n}`]);
+    const files = ["dlgs", "game", "glue"].flatMap((d) => walk(`release/mpq/${d}`)).filter((p) => /\.grp$/i.test(p));
+    const pal = testPalette();
+    let raw = 0;
+    for (const f of files) {
+      const bytes = cosmonarchyFile(f);
+      const image = decodeGrpImage(bytes);
+      if (!image.raw) continue;
+      raw++;
+      expect(sameBytes(encodeGrpImage(image), bytes), f).toBe(true);
+      if (bytes.length < 60_000) expect(sameBytes((await pngToGrp(await grpToPng(image, pal), pal)).grp, bytes), f).toBe(true);
+    }
+    expect(raw).toBe(37);
+  }, 60_000);
 });

@@ -4,8 +4,8 @@
  *
  * The sheet is one PNG: every frame in a cell of the GRP's size, `columns` cells a row (17 for a GRP of facings).
  * It is written as a palette image with the palette's colours and index 0 transparent, so it reads back exactly; the
- * frames' boxes, the column count and the palette's name are kept in `tEXt` chunks (`scmjs:grp`), so the GRP that
- * comes back is the same bytes. A PNG made elsewhere (RGBA, or another palette) is quantised: each colour to the
+ * frames' boxes, the column count, the palette's name and whether the GRP is uncompressed are kept in `tEXt` chunks
+ * (`scmjs:grp`), so the GRP that comes back is the same bytes. A PNG made elsewhere (RGBA, or another palette) is quantised: each colour to the
  * nearest of the palette's (index 0 is transparent, never chosen for an opaque pixel), and the report says which
  * colours had no exact match and how many pixels moved.
  */
@@ -26,7 +26,8 @@ function rgbOf(p: NamedPalette): Uint8Array {
   throw new Error(`a palette is 256 colours (768 or 1024 bytes), not ${c.length} bytes`);
 }
 
-interface SheetNote { v: 1; palette: string; width: number; height: number; columns: number; frames: [number, number, number, number][] }
+/** `raw` and `shares` are an uncompressed GRP's (`GrpImage`), so that it comes back uncompressed and shared as it was. */
+interface SheetNote { v: 1; palette: string; width: number; height: number; columns: number; frames: [number, number, number, number][]; raw?: true; shares?: number[] }
 
 /** The default number of cells a row: 17 for a GRP of facings, else about square. */
 export function sheetColumns(frames: number): number {
@@ -55,7 +56,7 @@ export async function grpToPng(grpBytes: Uint8Array | GrpImage, palette: NamedPa
   });
   const pal = new Uint8Array(1024);
   for (let i = 0; i < 256; i++) { pal.set(rgb.subarray(i * 3, i * 3 + 3), i * 4); pal[i * 4 + 3] = i === 0 ? 0 : 255; }
-  const note: SheetNote = { v: 1, palette: palette.name, width: grp.width, height: grp.height, columns, frames: grp.frames.map((f) => [f.x, f.y, f.width, f.height]) };
+  const note: SheetNote = { v: 1, palette: palette.name, width: grp.width, height: grp.height, columns, frames: grp.frames.map((f) => [f.x, f.y, f.width, f.height]), ...(grp.raw ? { raw: true } : {}), ...(grp.shares ? { shares: grp.shares } : {}) };
   return encodePng({ width: W, height: H, indices, palette: pal, text: { ...options.text, "scmjs:grp": JSON.stringify(note) } });
 }
 
@@ -142,7 +143,7 @@ export async function pngToGrp(png: Uint8Array, palette: NamedPalette, options: 
     } else frames.push(frameFromPicture(pic, fw, fh));
   }
   report.coloursLost = [...lost.entries()].map(([k, v]) => ({ colour: `#${k.toString(16).padStart(6, "0")}`, ...v })).sort((a, b) => b.pixels - a.pixels);
-  const image: GrpImage = { width: fw, height: fh, frames };
+  const image: GrpImage = { width: fw, height: fh, frames, ...(note?.raw ? { raw: true } : {}), ...(note?.raw && Array.isArray(note.shares) ? { shares: note.shares } : {}) };
   return { grp: encodeGrpImage(image), image, report };
 }
 

@@ -2185,10 +2185,11 @@ scmjs mod pack mymod -o MyMod.mpq
 ```
 
 `mod unpack` writes the tables as PyDAT's text, the string tables, iscript and AI as
-PyMS's text, the GRPs as PNG sheets and the rest as they are, and `mod.json`. A file is
-written as text or a picture only when that packs back into the same bytes; anything else
-stays as it is under `files/`, and `mod.json` says which and why. `mod pack` puts the
-folder back into an MPQ (`--compression zlib`, `pkware` or `none`), or with
+PyMS's text, the GRPs as PNG sheets (the units' sprite sheets and the uncompressed GRPs of
+the dialogs, score screens and icons alike) and the rest as they are, and `mod.json`. A
+file is written as text or a picture only when that packs back into the same bytes;
+anything else stays as it is under `files/`, and `mod.json` says which and why. `mod pack`
+puts the folder back into an MPQ (`--compression zlib`, `pkware` or `none`), or with
 `--folder <out>` into loose files in the game's paths. The same folder gives the same MPQ
 every time. `scmjs mod new
 <folder>` starts an empty one.

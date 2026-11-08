@@ -78,7 +78,8 @@ datex tables together (sfxdata excluded: GPTP reads sfxdata.dat).
 2. Cosmonarchy's release folder (`release/`: the FireGraft exe's archive, then `mpq/`): info names it "Cosmonarchy BW"
    (the folder's one exe with an archive), 11 extended tables (10 `.datex`, sfxdata.dat expanded 20,000). Unpack
    26.7 s, 960 MB: 11 tables, 8 TBLs, 6 iscripts, AI (32,224 raw_bytes lines), 306 overlays, 6 grafts, **169 GRPs as
-   PNG**, 1,441 GRPs kept ("another encoder"), 37 GRPs our decoder refuses (empty copy / runs past the end), 3,516
+   PNG**, 1,441 GRPs kept ("another encoder"), 37 GRPs refused at the time (uncompressed GRPs, the interface pictures'
+   own format — read and written since 5e631bc, so 206 come out as PNG now; `units.md` has the finding), 3,516
    WAVs, 2,265 other files. Pack 13.1 s: **7,767 of 7,767 members byte-identical**, plus the two FireGraft files back
    in as members; the MPQ (zlib) 774 MB in 52 s.
 3. `tests/cli-mod.test.ts` (15; 12 without data), `tests/cli-mcp.test.ts` "the mod tools".
@@ -94,9 +95,9 @@ datex tables together (sfxdata excluded: GPTP reads sfxdata.dat).
 
 ## Open
 
-- The play page's side of `scmjs.play.dataSet` (M1, another slice): the message shape is in `docs/cli.md` "Playing a
-  mod on the play page"; the page's own drop hashes *every* file of a mod, `mod play` hashes the files it hands over
-  (the changed ones) — the same only when every file differs; reconcile when M1 lands (send the whole-mod hash too?).
+- The play page's side of `scmjs.play.dataSet` (M1, scm-sim's `mods-plan`): the message shape is in `docs/cli.md`
+  "Playing a mod on the play page"; the page keeps and hashes only the files that differ from the game's, by the same
+  rule as `mod play` (sorted `gamename<TAB>sha256` lines of the changed files, first 16 hex digits), so the two agree.
   The editor's data-set hash (stamp, `scmjs\dataset.json`, `TestMapFile.dataSet.hash`) is `mod play`'s rule since
   the `mods` merge (`gamedata.md` "Hash"). Gaps left: the CLI's base is the person's game, the editor's the copy it
   laid the set over (another data set's copy, if that was the base); the CLI probes a list-less archive by the game's

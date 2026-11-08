@@ -27,7 +27,8 @@ import { STDIO, type Input } from "./files";
 import { openGameFiles, readSpeedTables, readTileset, readUnitsDat, type GameFiles } from "./gamefiles";
 import { encodePng } from "./png";
 import { DEFAULT_PNG_SCALE, mapPicture, PNG_SCALES, tilesetOf, type Picture } from "./preview";
-import { CliError, dot, gameText, mark, num, pc, plural, size, table } from "./ui";
+import { msg, t, translate } from "./i18n";
+import { CliError, dot, gameText, mark, num, pc, size, table } from "./ui";
 import {
   blockBoxes, CELL_PX, CELLS_PER_TILE, clearance, distancesFrom, distancesWithin, groundFromTiles, narrowestOn, nearestCell, openCells,
   passableCells, pathTo, stepsToPx, UNIT_RADIUS, withoutSpecks, type Ground, type PixelBox,
@@ -275,7 +276,7 @@ export interface LayoutFiles { tileset: Tileset; units: UnitsDat | null; speeds:
  */
 export function analyzeLayout(scn: Scenario, files: LayoutFiles): Layout {
   const places = startPlaces({ scenario: scn });
-  if (places.length < 2) throw new CliError(`The map has ${plural(places.length, "start location")}: map analyze compares starts, and needs two or more.`, "A melee map has a start location for every player (the Start Location unit in the editor).", 2);
+  if (places.length < 2) throw new CliError(t("The map has {n, plural, one {# start location} other {# start locations}}: map analyze compares starts, and needs two or more.", { n: places.length }), t("A melee map has a start location for every player (the Start Location unit in the editor)."), 2);
   const { ground, blocking } = mapGround(scn, files.tileset, files.units);
   const { w, h } = ground;
   const open = openCells(ground);
@@ -441,9 +442,11 @@ function nearestWhere(w: number, h: number, x: number, y: number, reach: number,
 
 /* ── The verdicts ─────────────────────────────────────────────── */
 
-const listed = (xs: readonly (string | number)[]) => (xs.length < 2 ? String(xs[0] ?? "") : `${xs.slice(0, -1).join(", ")} and ${xs.at(-1)}`);
-const starts = (players: readonly number[]) => `${players.length === 1 ? "start" : "starts"} ${listed(players)}`;
-const tilesText = (n: number) => `${num(Math.round(n * 10) / 10)} ${Math.round(n * 10) === 10 ? "tile" : "tiles"}`;
+const listed = (xs: readonly (string | number)[]) => (xs.length < 2 ? String(xs[0] ?? "") : t("{list} and {last}", { list: xs.slice(0, -1).join(", "), last: String(xs.at(-1)) }));
+const starts = (players: readonly number[]) => t("{n, plural, one {start} other {starts}} {list}", { n: players.length, list: listed(players) });
+const tilesText = (n: number) => (Math.round(n * 10) === 10 ? t("{n} tile", { n: num(1) }) : t("{n} tiles", { n: num(Math.round(n * 10) / 10) }));
+/** "the starts' middle", or "start 3's": what a start was compared with. */
+const comparedWith = (other: number | null, player: () => number) => (other === null ? t("the starts' middle") : t("start {n}'s", { n: player() }));
 const percent = (f: number) => `${Math.round(f * 100)}%`;
 
 /** The middle value (the mean of the two middle ones for an even count). */
@@ -482,60 +485,60 @@ export function verdictsOf(l: Layout): Verdict[] {
 
   // Ground between the starts.
   const apart = l.pairs.filter((p) => p.ground === null);
-  if (l.terrain.walkable === 0) warn("No ground on the map is walkable: its tiles are blank or all cliff and water.");
-  else if (apart.length === l.pairs.length) warn("No two starts are joined by ground: an island map, played by air or drop.");
-  else if (apart.length) warn(`No ground joins ${listed(apart.map((p) => `${p.a} and ${p.b}`))}.`);
+  if (l.terrain.walkable === 0) warn(t("No ground on the map is walkable: its tiles are blank or all cliff and water."));
+  else if (apart.length === l.pairs.length) warn(t("No two starts are joined by ground: an island map, played by air or drop."));
+  else if (apart.length) warn(t("No ground joins {pairs}.", { pairs: listed(apart.map((p) => t("{a} and {b}", { a: p.a, b: p.b }))) }));
   if (l.shortest && l.longest && apart.length < l.pairs.length) {
-    if (l.pairs.length === 1) info(`One pair of starts: ${tilesText(l.shortest.ground!)} by ground, ${l.shortest.ratio}× the straight line.`);
-    else if (l.spread !== null && l.spread <= FAIR_WITHIN) ok(`Ground distances between starts within ${percent(l.spread)} of each other (${num(Math.round(l.shortest.ground!))} to ${num(Math.round(l.longest.ground!))} tiles).`);
-    else if (l.rankSpread && l.rankSpread.spread <= FAIR_WITHIN) ok(`Every start's walks to its opponents match the others', nearest to farthest, within ${percent(l.rankSpread.spread)}; near and far pairs differ by ${percent(l.spread ?? 0)}.`);
+    if (l.pairs.length === 1) info(t("One pair of starts: {tiles} by ground, {ratio}× the straight line.", { tiles: tilesText(l.shortest.ground!), ratio: String(l.shortest.ratio) }));
+    else if (l.spread !== null && l.spread <= FAIR_WITHIN) ok(t("Ground distances between starts within {spread} of each other ({lo} to {hi} tiles).", { spread: percent(l.spread), lo: num(Math.round(l.shortest.ground!)), hi: num(Math.round(l.longest.ground!)) }));
+    else if (l.rankSpread && l.rankSpread.spread <= FAIR_WITHIN) ok(t("Every start's walks to its opponents match the others', nearest to farthest, within {spread}; near and far pairs differ by {apart}.", { spread: percent(l.rankSpread.spread), apart: percent(l.spread ?? 0) }));
     else if (l.rankSpread) {
       const r = l.rankSpread, near = l.starts[r.near], far = l.starts[r.far];
-      const nth = r.rank === 1 ? "nearest opponent" : `${["", "", "second", "third", "fourth", "fifth", "sixth", "seventh"][r.rank] ?? `${r.rank}th`} nearest opponent`;
+      const nth = r.rank === 1 ? t("nearest opponent") : t("{rank, select, 2 {second} 3 {third} 4 {fourth} 5 {fifth} 6 {sixth} 7 {seventh} other {{rank}th}} nearest opponent", { rank: r.rank });
       const d = (i: number) => l.pairs.filter((p) => (p.a === l.starts[i].player || p.b === l.starts[i].player) && p.ground !== null).map((p) => p.ground!).sort((a, b) => a - b)[r.rank - 1];
-      warn(`Start ${far.player}'s ${nth} is ${percent(r.spread)} farther than start ${near.player}'s (${num(Math.round(d(r.far)))} against ${num(Math.round(d(r.near)))} tiles).`);
-    } else if (l.spread !== null) warn(`Ground distances between starts differ by ${percent(l.spread)} (${num(Math.round(l.shortest.ground!))} to ${num(Math.round(l.longest.ground!))} tiles).`);
+      warn(t("Start {far}'s {nth} is {spread} farther than start {near}'s ({farTiles} against {nearTiles} tiles).", { far: far.player, nth, spread: percent(r.spread), near: near.player, farTiles: num(Math.round(d(r.far))), nearTiles: num(Math.round(d(r.near))) }));
+    } else if (l.spread !== null) warn(t("Ground distances between starts differ by {spread} ({lo} to {hi} tiles).", { spread: percent(l.spread), lo: num(Math.round(l.shortest.ground!)), hi: num(Math.round(l.longest.ground!)) }));
   }
 
   // Mains.
   const empty = l.starts.filter((s) => !s.main.fields).map((s) => s.player);
-  if (empty.length) warn(`No mineral fields within 12 tiles of ${starts(empty)}.`);
+  if (empty.length) warn(t("No mineral fields within 12 tiles of {starts}.", { starts: starts(empty) }));
   else {
     const f = oddOnes(l.starts.map((s) => s.main.fields), players);
-    for (const p of f.odd) warn(`Start ${p}'s main has ${plural(l.starts.find((s) => s.player === p)!.main.fields, "mineral field")}, the others ${num(f.usual)}.`);
+    for (const p of f.odd) warn(t("Start {p}'s main has {n, plural, one {# mineral field} other {# mineral fields}}, the others {usual}.", { p, n: l.starts.find((s) => s.player === p)!.main.fields, usual: num(f.usual) }));
     const g = oddOnes(l.starts.map((s) => s.main.geysers), players);
-    for (const p of g.odd) warn(`Start ${p}'s main has ${plural(l.starts.find((s) => s.player === p)!.main.geysers, "geyser")}, the others ${num(g.usual)}.`);
+    for (const p of g.odd) warn(t("Start {p}'s main has {n, plural, one {# geyser} other {# geysers}}, the others {usual}.", { p, n: l.starts.find((s) => s.player === p)!.main.geysers, usual: num(g.usual) }));
     const m = oddOnes(l.starts.map((s) => s.main.minerals + s.main.gas), players);
     if (!f.odd.length && !g.odd.length) {
-      if (m.odd.length) for (const p of m.odd) { const s = l.starts.find((x) => x.player === p)!; warn(`Start ${p}'s main holds ${num(s.main.minerals)} minerals and ${num(s.main.gas)} gas, unlike the others.`); }
-      else ok(`Every main has ${plural(l.starts[0].main.fields, "mineral field")} and ${plural(l.starts[0].main.geysers, "geyser")}${m.odd.length ? "" : `, ${num(l.starts[0].main.minerals)} minerals and ${num(l.starts[0].main.gas)} gas`}.`);
+      if (m.odd.length) for (const p of m.odd) { const s = l.starts.find((x) => x.player === p)!; warn(t("Start {p}'s main holds {minerals} minerals and {gas} gas, unlike the others.", { p, minerals: num(s.main.minerals), gas: num(s.main.gas) })); }
+      else ok(t("Every main has {fields, plural, one {# mineral field} other {# mineral fields}} and {geysers, plural, one {# geyser} other {# geysers}}, {minerals} minerals and {gas} gas.", { fields: l.starts[0].main.fields, geysers: l.starts[0].main.geysers, minerals: num(l.starts[0].main.minerals), gas: num(l.starts[0].main.gas) }));
     }
   }
 
   // Naturals.
   const none = l.starts.filter((s) => !s.natural).map((s) => s.player);
-  if (none.length === l.starts.length) info("No start has a natural: there is no other base to walk to.");
+  if (none.length === l.starts.length) info(t("No start has a natural: there is no other base to walk to."));
   else {
-    if (none.length) warn(`${none.length === 1 ? "Start" : "Starts"} ${listed(none)} ${none.length === 1 ? "has" : "have"} no natural: no other base can be walked to.`);
+    if (none.length) warn(t("{n, plural, one {Start {list} has} other {Starts {list} have}} no natural: no other base can be walked to.", { n: none.length, list: listed(none) }));
     const seen = new Set<number>();
     for (const s of l.starts) {
       if (!s.natural?.sharedWith.length || seen.has(s.natural.base)) continue;
       seen.add(s.natural.base);
-      warn(`Starts ${listed([s.player, ...s.natural.sharedWith].sort((a, b) => a - b))} have the same nearest base at (${s.natural.at.x}, ${s.natural.at.y}) for a natural.`);
+      warn(t("Starts {list} have the same nearest base at ({x}, {y}) for a natural.", { list: listed([s.player, ...s.natural.sharedWith].sort((a, b) => a - b)), x: s.natural.at.x, y: s.natural.at.y }));
     }
     const with_ = l.starts.filter((s) => s.natural);
     if (with_.length >= 2) {
       const odd = apartFrom(with_.map((s) => s.natural!.ground), NATURAL_TILES);
       for (const o of odd) {
         const s = with_[o.index];
-        warn(`Start ${s.player}'s natural is ${num(Math.round(Math.abs(o.by)))} tiles ${o.by > 0 ? "farther" : "nearer"} than ${o.other === null ? "the starts' middle" : `start ${with_[o.other].player}'s`} (${num(Math.round(s.natural!.ground))} against ${num(Math.round(o.against))} by ground).`);
+        warn(t("Start {p}'s natural is {by} tiles {way, select, farther {farther} other {nearer}} than {other} ({tiles} against {against} by ground).", { p: s.player, by: num(Math.round(Math.abs(o.by))), way: o.by > 0 ? "farther" : "nearer", other: comparedWith(o.other, () => with_[o.other!].player), tiles: num(Math.round(s.natural!.ground)), against: num(Math.round(o.against)) }));
       }
       const ds = with_.map((s) => s.natural!.ground);
       const [lo, hi] = [Math.round(Math.min(...ds)), Math.round(Math.max(...ds))];
-      if (!odd.length) ok(`Naturals ${lo === hi ? num(lo) : `${num(lo)} to ${num(hi)}`} tiles from their mains by ground.`);
+      if (!odd.length) ok(lo === hi ? t("Naturals {n} tiles from their mains by ground.", { n: num(lo) }) : t("Naturals {lo} to {hi} tiles from their mains by ground.", { lo: num(lo), hi: num(hi) }));
       const gasless = with_.filter((s) => !s.natural!.geysers).map((s) => s.player);
-      if (gasless.length === with_.length) info("No natural has gas.");
-      else for (const p of gasless) warn(`Start ${p} has no gas at its natural.`);
+      if (gasless.length === with_.length) info(t("No natural has gas."));
+      else for (const p of gasless) warn(t("Start {p} has no gas at its natural.", { p }));
     }
   }
 
@@ -546,21 +549,23 @@ export function verdictsOf(l: Layout): Verdict[] {
     const odd = apartFrom(widths, WAY_OUT_TILES);
     for (const o of odd) {
       const s = ramps[o.index];
-      warn(`Start ${s.player}'s way out is ${tilesText(s.wayOut!.width)} at its narrowest, ${o.other === null ? "the starts' middle" : `start ${ramps[o.other].player}'s`} ${tilesText(o.against)}.`);
+      warn(t("Start {p}'s way out is {width} at its narrowest, {other} {against}.", { p: s.player, width: tilesText(s.wayOut!.width), other: comparedWith(o.other, () => ramps[o.other!].player), against: tilesText(o.against) }));
     }
     const lo = Math.min(...widths), hi = Math.max(...widths);
-    if (!odd.length) ok(`Every main's way out is ${lo === hi ? tilesText(lo) : `${num(lo)} to ${tilesText(hi)}`} at its narrowest.`);
+    if (!odd.length) ok(lo === hi ? t("Every main's way out is {width} at its narrowest.", { width: tilesText(lo) }) : t("Every main's way out is {lo} to {hi} at its narrowest.", { lo: num(lo), hi: tilesText(hi) }));
   }
   for (const p of l.pairs) {
     if (!p.narrowest || p.narrowest.width >= CHOKE_NARROW) continue;
-    warn(`A ${num(p.narrowest.width)}-tile choke between starts ${p.a} and ${p.b} at (${p.narrowest.at.x}, ${p.narrowest.at.y})${p.narrowest.wayOutOf ? `, start ${p.narrowest.wayOutOf}'s way out` : ""}.`);
+    warn(p.narrowest.wayOutOf
+      ? t("A {width}-tile choke between starts {a} and {b} at ({x}, {y}), start {of}'s way out.", { width: num(p.narrowest.width), a: p.a, b: p.b, x: p.narrowest.at.x, y: p.narrowest.at.y, of: p.narrowest.wayOutOf })
+      : t("A {width}-tile choke between starts {a} and {b} at ({x}, {y}).", { width: num(p.narrowest.width), a: p.a, b: p.b, x: p.narrowest.at.x, y: p.narrowest.at.y }));
   }
 
   // Raised ground round the mains (mid or high: a tileset's "high" terrain is its middle level in some).
   const raised = l.starts.map((s) => s.around.high + s.around.mid);
   for (const o of apartFrom(raised, HIGH_POINTS)) {
     const s = l.starts[o.index];
-    warn(`Start ${s.player} has ${Math.round(raised[o.index])}% raised ground (mid or high) within ${AROUND_TILES} tiles of it, ${o.other === null ? "the starts' middle" : `start ${l.starts[o.other].player}`} ${Math.round(o.against)}%.`);
+    warn(t("Start {p} has {raised}% raised ground (mid or high) within {around} tiles of it, {other} {against}%.", { p: s.player, raised: Math.round(raised[o.index]), around: AROUND_TILES, other: o.other === null ? t("the starts' middle") : t("start {n}", { n: l.starts[o.other].player }), against: Math.round(o.against) }));
   }
   return out;
 }
@@ -671,13 +676,13 @@ export function layoutReport(input: Pick<Input, "path" | "name">, scn: Scenario,
 export async function analyzeMap(input: Input, map: OpenedMap, o: AnalyzeOptions, stdout: Writable = process.stdout): Promise<{ report: AnalyzeReport; lines: string[] }> {
   const t0 = performance.now();
   const scn = map.scenario;
-  if (o.scale !== undefined && o.picture === undefined) throw new CliError("--scale is the picture's: give --picture a file to write too", null, 2);
+  if (o.scale !== undefined && o.picture === undefined) throw new CliError(t("--scale is the picture's: give --picture a file to write too"), null, 2);
   const scale = o.scale === undefined ? DEFAULT_PNG_SCALE : Number(o.scale);
-  if (!(PNG_SCALES as readonly number[]).includes(scale)) throw new CliError(`--scale takes ${PNG_SCALES.join(", ")}, not "${o.scale}"`, null, 2);
+  if (!(PNG_SCALES as readonly number[]).includes(scale)) throw new CliError(t("--scale takes {scales}, not \"{value}\"", { scales: PNG_SCALES.join(", "), value: String(o.scale) }), null, 2);
   const count = startPlaces(map).length;
-  if (count < 2) throw new CliError(`${input.name} has ${plural(count, "start location")}: map analyze compares starts, and needs two or more.`, "A melee map has a start location for every player (the Start Location unit in the editor).", 2);
+  if (count < 2) throw new CliError(t("{name} has {n, plural, one {# start location} other {# start locations}}: map analyze compares starts, and needs two or more.", { name: input.name, n: count }), t("A melee map has a start location for every player (the Start Location unit in the editor)."), 2);
 
-  const files = await openGameFiles(o.starcraft, "Which ground is walkable comes from your installation's tileset");
+  const files = await openGameFiles(o.starcraft, t("Which ground is walkable comes from your installation's tileset"));
   const layoutFiles = await loadLayoutFiles(scn, files);
   const t1 = performance.now();
   const layout = analyzeLayout(scn, layoutFiles);
@@ -697,57 +702,67 @@ export async function analyzeMap(input: Input, map: OpenedMap, o: AnalyzeOptions
 const MARK: Record<VerdictLevel, string> = { ok: mark.ok, warn: mark.warn, info: mark.info };
 const t0f = (n: number) => num(Math.round(n));
 /** "9 fields + gas", "7 fields, no gas", "15 fields + 2 gas", "a geyser alone". */
-const resourcesText = (fields: number, geysers: number) => (!fields ? (geysers === 1 ? "a geyser alone" : `${geysers} geysers alone`) : `${plural(fields, "field")}${geysers === 0 ? ", no gas" : geysers === 1 ? " + gas" : ` + ${geysers} gas`}`);
+const resourcesText = (fields: number, geysers: number) => (!fields
+  ? t("{n, plural, one {a geyser alone} other {# geysers alone}}", { n: geysers })
+  : geysers === 0 ? t("{n, plural, one {# field} other {# fields}}, no gas", { n: fields })
+    : geysers === 1 ? t("{n, plural, one {# field} other {# fields}} + gas", { n: fields })
+      : t("{n, plural, one {# field} other {# fields}} + {geysers} gas", { n: fields, geysers }));
+/** Where a start is (`sideOf`) and its ground's level, as the report says them; the JSON keeps the English words. */
+const PLACE_WORDS = [msg("top left"), msg("top"), msg("top right"), msg("left"), msg("middle"), msg("right"), msg("bottom left"), msg("bottom"), msg("bottom right"), msg("low"), msg("mid"), msg("high")];
+const placeWord = (word: string) => (PLACE_WORDS.includes(word) ? translate(word) : word);
+/** The units the walks are timed for, as the table's heads say them (the JSON keys stay English). */
+const UNIT_WORDS = [msg("Zergling"), msg("Marine"), msg("Zealot")];
+const unitWord = (name: string) => (UNIT_WORDS.includes(name) ? translate(name) : name);
 
 /** The report as the terminal shows it. */
 export function layoutLines(r: AnalyzeReport, files: Pick<GameFiles, "label">, all = false): string[] {
   const out: string[] = [];
   const warned = r.verdicts.some((v) => v.level === "warn");
-  out.push(`${warned ? mark.warn : mark.ok} ${pc.bold(r.name)}  ${pc.dim(`${num(r.size.width)} × ${num(r.size.height)}${dot}${r.tileset}${dot}${plural(r.starts.length, "start location")}${dot}${plural(r.bases.length, "base")}${dot}${files.label}${dot}${(r.ms.total / 1000).toFixed(1)} s`)}`);
+  out.push(`${warned ? mark.warn : mark.ok} ${pc.bold(r.name)}  ${pc.dim(`${num(r.size.width)} × ${num(r.size.height)}${dot}${r.tileset}${dot}${t("{n, plural, one {# start location} other {# start locations}}", { n: r.starts.length })}${dot}${t("{n, plural, one {# base} other {# bases}}", { n: r.bases.length })}${dot}${files.label}${dot}${(r.ms.total / 1000).toFixed(1)} s`)}`);
 
   out.push("", ...table([
-    ["Start", "Main", "Natural", "", "Way out", "Height"].map((c) => pc.dim(c)),
+    [t("Start"), t("Main"), t("Natural"), "", t("Way out"), t("Height")].map((c) => pc.dim(c)),
     ...r.starts.map((s) => [
-      `${s.player} ${pc.dim(`${s.side}, ${s.clock} o'clock`)}`,
+      `${s.player} ${pc.dim(t("{side}, {clock} o'clock", { side: placeWord(s.side), clock: s.clock }))}`,
       resourcesText(s.main.fields, s.main.geysers),
-      s.natural ? `${t0f(s.natural.ground)} ${pc.dim(`(air ${t0f(s.natural.air)})`)}` : pc.yellow("none"),
-      s.natural ? `${resourcesText(s.natural.fields, s.natural.geysers)}${s.natural.sharedWith.length ? pc.dim(`, also ${listed(s.natural.sharedWith)}'s`) : ""}` : "",
-      s.wayOut ? `${num(s.wayOut.width)} ${pc.dim(`at ${s.wayOut.at.x}, ${s.wayOut.at.y}`)}` : "–",
-      `on ${s.level}${pc.dim(`, raised ${Math.round(s.around.high + s.around.mid)}%${s.around.high ? ` (high ${Math.round(s.around.high)}%)` : ""}`)}`,
+      s.natural ? `${t0f(s.natural.ground)} ${pc.dim(t("(air {air})", { air: t0f(s.natural.air) }))}` : pc.yellow(t("none")),
+      s.natural ? `${resourcesText(s.natural.fields, s.natural.geysers)}${s.natural.sharedWith.length ? pc.dim(t(", also {list}'s", { list: listed(s.natural.sharedWith) })) : ""}` : "",
+      s.wayOut ? `${num(s.wayOut.width)} ${pc.dim(t("at {x}, {y}", { x: s.wayOut.at.x, y: s.wayOut.at.y }))}` : "–",
+      `${t("on {level}", { level: placeWord(s.level) })}${pc.dim(s.around.high ? t(", raised {raised}% (high {high}%)", { raised: Math.round(s.around.high + s.around.mid), high: Math.round(s.around.high) }) : t(", raised {raised}%", { raised: Math.round(s.around.high + s.around.mid) }))}`,
     ]),
   ], 2));
 
   // The walks: a table of every pair when there are few (or --all), else the matrix and the extremes.
   const speedNames = r.speeds.map((s) => s.name);
   const pairRow = (p: PairLayout) => [
-    `${p.a} ↔ ${p.b}`, p.ground === null ? pc.yellow("no ground") : `${t0f(p.ground)} tiles`, pc.dim(`air ${t0f(p.air)}`), p.ratio === null ? "" : `${p.ratio.toFixed(2)}×`,
+    `${p.a} ↔ ${p.b}`, p.ground === null ? pc.yellow(t("no ground")) : t("{n} tiles", { n: t0f(p.ground) }), pc.dim(t("air {air}", { air: t0f(p.air) })), p.ratio === null ? "" : `${p.ratio.toFixed(2)}×`,
     ...speedNames.map((n) => (p.seconds ? `${p.seconds[n].toFixed(1)} s` : "")),
-    p.narrowest ? `${num(p.narrowest.width)} ${pc.dim(`at ${p.narrowest.at.x}, ${p.narrowest.at.y}${p.narrowest.wayOutOf ? `, ${p.narrowest.wayOutOf}'s way out` : ""}`)}` : "",
+    p.narrowest ? `${num(p.narrowest.width)} ${pc.dim(p.narrowest.wayOutOf ? t("at {x}, {y}, {of}'s way out", { x: p.narrowest.at.x, y: p.narrowest.at.y, of: p.narrowest.wayOutOf }) : t("at {x}, {y}", { x: p.narrowest.at.x, y: p.narrowest.at.y }))}` : "",
   ];
-  const head = ["Pair", "Ground", "", "Ratio", ...speedNames, "Narrowest"].map((c) => pc.dim(c));
+  const head = [t("Pair"), t("Ground"), "", t("Ratio"), ...speedNames.map(unitWord), t("Narrowest")].map((c) => pc.dim(c));
   if (all || r.pairs.length <= 6) out.push("", ...table([head, ...r.pairs.map(pairRow)], 2));
   else {
     const players = r.starts.map((s) => s.player);
     const cell = (a: number, b: number) => { if (a === b) return "–"; const p = r.pairs.find((x) => (x.a === a && x.b === b) || (x.a === b && x.b === a))!; return p.ground === null ? "·" : t0f(p.ground); };
-    out.push("", pc.dim("  Tiles by ground"), ...table([["", ...players.map(String)].map((c) => pc.dim(c)), ...players.map((a) => [pc.dim(String(a)), ...players.map((b) => cell(a, b))])], 2));
+    out.push("", pc.dim(`  ${t("Tiles by ground")}`), ...table([["", ...players.map(String)].map((c) => pc.dim(c)), ...players.map((a) => [pc.dim(String(a)), ...players.map((b) => cell(a, b))])], 2));
     out.push("", ...table([head, ...[r.shortest, r.longest].filter((p): p is PairLayout => !!p).map(pairRow)], 2));
   }
   if (r.spread !== null && r.shortest && r.longest && r.pairs.length > 1) {
-    out.push(pc.dim(`  Shortest ${r.shortest.a} ↔ ${r.shortest.b}, longest ${r.longest.a} ↔ ${r.longest.b}: ${percent(r.spread)} apart${r.speeds.length ? "" : dot + "no walking speeds (the copy's units.dat, flingy.dat or iscript.bin could not be read), so tiles only"}`));
-  } else if (!r.speeds.length) out.push(pc.dim("  No walking speeds (the copy's units.dat, flingy.dat or iscript.bin could not be read), so tiles only"));
+    out.push(pc.dim(`  ${t("Shortest {a} ↔ {b}, longest {c} ↔ {d}: {spread} apart", { a: r.shortest.a, b: r.shortest.b, c: r.longest.a, d: r.longest.b, spread: percent(r.spread) })}${r.speeds.length ? "" : dot + t("no walking speeds (the copy's units.dat, flingy.dat or iscript.bin could not be read), so tiles only")}`));
+  } else if (!r.speeds.length) out.push(pc.dim(`  ${t("No walking speeds (the copy's units.dat, flingy.dat or iscript.bin could not be read), so tiles only")}`));
 
-  const t = r.terrain;
-  out.push("", `  ${pc.dim("Terrain")}  walkable ${t.walkable}% ${pc.dim(`(high ${t.high}%, mid ${t.mid}%, low ${t.low}%)`)}${dot}buildable ${t.buildable}%${dot}unwalkable ${t.unwalkable}%`);
-  if (r.blocking.buildings) out.push(`  ${pc.dim("Standing")} ${plural(r.blocking.buildings, "building")} in the way, besides the resources`);
+  const g = r.terrain;
+  out.push("", `  ${pc.dim(t("Terrain"))}  ${t("walkable {n}%", { n: g.walkable })} ${pc.dim(t("(high {high}%, mid {mid}%, low {low}%)", { high: g.high, mid: g.mid, low: g.low }))}${dot}${t("buildable {n}%", { n: g.buildable })}${dot}${t("unwalkable {n}%", { n: g.unwalkable })}`);
+  if (r.blocking.buildings) out.push(`  ${t("Standing {n, plural, one {# building} other {# buildings}} in the way, besides the resources", { n: r.blocking.buildings })}`);
 
   if (all && r.bases.length) {
     out.push("", ...table([
-      ["Base", "Fields", "Minerals", "Geysers", "Gas", ""].map((c) => pc.dim(c)),
-      ...r.bases.map((b) => [`(${b.at.x}, ${b.at.y})`, String(b.fields), num(b.minerals), String(b.geysers), num(b.gas), b.mainOf ? pc.dim(`start ${b.mainOf}'s main`) : r.starts.some((s) => s.natural && r.bases[s.natural.base] === b) ? pc.dim(`natural of ${listed(r.starts.filter((s) => s.natural && r.bases[s.natural.base] === b).map((s) => s.player))}`) : ""]),
+      [t("Base"), t("Fields"), t("Minerals"), t("Geysers"), t("Gas"), ""].map((c) => pc.dim(c)),
+      ...r.bases.map((b) => [`(${b.at.x}, ${b.at.y})`, String(b.fields), num(b.minerals), String(b.geysers), num(b.gas), b.mainOf ? pc.dim(t("start {n}'s main", { n: b.mainOf })) : r.starts.some((s) => s.natural && r.bases[s.natural.base] === b) ? pc.dim(t("natural of {list}", { list: listed(r.starts.filter((s) => s.natural && r.bases[s.natural.base] === b).map((s) => s.player)) })) : ""]),
     ], 2));
   }
 
   out.push("", ...r.verdicts.map((v) => `${MARK[v.level]} ${v.text}`));
-  if (r.picture) out.push("", pc.dim(`  Picture: ${r.picture.width} × ${r.picture.height} PNG, ${plural(r.picture.scale, "pixel")} a tile, written to ${r.picture.path === STDIO ? "standard output" : r.picture.path}${dot}${size(r.picture.bytes)}`));
+  if (r.picture) out.push("", pc.dim(`  ${t("Picture: {width} × {height} PNG, {scale, plural, one {# pixel} other {# pixels}} a tile, written to {path}", { width: r.picture.width, height: r.picture.height, scale: r.picture.scale, path: r.picture.path === STDIO ? t("standard output") : r.picture.path })}${dot}${size(r.picture.bytes)}`));
   return out;
 }

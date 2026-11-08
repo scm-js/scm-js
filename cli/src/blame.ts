@@ -29,7 +29,8 @@ import { sectionBytes } from "./dump";
 import { kindOf, loadMapInput } from "./files";
 import { blobIds, commitsTouching, locate, short, Versions, type Commit } from "./history";
 import { noHistory } from "./maplog";
-import { CliError, columns, pc, size } from "./ui";
+import { msg, t, translate } from "./i18n";
+import { CliError, columns, padColumns, pc, size } from "./ui";
 
 export const BLAME_KINDS = ["settings", "units", "locations", "triggers", "strings"] as const;
 export type BlameKind = (typeof BLAME_KINDS)[number];
@@ -42,16 +43,17 @@ export interface Item { id: string; content: string; label: string; text: string
 type Snapshot = Partial<Record<BlameKind, Item[]>>;
 
 const sha1 = (s: string | Uint8Array) => createHash("sha1").update(s).digest("hex");
-const owner = (o: number) => (o === 11 ? "Neutral" : o < 8 ? `Player ${o + 1}` : `Owner ${o}`);
+const owner = (o: number) => (o === 11 ? t("Neutral") : o < 8 ? t("Player {n}", { n: o + 1 }) : t("Owner {n}", { n: o }));
 const cut = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 
 /** `shown`: the text too — only the version blamed needs it, and a trigger's summary is the costly part. */
 function triggerItems(doc: OpenedMap, shown: boolean): Item[] {
   const names = triggerNames(doc.scenario);
-  return readTriggers(doc.scenario).map((t, i) => {
-    const key = fingerprintTrigger(t);
+  return readTriggers(doc.scenario).map((trig, i) => {
+    const key = fingerprintTrigger(trig);
     if (!shown) return { id: key, content: key, label: `${i + 1}`, text: "" };
-    const sum = summarizeTrigger(t, names);
+    // The trigger's summary is the text trigger form's words, English in every language.
+    const sum = summarizeTrigger(trig, names);
     return { id: key, content: key, label: `${i + 1}`, text: `${sum.players}: ${sum.conditions || "always"} → ${sum.actions || "nothing"}` };
   });
 }
@@ -87,38 +89,39 @@ function unitItems(doc: OpenedMap): Item[] {
     .map(([k, g]) => ({ id: k, content: sha1(g.keys.sort().join("\n")), label: `${unitName(g.unitId)} · ${owner(g.owner)}`, text: `× ${g.keys.length}` }));
 }
 
-/** The sections settings live in, under the name the editor's windows give them. */
+/** The sections settings live in, under the name the editor's windows give them (shown through `translate`). */
 const SETTING_SECTIONS: [string, string[]][] = [
-  ["Terrain", ["MTXM", "TILE", "ISOM"]], ["Doodads", ["DD2"]], ["Sprites", ["THG2"]], ["Fog of war", ["MASK"]],
-  ["Unit settings", ["UNIS", "UNIx"]], ["Upgrade settings", ["UPGS", "UPGx"]], ["Tech settings", ["TECS", "TECx"]],
-  ["Unit availability", ["PUNI"]], ["Upgrade availability", ["UPGR", "PUPx"]], ["Tech availability", ["PTEC", "PTEx"]],
-  ["Switch names", ["SWNM"]], ["Sound list", ["WAV"]],
+  [msg("Terrain"), ["MTXM", "TILE", "ISOM"]], [msg("Doodads"), ["DD2"]], [msg("Sprites"), ["THG2"]], [msg("Fog of war"), ["MASK"]],
+  [msg("Unit settings"), ["UNIS", "UNIx"]], [msg("Upgrade settings"), ["UPGS", "UPGx"]], [msg("Tech settings"), ["TECS", "TECx"]],
+  [msg("Unit availability"), ["PUNI"]], [msg("Upgrade availability"), ["UPGR", "PUPx"]], [msg("Tech availability"), ["PTEC", "PTEx"]],
+  [msg("Switch names"), ["SWNM"]], [msg("Sound list"), ["WAV"]],
 ];
 
 function settingItems(doc: OpenedMap): Item[] {
   const s = doc.scenario;
   const out: Item[] = [];
-  const add = (label: string, text: string, content = text) => out.push({ id: label, content, label, text });
-  add("Name", plainText(scenarioName(s) ?? ""));
-  add("Description", plainText(scenarioDescription(s) ?? "").replace(/\s+/g, " "));
-  add("Size", `${s.width} × ${s.height}`);
-  add("Tileset", TILESETS[s.era]?.name ?? String(s.era));
-  add("Version", MAP_VERSIONS[mapVersionOf(s.fileVersion)].label);
-  add("Text encoding", TEXT_ENCODINGS.find((e) => e.id === s.strings.encoding)?.label ?? s.strings.encoding);
+  // `id` is the English label (what matches the item between versions); `label` is it in the reader's language.
+  const add = (id: string, label: string, text: string, content = text) => out.push({ id, content, label, text });
+  add("Name", t("Name"), plainText(scenarioName(s) ?? ""));
+  add("Description", t("Description"), plainText(scenarioDescription(s) ?? "").replace(/\s+/g, " "));
+  add("Size", t("Size"), `${s.width} × ${s.height}`);
+  add("Tileset", t("Tileset"), translate(TILESETS[s.era]?.name ?? String(s.era)));
+  add("Version", t("Version"), translate(MAP_VERSIONS[mapVersionOf(s.fileVersion)].label));
+  add("Text encoding", t("Text encoding"), translate(TEXT_ENCODINGS.find((e) => e.id === s.strings.encoding)?.label ?? s.strings.encoding));
   for (let i = 0; i < 8; i++) {
-    const colour = PLAYER_COLORS[s.playerColors[i] ?? 0]?.name ?? String(s.playerColors[i] ?? 0);
-    add(`Player ${i + 1}`, `${playerTypeLabel(s.playerTypes[i] ?? 0)}, ${playerRaceLabel(s.playerRaces[i] ?? 0)}, ${colour}, force ${(s.forces.playerForce[i] ?? 0) + 1}`);
+    const colour = translate(PLAYER_COLORS[s.playerColors[i] ?? 0]?.name ?? String(s.playerColors[i] ?? 0));
+    add(`Player ${i + 1}`, t("Player {n}", { n: i + 1 }), t("{type}, {race}, {colour}, force {force}", { type: translate(playerTypeLabel(s.playerTypes[i] ?? 0)), race: translate(playerRaceLabel(s.playerRaces[i] ?? 0)), colour, force: (s.forces.playerForce[i] ?? 0) + 1 }));
   }
-  for (let i = 0; i < 4; i++) add(`Force ${i + 1}`, `${plainText(forceName(s, i))}${s.forces.flags[i] ? `, flags ${s.forces.flags[i]}` : ""}`);
+  for (let i = 0; i < 4; i++) add(`Force ${i + 1}`, t("Force {n}", { n: i + 1 }), `${plainText(forceName(s, i))}${s.forces.flags[i] ? t(", flags {flags}", { flags: s.forces.flags[i] }) : ""}`);
   const bytes = sectionBytes(s);
   for (const [label, names] of SETTING_SECTIONS) {
     const parts = names.map((n) => bytes.get(n)).filter((b): b is Uint8Array => !!b);
     if (!parts.length) continue;
     const h = createHash("sha1");
     for (const [i, p] of parts.entries()) h.update(names[i]).update(p);
-    add(label, size(parts.reduce((n, p) => n + p.length, 0)), h.digest("hex"));
+    add(label, translate(label), size(parts.reduce((n, p) => n + p.length, 0)), h.digest("hex"));
   }
-  for (const [name, b] of [...doc.extras].sort(([a], [b]) => a.localeCompare(b))) add(`File ${name}`, size(b.length), sha1(b));
+  for (const [name, b] of [...doc.extras].sort(([a], [b]) => a.localeCompare(b))) add(`File ${name}`, t("File {name}", { name }), size(b.length), sha1(b));
   return out;
 }
 
@@ -158,7 +161,7 @@ export interface MapBlame {
 
 /** A range's two ends: `A..B` → [A, B or HEAD]; anything else is one revision. */
 export function splitRange(rev: string): { from: string | null; to: string } {
-  if (rev.includes("...")) throw new CliError(`map blame takes a revision or a range A..B, not ${rev}`, null, 2);
+  if (rev.includes("...")) throw new CliError(t("map blame takes a revision or a range A..B, not {rev}", { rev }), null, 2);
   const at = rev.indexOf("..");
   if (at < 0) return { from: null, to: rev };
   return { from: rev.slice(0, at) || "HEAD", to: rev.slice(at + 2) || "HEAD" };
@@ -176,7 +179,7 @@ export async function blameMap(file: string, kinds: readonly BlameKind[], o: { r
   const range = o.rev ? splitRange(o.rev) : { from: null, to: "HEAD" };
   const commits = commitsTouching(f, range.from ? `${range.from}..${range.to}` : range.to, { topo: true });
   const onDisk = !o.rev && existsSync(file);
-  if (!commits.length) throw range.from ? new CliError(`No commit in ${o.rev} changed ${f.path}`, "A wider range, or none, goes further back.", 2) : noHistory(f, file, o.rev);
+  if (!commits.length) throw range.from ? new CliError(t("No commit in {range} changed {path}", { range: String(o.rev), path: f.path }), t("A wider range, or none, goes further back."), 2) : noHistory(f, file, o.rev);
   const listed = new Map(commits.map((c) => [c.hash, c]));
   // Every version the walk may want, in the order it will want them: one git call for all the blob ids.
   const specs = [`${range.to}:${f.path}`, ...commits.flatMap((c) => [`${c.hash}:${f.path}`, ...c.parents.map((p) => `${p}:${f.path}`)])];
@@ -202,7 +205,7 @@ export async function blameMap(file: string, kinds: readonly BlameKind[], o: { r
     topDoc = await loadMapInput({ path: file, name: f.name, bytes, kind: kindOf(f.name, bytes) });
     uncommitted = !top || sha1(bytes) !== sha1(versions.bytes(top));
   } else {
-    if (!top) throw new CliError(`git has no ${f.path} at ${range.to}`, null, 2);
+    if (!top) throw new CliError(t("git has no {path} at {rev}", { path: f.path, rev: range.to }), null, 2);
     topDoc = await versions.map(top);
   }
   const topSnap = snapshot(topDoc, kinds, true);
@@ -261,8 +264,8 @@ export async function blameMap(file: string, kinds: readonly BlameKind[], o: { r
 
   const out: MapBlame = { file, path: f.path, rev: o.rev ?? null, kinds: rows, walked: { commits: walked, parsed: versions.counts.parsed, of: commits.length } };
   if (o.trigger !== undefined) {
-    const t = readTriggers(topDoc.scenario)[o.trigger - 1];
-    if (t) out.detail = triggersToText(topDoc.scenario, [t]).trimEnd();
+    const trig = readTriggers(topDoc.scenario)[o.trigger - 1];
+    if (trig) out.detail = triggersToText(topDoc.scenario, [trig]).trimEnd();
   }
   // The file's date stands for "now" on a change not committed, as git blame's own clock does.
   if (uncommitted) out.modified = statSync(file).mtime.toISOString();
@@ -282,7 +285,9 @@ function describeCommits(root: string, hashes: string[]): Map<string, Commit> {
 
 const spawnSyncGit = (args: string[]) => spawnSync("git", args, { encoding: "utf8" }).stdout ?? "";
 
-const KIND_TITLE: Record<BlameKind, string> = { settings: "Settings", units: "Units", locations: "Locations", triggers: "Triggers", strings: "Strings" };
+const KIND_TITLE: Record<BlameKind, string> = { settings: msg("Settings"), units: msg("Units"), locations: msg("Locations"), triggers: msg("Triggers"), strings: msg("Strings") };
+/** ` · path at rev`, after a title. */
+const where = (b: MapBlame) => ` · ${b.rev ? t("{path} at {rev}", { path: b.path, rev: b.rev }) : b.path}`;
 
 /**
  * The table, git blame's shape: `hash (author date label) text`, the columns as wide as their widest cell. A boundary
@@ -291,7 +296,7 @@ const KIND_TITLE: Record<BlameKind, string> = { settings: "Settings", units: "Un
 export function printBlame(b: MapBlame, width = process.stdout.columns || 120): string[] {
   const lines: string[] = [];
   const all = BLAME_KINDS.filter((k) => b.kinds[k]);
-  const who = (r: BlameRow) => (r.commit ? r.commit.author : "Not committed yet");
+  const who = (r: BlameRow) => (r.commit ? r.commit.author : t("Not committed yet"));
   const day = (r: BlameRow) => (r.commit ? r.commit.date.slice(0, 10) : (b.modified ?? "").slice(0, 10));
   const hash = (r: BlameRow) => (r.commit ? (r.commit.boundary ? `^${short(r.commit.hash, 7)}` : short(r.commit.hash, 8)) : "00000000");
   const rowsOf = all.flatMap((k) => b.kinds[k]!);
@@ -299,8 +304,8 @@ export function printBlame(b: MapBlame, width = process.stdout.columns || 120): 
   for (const k of all) {
     const rs = b.kinds[k]!;
     if (lines.length) lines.push("");
-    lines.push(pc.bold(`${KIND_TITLE[k]} (${rs.length})`) + pc.dim(` · ${b.path}${b.rev ? ` at ${b.rev}` : ""}`));
-    if (!rs.length) { lines.push(pc.dim("  (none)")); continue; }
+    lines.push(pc.bold(`${translate(KIND_TITLE[k])} (${rs.length})`) + pc.dim(where(b)));
+    if (!rs.length) { lines.push(pc.dim(`  ${t("(none)")}`)); continue; }
     const lw = Math.max(...rs.map((r) => columns(r.label)));
     const numeric = rs.every((r) => /^\d+$/.test(r.label));
     for (const r of rs) {
@@ -319,11 +324,12 @@ export function printBlame(b: MapBlame, width = process.stdout.columns || 120): 
 /** One item, with the commit's subject and (for a trigger) its whole text. */
 export function printBlameItem(b: MapBlame, kind: BlameKind, row: BlameRow, title: string): string[] {
   const c = row.commit;
-  const lines = [pc.bold(title) + pc.dim(` · ${b.path}${b.rev ? ` at ${b.rev}` : ""}`), ""];
+  const lines = [pc.bold(title) + pc.dim(where(b)), ""];
+  const changed = t("Last changed");
   if (c) {
-    lines.push(`  ${pc.dim("Last changed")}  ${pc.yellow(c.boundary ? `^${short(c.hash, 7)}` : short(c.hash, 8))}${pc.dim(" · ")}${pc.cyan(c.author)}${pc.dim(" · ")}${c.date.slice(0, 16).replace("T", " ")}${c.boundary ? pc.dim(" (or before: the range starts here)") : ""}`);
-    lines.push(`                ${c.subject}`);
-  } else lines.push(`  ${pc.dim("Last changed")}  ${pc.red("not committed yet")}`);
+    lines.push(`  ${pc.dim(changed)}  ${pc.yellow(c.boundary ? `^${short(c.hash, 7)}` : short(c.hash, 8))}${pc.dim(" · ")}${pc.cyan(c.author)}${pc.dim(" · ")}${c.date.slice(0, 16).replace("T", " ")}${c.boundary ? pc.dim(` ${t("(or before: the range starts here)")}`) : ""}`);
+    lines.push(`  ${padColumns("", columns(changed))}  ${c.subject}`);
+  } else lines.push(`  ${pc.dim(changed)}  ${pc.red(t("not committed yet"))}`);
   lines.push("");
   if (kind === "triggers" && b.detail) lines.push(...b.detail.split("\n").map((l) => `  ${l}`));
   else lines.push(`  ${row.text}`);

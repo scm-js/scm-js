@@ -6,6 +6,7 @@
  */
 import { MEGATILE_PX } from "../../src/formats/tileset/decode";
 import { plainText } from "../../src/editor/textColors";
+import { t } from "./i18n";
 import type { Picture } from "./preview";
 
 /* ── A game's events, as the runner sends them and the cache keeps them ──────── */
@@ -76,8 +77,8 @@ export function matchReplay(map: MapIdentity, rep: MapIdentity, force = false): 
   const sized = map.width === rep.width && map.height === rep.height;
   if (sized && sameName(map.name, rep.name)) return { match: "name", reason: "" };
   if (force) return { match: "forced", reason: "" };
-  const what = `${plainText(rep.name).trim() || "a map with no name"} (${rep.width} × ${rep.height})`;
-  return { match: null, reason: sized ? `played on ${what}` : `played on ${what}, another size` };
+  const what = `${plainText(rep.name).trim() || t("a map with no name")} (${rep.width} × ${rep.height})`;
+  return { match: null, reason: sized ? t("played on {map}", { map: what }) : t("played on {map}, another size", { map: what }) };
 }
 
 /* ── The events chosen ──────────────────────────────────────── */

@@ -16,6 +16,7 @@ import type { ChildProcess } from "node:child_process";
 import { FRAME_MS, type Command, type Replay } from "@scm-js/replay";
 import { ensureEngine, findGameCopy, runnerFor, startRunner } from "./engine";
 import type { Input } from "./files";
+import { t, translate } from "./i18n";
 import { CliError, columns, dot, duration, gameText, mark, num, pc, truecolor, unicode, visible } from "./ui";
 
 /* ── The runner's lines (scm-sim's src/exact/runReplay.ts) ──────────── */
@@ -185,8 +186,8 @@ export const clock = (frame: number) => duration(frame * FRAME_MS);
 export function pictureLines(v: View, o: PictureOptions): string[] {
   const { start, frame } = v;
   const width = o.size.cols;
-  const title = `${pc.bold(gameText(start.map.name))} ${pc.dim(`${start.map.width} × ${start.map.height}${dot}${start.map.tileset}`)}`;
-  const right = `${pc.bold(clock(frame.frame))} ${pc.dim(`frame ${num(frame.frame)}`)}  ${v.paused ? pc.yellow("paused") : pc.dim(`${v.speed}×`)}`;
+  const title = `${pc.bold(gameText(start.map.name))} ${pc.dim(`${start.map.width} × ${start.map.height}${dot}${translate(start.map.tileset)}`)}`;
+  const right = `${pc.bold(clock(frame.frame))} ${pc.dim(t("frame {n}", { n: num(frame.frame) }))}  ${v.paused ? pc.yellow(t("paused")) : pc.dim(`${v.speed}×`)}`;
   const gap = Math.max(1, width - columns(title) - columns(right));
   const out = [title + " ".repeat(gap) + right, ...drawMinimap({ ...start.map, terrain: start.terrain }, frame.units, v.sides, o), ""];
   const color = o.color ?? pc.isColorSupported;
@@ -196,7 +197,7 @@ export function pictureLines(v: View, o: PictureOptions): string[] {
   const cells = v.sides.map((s, k) => {
     const p = frame.players[k] ?? [0, 0, 0, 0, 0];
     const at = gone(k);
-    const figures = at === null ? [`${num(p[0])}${pc.dim("/")}${num(p[1])}`, `${p[2]}${pc.dim("/")}${p[3]}`, pc.dim(`${num(p[4])} units`)] : [pc.yellow(`left at ${clock(at)}`), "", ""];
+    const figures = at === null ? [`${num(p[0])}${pc.dim("/")}${num(p[1])}`, `${p[2]}${pc.dim("/")}${p[3]}`, pc.dim(t("{n} units", { n: num(p[4]) }))] : [pc.yellow(t("left at {clock}", { clock: clock(at) })), "", ""];
     return [`${swatch(s)} ${gameText(s.name)}`, RACE_LETTER[s.race] ?? "?", ...figures, pc.dim(`${num(v.apm[k] ?? 0)} APM`)];
   });
   const playing = cells.filter((_, k) => gone(k) === null);
@@ -218,7 +219,7 @@ export function pictureLines(v: View, o: PictureOptions): string[] {
 export function summaryLine(v: View): string {
   return `${pc.bold(clock(v.frame.frame).padStart(5))}  ${v.sides.map((s, k) => {
     const p = v.frame.players[k] ?? [0, 0, 0, 0, 0], at = v.left?.[k] ?? null;
-    return `${gameText(s.name)} ${RACE_LETTER[s.race] ?? "?"} ${at === null ? `${pc.dim(`${p[0]}/${p[1]}`)} ${p[2]}/${p[3]} ${pc.dim(`${p[4]}u ${v.apm[k]} APM`)}` : `${pc.yellow(`left at ${clock(at)}`)} ${pc.dim(`${v.apm[k]} APM`)}`}`;
+    return `${gameText(s.name)} ${RACE_LETTER[s.race] ?? "?"} ${at === null ? `${pc.dim(`${p[0]}/${p[1]}`)} ${p[2]}/${p[3]} ${pc.dim(`${p[4]}u ${v.apm[k]} APM`)}` : `${pc.yellow(t("left at {clock}", { clock: clock(at) }))} ${pc.dim(`${v.apm[k]} APM`)}`}`;
   }).join(pc.dim("  |  "))}`;
 }
 
@@ -272,7 +273,7 @@ export class Tally {
 /** `m:ss`, `h:mm:ss` or seconds, as a frame of the game; a CliError for anything else. */
 export function parseClock(spec: string, option = "--from"): number {
   const parts = spec.trim().split(":");
-  if (!parts.length || parts.length > 3 || parts.some((p) => !/^\d+$/.test(p))) throw new CliError(`${option} takes m:ss (or h:mm:ss), not "${spec}"`, null, 2);
+  if (!parts.length || parts.length > 3 || parts.some((p) => !/^\d+$/.test(p))) throw new CliError(t("{option} takes m:ss (or h:mm:ss), not \"{spec}\"", { option, spec }), null, 2);
   const seconds = parts.reduce((n, p) => n * 60 + Number(p), 0);
   return Math.round((seconds * 1000) / FRAME_MS);
 }
@@ -355,7 +356,7 @@ class Runner {
  * free, for a pipe) and the picture drawn as it goes. Resolves when the replay ends or a key stops it.
  */
 export async function watchReplay(input: Input, replay: Replay, o: WatchOptions = {}): Promise<WatchOutcome> {
-  if (!existsSync(input.path)) throw new CliError(`No file ${input.path}`, null, 2);
+  if (!existsSync(input.path)) throw new CliError(t("No file {path}", { path: input.path }), null, 2);
   const out = o.out ?? ((text: string) => process.stdout.write(text));
   const tty = o.tty ?? !!process.stdout.isTTY;
   const game = findGameCopy(o.starcraft);
@@ -367,14 +368,14 @@ export async function watchReplay(input: Input, replay: Replay, o: WatchOptions 
   if (!paced) args.push("--every", String(o.every ?? 1440));
   let speed = o.speed ?? 8;
   const fps = o.fps ?? 12;
-  const starting = pc.dim(`Starting the game${dot}${game.kind === "remastered" ? "Remastered" : "1.16.1"} files${dot}${pc.cyan(input.name)}`);
+  const starting = pc.dim(`${t("Starting the game")}${dot}${game.kind === "remastered" ? t("Remastered files") : t("1.16.1 files")}${dot}${pc.cyan(input.name)}`);
   if (paced) out(starting + "\n");
   const r = new Runner(startRunner(runner, args, { node: o.node, stdin: paced }));
   const first = await r.next();
   if (!first || first.kind !== "start") {
     await r.exit();
-    if (first?.kind === "error") throw new CliError(first.message, "The runner is scm-sim's; a replay the game itself plays and your own copy of the game are what it needs.");
-    throw new CliError(`The game did not start: the runner stopped without a word.${r.stderr.trim() ? `\n${r.stderr.trim().split("\n").slice(-6).join("\n")}` : ""}`);
+    if (first?.kind === "error") throw new CliError(first.message, t("The runner is scm-sim's; a replay the game itself plays and your own copy of the game are what it needs."));
+    throw new CliError(`${t("The game did not start: the runner stopped without a word.")}${r.stderr.trim() ? `\n${r.stderr.trim().split("\n").slice(-6).join("\n")}` : ""}`);
   }
   const start = first;
   const sides = sidesOf(start, replay);
@@ -402,7 +403,7 @@ export async function watchReplay(input: Input, replay: Replay, o: WatchOptions 
       else if (l.kind === "error") { await r.exit(); throw new CliError(l.message); }
     }
     await r.exit();
-    if (!outcome.end) throw new CliError(`The game did not finish: the runner stopped without a result.${r.stderr.trim() ? `\n${r.stderr.trim().split("\n").slice(-6).join("\n")}` : ""}`);
+    if (!outcome.end) throw new CliError(`${t("The game did not finish: the runner stopped without a result.")}${r.stderr.trim() ? `\n${r.stderr.trim().split("\n").slice(-6).join("\n")}` : ""}`);
     return outcome;
   }
 
@@ -460,9 +461,10 @@ export async function watchReplay(input: Input, replay: Replay, o: WatchOptions 
 
 /** The line after the picture: how far it went, and how the game kept to the replay. */
 export function watchSummary(input: Input, r: WatchOutcome): string {
-  const where = `${clock(r.frame)} ${pc.dim(`(frame ${num(r.frame)} of ${num(r.start.frames)})`)}`;
-  const kept = r.end?.check.parted !== null && r.end?.check.parted !== undefined ? `${dot}${pc.yellow(`the game parted from the replay at ${clock(r.end.check.parted)}`)}` : "";
-  return `${r.stopped ? mark.info : mark.ok} ${pc.bold(input.name)}: ${r.stopped ? "stopped at" : r.end?.ended ? "watched to the end," : "watched to"} ${where}${kept}${r.stopped ? "" : endedBy(r)}${r.end ? `${dot}${pc.dim(`${(r.end.ms.total / 1000).toFixed(1)} s`)}` : ""}`;
+  const where = `${clock(r.frame)} ${pc.dim(t("(frame {frame} of {frames})", { frame: num(r.frame), frames: num(r.start.frames) }))}`;
+  const kept = r.end?.check.parted !== null && r.end?.check.parted !== undefined ? `${dot}${pc.yellow(t("the game parted from the replay at {clock}", { clock: clock(r.end.check.parted) }))}` : "";
+  const how = r.stopped ? t("stopped at {where}", { where }) : r.end?.ended ? t("watched to the end, {where}", { where }) : t("watched to {where}", { where });
+  return `${r.stopped ? mark.info : mark.ok} ${pc.bold(input.name)}: ${how}${kept}${r.stopped ? "" : endedBy(r)}${r.end ? `${dot}${pc.dim(`${(r.end.ms.total / 1000).toFixed(1)} s`)}` : ""}`;
 }
 
 /** How the game ended, where the runner says (one deployed before it did says nothing): who won, or that the replay ran out. */
@@ -471,8 +473,8 @@ function endedBy(r: WatchOutcome): string {
   if (!end?.ended) return "";
   const names = (r.sides ?? r.start.players).map((s) => gameText(s.name));
   const won = (end.outcomes ?? []).flatMap((o, k) => (o === "victory" && names[k] ? [names[k]] : []));
-  if (won.length) return `${dot}${pc.green(`${won.join(" and ")} won`)}`;
-  if (end.by === "replay") return `${dot}ended at the replay's end`;
+  if (won.length) return `${dot}${pc.green(t("{names} won", { names: won.join(t(" and ")) }))}`;
+  if (end.by === "replay") return `${dot}${t("ended at the replay's end")}`;
   return "";
 }
 

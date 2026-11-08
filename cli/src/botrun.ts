@@ -8,7 +8,8 @@ import { createInterface } from "node:readline";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { ensureEngine, findGameCopy, runnerFor, startRunner } from "./engine";
-import { CliError, dot, mark, pc, plural, print, size } from "./ui";
+import { t, translate } from "./i18n";
+import { CliError, dot, mark, pc, print, size } from "./ui";
 
 // The engine, the cache and the copy of the game are `engine.ts`'s, shared with `scmjs replay watch`; named here still
 // for what imports them from here (doctor.ts, the tests).
@@ -51,18 +52,18 @@ export interface BotRunOutcome {
 }
 
 const RACE_LETTER: Record<string, string> = { zerg: "Z", terran: "T", protoss: "P" };
-const side = (p: PlayerLine) => `P${p.slot + 1} ${pc.bold(p.kind === "bot" ? "bot" : "computer")} ${RACE_LETTER[p.race] ?? "?"} ${pc.dim(`${p.minerals}/${p.gas}`)} ${p.supplyUsed}/${p.supplyAvailable}`;
+const side = (p: PlayerLine) => `P${p.slot + 1} ${pc.bold(p.kind === "bot" ? t("bot") : t("computer"))} ${RACE_LETTER[p.race] ?? "?"} ${pc.dim(`${p.minerals}/${p.gas}`)} ${p.supplyUsed}/${p.supplyAvailable}`;
 
 /** A runner's line as the terminal's. Null for lines that say nothing to a person. */
 export function wordLine(l: RunnerLine): string | null {
   switch (l.kind) {
-    case "start": return `${pc.bold(l.bot.name)} on ${pc.cyan(l.map.name)} ${pc.dim(`${l.map.width} × ${l.map.height}, ${l.map.tileset}`)}${dot}${l.players.map((p) => `${p.kind === "bot" ? "bot" : "computer"} ${p.race}`).join(" vs ")}${dot}seed ${l.seed}${dot}${l.copy === "remastered" ? "Remastered" : "1.16.1"} files`;
+    case "start": return `${t("{bot} on {map}", { bot: pc.bold(l.bot.name), map: pc.cyan(l.map.name) })} ${pc.dim(`${l.map.width} × ${l.map.height}, ${translate(l.map.tileset)}`)}${dot}${l.players.map((p) => `${p.kind === "bot" ? t("bot") : t("computer")} ${p.race}`).join(" vs ")}${dot}${t("seed {seed}", { seed: l.seed })}${dot}${l.copy === "remastered" ? t("Remastered files") : t("1.16.1 files")}`;
     case "text": return `  ${pc.dim(l.text)}`;
-    case "progress": return `  ${pc.dim(`frame ${String(l.frame).padStart(6)}`)}  ${l.players.map(side).join(pc.dim("  |  "))}`;
+    case "progress": return `  ${pc.dim(`${t("frame")} ${String(l.frame).padStart(6)}`)}  ${l.players.map(side).join(pc.dim("  |  "))}`;
     case "end": {
-      const won = l.outcome === "victory" ? `${mark.ok} ${pc.bold("the bot won")}` : l.outcome === "defeat" ? `${mark.error} ${pc.bold("the bot lost")}` : l.outcome === "draw" ? `${mark.info} a draw` : `${mark.warn} no outcome after ${plural(l.frame, "frame")}`;
+      const won = l.outcome === "victory" ? `${mark.ok} ${pc.bold(t("the bot won"))}` : l.outcome === "defeat" ? `${mark.error} ${pc.bold(t("the bot lost"))}` : l.outcome === "draw" ? `${mark.info} ${t("a draw")}` : `${mark.warn} ${t("no outcome after {n, plural, one {# frame} other {# frames}}", { n: l.frame })}`;
       const frames = Math.max(1, l.frame);
-      return `${won}${l.ended ? ` at frame ${l.frame}` : ""}${dot}${size(l.commandBytes)} of orders${l.errors.length ? `${dot}${pc.red(plural(l.errors.length, "error"))}` : ""}${dot}${(l.ms.game / frames).toFixed(2)} ms a frame game, ${(l.ms.bot / frames).toFixed(2)} bot${dot}${(l.ms.total / 1000).toFixed(1)} s`;
+      return `${won}${l.ended ? ` ${t("at frame {frame}", { frame: l.frame })}` : ""}${dot}${t("{size} of orders", { size: size(l.commandBytes) })}${l.errors.length ? `${dot}${pc.red(t("{n, plural, one {# error} other {# errors}}", { n: l.errors.length }))}` : ""}${dot}${t("{game} ms a frame game, {bot} bot", { game: (l.ms.game / frames).toFixed(2), bot: (l.ms.bot / frames).toFixed(2) })}${dot}${(l.ms.total / 1000).toFixed(1)} s`;
     }
     case "error": return `${mark.error} ${l.message}`;
   }
@@ -73,8 +74,8 @@ export function wordLine(l: RunnerLine): string | null {
  * come and into the outcome. A runner that could not start throws a CliError with its own words.
  */
 export async function runBotGame(bot: string, map: string, o: BotRunOptions = {}): Promise<BotRunOutcome> {
-  if (!existsSync(bot)) throw new CliError(`No file ${bot}`, "scmjs bot build writes out/<key>.scmbot in the bot's folder.", 2);
-  if (!existsSync(map)) throw new CliError(`No file ${map}`, null, 2);
+  if (!existsSync(bot)) throw new CliError(t("No file {path}", { path: bot }), t("scmjs bot build writes out/<key>.scmbot in the bot's folder."), 2);
+  if (!existsSync(map)) throw new CliError(t("No file {path}", { path: map }), null, 2);
   const game = findGameCopy(o.starcraft);
   const engine = await ensureEngine(o.engine, undefined, o.live ?? (() => {}));
   const args = [resolve(map), resolve(bot), "--engine", engine.dir, "--starcraft", game.folder];
@@ -102,15 +103,15 @@ export async function runBotGame(bot: string, map: string, o: BotRunOptions = {}
     if (worded && l.kind !== "error") o.live?.(worded);
   }
   outcome.exitCode = await new Promise<number>((done) => { child.on("error", () => done(2)); child.on("close", (c) => done(c ?? 2)); });
-  if (error) throw new CliError(error, "The runner is scm-sim's; a map StarCraft itself opens, a .scmbot the toolchain built, and your own copy of the game are what it needs.");
-  if (!outcome.end) throw new CliError(`The game did not finish: the runner stopped without a result (exit ${outcome.exitCode}).${stderr.trim() ? `\n${stderr.trim().split("\n").slice(-6).join("\n")}` : ""}`);
+  if (error) throw new CliError(error, t("The runner is scm-sim's; a map StarCraft itself opens, a .scmbot the toolchain built, and your own copy of the game are what it needs."));
+  if (!outcome.end) throw new CliError(`${t("The game did not finish: the runner stopped without a result (exit {code}).", { code: outcome.exitCode })}${stderr.trim() ? `\n${stderr.trim().split("\n").slice(-6).join("\n")}` : ""}`);
   return outcome;
 }
 
 /** Prints the outcome's lines when they were not printed as they came. */
 export function printBotRun(r: BotRunOutcome): void {
   if (r.start) print(wordLine(r.start)!);
-  for (const t of r.texts) print(wordLine({ kind: "text", text: t })!);
+  for (const text of r.texts) print(wordLine({ kind: "text", text })!);
   for (const p of r.progress) print(wordLine(p)!);
   if (r.end) print(wordLine(r.end)!);
 }

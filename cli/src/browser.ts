@@ -9,6 +9,7 @@ import { existsSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import type { Readable, Writable } from "node:stream";
+import { msg, t, translate } from "./i18n";
 import { CliError } from "./ui";
 
 /** Names a Chromium-family browser goes by on the PATH. */
@@ -51,7 +52,8 @@ export function findBrowser(named: string | undefined = process.env.SCMJS_BROWSE
 }
 
 /** The words for a computer without one. */
-export const NO_BROWSER = "Install Chrome, Chromium or Edge, or name one with --browser (or SCMJS_BROWSER); npx playwright install chromium fetches one too.";
+/** English; shown through `translate`. */
+export const NO_BROWSER = msg("Install Chrome, Chromium or Edge, or name one with --browser (or SCMJS_BROWSER); npx playwright install chromium fetches one too.");
 
 /* ── The protocol ───────────────────────────────────────────── */
 
@@ -145,7 +147,7 @@ export function launchBrowser(path: string, size: { width: number; height: numbe
     child = spawn(path, args, { stdio: ["ignore", "ignore", "pipe", "pipe", "pipe"] });
   } catch (e) {
     rmSync(profile, { recursive: true, force: true });
-    throw new CliError(`${path} could not be started (${e instanceof Error ? e.message : e}).`, NO_BROWSER);
+    throw new CliError(t("{path} could not be started ({reason}).", { path, reason: String(e instanceof Error ? e.message : e) }), translate(NO_BROWSER));
   }
   const toBrowser = child.stdio[3] as Writable, fromBrowser = child.stdio[4] as Readable;
   const cdp = new Cdp(toBrowser);
@@ -155,8 +157,8 @@ export function launchBrowser(path: string, size: { width: number; height: numbe
   child.stderr?.on("data", (c: Buffer) => { said = (said + c.toString("utf8")).slice(-2000); });
   toBrowser.on("error", () => { /* it went: said by `exited` */ });
   const exited = new Promise<number | null>((resolve) => {
-    child.once("error", (e) => { cdp.close(new CliError(`${path} could not be started (${e.message}).`, NO_BROWSER)); resolve(null); });
-    child.once("exit", (code) => { cdp.close(new CliError(`The browser stopped${code ? ` (exit code ${code})` : ""}.`, said.trim().split("\n").slice(-3).join("\n") || null)); resolve(code); });
+    child.once("error", (e) => { cdp.close(new CliError(t("{path} could not be started ({reason}).", { path, reason: e.message }), translate(NO_BROWSER))); resolve(null); });
+    child.once("exit", (code) => { cdp.close(new CliError(code ? t("The browser stopped (exit code {code}).", { code }) : t("The browser stopped."), said.trim().split("\n").slice(-3).join("\n") || null)); resolve(code); });
   });
   let stopping: Promise<void> | null = null;
   const stop = () => stopping ??= (async () => {

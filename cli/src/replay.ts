@@ -3,15 +3,17 @@ import { parseScenario, MAP_VERSIONS, mapVersionOf, tilesetIndex } from "../../s
 import { TILESETS } from "../../src/data/tilesets";
 import { FRAME_MS, type Replay } from "@scm-js/replay";
 import type { Input } from "./files";
+import { msg, t, translate } from "./i18n";
 import { dot, duration, gameText, num, pc, rgb, rows, size, table, truecolor } from "./ui";
 
-const RACES = ["Zerg", "Terran", "Protoss"];
+// English in the report (`--json`), shown through `translate`.
+const RACES = [msg("Zerg"), msg("Terran"), msg("Protoss")];
 export const GAME_TYPES: Record<number, string> = {
-  2: "Melee", 3: "Free For All", 4: "One on One", 5: "Capture The Flag", 6: "Greed", 7: "Slaughter", 8: "Sudden Death",
-  9: "Ladder", 10: "Use Map Settings", 11: "Team Melee", 12: "Team Free For All", 13: "Team Capture The Flag", 15: "Top vs Bottom",
+  2: msg("Melee"), 3: msg("Free For All"), 4: msg("One on One"), 5: msg("Capture The Flag"), 6: msg("Greed"), 7: msg("Slaughter"), 8: msg("Sudden Death"),
+  9: msg("Ladder"), 10: msg("Use Map Settings"), 11: msg("Team Melee"), 12: msg("Team Free For All"), 13: msg("Team Capture The Flag"), 15: msg("Top vs Bottom"),
 };
-const SPEEDS = ["Slowest", "Slower", "Slow", "Normal", "Fast", "Faster", "Fastest"];
-const FORMATS = { legacy: "1.16 or earlier", "1.18": "Remastered (1.18 to 1.20)", "1.21": "Remastered (1.21 or later)" };
+const SPEEDS = [msg("Slowest"), msg("Slower"), msg("Slow"), msg("Normal"), msg("Fast"), msg("Faster"), msg("Fastest")];
+const FORMATS = { legacy: msg("1.16 or earlier"), "1.18": msg("Remastered (1.18 to 1.20)"), "1.21": msg("Remastered (1.21 or later)") };
 
 export interface ReplayReport {
   file: { name: string; bytes: number };
@@ -74,21 +76,21 @@ export function printReplayInfo(r: ReplayReport): string[] {
   const when = r.started ? new Date(r.started) : null;
   return [
     pc.bold(`${r.players.map((p) => rgb(p.color, gameText(p.name))).join(pc.dim(" vs "))}`) + (matchup ? pc.dim(`  ${matchup}`) : ""),
-    pc.dim(`${r.gameType} on ${gameText(r.map.name)}`),
+    pc.dim(t("{type} on {map}", { type: translate(r.gameType), map: gameText(r.map.name) })),
     "",
     ...rows([
-      ["Length", `${duration(r.ms)}${dot}${num(r.frames)} frames${dot}${r.speed}`],
-      ["Played", when ? localTime(when) : null],
-      ["Map", `${gameText(r.map.name)}${dot}${r.map.width} × ${r.map.height}${r.map.tileset ? dot + r.map.tileset : ""}`],
-      ["Game", `${gameText(r.title)}${r.host ? pc.dim(` hosted by ${gameText(r.host)}`) : ""}`],
-      ["Recorded by", `${r.engine}${dot}${r.format}`],
-      ["File", `${r.file.name}${dot}${size(r.file.bytes)}`],
-      ["Chat", r.chat ? `${num(r.chat)} lines` : null],
+      [t("Length"), `${duration(r.ms)}${dot}${t("{n} frames", { n: num(r.frames) })}${dot}${translate(r.speed)}`],
+      [t("Played"), when ? localTime(when) : null],
+      [t("Map"), `${gameText(r.map.name)}${dot}${r.map.width} × ${r.map.height}${r.map.tileset ? dot + translate(r.map.tileset) : ""}`],
+      [t("Game"), `${gameText(r.title)}${r.host ? pc.dim(` ${t("hosted by {host}", { host: gameText(r.host) })}`) : ""}`],
+      [t("Recorded by"), `${translate(r.engine)}${dot}${translate(r.format)}`],
+      [t("File"), `${r.file.name}${dot}${size(r.file.bytes)}`],
+      [t("Chat"), r.chat ? t("{n, plural, one {# line} other {# lines}}", { n: r.chat }) : null],
     ]),
     "",
-    pc.dim("  Players"),
+    pc.dim(`  ${t("Players")}`),
     ...table(r.players.map((p) => [
-      (truecolor ? rgb(p.color, "■") + " " : "") + gameText(p.name), p.race, p.computer ? pc.dim("computer") : `${num(p.apm)} APM`, teams.size > 1 ? pc.dim(`team ${p.team}`) : "",
+      (truecolor ? rgb(p.color, "■") + " " : "") + gameText(p.name), translate(p.race), p.computer ? pc.dim(t("computer")) : `${num(p.apm)} APM`, teams.size > 1 ? pc.dim(t("team {n}", { n: p.team })) : "",
     ])),
   ];
 }

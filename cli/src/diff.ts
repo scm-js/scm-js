@@ -21,7 +21,8 @@ import { spawnSync } from "node:child_process";
 import { basename } from "node:path";
 import { kindOf, type Input } from "./files";
 import { locate } from "./history";
-import { CliError, mark, num, pc, plural, size } from "./ui";
+import { msg, t, translate } from "./i18n";
+import { CliError, mark, num, padColumns, pc, size } from "./ui";
 
 export type Change = "added" | "removed" | "changed";
 
@@ -50,13 +51,14 @@ const field = (field: string, a: string, b: string): FieldChange | null => (a ==
 function header(a: Scenario, b: Scenario): FieldChange[] {
   const enc = (s: Scenario) => TEXT_ENCODINGS.find((e) => e.id === s.strings.encoding)?.label ?? s.strings.encoding;
   return [
-    field("Name", plainText(scenarioName(a) ?? ""), plainText(scenarioName(b) ?? "")),
-    field("Description", plainText(scenarioDescription(a) ?? ""), plainText(scenarioDescription(b) ?? "")),
-    field("Size", `${a.width} × ${a.height}`, `${b.width} × ${b.height}`),
-    field("Tileset", TILESETS[a.era]?.name ?? String(a.era), TILESETS[b.era]?.name ?? String(b.era)),
-    field("Version", MAP_VERSIONS[mapVersionOf(a.fileVersion)].label, MAP_VERSIONS[mapVersionOf(b.fileVersion)].label),
-    field("Text encoding", enc(a), enc(b)),
-    field("Strings", `${a.strings.strings.length - 1}${a.strings.extended ? " (extended)" : ""}`, `${b.strings.strings.length - 1}${b.strings.extended ? " (extended)" : ""}`),
+    // The field names and values are English in the diff (`--json`); `printDiff` shows them through `translate`.
+    field(msg("Name"), plainText(scenarioName(a) ?? ""), plainText(scenarioName(b) ?? "")),
+    field(msg("Description"), plainText(scenarioDescription(a) ?? ""), plainText(scenarioDescription(b) ?? "")),
+    field(msg("Size"), `${a.width} × ${a.height}`, `${b.width} × ${b.height}`),
+    field(msg("Tileset"), TILESETS[a.era]?.name ?? String(a.era), TILESETS[b.era]?.name ?? String(b.era)),
+    field(msg("Version"), MAP_VERSIONS[mapVersionOf(a.fileVersion)].label, MAP_VERSIONS[mapVersionOf(b.fileVersion)].label),
+    field(msg("Text encoding"), enc(a), enc(b)),
+    field(msg("Strings"), `${a.strings.strings.length - 1}${a.strings.extended ? " (extended)" : ""}`, `${b.strings.strings.length - 1}${b.strings.extended ? " (extended)" : ""}`),
   ].filter((f): f is FieldChange => f !== null);
 }
 
@@ -212,26 +214,43 @@ const sign = { added: pc.green("+"), removed: pc.red("−"), changed: pc.yellow(
 /** The diff as lines: each group that has something, long lists cut unless `all`. */
 export function printDiff(d: MapDiff, all = false): string[] {
   const lines: string[] = [`${pc.bold(d.a)} ${pc.dim("→")} ${pc.bold(d.b)}`];
-  if (d.same) return [...lines, `${mark.ok} The maps are the same`];
+  if (d.same) return [...lines, `${mark.ok} ${t("The maps are the same")}`];
   const limit = all ? Infinity : 20;
   const group = (title: string, items: string[]) => {
     if (items.length === 0) return;
     lines.push("", pc.bold(title));
     for (const l of items.slice(0, limit)) lines.push(`  ${l}`);
-    if (items.length > limit) lines.push(pc.dim(`  … and ${num(items.length - limit)} more (--all lists them)`));
+    if (items.length > limit) lines.push(pc.dim(`  ${t("… and {n} more (--all lists them)", { n: num(items.length - limit) })}`));
   };
-  const fields = (fs: FieldChange[]) => fs.map((f) => `${sign.changed} ${f.field.padEnd(14)} ${pc.red(f.a || pc.dim("(none)"))} ${pc.dim("→")} ${pc.green(f.b || pc.dim("(none)"))}`);
+  const none = pc.dim(t("(none)"));
+  const fields = (fs: FieldChange[]) => fs.map((f) => { const v = fieldValue(f.field); return `${sign.changed} ${padColumns(fieldLabel(f.field), 14)} ${pc.red(f.a ? v(f.a) : none)} ${pc.dim("→")} ${pc.green(f.b ? v(f.b) : none)}`; });
   const entries = (es: Entry[]) => es.map((e) => (e.change === "changed" ? `${sign.changed} ${e.text}  ${pc.red(e.a ?? "")} ${pc.dim("→")} ${pc.green(e.b ?? "")}` : `${sign[e.change]} ${e.text}`));
-  group("Map", fields(d.header));
-  group("Players", fields([...d.players, ...d.forces]));
-  group(`Units ${pc.dim(counts(d.units))}`, entries(d.units));
-  group(`Locations ${pc.dim(counts(d.locations))}`, entries(d.locations));
-  group(`Triggers ${pc.dim(counts(d.triggers))}`, entries(d.triggers));
-  group(`Briefing ${pc.dim(counts(d.briefing))}`, entries(d.briefing));
-  group(`Strings ${pc.dim(counts(d.strings))}`, entries(d.strings));
-  group("Archive members", entries(d.members));
-  group("Sections", d.sections.map((s) => `${sign[s.change]} ${s.name.padEnd(4)}  ${s.change === "changed" ? `${size(s.a)} ${pc.dim("→")} ${size(s.b)}` : size(s.change === "added" ? s.b : s.a)}`));
+  group(t("Map"), fields(d.header));
+  group(t("Players"), fields([...d.players, ...d.forces]));
+  group(`${t("Units")} ${pc.dim(counts(d.units))}`, entries(d.units));
+  group(`${t("Locations")} ${pc.dim(counts(d.locations))}`, entries(d.locations));
+  group(`${t("Triggers")} ${pc.dim(counts(d.triggers))}`, entries(d.triggers));
+  group(`${t("Briefing")} ${pc.dim(counts(d.briefing))}`, entries(d.briefing));
+  group(`${t("Strings")} ${pc.dim(counts(d.strings))}`, entries(d.strings));
+  group(t("Archive members"), entries(d.members));
+  group(t("Sections"), d.sections.map((s) => `${sign[s.change]} ${s.name.padEnd(4)}  ${s.change === "changed" ? `${size(s.a)} ${pc.dim("→")} ${size(s.b)}` : size(s.change === "added" ? s.b : s.a)}`));
   return lines;
+}
+
+/** A changed field's name as shown: `Player 3 race`, `Force 2 flags` and the header's names, in the reader's language. */
+function fieldLabel(name: string): string {
+  let m: RegExpExecArray | null;
+  if ((m = /^Player (\d+) (type|race|colour|force)$/.exec(name))) {
+    const n = m[1];
+    return m[2] === "type" ? t("Player {n} type", { n }) : m[2] === "race" ? t("Player {n} race", { n }) : m[2] === "colour" ? t("Player {n} colour", { n }) : t("Player {n} force", { n });
+  }
+  if ((m = /^Force (\d+)( flags)?$/.exec(name))) return m[2] ? t("Force {n} flags", { n: m[1] }) : t("Force {n}", { n: m[1] });
+  return translate(name);
+}
+
+/** How a changed field's values are shown: the editor's labels (a tileset, a player type) translated; map text never. */
+function fieldValue(name: string): (value: string) => string {
+  return /^(Tileset|Version|Text encoding)$|^Player \d+ (type|race)$/.test(name) ? translate : (v) => v;
 }
 
 function counts(es: Entry[]): string {
@@ -246,9 +265,9 @@ function counts(es: Entry[]): string {
  */
 export function revisionInput(rev: string, file: string): Input {
   const f = locate(file);
-  if (!rev || rev.startsWith("-")) throw new CliError(`${rev || "An empty revision"} is not a revision`, "A commit, branch or tag: HEAD~1, main, v1.0.", 2);
+  if (!rev || rev.startsWith("-")) throw new CliError(rev ? t("{rev} is not a revision", { rev }) : t("An empty revision is not a revision"), t("A commit, branch or tag: HEAD~1, main, v1.0."), 2);
   const shown = spawnSync("git", ["-C", f.root, "show", `${rev}:${f.path}`], { encoding: "buffer", maxBuffer: 512 * 1024 * 1024 });
-  if (shown.status !== 0) throw new CliError(`git has no ${f.path} at ${rev}`, shown.stderr.toString().trim().split("\n")[0] || null, 2);
+  if (shown.status !== 0) throw new CliError(t("git has no {path} at {rev}", { path: f.path, rev }), shown.stderr.toString().trim().split("\n")[0] || null, 2);
   const bytes = new Uint8Array(shown.stdout);
   const name = `${rev}:${basename(file)}`;
   return { path: name, name, bytes, kind: kindOf(file, bytes) };
@@ -257,15 +276,20 @@ export function revisionInput(rev: string, file: string): Input {
 /** The change in a few words: "3 units added, 1 string changed". */
 export function summarizeDiff(d: MapDiff): string {
   const parts: string[] = [];
-  const list = (name: string, es: { change: string }[]) => {
+  const list = (name: (n: number) => string, es: { change: string }[]) => {
     const n = (c: string) => es.filter((e) => e.change === c).length;
-    if (n("added")) parts.push(`${plural(n("added"), name)} added`);
-    if (n("removed")) parts.push(`${plural(n("removed"), name)} removed`);
-    if (n("changed")) parts.push(`${plural(n("changed"), name)} changed`);
+    if (n("added")) parts.push(t("{what} added", { what: name(n("added")) }));
+    if (n("removed")) parts.push(t("{what} removed", { what: name(n("removed")) }));
+    if (n("changed")) parts.push(t("{what} changed", { what: name(n("changed")) }));
   };
   const fields = d.header.length + d.players.length + d.forces.length;
-  if (fields) parts.push(`${plural(fields, "setting")} changed`);
-  list("unit", d.units); list("location", d.locations); list("trigger", d.triggers); list("briefing trigger", d.briefing); list("string", d.strings); list("file", d.members);
-  if (!parts.length && d.sections.length) parts.push(`${plural(d.sections.length, "section")} changed`);
+  if (fields) parts.push(t("{what} changed", { what: t("{n, plural, one {# setting} other {# settings}}", { n: fields }) }));
+  list((n) => t("{n, plural, one {# unit} other {# units}}", { n }), d.units);
+  list((n) => t("{n, plural, one {# location} other {# locations}}", { n }), d.locations);
+  list((n) => t("{n, plural, one {# trigger} other {# triggers}}", { n }), d.triggers);
+  list((n) => t("{n, plural, one {# briefing trigger} other {# briefing triggers}}", { n }), d.briefing);
+  list((n) => t("{n, plural, one {# string} other {# strings}}", { n }), d.strings);
+  list((n) => t("{n, plural, one {# file} other {# files}}", { n }), d.members);
+  if (!parts.length && d.sections.length) parts.push(t("{what} changed", { what: t("{n, plural, one {# section} other {# sections}}", { n: d.sections.length }) }));
   return parts.join(", ");
 }

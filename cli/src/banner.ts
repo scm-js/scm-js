@@ -4,7 +4,8 @@
  * commander's.
  */
 import type { Command, Help } from "commander";
-import { pc, rgb, truecolor, unicode, visible } from "./ui";
+import { t, translate } from "./i18n";
+import { columns, padColumns, pc, rgb, truecolor, unicode } from "./ui";
 
 /**
  * The app mark, the wireframe globe of `public/favicon.svg` and the splash screen, in braille (2 × 4 dots a
@@ -45,7 +46,7 @@ export function banner(text: string[], { width = 80, ascii = !unicode } = {}): s
   const art = ascii ? GLOBE_ASCII : GLOBE;
   const artWidth = Math.max(...art.map((l) => l.length));
   const indent = "  ", gap = "   ";
-  if (indent.length + artWidth + gap.length + Math.max(...text.map((l) => visible(l).length)) > width) return text;
+  if (indent.length + artWidth + gap.length + Math.max(...text.map((l) => columns(l))) > width) return text;
   const top = Math.max(0, Math.floor((art.length - text.length) / 2));
   return art.map((l, i) => (text[i - top] ? `${indent}${violet(l.padEnd(artWidth))}${gap}${text[i - top]}` : `${indent}${violet(l.trimEnd())}`));
 }
@@ -53,13 +54,16 @@ export function banner(text: string[], { width = 80, ascii = !unicode } = {}): s
 /** The overview, in place of commander's: the banner, the command groups as commander lays them out, the options. */
 export function rootHelp(cmd: Command, helper: Help, version: string, opts: { ascii?: boolean } = {}): string {
   const termWidth = helper.padWidth(cmd, helper);
+  // The two titles one above the other, padded to one width in either language.
+  const [usage, docs] = [translate("Usage:"), t("Docs:")];
+  const titleWidth = Math.max(columns(usage), columns(docs));
   const out = banner([
     `${pc.bold(pc.cyan(cmd.name()))} ${pc.bold(version)}`,
-    "scmJS on the command line",
-    pc.dim("StarCraft: Brood War maps, replays, plugins and bots"),
+    t("scmJS on the command line"),
+    pc.dim(t("StarCraft: Brood War maps, replays, plugins and bots")),
     "",
-    `${helper.styleTitle("Usage:")} ${helper.styleUsage(helper.commandUsage(cmd))}`,
-    `${helper.styleTitle("Docs:")}  ${pc.cyan("https://docs.scmjs.dev")}`,
+    `${helper.styleTitle(padColumns(usage, titleWidth))} ${helper.styleUsage(helper.commandUsage(cmd))}`,
+    `${helper.styleTitle(padColumns(docs, titleWidth))} ${pc.cyan("https://docs.scmjs.dev")}`,
   ], { width: helper.helpWidth ?? 80, ...opts });
   // No blank line here: the globe's own bottom row, below the text, keeps the groups off the title, and the overview
   // is held to 23 lines (a 24-row terminal keeps the globe on screen).

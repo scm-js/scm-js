@@ -218,6 +218,36 @@ scmjs completion zsh > ~/.zsh/completions/_scmjs       # a folder on $fpath
 scmjs completion fish > ~/.config/fish/completions/scmjs.fish
 ```
 
+### In Korean
+
+`scmjs` speaks English and Korean. It follows the computer's language: the locale on Linux
+and macOS (`LANG`, or `LC_ALL` or `LC_MESSAGES` where one is set), the display language on
+Windows. To choose, set `SCMJS_LANG` to `ko` or `en`, or give one command `--lang`:
+
+```sh
+scmjs --lang ko info maps/*.scx
+export SCMJS_LANG=ko                 # every command, in ~/.bashrc
+```
+
+The help, the reports, Check Map's findings and the errors change language. What stays the
+same in every language:
+
+- A map's own text: its name, description, strings and triggers.
+- The text forms of triggers and strings, `map dump` and `map unpack --text`. They are
+  formats, so `git diff` on a map reads the same on every computer.
+- The files a command writes: a baseline, a test file, the README and workflow
+  `scmjs init` makes. A baseline written in Korean holds when the check runs in English.
+- In `--json`, the keys and the values that name things (a finding's level, a kind) are
+  English; a sentence in it, such as a finding's text, is in the chosen language. The CI
+  formats of `map check` do the same: rule ids in English, messages in the language.
+- `scmjs mcp` and `scmjs lsp`. The MCP server's tools are read by an AI model, and the
+  language server passes on the TrigScript compiler's messages, which are English.
+
+A few of the help's own words are left as they are: the usage line's `[options]` and
+`[command]`, which are syntax, and any error the command line library raises that the
+translation does not know. The Korean was not written by a native speaker; a review is
+welcome.
+
 ## Looking inside a map
 
 These commands read a map and change nothing.
@@ -2815,7 +2845,8 @@ While a map is on standard output, what the command says goes to standard error,
 `stdin.scx` or `stdin.chk` by its contents, and is written back in the same form.
 
 Colour is off when the output is not a terminal, when `NO_COLOR` is set, and with
-`--no-color`.
+`--no-color`. The language is chosen by `--lang` or `SCMJS_LANG` ([In
+Korean](#in-korean)); `--json` keys are English in every language.
 
 For what the commands do not do, such as a script that edits maps or a check of your own,
 the same functions are the [`@scm-js/core` library](core.md); the command is built on it.
@@ -3026,6 +3057,8 @@ from a clone with `npm run cli -- <command>`, or build it with `npm run build:cl
 | `src/plugins/devLink.ts` | The editor's half of `plugin dev`: only a plugin served on this computer is taken |
 | `cli/src/ui.ts` | Colour, marks, aligned rows, and StarCraft's text colours in a terminal |
 | `cli/src/banner.ts` | The globe and the command list that `scmjs` on its own prints |
+| `cli/src/i18n.ts`, `cli/src/ko.json` | The language chosen, and the command's words in Korean; the editor's translator underneath |
+| `cli/src/commanderText.ts` | The help's titles, an option's default and the argument errors in the chosen language |
 | `core/src/index.ts` | The library's surface; the command imports from the editor only what it exports ([core.md](core.md)) |
 | `src/hooks/` (the opener hand-over) | The editor's half of the hand-over: only a page on the loopback address that opened it is listened to |
 | [@scm-js/replay](https://github.com/scm-js/replay) | The replay reader, shared with the replay viewer plugin |

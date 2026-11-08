@@ -19,6 +19,7 @@ import { triggerNames } from "../../src/editor/triggers";
 import { formatTrigger, type TriggerNames } from "../../src/formats/triggers/text";
 import type { TriggerRecord } from "../../src/formats/chk/sections/triggers";
 import type { Issue, IssueLevel } from "../../src/editor/validate";
+import { t } from "./i18n";
 import { CliError } from "./ui";
 
 /** The file `--baseline` and `--write-baseline` use when given no path: in the working directory. */
@@ -37,6 +38,7 @@ export interface Baseline {
 /** What a map's check is against its baseline: the findings it does not hold, the ones it does, and the ones it holds that are gone. */
 export interface BaselineMatch { fresh: Issue[]; suppressed: Issue[]; fixed: BaselineEntry[] }
 
+// Written into the file, which is shared: English whatever the language.
 const ABOUT = "Findings scmjs map check already knows of: a check with --baseline fails only on others. scmjs map check --write-baseline rewrites this file.";
 
 /** Words after a number that make it a count, which changes without the finding changing. */
@@ -59,8 +61,8 @@ export function triggerHash(trigger: TriggerRecord, scn: Scenario, briefing = fa
 export function findingId(issue: Pick<Issue, "text" | "where">, scn: Scenario): string {
   // A trigger is named by its place in the list ("Trigger 12", "Briefing 3") whether or not the finding points at it.
   const text = issue.text
-    .replace(/\bTrigger (\d+)\b/g, (whole, n: string) => { const t = scn.triggers[Number(n) - 1]; return t ? `Trigger @${triggerHash(t, scn)}` : whole; })
-    .replace(/\bBriefing (\d+)\b/g, (whole, n: string) => { const t = scn.briefing[Number(n) - 1]; return t ? `Briefing @${triggerHash(t, scn, true)}` : whole; });
+    .replace(/\bTrigger (\d+)\b/g, (whole, n: string) => { const trig = scn.triggers[Number(n) - 1]; return trig ? `Trigger @${triggerHash(trig, scn)}` : whole; })
+    .replace(/\bBriefing (\d+)\b/g, (whole, n: string) => { const trig = scn.briefing[Number(n) - 1]; return trig ? `Briefing @${triggerHash(trig, scn, true)}` : whole; });
   return text.replace(COUNTED, "#").replace(/\b\d+%/g, "#%").replace(/\(the first\b[^)]*\)/g, "(the first …)").replace(/\s+/g, " ").trim();
 }
 
@@ -73,14 +75,14 @@ export function mapKey(baselineFile: string, mapPath: string): string {
 
 /** The baseline file read; a missing or unreadable one is a CliError (exit 2) saying how to make one. */
 export function readBaseline(file: string): Baseline {
-  if (!existsSync(file)) throw new CliError(`No baseline ${file}`, `scmjs map check <maps…> --write-baseline${file === BASELINE_FILE ? "" : ` ${file}`} writes one from the findings the maps have now.`, 2);
+  if (!existsSync(file)) throw new CliError(t("No baseline {file}", { file }), t("{command} writes one from the findings the maps have now.", { command: `scmjs map check <maps…> --write-baseline${file === BASELINE_FILE ? "" : ` ${file}`}` }), 2);
   let v: unknown;
-  try { v = JSON.parse(readFileSync(file, "utf8")); } catch (e) { throw new CliError(`${file} is not JSON: ${e instanceof Error ? e.message : e}`, null, 2); }
+  try { v = JSON.parse(readFileSync(file, "utf8")); } catch (e) { throw new CliError(t("{file} is not JSON: {reason}", { file, reason: String(e instanceof Error ? e.message : e) }), null, 2); }
   const maps = (v as { maps?: unknown })?.maps;
-  if (typeof maps !== "object" || maps === null || Array.isArray(maps)) throw new CliError(`${file} is not a baseline: it has no "maps".`, "scmjs map check --write-baseline writes one.", 2);
+  if (typeof maps !== "object" || maps === null || Array.isArray(maps)) throw new CliError(t("{file} is not a baseline: it has no \"maps\".", { file }), t("scmjs map check --write-baseline writes one."), 2);
   const out: Baseline = { file, maps: {} };
   for (const [map, list] of Object.entries(maps as Record<string, unknown>)) {
-    if (!Array.isArray(list)) throw new CliError(`${file}: "${map}" is not a list of findings.`, null, 2);
+    if (!Array.isArray(list)) throw new CliError(t("{file}: \"{map}\" is not a list of findings.", { file, map }), null, 2);
     out.maps[map] = list.filter((e): e is BaselineEntry => typeof e === "object" && e !== null && typeof (e as BaselineEntry).text === "string" && typeof (e as BaselineEntry).where === "string")
       .map((e) => ({ level: e.level, where: e.where, text: e.text, ...(typeof e.id === "string" ? { id: e.id } : {}) }));
   }

@@ -15,7 +15,8 @@ import { findBrowser, NO_BROWSER } from "./browser";
 import { exportReplay, type ExportOptions, type ExportResult } from "./export";
 import { loadReplayInput, readInput, STDIO, type Input } from "./files";
 import { slug, type ScenarioResult } from "./maptest";
-import { CliError, dot, duration, mark, pc, plural, size } from "./ui";
+import { t, translate } from "./i18n";
+import { CliError, dot, duration, mark, pc, size } from "./ui";
 
 /** The game before the frame a scenario ended on, and after it, that a clip shows. */
 export const CLIP_BEFORE_MS = 8000;
@@ -86,8 +87,8 @@ const shown = (path: string) => { const r = relative(process.cwd(), path); retur
 
 /** One clip's line: where it went, its size and length, and the stretch of the game. */
 export function clipLine(c: Clip): string {
-  const span = `${duration(c.from * FRAME_MS)}–${duration(c.to * FRAME_MS)} of the game`;
-  if (!c.file) return `  ${pc.dim(`· no clip of ${c.scenario}: ${c.skipped}`)}`;
+  const span = t("{from}–{to} of the game", { from: duration(c.from * FRAME_MS), to: duration(c.to * FRAME_MS) });
+  if (!c.file) return `  ${pc.dim(`· ${t("no clip of {scenario}: {why}", { scenario: c.scenario, why: c.skipped ?? "" })}`)}`;
   return `  ${mark.ok} ${pc.bold(shown(c.file))}${pc.dim(`${dot}${size(c.bytes ?? 0)}${dot}${duration((c.seconds ?? 0) * 1000)}${dot}${span}`)}`;
 }
 
@@ -100,7 +101,7 @@ export async function makeClips(results: readonly ScenarioResult[], o: ClipOptio
   const run: ClipRun = { dir: o.dir, kind: o.kind, clips: [], missing: null };
   if (!failed.length) return run;
   const browser = o.browserFound !== undefined ? o.browserFound : findBrowser(o.browser ?? process.env.SCMJS_BROWSER);
-  if (!browser) run.missing = `No clips: no browser to draw them with was found. ${NO_BROWSER}`;
+  if (!browser) run.missing = t("No clips: no browser to draw them with was found. {hint}", { hint: translate(NO_BROWSER) });
   const exporter = o.exporter ?? exportReplay;
   const taken = new Set<string>();
   for (const r of failed) {
@@ -109,7 +110,7 @@ export async function makeClips(results: readonly ScenarioResult[], o: ClipOptio
     taken.add(name);
     const base = { scenario: r.name, tests: r.file, file: null, bytes: null, seconds: null };
     if (!r.replay || !existsSync(r.replay)) {
-      const why = r.playing ? `it plays ${basename(r.playing)}; scmjs replay export draws that game` : "no replay was kept of its game";
+      const why = r.playing ? t("it plays {replay}; scmjs replay export draws that game", { replay: basename(r.playing) }) : t("no replay was kept of its game");
       const clip: Clip = { ...base, from: 0, to: r.frame, skipped: why, cause: r.playing ? "replay" : "no-replay" };
       run.clips.push(clip);
       o.live?.(clipLine(clip));
@@ -129,7 +130,7 @@ export async function makeClips(results: readonly ScenarioResult[], o: ClipOptio
     } catch (e) {
       if (!(e instanceof CliError)) throw e;
       // The same want would stop every clip: said once, the rest not tried.
-      run.missing = `No clips: ${e.message}${e.hint ? ` ${e.hint}` : ""}`;
+      run.missing = t("No clips: {reason}", { reason: `${e.message}${e.hint ? ` ${e.hint}` : ""}` });
       run.clips.push({ ...base, from: 0, to: r.frame, skipped: run.missing, cause: "computer" });
     }
   }
@@ -141,7 +142,7 @@ export function clipsSummary(run: ClipRun): string[] {
   const made = run.clips.filter((c) => c.file).length;
   const out: string[] = [];
   if (run.missing) out.push(`${mark.warn} ${pc.yellow(run.missing)}`);
-  else if (made) out.push(pc.dim(`  ${plural(made, "clip")} of the failed ${made === 1 ? "scenario" : "scenarios"} in ${shown(run.dir)}`));
+  else if (made) out.push(pc.dim(`  ${t("{n, plural, one {# clip of the failed scenario} other {# clips of the failed scenarios}} in {dir}", { n: made, dir: shown(run.dir) })}`));
   return out;
 }
 

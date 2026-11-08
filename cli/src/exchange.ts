@@ -13,6 +13,7 @@ import { applyBriefing, applyTriggers, readBriefing, readTriggers } from "../../
 import { applyStringImport, encodeTrg, formatStringTable, parseStringTable, readTriggerFile, triggerFormatOf, triggersToText } from "../../src/editor/exchange";
 import { defaultSaveOptions, formatOf, type MapFormat } from "../../src/editor/save";
 import { STDIO, toStdout } from "./files";
+import { t } from "./i18n";
 import { CliError } from "./ui";
 
 export interface TriggerExport {
@@ -42,8 +43,8 @@ export function importTriggers(doc: OpenedMap, fileName: string, bytes: Uint8Arr
   try {
     read = readTriggerFile(doc.scenario, fileName, bytes, briefing);
   } catch (e) {
-    if (e instanceof TriggerTextError) throw new CliError(`${fileName}, ${e.message.replace(/^Line (\d+): /, "line $1: ")}`, "The text form is the trigger window's; docs.scmjs.dev/triggers lists every condition and action.");
-    throw new CliError(`${fileName} is not a trigger file this can read: ${e instanceof Error ? e.message : e}`);
+    if (e instanceof TriggerTextError) throw new CliError(t("{file}, line {line}: {message}", { file: fileName, line: e.line, message: e.message.replace(/^Line \d+: /, "") }), t("The text form is the trigger window's; docs.scmjs.dev/triggers lists every condition and action."));
+    throw new CliError(t("{file} is not a trigger file this can read: {reason}", { file: fileName, reason: String(e instanceof Error ? e.message : e) }));
   }
   const current = briefing ? readBriefing(doc.scenario) : readTriggers(doc.scenario);
   const next = append ? [...current, ...read] : read;
@@ -64,7 +65,7 @@ export function importStrings(doc: OpenedMap, fileName: string, text: string): S
   const parsed = parseStringTable(text);
   if (parsed.errors.length > 0) {
     const first = parsed.errors[0];
-    throw new CliError(`${fileName}, line ${first.line}: ${first.message}${parsed.errors.length > 1 ? ` (and ${parsed.errors.length - 1} more)` : ""}`, "Each line is the string's number, a tab, and its text; # starts a comment.");
+    throw new CliError(`${t("{file}, line {line}: {message}", { file: fileName, line: first.line, message: first.message })}${parsed.errors.length > 1 ? ` ${t("(and {n} more)", { n: parsed.errors.length - 1 })}` : ""}`, t("Each line is the string's number, a tab, and its text; # starts a comment."));
   }
   const { replaced, added } = applyStringImport(doc.scenario, parsed.entries);
   return { replaced, added, unchanged: parsed.entries.length - replaced - added };
@@ -103,7 +104,7 @@ export async function writeOutput(bytes: Uint8Array, path: string, stdout: Writa
   try {
     await writeFile(path, bytes);
   } catch (e) {
-    throw new CliError(`${path} could not be written (${(e as NodeJS.ErrnoException).code ?? e})`);
+    throw new CliError(t("{path} could not be written ({code})", { path, code: String((e as NodeJS.ErrnoException).code ?? e) }));
   }
   return { path, bytes: bytes.length };
 }

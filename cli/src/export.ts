@@ -27,6 +27,7 @@ import type { Input } from "./files";
 import { openGameFiles, type GameFiles } from "./gamefiles";
 import { GifWriter } from "./gif";
 import { parseClock } from "./watch";
+import { t, translate } from "./i18n";
 import { CliError, duration, mark, num, pc, size } from "./ui";
 
 export type ClipFormat = "webm" | "mp4" | "gif";
@@ -79,36 +80,36 @@ export function clipFormat(out: string): ClipFormat {
   if (ext === ".webm") return "webm";
   if (ext === ".mp4" || ext === ".m4v") return "mp4";
   if (ext === ".gif") return "gif";
-  throw new CliError(`--out names a ${ext || "nameless"} file; a clip is .webm, .mp4 or .gif`, null, 2);
+  throw new CliError(ext ? t("--out names a {ext} file; a clip is .webm, .mp4 or .gif", { ext }) : t("--out names a nameless file; a clip is .webm, .mp4 or .gif"), null, 2);
 }
 
 /** `WxH`, each even (video encoders work in pairs of pixels). */
 export function parseSize(spec: string): { width: number; height: number } {
   const m = /^(\d+)x(\d+)$/i.exec(spec.trim());
   const width = m ? Number(m[1]) : NaN, height = m ? Number(m[2]) : NaN;
-  if (!m || width < 64 || height < 64 || width > 3840 || height > 2160) throw new CliError(`--size takes WxH in pixels, from 64x64 to 3840x2160, not "${spec}"`, null, 2);
+  if (!m || width < 64 || height < 64 || width > 3840 || height > 2160) throw new CliError(t("--size takes WxH in pixels, from 64x64 to 3840x2160, not \"{spec}\"", { spec }), null, 2);
   return { width: Math.round(width / 2) * 2, height: Math.round(height / 2) * 2 };
 }
 
 /** Pictures a second; a GIF's is what its hundredths of a second allow (12 → 12.5, a picture every 8). */
 export function parseFps(spec: string, format: ClipFormat): number {
   const fps = Number(spec);
-  if (!(fps >= 1 && fps <= 60)) throw new CliError(`--fps takes a number from 1 to 60, not "${spec}"`, null, 2);
+  if (!(fps >= 1 && fps <= 60)) throw new CliError(t("--fps takes a number from 1 to 60, not \"{spec}\"", { spec }), null, 2);
   return format === "gif" ? 100 / Math.max(2, Math.round(100 / fps)) : fps;
 }
 
 export function parseSpeed(spec: string): number {
   const speed = Number(spec);
-  if (!(speed >= 0.25 && speed <= 64)) throw new CliError(`--speed takes a number from 0.25 to 64, not "${spec}"`, null, 2);
+  if (!(speed >= 0.25 && speed <= 64)) throw new CliError(t("--speed takes a number from 0.25 to 64, not \"{spec}\"", { spec }), null, 2);
   return speed;
 }
 
 /** `x,y` in tiles: the middle of the view on that tile. */
 export function parseAt(spec: string, map: { width: number; height: number }): { x: number; y: number } {
   const m = /^\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)\s*$/.exec(spec);
-  if (!m) throw new CliError(`--at takes x,y in tiles, not "${spec}"`, null, 2);
+  if (!m) throw new CliError(t("--at takes x,y in tiles, not \"{spec}\"", { spec }), null, 2);
   const x = Number(m[1]), y = Number(m[2]);
-  if (x >= map.width || y >= map.height) throw new CliError(`--at ${spec} is off the map, which is ${map.width} × ${map.height} tiles`, null, 2);
+  if (x >= map.width || y >= map.height) throw new CliError(t("--at {spec} is off the map, which is {width} × {height} tiles", { spec, width: map.width, height: map.height }), null, 2);
   return { x: x * 32 + 16, y: y * 32 + 16 };
 }
 
@@ -117,7 +118,7 @@ export function pickPlayer(players: readonly ReplayPlayer[], who: string | undef
   const humans = players.filter((p) => p.type === 2);
   if (who === undefined) {
     const first = humans[0] ?? players[0];
-    if (!first) throw new CliError("The replay names no players to follow.", "Use --at x,y or --all.", 2);
+    if (!first) throw new CliError(t("The replay names no players to follow."), t("Use --at x,y or --all."), 2);
     return first;
   }
   const n = Number(who);
@@ -128,7 +129,7 @@ export function pickPlayer(players: readonly ReplayPlayer[], who: string | undef
   const found = exact.length === 1 ? exact : start.length === 1 ? start : [];
   if (found.length) return found[0];
   const list = players.map((p, i) => `${i + 1} ${p.name}`).join(", ");
-  throw new CliError(`--follow ${who} is ${start.length > 1 ? "more than one player" : "nobody in this replay"}`, `The players: ${list}.`, 2);
+  throw new CliError(start.length > 1 ? t("--follow {who} is more than one player", { who }) : t("--follow {who} is nobody in this replay", { who }), t("The players: {list}.", { list }), 2);
 }
 
 /**
@@ -150,10 +151,10 @@ export function planClip(input: Input, rep: Replay, o: ExportOptions, map: { wid
   const frames = Math.max(rep.header.frames, rep.commands.at(-1)?.frame ?? 0);
   const from = o.fromFrame ?? (o.from ? parseClock(o.from, "--from") : 0);
   const to = Math.min(frames, o.toFrame ?? (o.to ? parseClock(o.to, "--to") : frames));
-  if (from >= frames) throw new CliError(`--from ${o.from} is past the replay's end (${duration(frames * FRAME_MS)})`, null, 2);
-  if (to <= from) throw new CliError(`--to ${o.to} is not after --from ${o.from ?? "0:00"}`, null, 2);
+  if (from >= frames) throw new CliError(t("--from {from} is past the replay's end ({end})", { from: String(o.from), end: duration(frames * FRAME_MS) }), null, 2);
+  if (to <= from) throw new CliError(t("--to {to} is not after --from {from}", { to: String(o.to), from: o.from ?? "0:00" }), null, 2);
   const chosen = [o.follow !== undefined, o.at !== undefined, !!o.all].filter(Boolean).length;
-  if (chosen > 1) throw new CliError("--follow, --at and --all each place the camera: give one", null, 2);
+  if (chosen > 1) throw new CliError(t("--follow, --at and --all each place the camera: give one"), null, 2);
   const camera: Camera = o.all ? { kind: "all" } : o.at !== undefined ? { kind: "at", ...parseAt(o.at, map) } : { kind: "follow", player: pickPlayer(rep.players, o.follow) };
   const pictures = Math.max(1, Math.floor(((to - from) * FRAME_MS * fps) / (1000 * speed)) + 1);
   return { out, format, width, height, fps, speed, from, to, pictures, rows: rowsFor(height), camera };
@@ -333,7 +334,7 @@ async function serve(play: URL, token: string, job: Job, track: Promise<JobTrack
       if (path.startsWith(prefix)) {
         const got = await pageFile(path);
         if (process.env.SCMJS_DEBUG) process.stderr.write(`[serve] ${path} ${got ? got.bytes.length : 404}\n`);
-        if (!got && path === prefix) on.news({ type: "error", message: `${new URL(path, play.origin).href} answered no page` });
+        if (!got && path === prefix) on.news({ type: "error", message: t("{url} answered no page", { url: new URL(path, play.origin).href }) });
         return got ? send(200, got.bytes, got.type) : send(404, "not found");
       }
       send(404, "not found");
@@ -405,28 +406,28 @@ export interface ExportResult {
 
 /** Where the view looks, in words. */
 function cameraWords(c: Camera): string {
-  return c.kind === "follow" ? `following ${c.player.name}` : c.kind === "at" ? `at ${Math.floor(c.x / 32)},${Math.floor(c.y / 32)}` : "the whole map";
+  return c.kind === "follow" ? t("following {name}", { name: c.player.name }) : c.kind === "at" ? t("at {x},{y}", { x: Math.floor(c.x / 32), y: Math.floor(c.y / 32) }) : t("the whole map");
 }
 
 export async function exportReplay(input: Input, rep: Replay, o: ExportOptions, progress: (line: string, done: boolean) => void = () => {}): Promise<ExportResult> {
   const started = Date.now();
   const debug = (line: string) => { if (process.env.SCMJS_DEBUG) process.stderr.write(`[export ${((Date.now() - started) / 1000).toFixed(1)} s] ${line}\n`); };
   let scn: ReturnType<typeof parseScenario>;
-  try { scn = parseScenario(rep.chk); } catch (e) { throw new CliError(`The replay's map could not be read (${e instanceof Error ? e.message : e}).`, null, 2); }
+  try { scn = parseScenario(rep.chk); } catch (e) { throw new CliError(t("The replay's map could not be read ({message}).", { message: String(e instanceof Error ? e.message : e) }), null, 2); }
   const map = { width: scn.width, height: scn.height };
   const plan = planClip(input, rep, o, map);
   const ffmpeg = plan.format === "mp4" ? findFfmpeg() : null;
-  if (plan.format === "mp4" && !ffmpeg) throw new CliError("An .mp4 is made with ffmpeg, which is not installed here.", "Install ffmpeg (https://ffmpeg.org/download.html; winget install ffmpeg, brew install ffmpeg, apt install ffmpeg), or export a .webm, which needs nothing more.");
+  if (plan.format === "mp4" && !ffmpeg) throw new CliError(t("An .mp4 is made with ffmpeg, which is not installed here."), t("Install ffmpeg (https://ffmpeg.org/download.html; winget install ffmpeg, brew install ffmpeg, apt install ffmpeg), or export a .webm, which needs nothing more."));
   // A GIF is made here from the pictures as drawn: smaller and truer than one ffmpeg makes from the encoded clip (cli.md).
   const jsGif = plan.format === "gif";
   const browserPath = findBrowser(o.browser ?? process.env.SCMJS_BROWSER);
-  if (!browserPath) throw new CliError("No browser to draw the clip with was found.", NO_BROWSER);
-  if (o.browser && !existsSync(o.browser)) throw new CliError(`${o.browser} is not there.`, NO_BROWSER, 2);
+  if (!browserPath) throw new CliError(t("No browser to draw the clip with was found."), translate(NO_BROWSER));
+  if (o.browser && !existsSync(o.browser)) throw new CliError(t("{path} is not there.", { path: o.browser }), translate(NO_BROWSER), 2);
   debug(`browser ${browserPath}`);
-  const files = await openGameFiles(o.starcraft, "The clip is drawn with your own installation's pictures");
+  const files = await openGameFiles(o.starcraft, t("The clip is drawn with your own installation's pictures"));
   debug(`game files ${files.label} in ${files.folder}`);
   const playUrl = new URL((o.play ?? process.env.SCMJS_PLAY_URL ?? PLAY_URL).replace(/\/*$/, "/"));
-  if (!/^https?:$/.test(playUrl.protocol)) throw new CliError(`${playUrl.href} is not a web address; replay export needs the play page's address.`, null, 2);
+  if (!/^https?:$/.test(playUrl.protocol)) throw new CliError(t("{url} is not a web address; replay export needs the play page's address.", { url: playUrl.href }), null, 2);
 
   // The camera: the player's clicks made into a track, a fixed place, or the whole map.
   const viewWidth = (plan.width * plan.rows) / plan.height;
@@ -443,9 +444,9 @@ export async function exportReplay(input: Input, rep: Replay, o: ExportOptions, 
       const m = await gameMoments(input, plan.from - lead, plan.to + SAMPLE_EVERY, { play: playUrl.href.replace(/\/$/, ""), starcraft: o.starcraft });
       const k = rep.players.filter((p) => p.type === 2 || p.type === 1).indexOf(who);
       const side = m.players.find((p) => p.name === who.name) ?? m.players[k];
-      const t = side ? actionTrack(m.samples, side.slot, options) : null;
-      debug(`${m.samples.length} moments of the game; ${t ? "following the game" : "nothing of the player's in them"}`);
-      if (t) { followedBy = "game"; return t; }
+      const track = side ? actionTrack(m.samples, side.slot, options) : null;
+      debug(`${m.samples.length} moments of the game; ${track ? "following the game" : "nothing of the player's in them"}`);
+      if (track) { followedBy = "game"; return track; }
     } catch (e) { debug(`the replay runner: ${e instanceof Error ? e.message : e}`); }
     const start = scn.units.find((u) => u.unitId === START_LOCATION && u.owner === who.index);
     followedBy = "clicks";
@@ -472,24 +473,24 @@ export async function exportReplay(input: Input, rep: Replay, o: ExportOptions, 
   let finished: () => void = () => {};
   const over = new Promise<void>((r) => { finished = r; });
   const fail = (e: CliError) => { failure ??= e; finished(); };
-  const t = { loaded: 0, recorded: 0 };
+  const times = { loaded: 0, recorded: 0 };
   let last = Date.now(), lastDone = -1;
   const clock = (frame: number) => duration(frame * FRAME_MS);
   const served = await serve(playUrl, token, job, trackJson, input.bytes, files, {
     news: (n) => {
       last = Date.now();
       if (process.env.SCMJS_DEBUG && n.type !== "progress") process.stderr.write(`\n[host] ${JSON.stringify(n)}\n`);
-      if (n.type === "loading") progress(pc.dim("Loading the replay in the game…"), false);
-      else if (n.type === "loaded") { t.loaded = Date.now(); progress(pc.dim("Recording…"), false); }
+      if (n.type === "loading") progress(pc.dim(t("Loading the replay in the game…")), false);
+      else if (n.type === "loaded") { times.loaded = Date.now(); progress(pc.dim(t("Recording…")), false); }
       else if (n.type === "progress" && typeof n.done === "number" && typeof n.pictures === "number") {
         if (n.done === lastDone) return;
-        if (n.done === 0) { progress(pc.dim(`Going to ${clock(n.frame ?? 0)} in the game…`), false); return; }
+        if (n.done === 0) { progress(pc.dim(t("Going to {clock} in the game…", { clock: clock(n.frame ?? 0) })), false); return; }
         lastDone = n.done;
-        const secs = (Date.now() - (t.loaded || started)) / 1000;
-        progress(`Recording ${num(n.done)}/${num(n.pictures)} pictures${pc.dim(` · ${clock(n.frame ?? 0)} in the game · ${secs.toFixed(0)} s · ${(n.done / Math.max(0.1, secs)).toFixed(0)} a second`)}`, false);
-      } else if (n.type === "done") { t.recorded = Date.now(); finished(); }
-      else if (n.type === "old") fail(new CliError(`The play page at ${playUrl.href} cannot record: it is older than replay export.`, "It needs a deploy of the play page from November 2026 or later; name another with SCMJS_PLAY_URL."));
-      else if (n.type === "error") fail(new CliError(`The play page could not record the replay: ${n.message ?? "no reason given"}`));
+        const secs = (Date.now() - (times.loaded || started)) / 1000;
+        progress(`${t("Recording {done}/{pictures} pictures", { done: num(n.done), pictures: num(n.pictures) })}${pc.dim(` · ${t("{clock} in the game", { clock: clock(n.frame ?? 0) })} · ${secs.toFixed(0)} s · ${t("{n} a second", { n: (n.done / Math.max(0.1, secs)).toFixed(0) })}`)}`, false);
+      } else if (n.type === "done") { times.recorded = Date.now(); finished(); }
+      else if (n.type === "old") fail(new CliError(t("The play page at {url} cannot record: it is older than replay export.", { url: playUrl.href }), t("It needs a deploy of the play page from November 2026 or later; name another with SCMJS_PLAY_URL.")));
+      else if (n.type === "error") fail(new CliError(n.message ? t("The play page could not record the replay: {message}", { message: n.message }) : t("The play page could not record the replay: no reason given")));
     },
     clip: (b) => { clip = b; },
     picture: (b) => { gif?.add(new Uint8Array(b.buffer, b.byteOffset, b.byteLength)); },
@@ -499,19 +500,19 @@ export async function exportReplay(input: Input, rep: Replay, o: ExportOptions, 
   const watchdog = setInterval(() => {
     const quiet = Date.now() - last;
     // (The first run fetches the engine, about 25 MB, through this server before the page says anything.)
-    if (quiet > (t.loaded ? 60_000 : 300_000)) fail(new CliError(`The play page said nothing for ${Math.round(quiet / 1000)} s.`, "Try again; --browser names another browser."));
+    if (quiet > (times.loaded ? 60_000 : 300_000)) fail(new CliError(t("The play page said nothing for {n} s.", { n: Math.round(quiet / 1000) }), t("Try again; --browser names another browser.")));
   }, 2000);
   try {
     debug(`serving ${served.url}/${token}/`);
     browser = launchBrowser(browserPath, { width: plan.width, height: plan.height });
-    void browser.exited.then(() => fail(new CliError("The browser stopped before the clip was made.", `${browserPath} may be too old: a Chrome, Chromium or Edge from 2023 or later records.`)));
+    void browser.exited.then(() => fail(new CliError(t("The browser stopped before the clip was made."), t("{browser} may be too old: a Chrome, Chromium or Edge from 2023 or later records.", { browser: browserPath }))));
     const errors: string[] = [];
     browser.cdp.on((m) => {
       // (SCMJS_DEBUG: what the page says in its console, for finding out why a recording went wrong.)
       if (process.env.SCMJS_DEBUG && m.method === "Runtime.consoleAPICalled") process.stderr.write(`\n[page ${String(m.params?.type)}] ${((m.params?.args as { value?: unknown; description?: string }[] | undefined) ?? []).map((a) => a.value ?? a.description ?? "").join(" ")}\n`);
       if (process.env.SCMJS_DEBUG && m.method === "Runtime.exceptionThrown") process.stderr.write(`\n[page exception] ${JSON.stringify(m.params).slice(0, 600)}\n`);
       if (m.method === "Runtime.exceptionThrown") errors.push(String((m.params?.exceptionDetails as { exception?: { description?: string }; text?: string } | undefined)?.exception?.description ?? (m.params?.exceptionDetails as { text?: string })?.text ?? "").split("\n")[0]);
-      if (m.method === "Inspector.targetCrashed") fail(new CliError("The page crashed while recording.", "The browser ran out of memory, perhaps; a smaller --size helps."));
+      if (m.method === "Inspector.targetCrashed") fail(new CliError(t("The page crashed while recording."), t("The browser ran out of memory, perhaps; a smaller --size helps.")));
     });
     const { targetId } = await browser.cdp.send("Target.createTarget", { url: `${served.url}/${token}/` }) as { targetId: string };
     const { sessionId } = await browser.cdp.send("Target.attachToTarget", { targetId, flatten: true }) as { sessionId: string };
@@ -519,11 +520,11 @@ export async function exportReplay(input: Input, rep: Replay, o: ExportOptions, 
     await over;
     if (failure) {
       const f = failure as CliError;
-      throw errors.length && !f.hint ? new CliError(f.message, `The page said: ${errors.slice(-2).join("; ")}`) : f;
+      throw errors.length && !f.hint ? new CliError(f.message, t("The page said: {errors}", { errors: errors.slice(-2).join("; ") })) : f;
     }
   } catch (e) {
     if (e instanceof CliError) throw e;
-    throw new CliError(`The browser could not record the clip (${e instanceof Error ? e.message : e}).`, NO_BROWSER);
+    throw new CliError(t("The browser could not record the clip ({message}).", { message: String(e instanceof Error ? e.message : e) }), translate(NO_BROWSER));
   } finally {
     clearInterval(watchdog);
     await browser?.stop();
@@ -536,7 +537,7 @@ export async function exportReplay(input: Input, rep: Replay, o: ExportOptions, 
   let encodedBy: ExportResult["encodedBy"] = "browser";
   const got = clip as Buffer | null;
   if (gif) { writeFileSync(plan.out, gif.finish()); encodedBy = "scmjs"; }
-  else if (!got) throw new CliError("The play page finished without a clip.");
+  else if (!got) throw new CliError(t("The play page finished without a clip."));
   else if (plan.format === "webm") writeFileSync(plan.out, got);
   else {
     const work = mkdtempSync(join(tmpdir(), "scmjs-export-"));
@@ -545,15 +546,15 @@ export async function exportReplay(input: Input, rep: Replay, o: ExportOptions, 
       writeFileSync(webm, got);
       const args = ["-y", "-loglevel", "error", "-i", webm, "-c:v", "libx264", "-preset", "medium", "-crf", "26", "-pix_fmt", "yuv420p", "-movflags", "+faststart", "-an", plan.out];
       const r = spawnSync(ffmpeg!.path, args, { encoding: "utf8", stdio: ["ignore", "ignore", "pipe"] });
-      if (r.status !== 0) throw new CliError(`ffmpeg could not make the MP4: ${(r.stderr || r.error?.message || "").trim().split("\n").slice(-2).join(" ")}`, "--out clip.webm keeps the browser's own file.");
+      if (r.status !== 0) throw new CliError(t("ffmpeg could not make the MP4: {message}", { message: (r.stderr || r.error?.message || "").trim().split("\n").slice(-2).join(" ") }), t("--out clip.webm keeps the browser's own file."));
       encodedBy = "ffmpeg";
     } finally { rmSync(work, { recursive: true, force: true }); }
   }
   const now = Date.now();
   return {
     file: plan.out, bytes: statSync(plan.out).size, format: plan.format, width: plan.width, height: plan.height, fps: plan.fps, speed: plan.speed,
-    pictures: plan.pictures, from: plan.from, to: plan.to, seconds: plan.pictures / plan.fps, camera: cameraWords(plan.camera) + (followedBy === "clicks" ? " (by their clicks)" : ""),
-    ms: { load: (t.loaded || now) - started, record: (t.recorded || now) - (t.loaded || started), convert: now - convertStart, total: now - started },
+    pictures: plan.pictures, from: plan.from, to: plan.to, seconds: plan.pictures / plan.fps, camera: followedBy === "clicks" ? t("{camera} (by their clicks)", { camera: cameraWords(plan.camera) }) : cameraWords(plan.camera),
+    ms: { load: (times.loaded || now) - started, record: (times.recorded || now) - (times.loaded || started), convert: now - convertStart, total: now - started },
     browser: browserPath, encodedBy,
   };
 }
@@ -561,5 +562,5 @@ export async function exportReplay(input: Input, rep: Replay, o: ExportOptions, 
 /** The line the command ends with. */
 export function exportSummary(r: ExportResult, cwd = process.cwd()): string {
   const shown = r.file.startsWith(`${cwd}/`) ? r.file.slice(cwd.length + 1) : r.file;
-  return `${mark.ok} ${pc.bold(shown)}${pc.dim(` · ${size(r.bytes)} · ${r.width} × ${r.height} · ${duration(r.seconds * 1000)} at ${r.fps % 1 ? r.fps.toFixed(1) : r.fps} a second · ${duration(r.from * FRAME_MS)}–${duration(r.to * FRAME_MS)} of the game at ${r.speed}× · ${r.camera} · made in ${(r.ms.total / 1000).toFixed(1)} s`)}`;
+  return `${mark.ok} ${pc.bold(shown)}${pc.dim(` · ${size(r.bytes)} · ${r.width} × ${r.height} · ${t("{length} at {fps} a second", { length: duration(r.seconds * 1000), fps: r.fps % 1 ? r.fps.toFixed(1) : r.fps })} · ${t("{from}–{to} of the game at {speed}×", { from: duration(r.from * FRAME_MS), to: duration(r.to * FRAME_MS), speed: r.speed })} · ${r.camera} · ${t("made in {seconds} s", { seconds: (r.ms.total / 1000).toFixed(1) })}`)}`;
 }

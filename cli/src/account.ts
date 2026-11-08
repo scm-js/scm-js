@@ -13,7 +13,8 @@ import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { openBrowser } from "./open";
 import { qrFor } from "./qr";
-import { CliError, dot, gameText, pc, plural, rows, size, table } from "./ui";
+import { t } from "./i18n";
+import { CliError, dot, gameText, pc, rows, size, table } from "./ui";
 
 /** The scmjs.dev service the editor's scmjs.dev plugin talks to. */
 export const DEFAULT_SERVER = "https://api.scmjs.dev";
@@ -90,8 +91,8 @@ export function forgetSession(path = sessionPath()): boolean {
 /** The session for `server`, or the CliError every account command answers without one. */
 export function requireSession(server = serverUrl(), path = sessionPath()): SavedSession {
   const s = readSession(path);
-  if (!s) throw new CliError("Sign in first: scmjs login", null, 2);
-  if (s.server !== server) throw new CliError("Sign in first: scmjs login", `The session in ${path} is for ${s.server}, not ${server}.`, 2);
+  if (!s) throw new CliError(t("Sign in first: scmjs login"), null, 2);
+  if (s.server !== server) throw new CliError(t("Sign in first: scmjs login"), t("The session in {path} is for {server}, not {wanted}.", { path, server: s.server, wanted: server }), 2);
   return s;
 }
 
@@ -121,15 +122,15 @@ export class Client {
     try {
       res = await this.fetchImpl(`${this.server}${path}`, { method, headers, body: payload, signal: AbortSignal.timeout(o.timeoutMs ?? 30_000) });
     } catch (e) {
-      const why = e instanceof Error && e.name === "TimeoutError" ? "it did not answer in time" : (e as { cause?: { code?: string; message?: string } }).cause?.code ?? (e as { cause?: { message?: string } }).cause?.message ?? (e instanceof Error ? e.message : String(e));
-      throw new CliError(`Could not reach ${this.server}: ${why}`, this.server === DEFAULT_SERVER ? "Check the connection; scmjs.dev's status is on https://scmjs.dev." : "SCMJS_SERVER names the server.");
+      const why = e instanceof Error && e.name === "TimeoutError" ? t("it did not answer in time") : (e as { cause?: { code?: string; message?: string } }).cause?.code ?? (e as { cause?: { message?: string } }).cause?.message ?? (e instanceof Error ? e.message : String(e));
+      throw new CliError(t("Could not reach {server}: {why}", { server: this.server, why }), this.server === DEFAULT_SERVER ? t("Check the connection; scmjs.dev's status is on https://scmjs.dev.") : t("SCMJS_SERVER names the server."));
     }
     if (res.status === 404 && o.missingOk) return null as T;
     const text = await res.text();
     let data: unknown = null;
     try { data = text ? JSON.parse(text) : null; } catch { /* said below */ }
     if (!res.ok) throw serverError(res, data);
-    if (data === null) throw new CliError(`${this.server} answered ${method} ${path} with something that is not JSON`, "SCMJS_SERVER may name something that is not a scmjs.dev server.");
+    if (data === null) throw new CliError(t("{server} answered {method} {path} with something that is not JSON", { server: this.server, method, path }), t("SCMJS_SERVER may name something that is not a scmjs.dev server."));
     return data as T;
   }
 }
@@ -138,9 +139,9 @@ export class Client {
 function serverError(res: Response, data: unknown): CliError {
   const e = (data as { error?: { code?: string; message?: string; retryAfterSec?: number } } | null)?.error;
   const retry = e?.retryAfterSec ?? (Number(res.headers.get("retry-after")) || 0);
-  const message = e?.message ?? `The server answered ${res.status} ${res.statusText}`.trim();
-  const later = retry ? ` Try again in ${retry >= 90 ? `${Math.ceil(retry / 60)} minutes` : `${retry} seconds`}.` : "";
-  if (res.status === 401 || e?.code === "unauthorized") return new CliError(message, "scmjs login signs in again.", 2);
+  const message = e?.message ?? t("The server answered {status}", { status: `${res.status} ${res.statusText}`.trim() });
+  const later = !retry ? "" : ` ${retry >= 90 ? t("Try again in {n, plural, one {# minute} other {# minutes}}.", { n: Math.ceil(retry / 60) }) : t("Try again in {n, plural, one {# second} other {# seconds}}.", { n: retry })}`;
+  if (res.status === 401 || e?.code === "unauthorized") return new CliError(message, t("scmjs login signs in again."), 2);
   return new CliError(`${message}${later}`);
 }
 
@@ -176,7 +177,7 @@ export interface LoginOutcome { server: string; file: string; provider: string; 
  */
 export async function login(o: LoginOptions = {}): Promise<LoginOutcome> {
   const provider = (o.provider ?? "discord").toLowerCase();
-  if (!(PROVIDERS as readonly string[]).includes(provider)) throw new CliError(`${o.provider} is not a sign-in scmjs.dev offers`, `One of ${PROVIDERS.join(", ")}.`, 2);
+  if (!(PROVIDERS as readonly string[]).includes(provider)) throw new CliError(t("{provider} is not a sign-in scmjs.dev offers", { provider: String(o.provider) }), t("One of {list}.", { list: PROVIDERS.join(", ") }), 2);
   const server = (o.server ?? serverUrl()).replace(/\/+$/, "");
   const file = o.file ?? sessionPath();
   const providerName = PROVIDER_NAMES[provider] ?? provider;
@@ -212,13 +213,13 @@ export async function login(o: LoginOptions = {}): Promise<LoginOutcome> {
       providerUrl = (await client.request<{ url: string }>("POST", "/v1/auth/start", { provider, returnOrigin: origin, cli: true })).url;
     } catch (e) {
       // A server from before the command-line sign-in (ai-server 0.36.0) ignores `cli` and refuses the loopback page.
-      if (e instanceof CliError && /not an allowed origin/.test(e.message)) throw new CliError(e.message, `${serverLabel(server)} does not take a sign-in from the command line yet.`);
+      if (e instanceof CliError && /not an allowed origin/.test(e.message)) throw new CliError(e.message, t("{server} does not take a sign-in from the command line yet.", { server: serverLabel(server) }));
       throw e;
     }
     o.say?.(page, providerName);
     (o.open ?? openBrowser)(page);
     const got = await arrived;
-    if (!got) throw new CliError(`The sign-in did not finish in ${Math.round((o.timeoutMs ?? SIGN_IN_TIMEOUT_MS) / 60_000) || 1} minutes`, "Run scmjs login again. BROWSER=none prints the address to open yourself.");
+    if (!got) throw new CliError(t("The sign-in did not finish in {n, plural, one {# minute} other {# minutes}}", { n: Math.round((o.timeoutMs ?? SIGN_IN_TIMEOUT_MS) / 60_000) || 1 }), t("Run scmjs login again. BROWSER=none prints the address to open yourself."));
     let account: AccountView;
     try {
       account = (await new Client({ server, session: got.session, fetchImpl: o.fetchImpl }).request<{ account: AccountView }>("GET", "/v1/account")).account;
@@ -226,7 +227,7 @@ export async function login(o: LoginOptions = {}): Promise<LoginOutcome> {
       got.reply(502, { error: e instanceof Error ? e.message : String(e) });
       throw e;
     }
-    if (account.kind !== "account") { got.reply(400, { error: "That is a trial session, not an account." }); throw new CliError("The server gave a trial session, not an account", "Run scmjs login again."); }
+    if (account.kind !== "account") { got.reply(400, { error: t("That is a trial session, not an account.") }); throw new CliError(t("The server gave a trial session, not an account"), t("Run scmjs login again.")); }
     saveSession({ server, session: got.session, name: account.name ?? null, provider, savedAt: new Date().toISOString() }, file);
     got.reply(200, { name: account.name ?? "" });
     return { server, file, provider, account };
@@ -257,13 +258,23 @@ function readBody(req: IncomingMessage, max = 16_384): Promise<string> {
 export function loginPage(p: { providerUrl: string; providerName: string; server: string; token: string }): string {
   const esc = (s: string) => s.replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
   const js = (v: unknown) => JSON.stringify(v).replace(/</g, "\\u003c");
-  return `<!doctype html><meta charset="utf-8"><title>Signing in to scmjs.dev</title>
+  // The words the page shows, in the reader's language; `{name}` is filled in by the page.
+  const said = {
+    signedIn: t("Signed in. Telling the command…"),
+    signedInAs: t("Signed in as {name}. You can close this tab and go back to the terminal.", { name: "{name}" }),
+    signedInNoName: t("Signed in. You can close this tab and go back to the terminal."),
+    refused: t("The command did not take the sign-in."),
+    stopped: t("The command has stopped waiting. Run scmjs login again."),
+    waiting: t("Waiting for {provider}…", { provider: p.providerName }),
+    blocked: t("Your browser asks before opening the sign-in window."),
+  };
+  return `<!doctype html><meta charset="utf-8"><title>${esc(t("Signing in to scmjs.dev"))}</title>
 <style>body{font:15px system-ui,sans-serif;background:#14141c;color:#d8d8e8;display:grid;place-items:center;height:90vh;margin:0}
 main{text-align:center;max-width:32em}button{font:inherit;padding:.6em 1.4em;border-radius:6px;border:1px solid #4a4a6a;background:#262640;color:#fff;cursor:pointer}
 p{color:#9898b0}</style>
-<main><h2>scmjs login</h2><p id="say">Opening ${esc(p.providerName)}…</p><button id="go" hidden>Sign in with ${esc(p.providerName)}</button></main>
+<main><h2>scmjs login</h2><p id="say">${esc(t("Opening {provider}…", { provider: p.providerName }))}</p><button id="go" hidden>${esc(t("Sign in with {provider}", { provider: p.providerName }))}</button></main>
 <script>
-const provider = ${js(p.providerUrl)}, server = ${js(p.server)}, token = ${js(p.token)};
+const provider = ${js(p.providerUrl)}, server = ${js(p.server)}, token = ${js(p.token)}, said = ${js(said)};
 const say = (t) => { document.getElementById("say").textContent = t; };
 let win = null, done = false;
 addEventListener("message", async (e) => {
@@ -271,17 +282,17 @@ addEventListener("message", async (e) => {
   const m = e.data;
   if (!m || m.type !== ${js(AUTH_MESSAGE_TYPE)} || typeof m.session !== "string") return;
   done = true;
-  say("Signed in. Telling the command…");
+  say(said.signedIn);
   try {
     const r = await fetch("/" + token + "/session", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ session: m.session }) });
     const a = await r.json().catch(() => ({}));
-    say(r.ok ? "Signed in" + (a.name ? " as " + a.name : "") + ". You can close this tab and go back to the terminal." : (a.error || "The command did not take the sign-in."));
+    say(r.ok ? (a.name ? said.signedInAs.replace("{name}", a.name) : said.signedInNoName) : (a.error || said.refused));
   } catch (err) {
-    say("The command has stopped waiting. Run scmjs login again.");
+    say(said.stopped);
   }
 });
-function go() { win = open(provider, "scmjs-signin", "width=540,height=720,popup=yes"); if (win) { document.getElementById("go").hidden = true; say("Waiting for ${esc(p.providerName)}…"); } return !!win; }
-if (!go()) { say("Your browser asks before opening the sign-in window."); document.getElementById("go").hidden = false; }
+function go() { win = open(provider, "scmjs-signin", "width=540,height=720,popup=yes"); if (win) { document.getElementById("go").hidden = true; say(said.waiting); } return !!win; }
+if (!go()) { say(said.blocked); document.getElementById("go").hidden = false; }
 document.getElementById("go").onclick = go;
 </script>`;
 }
@@ -319,9 +330,9 @@ export async function accountReport(o: { server?: string; file?: string; fetchIm
 
 /** How long a kept map stays open, in words. */
 export function keepWords(keepDays: KeepDays | undefined): string {
-  if (keepDays === undefined) return "until everyone leaves";
-  if (keepDays === null) return "until you end it";
-  return { 1: "for a day", 7: "for a week", 30: "for a month" }[keepDays];
+  if (keepDays === undefined) return t("until everyone leaves");
+  if (keepDays === null) return t("until you end it");
+  return { 1: t("for a day"), 7: t("for a week"), 30: t("for a month") }[keepDays];
 }
 
 /** `scmjs account`: who, the role, storage, and the maps being shared with their links. */
@@ -330,18 +341,18 @@ export function printAccount(r: AccountReport, home = homedir(), { qr = false } 
   const st = a.storage;
   const file = r.file.startsWith(home) ? `~${r.file.slice(home.length)}` : r.file;
   const lines = [
-    `${pc.bold(a.name ?? "(no name)")}${pc.dim(` · signed in to ${serverLabel(r.server)}${a.providers.length ? ` with ${a.providers.map((p) => PROVIDER_NAMES[p] ?? p).join(", ")}` : ""}`)}`, "",
+    `${pc.bold(a.name ?? t("(no name)"))}${pc.dim(` · ${a.providers.length ? t("signed in to {server} with {providers}", { server: serverLabel(r.server), providers: a.providers.map((p) => PROVIDER_NAMES[p] ?? p).join(", ") }) : t("signed in to {server}", { server: serverLabel(r.server) })}`)}`, "",
     ...rows([
-      ["Role", a.role],
-      ["Storage", st ? `${size(st.usedBytes)} of ${size(st.capBytes)}${dot}${plural(st.maps, "map")}, ${plural(st.revisions, "revision")}` : pc.dim("this server keeps no maps")],
-      ["Shared", r.shared ? `${r.shared.rooms.length} of ${r.shared.limit} at once` : pc.dim("this server shares no maps for editing")],
-      ["Session", pc.dim(file)],
+      [t("Role"), a.role],
+      [t("Storage"), st ? `${t("{used} of {cap}", { used: size(st.usedBytes), cap: size(st.capBytes) })}${dot}${t("{maps, plural, one {# map} other {# maps}}, {revisions, plural, one {# revision} other {# revisions}}", { maps: st.maps, revisions: st.revisions })}` : pc.dim(t("this server keeps no maps"))],
+      [t("Shared"), r.shared ? t("{n} of {limit} at once", { n: r.shared.rooms.length, limit: r.shared.limit }) : pc.dim(t("this server shares no maps for editing"))],
+      [t("Session"), pc.dim(file)],
     ]),
   ];
   if (r.shared?.rooms.length) {
     lines.push("", ...table(r.shared.rooms.map((m) => [
       gameText(m.name),
-      m.kind === "kept" ? `kept open ${keepWords(m.keepDays ?? null)}` : m.people.length ? `${plural(m.people.length, "person", "people")} in it` : "open, nobody in it",
+      m.kind === "kept" ? t("kept open {keep}", { keep: keepWords(m.keepDays ?? null) }) : m.people.length ? t("{n, plural, one {# person} other {# people}} in it", { n: m.people.length }) : t("open, nobody in it"),
       pc.cyan(linkTo("share", m.invite, r.server)),
     ]), 2));
     // --qr: each link's code under its name, one after another.

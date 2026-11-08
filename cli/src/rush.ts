@@ -13,7 +13,8 @@ import { resolve } from "node:path";
 import { UNIT_NAMES, unitName } from "../../src/data/units";
 import { ensureEngine, findGameCopy, runnerFor, startRunner } from "./engine";
 import { removeGameMap } from "./trace";
-import { CliError, columns, dot, mark, num, pc, plural, table, unicode } from "./ui";
+import { locale, t, translate } from "./i18n";
+import { CliError, columns, dot, mark, num, padColumns, pc, table, unicode } from "./ui";
 
 /* ── The runner's lines (scm-sim's src/exact/mapRush.ts, through runMap.ts --rush) ──────── */
 
@@ -29,7 +30,8 @@ export const RUSH_UNIT = 7;
 /** Milliseconds a frame at Fastest. */
 const FRAME_MS = 42;
 /** One way, both ways, and the table's corner; ASCII on the old Windows console (as `ui.ts`'s marks). */
-const TO = unicode ? "→" : "->", BOTH = unicode ? "↔" : "<->", CORNER = unicode ? "from ╲ to" : "from \\ to";
+const TO = unicode ? "→" : "->", BOTH = unicode ? "↔" : "<->";
+const corner = () => (unicode ? t("from ╲ to") : t("from \\ to"));
 
 export interface RushOptions {
   /** units.dat id of the unit walked (`unitByName`). */
@@ -66,7 +68,7 @@ export function unitByName(name: string): number {
   const asked = fold(name);
   if (/^\d+$/.test(asked)) {
     const id = Number(asked);
-    if (id >= UNIT_NAMES.length) throw new CliError(`There is no unit ${id}: units.dat's ids run from 0 to ${UNIT_NAMES.length - 1}.`, null, 2);
+    if (id >= UNIT_NAMES.length) throw new CliError(t("There is no unit {id}: units.dat's ids run from 0 to {last}.", { id, last: UNIT_NAMES.length - 1 }), null, 2);
     return id;
   }
   const names = UNIT_NAMES.map((n, id) => ({ id, full: fold(n), short: fold(n).replace(RACES, "") }));
@@ -76,12 +78,12 @@ export function unitByName(name: string): number {
   if (starts.length === 1) return starts[0].id;
   const near = starts.length ? starts : names.filter((n) => n.full.includes(asked));
   const listed = near.slice(0, 6).map((n) => `"${unitName(n.id)}" (${n.id})`).join(", ");
-  throw new CliError(near.length ? `"${name}" could be ${near.length > 6 ? `any of ${near.length} units: ${listed}, …` : listed}.` : `No unit is called "${name}".`, "Name it as the editor does (Zerg Zergling), without the race (Zergling), or by its units.dat id.", 2);
+  throw new CliError(!near.length ? t("No unit is called \"{name}\".", { name }) : near.length > 6 ? t("\"{name}\" could be any of {n} units: {list}, …", { name, n: near.length, list: listed }) : t("\"{name}\" could be {list}.", { name, list: listed }), t("Name it as the editor does (Zerg Zergling), without the race (Zergling), or by its units.dat id."), 2);
 }
 
 /* ── The run ────────────────────────────────────────────────── */
 
-const cancelled = () => new CliError("The run was cancelled: the game was stopped before it finished.", null);
+const cancelled = () => new CliError(t("The run was cancelled: the game was stopped before it finished."), null);
 
 /**
  * Walks the unit between the map's start locations in the game and keeps what the runner said. `map` is the file the
@@ -93,7 +95,7 @@ export async function runRush(map: string, o: RushOptions = {}): Promise<RushOut
 }
 
 async function rush(map: string, o: RushOptions): Promise<RushOutcome> {
-  if (!existsSync(map)) throw new CliError(`No file ${map}`, null, 2);
+  if (!existsSync(map)) throw new CliError(t("No file {name}", { name: map }), null, 2);
   const game = findGameCopy(o.starcraft);
   const engine = await ensureEngine(o.engine, undefined, o.live ?? (() => {}));
   const runner = runnerFor(engine, "map");
@@ -124,12 +126,12 @@ async function rush(map: string, o: RushOptions): Promise<RushOutcome> {
   } finally { o.signal?.removeEventListener("abort", stop); }
   const exitCode = await exited;
   if (o.signal?.aborted) throw cancelled();
-  if (older) throw new CliError(`The engine at ${engine.dir} has a map runner from before map rush.`, "A play page deployed since has one; the next run fetches it (or name a newer one with --engine).");
+  if (older) throw new CliError(t("The engine at {dir} has a map runner from before map rush.", { dir: engine.dir }), t("A play page deployed since has one; the next run fetches it (or name a newer one with --engine)."));
   if (error) {
-    if (/does not walk/.test(error)) throw new CliError(`The ${shortName(o.unit ?? RUSH_UNIT)} does not walk: it is a building, a flyer or a turret.`, "Name a ground unit with --unit (Zergling, Dragoon, Marine…); a flyer goes in a straight line, which the report gives as the air distance.", 2);
-    throw new CliError(error, "The runner is scm-sim's; a map StarCraft itself opens, with two start locations, and your own copy of the game are what it needs.");
+    if (/does not walk/.test(error)) throw new CliError(t("The {unit} does not walk: it is a building, a flyer or a turret.", { unit: unitShown(o.unit ?? RUSH_UNIT) }), t("Name a ground unit with --unit (Zergling, Dragoon, Marine…); a flyer goes in a straight line, which the report gives as the air distance."), 2);
+    throw new CliError(error, t("The runner is scm-sim's; a map StarCraft itself opens, with two start locations, and your own copy of the game are what it needs."));
   }
-  if (!start || !end) throw new CliError(`The walks did not finish: the runner stopped without a result (exit ${exitCode}).${stderr.trim() ? `\n${stderr.trim().split("\n").slice(-6).join("\n")}` : ""}`);
+  if (!start || !end) throw new CliError(`${t("The walks did not finish: the runner stopped without a result (exit {code}).", { code: exitCode })}${stderr.trim() ? `\n${stderr.trim().split("\n").slice(-6).join("\n")}` : ""}`);
   return { engine: { build: engine.build, dir: engine.dir, fetched: engine.fetched }, game, start, end };
 }
 
@@ -202,41 +204,56 @@ const shortName = (id: number) => unitName(id).replace(RACES_NAMED, "");
 const RACES_NAMED = /^(Terran|Zerg|Protoss) /;
 /** The name with "a" or "an" before it ("an SCV": the letters are said). */
 const withArticle = (name: string) => `${/^([aeiou]|SCV)/i.test(name) ? "an" : "a"} ${name}`;
+/** The unit's short name as the editor shows it: in English with its article, in Korean as the editor's name. */
+const unitShown = (id: number) => (locale() === "en" ? shortName(id) : translate(unitName(id)).replace(/^(테란|저그|프로토스) /, ""));
+const unitWithArticle = (id: number) => (locale() === "en" ? withArticle(shortName(id)) : unitShown(id));
 
 export function wordStart(l: RushStartLine): string {
-  return `${pc.bold(l.map.name)} ${pc.dim(`${l.map.width} × ${l.map.height}, ${l.map.tileset}`)}${dot}${plural(l.starts.length, "start location")}${dot}${withArticle(shortName(l.unit))} walked ${plural(l.walks, "time")}${dot}${l.copy === "remastered" ? "Remastered" : "1.16.1"} files`;
+  return `${pc.bold(l.map.name)} ${pc.dim(`${l.map.width} × ${l.map.height}, ${l.map.tileset}`)}${dot}${t("{n, plural, one {# start location} other {# start locations}}", { n: l.starts.length })}${dot}${t("{unit} walked {n, plural, one {# time} other {# times}}", { unit: unitWithArticle(l.unit), n: l.walks })}${dot}${t("{copy} files", { copy: l.copy === "remastered" ? t("Remastered") : "1.16.1" })}`;
+}
+
+/** A walk's outcome, in words. */
+function outcomeWord(o: WalkOutcome): string {
+  switch (o) {
+    case "stopped": return t("stopped");
+    case "stuck": return t("stuck");
+    case "limit": return t("limit");
+    case "apart": return t("apart");
+    case "unmoved": return t("unmoved");
+    default: return t("arrived");
+  }
 }
 
 /** What a walk that did not arrive came to, in words. */
 function shortfall(w: RushPair): string {
   switch (w.outcome) {
-    case "apart": return "no ground joins them (an island, or ground walled off)";
-    case "stopped": return `stopped ${pixels(w.off)} short of the base after ${seconds(w.seconds)}: the game found no way all the way`;
-    case "stuck": return `stuck ${pixels(w.off)} from the base after ${seconds(w.seconds)}`;
-    case "limit": return `still walking after ${seconds(w.seconds)}, ${pixels(w.off)} from the base`;
-    case "unmoved": return "the unit never took its order to move";
-    default: return "arrived";
+    case "apart": return t("no ground joins them (an island, or ground walled off)");
+    case "stopped": return t("stopped {px} short of the base after {time}: the game found no way all the way", { px: pixels(w.off), time: seconds(w.seconds) });
+    case "stuck": return t("stuck {px} from the base after {time}", { px: pixels(w.off), time: seconds(w.seconds) });
+    case "limit": return t("still walking after {time}, {px} from the base", { px: pixels(w.off), time: seconds(w.seconds) });
+    case "unmoved": return t("the unit never took its order to move");
+    default: return t("arrived");
   }
 }
 
 export function wordWalk(l: RushWalkLine): string {
   const w = `${l.from + 1} ${TO} ${l.to + 1}`;
   if (l.outcome === "arrived") return `  ${pc.dim(`${w}  ${pixels(l.travelled)}, ${seconds((l.frames * FRAME_MS) / 1000)}`)}`;
-  return `  ${pc.yellow(`${w}  ${l.outcome}`)}`;
+  return `  ${pc.yellow(`${w}  ${outcomeWord(l.outcome)}`)}`;
 }
 
 /** A cell of the table: pixels walked and seconds, the seconds alone, or the pixels alone. */
 function cell(w: RushPair | null, show: "both" | "seconds" | "pixels"): string {
   if (!w) return pc.dim("–");
-  if (w.outcome === "apart") return pc.yellow("no way");
-  if (w.outcome !== "arrived") return pc.yellow(w.outcome);
+  if (w.outcome === "apart") return pc.yellow(t("no way"));
+  if (w.outcome !== "arrived") return pc.yellow(outcomeWord(w.outcome));
   return show === "both" ? `${pixels(w.pixels)}, ${seconds(w.seconds)}` : show === "seconds" ? seconds(w.seconds) : num(w.pixels);
 }
 
 /** The starts as rows (from) and columns (to), each cell right-aligned. */
 function matrixLines(rep: RushReport, show: "both" | "seconds" | "pixels"): string[] {
-  const head = [pc.dim(CORNER), ...rep.starts.map((s) => pc.dim(String(s.player)))];
-  const body = rep.starts.map((s, i) => [`${s.player} ${pc.dim(`${s.clock} o'clock`)}`, ...rep.matrix[i].map((w) => cell(w, show))]);
+  const head = [pc.dim(corner()), ...rep.starts.map((s) => pc.dim(String(s.player)))];
+  const body = rep.starts.map((s, i) => [`${s.player} ${pc.dim(t("{clock} o'clock", { clock: s.clock }))}`, ...rep.matrix[i].map((w) => cell(w, show))]);
   const widths = head.map((h, k) => Math.max(columns(h), ...body.map((r) => columns(r[k]))));
   const right = (c: string, k: number) => (k === 0 ? c : " ".repeat(widths[k] - columns(c)) + c);
   return table([head.map(right), ...body.map((r) => r.map(right))], 2);
@@ -246,27 +263,27 @@ function matrixLines(rep: RushReport, show: "both" | "seconds" | "pixels"): stri
 export function printRush(file: string, r: RushOutcome, { width = process.stdout.columns || 100 } = {}): string[] {
   const rep = rushReport(file, r);
   const n = rep.starts.length, apart = rep.short.filter((w) => w.outcome === "apart");
-  const head = `${rep.short.length ? mark.warn : mark.ok} ${pc.bold(file)}: ${withArticle(shortName(rep.unit.id))} walked between ${plural(n, "start location")} by the game${dot}${plural(rep.walks.length, "walk")}${dot}${(r.end.ms.total / 1000).toFixed(1)} s`;
+  const head = `${rep.short.length ? mark.warn : mark.ok} ${pc.bold(file)}: ${t("{unit} walked between {n, plural, one {# start location} other {# start locations}} by the game", { unit: unitWithArticle(rep.unit.id), n })}${dot}${t("{n, plural, one {# walk} other {# walks}}", { n: rep.walks.length })}${dot}${(r.end.ms.total / 1000).toFixed(1)} s`;
   const out = [head];
   if (apart.length === rep.walks.length) {
-    out.push("", `  ${pc.yellow("No two start locations are joined by ground: an island map.")} ${pc.dim("The straight lines between them:")}`);
+    out.push("", `  ${pc.yellow(t("No two start locations are joined by ground: an island map."))} ${pc.dim(t("The straight lines between them:"))}`);
     for (const w of rep.walks.filter((x) => x.from < x.to)) out.push(`  ${w.from} ${BOTH} ${w.to}  ${pixels(w.air)}`);
     return out;
   }
   const both = matrixLines(rep, "both");
   if (Math.max(...both.map(columns)) <= width) out.push("", ...both);
-  else out.push("", pc.dim("  Seconds at Fastest"), ...matrixLines(rep, "seconds"), "", pc.dim("  Pixels walked"), ...matrixLines(rep, "pixels"));
-  const line = (label: string, w: RushPair) => `  ${label.padEnd(9)}${w.from} ${TO} ${w.to}: ${pixels(w.pixels)} ${pc.dim(`(${num(w.tiles)} tiles)`)}, ${seconds(w.seconds)}${dot}${pc.dim(`air ${pixels(w.air)}, ${(w.pixels / Math.max(1, w.air)).toFixed(2)}× the straight line`)}`;
+  else out.push("", pc.dim(`  ${t("Seconds at Fastest")}`), ...matrixLines(rep, "seconds"), "", pc.dim(`  ${t("Pixels walked")}`), ...matrixLines(rep, "pixels"));
+  const line = (label: string, w: RushPair) => `  ${padColumns(label, 9)}${w.from} ${TO} ${w.to}: ${pixels(w.pixels)} ${pc.dim(`(${t("{n} tiles", { n: num(w.tiles) })})`)}, ${seconds(w.seconds)}${dot}${pc.dim(t("air {px}, {ratio}× the straight line", { px: pixels(w.air), ratio: (w.pixels / Math.max(1, w.air)).toFixed(2) }))}`;
   if (rep.shortest && rep.longest) {
     out.push("");
-    if (rep.shortest === rep.longest) out.push(line("Walk", rep.shortest));
-    else out.push(line("Shortest", rep.shortest), line("Longest", rep.longest));
+    if (rep.shortest === rep.longest) out.push(line(t("Walk"), rep.shortest));
+    else out.push(line(t("Shortest"), rep.shortest), line(t("Longest"), rep.longest));
   }
   const others = rep.short.filter((w) => w.outcome !== "apart");
   if (apart.length) {
     const pairs = apart.filter((w) => w.from < w.to || !apart.some((x) => x.from === w.to && x.to === w.from)).map((w) => `${w.from} ${BOTH} ${w.to}`);
-    out.push("", `  ${pc.yellow("▸")} No ground joins ${pairs.join(", ")}: ${pc.dim("an island, or ground walled off — the way there is by air or by drop")}`);
+    out.push("", `  ${pc.yellow("▸")} ${t("No ground joins {pairs}:", { pairs: pairs.join(", ") })} ${pc.dim(t("an island, or ground walled off — the way there is by air or by drop"))}`);
   }
-  for (const w of others) out.push(`  ${pc.yellow("▸")} ${w.from} ${TO} ${w.to} did not arrive: ${pc.dim(shortfall(w))}`);
+  for (const w of others) out.push(`  ${pc.yellow("▸")} ${t("{walk} did not arrive:", { walk: `${w.from} ${TO} ${w.to}` })} ${pc.dim(shortfall(w))}`);
   return out;
 }

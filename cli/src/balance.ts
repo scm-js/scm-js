@@ -24,7 +24,8 @@ import { NOT_A_LOSS, type GameEvents } from "./heat";
 import { defaultParallel, playForEvents } from "./heatmap";
 import { parseEntrants, playGame, schedule, type Entrant, type GameResult, type RaceLetter, type ScheduledGame } from "./ladder";
 import { clockOf, rushReport, runRush, type RushReport } from "./rush";
-import { CliError, dot, duration, mark, num, pc, plural, table } from "./ui";
+import { t } from "./i18n";
+import { CliError, dot, duration, mark, num, pc, table } from "./ui";
 
 /** A frame at Fastest. */
 const FRAME_MS = 42;
@@ -125,7 +126,7 @@ export function readGame(game: ScheduledGame, result: GameResult, ev: GameEvents
   const slots = [0, 1].map((side) => result.end?.players.find((p) => p.side === side)?.slot ?? null);
   const dealt = slots.map((slot) => (ev && slot !== null ? dealtStart(ev, slot, starts) : null));
   const contact = ev ? firstContact(ev, slots.filter((s): s is number => s !== null)) : null;
-  return { game, result, slots, starts: dealt, contact, unread: ev ? null : unread ?? (result.end ? "no replay" : null) };
+  return { game, result, slots, starts: dealt, contact, unread: ev ? null : unread ?? (result.end ? t("no replay") : null) };
 }
 
 /* ── The report ────────────────────────────────────────────── */
@@ -221,31 +222,36 @@ export function balanceReport(file: string, doc: OpenedMap, starts: readonly Sta
 
   const notes: string[] = [];
   const unread = games.filter((g) => g.result.end && g.starts.some((s) => s === null));
-  if (unread.length) notes.push(`${plural(unread.length, "game")} could not be placed at a start${unread[0].unread ? ` (${unread[0].unread})` : ""} and ${unread.length === 1 ? "is" : "are"} left out of the rows.`);
+  if (unread.length) {
+    notes.push(unread[0].unread
+      ? t("{n, plural, one {# game} other {# games}} could not be placed at a start ({why}) and {n, plural, one {is} other {are}} left out of the rows.", { n: unread.length, why: unread[0].unread })
+      : t("{n, plural, one {# game} other {# games}} could not be placed at a start and {n, plural, one {is} other {are}} left out of the rows.", { n: unread.length }));
+  }
   const never = rows.filter((r) => !r.games).map((r) => r.player);
-  if (never.length) notes.push(`Never dealt: start ${never.join(", ")}. The game deals the starts at random; more games (--games) give each its turns.`);
+  if (never.length) notes.push(t("Never dealt: start {list}. The game deals the starts at random; more games (--games) give each its turns.", { list: never.join(", ") }));
   return { file, map: { name: plainText(scenarioName(doc.scenario) ?? file), width: doc.scenario.width, height: doc.scenario.height }, sides, starts: rows, pairs, games: [...games], verdict: verdictOf(rows, sides), rush, notes };
 }
 
 /** The line at the end: balanced within N%, a start that wins more and what is different about it, or why no call. */
 export function verdictOf(rows: readonly StartRow[], sides: BalanceReport["sides"]): Verdict {
   const counted = rows.map((r, i) => ({ r, i })).filter((x) => x.r.winRate !== null && x.r.expected !== null);
-  if (counted.length < 2) return { kind: "too-few", spread: null, start: null, text: "Too few games were decided to compare the starts: play more (--games) or longer (--frames)." };
+  if (counted.length < 2) return { kind: "too-few", spread: null, start: null, text: t("Too few games were decided to compare the starts: play more (--games) or longer (--frames).") };
   // A side that won (or lost) every game says nothing about the starts; when every side did, no game does.
   const playing = sides.filter((s) => s.won + s.lost > 0);
   if (playing.every((s) => s.won === 0 || s.lost === 0)) {
     const sweep = playing.find((s) => s.lost === 0) ?? playing[0];
-    return { kind: "one-sided", spread: null, start: null, text: `${sweep.label} won every decided game: the sides are too far apart for the starts to show. Play two sides of a strength (the same bot twice: --bots a.scmbot,a.scmbot).` };
+    return { kind: "one-sided", spread: null, start: null, text: t("{side} won every decided game: the sides are too far apart for the starts to show. Play two sides of a strength (the same bot twice: --bots a.scmbot,a.scmbot).", { side: sweep.label }) };
   }
   const worst = counted.reduce((a, b) => (Math.abs(b.r.winRate! - b.r.expected!) > Math.abs(a.r.winRate! - a.r.expected!) ? b : a));
   const spread = Math.abs(worst.r.winRate! - worst.r.expected!);
   const pct = (x: number) => `${Math.round(x * 100)}%`;
   const perStart = Math.round(mean(counted.map((x) => x.r.won + x.r.lost))!);
-  if (spread <= BALANCED_WITHIN) return { kind: "balanced", spread, start: null, text: `Balanced within ${pct(spread)}: no start's win rate is further than that from what the sides' strength predicts (${plural(perStart, "decided game")} a start).` };
+  if (spread <= BALANCED_WITHIN) return { kind: "balanced", spread, start: null, text: t("Balanced within {spread}: no start's win rate is further than that from what the sides' strength predicts ({n, plural, one {# decided game} other {# decided games}} a start).", { spread: pct(spread), n: perStart }) };
   const r = worst.r;
-  const said = `Start ${r.player} (${r.clock} o'clock) ${r.winRate! > r.expected! ? "wins" : "wins only"} ${pct(r.winRate!)} where ${pct(r.expected!)} was expected`;
-  if (r.margin !== null && spread <= r.margin) return { kind: "chance", spread, start: worst.i, text: `${said}, but ${plural(r.won + r.lost, "decided game")} cannot tell that from chance (±${pct(r.margin)}): play more (--games).` };
-  return { kind: "unbalanced", spread, start: worst.i, text: `${said} — ${differs(rows, worst.i, r.winRate! > r.expected!)}.` };
+  const facts = { start: r.player, clock: r.clock, rate: pct(r.winRate!), expected: pct(r.expected!) };
+  const said = r.winRate! > r.expected! ? t("Start {start} ({clock} o'clock) wins {rate} where {expected} was expected", facts) : t("Start {start} ({clock} o'clock) wins only {rate} where {expected} was expected", facts);
+  if (r.margin !== null && spread <= r.margin) return { kind: "chance", spread, start: worst.i, text: t("{said}, but {n, plural, one {# decided game} other {# decided games}} cannot tell that from chance (±{margin}): play more (--games).", { said, n: r.won + r.lost, margin: pct(r.margin) }) };
+  return { kind: "unbalanced", spread, start: worst.i, text: t("{said} — {why}.", { said, why: differs(rows, worst.i, r.winRate! > r.expected!) }) };
 }
 
 /**
@@ -256,20 +262,24 @@ export function differs(rows: readonly StartRow[], i: number, favoured: boolean)
   const others = rows.filter((_, k) => k !== i);
   const r = rows[i];
   const facts: { off: number; text: string }[] = [];
-  const add = (mine: number | null, theirs: (number | null)[], text: (m: string, t: string) => string, fmt: (x: number) => string) => {
-    const t = mean(theirs.filter((x): x is number => x !== null));
-    if (mine === null || t === null || t === 0) return;
-    const off = Math.abs(mine - t) / t;
-    if (off >= 0.1) facts.push({ off, text: text(fmt(mine), fmt(t)) });
+  const add = (mine: number | null, theirs: (number | null)[], text: (m: string, o: string) => string, fmt: (x: number) => string) => {
+    const avg = mean(theirs.filter((x): x is number => x !== null));
+    if (mine === null || avg === null || avg === 0) return;
+    const off = Math.abs(mine - avg) / avg;
+    if (off >= 0.1) facts.push({ off, text: text(fmt(mine), fmt(avg)) });
   };
   const n = (x: number) => num(Math.round(x));
-  add(r.resources.gas, others.map((o) => o.resources.gas), (m, t) => `look at its gas: its main has ${m}, the others average ${t}`, n);
-  add(r.resources.minerals, others.map((o) => o.resources.minerals), (m, t) => `look at its minerals: its main has ${m}, the others average ${t}`, n);
-  add(r.resources.fieldTiles, others.map((o) => o.resources.fieldTiles), (m, t) => `look at its mineral line: ${m} tiles from the start, the others ${t}`, (x) => x.toFixed(1));
-  add(r.resources.geyserTiles, others.map((o) => o.resources.geyserTiles), (m, t) => `look at its geyser: ${m} tiles from the start, the others ${t}`, (x) => x.toFixed(1));
-  add(r.rushSeconds, others.map((o) => o.rushSeconds), (m, t) => `look at its distances: its walks to the other starts average ${m}, the others' ${t}`, (x) => `${x.toFixed(1)} s`);
-  add(r.contact, others.map((o) => o.contact), (m, t) => `its games met the enemy at ${m} on average, the others at ${t}`, (x) => duration(x * FRAME_MS));
-  if (!facts.length) return `its resources and distances are within 10% of the others', so the difference is in the ground${favoured ? " around it" : ""} or in how the games went`;
+  add(r.resources.gas, others.map((o) => o.resources.gas), (m, o) => t("look at its gas: its main has {m}, the others average {o}", { m, o }), n);
+  add(r.resources.minerals, others.map((o) => o.resources.minerals), (m, o) => t("look at its minerals: its main has {m}, the others average {o}", { m, o }), n);
+  add(r.resources.fieldTiles, others.map((o) => o.resources.fieldTiles), (m, o) => t("look at its mineral line: {m} tiles from the start, the others {o}", { m, o }), (x) => x.toFixed(1));
+  add(r.resources.geyserTiles, others.map((o) => o.resources.geyserTiles), (m, o) => t("look at its geyser: {m} tiles from the start, the others {o}", { m, o }), (x) => x.toFixed(1));
+  add(r.rushSeconds, others.map((o) => o.rushSeconds), (m, o) => t("look at its distances: its walks to the other starts average {m}, the others' {o}", { m, o }), (x) => `${x.toFixed(1)} s`);
+  add(r.contact, others.map((o) => o.contact), (m, o) => t("its games met the enemy at {m} on average, the others at {o}", { m, o }), (x) => duration(x * FRAME_MS));
+  if (!facts.length) {
+    return favoured
+      ? t("its resources and distances are within 10% of the others', so the difference is in the ground around it or in how the games went")
+      : t("its resources and distances are within 10% of the others', so the difference is in the ground or in how the games went");
+  }
   return facts.sort((a, b) => b.off - a.off)[0].text;
 }
 
@@ -328,22 +338,23 @@ export function balanceLine(g: BalanceGame, entrants: readonly Entrant[], starts
   const side = (k: number) => {
     const st = g.starts[k];
     const race = r.end?.players.find((p) => p.side === k)?.race;
-    return `${pc.bold(entrants[g.game.sides[k]].label)}${race ? pc.dim(` ${race[0].toUpperCase()}`) : ""} ${pc.dim(st === null ? "(start ?)" : `(start ${starts[st].player}, ${starts[st].clock} o'clock)`)}`;
+    return `${pc.bold(entrants[g.game.sides[k]].label)}${race ? pc.dim(` ${race[0].toUpperCase()}`) : ""} ${pc.dim(st === null ? t("(start ?)") : t("(start {n}, {clock} o'clock)", { n: starts[st].player, clock: starts[st].clock }))}`;
   };
-  if (!r.end) return `${at} ${mark.error} ${entrants[g.game.sides[0]].label} vs ${entrants[g.game.sides[1]].label}${dot}seed ${g.game.seed}: ${r.error ?? "not played"}`;
-  const when = `${duration(r.end.frame * FRAME_MS)}${g.contact !== null ? `${dot}first contact ${duration(g.contact * FRAME_MS)}` : ""}${dot}seed ${g.game.seed}`;
-  if (r.end.by === "desync") return `${at} ${mark.error} ${side(0)} vs ${side(1)}${dot}${pc.red("the copies went out of step")}`;
-  if (r.winner === null) return `${at} ${mark.warn} ${side(0)} and ${side(1)} undecided${dot}${when}`;
+  const seed = t("seed {seed}", { seed: g.game.seed });
+  if (!r.end) return `${at} ${mark.error} ${entrants[g.game.sides[0]].label} vs ${entrants[g.game.sides[1]].label}${dot}${seed}: ${r.error ?? t("not played")}`;
+  const when = `${duration(r.end.frame * FRAME_MS)}${g.contact !== null ? `${dot}${t("first contact {time}", { time: duration(g.contact * FRAME_MS) })}` : ""}${dot}${seed}`;
+  if (r.end.by === "desync") return `${at} ${mark.error} ${side(0)} vs ${side(1)}${dot}${pc.red(t("the copies went out of step"))}`;
+  if (r.winner === null) return `${at} ${mark.warn} ${t("{a} and {b} undecided", { a: side(0), b: side(1) })}${dot}${when}`;
   const [w, l] = r.winner === g.game.sides[0] ? [0, 1] : [1, 0];
-  return `${at} ${mark.ok} ${side(w)} beat ${side(l)}${dot}${when}`;
+  return `${at} ${mark.ok} ${t("{winner} beat {loser}", { winner: side(w), loser: side(l) })}${dot}${when}`;
 }
 
 /** Every game played (`parallel` at once), each replay read for its starts and first contact, the rush walked. */
 export async function runBalance(file: string, mapPath: string, doc: OpenedMap, o: BalanceOptions): Promise<BalanceOutcome> {
   const t0 = performance.now();
   const starts = startPlaces(doc);
-  if (starts.length < 2) throw new CliError(`${file} has ${starts.length ? "one start location" : "no start locations"}: balance compares two or more.`, "A melee map places a Start Location for each player.", 2);
-  if (!o.bots.length || o.bots.length > 2) throw new CliError("--bots names one bot (played against the computer) or two", "scmjs map balance map.scx --bots mybot.scmbot   (or --bots a.scmbot,b.scmbot)", 2);
+  if (starts.length < 2) throw new CliError(starts.length ? t("{file} has one start location: balance compares two or more.", { file }) : t("{file} has no start locations: balance compares two or more.", { file }), t("A melee map places a Start Location for each player."), 2);
+  if (!o.bots.length || o.bots.length > 2) throw new CliError(t("--bots names one bot (played against the computer) or two"), t("scmjs map balance map.scx --bots mybot.scmbot   (or --bots a.scmbot,b.scmbot)"), 2);
   const races = o.races ?? ["r"];
   // One bot plays the game's computer (once for each of --races); two bots play each other, both ways round.
   const entrants = parseEntrants(o.bots.length === 1 ? [o.bots[0], "computer"] : o.bots, races);
@@ -366,7 +377,7 @@ export async function runBalance(file: string, mapPath: string, doc: OpenedMap, 
   const out = keep ? resolve(o.out!) : mkdtempSync(join(tmpdir(), "scmjs-balance-"));
   mkdirSync(out, { recursive: true });
   const data = join(out, "bwapi-data");
-  say(`${pc.bold(plural(games.length, "game"))}${dot}${entrants.map((e) => e.label).join(" vs ")}${dot}${plural(starts.length, "start location")}${dot}${engine.build}${o.parallel && o.parallel > 1 ? `${dot}${o.parallel} at once` : ""}`);
+  say(`${pc.bold(t("{n, plural, one {# game} other {# games}}", { n: games.length }))}${dot}${entrants.map((e) => e.label).join(" vs ")}${dot}${t("{n, plural, one {# start location} other {# start locations}}", { n: starts.length })}${dot}${engine.build}${o.parallel && o.parallel > 1 ? `${dot}${t("{n} at once", { n: o.parallel })}` : ""}`);
 
   const done: BalanceGame[] = [];
   const parallel = Math.max(1, Math.min(o.parallel ?? defaultParallel(), games.length));
@@ -379,7 +390,7 @@ export async function runBalance(file: string, mapPath: string, doc: OpenedMap, 
         let ev: GameEvents | null = null, unread: string | null = null;
         if (result.replay) {
           try { ev = await playForEvents(replayRunner, engine.dir, game.folder, result.replay, o.node); }
-          catch (e) { unread = e instanceof Error && e.message ? e.message : "the replay runner is from before map heatmap"; }
+          catch (e) { unread = e instanceof Error && e.message ? e.message : t("the replay runner is from before map heatmap"); }
         }
         const b = readGame(g, result, ev, starts, unread);
         done.push(b);
@@ -407,29 +418,29 @@ export function printBalance(r: BalanceOutcome): string[] {
   const rep = r.report;
   const decided = rep.games.filter((g) => g.result.end && g.result.end.by !== "desync").length;
   const out = [
-    `${pc.bold(rep.file)} ${pc.dim(`${rep.map.width} × ${rep.map.height}`)}${dot}${plural(decided, "game")} played${dot}${rep.sides.map((s) => `${s.label} ${pc.dim(`${s.won}-${s.lost}${s.undecided ? `-${s.undecided}` : ""}`)}`).join(" vs ")}${dot}${pc.dim(`${(r.ms / 1000).toFixed(0)} s`)}`,
+    `${pc.bold(rep.file)} ${pc.dim(`${rep.map.width} × ${rep.map.height}`)}${dot}${t("{n, plural, one {# game} other {# games}} played", { n: decided })}${dot}${rep.sides.map((s) => `${s.label} ${pc.dim(`${s.won}-${s.lost}${s.undecided ? `-${s.undecided}` : ""}`)}`).join(" vs ")}${dot}${pc.dim(`${(r.ms / 1000).toFixed(0)} s`)}`,
     "",
   ];
   const res = (m: MainResources) => `${m.fields} × ${num(m.fields ? Math.round(m.minerals / m.fields) : 0)}${m.fieldTiles !== null ? pc.dim(` · ${m.fieldTiles.toFixed(1)} t`) : ""}`;
-  const gas = (m: MainResources) => (m.geysers ? `${m.geysers} × ${num(Math.round(m.gas / m.geysers))}${m.geyserTiles !== null ? pc.dim(` · ${m.geyserTiles.toFixed(1)} t`) : ""}` : pc.dim("none"));
+  const gas = (m: MainResources) => (m.geysers ? `${m.geysers} × ${num(Math.round(m.gas / m.geysers))}${m.geyserTiles !== null ? pc.dim(` · ${m.geyserTiles.toFixed(1)} t`) : ""}` : pc.dim(t("none")));
   out.push(...table([
-    ["Start", "", "Games", "Won", "Lost", "Win rate", "Expected", "Length", "Contact", "Rush", "Minerals", "Gas"].map((h) => pc.dim(h)),
+    [t("Start"), "", t("Games"), t("Won"), t("Lost"), t("Win rate"), t("Expected"), t("Length"), t("Contact"), t("Rush"), t("Minerals"), t("Gas")].map((h) => pc.dim(h)),
     ...rep.starts.map((s, i) => [
-      pc.bold(String(s.player)), pc.dim(`${s.clock} o'clock`), String(s.games), String(s.won), String(s.lost), pct(s.winRate), pct(s.expected),
+      pc.bold(String(s.player)), pc.dim(t("{clock} o'clock", { clock: s.clock })), String(s.games), String(s.won), String(s.lost), pct(s.winRate), pct(s.expected),
       clockOrDash(s.frames), clockOrDash(s.contact), s.rushSeconds === null ? pc.dim("-") : `${s.rushSeconds.toFixed(1)} s`, res(s.resources), gas(s.resources),
     ].map((c, k) => (rep.verdict.start === i && k === 5 ? pc.yellow(c) : c))),
   ], 2));
-  out.push(pc.dim("  Expected: what the two sides' own records predict for the games started there. Contact: the first unit lost to"),
-    pc.dim("  the other side. Rush: the average walk to the other starts (map rush). t: tiles from the start location."));
+  out.push(...t(`Expected: what the two sides' own records predict for the games started there. Contact: the first unit lost to
+the other side. Rush: the average walk to the other starts (map rush). t: tiles from the start location.`).split("\n").map((l) => pc.dim(`  ${l}`)));
   const met = rep.pairs.filter((p) => p.games).map((p) => `${rep.starts[p.a].player}–${rep.starts[p.b].player} ×${p.games}`);
   const unmet = rep.pairs.filter((p) => !p.games).map((p) => `${rep.starts[p.a].player}–${rep.starts[p.b].player}`);
-  if (rep.starts.length > 2) out.push("", `  ${pc.dim("Pairs met:")} ${met.join(", ") || "none"}${unmet.length ? `${dot}${pc.dim("never:")} ${unmet.join(", ")}` : ""}`);
+  if (rep.starts.length > 2) out.push("", `  ${pc.dim(t("Pairs met:"))} ${met.join(", ") || t("none")}${unmet.length ? `${dot}${pc.dim(t("never:"))} ${unmet.join(", ")}` : ""}`);
   const v = rep.verdict;
   out.push("", `${v.kind === "balanced" ? mark.ok : v.kind === "unbalanced" ? mark.warn : mark.info} ${v.text}`);
   for (const n of rep.notes) out.push(pc.dim(`  ${n}`));
-  out.push(pc.dim("  The game deals the start locations; each game's are read from its replay (the match runner has no option to fix them)."));
-  if (r.rushError) out.push(pc.dim(`  The walks between the starts could not be measured: ${r.rushError}`));
-  if (r.out) out.push(`${mark.info} Replays in ${pc.cyan(r.out)}`);
+  out.push(pc.dim(`  ${t("The game deals the start locations; each game's are read from its replay (the match runner has no option to fix them).")}`));
+  if (r.rushError) out.push(pc.dim(`  ${t("The walks between the starts could not be measured: {error}", { error: r.rushError })}`));
+  if (r.out) out.push(`${mark.info} ${t("Replays in {folder}", { folder: pc.cyan(r.out) })}`);
   return out;
 }
 

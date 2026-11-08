@@ -14,7 +14,9 @@ import { soundList } from "../../src/editor/sounds";
 import { parseWavHeader, wavDuration, wavFormatLabel } from "../../src/formats/wav";
 import { fileFor } from "./archive";
 import type { Input } from "./files";
-import { CliError, dot, mark, num, pc, plural, size } from "./ui";
+import { t } from "./i18n";
+import { MapReadError } from "./files";
+import { CliError, columns, dot, mark, num, padColumns, pc, size } from "./ui";
 
 export type SoundState = "present" | "missing" | "unreadable";
 
@@ -89,7 +91,7 @@ export async function readSounds(input: Input): Promise<{ report: SoundsReport; 
   try {
     archive = await readArchive(input.bytes);
   } catch (e) {
-    throw new CliError(`${input.name} is not a map this can read: ${e instanceof Error ? e.message : e}`);
+    throw new MapReadError(input.name, e instanceof Error ? e.message : String(e));
   }
   const scn = parseScenario(archive.chk);
   const unreadable = new Set((archive.stored?.unreadable ?? []).map(key));
@@ -143,7 +145,7 @@ export async function exportSounds(input: Input, dir: string): Promise<SoundsExp
       if (!written) await mkdir(out, { recursive: true });
       await writeFile(path, member);
     } catch (e) {
-      throw new CliError(`${path} could not be written (${(e as NodeJS.ErrnoException).code ?? e})`);
+      throw new CliError(t("{path} could not be written ({code})", { path, code: String((e as NodeJS.ErrnoException).code ?? e) }));
     }
     written++; bytes += member.length;
     sounds.push({ ...s, file: path });
@@ -155,23 +157,23 @@ export async function exportSounds(input: Input, dir: string): Promise<SoundsExp
 export const seconds = (s: number | null) => (s === null ? "" : s < 60 ? `${s.toFixed(1)} s` : `${Math.floor(s / 60)}:${(s % 60).toFixed(0).padStart(2, "0")}`);
 
 function why(s: SoundEntry): string {
-  if (s.state === "unreadable") return pc.yellow("in the archive, but could not be read");
-  if (s.stock) return pc.dim("the game's own sound; not in the map");
-  return pc.yellow("not in the archive");
+  if (s.state === "unreadable") return pc.yellow(t("in the archive, but could not be read"));
+  if (s.stock) return pc.dim(t("the game's own sound; not in the map"));
+  return pc.yellow(t("not in the archive"));
 }
 
 /** The list's lines: one a sound, its slot, length, format, size, and what plays it. */
 export function printSounds(r: SoundsReport | SoundsExport, shown: (s: SoundEntry & { file?: string | null }) => string = (s) => s.name): string[] {
   const present = r.sounds.filter((s) => s.state === "present");
   const total = present.reduce((n, s) => n + s.bytes, 0);
-  const head = `${pc.bold(r.file)}${dot}${r.sounds.length ? `${plural(present.length, "sound")}${present.length ? `, ${size(total)}` : ""}` : "no sounds"}`;
-  const width = Math.max(0, ...r.sounds.map((s) => shown(s).length));
+  const head = `${pc.bold(r.file)}${dot}${r.sounds.length ? `${t("{n, plural, one {# sound} other {# sounds}}", { n: present.length })}${present.length ? `, ${size(total)}` : ""}` : t("no sounds")}`;
+  const width = Math.max(0, ...r.sounds.map((s) => columns(shown(s))));
   const lines = [head, ...r.sounds.map((s) => {
     const slot = pc.dim((s.slot === null ? "  -" : String(s.slot + 1).padStart(3)));
-    if (s.state !== "present") return `  ${slot}  ${shown(s).padEnd(width)}  ${why(s)}`;
-    const facts = [seconds(s.seconds), s.format ?? (s.type ? s.type.toUpperCase() : "not audio"), size(s.bytes)].filter(Boolean).join(dot);
-    const used = s.usedBy.length ? pc.dim(`  ${s.usedBy.length === 1 ? s.usedBy[0] : `${num(s.usedBy.length)} actions`}`) : "";
-    return `  ${slot}  ${shown(s).padEnd(width)}  ${facts}${used}`;
+    if (s.state !== "present") return `  ${slot}  ${padColumns(shown(s), width)}  ${why(s)}`;
+    const facts = [seconds(s.seconds), s.format ?? (s.type ? s.type.toUpperCase() : t("not audio")), size(s.bytes)].filter(Boolean).join(dot);
+    const used = s.usedBy.length ? pc.dim(`  ${s.usedBy.length === 1 ? s.usedBy[0] : t("{n} actions", { n: num(s.usedBy.length) })}`) : "";
+    return `  ${slot}  ${padColumns(shown(s), width)}  ${facts}${used}`;
   })];
   return [...lines, ...r.problems.map((p) => `${mark.warn} ${p}`)];
 }

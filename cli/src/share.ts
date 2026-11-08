@@ -15,6 +15,7 @@ import { STDIO } from "./files";
 import { openGameFiles } from "./gamefiles";
 import { mapReport } from "./map";
 import { loadGraphics, previewPng, tilesetOf } from "./preview";
+import { t } from "./i18n";
 import { CliError, gameText, pc, size, visible } from "./ui";
 
 /** `--keep`: the editor's *Keep it open…* choices; none is *Until everyone leaves*. */
@@ -22,7 +23,7 @@ export const KEEP: Record<string, KeepDays> = { day: 1, week: 7, month: 30, fore
 
 export function parseKeep(keep: string | undefined): KeepDays | undefined {
   if (keep === undefined) return undefined;
-  if (!(keep in KEEP)) throw new CliError(`--keep ${keep} is not one of ${Object.keys(KEEP).join(", ")}`, "--keep week keeps the map open for a week after its last edit; without --keep it is open until everyone leaves.", 2);
+  if (!(keep in KEEP)) throw new CliError(t("--keep {keep} is not one of {list}", { keep, list: Object.keys(KEEP).join(", ") }), t("--keep week keeps the map open for a week after its last edit; without --keep it is open until everyone leaves."), 2);
   return KEEP[keep];
 }
 
@@ -98,7 +99,7 @@ export function metaOf(map: OpenedMap, input: Input): { meta: MapMeta; name: str
 export async function picturesOf(map: OpenedMap, starcraft: string | undefined): Promise<{ picture: Uint8Array | null; thumbnail: string | null; none?: string }> {
   try { findGameCopy(starcraft); } catch (e) {
     // (A folder named with --starcraft that is not a copy is said; none found in the usual places is not a problem.)
-    if (e instanceof CliError && !starcraft) return { picture: null, thumbnail: null, none: "no copy of StarCraft here to draw it with" };
+    if (e instanceof CliError && !starcraft) return { picture: null, thumbnail: null, none: t("no copy of StarCraft here to draw it with") };
     throw e;
   }
   try {
@@ -112,7 +113,7 @@ export async function picturesOf(map: OpenedMap, starcraft: string | undefined):
       if (png.length <= 900_000) { picture = png; break; }
     }
     const thumb = previewPng(map, graphics, { scale: 1 }).png;
-    return { picture, thumbnail: thumb.length <= 150_000 ? `data:image/png;base64,${Buffer.from(thumb).toString("base64")}` : null, ...(picture ? {} : { none: "the picture came out larger than the server takes" }) };
+    return { picture, thumbnail: thumb.length <= 150_000 ? `data:image/png;base64,${Buffer.from(thumb).toString("base64")}` : null, ...(picture ? {} : { none: t("the picture came out larger than the server takes") }) };
   } catch (e) {
     if (e instanceof CliError) return { picture: null, thumbnail: null, none: e.message };
     throw e;
@@ -129,18 +130,18 @@ async function asArchive(input: Input, map: OpenedMap): Promise<Uint8Array> {
 export async function shareMap(input: Input, map: OpenedMap, o: ShareOptions = {}, deps: ShareDeps = {}): Promise<ShareOutcome> {
   const server = (deps.server ?? serverUrl()).replace(/\/+$/, "");
   const keepDays = parseKeep(o.keep);
-  if (keepDays !== undefined && !o.edit) throw new CliError("--keep is for --edit", "A copy link stays until you remove it in My Maps; --keep says how long a shared-editing link stays open.", 2);
+  if (keepDays !== undefined && !o.edit) throw new CliError(t("--keep is for --edit"), t("A copy link stays until you remove it in My Maps; --keep says how long a shared-editing link stays open."), 2);
   const session = requireSession(server, deps.file ?? sessionPath());
   const client = new Client({ server, session: session.session, fetchImpl: deps.fetchImpl });
   const { meta, name: scenarioName } = metaOf(map, input);
   const fileName = shareFileName(input, scenarioName);
   const name = (o.name ?? "").trim() || scenarioName || fileName.replace(/\.(scm|scx|chk)$/i, "");
   const note = o.note ?? (o.edit ? "Shared for editing" : "Shared with a link");
-  const pics = o.picture === false ? { picture: null, thumbnail: null, none: "left out with --no-picture" } : await picturesOf(map, o.starcraft);
+  const pics = o.picture === false ? { picture: null, thumbnail: null, none: t("left out with --no-picture") } : await picturesOf(map, o.starcraft);
   if (pics.thumbnail) meta.thumbnail = pics.thumbnail;
   const base = {
     name, file: { name: fileName, bytes: input.bytes.length }, width: map.scenario.width, height: map.scenario.height, tileset: meta.tileset ?? "",
-    picture: pics.picture ? { bytes: pics.picture.length } : { none: pics.none ?? "none" },
+    picture: pics.picture ? { bytes: pics.picture.length } : { none: pics.none ?? t("none") },
   };
   // The account's map with this file name, newest change first: a copy link adds a revision to it, and a kept room is stored as one.
   const same = async (): Promise<MapSummary | null> => {
@@ -195,13 +196,15 @@ export async function shareMap(input: Input, map: OpenedMap, o: ShareOptions = {
 export function printShare(r: ShareOutcome): string[] {
   const facts = [r.name, `${r.width} × ${r.height}`, size(r.file.bytes)];
   if (r.kind === "copy" && r.map) {
-    const what = r.map.action === "new map" ? "a new map on your account" : r.map.action === "new revision" ? `a new revision of ${r.map.name}` : "already on your account as it is";
-    return [r.link, `${facts.join(" · ")} · revision ${r.map.revision}, ${what}`,
-      pc.dim(`Anyone with the link opens a copy in their editor, without signing in.${"none" in r.picture ? ` No picture for its card: ${r.picture.none}.` : ""}`)];
+    const what = r.map.action === "new map" ? t("a new map on your account") : r.map.action === "new revision" ? t("a new revision of {name}", { name: r.map.name }) : t("already on your account as it is");
+    return [r.link, `${facts.join(" · ")} · ${t("revision {n}, {what}", { n: r.map.revision, what })}`,
+      pc.dim(`${t("Anyone with the link opens a copy in their editor, without signing in.")}${"none" in r.picture ? ` ${t("No picture for its card: {reason}.", { reason: r.picture.none })}` : ""}`)];
   }
   const room = r.room!;
   const open = room.keepDays === undefined
-    ? "open until everyone has left it; if nobody comes, it closes after a while"
-    : `kept open ${keepWords(room.keepDays)}${room.keepDays === null ? "" : " after its last edit"}, stored on your account`;
-  return [r.link, `${facts.join(" · ")} · shared for editing, ${open}`, pc.dim("Anyone with the link edits the map with you in their editor, without signing in.")];
+    ? t("open until everyone has left it; if nobody comes, it closes after a while")
+    : room.keepDays === null
+      ? t("kept open {keep}, stored on your account", { keep: keepWords(room.keepDays) })
+      : t("kept open {keep} after its last edit, stored on your account", { keep: keepWords(room.keepDays) });
+  return [r.link, `${facts.join(" · ")} · ${t("shared for editing, {open}", { open })}`, pc.dim(t("Anyone with the link edits the map with you in their editor, without signing in."))];
 }

@@ -17,7 +17,8 @@ import { PLUGIN_API_VERSION } from "../../src/plugins/api";
 import { resolveIcon, validateManifest } from "../../src/plugins/loader";
 import { VERSION } from "./about";
 import { EDITOR_URL, openBrowser } from "./open";
-import { CliError, dot, mark, pc, plural, print } from "./ui";
+import { t } from "./i18n";
+import { CliError, dot, mark, pc, print } from "./ui";
 
 /* ── new ───────────────────────────────────────────────── */
 
@@ -204,10 +205,10 @@ SOFTWARE.
 /** `scmjs plugin new [name]`: a folder `plugin-<id>` (or `--dir`) with a plugin to start from. */
 export function newPlugin(o: { name?: string; dir?: string }): { dir: string; files: string[] } {
   const name = (o.name?.trim() || (o.dir ? nameFromFolder(resolve(o.dir)) : "")).slice(0, 64);
-  if (!name) throw new CliError("Name the plugin", "scmjs plugin new \"Base Check\"  (or --dir <folder>)", 2);
+  if (!name) throw new CliError(t("Name the plugin"), t("scmjs plugin new \"Base Check\"  (or --dir <folder>)"), 2);
   const id = pluginId(name);
   const dir = resolve(o.dir ?? `plugin-${id}`);
-  if (existsSync(dir) && readdirSync(dir).filter((f) => f !== ".git").length > 0) throw new CliError(`${relative(process.cwd(), dir) || "."} is not empty`, "Give an empty or new folder with --dir.", 2);
+  if (existsSync(dir) && readdirSync(dir).filter((f) => f !== ".git").length > 0) throw new CliError(t("{dir} is not empty", { dir: relative(process.cwd(), dir) || "." }), t("Give an empty or new folder with --dir."), 2);
   const files = pluginFiles({ name, id, author: gitUser(), year: new Date().getFullYear() });
   for (const [path, text] of Object.entries(files)) {
     mkdirSync(dirname(join(dir, path)), { recursive: true });
@@ -259,32 +260,32 @@ export function checkPlugin(dirArg = "."): PluginCheck {
   const out: PluginCheck = { dir, name: null, id: null, version: null, loads: null, issues: [] };
   const add = (level: PluginIssue["level"], message: string, hint?: string) => out.issues.push({ level, message, ...(hint ? { hint } : {}) });
   const file = join(dir, "plugin.json");
-  if (!existsSync(file)) throw new CliError(`No plugin.json in ${relative(process.cwd(), dir) || "this folder"}`, "Run this in the plugin's folder, or start one with scmjs plugin new.", 2);
+  if (!existsSync(file)) throw new CliError(relative(process.cwd(), dir) ? t("No plugin.json in {dir}", { dir: relative(process.cwd(), dir) }) : t("No plugin.json in this folder"), t("Run this in the plugin's folder, or start one with scmjs plugin new."), 2);
   let raw: unknown;
-  try { raw = JSON.parse(readFileSync(file, "utf8")); } catch (e) { add("error", `plugin.json is not valid JSON: ${(e as Error).message}`); return out; }
+  try { raw = JSON.parse(readFileSync(file, "utf8")); } catch (e) { add("error", t("plugin.json is not valid JSON: {message}", { message: (e as Error).message })); return out; }
   let m;
   try { m = validateManifest(raw, "plugin.json"); } catch (e) { add("error", (e as Error).message); return out; }
   out.name = m.name; out.id = m.id ?? pluginId(m.name); out.version = m.version ?? null;
 
-  if (m.api === undefined) add("warn", "plugin.json names no \"api\"", `Add "api": ${PLUGIN_API_VERSION}, so an older editor says it is too old instead of failing.`);
-  else if (m.api > PLUGIN_API_VERSION) add("error", `It needs plugin API ${m.api}; the editor provides ${PLUGIN_API_VERSION}`);
-  if (!m.id) add("info", `No "id": the editor uses "${out.id}", made from the name`, "An id keeps storage and commands the same if the name changes.");
-  for (const k of ["version", "description", "author", "homepage"] as const) if (!m[k]) add("info", `No "${k}": shown when someone adds the plugin`);
+  if (m.api === undefined) add("warn", t("plugin.json names no \"api\""), t("Add \"api\": {version}, so an older editor says it is too old instead of failing.", { version: PLUGIN_API_VERSION }));
+  else if (m.api > PLUGIN_API_VERSION) add("error", t("It needs plugin API {api}; the editor provides {version}", { api: m.api, version: PLUGIN_API_VERSION }));
+  if (!m.id) add("info", t("No \"id\": the editor uses \"{id}\", made from the name", { id: out.id }), t("An id keeps storage and commands the same if the name changes."));
+  for (const k of ["version", "description", "author", "homepage"] as const) if (!m[k]) add("info", t("No \"{field}\": shown when someone adds the plugin", { field: k }));
 
   const icon = resolveIcon(m.icon, "file:///plugin/plugin.json");
-  if (!m.icon) add("info", "No \"icon\": the default plugin mark is shown");
-  else if (!icon) add("warn", `The icon "${m.icon}" is not one the editor shows`, "An image beside plugin.json, an https or data: image, or up to four characters.");
-  else if (icon.kind === "image" && icon.url.startsWith("file:///plugin/") && !existsSync(join(dir, decodeURIComponent(icon.url.slice("file:///plugin/".length))))) add("error", `The icon ${m.icon} is not in the folder`);
+  if (!m.icon) add("info", t("No \"icon\": the default plugin mark is shown"));
+  else if (!icon) add("warn", t("The icon \"{icon}\" is not one the editor shows", { icon: m.icon }), t("An image beside plugin.json, an https or data: image, or up to four characters."));
+  else if (icon.kind === "image" && icon.url.startsWith("file:///plugin/") && !existsSync(join(dir, decodeURIComponent(icon.url.slice("file:///plugin/".length))))) add("error", t("The icon {icon} is not in the folder", { icon: m.icon }));
 
   const entry = m.entry ?? ["plugin.ts", "plugin.js"].find((f) => existsSync(join(dir, f)));
   const entryFile = entry ? join(dir, entry) : null;
-  if (!entryFile || !existsSync(entryFile)) add("error", entry ? `The entry ${entry} is not there` : "No \"entry\", and neither plugin.ts nor plugin.js is there");
+  if (!entryFile || !existsSync(entryFile)) add("error", entry ? t("The entry {entry} is not there", { entry }) : t("No \"entry\", and neither plugin.ts nor plugin.js is there"));
 
   if (m.build) {
     const built = join(dir, m.build);
     out.loads = m.build;
-    if (!existsSync(built)) add("error", `The build ${m.build} is not there, and the editor loads it instead of ${entry ?? "the source"}`, existsSync(join(dir, "package.json")) ? "Run npm run build (scmjs plugin dev builds it for you)." : "Build it, or take \"build\" out of plugin.json.");
-    else if (newest(dir, new Set([built])) > statSync(built).mtimeMs + 1000) add("warn", `${m.build} is older than the source`, "Run npm run build, or the editor loads what it was.");
+    if (!existsSync(built)) add("error", entry ? t("The build {build} is not there, and the editor loads it instead of {entry}", { build: m.build, entry }) : t("The build {build} is not there, and the editor loads it instead of the source", { build: m.build }), existsSync(join(dir, "package.json")) ? t("Run npm run build (scmjs plugin dev builds it for you).") : t("Build it, or take \"build\" out of plugin.json."));
+    else if (newest(dir, new Set([built])) > statSync(built).mtimeMs + 1000) add("warn", t("{build} is older than the source", { build: m.build }), t("Run npm run build, or the editor loads what it was."));
   } else if (entryFile && existsSync(entryFile)) {
     out.loads = entry!;
     // Without a build the editor compiles the source file by file: relative imports must be there, packages cannot be.
@@ -297,8 +298,8 @@ export function checkPlugin(dirArg = "."): PluginCheck {
         if (/^(?:\.{1,2}\/|\/)/.test(spec)) {
           const to = importedFile(f, spec);
           if (to) todo.push(to);
-          else add("error", `${relative(dir, f)} imports ${spec}, which is not there`);
-        } else if (!/^https?:\/\//.test(spec)) add("error", `${relative(dir, f)} imports the package "${spec}"`, "The editor loads source without a module resolver: bundle the plugin and name the bundle as \"build\".");
+          else add("error", t("{file} imports {spec}, which is not there", { file: relative(dir, f), spec }));
+        } else if (!/^https?:\/\//.test(spec)) add("error", t("{file} imports the package \"{spec}\"", { file: relative(dir, f), spec }), t("The editor loads source without a module resolver: bundle the plugin and name the bundle as \"build\"."));
       }
     }
   }
@@ -309,7 +310,7 @@ export function checkPlugin(dirArg = "."): PluginCheck {
 export function printPluginCheck(c: PluginCheck, all: boolean): string[] {
   const shown = c.issues.filter((i) => all || i.level !== "info");
   const errors = c.issues.filter((i) => i.level === "error").length, warns = c.issues.filter((i) => i.level === "warn").length;
-  const head = `${pc.bold(c.name ?? basename(c.dir))}${c.version ? pc.dim(` ${c.version}`) : ""}  ${errors ? `${mark.error} ${plural(errors, "error")}` : warns ? `${mark.warn} ${plural(warns, "warning")}` : `${mark.ok} loads`}${c.loads && !errors ? pc.dim(` (${c.loads})`) : ""}`;
+  const head = `${pc.bold(c.name ?? basename(c.dir))}${c.version ? pc.dim(` ${c.version}`) : ""}  ${errors ? `${mark.error} ${t("{n, plural, one {# error} other {# errors}}", { n: errors })}` : warns ? `${mark.warn} ${t("{n, plural, one {# warning} other {# warnings}}", { n: warns })}` : `${mark.ok} ${t("loads")}`}${c.loads && !errors ? pc.dim(` (${c.loads})`) : ""}`;
   const order = { error: 0, warn: 1, info: 2 };
   return [head, ...shown.sort((a, b) => order[a.level] - order[b.level]).flatMap((i) => [
     `  ${i.level === "error" ? mark.error : i.level === "warn" ? mark.warn : mark.info} ${i.message}`,
@@ -336,7 +337,7 @@ export async function devPlugin(o: { dir?: string; port: number; open: boolean; 
   const manifest = JSON.parse(readFileSync(join(dir, "plugin.json"), "utf8")) as { build?: string; name?: string };
   const pkg = existsSync(join(dir, "package.json")) ? JSON.parse(readFileSync(join(dir, "package.json"), "utf8")) as { scripts?: Record<string, string> } : null;
   const builds = !!(manifest.build && pkg?.scripts?.build);
-  if (builds && !existsSync(join(dir, "node_modules"))) throw new CliError("The plugin's packages are not installed", "Run npm install in its folder first.", 2);
+  if (builds && !existsSync(join(dir, "node_modules"))) throw new CliError(t("The plugin's packages are not installed"), t("Run npm install in its folder first."), 2);
 
   const clients = new Set<ServerResponse>();
   const send = (event: string, data: unknown) => { for (const c of clients) c.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`); };
@@ -349,7 +350,7 @@ export async function devPlugin(o: { dir?: string; port: number; open: boolean; 
       res.writeHead(200, { ...HEADERS, "content-type": "text/event-stream", connection: "keep-alive" });
       res.write(`event: hello\ndata: ${JSON.stringify({ name: manifest.name })}\n\n`);
       clients.add(res);
-      if (!connected) { connected = true; print(`${mark.ok} The editor is connected`); }
+      if (!connected) { connected = true; print(`${mark.ok} ${t("The editor is connected")}`); }
       req.on("close", () => clients.delete(res));
       return;
     }
@@ -363,7 +364,7 @@ export async function devPlugin(o: { dir?: string; port: number; open: boolean; 
     res.end(readFileSync(file));
   });
   await new Promise<void>((ok, fail) => {
-    server.once("error", (e: NodeJS.ErrnoException) => fail(e.code === "EADDRINUSE" ? new CliError(`Port ${o.port} is in use`, `Pick another with --port. The editor keeps one install per address, so stay with the one you choose.`) : e));
+    server.once("error", (e: NodeJS.ErrnoException) => fail(e.code === "EADDRINUSE" ? new CliError(t("Port {port} is in use", { port: o.port }), t("Pick another with --port. The editor keeps one install per address, so stay with the one you choose.")) : e));
     server.listen(o.port, "127.0.0.1", () => ok());
   });
   const served = `http://127.0.0.1:${o.port}/`;
@@ -375,7 +376,7 @@ export async function devPlugin(o: { dir?: string; port: number; open: boolean; 
     let text = "";
     child.stdout.on("data", (d) => { text += d; });
     child.stderr.on("data", (d) => { text += d; });
-    child.on("close", (code) => done(code === 0 ? null : text.trim() || `npm run build exited with ${code}`));
+    child.on("close", (code) => done(code === 0 ? null : text.trim() || t("npm run build exited with {code}", { code: String(code) })));
     child.on("error", (e) => done(e.message));
   });
 
@@ -383,12 +384,12 @@ export async function devPlugin(o: { dir?: string; port: number; open: boolean; 
   const failed = await build();
   const first = checkPlugin(dir);
   print(`${pc.bold(first.name ?? basename(dir))}${first.version ? pc.dim(` ${first.version}`) : ""}`);
-  if (failed) print(`${mark.error} The build failed`, pc.dim(failed.split("\n").map((l) => `  ${l}`).join("\n")));
+  if (failed) print(`${mark.error} ${t("The build failed")}`, pc.dim(failed.split("\n").map((l) => `  ${l}`).join("\n")));
   else for (const line of printPluginCheck(first, false).slice(1)) print(line);
   const url = devEditorUrl(o.editor ?? process.env.SCMJS_EDITOR_URL ?? EDITOR_URL, served);
-  print(`${mark.info} Serving it at ${pc.cyan(served)}${builds ? dot + "built with npm run build" : ""}`);
-  if (o.open && process.env.BROWSER !== "none") { openBrowser(url); print(`${mark.info} Opening the editor. The first time, it asks you to add the plugin.`); }
-  print(pc.dim(`  If nothing opens, go to ${url}`), pc.dim("  Watching for changes. Ctrl+C stops."));
+  print(`${mark.info} ${t("Serving it at {url}", { url: pc.cyan(served) })}${builds ? dot + t("built with npm run build") : ""}`);
+  if (o.open && process.env.BROWSER !== "none") { openBrowser(url); print(`${mark.info} ${t("Opening the editor. The first time, it asks you to add the plugin.")}`); }
+  print(pc.dim(`  ${t("If nothing opens, go to {url}", { url })}`), pc.dim(`  ${t("Watching for changes. Ctrl+C stops.")}`));
 
   let timer: ReturnType<typeof setTimeout> | null = null, changed = new Set<string>(), running = false;
   // What the build writes is not a change to build again: the bundle, and the folder it is in when only it is there.
@@ -400,8 +401,8 @@ export async function devPlugin(o: { dir?: string; port: number; open: boolean; 
     const files = [...changed]; changed = new Set();
     const err = await build();
     const at = new Date().toTimeString().slice(0, 8);
-    if (err) { print(`${mark.error} ${pc.dim(at)} The build failed`, pc.dim(err.split("\n").slice(0, 12).map((l) => `  ${l}`).join("\n"))); send("failed", { text: err.split("\n").slice(0, 3).join("\n") }); }
-    else { send("reload", { files }); print(`${mark.ok} ${pc.dim(at)} ${files.slice(0, 3).join(", ")}${files.length > 3 ? ` and ${files.length - 3} more` : ""}${clients.size ? "; reloaded in the editor" : pc.dim("; no editor connected")}`); }
+    if (err) { print(`${mark.error} ${pc.dim(at)} ${t("The build failed")}`, pc.dim(err.split("\n").slice(0, 12).map((l) => `  ${l}`).join("\n"))); send("failed", { text: err.split("\n").slice(0, 3).join("\n") }); }
+    else { send("reload", { files }); print(`${mark.ok} ${pc.dim(at)} ${files.length > 3 ? t("{files} and {n} more", { files: files.slice(0, 3).join(", "), n: files.length - 3 }) : files.join(", ")}${clients.size ? t("; reloaded in the editor") : pc.dim(t("; no editor connected"))}`); }
     running = false;
   };
   const watcher = watch(dir, { recursive: true }, (_e, f) => {
@@ -412,7 +413,7 @@ export async function devPlugin(o: { dir?: string; port: number; open: boolean; 
   });
 
   await new Promise<void>((done) => {
-    const stop = () => { watcher.close(); clearInterval(heartbeat); for (const c of clients) c.end(); server.close(); print("", pc.dim("Stopped.")); done(); };
+    const stop = () => { watcher.close(); clearInterval(heartbeat); for (const c of clients) c.end(); server.close(); print("", pc.dim(t("Stopped."))); done(); };
     process.once("SIGINT", stop);
     process.once("SIGTERM", stop);
   });

@@ -30,7 +30,8 @@ import {
   DEFAULT_PNG_SCALE, drawMarks, loadGraphics, mapPicture, placeMarks, PNG_SCALES, resizePicture, terminalInfo, terminalWidth, terrainPicture, tilesetOf,
   type GameGraphics, type Mark, type Picture, type TerminalInfo,
 } from "./preview";
-import { CliError, dot, mark, num, pc, plural, size } from "./ui";
+import { msg, t, translate } from "./i18n";
+import { CliError, columns, dot, mark, num, pc, size } from "./ui";
 
 /* ── What changed, without graphics ─────────────────────────── */
 
@@ -500,19 +501,19 @@ export function asciiOverlay(cp: ChangePicture, width = cp.picture.width, dx = 0
  * letter. `tiles: false` leaves the tiles out (maps of two tilesets, whose ids mean nothing to each other).
  */
 export function diffLegend(c: DiffCounts, depth: Depth, unicode: boolean, ascii: boolean, tiles = true): string {
-  if (!anyChange(c)) return "nothing changed";
+  if (!anyChange(c)) return t("nothing changed");
   const minus = unicode ? "−" : "-";
   const swatch = (hex: string, letter: string, text: string) =>
     ascii ? (depth === "none" ? `${letter} ${text}` : `\x1b[${sgr(38, rgbOf(hex), depth)}m${letter}\x1b[39m ${text}`)
       : depth === "none" ? text : `\x1b[${sgr(38, rgbOf(hex), depth)}m${unicode ? "■" : "#"}\x1b[39m ${text}`;
   const moved = c.unitsMoved + c.unitsChanged;
   const parts = [
-    swatch(ADDED_COLOR, ASCII_CHANGE.added, `+${num(c.unitsAdded)} units`),
-    swatch(REMOVED_COLOR, ASCII_CHANGE.removed, `${minus}${num(c.unitsRemoved)} units`),
-    ...(moved ? [swatch(MOVED_COLOR, ASCII_CHANGE.moved, `~${num(moved)} units ${!c.unitsChanged ? "moved" : !c.unitsMoved ? "edited" : "moved or edited"}`)] : []),
-    ...(tiles ? [swatch(TILE_COLOR, ASCII_CHANGE.tile, `~${num(c.tiles)} tiles`)] : []),
-    ...(tiles && c.resized ? [swatch(RESIZED_COLOR, ASCII_CHANGE.resized, `${num(c.resized)} tiles in one map only`)] : []),
-    swatch(MOVED_COLOR, ASCII_CHANGE.location, `~${num(c.locations)} locations`),
+    swatch(ADDED_COLOR, ASCII_CHANGE.added, t("{sign}{n} units", { sign: "+", n: num(c.unitsAdded) })),
+    swatch(REMOVED_COLOR, ASCII_CHANGE.removed, t("{sign}{n} units", { sign: minus, n: num(c.unitsRemoved) })),
+    ...(moved ? [swatch(MOVED_COLOR, ASCII_CHANGE.moved, !c.unitsChanged ? t("~{n} units moved", { n: num(moved) }) : !c.unitsMoved ? t("~{n} units edited", { n: num(moved) }) : t("~{n} units moved or edited", { n: num(moved) }))] : []),
+    ...(tiles ? [swatch(TILE_COLOR, ASCII_CHANGE.tile, t("~{n} tiles", { n: num(c.tiles) }))] : []),
+    ...(tiles && c.resized ? [swatch(RESIZED_COLOR, ASCII_CHANGE.resized, t("{n} tiles in one map only", { n: num(c.resized) }))] : []),
+    swatch(MOVED_COLOR, ASCII_CHANGE.location, t("~{n} locations", { n: num(c.locations) })),
   ];
   return parts.join("  ");
 }
@@ -558,7 +559,7 @@ const TERM_GAP = 2;
 const number = (value: string | undefined, name: string, ok: (n: number) => boolean, hint: string): number | undefined => {
   if (value === undefined) return undefined;
   const n = Number(value);
-  if (!Number.isFinite(n) || !ok(n)) throw new CliError(`--${name} takes ${hint}, not "${value}"`, null, 2);
+  if (!Number.isFinite(n) || !ok(n)) throw new CliError(t("--{name} takes {hint}, not \"{value}\"", { name, hint, value }), null, 2);
   return n;
 };
 
@@ -569,13 +570,13 @@ const number = (value: string | undefined, name: string, ok: (n: number) => bool
 async function gameFilesOrNone(named: string | undefined): Promise<GameFiles | null> {
   if (named) return openGameFiles(named);
   try { return await openGameFiles(undefined); } catch (e) {
-    if (e instanceof CliError && e.message.startsWith("No copy of StarCraft")) return null;
+    if (e instanceof CliError && e.message === t("No copy of StarCraft was found on this computer.")) return null;
     throw e;
   }
 }
 
 /** The ground's words when no copy of the game was found. */
-export const PLAIN_GROUND = "no copy of StarCraft here, so the ground is plain greys";
+export const PLAIN_GROUND = msg("no copy of StarCraft here, so the ground is plain greys");
 
 /**
  * `scmjs map diff a b --picture`: the copy of the game opened (plain ground without one), the tilesets read, the change picture (or the three
@@ -588,10 +589,10 @@ export async function diffPicture(
   const t0 = performance.now();
   const sa = x.doc.scenario, sb = y.doc.scenario;
   const png = o.out !== undefined;
-  if (png && o.width !== undefined) throw new CliError("--width is the terminal picture's; a PNG's size is --scale pixels a tile", null, 2);
-  if (o.width !== undefined && o.scale !== undefined) throw new CliError("--width or --scale, not both", null, 2);
-  const scale = number(o.scale, "scale", png ? (n) => (PNG_SCALES as readonly number[]).includes(n) : (n) => n > 0 && n <= 32, png ? PNG_SCALES.join(", ") : "a number of pixels a tile, above 0 and up to 32");
-  const width = number(o.width, "width", (n) => Number.isInteger(n) && n >= 8, "a number of columns, 8 or more");
+  if (png && o.width !== undefined) throw new CliError(t("--width is the terminal picture's; a PNG's size is --scale pixels a tile"), null, 2);
+  if (o.width !== undefined && o.scale !== undefined) throw new CliError(t("--width or --scale, not both"), null, 2);
+  const scale = number(o.scale, "scale", png ? (n) => (PNG_SCALES as readonly number[]).includes(n) : (n) => n > 0 && n <= 32, png ? PNG_SCALES.join(", ") : t("a number of pixels a tile, above 0 and up to 32"));
+  const width = number(o.width, "width", (n) => Number.isInteger(n) && n >= 8, t("a number of columns, 8 or more"));
 
   const files = await gameFilesOrNone(o.starcraft);
   const same = tilesetIndex(sa) === tilesetIndex(sb);
@@ -602,17 +603,17 @@ export async function diffPicture(
 
   const W = Math.max(sa.width, sb.width), H = Math.max(sa.height, sb.height);
   const d = diffChanges(sa, sb);
-  const note = same ? undefined : `The maps' tilesets differ (${tilesetOf(sa)}, ${tilesetOf(sb)}): drawn side by side, with nothing marked`;
+  const note = same ? undefined : t("The maps' tilesets differ ({a}, {b}): drawn side by side, with nothing marked", { a: tilesetOf(sa), b: tilesetOf(sb) });
   const base = {
     a: x.input.name, b: y.input.name, size: { width: W, height: H }, tilesets: { a: tilesetOf(sa), b: tilesetOf(sb) },
     counts: d.counts, bounds: d.bounds, copy: files ? { folder: files.folder, kind: files.kind, label: files.label } : null, ...(note ? { note } : {}),
   };
   const ms = () => ({ copy: Math.round(t1 - t0), draw: Math.round(performance.now() - t1), total: Math.round(performance.now() - t0) });
   const arrow = term.unicode ? "→" : "->";
-  const title = `${pc.bold(x.input.name)} ${pc.dim(arrow)} ${pc.bold(y.input.name)}  ${pc.dim(`${num(W)} × ${num(H)}${dot}${same ? tilesetOf(sb) : `${tilesetOf(sa)}, ${tilesetOf(sb)}`}${dot}${files ? files.label : "plain ground"}`)}`;
+  const title = `${pc.bold(x.input.name)} ${pc.dim(arrow)} ${pc.bold(y.input.name)}  ${pc.dim(`${num(W)} × ${num(H)}${dot}${same ? tilesetOf(sb) : `${tilesetOf(sa)}, ${tilesetOf(sb)}`}${dot}${files ? files.label : t("plain ground")}`)}`;
   const noteLines = note ? [pc.yellow(note)] : [];
   // (The PNG's closing line says it; the terminal's pictures say it under the title.)
-  const plainLines = files ? [] : [pc.dim(`${PLAIN_GROUND[0].toUpperCase()}${PLAIN_GROUND.slice(1)}: --starcraft names a copy`)];
+  const plainLines = files ? [] : [pc.dim(t("No copy of StarCraft here, so the ground is plain greys: --starcraft names a copy"))];
 
   if (png) {
     const s = scale ?? DEFAULT_PNG_SCALE;
@@ -622,10 +623,10 @@ export async function diffPicture(
     const out = await writeOutput(bytes, o.out!, stdout);
     const report: DiffPictureReport = { ...base, layout, picture: { form: "png", width: pic.width, height: pic.height, scale: s }, out, ms: ms() };
     return { report, lines: [
-      `${mark.ok} ${pc.bold(x.input.name)} ${pc.dim(arrow)} ${pc.bold(y.input.name)}: ${pic.width} × ${pic.height} PNG, ${plural(s, "pixel")} a tile${layout === "side-by-side" ? `, ${same ? "a | changes | b" : "a | b"}` : ""}${dot}written to ${out.path === STDIO ? "standard output" : pc.cyan(out.path)}${dot}${size(out.bytes)}`,
+      `${mark.ok} ${pc.bold(x.input.name)} ${pc.dim(arrow)} ${pc.bold(y.input.name)}: ${t("{width} × {height} PNG, {n, plural, one {# pixel} other {# pixels}} a tile", { width: pic.width, height: pic.height, n: s })}${layout === "side-by-side" ? `, ${same ? `a | ${t("changes")} | b` : "a | b"}` : ""}${dot}${t("written to {where}", { where: out.path === STDIO ? t("standard output") : pc.cyan(out.path) })}${dot}${size(out.bytes)}`,
       ...noteLines,
       diffLegend(d.counts, term.depth, term.unicode, false, same),
-      pc.dim(`  ${files ? `drawn from ${files.label} in ${files.folder}` : `drawn without the game: ${PLAIN_GROUND}`}${dot}${(report.ms.total / 1000).toFixed(1)} s`),
+      pc.dim(`  ${files ? t("drawn from {copy} in {folder}", { copy: files.label, folder: files.folder }) : t("drawn without the game: {why}", { why: translate(PLAIN_GROUND) })}${dot}${(report.ms.total / 1000).toFixed(1)} s`),
     ] };
   }
 
@@ -635,7 +636,7 @@ export async function diffPicture(
   const room = term.columns - 1 - TERM_GAP * (panels - 1);
   const perPanel = width ?? (scale ? Math.max(1, Math.round(W * scale)) : terminalWidth(W, H, Math.floor(room / panels) + 1));
   const wide = !same || (!!o.sideBySide && (width !== undefined || scale !== undefined || perPanel >= MIN_PANEL));
-  const narrowNote = o.sideBySide && same && !wide ? [pc.dim(`Too narrow for three pictures side by side (${term.columns} columns): the changes alone`)] : [];
+  const narrowNote = o.sideBySide && same && !wide ? [pc.dim(t("Too narrow for three pictures side by side ({n} columns): the changes alone", { n: term.columns }))] : [];
   const legend = (ascii: boolean) => diffLegend(d.counts, term.depth, term.unicode, ascii, same);
 
   const inline = !o.blocks && !o.json ? term.inline : null;
@@ -655,8 +656,9 @@ export async function diffPicture(
     const changes = sbs.panels.find((p) => p.name === "changes");
     if (form === "ascii" && sbs.change && changes) overlay = asciiOverlay(sbs.change, pic.width, changes.x);
     const label = (p: SideBySide["panels"][number], last: boolean) => {
-      const t = p.name === "a" ? x.input.name : p.name === "b" ? y.input.name : "changes";
-      return pc.bold(t.length > p.width ? `${t.slice(0, Math.max(1, p.width - 1))}…` : t) + (last ? "" : " ".repeat(Math.max(0, p.width - t.length) + TERM_GAP));
+      let text = p.name === "a" ? x.input.name : p.name === "b" ? y.input.name : t("changes");
+      if (columns(text) > p.width) { let cut = ""; for (const ch of text) { if (columns(cut + ch) > Math.max(1, p.width - 1)) break; cut += ch; } text = `${cut}…`; }
+      return pc.bold(text) + (last ? "" : " ".repeat(Math.max(0, p.width - columns(text)) + TERM_GAP));
     };
     header = [sbs.panels.map((p, i) => label(p, i === sbs.panels.length - 1)).join("")];
   } else {

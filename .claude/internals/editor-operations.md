@@ -9,8 +9,9 @@ trigger gives Victory or Defeat and notes a missing Set Mission Objectives; `isH
 recognises the community's hyper triggers (preserved, unconditional, ≥ 8 Wait 0s that are
 nearly all of the actions) and, when they are present, warns on any other preserved trigger
 carrying a Wait, since that stalls the player's queue. `tests/validate.test.ts`.
-`resizeScenario` is a transaction outside the undo model, applied through `resizeDocumentAtom`
-(drops both stacks, bumps every revision, mirrors width/height into the display atoms). `dx` is
+`resizeScenario` is applied through `resizeDocumentAtom`, which records it as one `whole` undo
+entry (see `clipboard.md`; dropped history on a shared map), bumps every revision and mirrors
+width/height into the display atoms. `dx` is
 forced even so left/right tile pairs keep their columns; ISOM is `rebuildIsomFromTiles` when a
 tileset is loaded, else the flat fill's lattice; objects outside the new bounds are dropped,
 locations clamped, Anywhere reset. `validateScenario(scn, { extras, isom })` is pure and

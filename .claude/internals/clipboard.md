@@ -70,3 +70,29 @@ together; `FIELD_SECTIONS` is the `markDirty` map for both) plus the string tabl
   the second of a pair finds nothing left — one entry per `document.update`.
 - A scenario put into `scenarioAtom` directly (tests) is not followed: its first commit records
   nothing and starts the baseline. `tests/table-history.test.ts`.
+
+### Whole-map undo (`WholeState` / `swapWholeState` in `editor/history.ts`, `stepWhole` in `documentAtoms.ts`)
+
+Added 2026-11-07, after an outside review named "Resize and Change Tileset clear the undo
+history" as the editor's most concrete lost-work risk. `resizeDocumentAtom` and
+`changeTilesetAtom` take `takeWholeState(scn)` before the change and push `{ label, changes: [],
+whole }` through `afterWholeDocumentChange(get, set, entry)`. `whole` is the map on the *other*
+side of the step: undo and redo `swapWholeState` it with the scenario's and store what they took
+out back on the entry, so one snapshot per entry, never two. Like `tables`, an entry with `whole`
+has no other part and `undoAtom` / `redoAtom` branch to it before anything else (`SyncCore.step`
+and `applyEntry` never see one).
+
+- **By reference, not copied.** Width, height, ERA, MTXM, TILE, ISOM, MASK and the four object
+  lists. That is safe only because `resizeScenario` and `changeTileset` build every new grid and
+  list instead of writing into the old ones, and every later in-place edit is on the stack above
+  the entry, so it is undone before the entry is. **A whole-map change that writes into an
+  existing array breaks this** — build new arrays, or copy in `takeWholeState`.
+- **Dirty is unioned, never restored.** The swap marks every section the two sides may differ
+  in; re-encoding is always safe, emitting the file's bytes is not once something changed them.
+- **Shared maps keep the old behaviour.** `wholeEntry` answers null when `syncTapAtom` owns the
+  front map, and the history is dropped: the change went out as a `reset` and every other
+  editor's history restarted, so a local undo of it would only be another whole-map reset. An
+  entry recorded before sharing began still undoes there, as a reset sent to everyone, and then
+  drops the history the same way.
+- `replaceScenarioAtom` (raw section edits, Repair) still drops the history — it installs a new
+  `Scenario` object, which a reference swap cannot take back. `tests/whole-history.test.ts`.

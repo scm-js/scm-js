@@ -258,7 +258,11 @@ jobs:
       - run: npm run vendor:plugins
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - run: npm test
+      # The JSON report names every suite that skipped (no game data here), for the job summary.
+      - run: npm test -- --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/vitest.json"
+      - name: Test summary
+        if: always()
+        run: node scripts/test-summary.mjs "$RUNNER_TEMP/vitest.json" >> "$GITHUB_STEP_SUMMARY"
       # The default plugins are compiled into the bundle rather than fetched at startup
       # (`scripts/vendor-plugins.mjs`, run by `prebuild`), which is worth 890 KB gzipped
       # off a first visit but takes the remote loading path off the path everyone walks.

@@ -1348,9 +1348,10 @@ of StarCraft and the engine](#commands-that-need-starcraft).
 ### A video or GIF of a replay
 
 `scmjs replay export game.rep` makes a video of the replay with the game's own pictures,
-to share where nobody has the game: a Discord channel, a forum post, a page. The play
-page's replay viewer draws it, in a browser already on your computer (Chrome, Chromium or
-Edge, started without a window), with the pictures of your own copy of StarCraft.
+to share where nobody has the game, such as a Discord channel, a forum post or a web page.
+The play page's replay viewer draws it in a browser already on your computer, Chrome,
+Chromium or Edge started without a window, with the pictures from your own copy of
+StarCraft.
 
 ```sh
 scmjs replay export game.rep --from 14:00 --to 14:30           # game.webm beside the replay
@@ -1359,43 +1360,43 @@ scmjs replay export game.rep --out game.gif --all --speed 16 --to 6:00
 ```
 
 The game is stepped picture by picture rather than played and filmed, so the clip plays at
-the speed you ask whatever your computer's pace, without a dropped picture. A 720p clip
-takes about as long to make as it lasts, less for a quiet part of the game, more for a big
-fight. The time it takes to run the game on to `--from` comes first: about twenty seconds
-to reach twenty minutes into a game.
+the speed you ask whatever your computer's pace, with no picture dropped. A 720p clip
+takes about as long to make as it lasts, less for a quiet part of the game and more for a
+big fight. Before that, the game has to run on to `--from`, which takes about twenty
+seconds to reach twenty minutes into a game.
 
 | Option | What it does |
 | --- | --- |
 | `--out clip.webm` | The file: `.webm`, `.mp4` or `.gif`. By default the replay's name with `.webm`, beside it |
 | `--from 4:30`, `--to 5:00` | Where the clip starts and ends in the game; the whole game by default |
-| `--follow <player>` | The camera stays on that player's play: a name, the start of one, or a number as `replay info` lists the players. The first person in the replay by default |
+| `--follow <player>` | The camera stays on that player's play. Name them, give the start of the name, or a number as `replay info` lists the players. The first person in the replay by default |
 | `--at 64,40` | The camera holds on this tile |
 | `--all` | The whole map, scaled to fit |
-| `--speed 4` | Four times the game's Fastest; 1, the game's own pace, by default |
+| `--speed 4` | Four times the game's Fastest. The default is 1, the game's own pace |
 | `--size 1920x1080` | The clip's size in pixels: 1280x720 by default, 640x360 for a GIF |
-| `--fps 30` | Pictures a second: 24 by default, 12 for a GIF (a GIF counts in hundredths of a second, so 12 becomes 12.5) |
-| `--browser <path>` | The browser to draw with, or the `SCMJS_BROWSER` setting; found in the usual places otherwise |
+| `--fps 30` | Pictures per second, 24 by default and 12 for a GIF. A GIF counts in hundredths of a second, so 12 becomes 12.5 |
+| `--browser <path>` | The browser to draw with, or the `SCMJS_BROWSER` setting. Otherwise one is found in the usual places |
 | `--json` | The file, its size and the time each part took, as JSON |
 
-Following a player, the camera goes where their army is, and to the biggest fight it is
-in: the game is run through first by the engine, which reports every unit, as
-`replay watch` draws them. It holds still while what it shows stays near the middle of the
-screen, pans to a place within reach, cuts to one further away, and does not chase a lone
-scout. The view shows as much of the map as the game's own screen, at a whole number of
-pixels to each of the game's (two at 720p), so the pictures stay sharp.
+Following a player, the camera goes where their army is, and to the biggest fight the army
+is in. To know that, the engine runs the game through first and reports every unit, as it
+does for `replay watch`. The camera holds still while what it shows stays near the middle
+of the screen, pans to a place within reach, cuts to one further away, and does not chase
+a lone scout. The view shows as much of the map as the game's own screen does, at a whole
+number of pixels for each of the game's, two at 720p, so the pictures stay sharp.
 
 A `.webm` (VP9) or a `.gif` needs nothing more. An `.mp4` (H.264) is made from the `.webm`
-with [ffmpeg](https://ffmpeg.org/download.html) when it is installed; without it the
+with [ffmpeg](https://ffmpeg.org/download.html) when it is installed. Without it the
 command says so and makes nothing. The GIF is made from the pictures as drawn, each with a
-palette of its own, which keeps the game's colours exact; a GIF of a camera that moves is
-large, so keep it short (eight seconds of a fight at 640x360 is about 12 MB). A 30-second
-720p `.webm` is about 8 to 10 MB. Progress is shown as it goes; the file's name and size
-are printed at the end.
+palette of its own, which keeps the game's colours exact. A GIF of a camera that moves is
+large, so keep it short: eight seconds of a fight at 640x360 is about 12 MB. A 30-second
+720p `.webm` is about 8 to 10 MB. Progress is shown as it goes, and the file's name and
+size are printed at the end.
 
-The pictures are the classic game's, whichever copy you have: Remastered's own pictures
-are not drawn yet, and there is no sound. Besides your copy of StarCraft it needs [the
-engine](#commands-that-need-starcraft) and the play page itself, both fetched once from
-scmjs.dev and kept.
+The pictures are the classic game's, whichever copy you have. Remastered's own pictures
+are not drawn yet, and there is no sound. Besides your copy of StarCraft, the command
+needs [the engine](#commands-that-need-starcraft) and the play page itself, both fetched
+once from scmjs.dev and kept.
 
 ### Opening a replay in scmJS
 

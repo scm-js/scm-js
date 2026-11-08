@@ -43,6 +43,7 @@ import { serveLsp } from "./lsp";
 import { openInScmjs, playInLobby } from "./open";
 import { checkPlugin, devPlugin, newPlugin, printPluginCheck, type PluginCheck } from "./plugin";
 import { printReplayInfo, replayReport } from "./replay";
+import { buildOrders, checkPlayedMod, refuseModReplay, replayNamer, type ReplayNameOptions } from "./replaymod";
 import { SCMSCX, scmscx } from "./scmscx";
 import { mapFileFor, writeReplayMap } from "./replaymap";
 import { printReplayShare, shareReplay } from "./replayshare";
@@ -114,9 +115,15 @@ async function mapInfo(input: Input) {
   const data: MapReport = { ...mapReport(input, doc), script: await hasScript(doc.extras) };
   return { data, lines: printMapInfo(data) };
 }
-async function replayInfo(input: Input) {
+async function replayInfo(input: Input, o: ReplayNameOptions = {}) {
   expectKind(input, "replay");
-  const data = replayReport(input, await loadReplayInput(input));
+  const rep = await loadReplayInput(input);
+  const data = replayReport(input, rep);
+  if (o.mod || o.builds) {
+    const names = await replayNamer(rep, input.name, { mod: o.mod, starcraft: o.starcraft, costs: !!o.builds, warn: (line) => process.stderr.write(`${mark.warn} ${line}\n`) });
+    data.names = names.from;
+    if (o.builds) data.builds = buildOrders(rep, names);
+  }
   return { data, lines: printReplayInfo(data) };
 }
 /** A bot file's header (the scm-sim toolchain's `.scmbot`). */
@@ -755,6 +762,7 @@ plugin changed it. Exits 1 when the plugin does not load or throws.`))
     expectKind(replayInput, "replay");
     if (replayInput.path === STDIO) throw new CliError(t("--replay takes a replay file, not standard input."), null, 2);
     const rep = await loadReplayInput(replayInput);
+    await checkPlayedMod(rep, replayInput.name, o.mod, o.starcraft, (line) => process.stderr.write(`${mark.warn} ${line}\n`));
     const named = file ? await openForEdit(file) : null;
     const run = await replayRun(rep, named && { doc: named.doc, path: named.input.path, name: named.input.name, bytes: named.input.bytes });
     if (!o.json) {
@@ -991,6 +999,7 @@ the map as it is then, and scmjs map test -u writes in what has changed.`) + `
       expectKind(replayInput, "replay");
       if (input.path === STDIO || replayInput.path === STDIO) throw new CliError(t("map test record writes beside the map and names the replay's file: give both as files."), null, 2);
       const rep = await loadReplayInput(replayInput);
+      refuseModReplay(rep, replayInput.name, "map test record");
       const players = rep.players.filter((p) => p.type === 1 || p.type === 2).map((p) => ({ slot: p.index, name: p.name, computer: p.type === 1 }));
       const map = await readMapForTests(input.bytes);
       const r = await recordTest(input.name, map, { path: replayInput.path, frames: rep.header.frames, players }, o.tests ?? defaultTests(input.path), {
@@ -1293,7 +1302,16 @@ their editor. --edit opens the map for editing together instead; whoever opens t
 
   const replay = program.command("replay").description(t("read and open replays")).helpGroup(t("Maps and replays:"));
   replay.command("info").description(t("who played, on what map, for how long, at what APM")).argument("<replays...>").addOption(json)
-    .action(async (files: string[], o: { json?: boolean }) => void await eachFile(files, !!o.json, replayInfo));
+    .option("--builds", t("what each player ordered: units, buildings, upgrades and technologies, by name, with their cost"))
+    .option("--mod <mod>", t("the mod the replay was played with, for its names and costs: a mod folder, an .mpq, a mod's .exe or .zip"))
+    .option("--starcraft <folder>", t("your installation of StarCraft (SCMJS_STARCRAFT), for the game's costs and the files under a mod; found in the usual places otherwise"))
+    .addHelpText("after", "\n" + t(`A replay saved by scmJS from a game of a mod says which mod it was (the Mod line): its name, the hash of its data
+set, its makers' link and the plugins that ran. --mod names the mod's folder for the names and costs of its units,
+upgrades and technologies, and is refused when its data set is not the one the replay names. Without it, a mod's
+replay shows ids, never the game's names for them.`) + `
+  scmjs replay info game.rep --builds
+  scmjs replay info game.rep --builds --mod "My Mod"`)
+    .action(async (files: string[], o: { json?: boolean } & ReplayNameOptions) => void await eachFile(files, !!o.json, (input) => replayInfo(input, o)));
   replay.command("map").description(t("the map the replay was played on, written out as a map file")).argument("<replay>").addOption(json)
     .option("--out <map>", t("the file to write (.scx, .scm or .chk); the replay's name with .scx by default; - for standard output"))
     .option("--force", t("overwrite a file that is there"))
@@ -1346,6 +1364,7 @@ pipe or a file it prints a line per minute of game instead (--every), or JSON li
       const input = await readInput(file);
       expectKind(input, "replay");
       const replay = await loadReplayInput(input);
+      refuseModReplay(replay, input.name, "replay watch");
       const speed = Number(o.speed);
       if (!(speed > 0 && speed <= 64)) throw new CliError(t("--speed takes a number from 0.25 to 64, not \"{value}\"", { value: o.speed }), null, 2);
       const every = Number(o.every);
@@ -1380,6 +1399,7 @@ made from the .webm with ffmpeg, when it is installed. The camera follows where 
       const input = await readInput(file);
       expectKind(input, "replay");
       const replay = await loadReplayInput(input);
+      refuseModReplay(replay, input.name, "replay export");
       const tty = !!process.stderr.isTTY && !o.json;
       let shown = 0;
       const r = await exportReplay(input, replay, o, (line, done) => {

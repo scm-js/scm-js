@@ -1587,6 +1587,10 @@ played, to the end of the replay.
 scmjs map trace --replay report.rep --order
 ```
 
+A replay of a mod needs that mod named with `--mod`, and the command checks that the mod's
+data set is the one the replay names before it plays. A game the mod's plugins ran in is
+refused: the engine's runners lay a mod's files over the game's and run no plugin.
+
 The report is the one above, with two differences. The first and last firings are given on
 the game's clock, `m:ss` at Fastest as the replay viewer counts it, and only the triggers
 owned by the players in the game are listed. `--order` adds every firing in the order the
@@ -2223,6 +2227,42 @@ That replay is from a [bot ladder](#a-ladder-for-bots), whose replays carry the 
 seed where a real game has its start time, so the date is the first of January 1970 (or
 the last day of 1969, west of Greenwich).
 
+The `Mod` line says which mod the game was played with, for a replay scmJS saved from a
+game of a mod: the mod's name, the hash of its data set, its makers' link, and a `Plugins`
+line below it with the plugins that ran. A replay of the game itself says `none`. See
+[Replays of modded games](mods.md#replays-of-modded-games).
+
+`--builds` adds what each player ordered: every unit, building, upgrade and technology,
+when it was first ordered, how many times, and what one costs. These are the players'
+orders, not what the game made: a player who clicks Train five times with money for two
+has ordered five. The costs come from your copy of StarCraft's tables; without one the
+names are there and the costs are left out.
+
+```
+$ scmjs replay info game.rep --builds
+…
+  Builds  (what each player ordered, first when, how often, and what one costs)
+    Question
+      Protoss Probe              0:01  ×186  50 minerals
+      Protoss Pylon              0:47  ×17   100 minerals
+      Protoss Gateway            1:18  ×4    150 minerals
+      Protoss Assimilator        1:38  ×2    100 minerals
+      Protoss Cybernetics Core   2:04  ×1    200 minerals
+      Protoss Dragoon            2:47  ×70   125 minerals, 50 gas
+      Singularity Charge         2:56  ×1    150 minerals, 150 gas
+```
+
+A mod's replay names its units by the mod, so `--builds` on one shows ids (`unit 7`) until
+`--mod` names the mod: a folder, an `.mpq`, a mod's `.exe` or a `.zip`, as `scmjs mod`
+reads them. The names and costs then come from the mod's tables. The mod is checked first:
+its data set's hash, worked out as [`mod play`](#playing-a-mod-on-the-play-page) works it
+out, must be the one the replay names, or the command stops and says both. With a replay
+that names no mod, `--mod` warns that the names may not be the game's and uses them.
+
+```sh
+scmjs replay info game.rep --builds --mod "Cosmonarchy BW"
+```
+
 ### The map a replay was played on
 
 `scmjs replay map game.rep` writes out the map the replay was played on. A replay carries
@@ -2248,6 +2288,10 @@ units alive and APM so far, and the last three lines of chat.
 ![replay watch three and a half minutes into a bot game on a generated jungle map](images/cli-replay-watch.webp)
 
 *`scmjs replay watch` on a replay from a bot ladder, stopped at 3:33.*
+
+A replay of a mod (one whose `replay info` names a mod) is refused, with the mod's name
+and link: the engine here plays it with the game's own files, which would be another game.
+`replay export` refuses one for the same reason.
 
 Space pauses, `+` and `-` double and halve the speed, and `q` stops and leaves the last
 picture on screen.
@@ -2831,7 +2875,7 @@ with the command's text and its `--json` data:
 | `map_analyze` | A melee map's layout: starts, naturals, the walks between starts and their narrowest points, and the verdicts; the picture too when asked |
 | `map_trace`, `map_cost`, `map_coverage` | The triggers run in the game, what they cost, and which fired across many replays |
 | `map_balance` | Games played on a melee map with your bots, to see whether its starts are fair; it takes minutes |
-| `replay_info`, `replay_map` | What a replay holds, and its map written out |
+| `replay_info`, `replay_map` | What a replay holds (the mod it was played with; with `builds`, what each player ordered, named by `mod`), and its map written out |
 | `mod_info`, `mod_check`, `mod_diff`, `mod_unpack`, `mod_pack`, `mod_new` | [Mods](#mods): what a mod is, its check, a changelog, the folder of text and back, a new one |
 | `doctor` | What this computer has, so the model knows what it can call |
 
@@ -3047,7 +3091,7 @@ gives its options.
 
 | Command | What it does |
 | --- | --- |
-| [`scmjs replay info <replays…>`](#what-a-replay-holds) | Who played, on which map, for how long and at what APM |
+| [`scmjs replay info <replays…>`](#what-a-replay-holds) | Who played, on which map, for how long and at what APM, the mod it was played with; `--builds` what each player ordered, `--mod` names from the mod |
 | [`scmjs replay map <replay>`](#the-map-a-replay-was-played-on) | The map the replay was played on, as a map file |
 | [`scmjs replay watch <replay>`](#watching-a-replay-in-the-terminal) | Plays the replay in the terminal |
 | [`scmjs replay export <replay>`](#a-video-or-gif-of-a-replay) | A video or GIF of the replay with the game's own pictures |

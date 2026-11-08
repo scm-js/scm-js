@@ -241,6 +241,33 @@ The game engine's runners play a map with the mod's files laid over the game's. 
 an engine whose runners take a mod, which the play page's next release brings; until then
 the command says which version it needs and stops.
 
+### Replays of modded games
+
+A replay holds the players' commands, not the files the game read. Played back with other
+files, the same commands make another game: a unit costs something else, a building is
+somewhere else, and the replay goes its own way. So a replay of a mod says which mod it
+was. scmJS adds a short section at the end of the file, after what the game wrote, that
+holds the mod's name, the hash of its data set (the same hash `mod play` gives the play
+page), its makers' link, the plugins that ran and the FireGraft patch applied. StarCraft
+itself does not read it: 1.16.1 plays the file as it would the same file without it, and
+Remastered steps over it as over any section it does not know. The [replay
+package's](https://github.com/scm-js/replay#mod-identity) read-me has the bytes.
+
+What reads it:
+
+- `scmjs replay info` shows it on the `Mod` line. With `--builds` it lists what each
+  player ordered, by id until `--mod` names the mod's folder, and then with the mod's
+  names and costs. A mod whose data set is not the one the replay names is refused.
+- `scmjs map trace --replay` and `map cost --replay` need the mod named with `--mod` and
+  check it the same way. A game the mod's plugins ran in is refused, as the engine's
+  runners do not run plugins.
+- `scmjs replay watch`, `replay export`, `map heatmap`, `map coverage` and
+  `map test record` refuse a mod's replay, or leave it out of a list, for now.
+- The Aftermath plugin, the editor's replay viewer, shows the mod and its link, and takes
+  the names and costs from the mod's folder when you attach it.
+
+The play page's Save Replay writes the section for a game of a mod from its next release.
+
 ### For AI tools
 
 `scmjs mcp` has the mod commands as tools: `mod_info`, `mod_check`, `mod_diff`,

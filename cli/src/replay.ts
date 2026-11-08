@@ -1,9 +1,10 @@
 /** `scmjs replay info`: who played, on what, for how long, from the replay's header, commands and its copy of the map. */
 import { parseScenario, MAP_VERSIONS, mapVersionOf, tilesetIndex } from "../../src/formats/chk/scenario";
 import { TILESETS } from "../../src/data/tilesets";
-import { FRAME_MS, type Replay } from "@scm-js/replay";
+import { FRAME_MS, type ModTag, type Replay } from "@scm-js/replay";
 import type { Input } from "./files";
 import { msg, t, translate } from "./i18n";
+import { printBuilds, type NamesFrom, type PlayerBuilds } from "./replaymod";
 import { dot, duration, gameText, num, pc, rgb, rows, size, table, truecolor } from "./ui";
 
 // English in the report (`--json`), shown through `translate`.
@@ -29,6 +30,12 @@ export interface ReplayReport {
   map: { name: string; width: number; height: number; tileset: string | null; version: string | null };
   players: { name: string; race: string; computer: boolean; team: number; color: string; commands: number; apm: number }[];
   chat: number;
+  /** The mod the game was played with, as the replay's SCMJ section says; null for the game itself. */
+  mod: ModTag | null;
+  /** With `--mod` or `--builds`: where the names came from. */
+  names?: NamesFrom;
+  /** With `--builds`: what each player ordered. */
+  builds?: PlayerBuilds[];
 }
 
 export function replayReport(input: Input, rep: Replay): ReplayReport {
@@ -59,6 +66,7 @@ export function replayReport(input: Input, rep: Replay): ReplayReport {
       return { name: p.name, race: RACES[p.race] ?? `Race ${p.race}`, computer: p.type === 1, team: p.team, color: p.color, commands, apm: end > 0 ? Math.round(commands / ((end * FRAME_MS) / 60000)) : 0 };
     }),
     chat,
+    mod: rep.mod,
   };
 }
 
@@ -84,6 +92,9 @@ export function printReplayInfo(r: ReplayReport): string[] {
       [t("Map"), `${gameText(r.map.name)}${dot}${r.map.width} × ${r.map.height}${r.map.tileset ? dot + translate(r.map.tileset) : ""}`],
       [t("Game"), `${gameText(r.title)}${r.host ? pc.dim(` ${t("hosted by {host}", { host: gameText(r.host) })}`) : ""}`],
       [t("Recorded by"), `${translate(r.engine)}${dot}${translate(r.format)}`],
+      [t("Mod"), r.mod ? `${gameText(r.mod.dataSet.name) || pc.italic(t("unnamed"))}${dot}${r.mod.dataSet.hash}${r.mod.dataSet.url ? dot + r.mod.dataSet.url : ""}` : pc.dim(t("none"))],
+      [t("Plugins"), r.mod ? (r.mod.noplugins ? pc.dim(t("none: played without them")) : [...r.mod.plugins.map((p) => p.name), ...(r.mod.firegraft ? [r.mod.firegraft.name] : [])].join(", ") || pc.dim(t("none"))) : null],
+      [t("Names"), r.names?.kind === "mod" ? t("from {mod}, the same data set", { mod: r.names.name ?? "" }) : null],
       [t("File"), `${r.file.name}${dot}${size(r.file.bytes)}`],
       [t("Chat"), r.chat ? t("{n, plural, one {# line} other {# lines}}", { n: r.chat }) : null],
     ]),
@@ -92,5 +103,6 @@ export function printReplayInfo(r: ReplayReport): string[] {
     ...table(r.players.map((p) => [
       (truecolor ? rgb(p.color, "■") + " " : "") + gameText(p.name), translate(p.race), p.computer ? pc.dim(t("computer")) : `${num(p.apm)} APM`, teams.size > 1 ? pc.dim(t("team {n}", { n: p.team })) : "",
     ])),
+    ...(r.builds && r.names ? printBuilds(r.builds, r.names, r.mod) : []),
   ];
 }

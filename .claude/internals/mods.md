@@ -130,6 +130,14 @@ mod reloads; then this layer is redundant (harmless: same bytes). Sounds by name
 still refused by the runner. `protoss\archon\parmin00.wav` is only under `SD/` in Remastered (neither the play set
 nor `gamefiles.ts` falls back to `SD/`).
 
+## Replays of a mod (R1, 2026-11-08)
+
+A replay's `SCMJ` section names the data set by this page's hash (`dataSetHash`, the changed files' sorted
+`name\tsha256` lines). `scmjs replay info --mod`, `map trace|cost --replay --mod` check a mod against it with
+`cli/src/replaymod.ts#sourceHashes` (changed-vs-copy and all-files both accepted). Details and the loader proof:
+`cli.md` "A replay's mod". When step 7a puts the plugins and the project into the hash, `sourceHashes` and the tag's
+writer (scm-sim R2) change together.
+
 ## Open
 
 - The play page's side of `scmjs.play.dataSet` (M1, scm-sim's `mods-plan`): the message shape is in `docs/cli.md`

@@ -1,6 +1,6 @@
 # The `scmjs` command line
 
-`cli/` is the npm package **`@scm-js/cli`** (its command is `scmjs`): `scmjs about | doctor | info | mcp | lsp | map info|check|open|new|generate|dump|find|fetch|set|resize|triggers|strings|sounds|diff|log|blame|merge|build|run|unpack|pack|trace|cost|rush|test [record]|preview|heatmap |
+`cli/` is the npm package **`@scm-js/cli`** (its command is `scmjs`): `scmjs about | doctor | info | mcp | lsp | map info|check|open|new|generate|dump|find|fetch|set|resize|triggers|strings|sounds|diff|log|blame|merge|build|run|unpack|pack|trace|cost|rush|test [record]|preview|heatmap|coverage |
 replay info|map|open|watch|export|share | plugin new|check|dev | bot new|init|build|update|run|ladder`, or `npx @scm-js/cli …`. npm refused the plain name `scmjs` on the first publish (2026-11-06,
 E403 "too similar to scss, sockjs"), so the user chose the scope beside @scm-js/replay and @scm-js/plugin-api. The reader's page is `docs/cli.md`. The shape was the user's (2026-11-05): one command, a noun for
 each kind of thing (`map`, `replay`, `plugin`, `bot`), "an impressive UX tool … not overly engineered".
@@ -1789,3 +1789,94 @@ overview row. Docs: `docs/cli.md` "A map's history", "Who last changed what".
   with textconv does that); `map log --rev A...B` passes through to git, `map blame` refuses `...`.
 - **CLI strings are literals, not `t()`**: the i18n extractor reads `src/` only and no CLI module uses `t()` for its
   own words (plugin.ts's are the starter's text); followed that.
+
+## Many games and old maps: `map coverage`, `map check --baseline` (`coverage.ts`, `baseline.ts`) — 2026-11-07
+
+`scmjs map coverage <map> [replays…] [--tests] [--strict] [--format text|json|github|junit|sarif] [--all] [--force]
+[--parallel n] [--starcraft]` and `scmjs map check … --baseline [file] | --write-baseline [file]`. One PR (branch
+`cli-coverage-baseline`); no scm-sim change — the map runner's `--play` + `--order` already said everything needed.
+Docs: `docs/cli.md` "A baseline for old maps" (under Checking a map) and "Which triggers fired across many games"
+(Running a map in the game, after "A test from a replay"), reference rows, cheat sheet, AI tools row, exit codes.
+
+- **Coverage = `map trace --replay` per replay, added up.** `runCoverage`: `replayFiles(paths, deep = true)` (new
+  `deep` parameter on heatmap's walker; heatmap itself still takes a folder's own files only), dedupe by sha256,
+  `matchReplay` against `mapIdentity` (same scenario, else same name + size; `--force` takes the rest) — heatmap's rule,
+  so a newer version of a map still takes the old replays — then **non-UMS replays are left out before anything runs**
+  (`header.gameType !== 10`: in melee the game runs its own triggers; the trace would hold only row −1 copies, and
+  39 of the 42 psistorm replays are melee/1v1/TvB). Each taken replay → `gameMap` (a 1.00 map converted per run, since
+  `runMapInGame` deletes its temp copy) → `runMapInGame(map, "trace", { replay, order: true, every: 0, ready })`.
+  **`MapRunOptions.ready`** (new, additive): an `Engine` found once, so N games ask the page's `current.json` once and
+  parallel workers never race the first fetch into the cache. Workers as heatmap's (`defaultParallel`: half the CPUs,
+  ≤ 4, a game per GB). A CliError matching /from before/ (older runner) aborts the whole run; any other error is that
+  replay's: listed under left out, `exitCode = 1` (heatmap's convention); none played at all → CliError.
+- **Rows owned vs not**: `gameRows` folds a game's `CopyLine`s per map row; `addGames` sums games-fired-in, firings,
+  first firing + `firstIn`, latest `lastFail` + its game. The table, the counts and `--strict` cover only rows a player
+  in at least one game had a copy of (`players.length`), as `map trace --replay` lists only owned rows — a 1,713-row
+  EUD map (투혼) has 5 owned; "N more owned by no player in these games" is said, `--all` lists them, the JSON has
+  `owned: false`. Decided: a trigger for P8 cannot be expected to fire when no game had a P8, so it does not fail
+  `--strict`.
+- **A parted game counts up to the parting.** Always asking `--order` (≤ 10,000 kept by the runner) lets
+  `gameRows(lines, rows, parted, order)` count firings with `frame < parted` and the first one; past what the order
+  kept, a copy whose `firstFired < parted` counts once. `lastFail` after the parting is not used for "why". Test
+  scenarios driven by a replay have no order: the `firstFired` rule only. Games that parted get ▲ in their line and a
+  summary line; github/sarif carry a notice/note per parted game, junit a `<system-out>`.
+- **`--tests`** = `<map>.tests.json` beside the map; any `.json` among the sources is a tests file too. `readTests` +
+  `runTests({ quiet, out: <temp>, onEnd })`: `onEnd` hands the raw end, folded with `shift = p.before.length` (the
+  setup's triggers come first); pass/fail is ignored (map test's job); the failed scenarios' replays go to a temp
+  folder that is removed. Tests run after the replays, one at a time (runTests is sequential), and runTests asks
+  `ensureEngine` again itself (one more `current.json` fetch; not threaded through to keep maptest.ts untouched).
+- **Output**: a skipped line per reason (heatmap's `skippedLines`), the header, a line per game as it ends (`k/K ✔|▲|✖
+  name  m:ss · n players · n triggers fired [· parted at m:ss, counted to there] · s`), then the summary `✔|▲|✖ map:
+  F of N triggers fired in K games; L never fired · X more owned by no player…`, the table (#, Games k/K, Fired, First
+  as the game clock, Players from the copies, the trigger window line via trace's `rowText`), cut at 40, then "Never
+  fired" with `neverWhy` (the condition, the game, the clock). Test games are named `test "<name>"` (`gameName`). In
+  machine formats the live lines go to stderr. `coverageJson` adds per row `number`, `owned`, `firstClock`, `owners`
+  (summarizeTrigger's players), plain `text`, `why`. CI forms in report.ts (`CoverageForm`): github warning per
+  never-fired (error with `--strict`), junit a case per owned trigger (never fired = `<skipped>`, `<failure>` with
+  strict), SARIF rules `scmjs/coverage-never-fired` and `scmjs/coverage-parted`.
+- **Measured** (Remastered copy, the engine of scmjs.dev/play build 1248410ad2a0 from the cache, 24 cores): 투혼 map
+  from 1631.rep over the 39 psistorm replays: 38 left out (36 other maps, 3 1v1 on 투혼), 1631 played in 7.3 s, 8.6 s
+  wall; the result matches `map trace --replay 1631.rep` (4 of 5 fired, #1711 never). Fighting Spirit map from 1603.rep
+  with `--force`: 6 UMS replays, 4 at a time, 31 s wall (1603: 34 min of play in 30.5 s); the five from other maps
+  parted at 0:00–1:46 and were counted only to there. ums.scx `--tests`: three scenarios in 7.4 s, #2 never fired.
+- **`map check --baseline`** (`baseline.ts`): the file is `{ about, version: 1, maps: { "<path from the file's folder,
+  />": [{ level, where, text, id? }] } }`, maps sorted, entries sorted by where then identity (diffs well), `id` only
+  when it differs from `text`. Default `.scmjs-baseline.json` in the cwd. **Identity** (`findingId`, matched with
+  `where` as a multiset — each known entry answers for one finding): `Issue` carries only `{level, text, where,
+  target?}`, no rule code, and the target index shifts, so the text is the key with the moving parts taken out:
+  every `Trigger N` / `Briefing N` in the text (whether or not `target` is the trigger — the CUWP "uses slot" notes
+  point at the dialog) becomes `Trigger @<sha1 of formatTrigger(t, triggerNames(scn))[0..8]>`; counts before
+  `units|unit types|strings|tiles|mineral fields|triggers|start locations|bytes` (optionally `more`/`other`/`placed`)
+  and `N%` become `#`; `(the first …)` examples are dropped. **Why the trigger's text and not `fingerprintTrigger`**:
+  the first try used the fingerprint, and a `triggers export|import` round trip on Wakka Wakka (140 triggers, 81
+  findings) changed 75 of them — the import re-interns strings (`a.text` 131 → 65) and normalises flag bits (0 → 16,
+  8 → 16) — so every known trigger finding came back as new. The text form names strings by content, which survives
+  renumbering; with it, two triggers prepended to Wakka Wakka leave all 81 known and report only the one new finding.
+  The price: editing the trigger, or renaming a location/switch it names, makes its findings new (documented as
+  "look at them again"). Level is not in the key (a level change with the same text is the same finding). Kept as
+  is: locations, players, switch numbers, unit name + position (they name the thing).
+- **The command** (main.ts): `--baseline [file]` and `--write-baseline [file]` are optional-value options, so
+  `--baseline a.scx b.scx` would take the map as the file: a value ending `.scm|.scx|.chk` is pushed back into the maps
+  and the default file used. A missing file with `--baseline` → exit 2 naming `--write-baseline`; with
+  `--write-baseline` a missing file is fine and an existing one is read first, so the per-map line says what changed
+  (`(1 new, 1 fixed and dropped)`) and the other maps in the file are kept. Nothing is written when no map could be
+  read. Standard input is refused (a map is keyed by its path). Write mode exits 0. `failed` and the exit code are
+  computed on the new findings only; `--format github|junit|sarif` get `issues` = new only; `--json` adds `baseline:
+  { file, suppressed, fixed, new, fixedFindings, written? }`. Fixed = known entries no current finding (notes
+  included, so a baseline written with `--all` does not report its notes as fixed when checked without it). Text: `✔
+  no new problems · N known, M fixed since the baseline`, `▲ 1 new warning · …`, and the multi-map summary adds `N
+  known findings left out, M fixed since the baseline`.
+- **MCP**: `map_check` gained `baseline` (read only; writing stays the command's), `map_coverage` (path, replays[],
+  tests, force, starcraft, all; lines to stderr, `coverageJson` as data; the client's cancel stops the games through
+  `signal`) — 22 tools. No progress notifications for coverage (a game's progress lines are off: `every: 0`).
+- **Tests**: `tests/cli-baseline.test.ts` (6: identity, matching, the file, and the command end to end through the
+  exported `program.parseAsync(args, { from: "user" })` with stdout/stderr spied — the first CLI test to drive whole
+  commands that way; commander 15 resets option values between parses), `tests/cli-coverage.test.ts` (6: folding with
+  and without a parting, adding up, the run over `FAKE_RUNNER` with replays written by `@scm-js/replay/write` incl. a
+  sub-folder, a duplicate, a melee one, another map's, a non-replay; the CI forms; tests over `FAKE_TEST_RUNNER`; the
+  refusals, `--force`, an older runner, a refused map), `tests/cli-mcp.test.ts` +2 and the tool list.
+- **Not built**: a per-game breakdown in text (the JSON has each game's count; per-row per-game is not kept); caching
+  a replay's trace by its hash and the map's (heatmap caches events; coverage plays every replay each run — a cache
+  keyed by replay + map scenario hash would make re-runs after a trigger edit still replay everything, since the map
+  changed, so it would only help unchanged maps); progress over MCP; `--since <baseline>` style coverage ratchets;
+  `map check --baseline` across renamed maps (the key is the path).

@@ -1,6 +1,7 @@
 # Cutting a numbered release: one commit and a tag.
 #
-#   1. package.json (and the lock) go to the version being released, committed.
+#   1. package.json (and the lock) go to the version being released, committed — with
+#      cli/package.json and core/package.json, the npm packages that carry the same version.
 #   2. `vX.Y.Z` tags THAT commit — the one whose package.json says X.Y.Z.
 #
 # There is deliberately no third step moving package.json on to the next version. It used
@@ -158,6 +159,22 @@ jobs:
       # Everything the Build workflow would do, before a tag exists to clean up.
       - run: npm ci
       - run: npm version --no-git-tag-version --allow-same-version "${{ steps.v.outputs.version }}"
+      # @scm-js/cli and @scm-js/core carry the editor's version. `build:cli` and `build:core`
+      # stamp it again before a publish; writing it here too keeps the committed files true,
+      # so a local build after a release leaves nothing changed. Written as those builds
+      # write it (two spaces, a closing newline), so the two never disagree on the bytes.
+      - name: The command line's and the library's version
+        env:
+          VERSION: ${{ steps.v.outputs.version }}
+        run: |
+          node -e '
+            const fs = require("fs");
+            for (const file of ["cli/package.json", "core/package.json"]) {
+              const pkg = JSON.parse(fs.readFileSync(file, "utf8"));
+              pkg.version = process.env.VERSION;
+              fs.writeFileSync(file, JSON.stringify(pkg, null, 2) + "\n");
+            }'
+          git --no-pager diff --stat -- cli/package.json core/package.json
       - run: npm run lint
       - run: npm test
       # The remote plugin loader, over the real network — the check that replaced the one
@@ -227,10 +244,11 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
           # The release commit and the tag on it. `version` changes from the last release to
-          # this one — nothing else in the tree moves. Before the very first release there is
+          # this one, in package.json, the lock, cli/ and core/ — nothing else in the tree
+          # moves. Before the very first release there is
           # nothing to commit (package.json already says it) and an empty commit would say
           # nothing the tag does not, so the tag goes on the commit that is already there.
-          git add package.json package-lock.json
+          git add package.json package-lock.json cli/package.json core/package.json
           if git diff --cached --quiet; then
             echo "package.json already says $VERSION; tagging the commit that is there."
           else

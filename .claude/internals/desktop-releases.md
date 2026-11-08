@@ -287,7 +287,8 @@ electron-builder writes it into `latest*.yml`. A release is cut by the **Release
 (`.github/workflows/release.yml`, manual dispatch), never by hand: it refuses to run off main,
 over an existing tag, or backwards past the last release, runs lint/tests/build *before*
 writing anything, then commits the release version (the whole diff is `"version"` in
-package.json and the lock; skipped when it already says it) and annotates `vX.Y.Z` on that
+package.json, the lock, cli/package.json and core/package.json — the npm packages carry the editor's version, and
+until 0.12.1 only their builds stamped it, so the committed files went stale; skipped when it already says it) and annotates `vX.Y.Z` on that
 commit. It then **dispatches** build.yml on the tag — one dispatch is the whole release, hosted
 editor included — because a push made with `GITHUB_TOKEN` starts no workflow run while
 `workflow_dispatch` through the API is the exception. A tagged release's notes are `docs/releases/<version>.md` — committed on main

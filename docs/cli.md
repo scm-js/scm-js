@@ -2586,6 +2586,56 @@ both. The first line under the run says how many of the mod's files the game rea
 whether the startup data was read again without a missing file; `--json` has the same
 under `mod`.
 
+### A bot made for a mod
+
+```sh
+scmjs mod header "Cosmonarchy BW"
+scmjs mod header MyMod.mpq --out mybot --bot
+scmjs mod header mymod --namespace MyMod --json
+```
+
+writes two files for a [community bot](#bots) made for the mod: `<Mod>.h`, C++ for a BWAPI
+bot built with scmbot, and `<Mod>.ids.json`. `<Mod>` is the mod's name made an identifier
+(`Cosmonarchy_BW`), or `--namespace`. The header is one namespace holding `MOD_NAME` and
+`MOD_HASH` ([the mod's hash](mods.md#the-mods-hash), the one `mod info` prints), then the
+mod's units in `UnitTypes` (each a `BWAPI::UnitType` made from its id), its weapons in
+`WeaponTypes`, upgrades in `UpgradeTypes`, technologies in `TechTypes`, and the same ids
+as plain numbers (`constexpr int`) in `Ids::Units`, `Ids::Weapons`, `Ids::Upgrades` and
+`Ids::Techs`:
+
+```cpp
+#include "Cosmonarchy_BW.h"
+namespace cosmo = Cosmonarchy_BW;
+// …
+if (unit->getType() == cosmo::UnitTypes::Terran_Ministry) unit->train(cosmo::UnitTypes::Terran_Mason);
+```
+
+The JSON is
+`{ "mod": { "name", "hash" }, "units": [{ "id", "name", "identifier" }], "weapons", "upgrades", "techs" }`.
+
+The names are the mod's, every one of them. A unit is named as the editor names it (the
+mod's `unitnames.tbl`, else `stat_txt.tbl`); a weapon, upgrade or technology by its
+table's label in the mod's strings, where a GPTP mod's `rez\stat.txt` fills the entries
+`stat_txt.tbl` leaves empty, and by the mod's own name list (`arr\weapons.txt`,
+`upgrades.txt`, `techdata.txt`, one line an entry, as Cosmonarchy ships them) when it has
+one for every entry. A name becomes an identifier by turning every run of other characters
+than letters, digits and `_` into one `_` (`U-238 Shells` is `U_238_Shells`,
+`Terran Ogun (Worker Mode)` is `Terran_Ogun_Worker_Mode`); one that starts with a digit,
+or is a C++ keyword or a Windows macro's name, gets a `_` in front; one with no such
+characters left is its kind and id (`Unit_612`). When two entries of a kind have the same
+name, the first keeps it and each later one gets `_` and its id (`Floor_Hatch_385`). Rows
+that name nothing are left out: an empty name, "None", "Reserved", "Unused", "*", and a
+data editor's "Extended Tech #54". The header says it was generated, from which mod and
+hash and on what day; run the command again rather than edit it.
+
+With `--bot`, `--out` must be a bot's folder (one with `scmbot.json`): the two files go
+there and `scmbot.json` gains `"mod": { "name", "hash" }` (and `"link"` when the mod's
+`mod.json` has one), the rest of it as it was. The next `scmbot build` writes the mod into
+the `.scmbot` file, and `bot run` and `bot ladder` say whether the game's mod is the one
+the bot was made for. On Cosmonarchy BW the header names 621 units, 330 weapons, 67
+upgrades and 54 technologies. `--starcraft` names the copy of the game whose tables are
+read for any the mod has not got.
+
 ## Sharing from the terminal
 
 These commands use your [scmjs.dev account](guide.md#your-scmjsdev-account). Nothing else
@@ -3150,6 +3200,7 @@ gives its options.
 | [`scmjs mod build <folder>`](#checking-and-comparing-mods) | Check, then pack; stops on an error unless `--force` |
 | [`scmjs mod play <mod>`](#playing-a-mod-on-the-play-page) | Every file of the mod handed to the play page with its hash; `--map` starts a map with it |
 | [`scmjs mod test <mod> <map> [tests…]`](#a-mod-in-the-game-engine) | `map test` with the mod laid over the game; `map test`, `trace` and `cost` take `--mod` |
+| [`scmjs mod header <mod>`](#a-bot-made-for-a-mod) | The mod's units, weapons, upgrades and techs by name for a bot made for it: a C++ header and JSON; `--bot` writes the mod into the bot's `scmbot.json` |
 
 ### `scmjs plugin` and `scmjs bot`
 

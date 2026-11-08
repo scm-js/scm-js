@@ -69,6 +69,7 @@ import { modInfo, printModInfo } from "./mod/info";
 import { newMod } from "./mod/new";
 import { gameFilesOrNull, openMod } from "./mod/open";
 import { sourceHash } from "./mod/hash";
+import { writeModHeader } from "./mod/header";
 import { modOverlay } from "./mod/overlay";
 import { modWords } from "./engine";
 import { MOD_COMPRESSIONS, packMod, readModFolder, type ModCompression } from "./mod/pack";
@@ -1599,6 +1600,28 @@ page.`))
       else if (r.error) throw new CliError(t("The play page said: {error}", { error: r.error }), null, 1);
       else print(`${mark.ok} ${r.shown ? t("On the play page's setup screen") : t("Playing on the play page")}`);
       if (r.error) process.exitCode = 1;
+    });
+
+  modCmd.command("header").description(t("the mod's units, weapons, upgrades and techs by name, for a bot made for it (C++ and JSON)")).argument("<mod>", t("a folder, an .mpq, a mod's .exe, a .zip, or a folder mod unpack wrote")).addOption(json)
+    .option("--out <folder>", t("where the files go (the working folder by default)"))
+    .option("--namespace <name>", t("the C++ namespace, and the files' name (the mod's name made an identifier by default)"))
+    .option("--bot", t("--out is a bot's folder: its scmbot.json gains the mod, which the bot file then carries"))
+    .addOption(starcraftOption())
+    .addHelpText("after", "\n" + t(`Writes <Mod>.h, C++ for a BWAPI bot built with scmbot (Cosmonarchy_BW::UnitTypes::Terran_Mason is a
+BWAPI::UnitType, Ids::Units::Terran_Mason the number), and <Mod>.ids.json, the same for other languages. Every name
+in the mod's tables is there, as the editor shows it. Both carry the mod's name and hash; with --bot, scmbot build
+writes them into the .scmbot file, and the runners say whether the game is the mod the bot was made for.`))
+    .action(async (path: string, o: { json?: boolean; out?: string; namespace?: string; bot?: boolean; starcraft?: string }) => {
+      const base = await gameFilesOrNull(o.starcraft);
+      const r = await writeModHeader(await openMod(path, base), base, { out: o.out, namespace: o.namespace, bot: o.bot });
+      if (o.json) { print(JSON.stringify(r, null, 2)); return; }
+      print(`${mark.ok} ${pc.bold(r.mod.name)}: ${t("{units} units, {weapons} weapons, {upgrades} upgrades, {techs} techs named", { units: num(r.counts.units), weapons: num(r.counts.weapons), upgrades: num(r.counts.upgrades), techs: num(r.counts.techs) })}${dot}${pc.dim(t("hash {hash}", { hash: r.mod.hash }))}`,
+        ...rows([
+          [t("Header"), pc.cyan(shownPath(r.files.header))],
+          [t("Ids"), pc.cyan(shownPath(r.files.ids))],
+          [t("Bot"), r.files.scmbot ? t("{file} now names the mod: build the bot again", { file: shownPath(r.files.scmbot) }) : null],
+          [t("From the game"), r.fromGame.length ? t("the names of {list}: the mod has not got them", { list: r.fromGame.join(", ") }) : null],
+        ]));
     });
 
   modCmd.command("test").description(t("map test with the mod laid over the game")).argument("<mod>").argument("<map>").argument("[tests...]", t("tests files (JSON); <map>.tests.json beside the map by default")).addOption(json)

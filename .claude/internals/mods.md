@@ -203,6 +203,30 @@ carries those); the editor's folder route takes loose files only under `GAME_FOL
 root) and orders own archives by name (the page: as given); the page's `GAME_FOLDERS` lacks `datreq`, `samase`,
 `lua`, `config` for finding the root (scoring only).
 
+## `mod header` (C4 of the capstone, 2026-11-08, branch `mod-header`)
+
+`cli/src/mod/header.ts`: `<Mod>.h` (C++17, `inline const BWAPI::UnitType X(id);` in `<Ns>::UnitTypes` / `WeaponTypes`
+/ `UpgradeTypes` / `TechTypes`, `constexpr int` in `<Ns>::Ids::{Units,Weapons,Upgrades,Techs}`, `MOD_NAME`, `MOD_HASH`
+= `sourceHash().hash`, the full one) and `<Mod>.ids.json`; `--bot` adds `mod: { name, hash, link? }` to the bot's
+`scmbot.json` (in place when present, else last; `link` from `mod.json`'s `link`/`url`/`homepage`). The toolchain side
+(the `.scmbot` header's `mod`, the runners' "made for" line) is scm-sim's, `docs/mods-plan.md` "C4, as built".
+- **Names** (`modNames`): `loadModData` → `namesOf` with two GPTP additions found on Cosmonarchy. (1) `rez\stat.txt`,
+  PyTBL text a plugin loads as the game's strings: weapons' labels are 2000+ and `stat_txt.tbl` has 1,813 entries.
+  It fills only entries the tbl leaves empty or does not reach — **not** an override: at the techs' labels (313…) the
+  text holds button tooltips ("Memphis Requires: Scrapyard") where the tbl is empty or right. (2) `arr\weapons.txt`,
+  `upgrades.txt`, `techdata.txt`: the makers' name lists, one line an entry, taken over the labels when the line
+  count equals the table's count (1,001 / 100 / 100); the techs' labels are junk without them. Units stay
+  `unitnames.tbl` (as the editor and the page); `arr\units.txt` (3,003 lines) is not used.
+- **Identifiers**: runs of non-`[A-Za-z0-9_]` → `_`, trimmed; leading digit, a C++ keyword or a Windows macro name →
+  `_` prefix; nothing left → `<Kind>_<id>`; duplicates: first keeps, later `_<id>`. Skipped: empty, None, Reserved,
+  Unused (with a bracketed subname too), `*`, `Extended Tech #n` (a data editor's filler).
+- **Cosmonarchy** (release, hash ac3f86533e4b5a31): 621 units, 330 weapons, 67 upgrades, 54 techs, all identifiers
+  unique; Mason 7, Ministry 106, Supply Depot 109, Stockade 111, Quarry 174, Talos 20, Maverick 0, Sieve 419,
+  Ogun 494 (worker mode) / 497 (smithy mode). The header compiles with the toolchain's flags, plain and MSVC-compat
+  (em++ -std=c++17 against `native/` of scm-sim). 4.7 s, mostly the hash.
+- Tests: `tests/cli-mod-header.test.ts` (made mod: tbl/unitnames names, a 230-unit `.dat`, stat.txt fill, a name list,
+  `--namespace`, `--bot`).
+
 ## Open
 
 - The hash is one rule everywhere since `mod-hash` ("The mod hash, one rule" above, with its known gaps). The copy

@@ -46,8 +46,8 @@ import { useT } from "../../i18n/react";
 
 const REPO_URL = "https://github.com/scm-js/scm-js";
 const DOCS_URL = "https://docs.scmjs.dev";
-// The command line's install page: the download without Node, and the package managers.
-const CLI_DOCS_URL = "https://docs.scmjs.dev/cli/getting-started/#without-node";
+// The command line's install page: the package managers, npm and the download.
+const CLI_DOCS_URL = "https://docs.scmjs.dev/cli/getting-started/#installing";
 
 /* ── Menu model ─────────────────────────────────────────── */
 

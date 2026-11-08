@@ -20,7 +20,7 @@ placeholders (`@VERSION@`, `@DATE@`, `@SHA256_WINDOWS_X64@` and so on), not a re
 | `winget/*.yaml` | winget | `github.com/microsoft/winget-pkgs`, as `manifests/s/scm-js/scmjs/<version>/` |
 | `homebrew/scmjs.rb` | Homebrew | a tap, `github.com/scm-js/homebrew-tap`, as `Formula/scmjs.rb` |
 
-The docs (`docs/cli.md`, "Without Node") give the install commands as these names make them:
+The docs (`docs/cli.md`, "Installing") give the install commands as these names make them:
 `scoop bucket add scm-js https://github.com/scm-js/scoop-bucket` then `scoop install scmjs`,
 `winget install scm-js.scmjs`, and `brew install scm-js/tap/scmjs`. `scmjs about` and
 `scmjs doctor` print `scoop update scmjs`, `winget upgrade scm-js.scmjs` and

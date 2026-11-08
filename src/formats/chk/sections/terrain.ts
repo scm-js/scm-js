@@ -46,5 +46,6 @@ export function decodeMask(data: Uint8Array, width: number, height: number): Uin
 }
 
 /** Split an MTXM tile id into its CV5 group and the megatile slot within it. */
-export function tileGroup(id: number): number { return (id >> 4) & 0x7ff; }
+/** The CV5 group of an MTXM value: eleven bits, or twelve on a tileset of more than 2,048 groups (`groupCount`). */
+export function tileGroup(id: number, groupCount = 0): number { return (id >> 4) & (groupCount > 0x800 ? 0xfff : 0x7ff); }
 export function tileSubIndex(id: number): number { return id & 0xf; }

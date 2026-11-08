@@ -24,7 +24,24 @@ import { msg } from "../i18n";
 import { copyPlaySet } from "./play";
 import { DEFAULT_PROFILE, type GameDataProfile } from "./profiles";
 import { extractRemastered, pickedFilesSource, type PickedFile } from "./remastered";
-import { writeStoredCopy, type StoredStamp } from "./store";
+import { readStored, writeStoredCopy, type StoredStamp } from "./store";
+import { extractOverCopy, filesHash, hdOffImages, type CopyReader } from "./overCopy";
+
+/** The copy a data set is laid over, read a file at a time: from this browser's storage, or from the build's own files. */
+function copyReader(base: NonNullable<ExtractRequest["base"]>): CopyReader {
+  if ("profile" in base) {
+    return async (path) => {
+      const blob = await readStored(path, base.profile);
+      return blob ? new Uint8Array(await blob.arrayBuffer()) : null;
+    };
+  }
+  return async (path) => {
+    const res = await fetch(base.url + path).catch(() => null);
+    // A dev server answers a missing file with its page.
+    if (!res?.ok || res.headers.get("content-type")?.startsWith("text/html")) return null;
+    return new Uint8Array(await res.arrayBuffer());
+  };
+}
 
 export interface ExtractRequest {
   kind: "extract";
@@ -39,6 +56,12 @@ export interface ExtractRequest {
   remastered?: FileSystemDirectoryHandle | PickedFile[];
   /** Keep what the play page's real-time lighting reads of Remastered's sprites (about 200 MB more). */
   lighting?: boolean;
+  /**
+   * Lay `archives` and `overlay` over a copy already kept here instead of over the game's
+   * archives (`overCopy.ts`): a stored data set's copy by its id, or the files this build
+   * serves under a URL (a clone that extracted its own). The game's archives are then not needed.
+   */
+  base?: { profile: string } | { url: string };
 }
 
 export type ExtractResponse =
@@ -61,6 +84,11 @@ self.onmessage = async (e: MessageEvent<ExtractRequest>) => {
     let staredit = false;
     /** A file of the source by the game's name for it, for the play set. */
     let member: (name: string) => Promise<Uint8Array | null>;
+    /** The digest of the data set's own files, for a map to name them by. */
+    let hash: string | undefined;
+    /** Images to draw from their GRP with the 2x sprites on: the data set changed them against the copy underneath. */
+    let hdOff: number[] = [];
+    let overCopy = false;
     if (req.remastered) {
       reportStep(progressOver(0, 1), 0, msg("Opening the installation"));
       const { Storage, directoryHandleSource } = await import("kascade");
@@ -75,18 +103,29 @@ self.onmessage = async (e: MessageEvent<ExtractRequest>) => {
       member = async (name) => (storage.fileInfo(memberKey(name))?.installed ? storage.readFile(memberKey(name)) : null);
     } else {
       reportStep(progressOver(0, 1), 0, msg("Opening the archives"));
-      staredit = isStarEditDownload(req.archives.map((a) => ({ name: a.name, size: a.bytes.byteLength })));
+      staredit = !req.base && isStarEditDownload(req.archives.map((a) => ({ name: a.name, size: a.bytes.byteLength })));
       const opened = openArchives(req.archives.map((a) => ({ name: a.name, bytes: new Uint8Array(a.bytes) })));
       problems = opened.problems;
-      if (opened.archives.length === 0) throw problems[0] ? new Error(problems[0]) : new ExtractError(msg("No archive could be opened."));
+      if (opened.archives.length === 0 && !req.base) throw problems[0] ? new Error(problems[0]) : new ExtractError(msg("No archive could be opened."));
 
       const overlay = new Map<string, Uint8Array>();
       for (const { path, bytes } of req.overlay ?? []) overlay.set(memberKey(path), new Uint8Array(bytes));
+      hash = await filesHash([...(req.overlay ?? []), ...req.archives.map((a) => ({ path: a.name, bytes: a.bytes }))]);
 
       // Extraction is 0–80% of the bar, the write the rest.
       const reader = readerFor(opened.archives, overlay.size ? overlay : undefined);
-      result = extractGameData(reader, progressOver(0, 0.8));
-      member = async (name) => reader(name);
+      if (req.base) {
+        const copy = copyReader(req.base);
+        const over = await extractOverCopy(reader, copy, progressOver(0, 0.8));
+        result = over.result;
+        hdOff = await hdOffImages(over, copy);
+        // The play set is the copy underneath's: a data set over a copy keeps only what the editor reads.
+        member = async () => null;
+        overCopy = true;
+      } else {
+        result = extractGameData(reader, progressOver(0, 0.8));
+        member = async (name) => reader(name);
+      }
     }
     const stamp: StoredStamp = {
       from,
@@ -96,6 +135,9 @@ self.onmessage = async (e: MessageEvent<ExtractRequest>) => {
       summary: describeExtraction(result),
       ...(req.profile ? { profile: req.profile } : {}),
       ...(staredit ? { staredit: true } : {}),
+      ...(req.base ? { base: "profile" in req.base ? req.base.profile : DEFAULT_PROFILE.id } : {}),
+      ...(hash ? { hash } : {}),
+      ...(hdOff.length > 0 ? { hdOff } : {}),
     };
 
     try {
@@ -108,6 +150,7 @@ self.onmessage = async (e: MessageEvent<ExtractRequest>) => {
         req.profile?.id ?? DEFAULT_PROFILE.id,
         async (write) => {
           playing = true;
+          if (overCopy) return {};
           let play = null;
           try {
             play = await copyPlaySet(

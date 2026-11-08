@@ -3,10 +3,10 @@ import { useStore } from "jotai";
 import { Sparkles, SquareDashed, User } from "lucide-react";
 import { scenarioAtom } from "../../atoms/documentAtoms";
 import { PLAYER_COLORS, playerColorIndex } from "../../data/players";
-import { UNIT_GROUPS, unitLabel } from "../../data/units";
-import { SPRITE_COUNT, spriteCatalogue } from "../../data/sprites";
+import { shownUnitGroups, unitLabel } from "../../data/units";
+import { gameDataSourceAtom } from "../../atoms/gameDataAtoms";
+import { spriteCatalogue } from "../../data/sprites";
 import { ANYWHERE_INDEX, ELEVATION_MASK, ELEVATIONS, isLocationUsed, SpriteFlag, UnitRelation, UnitState, UnitUsed, UnitValid, type SpriteRecord, type UnitRecord } from "../../formats/chk/sections/objects";
-import { NO_UNIT } from "../../formats/dat/dat";
 import { spriteKind } from "../../editor/sprites";
 import { isAnywhereIntact, locationName } from "../../editor/locations";
 import { useLocationTools } from "../../hooks/useLocationTools";
@@ -45,6 +45,7 @@ export function UnitPropertiesDialog({ entry }: DialogProps) {
   const store = useStore();
   const tools = useUnitTools();
   const scenario = store.get(scenarioAtom);
+  const unitGroups = shownUnitGroups(store.get(gameDataSourceAtom)?.profile.name ?? "");
   const indices = useMemo(() => {
     const raw = entry.payload?.indices;
     return Array.isArray(raw) ? raw.filter((i): i is number => typeof i === "number" && !!scenario?.units[i]) : [];
@@ -119,11 +120,12 @@ export function UnitPropertiesDialog({ entry }: DialogProps) {
               <SpritePreview kind="unit" id={form.unitId} owner={form.owner} colors={scenario?.playerColors} rgb={scenario?.playerRgb} size={56} />
             </div>
             <select className="select grow" value={form.unitId} onChange={(e) => set("unitId", Number(e.target.value))}>
-              {UNIT_GROUPS.map((g) => (
-                <optgroup key={translate(g.label)} label={translate(g.label)}>
+              {unitGroups.map((g) => (
+                <optgroup key={g.key} label={g.label}>
                   {g.units.map((id) => <option key={id} value={id}>{unitLabel(id)}</option>)}
                 </optgroup>
               ))}
+              {!unitGroups.some((g) => g.units.includes(form.unitId)) && <option value={form.unitId}>{t("Unit #{spriteId} (raw)", { spriteId: form.unitId })}</option>}
             </select>
           </div>
         </Field>
@@ -305,6 +307,7 @@ export function SpritePropertiesDialog({ entry }: DialogProps) {
   const store = useStore();
   const tools = useSpriteTools();
   const scenario = store.get(scenarioAtom);
+  const unitGroups = shownUnitGroups(store.get(gameDataSourceAtom)?.profile.name ?? "");
   const indices = useMemo(() => {
     const raw = entry.payload?.indices;
     return Array.isArray(raw) ? raw.filter((i): i is number => typeof i === "number" && !!scenario?.sprites[i]) : [];
@@ -366,12 +369,12 @@ export function SpritePropertiesDialog({ entry }: DialogProps) {
             <SpritePreview kind={kind} id={form.spriteId} owner={form.owner} colors={scenario?.playerColors} rgb={scenario?.playerRgb} size={32} flipped={has(SpriteFlag.Flipped)} />
             {kind === "unit" ? (
               <select className="select grow" value={form.spriteId} onChange={(e) => set("spriteId", Number(e.target.value))}>
-                {UNIT_GROUPS.map((g) => (
-                  <optgroup key={translate(g.label)} label={translate(g.label)}>
+                {unitGroups.map((g) => (
+                  <optgroup key={g.key} label={g.label}>
                     {g.units.map((id) => <option key={id} value={id}>{unitLabel(id)}</option>)}
                   </optgroup>
                 ))}
-                {form.spriteId >= NO_UNIT && <option value={form.spriteId}>{t("Unit #{spriteId} (raw)", { spriteId: form.spriteId })}</option>}
+                {!unitGroups.some((g) => g.units.includes(form.spriteId)) && <option value={form.spriteId}>{t("Unit #{spriteId} (raw)", { spriteId: form.spriteId })}</option>}
               </select>
             ) : catalogue ? (
               <select className="select grow" value={form.spriteId} onChange={(e) => set("spriteId", Number(e.target.value))}>
@@ -380,7 +383,7 @@ export function SpritePropertiesDialog({ entry }: DialogProps) {
                     {g.ids.map((id) => <option key={id} value={id}>{id} · {catalogue.entries[id].label}</option>)}
                   </optgroup>
                 ))}
-                {form.spriteId >= SPRITE_COUNT && <option value={form.spriteId}>{t("Sprite #{spriteId} (raw)", { spriteId: form.spriteId })}</option>}
+                {form.spriteId >= catalogue.entries.length && <option value={form.spriteId}>{t("Sprite #{spriteId} (raw)", { spriteId: form.spriteId })}</option>}
               </select>
             ) : (
               <NumberInput value={form.spriteId} onChange={(v) => set("spriteId", v)} min={0} max={0xffff} width={130} />

@@ -48,11 +48,11 @@ import { flatTerrain, variationsOf } from "../formats/tileset/terrain";
 import { terrainTypes, tileInfo } from "../formats/tileset/palette";
 import { getUnitAssets, imageGrpPath, peekUnitAssets, requestGrp } from "../formats/units/load";
 import { gameDataRevisionAtom, gameDataSourceAtom } from "../atoms/gameDataAtoms";
-import { DEFAULT_PROFILE } from "../gamedata/profiles";
+import { DEFAULT_PROFILE, isProfileId } from "../gamedata/profiles";
 import { currentAssetSource, fetchAsset, GameDataUnavailableError, type AssetSource } from "../gamedata/source";
-import { installDataSetInto, listDataSets, removeDataSet, switchDataSet } from "../services/gameData";
+import { attachReaderDataSet, installDataSetInto, listDataSets, reloadDataSet, removeDataSet, switchDataSet } from "../services/gameData";
 import { displayColorHex, PLAYER_RACES, PLAYER_TYPES, playerRaceLabel, playerTypeLabel } from "../data/players";
-import { TECH_NAMES, techName, UNIT_GROUPS, UNIT_NAMES, unitName, UPGRADE_NAMES, upgradeName } from "../data/units";
+import { dataSetUnitGroups, TECH_NAMES, techName, UNIT_GROUPS, UNIT_NAMES, unitName, unitTypeCount, UPGRADE_NAMES, upgradeName } from "../data/units";
 import { WEAPON_NAMES, weaponName } from "../data/weapons";
 import {
   ACTION_DEFS, actionDef, aiScriptName, BRIEFING_ACTION_DEFS, CHOICES, choiceLabel, choiceValue, CONDITION_DEFS, conditionDef, DEATHS_TABLE_ADDRESS, PLAYER_GROUP_CHOICES, UNIT_CLASS_CHOICES,
@@ -1649,13 +1649,22 @@ export function dataApi(): DataApi {
 
 /** `api.gameData`: the source and the data sets, over `services/gameData.ts`. */
 export function gameDataApi(store: Store): GameDataApi {
-  const publish = (s: AssetSource): GameDataSource => ({ kind: s.kind, label: s.label, profile: { ...s.profile }, desktop: s.desktop === true });
+  const publish = (s: AssetSource): GameDataSource => {
+    const hash = s.stored?.hash ?? s.reader?.hash;
+    return { kind: s.kind, label: s.label, profile: { ...s.profile }, desktop: s.desktop === true, ...(hash ? { hash } : {}), ...(s.stored?.base ? { base: s.stored.base } : {}) };
+  };
   const source = () => store.get(gameDataSourceAtom) ?? currentAssetSource();
   return {
     source: () => { const s = source(); return s ? publish(s) : null; },
     profile: () => ({ ...(source()?.profile ?? DEFAULT_PROFILE) }),
     profiles: listDataSets,
-    install: async (profile, files, progress) => publish(await installDataSetInto(store, { id: profile.id, name: profile.name }, files, progress)),
+    install: async (profile, files, progress) => publish(await installDataSetInto(store, { id: profile.id, name: profile.name, ...(profile.url ? { url: profile.url } : {}) }, files, progress)),
+    attach: async (profile, read, options) => {
+      if (!isProfileId(profile.id)) throw new Error(`"${profile.id}" is not a data set id: lower-case letters, digits and hyphens, up to 40 characters.`);
+      if (typeof read !== "function") throw new Error("gameData.attach needs a function that reads a file");
+      return publish(attachReaderDataSet(store, profile, read, options?.hash));
+    },
+    reload: () => reloadDataSet(store),
     select: async (id) => publish(await switchDataSet(store, id)),
     remove: (id) => removeDataSet(store, id),
     read: readGameFile,
@@ -2174,7 +2183,11 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
     names: {
       unit: (id) => UNIT_CLASS_CHOICES.find((c) => c.value === id)?.label ?? (id === UNIT_NAMES.length ? "None" : unitName(id)),
       // 228 is the game's "None", between the types and the classes: listed so that an entry's place is its value.
-      units: () => [...UNIT_NAMES.map((_, id) => ({ value: id, label: unitName(id) })), { value: UNIT_NAMES.length, label: "None" }, ...UNIT_CLASS_CHOICES.map((c) => ({ value: c.value, label: c.label }))],
+      // A data set with more types lists the rest after the classes, from 233, where their place is their value again.
+      units: () => [
+        ...UNIT_NAMES.map((_, id) => ({ value: id, label: unitName(id) })), { value: UNIT_NAMES.length, label: "None" }, ...UNIT_CLASS_CHOICES.map((c) => ({ value: c.value, label: c.label })),
+        ...Array.from({ length: Math.max(0, unitTypeCount() - 233) }, (_, i) => ({ value: 233 + i, label: unitName(233 + i) })),
+      ],
       upgrade: upgradeName,
       upgrades: () => UPGRADE_NAMES.map((_, id) => ({ value: id, label: upgradeName(id) })),
       tech: techName,
@@ -2418,7 +2431,11 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
       setDoodadPlacement: (patch) => store.set(doodadPlacementAtom, { ...store.get(doodadPlacementAtom), ...patch }),
       locationSnap: () => store.get(locationSnapAtom),
       setLocationSnap: (step) => store.set(locationSnapAtom, step),
-      unitGroups: () => UNIT_GROUPS.map((g) => ({ ...g, units: [...g.units] })),
+      // The types a data set has past the game's 228 follow, their groups named for the data set.
+      unitGroups: () => [
+        ...UNIT_GROUPS.map((g) => ({ ...g, units: [...g.units] })),
+        ...dataSetUnitGroups().map((g) => ({ ...g, label: `${(store.get(gameDataSourceAtom) ?? currentAssetSource())?.profile.name ?? ""} · ${g.label}`, units: [...g.units] })),
+      ],
       unitName,
       unitSize: (unitId) => {
         const g = unitGeometry(peekUnitAssets()?.units ?? null, unitId);

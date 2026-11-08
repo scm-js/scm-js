@@ -19,7 +19,7 @@ import { atlasSource, atlasTileSize } from "../formats/tileset/atlas";
 import { megatileForTile } from "../formats/tileset/decode";
 import { ensureTileset, peekTileset, type LoadedTileset } from "../formats/tileset/load";
 import { announceArrival, getUnitAssets, hdSprites, imageGrpPath, onGrpLoaded, peekUnitAssets, requestGrp, requestIconSheet, unitImageId, type UnitAssets } from "../formats/units/load";
-import { iconFrame, paintIcon } from "../formats/units/icons";
+import { iconFor, paintIcon } from "../formats/units/icons";
 import { getImageFrame, getUnitSprite, subunitOf, turretOffset } from "../formats/units/sprites";
 import { NO_UNIT } from "../formats/dat/dat";
 import { DEFAULT_IMAGE_OPTIONS, exportMapImage } from "../services/mapImage";
@@ -289,12 +289,13 @@ export function createGraphicsApi(store: Store, bag: Bag): GraphicsApi {
       const assets = peekUnitAssets();
       if (!sheet || typeof document === "undefined") return null;
       const look = options.look ?? "normal";
-      const frame = iconFrame(sheet.grp, kind, id, { upgrades: assets?.upgrades ?? null, techs: assets?.techs ?? null });
-      if (frame < 0) return null;
-      // By frame, not by kind and id: an upgrade and a technology often share a picture.
-      const key = `icon|${look}|${frame}`;
+      const found = iconFor(sheet, kind, id, { upgrades: assets?.upgrades ?? null, techs: assets?.techs ?? null });
+      if (!found) return null;
+      const { grp, frame } = found;
+      // By frame, not by kind and id: an upgrade and a technology often share a picture. A data set's own sheet of unit pictures is another sheet.
+      const key = `icon|${look}|${grp === sheet.grp ? "" : "u"}${frame}`;
       if (!composed.has(key)) {
-        const painted = paintIcon(sheet.grp, frame, sheet.colours, sheet.palette, look);
+        const painted = paintIcon(grp, frame, sheet.colours, sheet.palette, look);
         const made = canvasOf(painted.width, painted.height);
         if (!made) return null;
         made.ctx.putImageData(new ImageData(painted.pixels, painted.width, painted.height), 0, 0);

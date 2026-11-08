@@ -34,6 +34,20 @@ export function iconFrame(grp: Grp, kind: IconKind, id: number, tables: { upgrad
   return frame;
 }
 
+/**
+ * The sheet and frame that picture `id`, or null for none. A data set with its own sheet of
+ * unit pictures (`units`, GPTP's `uniticons.grp`: one frame a type, by id, for every type)
+ * pictures unit types from it; upgrades and technologies stay on the game's sheet.
+ */
+export function iconFor(sheet: { grp: Grp; units: Grp | null }, kind: IconKind, id: number, tables: { upgrades: UpgradesDat | null; techs: TechdataDat | null }): { grp: Grp; frame: number } | null {
+  if (kind === "unit" && sheet.units) {
+    const f = sheet.units.frames[id];
+    return id >= 0 && f && !isBlank(sheet.units, id) ? { grp: sheet.units, frame: id } : null;
+  }
+  const frame = iconFrame(sheet.grp, kind, id, tables);
+  return frame < 0 ? null : { grp: sheet.grp, frame };
+}
+
 /** Whether a frame is the sheet's BLANK placeholder. */
 export function isBlank(grp: Grp, frame: number): boolean {
   const f = grp.frames[frame];

@@ -23,7 +23,7 @@ import { clearFrameCache } from "../formats/units/sprites";
 import { installDataSet, InstallError, installFromRemastered, type GameDataFiles, type InstallProgress, type RemasteredFolder, type RemasteredOptions } from "../gamedata/install";
 import { DEFAULT_PROFILE, isDefaultProfile, isProfileId, type GameDataProfile } from "../gamedata/profiles";
 import { REMASTERED_PROFILE } from "../gamedata/profiles";
-import { adoptStoredCopy, resetAssetSource, resolveAssetSource, type AssetSource } from "../gamedata/source";
+import { adoptStoredCopy, currentAssetSource, resetAssetSource, resolveAssetSource, setAssetSource, type AssetSource, type DataSetReader } from "../gamedata/source";
 import { clearStoredCopy, listStoredCopies, profileOf } from "../gamedata/store";
 import { relayBlankTerrain } from "../hooks/useMapFileActions";
 import { clearComposedImages } from "../plugins/graphics";
@@ -119,6 +119,37 @@ export async function installRemasteredInto(store: Store, folder: RemasteredFold
   turnOnRemasteredGraphics(store);
   adoptSource(store, next, !sameFiles(before, next) || before?.kind === "stored");
   return next;
+}
+
+/**
+ * Draw from a data set that is a function in memory (`source.ts#DataSetReader`): every file
+ * is asked of `read` first and the rest come from the source in use now (or, when that is
+ * itself such a function, from what it lays over). Nothing is stored and the choice is not
+ * remembered: a reload, or a switch to another data set, leaves it.
+ */
+export function attachReaderDataSet(store: Store, profile: GameDataProfile, read: DataSetReader["read"], hash?: string): AssetSource {
+  const before = store.get(gameDataSourceAtom) ?? currentAssetSource();
+  const base = before?.kind === "reader" ? before.reader?.base ?? null : before;
+  const next: AssetSource = {
+    kind: "reader",
+    profile: { id: profile.id, name: profile.name.trim() || profile.id, ...(profile.url ? { url: profile.url } : {}) },
+    label: t("Read from {name} in memory, over {base}", { name: profile.name.trim() || profile.id, base: base?.profile.name ?? DEFAULT_PROFILE.name }),
+    tried: [],
+    reader: { read, base, ...(hash ? { hash } : {}) },
+  };
+  setAssetSource(next);
+  adoptSource(store, next, true);
+  return next;
+}
+
+/**
+ * Drop everything decoded and draw again from the same source — after the files behind a
+ * data set in memory changed. The tables, tilesets and pictures are read afresh.
+ */
+export function reloadDataSet(store: Store): void {
+  const current = store.get(gameDataSourceAtom) ?? currentAssetSource();
+  if (!current) return;
+  adoptSource(store, current, true);
 }
 
 /**

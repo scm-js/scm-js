@@ -4,6 +4,7 @@ import { AlertTriangle, Download, FolderOpen, HardDrive, Layers, Search, Trash2 
 import { gameDataRevisionAtom, gameDataSourceAtom } from "../../atoms/gameDataAtoms";
 import { closeDialogAtom, pushToastAtom } from "../../atoms/uiAtoms";
 import { desktopBridge, type DesktopLocateResult } from "../../gamedata/desktop";
+import { isGameArchive } from "../../gamedata/archives";
 import { hostTerms } from "../../editor/platform";
 import {
   ARCHIVE_NAMES, BLIZZARD_ZIP_URL, installFromFiles, installFromRemastered, installFromZipUrl, isRemasteredFolder, pickArchives, splitPickedFiles,
@@ -70,6 +71,7 @@ function explain(source: AssetSource | null): string {
   switch (source.kind) {
     case "bundled": return source.desktop ? t("Extracted into the app's data folder from your StarCraft installation.") : t("The graphics ship with this build.");
     case "stored": return t("Terrain and units draw from this copy, and it is here next time.");
+    case "reader": return t("A plugin hands these files over as they are asked for; nothing is kept for next time.");
     case "none": return t("The editor is running without Blizzard’s assets — terrain is flat colours and units are markers.");
   }
 }
@@ -244,7 +246,11 @@ export function GameDataBody({ onReady }: { onReady?: (next: AssetSource) => voi
     const id = profileIdFrom(name);
     if (!id) throw new Error(t("Give the data set a name first."));
     if (sets.some((p) => p.id === id)) throw new Error(t("There is already a data set called {name}.", { name }));
-    const next = await installDataSetInto(store, { id, name }, splitPickedFiles(files), progress);
+    const input = splitPickedFiles(files);
+    // A mod's folder without the game's archives is laid over the copy in use (or the one that copy was laid over).
+    const games = input.archives.filter((a) => isGameArchive(a.name)).length;
+    const base = games >= ARCHIVE_NAMES.length ? undefined : source?.stored?.base ?? (source?.kind === "stored" || source?.kind === "bundled" ? source.profile.id : undefined);
+    const next = await installDataSetInto(store, { id, name }, { ...input, ...(base ? { base } : {}) }, progress);
     setAdding(false);
     setNewName("");
     setMessage({ text: t("Installed {name}: {summary}.", { name, summary: next.stored ? summaryText(next.stored.summary) : next.label }) + kept(next.stored?.where ?? "opfs") });
@@ -328,7 +334,7 @@ export function GameDataBody({ onReady }: { onReady?: (next: AssetSource) => voi
                 </div>
                 <input ref={setFolderInput} type="file" hidden {...({ webkitdirectory: "" } as object)} onChange={(e) => { const f = Array.from(e.target.files ?? []); e.target.value = ""; if (f.length) void addFromFolder(f); }} />
                 <p className="hint">
-                  {t("A folder holding the mod's files —")}{" "}<span className="mono">arr</span>, <span className="mono">{t("unit")}</span>, <span className="mono">{t("tileset")}</span> {" "}{t("and the rest as loose files or as")}{" "}<span className="mono">{t(".mpq")}</span> {" "}{t("archives — together with")}{" "}<span className="mono">{ARCHIVE_NAMES[0]}</span> {t("and")} <span className="mono">{ARCHIVE_NAMES[1]}</span>{t(", which the mod's files are laid over. Anything else in the folder is left alone.")}
+                  {t("A folder holding the mod's files —")}{" "}<span className="mono">arr</span>, <span className="mono">{t("unit")}</span>, <span className="mono">{t("tileset")}</span> {" "}{t("and the rest as loose files or as")}{" "}<span className="mono">{t(".mpq")}</span> {" "}{t("archives — together with")}{" "}<span className="mono">{ARCHIVE_NAMES[0]}</span> {t("and")} <span className="mono">{ARCHIVE_NAMES[1]}</span>{t(", which the mod's files are laid over; without them the files are laid over the copy in use. Anything else in the folder is left alone.")}
                 </p>
               </div>
             ) : (

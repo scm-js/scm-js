@@ -21,10 +21,13 @@ files that differ from your game in your browser, and plays with them. `scmjs mo
 hands a mod to it from a terminal. The play page's support for mods is new and arrives
 with its next release; until then the page does not take a mod.
 
-**The editor.** Opening a mod in the editor, so its units, names and pictures are in the
-palette and Test Map plays with it, is the next step and is not there yet. The editor's
-[data sets](game-data.md) already lay a mod's archives over the game's files for the
-pictures; tables wider than the game's are what is missing.
+**The editor.** The editor makes maps for a mod through its [data
+sets](game-data.md#data-sets-made-from-a-mod): Help ▸ Game Data… ▸ Add a data set… takes a
+folder of the mod's archives and loose files and lays them over the game's. Its tables are
+read at any width, so its new unit types are in the palette with their names and pictures,
+and a map saved with it remembers the data set, which Test Map passes on. The folder holds
+`.mpq` archives and the game's paths; a mod that ships as a `.zip` or a self-executing
+`.exe` is unpacked and packed again first (`scmjs mod unpack`, then `scmjs mod pack`).
 
 ## A mod as a folder
 
@@ -268,7 +271,7 @@ and pack it again, as you would. See [AI tools](cli.md#ai-tools).
 - Plugins (`.qdp`, `.bwl`) are kept and listed, never run, and a FireGraft file's edits to
   the game's program are not applied. Playing a mod that needs them waits for the play
   page to run a plugin's code.
-- The editor does not open a mod yet.
+- The editor does not open a mod's `.zip` or `.exe` itself; its data sets take a folder.
 - `mod pack` does not make a self-executing exe; MPQDraft does.
 - PNG sheets need the palette they name when a picture has lost its palette (saved in full
   colour). An untouched sheet carries its own.

@@ -12,7 +12,7 @@ import {
 } from "../editor/sprites";
 import { unitBox, unitGeometry } from "../editor/units";
 import { SpriteFlag, type SpriteRecord } from "../formats/chk/sections/objects";
-import { NO_UNIT } from "../formats/dat/dat";
+import { datCount } from "../formats/dat/dat";
 import { imageGrpPath, requestGrp, unitImageId, type UnitAssets } from "../formats/units/load";
 import { editorFrame } from "../formats/units/sprites";
 import type { Grp } from "../formats/dat/grp";
@@ -42,7 +42,7 @@ export interface SpriteGhost {
 export function spriteImageId(assets: UnitAssets | null, kind: SpriteKind, id: number): number {
   if (!assets) return -1;
   if (kind === "pure") return assets.sprites.image[id] ?? -1;
-  return id >= 0 && id < NO_UNIT ? unitImageId(assets, id) : -1;
+  return id >= 0 && id < datCount(assets.units.flingy) ? unitImageId(assets, id) : -1;
 }
 
 /** The GRP a record draws with, once loaded (null while loading or when there is none). */

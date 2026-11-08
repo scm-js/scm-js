@@ -1,6 +1,6 @@
 import { markDirty, type Scenario } from "../formats/chk/scenario";
 import { UnitUsed, UnitValid, type UnitRecord } from "../formats/chk/sections/objects";
-import { NO_UNIT, UnitFlag, type UnitsDat } from "../formats/dat/dat";
+import { datCount, UnitFlag, type UnitsDat } from "../formats/dat/dat";
 import { START_LOCATION } from "../data/units";
 
 /**
@@ -49,7 +49,7 @@ const FALLBACK: UnitGeometry = { building: false, flyer: false, placeW: 32, plac
 
 /** Sizes from units.dat, or a one-tile box when the tables are not loaded. */
 export function unitGeometry(units: UnitsDat | null, unitId: number): UnitGeometry {
-  if (!units || unitId < 0 || unitId >= NO_UNIT) return FALLBACK;
+  if (!units || unitId < 0 || unitId >= datCount(units.flingy)) return FALLBACK;
   const flags = units.flags[unitId];
   return {
     building: (flags & UnitFlag.Building) !== 0,

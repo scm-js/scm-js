@@ -56,7 +56,7 @@ export function terrainFits(scn: Scenario, tileset: Tileset | null, g: UnitGeome
     for (let ty = r.y0; ty <= r.y1; ty++) {
       for (let tx = r.x0; tx <= r.x1; tx++) {
         const id = scn.tiles[ty * scn.width + tx];
-        const group = tileset.groups[tileGroupOf(id)];
+        const group = tileset.groups[tileGroupOf(id, tileset.groups.length)];
         if (!group || !groupBuildable(group) || megatileForTile(tileset, id) <= 0) return false;
       }
     }

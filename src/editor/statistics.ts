@@ -102,7 +102,8 @@ export function mapStatistics(scn: Scenario, tileset: Tileset | null, terrainNam
       nameOf.set(i, name);
     });
     for (const id of scn.tiles) {
-      const name = nameOf.get(tileGroup(id)) ?? t("Group {n} (not in the tileset)", { n: tileGroup(id) });
+      const group = tileGroup(id, tileset.groups.length);
+      const name = nameOf.get(group) ?? t("Group {n} (not in the tileset)", { n: group });
       counts.set(name, (counts.get(name) ?? 0) + 1);
     }
     terrain = [...counts].sort((a, b) => b[1] - a[1]).map(([name, tiles]) => ({ name, tiles }));

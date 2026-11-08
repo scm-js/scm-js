@@ -20,6 +20,9 @@ import { desktopBridge, type DesktopGameInfo } from "../gamedata/desktop";
 import { ensurePermission, loadHandle, removeHandle, storeHandle, type StoredHandle } from "./handleStore";
 import { saveBytes } from "./mapIo";
 import { t } from "../i18n";
+import { dataSetOf } from "./mapDataSet";
+import { gameDataSourceAtom } from "../atoms/gameDataAtoms";
+import { currentAssetSource } from "../gamedata/source";
 
 type Store = ReturnType<typeof createStore>;
 
@@ -50,6 +53,12 @@ export function testFileName(store: Store): string | null {
   if (/\.chk$/i.test(name)) name = name.replace(/\.chk$/i, ".scx");
   if (!/\.(scx|scm)$/i.test(name)) name += ".scx";
   return name;
+}
+
+/** The data set the map is tested with, as a test target is handed it (`TestMapFile.dataSet`); null for the game's own data. */
+export function testDataSet(store: Store): { id: string; name: string; hash: string } | null {
+  const set = dataSetOf(store.get(gameDataSourceAtom) ?? currentAssetSource());
+  return set ? { id: set.id, name: set.name, hash: set.hash } : null;
 }
 
 /** The map as the game should get it: the remembered save options, in an archive. */

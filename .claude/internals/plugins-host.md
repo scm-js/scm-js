@@ -553,3 +553,15 @@ a folder on disk (`sourceFor` makes the `file:` source). Commands run through th
 `runCommand`, so a throw reaches the terminal instead of the log. `api.document.save()` is not made to work here:
 the CLI writes the document with `writeBack`. Layering: `tests/core.test.ts` lets `cli/src/run.ts` import this one
 module beyond the library's entry (`HOST_EXCEPTION`); the host stays the editor's.
+
+### Data sets for mods (M4, 2026-11-08)
+
+Additive, version 1 unchanged, nothing named after a mod: `GameDataProfile.url?` (where the set's makers publish it;
+a saved map records it), `GameDataFiles.base?` (lay the files over that data set's copy instead of the game's
+archives), `GameDataSource.kind` gains `"reader"` and the source `hash?` / `base?`, `gameData.attach(profile, read,
+{ hash? })` (a data set that is a function in memory over the one in use: the Mod Editor's edit-and-see loop) and
+`gameData.reload()` (drop everything decoded and draw again). `TestMapFile.dataSet?` `{ id, name, hash }` reaches
+test targets. `api.data`'s tables are as wide as the data set (`UnitsDat.flingy` / weapons are `Uint16Array` now),
+`api.names.units()` lists ids ≥ 233 after the classes, `api.names.unitGroups()` appends the data set's groups
+(`"<set> · Terran Units"`), and `api.graphics.icon("unit", id)` pictures types past 227 from `uniticons.grp` where the
+set has one. See `gamedata.md` "Data sets widened".

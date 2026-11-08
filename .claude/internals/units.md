@@ -176,8 +176,9 @@ Links and gas the game reads (2026-10-17 audit, OB1/OB3; runs O3/O3b/O7 in the l
 ## Codecs for mods (M2)
 
 Added 2026-11-08 for the mods plan (`scm-sim` branch mods-plan, `docs/mods-plan.md`, slice M2): every data file a mod
-changes, read **and written**, beside the editor's old readers (which are unchanged — `dat.ts`, `tbl.ts`, `grp.ts`,
-`pcx.ts`, `lo.ts`, `iscript.ts` still decode only what the editor draws; M4 moves the editor over). All are pure, no
+changes, read **and written**, beside the editor's old readers (`dat.ts`, `tbl.ts`, `grp.ts`, `pcx.ts`, `lo.ts`, `iscript.ts` decode only what the
+editor draws; since M4 `dat.ts` reads through `decodeDat` and `iscript.ts` through `readIscriptHeaders` — see
+`gamedata.md` "Data sets widened"). All are pure, no
 game data, exported from `@scm-js/core` (index.ts "Mods" block), and walk clean in `tests/core.test.ts`.
 
 - **One schema** (`schema.ts`, `DAT_SCHEMAS`): the eleven tables field by field in file order, PyMS's names (so PyDAT

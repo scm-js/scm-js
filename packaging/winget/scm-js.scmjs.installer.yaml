@@ -11,7 +11,7 @@ Commands:
 ReleaseDate: "@DATE@"
 Installers:
   - Architecture: x64
-    InstallerUrl: https://github.com/scm-js/scm-js/releases/download/v@VERSION@/scmjs-windows-x64.zip
+    InstallerUrl: https://github.com/scm-js/scm-js/releases/download/v@VERSION@/scmjs-cli-windows-x64.zip
     InstallerSha256: "@SHA256_WINDOWS_X64@"
 ManifestType: installer
 ManifestVersion: 1.9.0

@@ -2,7 +2,7 @@
 // Node would: with no `node` and no `npm` on PATH, in a temporary folder. Maps come from tests/maps; TypeScript for
 // `map build` from a project folder whose node_modules links this clone's. Prints a line per check, exits 1 on any
 // failure. CI runs it on each executable it builds (build.yml's `cli-binary`); by hand:
-//   node scripts/check-cli-binary.mjs cli/dist/bin/scmjs-linux-x64
+//   node scripts/check-cli-binary.mjs cli/dist/bin/scmjs-cli-linux-x64
 //   node scripts/check-cli-binary.mjs <exe> --replay some.rep --game     a replay's info, and the game (needs StarCraft)
 import { spawn, spawnSync } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";

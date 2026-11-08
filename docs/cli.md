@@ -34,10 +34,10 @@ and Linux. It runs every command the npm package runs, and nothing else needs in
 
 | System | Download |
 | --- | --- |
-| Windows (x64) | [scmjs-windows-x64.zip](https://github.com/scm-js/scm-js/releases/latest/download/scmjs-windows-x64.zip) |
-| macOS (Apple silicon) | [scmjs-macos-arm64.tar.gz](https://github.com/scm-js/scm-js/releases/latest/download/scmjs-macos-arm64.tar.gz) |
-| macOS (Intel) | [scmjs-macos-x64.tar.gz](https://github.com/scm-js/scm-js/releases/latest/download/scmjs-macos-x64.tar.gz) |
-| Linux (x64) | [scmjs-linux-x64.tar.gz](https://github.com/scm-js/scm-js/releases/latest/download/scmjs-linux-x64.tar.gz) |
+| Windows (x64) | [scmjs-cli-windows-x64.zip](https://github.com/scm-js/scm-js/releases/latest/download/scmjs-cli-windows-x64.zip) |
+| macOS (Apple silicon) | [scmjs-cli-macos-arm64.tar.gz](https://github.com/scm-js/scm-js/releases/latest/download/scmjs-cli-macos-arm64.tar.gz) |
+| macOS (Intel) | [scmjs-cli-macos-x64.tar.gz](https://github.com/scm-js/scm-js/releases/latest/download/scmjs-cli-macos-x64.tar.gz) |
+| Linux (x64) | [scmjs-cli-linux-x64.tar.gz](https://github.com/scm-js/scm-js/releases/latest/download/scmjs-cli-linux-x64.tar.gz) |
 
 Each holds `scmjs` (`scmjs.exe` on Windows), its licence and the licences of what is
 inside it, Node's among them. Put the program in a folder on your PATH so that `scmjs`
@@ -46,7 +46,7 @@ into it, and add the folder under Settings ▸ System ▸ About ▸ Advanced sys
 Environment Variables ▸ Path. On macOS and Linux:
 
 ```sh
-curl -L https://github.com/scm-js/scm-js/releases/latest/download/scmjs-linux-x64.tar.gz | tar -xz scmjs
+curl -L https://github.com/scm-js/scm-js/releases/latest/download/scmjs-cli-linux-x64.tar.gz | tar -xz scmjs
 sudo mv scmjs /usr/local/bin/
 ```
 

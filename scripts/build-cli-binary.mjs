@@ -26,10 +26,10 @@ const POSTJECT = "postject@1.0.0-alpha.6";
 const FUSE = "NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2";
 /** Node's target names → the asset's (the desktop installers say windows, macos, linux too). */
 const TARGETS = {
-  "linux-x64": { os: "linux", arch: "x64", asset: "scmjs-linux-x64", archive: "tar.gz" },
-  "darwin-arm64": { os: "macos", arch: "arm64", asset: "scmjs-macos-arm64", archive: "tar.gz" },
-  "darwin-x64": { os: "macos", arch: "x64", asset: "scmjs-macos-x64", archive: "tar.gz" },
-  "win-x64": { os: "windows", arch: "x64", asset: "scmjs-windows-x64", archive: "zip", exe: ".exe" },
+  "linux-x64": { os: "linux", arch: "x64", asset: "scmjs-cli-linux-x64", archive: "tar.gz" },
+  "darwin-arm64": { os: "macos", arch: "arm64", asset: "scmjs-cli-macos-arm64", archive: "tar.gz" },
+  "darwin-x64": { os: "macos", arch: "x64", asset: "scmjs-cli-macos-x64", archive: "tar.gz" },
+  "win-x64": { os: "windows", arch: "x64", asset: "scmjs-cli-windows-x64", archive: "zip", exe: ".exe" },
 };
 
 const args = process.argv.slice(2);

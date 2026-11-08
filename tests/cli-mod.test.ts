@@ -5,7 +5,8 @@
  * on the person's own copy of the game (`fixtures/data`) and on Cosmonarchy's release (`SCMJS_COSMONARCHY`) when they
  * are there, and skip otherwise.
  */
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
@@ -20,10 +21,10 @@ import { encodeGrpImage, frameFromPicture } from "../src/formats/dat/grpFile";
 import { encodeReqGraft } from "../src/formats/dat/graft";
 import { dataSetHash, exeArchive, gameName, modRoot, readZip } from "../src/formats/mod/sources";
 import { readManifest } from "../src/formats/mod/folder";
-import { archiveFiles, type GameFiles } from "../cli/src/gamefiles";
+import { archiveFiles, storageFiles, type GameFiles } from "../cli/src/gamefiles";
 import { modArgs, MOD_OVERLAY, type Engine } from "../cli/src/engine";
 import { modInfo, printModInfo } from "../cli/src/mod/info";
-import { openMod } from "../cli/src/mod/open";
+import { gameFilesOrNull, openMod } from "../cli/src/mod/open";
 import { gameSource } from "../cli/src/mod/source";
 import { unpackMod } from "../cli/src/mod/unpack";
 import { packFolder, packMod, readModFolder, writeMpq } from "../cli/src/mod/pack";
@@ -31,9 +32,10 @@ import { checkModSource } from "../cli/src/mod/check";
 import { diffModSources, printModDiff } from "../cli/src/mod/diff";
 import { newMod } from "../cli/src/mod/new";
 import { playOnPage, playSet } from "../cli/src/mod/play";
-import { modOverlay } from "../cli/src/mod/overlay";
+import { gameLayer, modOverlay } from "../cli/src/mod/overlay";
+import { runMapInGame } from "../cli/src/trace";
 import { visible } from "../cli/src/ui";
-import { cosmonarchyPath, haveCosmonarchy, haveGameArchives } from "./support/modFiles";
+import { cosmonarchyPath, gameFile, gameImagePaths, haveCosmonarchy, haveGameArchives } from "./support/modFiles";
 
 const root = mkdtempSync(join(tmpdir(), "scmjs-mod-"));
 let n = 0;
@@ -41,6 +43,7 @@ const tmp = (name = "t") => join(root, `${name}-${++n}`);
 afterAll(() => { /* the OS temp folder is the test's; nothing else is written */ });
 
 const latin = (s: string) => new TextEncoder().encode(s);
+const latinOf = (b: Uint8Array) => String.fromCharCode(...b);
 const same = (a: Uint8Array | null | undefined, b: Uint8Array | null | undefined) => !!a && !!b && a.length === b.length && a.every((x, i) => x === b[i]);
 
 /* ── A made game and made mods ─────────────────────────────────────────── */
@@ -396,15 +399,52 @@ describe("scmjs mod test and --mod", () => {
     expect(modArgs(engine(0), null)).toEqual([]);
     expect(() => modArgs(engine(0), "/x")).toThrow(`--mod needs runners of mod overlay version ${MOD_OVERLAY} or newer`);
     expect(modArgs(engine(MOD_OVERLAY), "/x")).toEqual(["--mod", "/x"]);
+    expect(modArgs(engine(MOD_OVERLAY), ["/game", "/x"])).toEqual(["--mod", "/game", "--mod", "/x"]);
   });
 
   it("writes the mod's files in the game's paths for the runner, and removes them after", async () => {
     const dir = tmp("overlay"); writeFolder(dir, madeMod());
     const overlay = modOverlay(dir, async () => null);
-    const folder = await overlay.folder();
+    const [folder, ...more] = await overlay.layers();
+    expect(more).toEqual([]);
     expect(same(readFileSync(join(folder, "arr", "weapons.dat")), madeMod().get("arr\\weapons.dat"))).toBe(true);
     overlay.remove();
     expect(existsSync(folder)).toBe(false);
+  });
+
+  it("on a Remastered copy, lays the game's pictures under a mod that has the startup data read again, and takes them out of the report", async () => {
+    const game = madeGame();
+    game.set("arr\\images.tbl", tbl(["terran\\marine.grp", "terran\\marine.lof", "zerg\\avenger.grp"]));
+    game.set("unit\\terran\\marine.lof", encodeLoFile({ frames: [[[0, 0]]] }));
+    game.set("unit\\zerg\\avenger.grp", grp(5));
+    game.set("game\\tselect.pcx", latin("tselect"));
+    const remastered: GameFiles = { ...asGame(game, "StarCraft: Remastered"), kind: "remastered" };
+    // An animation script alone: the reload reads every picture images.tbl names, which the runner's Remastered copy has not got.
+    const dir = tmp("overlay-rm"); writeFolder(dir, new Map([["scripts\\iscript.bin", ISCRIPT(3)]]));
+    const overlay = modOverlay(dir, async () => remastered);
+    const [under, mod] = await overlay.layers();
+    expect(mod).toBeDefined();
+    for (const [name, path] of [["unit\\terran\\marine.grp", "unit/terran/marine.grp"], ["unit\\terran\\marine.lof", "unit/terran/marine.lof"], ["unit\\zerg\\avenger.grp", "unit/zerg/avenger.grp"], ["game\\tselect.pcx", "game/tselect.pcx"], ["arr\\images.tbl", "arr/images.tbl"]]) {
+      expect(same(readFileSync(join(under, ...path.split("/"))), game.get(name)), name).toBe(true);
+    }
+    // The mod's own script is the mod's, not laid twice; no sounds (the reload reads the sound table, not the sounds).
+    expect(existsSync(join(under, "scripts", "iscript.bin"))).toBe(false);
+    expect(existsSync(join(under, "sound"))).toBe(false);
+    expect(same(readFileSync(join(mod, "scripts", "iscript.bin")), ISCRIPT(3))).toBe(true);
+    const said = overlay.report({ paths: [under, mod], files: 12, read: ["scripts\\iscript.bin", "unit\\zerg\\avenger.grp", "arr\\images.tbl"], reloaded: { served: 11, refused: [], heapBytes: 1, ms: 1 } });
+    expect(said).toMatchObject({ paths: [mod], files: 1, read: ["scripts\\iscript.bin"], reloaded: { refused: [] } });
+    expect(said.game).toBeGreaterThanOrEqual(5);
+    overlay.remove();
+    expect([existsSync(under), existsSync(mod)]).toEqual([false, false]);
+
+    // Tables alone are not read again: nothing under them. A 1.16.1 copy's archives hold the pictures: nothing under either.
+    const tables = tmp("overlay-tables"); writeFolder(tables, new Map([["arr\\weapons.dat", madeMod().get("arr\\weapons.dat")!]]));
+    const alone = modOverlay(tables, async () => remastered);
+    expect(await alone.layers()).toHaveLength(1);
+    alone.remove();
+    const classic = modOverlay(dir, async () => asGame(game));
+    expect(await classic.layers()).toHaveLength(1);
+    classic.remove();
   });
 });
 
@@ -438,6 +478,135 @@ describe.skipIf(!haveGameArchives)("the game's own data (fixtures/data)", () => 
     const source = await gameSource(files, await names());
     const r = await checkModSource(source, files);
     expect(r.findings).toEqual([]);
+  });
+});
+
+/**
+ * The person's StarCraft: Remastered installation, read-only (SCM_REMASTERED_DIR, else where Battle.net puts it under
+ * WSL): what the command's reader answers for the play set's names, and the game's layer it lays under a mod for the
+ * runner's reload — against the 1.16.1 archives (`fixtures/data`) for the pictures and overlays.
+ */
+const remasteredDir = process.env.SCM_REMASTERED_DIR ?? "/mnt/c/Program Files (x86)/StarCraft";
+const haveRemastered = existsSync(join(remasteredDir, ".build.info"));
+
+describe.skipIf(!haveRemastered || !haveGameArchives)("a StarCraft: Remastered installation (read-only)", () => {
+  it("answers the pictures, overlays, sounds and interface pictures by the game's names", { timeout: 60_000 }, async () => {
+    const files = await storageFiles(remasteredDir);
+    expect(files.kind).toBe("remastered");
+    // The SD pictures and overlays are 1.16.1's, byte for byte.
+    for (const name of ["unit\\zerg\\avenger.grp", "unit\\zerg\\drone.loo", "game\\tunit.pcx"]) {
+      const got = await files.read(name);
+      expect(got?.length, name).toBeGreaterThan(0);
+      expect(same(got, gameFile(name)), name).toBe(true);
+    }
+    // A sound is Remastered's own WAV (louder and longer than 1.16.1's), as the storage holds it under that name.
+    const { Storage } = await import("kascade");
+    const { nodeSource } = await import("kascade/node");
+    const storage = await Storage.open(nodeSource(remasteredDir));
+    const sound = "sound\\zerg\\avenger\\zavyes01.wav";
+    const wavBytes = await files.read(sound);
+    expect(same(wavBytes, await storage.readFile("sound/zerg/avenger/zavyes01.wav"))).toBe(true);
+    expect(latinOf(wavBytes!.subarray(0, 4))).toBe("RIFF");
+    console.log(`Remastered ${storage.build.version}: avenger.grp ${(await files.read("unit\\zerg\\avenger.grp"))!.length} B = 1.16.1's; drone.loo = 1.16.1's; ${sound} ${wavBytes!.length} B (1.16.1's ${gameFile(sound)?.length ?? 0} B)`);
+  });
+
+  it("lays every picture and overlay images.tbl names under a mod with an animation script, each the 1.16.1 archives' bytes", { timeout: 120_000 }, async () => {
+    const files = await storageFiles(remasteredDir);
+    const dir = tmp("rm-iscript"); writeFolder(dir, new Map([["scripts\\iscript.bin", (await files.read("scripts\\iscript.bin"))!]]));
+    const t0 = performance.now();
+    const layer = await gameLayer(await openMod(dir, files), files);
+    const ms = performance.now() - t0;
+    const names = new Set(layer.map((l) => l.member));
+    const pictures = [...new Set(gameImagePaths().map(gameName))];
+    expect(pictures.filter((p) => !names.has(p))).toEqual([]);
+    const differ = layer.filter((l) => l.member.startsWith("unit\\") && !same(l.data, gameFile(l.member))).map((l) => l.member);
+    expect(differ).toEqual([]);
+    expect(names.has("scripts\\iscript.bin")).toBe(false);
+    for (const n of ["arr\\images.dat", "arr\\images.tbl", "arr\\mapdata.dat", "arr\\mapdata.tbl", "game\\tselect.pcx"]) expect(names.has(n), n).toBe(true);
+    const bytes = layer.reduce((n, l) => n + l.data.length, 0);
+    console.log(`the game's layer under an iscript mod: ${layer.length} files (${pictures.filter((p) => p.endsWith(".grp")).length} GRPs, ${pictures.filter((p) => !p.endsWith(".grp")).length} overlays, ${layer.length - pictures.length} startup files), ${(bytes / 1e6).toFixed(1)} MB, read in ${Math.round(ms)} ms`);
+  });
+});
+
+/**
+ * The end to end: `map trace --mod` on a Remastered copy, with scm-sim's own map runner (bundled from a checkout that
+ * has mods: SCM_SIM_DIR, else a sibling `scm-sim` or `scm-sim-mods-plan`, with the engine's files in `data/lifted`).
+ * The scene is the runner tests' (scm-sim `tests/exact-mod-runner.test.ts`): a marine beside a computer's supply
+ * depot, which it fires on by itself. The mod is the game's animation script with the marine's frame after a shot
+ * (`playfram 51`, the muzzle's flash) made the aiming frame (34), scm-sim's `tests/exact-mod-iscript.test.ts` change.
+ * The triggers read the frame set of the last twenty images (the game takes images from the top of its table) through
+ * EUD Deaths conditions, a row for "frames 34–50" and one for "51–67" an image, run every frame by hyper triggers.
+ */
+const simDir = [process.env.SCM_SIM_DIR, join(import.meta.dirname, "..", "..", "scm-sim"), join(import.meta.dirname, "..", "..", "scm-sim-mods-plan")]
+  .find((d): d is string => !!d && existsSync(join(d, "src", "exact", "modRunner.ts")) && ["core.js", "game.js", "base-s1.bin", "interface.bin"].every((f) => existsSync(join(d, "data", "lifted", f))));
+
+const SCENE = `
+const [dir, copy] = process.argv.slice(-2);
+const { mkdirSync, readFileSync, writeFileSync } = await import("node:fs");
+const { join } = await import("node:path");
+const { sceneMap } = await import("./scripts/real.ts");
+const { A, C, Compare, Group, trigger } = await import("./src/sim/triggers/types.ts");
+const { gameCopyFiles } = await import("./src/exact/gameCopy.ts");
+const { readGameData, unitImage } = await import("./src/data/dat.ts");
+const { Anim, readIScript } = await import("./src/data/iscript.ts");
+const { decode } = await import("./src/sim/iscript/opcodes.ts");
+const DEATHS = 0x58a364, IMAGES = 0x52f568, FIRST = 4980, LAST = 4999, FROM = 51, TO = 34;
+const triggers = [], rows = [];
+for (let s = FIRST; s <= LAST; s++) for (const set of [TO, FROM]) {
+  const eud = (IMAGES + 64 * s + 0x18 - DEATHS) / 4;
+  rows.push([s, set]);
+  triggers.push(trigger([Group.Player1], [C.deaths(eud, 0, Compare.AtLeast, set * 65536), C.deaths(eud, 0, Compare.AtMost, (set + 17) * 65536 - 1)], [A.preserve()]));
+}
+for (let k = 0; k < 3; k++) triggers.push(trigger([Group.Player1], [C.always()], [...Array.from({ length: 62 }, () => A.wait(0)), A.preserve()]));
+writeFileSync(join(dir, "scene.chk"), sceneMap({ size: [64, 64], frames: 1, map: { units: [{ type: 0, x: 340, y: 288, owner: 0 }, { type: 109, x: 400, y: 288, owner: 1 }] }, triggers }).chk);
+writeFileSync(join(dir, "rows.json"), JSON.stringify(rows));
+const files = (await gameCopyFiles(copy, new Uint8Array(readFileSync("data/lifted/interface.bin")))).files;
+const read = (p) => files.read(p.split("/").join("\\\\"));
+const data = readGameData({ read: (p) => { const b = read(p); if (!b) throw new Error("no " + p); return b; } });
+const iscript = read("scripts\\\\iscript.bin");
+const script = readIScript(iscript).entries.get(data.images.iscript[unitImage(data, 0)]);
+let at = script.animations[Anim.GndAttkRpt], shot = false, changed = -1;
+for (let i = 0; i < 40 && changed < 0; i++) { const ins = decode(iscript, at); if (ins.def.name === "attackwith") shot = true; else if (shot && ins.def.name === "playfram") changed = ins.offset; at = ins.next; }
+if (changed < 0 || (iscript[changed + 1] | iscript[changed + 2] << 8) !== FROM) throw new Error("the marine's script is not as expected");
+const modded = iscript.slice(); modded[changed + 1] = TO; modded[changed + 2] = 0;
+mkdirSync(join(dir, "mod", "scripts"), { recursive: true });
+writeFileSync(join(dir, "mod", "scripts", "iscript.bin"), modded);
+`;
+
+describe.skipIf(!haveRemastered || !simDir)("map trace --mod on a Remastered copy, with scm-sim's map runner", () => {
+  it("reads the startup data again with nothing refused, and the marine's flash frames become aiming frames", { timeout: 240_000 }, async () => {
+    const dir = tmp("rm-trace"); mkdirSync(dir, { recursive: true });
+    // The scene and the mod, by scm-sim's own code; the runner bundled as its deploy bundles it, into an engine folder.
+    const made = spawnSync(process.execPath, ["--input-type=module", "-e", SCENE, dir, remasteredDir], { cwd: simDir, encoding: "utf8" });
+    expect(made.status, made.stderr).toBe(0);
+    const engine = join(dir, "engine"), build = join(engine, "b1");
+    mkdirSync(build, { recursive: true });
+    const bundle = `require("esbuild").build({ entryPoints: ["src/exact/runMap.ts"], outfile: ${JSON.stringify(join(build, "map.mjs"))}, bundle: true, platform: "node", format: "esm", target: "node22", logLevel: "error" })`;
+    const bundled = spawnSync(process.execPath, ["-e", bundle], { cwd: simDir, encoding: "utf8" });
+    expect(bundled.status, bundled.stderr).toBe(0);
+    for (const f of ["core.js", "game.js", "base-s1.bin", "interface.bin"]) symlinkSync(join(simDir!, "data", "lifted", f), join(build, f));
+    writeFileSync(join(engine, "current.json"), JSON.stringify({ build: "b1", files: ["core.js", "game.js", "base-s1.bin", "interface.bin"], runner: "map.mjs", mapRunner: "map.mjs", mods: MOD_OVERLAY }));
+    const rows = JSON.parse(readFileSync(join(dir, "rows.json"), "utf8")) as [number, number][];
+    const sets = (trace: { row: number; fired: number }[] | null) => {
+      const out = { 34: 0, 51: 0 };
+      for (const c of trace ?? []) if (c.row < rows.length) out[rows[c.row][1] as 34 | 51] += c.fired;
+      return out;
+    };
+    const o = { engine, starcraft: remasteredDir, frames: 400, every: 0 };
+    const plain = await runMapInGame(join(dir, "scene.chk"), "trace", o);
+    const overlay = modOverlay(join(dir, "mod"), () => gameFilesOrNull(remasteredDir));
+    const modded = await runMapInGame(join(dir, "scene.chk"), "trace", { ...o, mod: overlay }).finally(() => overlay.remove());
+    expect(plain.game.kind).toBe("remastered");
+    expect(plain.start?.mod).toBeUndefined();
+    const mod = modded.start!.mod!;
+    expect(mod).toMatchObject({ files: 1, read: ["scripts\\iscript.bin"], reloaded: { refused: [] } });
+    expect(mod.paths).toHaveLength(1);
+    expect(mod.game).toBeGreaterThanOrEqual(928);
+    const p = sets(plain.end.trace), q = sets(modded.end.trace);
+    console.log(`map trace --mod on Remastered: the reload read ${mod.reloaded!.served} files, refused none (${mod.game} of the game's laid under the mod); passes of the triggers seeing frames 34–50 / 51–67: ${p[34]} / ${p[51]} without the mod, ${q[34]} / ${q[51]} with it`);
+    expect(plain.end.passes).toBeGreaterThan(150);
+    expect(q[51]).toBeLessThan(p[51]);
+    expect(q[34] - p[34]).toBe(p[51] - q[51]);
   });
 });
 

@@ -66,6 +66,7 @@ import { modInfo, printModInfo } from "./mod/info";
 import { newMod } from "./mod/new";
 import { gameFilesOrNull, openMod } from "./mod/open";
 import { modOverlay } from "./mod/overlay";
+import { modWords } from "./engine";
 import { MOD_COMPRESSIONS, packMod, readModFolder, type ModCompression } from "./mod/pack";
 import { playOnPage, playSet } from "./mod/play";
 import { unpackMod } from "./mod/unpack";
@@ -872,7 +873,7 @@ async function mapTestAction(file: string, testFiles: string[], o: { json?: bool
   const overlay = overlayOf(o);
   const run = await runTests(input.name, scenarios, map, {
     out: o.out ?? defaultOut(input.path === STDIO ? input.name : input.path), starcraft: o.starcraft, engine: o.engine, update: !!o.update, mod: overlay ?? undefined,
-    live: text ? (line) => print(line) : undefined, onStart: text ? (start) => print(testHeader(input.name, scenarios[0].rows, scenarios, start)) : undefined,
+    live: text ? (line) => print(line) : undefined, onStart: text ? (start) => { print(testHeader(input.name, scenarios[0].rows, scenarios, start)); if (start?.mod) print(modWords(start.mod)); } : undefined,
   }).finally(() => overlay?.remove());
   const written = o.update ? updateTests(run.scenarios) : [];
   if (text) for (const w of written) print(`${pc.cyan("✎")} ${plural(w.expectations, "expectation")} written into ${relative(process.cwd(), w.file) || w.file}`);

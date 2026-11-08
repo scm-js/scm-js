@@ -134,13 +134,36 @@ export async function ensureEngine(at: string = process.env.SCMJS_PLAY_URL || PL
 const modsOf = (c: EngineCurrent) => (typeof c.mods === "number" && c.mods > 0 ? c.mods : 0);
 
 /**
- * The runner's arguments for a mod laid over the game (`--mod <folder>`), or a CliError when the engine's runners take
- * no mod: a deploy from before mods. Nothing when there is no mod.
+ * The runner's arguments for a mod laid over the game (`--mod <folder>`, once a layer, the later winning), or a
+ * CliError when the engine's runners take no mod: a deploy from before mods. Nothing when there is no mod.
  */
-export function modArgs(engine: Engine, folder: string | null | undefined): string[] {
-  if (!folder) return [];
+export function modArgs(engine: Engine, folders: string | readonly string[] | null | undefined): string[] {
+  const layers = typeof folders === "string" ? [folders] : folders ?? [];
+  if (!layers.length) return [];
   if (engine.mods < MOD_OVERLAY) throw new CliError(`The game engine at ${engine.dir} (build ${engine.build}) cannot lay a mod over the game: --mod needs runners of mod overlay version ${MOD_OVERLAY} or newer ("mods": ${MOD_OVERLAY} in the play page's engine/current.json).`, "A play page deployed with scm-sim's mod support has them; the next run fetches it (or name a newer one with --engine).");
-  return ["--mod", folder];
+  return layers.flatMap((f) => ["--mod", f]);
+}
+
+/** What a runner's `start` line says of the mod it laid over the game (scm-sim `src/exact/modRunner.ts`, `ModReport`). */
+export interface RunnerModReport {
+  /** The layers, in load order. */
+  paths: string[];
+  /** How many files the mod holds. */
+  files: number;
+  /** The mod's files the game read, by the game's names. */
+  read: string[];
+  /** The startup data read again (names served and refused), or null when the mod holds none of it. */
+  reloaded: { served: number; refused: string[]; heapBytes: number; ms: number } | null;
+  /** On a Remastered copy: how many of the game's own files the command laid under the mod for that reload (`mod/overlay.ts`). */
+  game?: number;
+}
+
+/** The mod's line under a run's first: what the game read of it, and the startup data read again. */
+export function modWords(m: RunnerModReport): string {
+  const read = `${m.read.length} of the mod's ${m.files} file${m.files === 1 ? "" : "s"} read`;
+  const r = m.reloaded;
+  const reload = !r ? "" : r.refused.length ? `; the startup data read again, refused ${r.refused.slice(0, 3).join(", ")}${r.refused.length > 3 ? ` and ${r.refused.length - 3} more` : ""}` : `; the startup data read again (${r.served} files)`;
+  return `  ${pc.dim(`mod: ${read}${reload}${m.game ? `, the game's own pictures from your Remastered copy under it` : ""}`)}`;
 }
 
 /** The runners `current.json` names, by kind. */

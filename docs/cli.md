@@ -2267,6 +2267,15 @@ scmjs map trace ridge.scx --mod MyMod.mpq
 page's next release; with an engine from before, the command names the version it needs
 and stops.
 
+A mod that changes animation scripts, pictures, overlays or the sound table makes the game
+read its startup data again before the game starts, and that opens every unit picture and
+overlay the image table names. With StarCraft: Remastered, the command reads those
+pictures out of your installation and lays them under the mod for the game, so such a mod
+runs on a Remastered copy as on a 1.16.1 one. They are the classic pictures, the same in
+both. The first line under the run says how many of the mod's files the game read and
+whether the startup data was read again without a missing file; `--json` has the same
+under `mod`.
+
 ## Sharing from the terminal
 
 These commands use your [scmjs.dev account](guide.md#your-scmjsdev-account). Nothing else

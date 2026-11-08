@@ -2198,7 +2198,9 @@ The whole design, the proofs and the traps are in **`mods.md`**. Here, what touc
   lines are held again; the next row needs another freed.
 - `map test`'s action is the function `mapTestAction`, shared with `mod test <mod> <map>`; `map test|trace|cost` take
   `--mod`, which writes the mod loose in a temp folder (`overlay.ts`) only after `modArgs` says the engine's runners
-  take one (`current.json` `"mods": 1`), and removes it after.
+  take one (`current.json` `"mods": 1`), and removes it after. On a Remastered copy a mod the runner reloads the
+  startup data for also gets the game's own pictures as a layer under it (`--mod <game> --mod <mod>`; the runner's
+  own Remastered reader has not got them); `mods.md` "Remastered copy and the engine's reload".
 - `mod play` has its own loopback page (`play.ts`), not `open.ts`'s `handOver`: it serves `/manifest`, `/file/<i>` and
   `/map`, builds `File`s in the page and posts `scmjs.play` with `dataSet`; `tests/cli-mod.test.ts` stands in for the page.
 - MCP: six tools (`mod_info|check|diff|unpack|pack|new`), 30 in all; `mod_unpack`'s data leaves out the manifest.

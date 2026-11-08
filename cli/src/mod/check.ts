@@ -36,7 +36,11 @@ export function modTables(source: ModSource): Partial<Record<DatTableName, strin
 /** The mod's iscript files: every `scripts\*.bin` but the AI scripts. */
 export const iscriptMembers = (source: ModSource) => [...source.files.values()].map((f) => f.name).filter((n) => /^scripts\\.*\.bin$/.test(gameName(n)) && !/^scripts\\(aiscript|bwscript)\.bin$/.test(gameName(n))).sort();
 
-/** Whether the game's copy has a file, for the kinds of file it holds (a Remastered copy has no GRPs or WAVs of 1.16.1's). */
+/**
+ * Whether the game's copy has a file, for the kinds of file it holds: unknown (null) for pictures or sounds when the
+ * copy answers neither the marine's picture nor the buzz. Both kinds of copy do (a Remastered one at the classic
+ * names, its sounds its own WAVs); the probe stands for a copy that is only part of the game.
+ */
 export async function baseHas(base: GameFiles | null): Promise<((name: string) => Promise<boolean | null>) | null> {
   if (!base) return null;
   const pictures = !!(await base.read("unit\\terran\\marine.grp"));

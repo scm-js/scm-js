@@ -168,9 +168,9 @@ program carries its own).
 ### Commands that need StarCraft
 
 `map preview` draws a map with the game's graphics and `map generate` lays its ground with
-the game's tilesets. `map trace`, `map cost`, `map rush`, `map test`, `map heatmap`,
-`replay watch`, `replay export`, `bot run` and `bot ladder` run the game itself. They need
-two things on your computer:
+the game's tilesets. `map trace`, `map cost`, `map coverage`, `map rush`, `map test`,
+`map heatmap`, `replay watch`, `replay export`, `bot run` and `bot ladder` run the game
+itself. They need two things on your computer:
 
 - Your copy of StarCraft, Remastered or 1.16.1. It is found in the usual places; otherwise
   name its folder with `--starcraft <folder>` or the `SCMJS_STARCRAFT` setting. Nothing of
@@ -270,6 +270,56 @@ pull request's maps:
 
 [`scmjs init`](#setting-up-a-folder-of-maps) writes a whole workflow that runs it on every
 push.
+
+### A baseline for old maps
+
+A map made years ago, or by other tools, can have hundreds of findings, so `--strict`
+would fail it on every push. A baseline lets you start from where the map is.
+`--write-baseline` keeps the findings the maps have now in a file, and `--baseline` then
+reports and fails only on findings that file does not hold:
+
+```sh
+scmjs map check maps/*.scx --write-baseline            # once: today's findings, in .scmjs-baseline.json
+scmjs map check maps/*.scx --baseline --strict         # from then on: only new findings fail
+```
+
+```
+$ scmjs map check maps/* --baseline --strict
+ridge.scx  ✔ no new problems · 1 fixed since the baseline
+
+wakka.scm  ▲ 1 new warning · 72 known
+  ▲ Trigger 1: Create Unit with Properties names properties slot 0; the slots are 1 to 64. ·
+    Triggers
+
+✖ 1 map of 2 failed the check · 72 known findings left out, 1 fixed since the baseline
+```
+
+*A trigger was added at the top of `wakka.scm`, and a Defeat to `ridge.scx`. The 72 known
+findings of the triggers below the new one still match.*
+
+Without a file name both options use `.scmjs-baseline.json` in the current folder; give
+one to keep it elsewhere. The file is JSON, one list of findings for each map, keyed by
+the map's path from the file's folder, so one file serves a whole folder of maps. Commit
+it beside the maps.
+
+A finding is matched by the part of the map it is in and its text, with the parts that
+move taken out. A trigger is known by its text, not by its number, so adding a trigger
+above it, or renumbering the strings, does not make its findings new. Counts are left out
+too: one more unit in a slot that is not in the game is the same finding as before.
+Editing the trigger itself, or renaming a location it uses, makes its findings new again,
+so look at them again.
+
+Findings the baseline holds that are gone are counted as fixed since the baseline. They do
+not fail anything, and `--write-baseline` drops them. Run it again whenever you accept the
+findings as they are. `--format github`, `junit` and `sarif` list only the new findings,
+so the CI step is one line:
+
+```yaml
+- run: npx @scm-js/cli map check maps/*.scx --baseline --strict --format github
+```
+
+With `--json`, each map has a `baseline` entry: the file, how many findings it left out
+(`suppressed`), how many are new, and how many are fixed, with the fixed findings listed.
 
 ### The whole map as text
 
@@ -1542,6 +1592,77 @@ still holds is left alone. Scenarios with steps are never rewritten. If the map 
 much that the game parted from the replay, the report says when, as `map trace --replay`
 does.
 
+### Which triggers fired across many games
+
+`scmjs map coverage` plays a folder of replays on the map, each as
+[`map trace --replay`](#triggers-in-a-replays-game) plays one, and adds up what fired. It
+answers whether a trigger ever fires when people play the map. A trigger that never fired
+in any of the games is either one nobody reaches or one that is broken, so those are
+listed clearly.
+
+```sh
+scmjs map coverage td.scx replays/
+```
+
+Replays are files or folders, sub-folders included. Only replays of this map count: the
+same map, or one with the same name and size, as for
+[`map heatmap`](#where-things-happened-across-many-games). Only Use Map Settings games
+count too, since in the other game types the game runs its own melee triggers. Every
+replay left out is listed with the reason. Several games are played at once: half the
+processors, at most four, or `--parallel`.
+
+```
+$ scmjs map coverage fs.scx replays/ --force
+fs.scx · 4 triggers · 6 replays to play, 4 at a time
+1/6 ▲ 1570.rep  25:24 · 6 players · 2 triggers fired · parted at 0:00, counted to there · 6.6 s
+2/6 ▲ 1571.rep  31:59 · 6 players · 2 triggers fired · parted at 0:00, counted to there · 7.3 s
+3/6 ▲ 1544.rep  49:11 · 4 players · 2 triggers fired · parted at 1:46, counted to there · 10.7 s
+4/6 ▲ 1631.rep  10:16 · 4 players · 2 triggers fired · parted at 0:34, counted to there · 5.5 s
+5/6 ▲ 1635.rep  37:42 · 3 players · 2 triggers fired · parted at 0:00, counted to there · 8.1 s
+6/6 ✔ 1603.rep  34:08 · 4 players · 3 triggers fired · 30.5 s
+
+▲ fs.scx: 3 of 4 triggers fired in 6 games; 1 never fired
+▲ 5 games parted from the map: 1544.rep at 1:46, 1570.rep at 0:00, 1571.rep at 0:00 and 2 more. What fired after that is not counted: the players' commands were meant for another game.
+
+  #  Games  Fired  First  Players            Trigger
+  1  6/6    12     0:00   P1 P2 P3 P4        (no conditions) → Set Resources("Current Player", Set To, …
+  2  6/6    15     0:00   P3 P4 P5 P6 P7 P8  (no conditions) → Run AI Script("Turn ON Shared Vision for…
+  3  0/6    0      –      P1 P2 P3 P4        Command("Current Player", "Buildings", At most, 0) → Defea…
+  4  1/6    1      34:06  P1 P2 P3 P4        Command("Non Allied Victory Players", "Buildings", At most…
+
+  Never fired (1 of 4)
+  ▸ #3  Command("Current Player", "Buildings", At most, 0) → Defeat()
+      Command (condition 1) said no last, in 1603.rep at 34:08
+```
+
+*`--force` took replays played on other maps, so five of the six games parted from this
+one early. Only the last game ran this map as it was played.*
+
+For each trigger the table gives the games it fired in, how often it fired in all of them,
+and its first firing on the game's clock. Only triggers owned by a player in at least one
+of the games are listed. The first line counts the rest separately, and `--all` lists them
+too. A game whose players' commands parted from the map, as [explained
+above](#triggers-in-a-replays-game), counts only what fired before that point, and is
+marked ▲.
+
+`--tests` counts the scenarios of the map's [tests file](#testing-a-maps-triggers) as
+games as well, and a tests file named among the replays (any `.json`) counts its
+scenarios. Whether a scenario passes does not matter here; that is `map test`'s job.
+
+| Option | What it does |
+| --- | --- |
+| `--tests` | Also count the games of `<map>.tests.json` beside the map |
+| `--strict` | Exits with 1 when a trigger a player owned never fired |
+| `--format` | `github`, `junit` or `sarif`: the triggers that never fired, for CI. Warnings, or errors with `--strict`, and a note for each game that parted |
+| `--all` | Lists every trigger, even ones no player in the games owned |
+| `--force` | Takes replays played on another map too. Expect those games to part early |
+| `--parallel` | Games played at once |
+| `--json` | Every game, every trigger with its counts, its text and why it never fired |
+
+Each replay takes about a second for every minute or two of play, so a folder of a hundred
+games takes a few minutes. Like the other commands that run the game, it needs your copy
+of StarCraft, so in CI it runs only on a machine that has one.
+
 ### Rush distances
 
 `scmjs map rush` measures how long a rush takes between each pair of start locations. The
@@ -2105,11 +2226,11 @@ with the command's text and its `--json` data:
 
 | Tools | The commands |
 | --- | --- |
-| `map_info`, `map_check`, `map_dump`, `map_find`, `map_diff` | Reading, checking, searching and comparing maps |
+| `map_info`, `map_check`, `map_dump`, `map_find`, `map_diff` | Reading, checking, searching and comparing maps. `map_check` takes a `baseline` file and lists only the findings it does not hold |
 | `map_triggers_export`, `map_triggers_import`, `map_strings_export`, `map_strings_import`, `map_strings_prune` | The triggers and strings as text, in and out. The text is passed inline, so the model edits triggers in the [trigger window's text form](triggers.md) |
 | `map_set`, `map_resize`, `map_new`, `map_build`, `map_run` | The Scenario menu's edits, a new map, the TrigScript build, a plugin run over the map |
 | `map_preview` | The answer is the picture itself, so a model that can see images sees the map |
-| `map_trace`, `map_cost` | The triggers run in the game, and what they cost |
+| `map_trace`, `map_cost`, `map_coverage` | The triggers run in the game, what they cost, and which fired across many replays |
 | `replay_info`, `replay_map` | What a replay holds, and its map written out |
 | `doctor` | What this computer has, so the model knows what it can call |
 
@@ -2119,13 +2240,14 @@ your maps in git or give the tool copies. `map_run` runs a plugin, which is code
 your privileges, as `scmjs map run` does; the AI tool asks you before it calls a tool, and
 you can leave that one unapproved.
 
-`map_preview`, `map_trace` and `map_cost` need [your copy of the
-game](#commands-that-need-starcraft), and the two runs fetch the engine the first time; a
-run takes a few seconds and plays at most ten minutes of game. `doctor` tells the model
-whether the game and the engine are there and what you would need to install, so it can
-say so rather than fail. When the game is not in one of the usual places, the model can
-pass its folder as `starcraft`, or you can set `SCMJS_STARCRAFT` in the tool's MCP
-settings.
+`map_preview`, `map_trace`, `map_cost` and `map_coverage` need [your copy of the
+game](#commands-that-need-starcraft), and the runs fetch the engine the first time; a
+trace or cost run takes a few seconds and plays at most ten minutes of game.
+`map_coverage` plays whole replays, so it takes as long as the command does. `doctor`
+tells the model whether the game and the engine are there and what you would need to
+install, so it can say so rather than fail. When the game is not in one of the usual
+places, the model can pass its folder as `starcraft`, or you can set `SCMJS_STARCRAFT` in
+the tool's MCP settings.
 
 ### TrigScript in your text editor
 
@@ -2258,7 +2380,7 @@ the same functions are the [`@scm-js/core` library](core.md); the command is bui
 | Code | Means |
 | --- | --- |
 | 0 | All went well |
-| 1 | A map failed its check, two maps differed, a merge had conflicts it was not told how to settle, nothing matched a search, a build did not go through, a map test or a bot failed, or something went wrong |
+| 1 | A map failed its check, two maps differed, a merge had conflicts it was not told how to settle, nothing matched a search, a build did not go through, a map test or a bot failed, a trigger never fired in `map coverage --strict`, a replay could not be played, or something went wrong |
 | 2 | A file was missing or the wrong kind for the command, an option was not valid, you need to sign in first, or the game could not start |
 
 ## Command reference
@@ -2277,7 +2399,7 @@ gives its options.
 | Command | What it does |
 | --- | --- |
 | [`scmjs map info <maps…>`](#what-a-map-holds) | Size, tileset, players, units, triggers, strings and the check in one line; `--table` for a folder |
-| [`scmjs map check <maps…>`](#checking-a-map) | Check Map: errors, then warnings; `--format github`, `junit` or `sarif` for CI |
+| [`scmjs map check <maps…>`](#checking-a-map) | Check Map: errors, then warnings; `--format github`, `junit` or `sarif` for CI; `--baseline` fails only on new findings |
 | [`scmjs map dump <map>`](#the-whole-map-as-text) | The whole map as text, for `git diff` and `grep` |
 | [`scmjs map find <text> <maps…>`](#searching-maps) | Edit ▸ Find across maps: units, locations, strings, triggers |
 | [`scmjs map preview <map>`](#a-picture-of-a-map) | A picture of the map, in the terminal or as a PNG with `--out` |
@@ -2302,6 +2424,7 @@ gives its options.
 | [`scmjs map cost <map>`](#what-the-triggers-cost) | What the triggers cost Remastered each frame, and the costliest; `--replay` as for `map trace` |
 | [`scmjs map test <map> [tests…]`](#testing-a-maps-triggers) | Plays the map's test scenarios in the game, with a replay of each that fails; `-u` rewrites what a replay's scenario expects |
 | [`scmjs map test record <map> <rep>`](#a-test-from-a-replay) | A test scenario from a replay, its expectations taken from the end of the game |
+| [`scmjs map coverage <map> <replays…>`](#which-triggers-fired-across-many-games) | Plays many replays on the map: which triggers fired in how many games, and which never did |
 | [`scmjs map rush <map>`](#rush-distances) | The time to walk between the start locations, by the game's own pathing |
 | [`scmjs map heatmap <map> <replays…>`](#where-things-happened-across-many-games) | Where units died, buildings went up or armies walked in many replays, as heat over the map |
 | [`scmjs map share <map>`](#a-link-to-a-map) | A link to the map on scmjs.dev; `--edit` to edit it together |
@@ -2353,6 +2476,7 @@ gives its options.
 ```sh
 scmjs info map.scx                              # what the map holds
 scmjs map check maps/*.scx --strict             # fail on errors and warnings
+scmjs map check maps/*.scx --baseline --strict  # fail only on findings not in .scmjs-baseline.json
 scmjs map preview map.scx --out map.png         # a picture
 scmjs map find "Marine" maps/*.scx              # search
 scmjs map triggers edit map.scx                 # triggers in your text editor
@@ -2363,6 +2487,7 @@ scmjs map generate "(2)Duel.scx" --seed 7       # a melee map to play
 scmjs map trace map.scx                         # which triggers fire in the game
 scmjs map test map.scx                          # run map.tests.json in the game
 scmjs map trace --replay bug.rep --order        # which triggers fired in a played game, and when
+scmjs map coverage map.scx replays/             # which triggers never fired in any of those games
 scmjs replay watch game.rep                     # a replay in the terminal
 scmjs map heatmap map.scx replays/ --out h.png  # where units died in those games
 scmjs replay export game.rep --to 0:30          # its first half minute, as game.webm
@@ -2388,7 +2513,8 @@ from a clone with `npm run cli -- <command>`, or build it with `npm run build:cl
 | `cli/src/blame.ts` | `map blame`: the items of each kind, matched between versions as `map diff` matches them, and git blame's walk from the newest version back |
 | `cli/src/merge.ts` | The three-way merge: each part's rule, the ordered list merge for triggers, units matched without ids, the string table numbered again; git's three versions of a stopped file |
 | `cli/src/edit.ts` | The header set, the map resized and the unused strings dropped, over the open document |
-| `cli/src/report.ts` | Check Map's findings, and a map test's failures, as GitHub annotations, JUnit XML and SARIF |
+| `cli/src/report.ts` | Check Map's findings, a map test's failures and the triggers `map coverage` never saw fire, as GitHub annotations, JUnit XML and SARIF |
+| `cli/src/baseline.ts` | `map check --baseline`: a finding's identity (a trigger by its text, counts left out), the known findings matched one for one, the file read and written |
 | `cli/src/dump.ts` | The map as text: every part in file order, the triggers and strings in their text forms, members hashed, sections as they would be written |
 | `cli/src/find.ts` | Edit ▸ Find over a map from the terminal: the kinds, the hits and their lines |
 | `cli/src/create.ts` | A new map as File ▸ New makes it: the flat fill with a seeded variation, the start locations, the slots closed, the file written as a new map is saved |
@@ -2424,6 +2550,7 @@ from a clone with `npm run cli -- <command>`, or build it with `npm run build:cl
 | `cli/src/gif.ts` | The GIF writer: a palette a picture by median cut, unchanged pixels left transparent, LZW |
 | `cli/src/trace.ts` | A map's triggers run in the game: scm-sim's map runner run, its trace and cost worded against the map's own triggers; a replay's game, the map given compared with the replay's, the firings in order |
 | `cli/src/maptest.ts` | A map's tests: the tests file read and resolved against the map's names, the setup and timed steps made triggers of a copy, the map runner run in its test mode for each scenario, the end judged and the failed scenarios' replays kept; scenarios that play a replay, recorded from one and rewritten with `-u` |
+| `cli/src/coverage.ts` | `map coverage`: the replays matched to the map, played a few at once by the map runner's replay mode, each game's trace folded per trigger (to the parting, from the firings in order), the tests' scenarios as games, the totals and the report |
 | `cli/src/heatmap.ts`, `cli/src/heat.ts` | A heatmap from replays: the replays matched to the map, played a few at once by the replay runner's event mode and kept in the cache, the events chosen, counted per tile, spread and drawn as a heat ramp |
 | `cli/src/rush.ts` | The walks between the start locations: the unit found by name, the map runner run in its rush mode, the table of the starts |
 | `cli/src/preview.ts`, `cli/src/png.ts` | A map's picture: the terrain from the tileset, reduced to the scale asked, the units, resources and start locations over it, and the PNG written by hand |

@@ -23,7 +23,7 @@ import { summarizeTrigger } from "../../src/formats/triggers/text";
 import { conditionDef } from "../../src/data/triggerDefs";
 import { createInterface } from "node:readline";
 import { FRAME_MS, type Replay } from "@scm-js/replay";
-import { cacheRoot, ensureEngine, findGameCopy, runnerFor, startRunner } from "./engine";
+import { cacheRoot, ensureEngine, findGameCopy, runnerFor, startRunner, type Engine } from "./engine";
 import { VERSION } from "./about";
 import { assetFile, INSTALL } from "./runtime";
 import { diffMaps, summarizeDiff } from "./diff";
@@ -73,6 +73,8 @@ export interface MapRunOptions {
   starcraft?: string;
   /** The play page's address, or a folder holding the engine. */
   engine?: string;
+  /** An engine already found, for several games in a row (`map coverage`): the page is asked once, not each game. */
+  ready?: Engine;
   /** The weigher's module, instead of the `weigh.mjs` beside the command. */
   weigh?: string;
   /** A replay whose commands are the game (the runner's `--play`); the map given is then played in place of its own, or none is given. */
@@ -174,7 +176,7 @@ async function runMap(map: string | null, what: "trace" | "cost", o: MapRunOptio
   if (o.replay && !existsSync(o.replay)) throw new CliError(`No file ${o.replay}`, null, 2);
   const weigh = what === "cost" ? weighModule(o.weigh) : null;
   const game = findGameCopy(o.starcraft);
-  const engine = await ensureEngine(o.engine, undefined, o.live ?? (() => {}));
+  const engine = o.ready ?? await ensureEngine(o.engine, undefined, o.live ?? (() => {}));
   const runner = runnerFor(engine, "map");
   const args = [...(map !== null ? [resolve(map)] : []), "--engine", engine.dir, "--starcraft", game.folder];
   if (o.replay) args.push("--play", resolve(o.replay));

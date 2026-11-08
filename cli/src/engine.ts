@@ -1,5 +1,5 @@
 /**
- * The game engine for the commands that play: `scmjs bot run`, `bot ladder`, `scmjs replay watch`, `scmjs map trace`, `map cost`,
+ * The game engine for the commands that play: `scmjs bot run`, `bot ladder`, `scmjs replay watch`, `map heatmap`, `scmjs map trace`, `map cost`,
  * `map rush` and `map test`. The engine is scm-sim's lifted game, the one the play page runs; its files (the module,
  * the base image, the interface pack) and the runners that drive a game from a terminal are fetched once from the play
  * page's address — `play/engine/current.json` names the current build and its runners — and kept under the user's cache
@@ -22,7 +22,7 @@ export const PLAY_URL = "https://scmjs.dev/play";
 /** The runners a deploy may name in `current.json`, by what they run, and the file name each goes by. */
 export const RUNNERS = {
   bot: { key: "runner", file: /^run(-[0-9a-f]+)?\.(mjs|cjs)$/, command: "scmjs bot run" },
-  replay: { key: "replayRunner", file: /^replay(-[0-9a-f]+)?\.(mjs|cjs)$/, command: "scmjs replay watch" },
+  replay: { key: "replayRunner", file: /^replay(-[0-9a-f]+)?\.(mjs|cjs)$/, command: "scmjs replay watch (and map heatmap)" },
   map: { key: "mapRunner", file: /^map(-[0-9a-f]+)?\.(mjs|cjs)$/, command: "scmjs map trace (and map cost, rush and test)" },
   match: { key: "matchRunner", file: /^match(-[0-9a-f]+)?\.(mjs|cjs)$/, command: "scmjs bot ladder" },
 } as const;

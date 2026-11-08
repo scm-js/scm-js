@@ -1,8 +1,9 @@
 /**
  * Resize / crop the map in place.
  *
- * Not an undoable edit — like the settings dialogs it is a transaction, and the caller
- * (`resizeDocumentAtom`) drops the history. Existing content keeps its position relative
+ * A whole-map change: the caller (`resizeDocumentAtom`) records the map as it was as one
+ * undo step (`WholeState`), so nothing here may write into the arrays it replaces — every
+ * grid and list is built new. Existing content keeps its position relative
  * to the chosen anchor: the offset `dx` is kept *even* so StarEdit's left/right tile
  * pairs stay on their columns. Terrain outside the new bounds is cropped; units, sprites
  * and doodads whose position falls outside are dropped (a doodad's tiles are already part

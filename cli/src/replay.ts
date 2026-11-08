@@ -6,7 +6,7 @@ import type { Input } from "./files";
 import { dot, duration, gameText, num, pc, rgb, rows, size, table, truecolor } from "./ui";
 
 const RACES = ["Zerg", "Terran", "Protoss"];
-const GAME_TYPES: Record<number, string> = {
+export const GAME_TYPES: Record<number, string> = {
   2: "Melee", 3: "Free For All", 4: "One on One", 5: "Capture The Flag", 6: "Greed", 7: "Slaughter", 8: "Sudden Death",
   9: "Ladder", 10: "Use Map Settings", 11: "Team Melee", 12: "Team Free For All", 13: "Team Capture The Flag", 15: "Top vs Bottom",
 };

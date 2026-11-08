@@ -15,19 +15,20 @@
  */
 import type { createStore } from "jotai";
 import {
-  activeDocumentIdAtom, archiveExtrasAtom, archiveStoredAtom, documentsAtom, doodadsRevisionAtom, isomRevisionAtom, loadDocumentAtom, locationsRevisionAtom, noticeWholeAtom,
+  activeDocumentIdAtom, archiveExtrasAtom, archiveStoredAtom, commitSettingsAtom, commitTriggersAtom, documentsAtom, doodadsRevisionAtom, isomRevisionAtom, loadDocumentAtom, locationsRevisionAtom, noticeWholeAtom,
   redoStackAtom, scenarioAtom, settingsRevisionAtom, syncTapAtom, terrainRevisionAtom, triggersRevisionAtom, undoStackAtom, unitsRevisionAtom, type SyncTap,
 } from "../atoms/documentAtoms";
 import {
   mapDescriptionAtom, mapFileHandleAtom, mapFilePathAtom, mapModifiedAtom, mapNameAtom, mapOriginAtom, mapPointerHeldAtom, mapVersionAtom, saveOptionsAtom,
   selectedDoodadsAtom, selectedLocationsAtom, selectedSpritesAtom, selectedUnitsAtom,
 } from "../atoms/editorAtoms";
-import { dialogStackAtom, type DialogId } from "../atoms/uiAtoms";
-import { mapVersionOf, parseScenario, scenarioDescription, scenarioName, serializeScenario, type Scenario } from "../formats/chk/scenario";
+import { dialogStackAtom, pushToastAtom, statusMessageAtom, type DialogId } from "../atoms/uiAtoms";
+import { mapVersionOf, markDirty, parseScenario, scenarioDescription, scenarioName, serializeScenario, type Scenario } from "../formats/chk/scenario";
 import { isLocationUsed } from "../formats/chk/sections/objects";
 import {
-  SyncCore, captureFields, captureStrings, forgetCells, isSyncOp, type FieldsBaseline, type SyncCells, type SyncDoc, type SyncOp,
+  FIELD_SECTIONS, SyncCore, captureFields, captureStrings, forgetCells, isSyncOp, unpack, type FieldsBaseline, type SyncCells, type SyncDoc, type SyncField, type SyncOp,
 } from "../editor/sync";
+import { t } from "../i18n";
 import { rebaseTables } from "../editor/tableHistory";
 import { logInfo, logWarn } from "../editor/log";
 import { DEFAULT_SAVE_OPTIONS, defaultSaveOptions } from "../editor/save";
@@ -78,6 +79,12 @@ export function startSync(store: Store, options: SyncStartOptions): SyncSession 
   let base: FieldsBaseline = captureFields(first);
   let extrasBase = store.get(archiveExtrasAtom);
   let before: Scenario | null = null;
+  /**
+   * Each field as this editor's own last dialog write left it (packed JSON). When someone
+   * else's write replaces exactly that, made without seeing it, the change was ours and is
+   * about to be lost — `offerRestore` keeps it.
+   */
+  const mine = new Map<SyncField, string>();
   /** Ops to apply and confirmations (null), in arrival order. */
   const inbox: (SyncOp | null)[] = [];
   let applying = false;
@@ -115,7 +122,10 @@ export function startSync(store: Store, options: SyncStartOptions): SyncSession 
       const doc = docOf();
       const op = core.commitFields(doc, base);
       base = captureFields(doc.scn);
-      if (op) send(op);
+      if (op) {
+        for (const f of Object.keys(op.set) as SyncField[]) mine.set(f, base.values.get(f) ?? "null");
+        send(op);
+      }
     },
     beforeWhole() {
       if (quiet()) return;
@@ -145,6 +155,7 @@ export function startSync(store: Store, options: SyncStartOptions): SyncSession 
     if (ended || applying || inbox.length === 0 || holding()) return;
     applying = true;
     const report: SyncReport = { ops: 0, dropped: 0, lost: 0 };
+    const lost = new Map<SyncField, string>();
     try {
       const doc = docOf();
       const scnBefore = doc.scn;
@@ -158,6 +169,7 @@ export function startSync(store: Store, options: SyncStartOptions): SyncSession 
       for (const item of inbox.splice(0)) {
         if (item === null) { core.confirm(); continue; }
         const r = core.receive(doc, item);
+        for (const [f, json] of r.applied.overwritten ?? []) if (mine.get(f) === json) lost.set(f, json);
         report.ops++;
         report.dropped += r.applied.dropped;
         report.lost += r.lost;
@@ -198,6 +210,7 @@ export function startSync(store: Store, options: SyncStartOptions): SyncSession 
       extrasBase = doc.extras;
       // Their changes are not the next dialog's to undo.
       rebaseTables(doc.scn);
+      if (lost.size > 0 && doc.scn === scnBefore) offerRestore(lost, doc.scn);
     } catch (err) {
       // An op this editor cannot apply leaves the copy out of step with everyone else's;
       // the only safe thing is to end the session and say so.
@@ -209,6 +222,42 @@ export function startSync(store: Store, options: SyncStartOptions): SyncSession 
       applying = false;
     }
     if (report.ops > 0) options.onApplied?.(report);
+  };
+
+  /**
+   * Someone else's dialog write replaced one of ours without having seen it — two people
+   * pressed OK on the same table. Theirs stands, as it does on every other copy; ours is
+   * kept on a notice until it is dismissed, and putting it back is an ordinary dialog
+   * write: on the undo stack, sent to everyone, and reported to them the same way.
+   */
+  const offerRestore = (lost: Map<SyncField, string>, scn: Scenario) => {
+    const title = lost.has("triggers") ? t("Someone else's change replaced your triggers")
+      : lost.has("briefing") ? t("Someone else's change replaced your mission briefing")
+      : t("Someone else's change replaced your settings");
+    logInfo("sync", "A dialog write of ours was replaced", { fields: [...lost.keys()].join(",") });
+    store.set(pushToastAtom, {
+      kind: "warn", ttl: 0, title,
+      detail: t("They pressed OK without seeing your version. Put yours back to replace theirs, or close this to keep theirs."),
+      action: {
+        label: t("Put mine back"),
+        run: () => {
+          if (store.get(scenarioAtom) !== scn) {
+            store.set(statusMessageAtom, t("The map has been replaced since, so your version cannot be put back."));
+            return;
+          }
+          for (const [f, json] of lost) {
+            (scn as unknown as Record<string, unknown>)[f] = unpack(JSON.parse(json));
+            markDirty(scn, ...FIELD_SECTIONS[f](scn));
+          }
+          const label = t("Put back my changes");
+          if (lost.has("triggers") || lost.has("briefing")) store.set(commitTriggersAtom, { label });
+          if ([...lost.keys()].some((f) => f !== "triggers" && f !== "briefing")) store.set(commitSettingsAtom, { label });
+          store.set(mapNameAtom, scenarioName(scn) ?? store.get(mapFilePathAtom) ?? "Untitled Scenario");
+          store.set(mapDescriptionAtom, scenarioDescription(scn) ?? "");
+          store.set(mapVersionAtom, mapVersionOf(scn.fileVersion));
+        },
+      },
+    });
   };
 
   const unsubs = [

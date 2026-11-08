@@ -18,9 +18,10 @@ import { playerRaceLabel, playerTypeLabel } from "../../src/data/players";
 import { unitName } from "../../src/data/units";
 import { TEXT_ENCODINGS } from "../../src/formats/text/encoding";
 import { spawnSync } from "node:child_process";
-import { basename, dirname, relative, resolve } from "node:path";
+import { basename } from "node:path";
 import { kindOf, type Input } from "./files";
-import { CliError, mark, num, pc, size } from "./ui";
+import { locate } from "./history";
+import { CliError, mark, num, pc, plural, size } from "./ui";
 
 export type Change = "added" | "removed" | "changed";
 
@@ -244,15 +245,27 @@ function counts(es: Entry[]): string {
  * does not have is refused with git's own words.
  */
 export function revisionInput(rev: string, file: string): Input {
-  const git = (args: string[]) => spawnSync("git", args, { encoding: "buffer", maxBuffer: 512 * 1024 * 1024 });
-  const top = git(["-C", dirname(resolve(file)), "rev-parse", "--show-toplevel"]);
-  if (top.error) throw new CliError("git is not installed, or not on PATH", "--rev reads the map's earlier version through git.", 2);
-  if (top.status !== 0) throw new CliError(`${file} is not in a git repository`, top.stderr.toString().trim() || null, 2);
-  const root = top.stdout.toString().trim();
-  const path = relative(root, resolve(file)).split("\\").join("/");
-  const shown = git(["-C", root, "show", `${rev}:${path}`]);
-  if (shown.status !== 0) throw new CliError(`git has no ${path} at ${rev}`, shown.stderr.toString().trim().split("\n")[0] || null, 2);
+  const f = locate(file);
+  if (!rev || rev.startsWith("-")) throw new CliError(`${rev || "An empty revision"} is not a revision`, "A commit, branch or tag: HEAD~1, main, v1.0.", 2);
+  const shown = spawnSync("git", ["-C", f.root, "show", `${rev}:${f.path}`], { encoding: "buffer", maxBuffer: 512 * 1024 * 1024 });
+  if (shown.status !== 0) throw new CliError(`git has no ${f.path} at ${rev}`, shown.stderr.toString().trim().split("\n")[0] || null, 2);
   const bytes = new Uint8Array(shown.stdout);
   const name = `${rev}:${basename(file)}`;
   return { path: name, name, bytes, kind: kindOf(file, bytes) };
+}
+
+/** The change in a few words: "3 units added, 1 string changed". */
+export function summarizeDiff(d: MapDiff): string {
+  const parts: string[] = [];
+  const list = (name: string, es: { change: string }[]) => {
+    const n = (c: string) => es.filter((e) => e.change === c).length;
+    if (n("added")) parts.push(`${plural(n("added"), name)} added`);
+    if (n("removed")) parts.push(`${plural(n("removed"), name)} removed`);
+    if (n("changed")) parts.push(`${plural(n("changed"), name)} changed`);
+  };
+  const fields = d.header.length + d.players.length + d.forces.length;
+  if (fields) parts.push(`${plural(fields, "setting")} changed`);
+  list("unit", d.units); list("location", d.locations); list("trigger", d.triggers); list("briefing trigger", d.briefing); list("string", d.strings); list("file", d.members);
+  if (!parts.length && d.sections.length) parts.push(`${plural(d.sections.length, "section")} changed`);
+  return parts.join(", ");
 }

@@ -1,8 +1,8 @@
 import { useMemo, useState } from "react";
-import { useAtom, useAtomValue, useSetAtom } from "jotai";
+import { useAtom, useAtomValue, useSetAtom, useStore } from "jotai";
 import { ArrowDown, ArrowDownLeft, ArrowDownRight, ArrowLeft, ArrowRight, ArrowUp, ArrowUpLeft, ArrowUpRight, Circle, FileText, Maximize, ScrollText } from "lucide-react";
 import { mapDescriptionAtom, mapHeightAtom, mapModifiedAtom, mapNameAtom, mapTilesetAtom, mapWidthAtom } from "../../atoms/editorAtoms";
-import { changeTilesetAtom, commitSettingsAtom, resizeDocumentAtom, scenarioAtom, settingsRevisionAtom, triggersRevisionAtom } from "../../atoms/documentAtoms";
+import { changeTilesetAtom, commitSettingsAtom, resizeDocumentAtom, scenarioAtom, settingsRevisionAtom, syncTapAtom, triggersRevisionAtom } from "../../atoms/documentAtoms";
 import { ensureTileset, TILESET_FILENAMES } from "../../formats/tileset/load";
 import { openDialogAtom, statusMessageAtom } from "../../atoms/uiAtoms";
 import { resizePreview } from "../../editor/resize";
@@ -47,6 +47,8 @@ export function MapPropertiesDialog({ entry }: DialogProps) {
   const commitSettings = useSetAtom(commitSettingsAtom);
   const changeTs = useSetAtom(changeTilesetAtom);
   const setStatus = useSetAtom(statusMessageAtom);
+  const store = useStore();
+  const shared = useAtomValue(syncTapAtom)?.owns(store.get) === true;
   const [localName, setLocalName] = useState(name);
   const [localDesc, setLocalDesc] = useState(desc);
   const [localTileset, setLocalTileset] = useState<TilesetId>(tileset);
@@ -104,7 +106,7 @@ export function MapPropertiesDialog({ entry }: DialogProps) {
       <div className="split" style={{ ["--split" as string]: "1fr" }}>
         <Group title={t("Terrain")}>
           <div className="form">
-            <Field label={t("Tileset")} hint={tilesetChanged ? t("Tile numbers mean something else in every tileset, so the terrain is laid again and the doodads go. Units, sprites, locations, fog and triggers stay. This clears the undo history.") : undefined}>
+            <Field label={t("Tileset")} hint={tilesetChanged ? t("Tile numbers mean something else in every tileset, so the terrain is laid again and the doodads go. Units, sprites, locations, fog and triggers stay.") + " " + (shared ? t("The map is shared, so this cannot be undone: everyone's undo history starts again.") : t("Undo takes the change back.")) : undefined}>
               <div className="row">
                 <span className="swatch" style={{ background: TILESET_BY_ID[localTileset].color }} />
                 <Select value={localTileset} onChange={(e) => pickTileset(e.target.value as TilesetId)} options={TILESETS.map((t) => ({ value: t.id, label: t.name }))} />
@@ -161,8 +163,8 @@ const ANCHORS = [ArrowUpLeft, ArrowUp, ArrowUpRight, ArrowLeft, Circle, ArrowRig
 const ANCHOR_NAMES = [msg("top-left"), msg("top"), msg("top-right"), msg("left"), msg("centre"), msg("right"), msg("bottom-left"), msg("bottom"), msg("bottom-right")];
 
 /**
- * Scenario ▸ Resize / Crop Map: the whole document moves (editor/resize.ts), so this is
- * a transaction outside the undo history, like the settings dialogs. The preview line
+ * Scenario ▸ Resize / Crop Map: the whole document moves (editor/resize.ts), as one undo
+ * step (a whole-map entry; on a shared map the history is dropped instead). The preview line
  * says what the chosen size and anchor would crop before anything happens.
  */
 export function ResizeMapDialog({ entry }: DialogProps) {
@@ -172,6 +174,9 @@ export function ResizeMapDialog({ entry }: DialogProps) {
   const [tileset] = useAtom(mapTilesetAtom);
   const resize = useSetAtom(resizeDocumentAtom);
   const setStatus = useSetAtom(statusMessageAtom);
+  const store = useStore();
+  // A shared map's resize replaces everyone's map, so there it still starts every history again.
+  const shared = useAtomValue(syncTapAtom)?.owns(store.get) === true;
   const { loaded } = useTileset();
   const [nw, setNw] = useState(w);
   const [nh, setNh] = useState(h);
@@ -234,7 +239,7 @@ export function ResizeMapDialog({ entry }: DialogProps) {
               {!same && <li>{crops.length > 0 ? t("Cropped: {join}.", { join: crops.join(", ") }) : t("No units, sprites or doodads fall outside.")}</li>}
               {!same && preview && preview.locationsClamped > 0 && <li>{clamp ? t("{n, plural, one {# location hangs} other {# locations hang}} past the edge and will be pulled inside.", { n: preview.locationsClamped }) : t("{n, plural, one {# location hangs} other {# locations hang}} past the edge and will stay there.", { n: preview.locationsClamped })}</li>}
               {!same && (scenario.isom ? <li>{loaded ? t("ISOM will be rebuilt from the tiles.") : t("The tileset is not loaded, so ISOM will be the fill's lattice — run Rebuild ISOM afterwards.")}</li> : <li>{t("The map has no ISOM section; none is made.")}</li>)}
-              <li>{t("This cannot be undone: the undo history is cleared.")}</li>
+              <li>{shared ? t("The map is shared, so this cannot be undone: everyone's undo history starts again.") : t("Undo takes the whole resize back.")}</li>
             </ul>
           </Group>
         </div>

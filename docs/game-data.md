@@ -46,8 +46,8 @@ or playing one, in the game or on the site's play page, needs StarCraft installe
   directly. The forwarder stores nothing.
 
 Either way the copy is made on your machine, in a background thread in the browser and in
-the app's own process on the desktop, so it happens once. Open maps pick the graphics up
-as they arrive.
+the app's own process on the desktop, and only once. Open maps pick the graphics up as
+they arrive.
 
 ### Where it looks
 
@@ -153,9 +153,9 @@ need to move; see [Remastered graphics](#remastered-graphics). A Remastered copy
 **View ▸ Remastered Graphics** on when it is made.
 
 Remastered also added tiles, and so doodads, to seven of the eight tilesets (Installation
-is unchanged). Everything the 1.16 tile tables hold is in its tables unchanged, so a map
-made for 1.16 draws the same from either copy. A map that uses the added tiles needs the
-Remastered files: from a 1.16 copy those tiles have no picture.
+is unchanged). Everything the 1.16 tile tables hold is in Remastered's tables unchanged,
+so a map made for 1.16 draws the same from either copy. A map that uses the added tiles
+needs the Remastered files: from a 1.16 copy those tiles have no picture.
 
 There are two ways in:
 
@@ -236,7 +236,7 @@ of StarCraft opens a map handed to it from outside, so the editor writes the map
 - **Chrome and Edge** write into a folder you pick once and remember. Other browsers
   download the file.
 
-At scmjs.dev, Tools ▸ Test Map in Browser plays the map on the play page instead, from the
+At scmjs.dev, Tools ▸ Test in Browser plays the map on the play page instead, from the
 copy described above. It needs a copy made from your own installation, not from the map
 editor download.
 
@@ -363,8 +363,8 @@ bends the picture: water is the ground seen through two layers of ripples drifti
 the map, and lava the ground seen through heat, which shows on whatever glows red and
 leaves dark rock alone. A table per tileset says which megatiles take the effect, and a
 mask for each says where on it, so a shoreline tile moves on its water side only. The
-editor does the same with View ▸ Animate Water on. Ashworld's is the lava; the other
-tilesets' is water; Space Platform and Installation have neither. Desert's tar is left
+editor does the same with View ▸ Animate Water on. On Ashworld the effect is lava, on the
+other tilesets water; Space Platform and Installation have neither. Desert's tar is left
 still, as in the game.
 
 How far the picture bends and how the ripples drift are the game's own figures. How large

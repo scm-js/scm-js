@@ -276,8 +276,8 @@ confirmed the first nine:
   and 206 included;
 - the settings tables have the same lengths, and repeated copies combine entry by entry.
 
-A map with no `MBRF` plays with no briefing, as in 1.16.1. That one rests on playing
-alone.
+A map with no `MBRF` plays with no briefing, as in 1.16.1. That one has been checked only
+by playing alone.
 
 Remastered's trigger engine has been read too, apart from the part that hands out the
 triggers to the players when a game starts, which is scrambled. The [trigger
@@ -2119,11 +2119,11 @@ column's width. A Carrier (unit type 72) given 400 hit points and a new cost:
 ```
 <!-- /generated -->
 
-The first byte is what makes the rest count: while it is anything but 0, the game uses its
-own values for the unit type and ignores the other columns, the name included, so a unit
-type's new name only shows once the type is marked as not using the game's own values.
-[`UNIS`](#unis) is laid out the same way with 100 weapons instead of 130, so every column
-is at the same offset except the last, the damage each upgrade adds.
+The first byte decides whether the rest counts. While it is anything but 0, the game uses
+its own values for the unit type and ignores the other columns, the name included, so a
+unit type's new name shows only once the type is marked as not using the game's own
+values. [`UNIS`](#unis) is laid out the same way with 100 weapons instead of 130, so every
+column is at the same offset except the last, the damage each upgrade adds.
 
 The weapon columns are not read for their own sake. The game sets a weapon's damage only
 while it sets up a unit type that fires it and does not use the game's own values, so a

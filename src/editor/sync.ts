@@ -125,6 +125,13 @@ export interface SyncFieldsOp {
   stringsLength?: number;
   /** The table's width and text encoding, when they changed. */
   stringsFormat?: { extended: boolean; encoding: TextEncoding };
+  /**
+   * For each field in `set`, `fieldHash` of the value the change was made from — what the
+   * sender's dialog showed. A receiver whose copy holds something else learns that the op
+   * writes over a version its sender never saw (`Applied.overwritten`). Absent from ops
+   * sent by older editors, which are then never reported as overwriting.
+   */
+  from?: Partial<Record<SyncField, string>>;
 }
 
 export interface SyncExtrasOp {
@@ -166,6 +173,11 @@ export interface Applied {
   cells?: SyncCells;
   /** Parts that could not be applied (their record was gone, the map was another size…). */
   dropped: number;
+  /**
+   * A fields op that wrote over a value its sender never saw (`SyncFieldsOp.from`): each such
+   * field's value as it was just before, packed JSON — a version someone's change is lost from.
+   */
+  overwritten?: Map<SyncField, string>;
 }
 
 /* ── Bytes and values ────────────────────────────────────── */
@@ -492,6 +504,22 @@ export function captureFields(scn: Scenario): FieldsBaseline {
   return { values, strings: scn.strings.strings.slice(), format: { extended: scn.strings.extended, encoding: scn.strings.encoding } };
 }
 
+/**
+ * A short fingerprint of a field's packed JSON (`FieldsBaseline.values`), sent in place of the
+ * value itself: a trigger list can be megabytes. cyrb53 — two 32-bit lanes, 53 bits kept.
+ */
+export function fieldHash(json: string): string {
+  let h1 = 0xdeadbeef, h2 = 0x41c6ce57;
+  for (let i = 0; i < json.length; i++) {
+    const c = json.charCodeAt(i);
+    h1 = Math.imul(h1 ^ c, 2654435761);
+    h2 = Math.imul(h2 ^ c, 1597334677);
+  }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
+}
+
 /** Only the string table, after an edit that may have added a location's name. */
 export function captureStrings(scn: Scenario, base: FieldsBaseline): FieldsBaseline {
   return { ...base, strings: scn.strings.strings.slice() };
@@ -503,7 +531,11 @@ export function diffFields(scn: Scenario, base: FieldsBaseline): SyncFieldsOp | 
   let any = false;
   for (const f of SYNC_FIELDS) {
     const packed = pack(scn[f]);
-    if (JSON.stringify(packed) !== base.values.get(f)) { op.set[f] = packed; any = true; }
+    if (JSON.stringify(packed) !== base.values.get(f)) {
+      op.set[f] = packed;
+      (op.from ??= {})[f] = fieldHash(base.values.get(f) ?? "null");
+      any = true;
+    }
   }
   const now = scn.strings.strings;
   const strings: [number, string | null, string | null][] = [];
@@ -590,8 +622,14 @@ function applyFieldsOp(doc: SyncDoc, op: SyncFieldsOp): Applied {
     scn.strings.encoding = op.stringsFormat.encoding;
     markDirty(scn, "STR ", "STRx");
   }
+  let overwritten: Map<SyncField, string> | undefined;
   for (const f of SYNC_FIELDS) {
     if (!(f in op.set)) continue;
+    const from = op.from?.[f];
+    if (from !== undefined) {
+      const current = JSON.stringify(pack(scn[f]));
+      if (fieldHash(current) !== from) (overwritten ??= new Map()).set(f, current);
+    }
     const value = unpack(op.set[f]);
     if (remap.size) remapStrings(f, value, remap);
     prevFields.set(f, scn[f]);
@@ -600,6 +638,7 @@ function applyFieldsOp(doc: SyncDoc, op: SyncFieldsOp): Applied {
   }
   return {
     dropped,
+    ...(overwritten ? { overwritten } : {}),
     rollback(d) {
       for (const [f, v] of prevFields) {
         (d.scn as unknown as Record<string, unknown>)[f] = v;

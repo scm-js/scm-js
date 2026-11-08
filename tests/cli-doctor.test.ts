@@ -77,10 +77,11 @@ describe("scmjs doctor: what is ready", () => {
       { what: "TypeScript", state: "ok", detail: "" },
       { what: "Docker", state: "warn", detail: "not found" },
       { what: "StarCraft", state: "ok", detail: "" },
+      { what: "Browser", state: "warn", detail: "not found" },
       engine(["bot", "replay"]),
     ])).toEqual({
       "map info|check|…": "ok", "replay info|open": "ok", mcp: "ok", "map build": "ok", "map preview|generate": "ok", "bot new|build": "Docker",
-      "bot run": "ok", "replay watch": "ok", "map trace|cost": "engine runner", "bot ladder": "engine runner",
+      "bot run": "ok", "replay watch": "ok", "replay export": "Browser", "map trace|cost": "engine runner", "bot ladder": "engine runner",
     });
   });
 
@@ -88,7 +89,7 @@ describe("scmjs doctor: what is ready", () => {
     const r = by([{ what: "StarCraft", state: "warn", detail: "not found" }, engine([], null)]);
     expect([r["bot run"], r["map trace|cost"], r["bot ladder"], r["map preview|generate"], r["map build"]]).toEqual(["StarCraft", "StarCraft", "StarCraft", "StarCraft", "ok"]);
     expect(by([engine([], null)])["map trace|cost"]).toBe("ok");
-    expect(Object.values(by([{ what: "Node", state: "bad", detail: "" }]))).toEqual(Array(10).fill("Node"));
+    expect(Object.values(by([{ what: "Node", state: "bad", detail: "" }]))).toEqual(Array(11).fill("Node"));
   });
 
   it("lists only what is not ready, with the one thing it lacks, in 80 columns; the JSON has every group", () => {

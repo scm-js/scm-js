@@ -175,10 +175,10 @@ sixty-two waits, so that the game goes through the trigger list every 2 frames i
 every 31 ([Hyper triggers](triggers.md#hyper-triggers)). Give them to a player whose other
 triggers never wait, usually a computer slot: each player has one wait slot, and the hyper
 triggers keep it busy ([Waits](triggers.md#waits)). A map with a program does not need
-them, since its build already makes the list run every frame: the build leaves hyper
-triggers out, the script's and the map's own alike, and says so in a notice, as it does
-for a trigger owned by a player group the game runs no list for (Players 9 to 12, Foes,
-Allies, Neutral, Non-Allied Victory Players).
+them, because its build already makes the list run every frame. The build leaves hyper
+triggers out, both the script's and the map's own, and says so in a notice. It does the
+same for a trigger owned by a player group the game runs no list for (Players 9 to 12,
+Foes, Allies, Neutral, Non-Allied Victory Players).
 
 ## Examples of triggers
 
@@ -570,9 +570,9 @@ The shadow-art video for "Bad Apple!!" played on the minimap, in time with the s
 fog of war is the screen: a tile lit this frame is white, a tile seen before is grey, so
 each frame of the game shows one frame of the video, 5,216 of them.
 
-The video is a file of the script. **Import Video…** turned it into `bad-apple.video`, a
-tile a pixel at 128 × 96, and when the script is built the `fog` library works out, for
-every frame, the units whose sight covers exactly its white parts. In the game each of
+The video is a file of the script. **Import Video…** turned it into `bad-apple.video`, 128
+× 96 with one tile per pixel, and when the script is built the `fog` library works out,
+for every frame, the units whose sight covers exactly its white parts. In the game each of
 those units is made and taken away in the same trigger pass, and what it saw stays lit
 until the next frame, when the library has the game put every tile back in fog. A frame
 takes about 125 units on average and 356 at the most. The language guide describes [files
@@ -645,7 +645,7 @@ script that `playWav` plays (mixed to mono).
 
 **Playing it.** Host a multiplayer game alone, which runs at Fastest, the speed the video
 was imported for. Switch to Classic graphics (Options ▸ Graphics, or F5): Classic draws
-the minimap a pixel a tile, sharp, where Remastered graphics blurs it. Turn the music
+the minimap sharp, one pixel per tile, where Remastered graphics blurs it. Turn the music
 volume down, so the game's own music does not play over the song.
 
 "Bad Apple!! feat. nomico" is by Alstroemeria Records, an arrangement of a song from the
@@ -776,8 +776,9 @@ calls alone, with no program, plays on every version.
 
 ### What does not carry over
 
-- **Map protection.** euddraft's freeze scrambles a map against copying. TrigScript adds
-  no protection, by decision: a map stays one the editor, and anyone else's, can open.
+- **Map protection.** euddraft's freeze scrambles a map against copying. TrigScript
+  deliberately adds no protection, so the map can still be opened in this editor or any
+  other.
 - **euddraft plugins and Python libraries.** TrigScript has its own [library of
   modules](trigscript-library.md), and other scmJS plugins can provide [libraries of their
   own](trigscript-library.md#libraries-from-other-plugins). Neither runs Python.
@@ -1043,9 +1044,9 @@ build runs, and its **Save without it** button saves at once, without the progra
 
 A script with something TrigScript does not take yet is not built: Problems says which
 line and why, as a warning, and the save's notice says so again, with a button to save
-without the programs. The rest of the map is saved as it is. A map with Magenta's rows is
-built in the same pass: Magenta writes its rows as TrigScript and hands them to this
-build, so the two share one layout.
+without the programs. The rest of the map is saved as it is. A map with triggers from
+Magenta (the plugin that writes triggers as sentences) is built in the same pass: Magenta
+turns its rows into TrigScript and hands them to this build, so the two share one layout.
 
 The file you get is the one to play and to share. It also holds the map as you see it in
 the editor, which is what comes back when you open it again, so the trigger list never

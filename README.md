@@ -33,8 +33,8 @@ Plugins ▸ Browse Plugins….
   plays back and is analysed: fights, economy and tech. See
   [Replays](docs/guide.md#replays).
 - **Test in the game or the browser.** Tools ▸ Test Map puts the map in the game's Maps
-  folder; at scmjs.dev, Tools ▸ Test Map in Browser plays it in a browser tab from your
-  own StarCraft files. See [Test Map](docs/guide.md#test-map).
+  folder; at scmjs.dev, Tools ▸ Test in Browser plays it in a browser tab from your own
+  StarCraft files. See [Test Map](docs/guide.md#test-map).
 - **Several people on one map.** Share the open map and anyone with the link edits it with
   you, live. See [Editing a map together](docs/guide.md#editing-a-map-together).
 - **Triggers as code.** [TrigScript](docs/trigscript.md) writes triggers in TypeScript,

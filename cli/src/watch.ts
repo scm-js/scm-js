@@ -270,9 +270,9 @@ export class Tally {
 }
 
 /** `m:ss`, `h:mm:ss` or seconds, as a frame of the game; a CliError for anything else. */
-export function parseClock(spec: string): number {
+export function parseClock(spec: string, option = "--from"): number {
   const parts = spec.trim().split(":");
-  if (!parts.length || parts.length > 3 || parts.some((p) => !/^\d+$/.test(p))) throw new CliError(`--from takes m:ss (or h:mm:ss), not "${spec}"`, null, 2);
+  if (!parts.length || parts.length > 3 || parts.some((p) => !/^\d+$/.test(p))) throw new CliError(`${option} takes m:ss (or h:mm:ss), not "${spec}"`, null, 2);
   const seconds = parts.reduce((n, p) => n * 60 + Number(p), 0);
   return Math.round((seconds * 1000) / FRAME_MS);
 }

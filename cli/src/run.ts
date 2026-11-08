@@ -10,13 +10,15 @@ import { readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { CliError, dot, mark, pc, plural, size } from "./ui";
+import { CliError, dot, mark, pc, size } from "./ui";
 import { openMapBytes } from "../../src/editor/mapFile";
 // The one module of the editor's the command takes that is not the library's: the plugin host is the editor's
 // (`tests/core.test.ts` names this exception).
 import { parseSpec, PluginLoadError, runHeadless, transpileTs, type HeadlessHost, type LoaderDeps, type LogEntry, type OpenedMap, type PluginSource, type Toast, type TS } from "../../src/plugins/headless";
 import { loadTypeScript } from "./build";
-import { diffMaps, printDiff, type MapDiff } from "./diff";
+import { diffMaps, printDiff, summarizeDiff, type MapDiff } from "./diff";
+
+export { summarizeDiff };
 import { writeBack } from "./exchange";
 
 export interface NodeLoaderOptions {
@@ -155,22 +157,6 @@ export async function runOnMap(doc: OpenedMap, inputPath: string, inputBytes: Ui
 }
 
 const isJson = (v: unknown): boolean => { try { return v !== undefined && JSON.stringify(v) !== undefined; } catch { return false; } };
-
-/** The change in a few words: "3 units added, 1 string changed". */
-export function summarizeDiff(d: MapDiff): string {
-  const parts: string[] = [];
-  const list = (name: string, es: { change: string }[]) => {
-    const n = (c: string) => es.filter((e) => e.change === c).length;
-    if (n("added")) parts.push(`${plural(n("added"), name)} added`);
-    if (n("removed")) parts.push(`${plural(n("removed"), name)} removed`);
-    if (n("changed")) parts.push(`${plural(n("changed"), name)} changed`);
-  };
-  const fields = d.header.length + d.players.length + d.forces.length;
-  if (fields) parts.push(`${plural(fields, "setting")} changed`);
-  list("unit", d.units); list("location", d.locations); list("trigger", d.triggers); list("briefing trigger", d.briefing); list("string", d.strings); list("file", d.members);
-  if (!parts.length && d.sections.length) parts.push(`${plural(d.sections.length, "section")} changed`);
-  return parts.join(", ");
-}
 
 /** The closing line (the events were printed as they came, or are printed first when they were not). */
 export function printRun(name: string, r: RunOutcome, { events = false, dryRun = false } = {}): string[] {

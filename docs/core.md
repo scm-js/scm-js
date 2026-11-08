@@ -56,7 +56,7 @@ terrain. Everything else is a function that reads or changes one.
 | Describing | `scenarioName`, `scenarioDescription`, `mapVersionOf`, `mapStatistics`, `statisticsText`, `findInScenario` |
 | Check Map | `validateScenario`, `issueCounts` — every rule the editor runs that needs no game data |
 | Triggers | `readTriggers` / `applyTriggers`, `readBriefing` / `applyBriefing`, `newTrigger`, `newCondition`, `newAction`, `triggerNames`, `triggerUsage`, `triggerComment`; the numbers a record holds, by name (`ConditionType`, `ActionType`, `PlayerGroup`, `Comparison`, `SwitchState`, `SwitchAction`, `SetModifier`, `ResourceType`, `UnitClass`); the text form, `triggersToText` / `triggersFromText`; `.trg` files, `encodeTrg` / `decodeTrg`; the condition and action definitions |
-| Strings | `readStrings` / `applyStrings`, `stringUsages`, `unusedStrings`, `deleteUnused`; the table as text, `formatStringTable` / `parseStringTable`; `plainText` to drop colour codes |
+| Strings | `readStrings` / `applyStrings`, `stringUsages`, `unusedStrings`, `deleteUnused`; the table as text, `formatStringTable` / `parseStringTable`; `plainText` to drop colour codes; `decodeText` for bytes in a map's encoding (`TEXT_ENCODINGS`) |
 | Units | `addUnits`, `removeUnits`, `updateUnits`, `moveUnits`, `makeUnit`, `unitAt`, `unitsInBox`, `isResource` |
 | Locations | `addLocation`, `editLocation`, `removeLocations`, `moveLocations`, `locationName`, `usedLocations` |
 | Settings | `readPlayerSettings` / `applyPlayerSettings`, forces, unit, upgrade and tech settings, `changeMapVersion`, `changeTextEncoding` |
@@ -135,7 +135,7 @@ Strings have the same pair, `formatStringTable` and `parseStringTable`.
   tables that only the editor has. `mapStatistics` and `validateScenario` take `null` for
   them and leave those parts out, as the command line does. The decoders are here, but no
   game file is: `scmjs map preview` reads the tileset out of your copy of StarCraft and
-  draws with them.
+  draws with it.
 - **No plugin API.** The functions are the editor's, not `api.*`; a plugin's code does not
   run here. A plugin can share logic with a script by putting it in a module both import.
 - **One language.** The library's own text — a warning, an issue — is English.

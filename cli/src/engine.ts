@@ -16,7 +16,7 @@ import { basename, join, resolve } from "node:path";
 import { gunzipSync } from "node:zlib";
 import { runnerEnv } from "./runtime";
 import { msg, t, translate } from "./i18n";
-import { CliError, pc } from "./ui";
+import { CliError, dot, mark, pc } from "./ui";
 
 /** Where the play page is, and so where the engine's files are (`SCMJS_PLAY_URL` for another). */
 export const PLAY_URL = "https://scmjs.dev/play";
@@ -50,8 +50,15 @@ export interface EngineCurrent {
   mods?: number;
 }
 
-/** The mod overlay version this command hands a runner: `--mod <folder>`, a folder of the mod's files in the game's paths. */
-export const MOD_OVERLAY = 1;
+/**
+ * The mod overlay version this command knows: 1 is `--mod <folder>`, a folder of the mod's files in the game's paths;
+ * 2 adds the mod's code beside a bot (`bot run`, `bot ladder`): the folder's `plugins/` and `firegraft/` loaded before
+ * the game starts, `mod.json` naming the mod and its hash, a use-map-settings game (`--ums`), and a `start` line that
+ * says whether the bot was made for the mod (scm-sim `src/bwapi/modCode.ts`). A command asks for the version it needs.
+ */
+export const MOD_OVERLAY = 2;
+/** The overlay version that carries a mod's code (plugins and FireGraft project) beside a bot. */
+export const MOD_CODE = 2;
 
 /** The user's cache folder for scmjs: XDG's, Windows's local app data, else `~/.cache`. */
 export function cacheRoot(env = process.env, home = homedir()): string {
@@ -138,11 +145,48 @@ const modsOf = (c: EngineCurrent) => (typeof c.mods === "number" && c.mods > 0 ?
  * The runner's arguments for a mod laid over the game (`--mod <folder>`, once a layer, the later winning), or a
  * CliError when the engine's runners take no mod: a deploy from before mods. Nothing when there is no mod.
  */
-export function modArgs(engine: Engine, folders: string | readonly string[] | null | undefined): string[] {
+export function modArgs(engine: Engine, folders: string | readonly string[] | null | undefined, need = 1): string[] {
   const layers = typeof folders === "string" ? [folders] : folders ?? [];
   if (!layers.length) return [];
-  if (engine.mods < MOD_OVERLAY) throw new CliError(t("The game engine at {dir} (build {build}) cannot lay a mod over the game: --mod needs runners of mod overlay version {version} or newer (\"mods\": {version} in the play page's engine/current.json).", { dir: engine.dir, build: engine.build, version: MOD_OVERLAY }), t("A play page deployed with scm-sim's mod support has them; the next run fetches it (or name a newer one with --engine)."));
+  if (engine.mods < need) {
+    if (need >= MOD_CODE && engine.mods >= 1) throw new CliError(t("The game engine at {dir} (build {build}) lays a mod's files over the game but cannot run its plugins beside a bot: that needs runners of mod overlay version {version} (\"mods\": {version} in the play page's engine/current.json), which loads a mod's plugins and FireGraft project, plays its maps with their own settings, and says whether the bot was made for the mod.", { dir: engine.dir, build: engine.build, version: need }), t("A play page deployed with scm-sim's mod support has them; the next run fetches it (or name a newer one with --engine)."));
+    throw new CliError(t("The game engine at {dir} (build {build}) cannot lay a mod over the game: --mod needs runners of mod overlay version {version} or newer (\"mods\": {version} in the play page's engine/current.json).", { dir: engine.dir, build: engine.build, version: need }), t("A play page deployed with scm-sim's mod support has them; the next run fetches it (or name a newer one with --engine)."));
+  }
   return layers.flatMap((f) => ["--mod", f]);
+}
+
+/** What a bot runner's `start` line says of the mod's code (overlay 2, scm-sim `src/bwapi/modCode.ts`, `ModCodeReport`). */
+export interface RunnerCodeReport {
+  name: string;
+  link?: string;
+  /** The mod's hash, and its hash without the plugins' lines. */
+  hash: string;
+  withoutPlugins: string;
+  /** Each plugin's load and init, in the runner's words; those left out and why. */
+  plugins: string[];
+  skipped: string[];
+  firegraft: { name: string; from: string | null; edits: number } | null;
+  hashMs: number;
+}
+
+/** How a bot fits the game's mod (scm-sim `BotFitReport`): made for it, playing vanilla data, or made for another. */
+export interface BotFitReport { mod: { name: string; hash: string; link?: string } | null; fit: "made" | "vanilla" | "other"; words: string }
+
+/** The mod's code under a run's first line: its name and hash, the plugins initialized, the FireGraft project, the kind of game. */
+export function codeWords(c: RunnerCodeReport, game?: "melee" | "ums"): string {
+  const failed = c.plugins.filter((p) => / failed: /.test(p));
+  const plugins = c.plugins.length ? t("{n, plural, one {# plugin} other {# plugins}} loaded", { n: c.plugins.length - failed.length }) : t("no plugins");
+  const fg = c.firegraft ? `${dot}${t("FireGraft project {name} ({n, plural, one {# edit} other {# edits}})", { name: c.firegraft.name, n: c.firegraft.edits })}` : "";
+  const kind = game === "ums" ? `${dot}${t("the map's own settings")}` : "";
+  return `  ${pc.dim(`${t("mod:")} ${c.name}${dot}${c.hash}${dot}${plugins}${fg}${kind}`)}${failed.map((f) => `\n  ${mark.warn} ${f}`).join("")}`;
+}
+
+/** How the bot fits the mod, in a line: "made for Cosmonarchy BW", "plays vanilla data", or a warning. `who` names the bot in a ladder. */
+export function fitWords(f: BotFitReport, game: { name: string; hash: string } | null, who?: string): string {
+  const name = who ? `${who}: ` : "";
+  if (f.fit === "made") return `  ${mark.ok} ${name}${t("made for {mod}", { mod: f.mod!.name })}`;
+  if (f.fit === "vanilla") return `  ${pc.dim(`${name}${game ? t("plays vanilla data") : t("plays the game's own data")}`)}`;
+  return `  ${mark.warn} ${name}${game ? t("made for {mod} ({hash}), not for this game's {game} ({gameHash}): it plays all the same", { mod: f.mod!.name, hash: f.mod!.hash, game: game.name, gameHash: game.hash }) : t("made for {mod} ({hash}), and this game has no mod: it plays the game's own data", { mod: f.mod!.name, hash: f.mod!.hash })}`;
 }
 
 /** What a runner's `start` line says of the mod it laid over the game (scm-sim `src/exact/modRunner.ts`, `ModReport`). */

@@ -9,6 +9,11 @@
  * them under the mod as a layer of their own, read out of the installation by its own reader (`gamefiles.ts`: the
  * game's names, the same bytes as a 1.16.1 copy's archives), and takes that layer back out of what the runner says
  * of the mod. A 1.16.1 copy's archives hold them and the runner reads those itself: nothing is laid under the mod there.
+ *
+ * For a bot beside the mod (`bot run`, `bot ladder`: `code`, overlay version 2) the folder carries the mod's code as
+ * well: the plugins it carries as files in `plugins/`, its FireGraft project and database in `firegraft/`, and
+ * `mod.json` with the mod's name and its hash (`sourceHash`, the play page's rule), which the runner takes as the
+ * mod's: the folder lays the files differently from how the mod has them, so the runner could not work it out again.
  */
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -19,6 +24,8 @@ import type { RunnerModReport } from "../engine";
 import type { GameFiles } from "../gamefiles";
 import { openMod } from "./open";
 import { writeLoose } from "./pack";
+import { sourceHash } from "./hash";
+import { mkdirSync, writeFileSync } from "node:fs";
 import type { ModSource } from "./source";
 
 export interface ModOverlay {
@@ -67,7 +74,7 @@ export async function gameLayer(source: ModSource, base: GameFiles | null): Prom
   return out;
 }
 
-export function modOverlay(path: string, base: () => Promise<GameFiles | null>): ModOverlay {
+export function modOverlay(path: string, base: () => Promise<GameFiles | null>, o: { code?: boolean } = {}): ModOverlay {
   let dirs: { game: string | null; mod: string } | null = null;
   let mine = new Set<string>(), under = 0;
   return {
@@ -81,6 +88,7 @@ export function modOverlay(path: string, base: () => Promise<GameFiles | null>):
         const members: { member: string; data: Uint8Array }[] = [];
         for (const f of source.files.values()) members.push({ member: f.name, data: await f.read() });
         await writeLoose(members, dirs.mod);
+        if (o.code) await writeCode(source, dirs.mod);
         mine = new Set(source.files.keys());
         under = lay.length;
       }
@@ -96,4 +104,17 @@ export function modOverlay(path: string, base: () => Promise<GameFiles | null>):
       dirs = null;
     },
   };
+}
+
+/** The mod's code beside its files, for a bot's runner: `plugins/`, `firegraft/` and `mod.json` (the module's head says why). */
+async function writeCode(source: ModSource, dir: string): Promise<void> {
+  // (a plugin inside the mod's archive is not loaded by the play page: only those carried as files)
+  const plugins = source.plugins.filter((p) => !p.member);
+  if (plugins.length) mkdirSync(join(dir, "plugins"), { recursive: true });
+  for (const p of plugins) writeFileSync(join(dir, "plugins", p.name.split(/[\\/]/).pop()!), await p.read());
+  if (source.firegraft.length) mkdirSync(join(dir, "firegraft"), { recursive: true });
+  for (const f of source.firegraft) writeFileSync(join(dir, "firegraft", f.name.split(/[\\/]/).pop()!), await f.read());
+  const hash = await sourceHash(source);
+  const link = (source.manifest as { link?: unknown; url?: unknown } | null)?.link ?? (source.manifest as { url?: unknown } | null)?.url;
+  writeFileSync(join(dir, "mod.json"), JSON.stringify({ name: source.name, hash: hash.hash, withoutPlugins: hash.withoutPlugins, ...(typeof link === "string" && /^https?:\/\//.test(link) ? { link } : {}) }, null, 2) + "\n");
 }

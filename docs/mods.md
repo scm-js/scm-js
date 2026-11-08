@@ -309,7 +309,10 @@ when the bot plays, the runners say "made for" the mod when the game's mod is th
 "plays vanilla data" for a bot made for no mod, and warn (the game still plays) for a bot
 made for another. The scmbot repository's `examples/cosmonarchy/` is a small bot for
 Cosmonarchy written against such a header. See [the command](cli.md#a-bot-made-for-a-mod)
-for the names' rules.
+for the names' rules. To try a bot on the mod without a page,
+`scmjs bot run mybot/out/mybot.scmbot "(4)Exodus 1.0.scx" --mod "Cosmonarchy BW"` plays it
+with the mod's plugins, and `scmjs bot ladder … --mod` plays a ladder on the mod ([a bot
+on a mod](cli.md#a-bot-on-a-mod)).
 
 ### For AI tools
 

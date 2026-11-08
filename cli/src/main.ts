@@ -1689,16 +1689,26 @@ ${pc.dim(t("Guide: {url}", { url: BOT_GUIDE }))}`);
     .option("--frames <n>", t("stop after this many frames when nobody has won (24 a second)"), "50000")
     .option("--every <n>", t("frames between progress lines; 0 for none"), "1000")
     .option("--data <folder>", t("a folder the bot keeps its files in between games"))
+    .option("--mod <mod>", t("play a mod: its files, its plugins and its FireGraft project (a mod folder, an .mpq, a mod's .exe or .zip, or the release as its makers ship it)"))
+    .option("--ums", t("play the map with its own settings (the default for a mod with plugins)"))
+    .option("--melee", t("play a melee game even on a mod with plugins"))
     .option("--starcraft <folder>", t("your installation of StarCraft (SCMJS_STARCRAFT); found in the usual places otherwise"))
     .addOption(new Option("--engine <where>", t("the play page's address, or a folder holding the engine (SCMJS_PLAY_URL)")).hideHelp())
     .addHelpText("after", "\n" + t(`The game is the play page's engine, fetched once (about 25 MB) and kept; the game's own files come from your copy
 of StarCraft, Remastered or 1.16.1. Prints what the bot says and each side's purse and supply as it plays, then who
-won. Exits 1 when the bot printed errors, 2 when the game could not start.`))
-    .action(async (botFile: string, map: string, o: { json?: boolean; race: string; opponents: string; seed?: string; frames: string; every: string; data?: string; starcraft?: string; engine?: string }) => {
-      const r = await runBotGame(botFile, map, {
-        race: o.race, opponents: o.opponents.split(",").map((s) => s.trim()).filter(Boolean), seed: o.seed === undefined ? undefined : Number(o.seed), frames: Number(o.frames), every: Number(o.every),
-        data: o.data, starcraft: o.starcraft, engine: o.engine, live: o.json ? undefined : (line) => print(line),
-      });
+won. Exits 1 when the bot printed errors, 2 when the game could not start.`) + "\n\n" + t(`With --mod the mod's plugins run beside the bot, and the first lines say whether the bot was made for the mod
+(scmjs mod header --bot), plays vanilla data, or was made for another mod, which plays all the same.`))
+    .action(async (botFile: string, map: string, o: { json?: boolean; race: string; opponents: string; seed?: string; frames: string; every: string; data?: string; mod?: string; ums?: boolean; melee?: boolean; starcraft?: string; engine?: string }) => {
+      if (o.ums && o.melee) throw new CliError(t("--ums and --melee: one kind of game"), null, 2);
+      const overlay = o.mod ? modOverlay(o.mod, () => gameFilesOrNull(o.starcraft), { code: true }) : null;
+      let r;
+      try {
+        r = await runBotGame(botFile, map, {
+          race: o.race, opponents: o.opponents.split(",").map((s) => s.trim()).filter(Boolean), seed: o.seed === undefined ? undefined : Number(o.seed), frames: Number(o.frames), every: Number(o.every),
+          data: o.data, starcraft: o.starcraft, engine: o.engine, live: o.json ? undefined : (line) => print(line),
+          mod: overlay, game: o.ums ? "ums" : o.melee ? "melee" : undefined,
+        });
+      } finally { overlay?.remove(); }
       if (o.json) print(JSON.stringify({ bot: botFile, map, ...r }, null, 2));
       if (r.exitCode) process.exitCode = r.exitCode;
     });
@@ -1714,6 +1724,9 @@ won. Exits 1 when the bot printed errors, 2 when the game could not start.`))
     .option("--data <folder>", t("where each bot keeps its files between games (default: the ladder's folder)"))
     .option("--parallel <n>", t("games played at once"), "1")
     .option("--timeout <seconds>", t("how long a bot may think over one frame before it counts as hung (the first frame: 5 minutes at least)"), "60")
+    .option("--mod <mod>", t("play a mod: its files, its plugins and its FireGraft project (a mod folder, an .mpq, a mod's .exe or .zip, or the release as its makers ship it)"))
+    .option("--ums", t("play the map with its own settings (the default for a mod with plugins)"))
+    .option("--melee", t("play a melee game even on a mod with plugins"))
     .option("--starcraft <folder>", t("your installation of StarCraft (SCMJS_STARCRAFT); found in the usual places otherwise"))
     .addOption(new Option("--engine <where>", t("the play page's address, or a folder holding the engine (SCMJS_PLAY_URL)")).hideHelp())
     .addHelpText("after", "\n" + t(`Every pairing plays on every map: a bot against the computer once a seed, two bots both ways round (who is first in
@@ -1722,8 +1735,10 @@ then the standing with Elo, each bot's time a frame, and the head-to-head. Each 
 ladder's folder for scmjs replay watch. Exits 1 when a game could not be played or a bot's copy failed.`) + `
 
   scmjs bot ladder out/mybot.scmbot:p computer --maps "(2)Boxer.scm" --races tzp --games 3
-  scmjs bot ladder a.scmbot b.scmbot c.scmbot --maps maps/*.scx --frames 30000`)
-    .action(async (specs: string[], o: { json?: boolean; maps: string[]; races: string; games: string; seeds?: string; frames: string; out?: string; data?: string; parallel: string; timeout: string; starcraft?: string; engine?: string }) => {
+  scmjs bot ladder a.scmbot b.scmbot c.scmbot --maps maps/*.scx --frames 30000
+  scmjs bot ladder cosmo.scmbot:t other.scmbot:t --maps "(4)Exodus 1.0.scx" --mod "Cosmonarchy BW"`)
+    .action(async (specs: string[], o: { json?: boolean; maps: string[]; races: string; games: string; seeds?: string; frames: string; out?: string; data?: string; parallel: string; timeout: string; mod?: string; ums?: boolean; melee?: boolean; starcraft?: string; engine?: string }) => {
+      if (o.ums && o.melee) throw new CliError(t("--ums and --melee: one kind of game"), null, 2);
       const races = parseRaces(o.races);
       const count = (v: string, name: string, least = 1) => { const n = Number(v); if (!Number.isInteger(n) || n < least) throw new CliError(t("--{flag} {value} is not a whole number of {least} or more", { flag: name, value: v, least }), null, 2); return n; };
       const games = count(o.games, "games");
@@ -1739,12 +1754,13 @@ ladder's folder for scmjs replay watch. Exits 1 when a game could not be played 
         if (game.converted) say(pc.dim(t("{name} is an original StarCraft map: it is played converted to Brood War.", { name: input.name })));
       }
       let r;
+      const overlay = o.mod ? modOverlay(o.mod, () => gameFilesOrNull(o.starcraft), { code: true }) : null;
       try {
         r = await runLadder(entrants, {
           maps: o.maps, play, races, seeds, frames: count(o.frames, "frames"), out: o.out, data: o.data, parallel: count(o.parallel, "parallel"), timeout: count(o.timeout, "timeout"),
-          starcraft: o.starcraft, engine: o.engine, live: say,
+          starcraft: o.starcraft, engine: o.engine, live: say, mod: overlay, game: o.ums ? "ums" : o.melee ? "melee" : undefined,
         });
-      } finally { for (const p of play.values()) removeGameMap(p); }
+      } finally { for (const p of play.values()) removeGameMap(p); overlay?.remove(); }
       if (o.json) print(JSON.stringify(ladderJson(r), null, 2));
       else printLadder(r);
       if (r.results.some((x) => !x.end || x.end.by === "desync" || x.end.bots.some((b) => b.state === "crashed" || b.state === "failed"))) process.exitCode = 1;

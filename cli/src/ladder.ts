@@ -9,7 +9,8 @@
 import { createInterface } from "node:readline";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, extname, join, relative, resolve } from "node:path";
-import { ensureEngine, findGameCopy, runnerFor, startRunner, type Engine } from "./engine";
+import { codeWords, ensureEngine, findGameCopy, fitWords, MOD_CODE, modArgs, modWords, runnerFor, startRunner, type BotFitReport, type Engine, type RunnerCodeReport, type RunnerModReport } from "./engine";
+import type { ModOverlay } from "./mod/overlay";
 import { t } from "./i18n";
 import { CliError, dot, duration, mark, num, pc, print, table } from "./ui";
 
@@ -161,7 +162,7 @@ export interface MatchEnd {
   ms: { game: number; bots: number[]; total: number };
 }
 export type MatchLine =
-  | { kind: "start"; map: { name: string; width: number; height: number; tileset: string }; copy: string; seed: number; players: MatchPlayer[]; seats: number; ms: { load: number; start: number } }
+  | { kind: "start"; map: { name: string; width: number; height: number; tileset: string }; copy: string; seed: number; players: MatchPlayer[]; seats: number; ms: { load: number; start: number }; mod?: RunnerModReport; code?: RunnerCodeReport; game?: "melee" | "ums"; fits?: { side: number; name: string; fit: BotFitReport }[] }
   | { kind: "text"; side: number; text: string }
   | { kind: "progress"; frame: number; players: MatchPlayer[]; ms: { game: number; bots: number[] } }
   | ({ kind: "end" } & MatchEnd)
@@ -177,6 +178,8 @@ export interface GameResult {
   winner: number | null;
   /** The replay's path, when it was written. */
   replay: string | null;
+  /** The runner's start line (the mod, its code, each bot's fit to it). */
+  start?: Extract<MatchLine, { kind: "start" }> | null;
 }
 
 /** What a game counts as for entrant `e`: won, lost, undecided (the frame limit or a draw), or not counted. */
@@ -343,6 +346,10 @@ export interface LadderOptions {
   node?: string;
   /** The time now, for the default folder's name. */
   now?: Date;
+  /** A mod laid over every game with its code (`--mod`, `modOverlay(…, { code: true })`). */
+  mod?: ModOverlay | null;
+  /** The kind of game (`--ums`, `--melee`); the runner's rule without. */
+  game?: "melee" | "ums";
 }
 
 export interface LadderOutcome {
@@ -366,11 +373,12 @@ export function ladderFolder(dir: string, now: Date): string {
 }
 
 /** One game: the runner started on it, its lines read until its end. */
-export async function playGame(runner: string, engine: Engine, copy: string, entrants: readonly Entrant[], g: ScheduledGame, o: { out: string; data: string; frames?: number; timeout?: number; node?: string; text?: (who: string, text: string) => void; play?: ReadonlyMap<string, string> }): Promise<GameResult> {
+export async function playGame(runner: string, engine: Engine, copy: string, entrants: readonly Entrant[], g: ScheduledGame, o: { out: string; data: string; frames?: number; timeout?: number; node?: string; text?: (who: string, text: string) => void; play?: ReadonlyMap<string, string>; /** `--mod <layer>` and the kind of game, as the runner takes them. */ extra?: string[] }): Promise<GameResult> {
   const replay = join(o.out, g.replay);
   const args = [resolve(o.play?.get(g.map) ?? g.map), "--engine", engine.dir, "--starcraft", copy, "--seed", String(g.seed), "--every", "0", "--replay", replay];
   if (o.frames !== undefined) args.push("--frames", String(o.frames));
   if (o.timeout !== undefined) args.push("--timeout", String(o.timeout));
+  if (o.extra) args.push(...o.extra);
   g.sides.forEach((e, k) => {
     const x = entrants[e];
     if (x.kind === "computer") args.push("--computer", RACE_WORD[g.races[k]]);
@@ -380,11 +388,12 @@ export async function playGame(runner: string, engine: Engine, copy: string, ent
   let stderr = "";
   child.stderr!.on("data", (d) => { stderr = (stderr + d).slice(-4000); });
   const exit = new Promise<number>((done) => { child.on("error", () => done(2)); child.on("close", (c) => done(c ?? 2)); });
-  let end: MatchEnd | null = null, error: string | null = null;
+  let end: MatchEnd | null = null, error: string | null = null, start: Extract<MatchLine, { kind: "start" }> | null = null;
   for await (const raw of createInterface({ input: child.stdout! })) {
     let l: MatchLine;
     try { l = JSON.parse(raw) as MatchLine; } catch { continue; }
-    if (l.kind === "end") end = l;
+    if (l.kind === "start") start = l;
+    else if (l.kind === "end") end = l;
     else if (l.kind === "error") error = l.message;
     else if (l.kind === "text") o.text?.(entrants[g.sides[l.side]]?.label ?? "?", l.text);
   }
@@ -392,7 +401,7 @@ export async function playGame(runner: string, engine: Engine, copy: string, ent
   // (English whatever the language: the error goes into ladder.json, a file.)
   if (!end && !error) error = `the runner stopped without a result (exit ${code})${stderr.trim() ? `: ${stderr.trim().split("\n").slice(-3).join(" | ")}` : ""}`;
   const winner = end && end.winner !== null ? g.sides[end.winner] ?? null : null;
-  return { game: g, end, error: end ? null : error, winner, replay: end?.replay ? replay : null };
+  return { game: g, end, error: end ? null : error, winner, replay: end?.replay ? replay : null, start };
 }
 
 /** The ladder: every game scheduled, played one at a time (or `parallel` at once), then the standing. */
@@ -411,16 +420,22 @@ export async function runLadder(entrants: Entrant[], o: LadderOptions): Promise<
   const out = resolve(o.out ?? ladderFolder(process.cwd(), o.now ?? new Date()));
   mkdirSync(out, { recursive: true });
   const data = resolve(o.data ?? join(out, "bwapi-data"));
+  // (a mod with its code in every game; the engine asked first, so that an older one is said before the mod is written out)
+  const extra: string[] = [];
+  if (o.mod) { modArgs(engine, "?", MOD_CODE); extra.push(...modArgs(engine, await o.mod.layers(), MOD_CODE)); }
+  if (o.game) extra.push(`--${o.game}`);
   say(`${pc.bold(t("{n, plural, one {# game} other {# games}}", { n: games.length }))}${dot}${entrants.map((e) => e.label).join(", ")}${dot}${t("{n, plural, one {# map} other {# maps}}", { n: o.maps.length })}${dot}${pc.dim(relative(process.cwd(), out) || out)}`);
 
   const results: GameResult[] = [];
   const parallel = Math.max(1, Math.min(o.parallel ?? 1, games.length));
-  let next = 0;
+  let next = 0, told = false;
   const worker = async () => {
     while (next < games.length) {
       const g = games[next++];
-      const r = await playGame(runner, engine, game.folder, entrants, g, { out, data, frames: o.frames, timeout: o.timeout, node: o.node, text: o.text, play: o.play });
+      const r = await playGame(runner, engine, game.folder, entrants, g, { out, data, frames: o.frames, timeout: o.timeout, node: o.node, text: o.text, play: o.play, extra });
       results.push(r);
+      // The mod, once: what the first game read of it, its code, and how each bot fits it.
+      if (!told && r.start && (r.start.code || r.start.mod)) { told = true; for (const line of modLines(r.start, entrants, g, o.mod)) say(line); }
       say(gameLine(r, entrants, games.length));
     }
   };
@@ -432,6 +447,16 @@ export async function runLadder(entrants: Entrant[], o: LadderOptions): Promise<
   };
   writeFileSync(join(out, "ladder.json"), JSON.stringify(ladderJson(outcome), null, 2) + "\n");
   return outcome;
+}
+
+/** A game's start as the ladder's lines about the mod: what was read of it, its code, each bot's fit. */
+function modLines(start: Extract<MatchLine, { kind: "start" }>, entrants: readonly Entrant[], g: ScheduledGame, overlay: ModOverlay | null | undefined): string[] {
+  const out: string[] = [];
+  if (start.mod) out.push(modWords(overlay ? overlay.report(start.mod) : start.mod));
+  if (start.code) out.push(codeWords(start.code, start.game));
+  const game = start.code ? { name: start.code.name, hash: start.code.hash } : null;
+  for (const f of start.fits ?? []) out.push(fitWords(f.fit, game, entrants[g.sides[f.side]]?.label ?? f.name));
+  return out;
 }
 
 /** The ladder as data: `--json`, and `ladder.json` beside the replays. */
@@ -446,6 +471,7 @@ export function ladderJson(r: LadderOutcome) {
       sides: x.game.sides.map((e, k) => ({ entrant: r.entrants[e].key, race: RACE_WORD[x.game.races[k]], played: x.end?.players.find((p) => p.side === k)?.race ?? null, slot: x.end?.players.find((p) => p.side === k)?.slot ?? null })),
       winner: x.winner === null ? null : r.entrants[x.winner].key, by: x.end?.by ?? null, frames: x.end?.frame ?? null, clock: x.end ? clock(x.end.frame) : null,
       replay: x.replay, error: x.error, bots: x.end?.bots ?? [], hashes: x.end?.hashes ?? null, replayAgreed: x.end?.replay?.agreed ?? null, ms: x.end ? Math.round(x.end.ms.total) : null,
+      ...(x.start?.code ? { mod: { name: x.start.code.name, hash: x.start.code.hash, game: x.start.game ?? null, fits: (x.start.fits ?? []).map((f) => ({ entrant: r.entrants[x.game.sides[f.side]]?.key ?? null, fit: f.fit.fit, mod: f.fit.mod })) } } : {}),
     })),
   };
 }

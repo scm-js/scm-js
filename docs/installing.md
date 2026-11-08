@@ -139,8 +139,8 @@ commands that draw a map or run the game read your StarCraft folder directly, so
 no extracted graphics. The [command line guide](cli.md) has the rest.
 
 Without Node, each release also has `scmjs` as a single program with Node inside it:
-`scmjs-windows-x64.zip`, `scmjs-macos-arm64.tar.gz`, `scmjs-macos-x64.tar.gz` and
-`scmjs-linux-x64.tar.gz` on the [releases
+`scmjs-cli-windows-x64.zip`, `scmjs-cli-macos-arm64.tar.gz`, `scmjs-cli-macos-x64.tar.gz`
+and `scmjs-cli-linux-x64.tar.gz` on the [releases
 page](https://github.com/scm-js/scm-js/releases/latest). Unpack it and put `scmjs`
 (`scmjs.exe` on Windows) in a folder on your PATH, or install it with
 `scoop install scmjs` (after

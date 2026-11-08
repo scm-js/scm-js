@@ -8,18 +8,18 @@ class Scmjs < Formula
 
   on_macos do
     on_arm do
-      url "https://github.com/scm-js/scm-js/releases/download/v@VERSION@/scmjs-macos-arm64.tar.gz"
+      url "https://github.com/scm-js/scm-js/releases/download/v@VERSION@/scmjs-cli-macos-arm64.tar.gz"
       sha256 "@SHA256_MACOS_ARM64@"
     end
     on_intel do
-      url "https://github.com/scm-js/scm-js/releases/download/v@VERSION@/scmjs-macos-x64.tar.gz"
+      url "https://github.com/scm-js/scm-js/releases/download/v@VERSION@/scmjs-cli-macos-x64.tar.gz"
       sha256 "@SHA256_MACOS_X64@"
     end
   end
 
   on_linux do
     on_intel do
-      url "https://github.com/scm-js/scm-js/releases/download/v@VERSION@/scmjs-linux-x64.tar.gz"
+      url "https://github.com/scm-js/scm-js/releases/download/v@VERSION@/scmjs-cli-linux-x64.tar.gz"
       sha256 "@SHA256_LINUX_X64@"
     end
   end

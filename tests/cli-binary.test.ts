@@ -64,7 +64,7 @@ describe("how scmjs was installed", () => {
   it("registers itself with Claude Code by the name a package manager gives it, else by its path", () => {
     expect(mcpAddLine(installInfo("npm", "/x"))).toBe(MCP_ADD);
     expect(mcpAddLine(binary("C:\\Users\\me\\scoop\\apps\\scmjs\\current\\scmjs.exe"))).toBe("claude mcp add scmjs -- scmjs mcp");
-    expect(mcpAddLine(binary("/home/me/bin/scmjs-linux-x64"))).toBe("claude mcp add scmjs -- /home/me/bin/scmjs-linux-x64 mcp");
+    expect(mcpAddLine(binary("/home/me/bin/scmjs-cli-linux-x64"))).toBe("claude mcp add scmjs -- /home/me/bin/scmjs-cli-linux-x64 mcp");
     expect(mcpAddLine(binary("C:\\Program Files\\scmjs\\scmjs.exe"))).toBe('claude mcp add scmjs -- "C:\\Program Files\\scmjs\\scmjs.exe" mcp');
     expect(mcpCheck("/nonexistent/.claude.json").detail).toContain("Claude Code not found");
   });

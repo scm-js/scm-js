@@ -3,10 +3,10 @@
 
 /** The placeholder each archive's checksum fills, and the archive (scripts/build-cli-binary.mjs names them). */
 export const ARCHIVES = {
-  SHA256_WINDOWS_X64: "scmjs-windows-x64.zip",
-  SHA256_MACOS_ARM64: "scmjs-macos-arm64.tar.gz",
-  SHA256_MACOS_X64: "scmjs-macos-x64.tar.gz",
-  SHA256_LINUX_X64: "scmjs-linux-x64.tar.gz",
+  SHA256_WINDOWS_X64: "scmjs-cli-windows-x64.zip",
+  SHA256_MACOS_ARM64: "scmjs-cli-macos-arm64.tar.gz",
+  SHA256_MACOS_X64: "scmjs-cli-macos-x64.tar.gz",
+  SHA256_LINUX_X64: "scmjs-cli-linux-x64.tar.gz",
 };
 
 /** Each recipe in packaging/ and where its filled copy goes, laid out as the bucket, winget-pkgs and the tap lay them out. */

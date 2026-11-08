@@ -54,8 +54,8 @@
 #   https://github.com/scm-js/scm-js/releases/latest/download/scmJS-linux-amd64.deb
 #   https://github.com/scm-js/scm-js/releases/latest/download/scmJS-macos-arm64.dmg
 #   https://github.com/scm-js/scm-js/releases/download/nightly/scmJS-windows-x64-setup.exe
-#   https://github.com/scm-js/scm-js/releases/latest/download/scmjs-windows-x64.zip  (the command line;
-#     scmjs-macos-arm64.tar.gz, scmjs-macos-x64.tar.gz, scmjs-linux-x64.tar.gz and SHA256SUMS too)
+#   https://github.com/scm-js/scm-js/releases/latest/download/scmjs-cli-windows-x64.zip  (the command line;
+#     scmjs-cli-macos-arm64.tar.gz, scmjs-cli-macos-x64.tar.gz, scmjs-cli-linux-x64.tar.gz and SHA256SUMS too)
 #
 # That is why `electron-builder.yml` names the assets without the version in them: the
 # redirect can only work against a fixed file name. The version is in the release title,

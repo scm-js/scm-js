@@ -2176,3 +2176,15 @@ Branch `cli-balance-optimize`, one PR; nothing in scm-sim changed (the runner fa
   (rebuild); a member is carried as stored by its own size alone, so a few small ones can be carried where writing
   them afresh would have packed tighter (the whole file is compared both ways, which bounds it). Aside: `map rush` on (8)StarCraft Fortress reports "910 walks" for 8 starts on
   the original file too.
+
+**The archives are `scmjs-cli-<os>-<arch>` (2026-11-08, after the 0.12.0 release failed).** The first names were
+`scmjs-windows-x64.zip` and so on, which differ only in case from the desktop installers' `scmJS-windows-x64.zip`
+(electron-builder's `${productName}-windows-${arch}.zip`, the portable editor). The tag build of v0.12.0 created the
+release and then `gh release create … assets/*` got `HTTP 404` from uploads.github.com on `scmJS-windows-x64.zip`, and
+gh removed the half-made release — two assets whose names differ only in case cannot both be in a release, and on a
+case-insensitive disk (Windows, macOS) a person downloading both would have a clash anyway. So the command's archives
+carry `-cli-`: `scmjs-cli-windows-x64.zip`, `scmjs-cli-macos-arm64.tar.gz`, `scmjs-cli-macos-x64.tar.gz`,
+`scmjs-cli-linux-x64.tar.gz` (build-cli-binary.mjs `TARGETS[].asset`, `scripts/lib/recipes.mjs`, the packaging
+templates, docs/cli.md, docs/installing.md). The file inside each archive is still `scmjs` / `scmjs.exe`. v0.12.0 is a
+tag with no release page (its editor, docs, npm packages and image did publish); 0.12.1 is that release, and
+`docs/releases/0.12.0.md` became `0.12.1.md`.

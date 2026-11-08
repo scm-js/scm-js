@@ -5,10 +5,10 @@ it, built by `scripts/build-cli-binary.mjs` in the `cli-binary` job of `build.ym
 
 | Asset | Holds |
 | --- | --- |
-| `scmjs-windows-x64.zip` | `scmjs.exe`, `LICENSE`, `THIRD-PARTY-NOTICES.txt` |
-| `scmjs-macos-arm64.tar.gz` | `scmjs` (signed ad hoc), the same two files |
-| `scmjs-macos-x64.tar.gz` | the same |
-| `scmjs-linux-x64.tar.gz` | the same |
+| `scmjs-cli-windows-x64.zip` | `scmjs.exe`, `LICENSE`, `THIRD-PARTY-NOTICES.txt` |
+| `scmjs-cli-macos-arm64.tar.gz` | `scmjs` (signed ad hoc), the same two files |
+| `scmjs-cli-macos-x64.tar.gz` | the same |
+| `scmjs-cli-linux-x64.tar.gz` | the same |
 | `SHA256SUMS` | the SHA-256 of every asset of the release, in `sha256sum`'s form |
 
 The folders here are the recipes three package managers install it with. They hold
@@ -53,7 +53,7 @@ local build instead, with zeros for the archives not built here, to try a recipe
   `winget install --manifest <that folder>` installs from them (it needs
   `winget settings --enable LocalManifestFiles` once, as administrator). The review scans
   the zip; an unsigned program is accepted. Later versions:
-  `wingetcreate update scm-js.scmjs --version <v> --urls https://github.com/scm-js/scm-js/releases/download/v<v>/scmjs-windows-x64.zip --submit`,
+  `wingetcreate update scm-js.scmjs --version <v> --urls https://github.com/scm-js/scm-js/releases/download/v<v>/scmjs-cli-windows-x64.zip --submit`,
   which can run from a workflow with a token of its own.
 - **Homebrew.** Make the repository `scm-js/homebrew-tap` and commit the filled
   `Formula/scmjs.rb`. Check it with `brew install --formula ./Formula/scmjs.rb`,

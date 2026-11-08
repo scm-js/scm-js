@@ -379,3 +379,10 @@ beside it), stable → the GitHub provider (releases/latest). And an update is
 nightly, nightly on and off. A build from before the fix cannot find the fixed nightly by itself:
 install it once from the release page. `message()` trims electron-updater's errors, which otherwise carry the whole HTTP
 response — headers and `Set-Cookie` — into the dialog.
+
+**v0.12.0 (2026-11-08) has no release page.** Its tag build's release job created the release, then an asset upload got
+`HTTP 404` and gh removed the release: the command line's `scmjs-windows-x64.zip` and the desktop's
+`scmJS-windows-x64.zip` differ only in case. The command's archives are `scmjs-cli-<os>-<arch>` since (cli.md). Everything
+else of 0.12.0 published (Pages, docs, npm, image); 0.12.1 is the release with the page. A release asset name must not
+collide with another's case-insensitively, and nothing checks that before the upload — the nightly's release job does
+not run on a plain push to main, so a pull request's dry run and the nightly both missed it.

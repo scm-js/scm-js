@@ -194,7 +194,7 @@ export interface FolderOptions {
  * meanwhile records the data set by name with no hash.
  */
 export async function drawFromModFolder(store: Store, scn: Scenario, options: FolderOptions = {}): Promise<FolderAnswer> {
-  const pick = options.pick ?? pickFolder;
+  const pick = options.pick ?? (() => pickFolder(store));
   if (picking.has(store)) return "cancelled";
   picking.add(store);
   let pieces: FolderPiece[];

@@ -206,6 +206,8 @@
   "Symmetry is on: brushes, placing, moving and deleting are mirrored (Tools ▸ Symmetry…)": "대칭이 켜져 있습니다: 브러시, 배치, 이동, 삭제가 대칭으로 적용됩니다 (도구 ▸ 대칭…)",
   "This symmetry mode needs a square map — nothing is mirrored": "이 대칭 모드는 정사각형 맵이 필요합니다. 아무것도 대칭되지 않습니다",
   "Sym": "대칭",
+  "Reading the folder {name} · {n, plural, one {# file} other {# files}} found": "{name} 폴더 읽는 중 · {n, plural, other {파일 #개}} 찾음",
+  "Reading the folder {name} · {done} of {n, plural, one {# file} other {# files}}": "{name} 폴더 읽는 중 · {n, plural, other {파일 #개}} 중 {done}개",
   "working": "작업 중",
   "This map is open to look at; File ▸ Edit a Copy opens one you can change.": "이 맵은 보기용으로 열려 있습니다. 파일 ▸ 사본 편집으로 수정할 수 있는 사본을 엽니다.",
   "{label} · view only": "{label} · 보기 전용",

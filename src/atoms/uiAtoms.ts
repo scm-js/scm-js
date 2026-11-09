@@ -93,6 +93,20 @@ export const rightDockWidthAtom = atom((get) => get(dockWidthsAtom).right, (get,
 /** Transient status-bar message ("Ready", "Saved", …). */
 export const statusMessageAtom = atom<string>(msg("Ready"));
 
+/**
+ * The folders the editor is reading — a dropped folder before a plugin has it, a folder picked
+ * for a plugin (`api.ui.pickFiles({ directory: true })`) — each a status bar cell with a
+ * spinner until it is handed over. `found` counts the files listed; `read` the `File`s asked
+ * for once a plugin took the folder (null while still listing). Not per document.
+ */
+export interface FolderRead {
+  id: number;
+  name: string;
+  found: number;
+  read: number | null;
+}
+export const folderReadsAtom = atom<FolderRead[]>([]);
+
 /* ── Toasts ─────────────────────────────────────────────── */
 
 export const toastsAtom = atom<Toast[]>([]);

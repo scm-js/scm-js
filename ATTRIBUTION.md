@@ -24,6 +24,14 @@ project code and the assets the project has the right to license.
   maps open (Big Game Hunters, Binary Burghs, Crescent Moon and Ground Zero, from the
   game's Maps folder), so they contain Blizzard's terrain and unit art. They document the
   editor and are not offered as reusable assets.
+- **Showcase maps.** The maps offered for download in `docs/images/` beside the
+  TrigScript guide's Showcase are built from scripts in the TrigScript repository. Their
+  sound is made by the scripts, except in the Für Elise map, whose piano is rendered from
+  the [Salamander Grand Piano V3](https://sfzinstruments.github.io/pianos/salamander) by
+  Alexander Holm (CC BY 3.0) and whose strings, crash and timpani are rendered from [VSCO 2
+  Community Edition](https://github.com/sgossner/VSCO-2-CE) by Versilian Studios (CC0).
+  The map's description carries the same credits. Beethoven's score is in the public
+  domain; the transcription and the arrangement are the project's own.
 - **Related repositories** under [github.com/scm-js](https://github.com/scm-js), each with
   its own LICENSE:
   - the plugins (`plugin-*`, MIT, copyright scmJS): the ten defaults (eudplib, Image to

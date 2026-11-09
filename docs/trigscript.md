@@ -734,6 +734,80 @@ graphics modes work; the video is in Remastered.
 Korobeiniki is a Russian folk song from the 19th century; the arrangement was made for
 this map.
 
+### Für Elise
+
+[![Für Elise in the storm: red notes falling onto a keyboard of flags on the main screen,
+and the same notes on the
+minimap](images/showcase-fur-elise.webp)](https://www.youtube.com/watch?v=CFVdWwmngyw)
+
+[Watch it on YouTube](https://www.youtube.com/watch?v=CFVdWwmngyw) · [Download the
+map](images/showcase-fur-elise.scx) (3.8 MB) · [The whole
+script](https://github.com/scm-js/plugin-trigscript/blob/main/probes/fur-elise-showcase.ts)
+· [The
+soundtrack](https://github.com/scm-js/plugin-trigscript/blob/main/probes/lib/fur-elise-remix.ts)
+
+Beethoven's Für Elise, begun on a grand piano and carried into a trance remix, with every
+note drawn as it sounds. The notes fall onto a keyboard twice: on the minimap, where a
+note is a column of Overlords over Space, and on the main screen, where it is a column of
+Spider Mines wearing a Flag's looks. The melody is gold and drawn on top, the left hand
+cyan, and in the drops and builds the rest of the band falls in violet. In the storm, the
+piece's D minor middle, the chords turn red and the white keys flash red on each one, and
+Battlecruisers and Wraiths blow up on the biggest beats.
+
+**The music** is one sound, 2 minutes 35 seconds long, made when the script is built and
+started with a single `playWav`. The piano is the Salamander Grand Piano, recordings of a
+real grand at sixteen strengths for every third key, with the pedal and the strings
+ringing under it; the strings, crash and timpani are recordings from VSCO 2 Community
+Edition; the synths and drums are made by the script. The remix is in 4/4 at 128 beats a
+minute, each bar of the original's 3/8 becoming half a bar. It is mixed with the melody
+first: the harmony goes down whenever the melody plays, and a check run on the finished
+sound requires the melody to stand at least 6 dB over everything else in its range in
+every bar it plays.
+
+```js
+const grand = music.sampled(piano, { resonance: 0.07 });
+const heard = {
+  piano: { instrument: grand, volume: 1.2, reverb: 0.2 },
+  lead: { instrument: music.presets.trance(), reverb: 0.25,
+          fx: (c) => c.delay(BEAT * 0.75, { feedback: 0.3, mix: 0.18, pingPong: true }) },
+  arp: { instrument: music.presets.arp(), pan: 0.25, volume: 0.8, fx: PUMP },
+  bass: { instrument: music.presets.bass({ volume: 0.3 }), fx: (c) => PUMP(c.filter("lowpass", 700)) },
+  // … pads, stabs, strings, drums, timpani, risers
+};
+const take = music.perform({ meter: "4/4", bpm: 128 }, parts);
+// The harmony 6 dB down under the melody.
+const harmony = music.render(take, { parts: HARMONY }).duck(melody, { depth: 6, threshold: -30 });
+```
+
+These sampled instruments are not in the editor's TrigScript yet. The script builds from a
+checkout of the [TrigScript repository](https://github.com/scm-js/plugin-trigscript),
+which also holds the tool that turns the piano and orchestra recordings into the
+`.samples` files the script imports.
+
+**The picture** is worked out when the script is built: for every frame, the notes
+sounding at that moment and where each falls. The program only plays the changes back, a
+unit made, taken away or handed to the player of its new colour with Give Units, which
+recolours a unit where it stands. Remastered shows the picture about 95 ms ahead of a
+sound started in the same frame, so the music starts two frames early. One long sound
+keeps time with the game: in the recording it matches the file to the sample at every ten
+seconds, from start to end.
+
+**The map.** 128 × 128 Space Platform: Space at the top, black on the minimap, for the
+falling notes, and Platform at the bottom for the stage the camera watches. Player 1 owns
+only the Map Revealers placed over the map, Player 2 is the computer the game needs and
+owns nothing (a computer moves its own units), and Players 3 to 8 each own one colour: the
+white keys, the black keys, the melody, the left hand, the storm and the band.
+
+**Playing it.** Host a multiplayer game alone, turn the game's music off and leave sound
+effects on. It plays once, about two and a half minutes.
+
+Beethoven's score is in the public domain; the transcription, from the Breitkopf & Härtel
+complete edition of 1888, and the remix were made for this map. The piano is the
+[Salamander Grand Piano V3](https://sfzinstruments.github.io/pianos/salamander) by
+Alexander Holm ([CC BY 3.0](https://creativecommons.org/licenses/by/3.0/)); the strings,
+crash and timpani are from [VSCO 2 Community
+Edition](https://github.com/sgossner/VSCO-2-CE) by Versilian Studios (CC0).
+
 ## Coming from eudplib
 
 This page is for map makers who already write EUD maps with eudplib, in Python or in

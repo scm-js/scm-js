@@ -424,6 +424,9 @@ read in the first effect pass is still null.
   `StatusBar.tsx` through `statusBarCellsAtom` so the bar does not re-render on unrelated
   preference changes. The message, the symmetry badge and plugin status items are not
   optional. Ctrl+A's status line uses the same plural `t()` strings as Edit ▸ Select All.
+  Neither is a folder being read (a dropped folder before a plugin has it, a folder picked for one):
+  `folderReadsAtom` cells, spinner and a count, before the plugin items — the editor's one wait that
+  is not a plugin's, so it borrows their `plugin-status` / `status-spinner` look (see `plugins-host.md`).
 - File actions (open/save/new, drag-drop) are in
   `src/hooks/useMapFileActions.ts` and `src/services/mapIo.ts` (File System Access API with
   `<input>`/download fallbacks).

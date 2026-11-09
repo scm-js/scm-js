@@ -4,7 +4,7 @@ import { shownZoomAtom } from "../../atoms/zoomAtoms";
 import { chromeModeAtom, mapInFront } from "../../atoms/viewModeAtoms";
 import { scenarioAtom, terrainRevisionAtom, tilesetFileNameAtom } from "../../atoms/documentAtoms";
 import { peekTileset } from "../../formats/tileset/load";
-import { statusMessageAtom } from "../../atoms/uiAtoms";
+import { folderReadsAtom, statusMessageAtom } from "../../atoms/uiAtoms";
 import { pluginStatusItemsAtom } from "../../atoms/pluginAtoms";
 import { statusBarCellsAtom } from "../../atoms/preferencesAtoms";
 import { PluginIconView } from "../ui/PluginIconView";
@@ -13,7 +13,7 @@ import { hexTile } from "../../formats/tileset/palette";
 import { tileGroup, tileSubIndex } from "../../formats/chk/sections/terrain";
 import { symmetryAvailable, symmetryLabel } from "../../editor/symmetry";
 import { LAYERS } from "./MenuBar";
-import { msg, pluginText, translate } from "../../i18n";
+import { locale, msg, pluginText, translate } from "../../i18n";
 import { useT } from "../../i18n/react";
 
 const VERSION_LABEL = { original: msg("StarCraft 1.00"), hybrid: msg("Hybrid 1.04"), broodwar: msg("Brood War"), remastered: msg("Remastered"), remasteredHybrid: msg("Remastered") } as const;
@@ -33,6 +33,7 @@ export default function StatusBar() {
   const scenario = useAtomValue(scenarioAtom);
   const symmetry = useAtomValue(symmetryAtom);
   const pluginItems = useAtomValue(pluginStatusItemsAtom);
+  const folderReads = useAtomValue(folderReadsAtom);
   const show = useAtomValue(statusBarCellsAtom);
   useAtomValue(terrainRevisionAtom);
   // A plugin's view in the map's place says where the pointer is over it (`setPointer`); until it does,
@@ -96,6 +97,16 @@ export default function StatusBar() {
         </span>
       )}
       <span className="status-cell grow msg">{translate(status)}</span>
+      {folderReads.map((r) => (
+        <span key={`folder-${r.id}`} className="status-cell plugin-status" role="status">
+          <span className="status-spinner" aria-hidden="true" />
+          <span>
+            {r.read === null
+              ? t("Reading the folder {name} · {n, plural, one {# file} other {# files}} found", { name: r.name, n: r.found })
+              : t("Reading the folder {name} · {done} of {n, plural, one {# file} other {# files}}", { name: r.name, done: r.read.toLocaleString(locale()), n: r.found })}
+          </span>
+        </span>
+      ))}
       {pluginItems.map((item) => (
         <span
           key={item.key}

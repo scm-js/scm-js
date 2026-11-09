@@ -13,7 +13,7 @@
  *
  * Pure: the files come as anything with a size and `arrayBuffer()`, so tests hand in made ones.
  */
-import { GAME_FOLDERS, gameName, modRoot } from "../formats/mod/sources";
+import { GAME_FOLDERS, gameName, isSystemFile, modRoot } from "../formats/mod/sources";
 import type { DataSetReader } from "./source";
 
 /** One file of a picked folder: its path from the folder's parent, forward slashes (`My Mod/mpq/arr/units.dat`). */
@@ -35,15 +35,19 @@ export interface FolderSet {
 
 const isArchive = (path: string) => /\.(mpq|exe)$/i.test(path);
 
-/** A picked folder's files sorted into the game files it holds loose and the archives it holds. */
+/**
+ * A picked folder's files sorted into the game files it holds loose and the archives it holds. An operating system's
+ * file (`isSystemFile`: `sound/desktop.ini`, macOS's `._units.dat`) is neither, as nowhere else that reads a mod.
+ */
 export function folderSet(pieces: readonly FolderPiece[]): FolderSet {
   const paths = pieces.map((p) => p.path.replaceAll("\\", "/"));
-  const root = modRoot(paths);
+  const root = modRoot(paths.filter((p) => !isSystemFile(p)));
   const under = root ? `${root}/` : "";
   const files = new Map<string, FolderPiece["file"]>();
   const archives: string[] = [];
   pieces.forEach((piece, i) => {
     const path = paths[i];
+    if (isSystemFile(path)) return;
     if (isArchive(path)) { archives.push(path.split("/").pop()!); return; }
     if (!path.startsWith(under)) return;
     const inner = path.slice(under.length);

@@ -147,7 +147,9 @@ archive's list of its files is taken as its files; an archive with no list is se
 the names the game reads. A name the list holds and the archive does not (Cosmonarchy's
 loader lists six tileset files it never packed) is left out and said.
 
-The last two lines are [the mod's hash](#the-mods-hash).
+The last two lines are [the mod's hash](#the-mods-hash). An `Older hash` line follows them
+when the mod holds files an operating system left in its folders (`desktop.ini`,
+`Thumbs.db`, `.DS_Store`): the hash it had while those counted.
 
 ### A folder to edit
 
@@ -286,6 +288,45 @@ something else, so beside the hash there is one without the plugins; `mod info` 
 both, and a page that runs none of them presents that one. Each file is a line, its name
 and the SHA-256 of its bytes, and the hash is over the sorted lines ([the exact
 form](cli.md#playing-a-mod-on-the-play-page)).
+
+**Files an operating system leaves in folders are not the mod's.** Windows Explorer writes
+`desktop.ini` and `Thumbs.db` into folders it has shown, the macOS Finder `.DS_Store`, and
+a mod's loader that packs its folder into an archive packs them in too. The game never
+asks for them, and not every way of reading a folder hands them over: a browser's folder
+picker never shows `desktop.ini` or `Thumbs.db`, nor does a folder dropped on the editor,
+while a folder dropped on the play page and the command line do. So they have no line in
+the hash, wherever they lie, and the same mod has the same hash however it was read. They
+are, by name in any case:
+
+| Name | What leaves it |
+| --- | --- |
+| `desktop.ini` | Windows Explorer, a folder's view and icon |
+| `Thumbs.db`, `ehthumbs.db`, `ehthumbs_vista.db` | Windows Explorer and Media Center, thumbnails |
+| `.DS_Store`, `Icon` followed by a carriage return | the macOS Finder, a folder's view and icon |
+| a name that starts with `._`, and everything under a folder `__MACOSX` | macOS, the second half of a file on a disk that is not its own, and the folder its zips keep those in |
+| `.directory` | KDE's file manager, a folder's view |
+
+A file whose name only holds one of these (`mydesktop.ini`, `thumbs.db.txt`) is a file of
+the mod like any other. So is every other file a browser's folder picker does not show.
+Chrome hides more than the two names above: shortcuts (`.lnk`, `.url`, `.scf`), names
+Windows keeps for devices (`aux.wav`, `con.grp`), and names that begin or end with a
+space, a dot or `~`; on Windows its list of file types it does not hand to a page adds
+`.ini`, `.cfg`, `.dll` and `.manifest`. Those may be a mod's own (a plugin's
+`config.ini`), so they keep their lines: a mod read through the folder picker, or dropped
+on the editor, is short of them, and its hash says so by being another. Read such a mod
+with `scmjs`, or drop its folder on the play page, which reads a dropped folder file by
+file.
+
+**The hash before 9 November 2026** had lines for those files, so a mod whose folder holds
+any had another hash then: Cosmonarchy's release, with a `desktop.ini` in two of its sound
+folders, was `1c41a2d7701fe842` and is `20e1c6d89ae2af75`. A replay saved before that
+date, and a mod a browser kept, name the mod by the older hash. It is still taken wherever
+hashes are compared, where it can be worked out: `mod info` prints it as `Older hash`, the
+replay commands accept it, and the play page finds a mod it kept under the older hash by
+the new one and plays an older replay with it. It cannot be worked out by a route that
+never saw the files: a folder chosen with the browser's folder picker has no older hash,
+so a replay saved before the date is not matched to it. Drop the folder on the play page
+instead.
 
 ### Testing with it
 

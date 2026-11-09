@@ -1,7 +1,9 @@
 /**
  * A mod's hash as the command line works it out: core's `modHashOfDigests` (`src/formats/mod/hash.ts`, the play page's
  * rule) over every file the opened mod lays over the game, the plugins it carries as files and its FireGraft project.
- * A file at a time, the bytes let go after each. Nothing of the person's copy of the game is in it.
+ * A file at a time, the bytes let go after each. Nothing of the person's copy of the game is in it. An operating
+ * system's files are not the mod's and have no line (`ModSource.system`); where the mod has any, `older` is its hash as
+ * it was while they had lines.
  */
 import { modHashOfDigests, type Digest, type ModHash } from "../../../src/formats/mod/hash";
 import { fileDigest } from "../../../src/formats/mod/sources";
@@ -16,6 +18,8 @@ export interface SourceHash extends ModHash {
   unreadable: string[];
   /** The hash over the game files alone: what `scmjs` called a mod's data set before the plugins and the project had lines. */
   gameFilesOnly: string;
+  /** That hash as it was while an operating system's files had lines; null when the mod has none. */
+  gameFilesOnlyWere: string | null;
 }
 
 /** The mod's hash, its hash without plugins, and what went into them. */
@@ -29,7 +33,10 @@ export async function sourceHash(source: ModSource): Promise<SourceHash> {
   // (A plugin inside the mod's archive is not loaded by the play page, so it is not a line; one carried as a file is.)
   for (const p of source.plugins) if (!p.member) plugins.push({ name: p.name, sha256: await fileDigest(await p.read()) });
   for (const p of source.firegraft) if (/\.fgp$/i.test(p.name)) firegraft.push({ name: p.name, sha256: await fileDigest(await p.read()) });
-  const hash = await modHashOfDigests({ files, plugins, firegraft });
-  const onlyGame = await modHashOfDigests({ files });
-  return { ...hash, files: files.length, plugins: hash.pluginLines.length, firegraft: hash.lines.length - files.length, unreadable, gameFilesOnly: onlyGame.hash };
+  // (An operating system's files, read for the older form alone: the rule itself drops their lines.)
+  const system: Digest[] = [];
+  for (const [name, f] of source.system) { try { system.push({ name, sha256: await fileDigest(await f.read()) }); } catch { /* left out then too */ } }
+  const hash = await modHashOfDigests({ files: [...system, ...files], plugins, firegraft });
+  const onlyGame = await modHashOfDigests({ files: [...system, ...files] });
+  return { ...hash, files: files.length, plugins: hash.pluginLines.length, firegraft: hash.lines.length - files.length, unreadable, gameFilesOnly: onlyGame.hash, gameFilesOnlyWere: onlyGame.older?.hash ?? null };
 }

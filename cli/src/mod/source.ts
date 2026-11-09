@@ -7,7 +7,7 @@
 import { readdir, readFile, stat } from "node:fs/promises";
 import { basename, join, relative, resolve } from "node:path";
 import { Archive } from "mopaq";
-import { exeArchive, gameName, isMpq, isZip, modRoot, readZip, ModSourceError } from "../../../src/formats/mod/sources";
+import { exeArchive, gameName, isMpq, isSystemFile, isZip, modRoot, readZip, ModSourceError } from "../../../src/formats/mod/sources";
 import { probeNames } from "../../../src/formats/mod/hash";
 import { MOD_MANIFEST, readManifest, type ModManifest } from "../../../src/formats/mod/folder";
 import type { GameFiles } from "../gamefiles";
@@ -45,6 +45,12 @@ export interface ModSource {
   duplicates: string[];
   /** Files that are not the game's (a read-me beside the game's folders, a dll), left out. */
   left: string[];
+  /**
+   * An operating system's files where a file of the mod's would be (`isSystemFile`: `desktop.ini`, `Thumbs.db`, …), by
+   * the game's name: not the mod's files and not in its hash. Kept apart only for the hash the mod had while such
+   * files counted (`sourceHash`'s `older`).
+   */
+  system: Map<string, SourceFile>;
   /** A mod folder's manifest. */
   manifest: ModManifest | null;
   /** Archives with no file list, read by the names the game uses. */
@@ -105,17 +111,20 @@ export async function gameSource(files: GameFiles, names: readonly string[]): Pr
 }
 
 export function emptySource(path: string, kind: SourceKind, name: string): ModSource {
-  return { path, kind, name, layers: [], files: new Map(), plugins: [], firegraft: [], exes: [], duplicates: [], left: [], manifest: null, probed: [], unheld: [] };
+  return { path, kind, name, layers: [], files: new Map(), plugins: [], firegraft: [], exes: [], duplicates: [], left: [], system: new Map(), manifest: null, probed: [], unheld: [] };
 }
 
 async function fromPieces(path: string, kind: SourceKind, name: string, pieces: Piece[]): Promise<ModSource> {
   const source = emptySource(path, kind, name);
-  const loose: Piece[] = [];
+  const loose: Piece[] = [], systemPieces: Piece[] = [];
   const archives: { label: string; archive: Archive }[] = [];
   let modName: string | null = null;
   const take = async (list: Piece[], depth: number): Promise<void> => {
     for (const p of list) {
       const leaf = p.path.split("/").pop()!.toLowerCase();
+      // (An operating system's file is nothing of the mod's, whatever its name ends in: macOS's `._gptp.qdp` is no plugin.
+      // Where a game file would be it is set aside below, for the hash the mod had while such files counted.)
+      if (isSystemFile(p.path)) { systemPieces.push(p); continue; }
       if (/\.(qdp|bwl)$/.test(leaf)) { source.plugins.push({ name: p.path, bytes: p.size, read: p.read, layer: p.path }); continue; }
       if (/\.(fgp|fgd)$/.test(leaf)) { source.firegraft.push({ name: p.path, bytes: p.size, read: p.read, layer: p.path }); continue; }
       // (A program's library is never one of the game's files, wherever it is: the play page leaves it out too.)
@@ -161,6 +170,8 @@ async function fromPieces(path: string, kind: SourceKind, name: string, pieces: 
       if (!info) { if (!source.probed.includes(label)) source.unheld.push(`${gameName(n)} (${label})`); continue; }
       const read = async () => archive.readFile(n);
       const lower = gameName(n);
+      // (An archive packed from a folder Explorer had been in holds its desktop.ini too: not the mod's.)
+      if (isSystemFile(lower)) { source.system.set(lower, { name: n, size: info.uncompressedSize, read, layer: label }); continue; }
       if (/\.(qdp|bwl)$/.test(lower)) { source.plugins.push({ name: n.split("\\").pop()!, bytes: info.uncompressedSize, read, member: n, layer: label }); continue; }
       if (/\.(fgp|fgd)$/.test(lower)) { source.firegraft.push({ name: n.split("\\").pop()!, bytes: info.uncompressedSize, read, member: n, layer: label }); continue; }
       source.files.set(lower, { name: n, size: info.uncompressedSize, read, layer: label });
@@ -178,6 +189,18 @@ async function fromPieces(path: string, kind: SourceKind, name: string, pieces: 
     const was = source.files.get(lower);
     if (was && was.layer === (root ? `${root}/` : "./")) source.duplicates.push(`${was.name} and ${rel.replace(/\//g, "\\")}`);
     source.files.set(lower, { name: rel.replace(/\//g, "\\"), size: p.size, read: p.read, layer: root ? `${root}/` : "./" });
+  }
+  // An operating system's files: said among what was left out, and those where a game file would be set aside by name.
+  for (const p of systemPieces) {
+    source.left.push(p.path);
+    // (macOS's half of a plugin or of a project was taken for a plugin or a project then, not for a game file: the hash
+    // such a mod had is not worked out again.)
+    if (/\.(qdp|bwl|fgp|fgd|dll)$/i.test(p.path)) continue;
+    if (root && !p.path.startsWith(root + "/")) continue;
+    const rel = root ? p.path.slice(root.length + 1) : p.path;
+    const top = rel.split("/")[0].toLowerCase();
+    if (!rel.includes("/") || top === "plugins" || top === "firegraft") continue;
+    source.system.set(gameName(rel), { name: rel.replace(/\//g, "\\"), size: p.size, read: p.read, layer: root ? `${root}/` : "./" });
   }
   // A folder the mod's makers ship holds its launcher: the one exe with an archive in it is named as the mod is.
   if (kind === "folder" && source.exes.length === 1) source.name = source.exes[0].file.split("/").pop()!.replace(/\.exe$/i, "");

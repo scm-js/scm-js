@@ -20,7 +20,7 @@ import { forgetStoredFolders, keepInMemory, storedCopy, type StoredCopy } from "
 import { currentAssetSource } from "./source";
 import { findMembers, httpRangeReader, readZipDirectory, readZipMember, ZipError } from "./zip";
 import { t, translate } from "../i18n";
-import { exeArchive, GAME_FOLDERS } from "../formats/mod/sources";
+import { exeArchive, GAME_FOLDERS, isSystemFile } from "../formats/mod/sources";
 import { isModCode } from "../formats/mod/hash";
 
 export type InstallProgress = (fraction: number, label: string) => void;
@@ -117,10 +117,11 @@ export function isMemberPath(path: string): boolean {
 /**
  * Whether a loose file is in one of the game's folders at all (`sound\…`, `font\…` too): a
  * mod's file, which the data set's hash covers even where the extraction does not read it.
+ * An operating system's file there (`isSystemFile`: `sound\desktop.ini`) is not one.
  */
 export function isGamePath(path: string): boolean {
   const parts = memberKey(path).split("\\");
-  return parts.length > 1 && (GAME_FOLDERS as readonly string[]).includes(parts[0]);
+  return parts.length > 1 && (GAME_FOLDERS as readonly string[]).includes(parts[0]) && !isSystemFile(path);
 }
 
 /**
@@ -129,6 +130,9 @@ export function isGamePath(path: string): boolean {
  * plugin or FireGraft file anywhere is the mod's code (hashed, never run); and every other
  * file whose path (relative to the picked folder) starts with one of the game's folders is a
  * loose member (the extraction reads those under `isMemberPath`; the rest count for the hash).
+ * An operating system's file (`isSystemFile`: `desktop.ini`, `Thumbs.db`, `.DS_Store`, …) is
+ * none of these, whatever its name ends in: not every way of picking a folder hands them over,
+ * and the data set is the same either way.
  * The picked folder's own name is the first segment of `webkitRelativePath` and is dropped,
  * so a mod's `mpq/arr/units.dat` is the member `arr\units.dat`.
  */
@@ -139,6 +143,7 @@ export function splitPickedFiles(files: readonly File[]): GameDataFiles {
   for (const file of files) {
     const rel = (file as File & { webkitRelativePath?: string }).webkitRelativePath || file.name;
     const segments = rel.split(/[\\/]/).filter(Boolean);
+    if (isSystemFile(rel)) continue;
     if (/\.(mpq|exe)$/i.test(file.name)) {
       archives.push({ name: file.name, data: file });
       continue;
@@ -197,6 +202,7 @@ export async function installDataSet(profile: GameDataProfile, input: GameDataFi
   // The mod's files the extraction does not read (its sounds, say) go along for the hash alone, as Blobs where they are.
   const hashOnly: NonNullable<ExtractRequest["hashOnly"]> = [];
   for (const f of input.files ?? []) {
+    if (isSystemFile(f.path)) continue;
     if (isMemberPath(f.path)) overlay.push({ path: f.path, bytes: await bytesOf(f.data) });
     else if (isGamePath(f.path)) hashOnly.push({ path: f.path, data: f.data instanceof Blob ? f.data : await bytesOf(f.data) });
   }

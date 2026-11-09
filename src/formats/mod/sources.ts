@@ -20,6 +20,48 @@ export const GAME_FOLDERS = ["arr", "rez", "scripts", "unit", "tileset", "sound"
 export const gameName = (path: string): string => path.replace(/\//g, "\\").replace(/^\\+/, "").toLowerCase();
 
 /**
+ * Files an operating system or its file manager leaves in folders, and into the archives and zips made of them: never
+ * the game's, so never a mod's. Told by name alone, any case — the last part of a path, or a folder on the way to it:
+ *
+ * - `desktop.ini`: Windows Explorer's settings for a folder (its view, its icon);
+ * - `Thumbs.db`, `ehthumbs.db`, `ehthumbs_vista.db`: Explorer's and Media Center's caches of thumbnails;
+ * - `.DS_Store`: the macOS Finder's settings for a folder; `Icon\r`: a folder's own icon there;
+ * - `._<name>`: the AppleDouble half of a file, which macOS writes beside it on a disk that is not its own and into
+ *   every zip it makes; `__MACOSX/`: the folder those zips keep them in;
+ * - `.directory`: KDE's settings for a folder.
+ *
+ * A mod's hash has no line for one (`hash.ts`), and what reads a mod leaves them out of its files. Why it matters:
+ * the same folder is not handed over alike by every route. A browser's folder handle (the folder picker, a dropped
+ * folder read through its handle) never hands over `desktop.ini` or `Thumbs.db`: Chromium's
+ * `FileSystemAccessManagerImpl::IsSafePathComponent` refuses the names `base::IsReservedNameOnWindows` lists, on every
+ * system. A drop read through its entries, an `<input webkitdirectory>` and the command line hand them over. With
+ * these files in the hash a mod was named by how its folder had been read.
+ *
+ * Only names that are certain never to be a game file are here. A handle hides more than these (`.lnk`, `.url` and
+ * `.scf` files, Windows' device names such as `aux.wav`, names that begin or end with a space, a dot or `~`, and on
+ * Windows, by Chromium's table of file types, every `.ini`, `.cfg`, `.dll` and `.manifest`): those may be a mod's own
+ * files, so they keep their lines, and a route that cannot read one has a mod short of that file and says so with
+ * another hash.
+ */
+export const SYSTEM_FILES = {
+  /** File names, lower case. */
+  names: ["desktop.ini", "thumbs.db", "ehthumbs.db", "ehthumbs_vista.db", ".ds_store", "icon\r", ".directory"],
+  /** What a file name starts with. */
+  prefixes: ["._"],
+  /** Folder names, lower case: everything under one. */
+  folders: ["__macosx"],
+} as const;
+
+/** Whether a path (either slash, any case) is one of `SYSTEM_FILES`: by its file name, or by a folder it is under. */
+export function isSystemFile(path: string): boolean {
+  const parts = path.toLowerCase().split(/[\\/]/).filter(Boolean);
+  const leaf = parts.pop() ?? "";
+  return (SYSTEM_FILES.names as readonly string[]).includes(leaf)
+    || SYSTEM_FILES.prefixes.some((p) => leaf.startsWith(p))
+    || parts.some((folder) => (SYSTEM_FILES.folders as readonly string[]).includes(folder));
+}
+
+/**
  * The folder of a set of paths the game's paths start in: the one that holds `arr/`, else the one holding the most
  * files under the game's folders, the shallower on a tie; "" is the root. Paths use forward slashes. At any depth, as
  * the play page looks (a zip's `Mod 1.2/mpq/arr/…`); a game folder's name deeper in a root (`unit/terran/unit/`)
@@ -175,9 +217,9 @@ const sha256 = async (bytes: Uint8Array) => hex(await crypto.subtle.digest("SHA-
 
 /**
  * The hash of game files alone, by the mod hash's rule (`hash.ts`): a line `name<TAB>sha256` a file (the game's name,
- * lower case with backslashes), sorted by name, joined with newlines, hashed again; the first sixteen hex digits. A
- * mod's hash also has lines for its plugins and FireGraft project: `modHash` / `modHashOfDigests` in `hash.ts`; for a
- * mod without either the two agree.
+ * lower case with backslashes), sorted by name, joined with newlines, hashed again; the first sixteen hex digits. An
+ * operating system's files (`isSystemFile`) have no line. A mod's hash also has lines for its plugins and FireGraft
+ * project: `modHash` / `modHashOfDigests` in `hash.ts`; for a mod without either the two agree.
  */
 export async function dataSetHash(files: readonly { name: string; bytes: Uint8Array }[]): Promise<string> {
   const digests: { name: string; sha256: string }[] = [];
@@ -190,6 +232,6 @@ export const fileDigest = (bytes: Uint8Array): Promise<string> => sha256(bytes);
 
 /** `dataSetHash` from each file's `fileDigest` rather than its bytes: the same rule, the same hash. */
 export async function dataSetHashOfDigests(files: readonly { name: string; sha256: string }[]): Promise<string> {
-  const lines = files.map((f) => ({ name: gameName(f.name), sha256: f.sha256 })).sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0)).map((f) => `${f.name}\t${f.sha256}`);
+  const lines = files.filter((f) => !isSystemFile(f.name)).map((f) => ({ name: gameName(f.name), sha256: f.sha256 })).sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0)).map((f) => `${f.name}\t${f.sha256}`);
   return (await sha256(new TextEncoder().encode(lines.join("\n")))).slice(0, 16);
 }

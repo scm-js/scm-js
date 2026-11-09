@@ -3,7 +3,8 @@
  * `SCMJ` section that names the mod a game was played with (`@scm-js/replay`'s `mod`: the data set's hash, name and
  * link, the plugins that ran). Here: the mod named with `--mod` checked against it by that hash (the play page's rule,
  * core's `modHashOfDigests` over every file the mod provides, with its plugins or without them; and, for a replay
- * tagged before that rule, the older forms: the game files alone, or those that differ from the person's game), the names and costs of
+ * tagged before that rule, the older forms: the game files alone, or those that differ from the person's game; and each
+ * of these as it was while an operating system's files had lines, where the mod has such files), the names and costs of
  * units, upgrades and technologies from the mod's tables (the game's for a replay of the game itself, and bare ids for
  * a mod's replay with no mod named: never the game's name for a mod's id), and the refusal of the commands that play a
  * replay, which would play another game with other files.
@@ -12,7 +13,8 @@ import { FRAME_MS, type ModTag, type Replay } from "@scm-js/replay";
 import { techName, unitName, upgradeName } from "../../src/data/units";
 import type { DatFile } from "../../src/formats/dat/table";
 import { loadModData, type ModData } from "../../src/formats/mod/data";
-import { dataSetHashOfDigests, fileDigest } from "../../src/formats/mod/sources";
+import { hashLinesAsWere } from "../../src/formats/mod/hash";
+import { dataSetHashOfDigests, fileDigest, gameName } from "../../src/formats/mod/sources";
 import { sourceHash } from "./mod/hash";
 import type { GameFiles } from "./gamefiles";
 import { t, translate } from "./i18n";
@@ -30,12 +32,17 @@ export interface ModHashes {
   /** Older forms, for replays tagged before the rule: over the game files alone, and over those that differ from the person's game (null without a copy). */
   all: string;
   changed: string | null;
+  /**
+   * Each of those as it was until 2026-11-09, while an operating system's files (`desktop.ini`, …) had lines: there
+   * only for a mod that has such files where the command line reads them. A replay tagged then names the mod by one.
+   */
+  older: string[];
 }
 
 /** Every hash the mod may be named by in a replay's tag. */
 export async function sourceHashes(source: ModSource, base: GameFiles | null): Promise<ModHashes> {
   const h = await sourceHash(source);
-  let changed: string | null = null;
+  let changed: string | null = null, changedWere: string | null = null;
   if (base) {
     const differ: { name: string; sha256: string }[] = [];
     for (const f of source.files.values()) {
@@ -45,12 +52,19 @@ export async function sourceHashes(source: ModSource, base: GameFiles | null): P
       if (!(theirs && theirs.length === data.length && theirs.every((b, i) => b === data[i]))) differ.push({ name: f.name, sha256: await fileDigest(data) });
     }
     changed = await dataSetHashOfDigests(differ);
+    // (An operating system's file is in no copy of the game, so it always differed.)
+    if (source.system.size) {
+      const lines = new Map(differ.map((f) => [gameName(f.name), f.sha256]));
+      for (const [name, f] of source.system) { try { lines.set(name, await fileDigest(await f.read())); } catch { /* left out then too */ } }
+      changedWere = await hashLinesAsWere([...lines].map(([name, sha]) => `${name}\t${sha}`));
+    }
   }
-  return { hash: h.hash, withoutPlugins: h.withoutPlugins, all: h.gameFilesOnly, changed };
+  const older = [h.older?.hash, h.older?.withoutPlugins, h.gameFilesOnlyWere, changedWere].filter((x): x is string => !!x);
+  return { hash: h.hash, withoutPlugins: h.withoutPlugins, all: h.gameFilesOnly, changed, older };
 }
 
 /** Whether a replay's data set is the mod, by any of the forms it may be named by. */
-export const isTaggedMod = (wanted: string, h: ModHashes): boolean => [h.hash, h.withoutPlugins, h.all, h.changed].includes(wanted);
+export const isTaggedMod = (wanted: string, h: ModHashes): boolean => [h.hash, h.withoutPlugins, h.all, h.changed, ...h.older].includes(wanted);
 
 /** The mod a replay says it was played with, in one line: "Cosmonarchy BW · 1f2e3d4c5b6a7980". */
 export const modWords = (tag: ModTag) => `${tag.dataSet.name || t("a mod")}${visible(dot)}${tag.dataSet.hash}`;

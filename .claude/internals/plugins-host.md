@@ -596,7 +596,12 @@ no `File`) then `readFound` (32 `File`s in flight, same order, the first failure
 `droppedFolders` asks for the handle inside the event beside the entry (a rejection → null); `fileTypes.ts#offerFolder` walks
 the handle when there is one, falls back to the entry (logged as a warning) if that walk fails, asks `acceptsFolder` with the
 paths, and reads the `File`s only for the type that took it. Trade-off: a handle walk leaves out what the File System Access API
-keeps to itself — `desktop.ini` (Release has two) and the like — exactly as the folder picker always has. `folderReading(store, name)`
+keeps to itself — `desktop.ini` (Release has two) and the like — exactly as the folder picker always has. (What exactly: `mods.md`,
+"An operating system's files have no line". It is Chromium's `IsSafePathComponent`, and it is more than `desktop.ini`:
+`.lnk`/`.url`/`.scf`, device names such as `aux.wav`, names beginning or ending with a space, a dot or `~`, and on
+Windows — read from the source, not run — every `.ini`, `.cfg`, `.dll` and `.manifest`, which can be a mod's own files:
+Cosmonarchy's `mpq/samase/*.ini`. The mod hash leaves out only the operating system's own files; for the rest the
+entry walk is the route that sees everything.) `folderReading(store, name)`
 puts a `FolderRead` on `folderReadsAtom` (uiAtoms, global, not per document) at once; `StatusBar` draws each as a cell with the
 `status-spinner` ("Reading the folder {name} · N files found", then "· done of N files"); counts are written at most every
 150 ms; `end()` (idempotent) runs before `openFolder` — from then the plugin speaks — and in `finally`, so a folder nobody takes

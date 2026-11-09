@@ -12,7 +12,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { Creator } from "mopaq";
 import { DEFAULT_PALETTE, MOD_MANIFEST, ModFolderError, packFile, readManifest, type ModManifest, type PackContext } from "../../../src/formats/mod/folder";
-import { gameName } from "../../../src/formats/mod/sources";
+import { gameName, isSystemFile } from "../../../src/formats/mod/sources";
 import { isModCode } from "../../../src/formats/mod/hash";
 import { loadModData } from "../../../src/formats/mod/data";
 import type { NamedPalette, QuantiseReport } from "../../../src/formats/dat/grpPng";
@@ -39,7 +39,8 @@ export interface FolderPacked {
 
 /**
  * Every file under `dir` (forward slashes), in name order. A dot folder (git's, an editor's) is left out; a dot file is
- * not, as it may be one of the mod's (`files/lua/.gitignore`: the mod's hash counts it, so it must pack back).
+ * not, as it may be one of the mod's (`files/lua/.gitignore`: the mod's hash counts it, so it must pack back). An
+ * operating system's file (`isSystemFile`: the `desktop.ini` Explorer puts in `sounds/`) is left out: no mod has one.
  */
 async function folderFiles(dir: string, prefix = ""): Promise<string[]> {
   const out: string[] = [];
@@ -47,6 +48,7 @@ async function folderFiles(dir: string, prefix = ""): Promise<string[]> {
   entries.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
   for (const e of entries) {
     const path = prefix ? `${prefix}/${e.name}` : e.name;
+    if (isSystemFile(path)) continue;
     if (e.isDirectory()) out.push(...await folderFiles(dir, path));
     else if (e.isFile()) out.push(path);
   }

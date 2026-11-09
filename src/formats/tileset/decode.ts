@@ -17,7 +17,8 @@ export const MEGATILE_PX = 32;
 /** Minitiles per megatile edge. */
 export const MINITILES_PER_EDGE = 4;
 const MINITILE_BYTES = MINITILE_PX * MINITILE_PX;
-const CV5_ENTRY_BYTES = 52;
+/** Bytes of one group in a `.cv5`: a table's length in groups is its size over this. */
+export const CV5_ENTRY_BYTES = 52;
 const CV5_MEGATILE_OFFSET = 20;
 const MEGATILES_PER_GROUP = 16;
 
@@ -211,7 +212,7 @@ export function hasCreepFlag(tileId: number, groupCount = 0): boolean {
 }
 
 /** Resolve an MTXM tile id to a VX4 megatile index, or -1 when the id is out of range. */
-export function megatileForTile(tileset: Tileset, tileId: number): number {
+export function megatileForTile(tileset: Pick<Tileset, "groups" | "megatileCount">, tileId: number): number {
   const group = tileset.groups[tileGroupOf(tileId, tileset.groups.length)];
   if (!group) return -1;
   const megatile = group.megatiles[tileId & 0xf];

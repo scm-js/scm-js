@@ -1292,8 +1292,9 @@ When the browser has not got the mod, or keeps another version of it, the Replay
 the analysis say so, with the mod's hash and its makers' link, and play nothing.
 
 The replay's map itself is drawn from the editor's data set, like any map. When that data
-set has not got the mod's terrain, the editor says so ([A map remembers its data
-set](game-data.md#a-map-remembers-its-data-set)).
+set has not got the mod's terrain, those tiles are hatched and the editor says so, with a
+button to draw from the mod's folder ([Terrain the data set has not
+got](game-data.md#terrain-the-data-set-has-not-got)).
 
 Names and costs come from the data set the editor draws with. Add the mod as a data set
 (Help ▸ Game Data… ▸ Add a data set…, see [Data sets made from a

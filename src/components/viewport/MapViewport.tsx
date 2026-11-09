@@ -74,6 +74,7 @@ import { onGrpLoaded } from "../../formats/units/load";
 import { UnitAnimator } from "../../formats/units/animate";
 import { ANYWHERE_INDEX } from "../../formats/chk/sections/objects";
 import { tilesetIndex } from "../../formats/chk/scenario";
+import { mapLacks } from "../../data/remasteredTiles";
 import { unitAt, unitBox, unitGeometry } from "../../editor/units";
 import { unitLabel } from "../../data/units";
 import { symmetryAvailable, symmetryAxes } from "../../editor/symmetry";
@@ -388,6 +389,7 @@ export default function MapViewport() {
     if (tiles && tilesetAssets) {
       ({ animated: animatedInView, moving: movingInView } = paintGround(v, groundLayerRef, {
         scenario, tiles, assets: tilesetAssets, terrainRevision, doodadsRevision, elevation: flags.elevation, buildability: flags.buildability,
+        lacks: scenario ? mapLacks(tiles, tilesetIndex(scenario), tilesetAssets.tileset.groups.length, terrainRevision + doodadsRevision) : null,
         motion: flags.animateWater ? { pass: effectPass, seconds: (performance.now() / 1000) * waterSpeed, tune: effectTune } : null,
       }));
     } else if (tiles && tilesetLoading) {

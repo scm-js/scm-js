@@ -8,7 +8,9 @@ import type { LoadedTileset } from "../../../formats/tileset/load";
 import { atlasSource, atlasTileSize } from "../../../formats/tileset/atlas";
 import { groupBuildable, megatileForTile, megatileHeight, minitileHeight, tileGroupOf } from "../../../formats/tileset/decode";
 import { HD_TILE_PX, hdSource, type HdEffects } from "../../../formats/tileset/hd";
+import { isLackedTile } from "../../../data/remasteredTiles";
 import type { EffectPass } from "../effectPass";
+import { missingTilePattern } from "../missingTile";
 import { hashNoise } from "../noise";
 import { TILE, type PaintView } from "./view";
 
@@ -76,6 +78,14 @@ export interface Ground {
   buildability: boolean;
   /** Set while View ▸ Animate Water is on; the 2x terrain's water and lava then move. */
   motion: GroundMotion | null;
+  /**
+   * The groups the tileset has not got, when `tiles` uses any of them
+   * (`remasteredTiles.ts#mapLacks`); null for a map with all its terrain, which is then
+   * drawn with no test per tile beyond this being null. A tile of such a group gets the
+   * marker (`missingTile.ts`) in place of a picture, and no overlay or water: nothing is
+   * known of it.
+   */
+  lacks: Uint8Array | null;
 }
 
 const MID = "rgba(230,185,92,0.30)";
@@ -238,6 +248,9 @@ export function paintGround(v: PaintView, cache: { current: GroundLayer | null }
       }
     };
     const overlays = !flat && (g.elevation || g.buildability);
+    const lacks = g.lacks;
+    // Laid from the map's corner, so a strip a scroll uncovers continues the lines beside it.
+    const marker = lacks ? missingTilePattern(lc, dpr, -ox, -oy) : null;
     /** Blit the tiles of a block of the map — all of them, or only the ones that cycle — and say whether any cycles. */
     const blitTiles = (tx0: number, ty0: number, tx1: number, ty1: number, onlyAnimated: boolean): boolean => {
       let animated = false;
@@ -248,7 +261,9 @@ export function paintGround(v: PaintView, cache: { current: GroundLayer | null }
         const py = snapY(ty), ph = snapY(ty + 1) - py;
         for (let tx = tx0; tx < tx1; tx++) {
           const id = tiles[row + tx];
-          const megatile = megatileForTile(ts, id);
+          const missing = isLackedTile(lacks, id);
+          // By the game's rule a missing tile's group can read as another group's, with a picture of its own.
+          const megatile = missing ? -1 : megatileForTile(ts, id);
           const px = snapX(tx), pw = snapX(tx + 1) - px;
           if (mc && effects && !onlyAnimated) {
             const picture = megatile >= 0 && effects.maskOf[megatile] >= 0 ? hdSource(effects.masks, effects.maskOf[megatile]) : null;
@@ -258,6 +273,12 @@ export function paintGround(v: PaintView, cache: { current: GroundLayer | null }
             } else {
               mc.fillRect(px, py, pw, ph);
             }
+          }
+          if (missing) {
+            if (onlyAnimated) continue;
+            lc.fillStyle = marker!;
+            lc.fillRect(px, py, pw, ph);
+            continue;
           }
           if (megatile < 0) {
             if (onlyAnimated) continue;

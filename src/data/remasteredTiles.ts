@@ -71,6 +71,60 @@ export function tilesetHasTile(era: number, tile: number, groups: number): boole
   return !(group < classic && groups < remastered && isRemasteredOnlyTile(era, tile));
 }
 
+const lackTables = new Map<number, Uint8Array>();
+
+/**
+ * Which groups a tileset of `groups` groups on ERA `era` has not got: a byte for each of the
+ * 4,096 groups a tile can name (index `(tile >> 4) & 0xfff`), 1 where `tilesetHasTile`
+ * refuses the group. One table per era and length, kept: the answer depends on nothing else,
+ * so the drawing asks a byte per tile, not the rule.
+ */
+export function missingGroups(era: number, groups: number): Uint8Array {
+  const key = (era & 7) * 8192 + Math.max(0, Math.min(groups, 4096));
+  let table = lackTables.get(key);
+  if (!table) {
+    table = new Uint8Array(4096);
+    for (let group = 0; group < 4096; group++) table[group] = tilesetHasTile(era, group << 4, groups) ? 0 : 1;
+    lackTables.set(key, table);
+  }
+  return table;
+}
+
+/**
+ * `missingGroups`' table when `tiles` holds a tile the tileset has not got, and null when it
+ * has them all — which is what lets a map with all its terrain be drawn exactly as before.
+ * It reads every tile, so a caller that repaints asks through `mapLacks`.
+ */
+export function lackedGroups(tiles: ArrayLike<number>, era: number, groups: number): Uint8Array | null {
+  const table = missingGroups(era, groups);
+  for (let i = 0; i < tiles.length; i++) if (table[(tiles[i] >> 4) & 0xfff] === 1) return table;
+  return null;
+}
+
+/** Whether `lacks` (a `missingGroups` table, or null for a map with all its terrain) marks the tile as one the tileset has not got. */
+export const isLackedTile = (lacks: Uint8Array | null, tile: number): boolean => lacks !== null && lacks[(tile >> 4) & 0xfff] === 1;
+
+interface Lacks {
+  era: number;
+  groups: number;
+  revision: number;
+  table: Uint8Array | null;
+}
+const lacksOf = new WeakMap<object, Lacks>();
+
+/**
+ * `lackedGroups`, worked out once for a tile array, tileset and `revision` (a number that
+ * moves whenever the tiles change: the terrain and doodad revisions) and kept, so a repaint
+ * of the same ground costs a lookup.
+ */
+export function mapLacks(tiles: ArrayLike<number>, era: number, groups: number, revision: number): Uint8Array | null {
+  const was = lacksOf.get(tiles);
+  if (was && was.era === era && was.groups === groups && was.revision === revision) return was.table;
+  const table = lackedGroups(tiles, era, groups);
+  lacksOf.set(tiles, { era, groups, revision, table });
+  return table;
+}
+
 /** What of a map's terrain a tileset has not got: tiles from past Remastered's table (a mod's), and from Remastered's additions. */
 export interface MissingTerrain {
   mod: number;

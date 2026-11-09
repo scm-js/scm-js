@@ -21,6 +21,6 @@ export function useMissingTerrain(loaded: LoadedTileset | null): void {
   useEffect(() => {
     const current = peekTileset(name);
     const groups = current && loaded && current.tileset === loaded.tileset ? current.tileset.groups.length : null;
-    updateMissingTerrain(store, scenario, groups);
+    void updateMissingTerrain(store, scenario, groups);
   }, [store, scenario, name, source, extras, loaded]);
 }

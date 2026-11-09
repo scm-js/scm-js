@@ -123,7 +123,9 @@ Remastered info either. Why the whole group although bit 15 is the game's creep 
 user's Remastered maps folder) only our probe `Audit/R2 creep flag.scx` sets bit 15; 291 of
 Cosmonarchy's 404 maps do, and 191 of those have every bit-15 tile's eleven-bit group inside the
 1.16 table, so no per-map "is it a creep flag" rule separates them. A creep-flagged probe now gets
-both the creep info and the mod warn; accepted. `tileGroupOf` (drawing) is unchanged.
+both the creep info and the mod warn; accepted. `tileGroupOf` is unchanged, but since the follow-up the same day the
+drawing asks the whole group too and hatches what the table lacks (`viewport-ui.md`), so that probe's flagged tiles
+are hatched over the game's files, where they used to draw as the tile under the flag.
 `tests/validate.test.ts` "terrain made for a mod".
 
 Check Map follows the game (2026-10-17 audit, PR 2; evidence `~/github/scm-sim-reader/editor-audit/`):

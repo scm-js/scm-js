@@ -414,16 +414,66 @@ The mods plan's slice M4 (`scm-sim` branch mods-plan, `docs/mods-plan.md`, "Tier
   already the trigger switch in Korean.
 - **Terrain the data set lacks** (2026-11-09, `services/missingTerrain.ts`, `hooks/useMissingTerrain.ts`): the map in
   front with tiles the loaded tileset has not got (`remasteredTiles.ts#missingTerrain`, by the whole twelve-bit group)
-  gets one `warn` toast, `ttl: 0`, action Game Data…: the data set's name, the tileset, a count, and mod (past
-  Remastered's table) vs Remastered's additions (over a shorter table). Once per map (the `Scenario` object, a
-  `WeakMap`, so a parked tab keeps it and no `parkRegisters` entry is needed) and data set id; taken down when the
-  map in front or the data set changes or the new tileset has the tiles. Nothing for a map whose `dataset.json` names
-  another set (`offerMapDataSet` speaks) or with no data. `MapViewport` mounts the hook with `useTileset`'s
-  `loaded`, but the hook reads `peekTileset` and decides only when the two agree: on the render after a switch the
-  hook's state still holds the dropped set's tileset. A toast, not a `.viewport-notice`, because a replay's map
-  (Aftermath) opens under the Game view, which hides the map's own notices, and the minimap still draws the tiles.
-  Drawing is unchanged: a missing megatile stays black, as only part of a mod map's tiles reach that path (the rest
-  draw as another tile by the eleven-bit rule), so a marker would mislead. `tests/missing-terrain.test.ts`.
+  gets one `warn` toast, `ttl: 0`: the data set's name, the tileset, a count, and mod (past Remastered's table; with
+  "and N more from what Remastered added" over a 1.16 copy, since both are hatched) vs Remastered's additions (over
+  a shorter table). `MapViewport` mounts the hook with `useTileset`'s `loaded`, but the hook reads `peekTileset` and
+  decides only when the two agree: on the render after a switch the hook's state still holds the dropped set's
+  tileset. A toast, not a `.viewport-notice`, because a replay's map (Aftermath) opens under the Game view, which
+  hides the map's own notices. Nothing for a map whose `dataset.json` names another set (`offerMapDataSet` speaks:
+  never both for one map) or with no data. The tiles themselves are hatched (`viewport-ui.md`).
+  - **When it is said.** `told: WeakMap<Scenario, set key>` holds the *last* data set a map was told about (the
+    `Scenario` object, so a parked tab keeps it and no `parkRegisters` entry is needed); `shown: WeakMap<Store, Up>`
+    the notice up now. Not said again while the key stays (another map in front and back: no repeat); a null notice
+    (the set in use has the terrain) deletes `told`, so **a switch away and back says it again** — changed from "once
+    per map and data set" when the notice gained its buttons, as the hatching is back with the old set and so should
+    the way out be. The key is `copy:<id>` / `reader:<id>`: a set in memory is not the stored set of the same id. A
+    notice whose count changed under the same key (a reader set reloaded with other files) is replaced. Taken down
+    before it was ever up (below) = not told.
+  - **The offer of a set already here** (`otherSetTables` → `setWithTerrain`). `updateMissingTerrain` is async for
+    this alone: it marks `shown` with `toast: null`, lists `listStoredCopies()`, and for every set but the copy in
+    use reads **only the size** of its `tileset/<name>.cv5` (`readStored(…).size` — a `File` off OPFS, no bytes read —
+    over `CV5_ENTRY_BYTES`); the game's own set, when it is not the one in use, as a switch to it would find it: this
+    build's file (`readFrom` a made `bundled` source: a dev server's page or a 404 is null) else its stored copy. The
+    first whose length leaves `missingTerrain` at zero is offered, in `offerOrder`: the game's own, Remastered, then
+    the rest by name as `listDataSets` has them — the game's before a mod's because a switch redraws units and names
+    and the game's files change none (a Remastered copy and Cosmonarchy both "have" a map of Remastered's additions,
+    by length). One button `Switch to {name}` → `switchDataSet`, with the Map Data Set dialog's three toasts; never
+    switched unasked. Length is all that is compared: two mods with long enough tables both fit, and the first by
+    name is offered though its tiles may be other tiles (Game Data… lists the rest). After the await it checks
+    `shown.get(store) === mine` (the map or the set moved on meanwhile) before pushing the toast.
+  - **The mod's folder** (`drawFromModFolder`, `gamedata/folderSet.ts`; the mod case only, a Remastered
+    installation being CASC): `plugins/host.ts#pickFolder` (exported for this; the same pick `ui.pickFiles({
+    directory })` uses, so whatever that walk becomes this gets), `folderSet(pieces)` = `modRoot` of the paths, then
+    every file under it whose first folder is one of `GAME_FOLDERS`, keyed by `gameName`; `.mpq`/`.exe` anywhere are
+    listed as archives and **not opened**. `folderReader` answers `DataSetReadContext.member` from that map with
+    `file.arrayBuffer()` — a pick's `File`s are handles, nothing is read to decide or attach — plus one case: asked for
+    `tileset\x.vx4ex` when the folder has `x.cv5` and only `x.vx4`, it widens its own `.vx4` (u16 → u32), because
+    `tileset/load.ts` prefers `.vx4ex` and would otherwise take the base's (a Remastered copy's) under the folder's
+    groups. Before attaching it predicts the outcome by the same length rule (`folderFileSize(tileset\<name>.cv5)`
+    against `peekTileset`'s groups): attached only when the map would lack *fewer* tiles; otherwise a `warn` toast and
+    the source untouched (`"no-terrain"`: no table of its own, or as many missing; `"archives-only"` and
+    `"no-game-files"` point at Help ▸ Game Data… ▸ Add a data set…). All of it → `attachReaderDataSet` (profile: the
+    folder's name, id `profileIdFrom(name) || "mod"` as the Mod Editor derives it, `-folder` appended if that is the
+    game's or Remastered's id), `forget()` first so the rule decides afresh; then the notice's own rule: gone when
+    nothing is missing, back with the new count when some is. Measured in headless Chromium on BattleGuard over
+    the bundled files (2026-11-09; the folder input, since `showDirectoryPicker` cannot be driven there): from a
+    copy of Cosmonarchy's release folder on the Linux disk (7,776 files; everything the editor reads real, sounds
+    and portraits one-byte stand-ins) the browser handed the list over in 1.9 s and the map was drawn right 2.8 s
+    after the pick; straight off `/mnt/c` (WSL's 9p) the browser took 195 s to hand the 7,796 files over and the
+    editor 1.1 s after that — the wait there is the harness listing the folder, not anything read. Against 251 s to
+    install the same folder as a data set. The real picker's walk (`directoryHandleFiles`, a `getFile()` a file)
+    was not timed.
+    **Not handed to the Mod Editor** even when it is installed: its `mods.open` also opens its panel, reads every
+    table, asks to close an open mod and hashes the mod in the background, and an id of one plugin is nothing the
+    editor should know; the generic route (`pluginFileTypesAtom`'s `openFolder`, as a dropped folder goes) cannot
+    report back whether the terrain came, which this action has to say. So the button does one thing with or without
+    the plugin. **No hash**: `modHashOfDigests` covers every file and the archives' members (Cosmonarchy: 2.6 GB loose
+    plus a 977 MB `temp.mpq`), which is exactly the read this route avoids; `dataSetOf` then stamps a saved map with
+    `{ id, name, hash: "" }`. That stamp has a cost worth knowing: the map now *names* a set, so the next open without
+    it gets the Map Data Set dialog ("not installed here", Game Data…) and, by the never-both rule, no terrain notice
+    and so no folder button. Open: let that dialog offer the folder too.
+  - `tests/missing-terrain.test.ts` (the rule, the table = the rule for all 4,096 groups, the minimap's fill, the
+    offer off `keepInMemory` copies), `tests/mod-folder.test.ts` (member lookup, laziness, the answers).
 - **Test Map**: `TestMapFile.dataSet {id,name,hash}` (`testMap.ts#testDataSet`); plugin-scm-sim (branch `mods`)
   posts it as `dataSet` in `scmjs.play`. The play page's acceptance is M1's.
 - **Proofs**: `tests/datasets-widths.test.ts` (readers at three widths, grown tables made with `encodeDat`, tilesets

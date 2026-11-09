@@ -13,7 +13,8 @@ fifteenth guide) and the "Mods" page of `docs/cli.md`.
     any `MPQ\x1A` with a sane header), `readZip` (central directory, stored + deflate via
     `DecompressionStream("deflate-raw")`, no zip64/encryption), `dataSetHash`.
   - `src/formats/mod/hash.ts` — the mod hash (`modHash`, `modHashOfDigests`, `hashLines`, the line forms) and
-    `probeNames` for a list-less archive; "The mod hash, one rule" below.
+    `probeNames` for a list-less archive; "The mod hash, one rule" below. `sources.ts` holds `SYSTEM_FILES` /
+    `isSystemFile`: an operating system's files, which have no line and are no file of a mod's.
   - `src/formats/mod/folder.ts` — the form: `placeOf(member)` (rule: member → folder file), `memberOf(file, manifest)`
     (inverse, with `manifest.members` overrides), `renderMember` / `renderAiScripts` (unpack, checked), `packFile`
     (pack), `recordRendered` + `tidyManifest` (the manifest), `ModManifest` (`mod.json`).
@@ -202,6 +203,82 @@ Known gaps: `mod pack --folder` writes members loose, so a loose copy of a mod w
 carries those); the editor's folder route takes loose files only under `GAME_FOLDERS` (the page: anything under the
 root) and orders own archives by name (the page: as given); the page's `GAME_FOLDERS` lacks `datreq`, `samase`,
 `lua`, `config` for finding the root (scoring only).
+
+### An operating system's files have no line (2026-11-09, branch `mod-hash-system-files`)
+
+**Why.** The rule said nothing of `desktop.ini` and its kind, and they are not handed over alike by every route, so a
+mod was named by how its folder had been read. Decided (the user's): the rule leaves them out everywhere, and the hash
+with their lines stays accepted as an older form wherever hashes are matched.
+
+**The list** is `sources.ts#SYSTEM_FILES` / `isSystemFile(path)` (core exports both), by name alone, any case, either
+slash: names `desktop.ini`, `thumbs.db`, `ehthumbs.db`, `ehthumbs_vista.db`, `.ds_store`, `icon\r`, `.directory`; a
+name starting `._` (AppleDouble); anything under a folder `__macosx`. Only names certain never to be a game file. The
+same list is copied in scm-sim (`src/mods/inspect.ts`), plugin-aftermath (`modreplay.ts`) and plugin-mods (`source.ts`,
+until it can take core's): change all four together.
+
+**What a browser's folder handle hides** (so what the list had to cover at least). Not a Windows attribute and not in
+the File System Access specification (it only forbids "", ".", ".." and separators, and leaves the rest to the
+implementation): Chromium's `FileSystemAccessManagerImpl::IsSafePathComponent`
+(`content/browser/file_system_access/file_system_access_manager_impl.cc`), which directory iteration applies to every
+child (`FileSystemAccessDirectoryHandleImpl::DidReadDirectory` → `GetChildURL`) on every system. Read at main
+(2026-11-09) and at release tags 131 to 150; measured in headless Chromium 153 on Linux with a dropped folder of 45
+probe names, its entry walk against its handle walk (27 hidden):
+
+- `base::IsReservedNameOnWindows`: the names `desktop.ini`, `thumbs.db`, `conin$`, `conout$`, and a device name
+  (`con`, `prn`, `aux`, `nul`, `com1`–`9`, `lpt1`–`9`, `clock$`) alone or before the first dot (`aux.wav`, `nul.txt`);
+- extensions `.lnk`, `.scf`, `.url`, and a `{CLSID}` extension;
+- `base::i18n::IsFilenameLegal` after one leading dot is dropped: any of `"*/:<>?\|`, a control or format character
+  (so `Icon\r`, a soft hyphen, a zero-width space), a first or last character that is white space, `.` or `~`
+  (`~x.wav`, `x.wav~`, `..x`, a trailing dot or space);
+- **Windows only, read from the source and not run**: file types the download table marks DANGEROUS
+  (`download_file_types.asciipb`: `.ini`, `.cfg`, `.dll`, `.manifest`, `.scf`), and a `~` in a name that could be an
+  8.3 short name.
+- Seen by the handle: `.DS_Store`, `._x`, `__MACOSX/`, `.directory`, `ehthumbs.db`, `.gitignore`, `x.local`, and on
+  Linux `x.ini`, `x.cfg`, `x.dll`, `x.manifest`.
+
+Of these only `desktop.ini`, `thumbs.db` and `Icon\r` are on our list. The rest may be a mod's own files
+(Cosmonarchy's `mpq/samase/config.ini`, `mtl.ini`, `mtl_campaign.ini`: on Windows Chrome a handle would not hand them
+over), so they keep their lines: a route that cannot read one has a mod short of a file, and another hash is the truth
+about it. **That gap is in the reading, not in the hash**: closing it means not reading a mod's folder through a handle
+alone (an entry walk, `<input webkitdirectory>` and Node see everything).
+
+**Where the filter is.** (1) In the hash: `hashLines` drops a system file's line itself, `modHashOfDigests` marks a
+digest by the name it was given (a plugin's line keeps only the leaf, so `__MACOSX/y.fgp` is told there), and
+`dataSetHashOfDigests` filters; any caller gets the same hash whatever list it made. (2) Where the list of a mod's
+files is built, so counts agree and nothing of theirs is taken for the mod's: `cli/src/mod/source.ts#fromPieces`
+(loose pieces first of all, before the plugin and archive tests: macOS's `._gptp.qdp` was a plugin until now; archive
+members), `pack.ts#folderFiles` (the `desktop.ini` Explorer puts in a mod folder's `sounds/`), the editor's
+`install.ts#splitPickedFiles` / `isGamePath` / `installDataSet` and `overCopy.ts#dataSetHashOf` (not even read). The
+files themselves may stay in a kept or installed copy: nothing asks for them.
+
+**The older form.** `hashLinesAsWere` is the rule as it was. `ModHash.older { hash, withoutPlugins, left }` is there
+when system files were among the digests given. The command line keeps what it saw in `ModSource.system` (by game
+name; also named in `left`) and digests it for that alone: `sourceHash` → `older`, `gameFilesOnlyWere`;
+`replaymod.ts#sourceHashes` → `ModHashes.older[]` (the four forms as they were), which `isTaggedMod` takes. `mod info`
+prints `Older hash … (with …, which the hash leaves out)` and `--json` has `older`. Not worked out again: a mod whose
+AppleDouble half of a plugin or project (`._x.qdp`) was a plugin's line then; the editor's stamp (a data set installed
+before keeps the hash it was stamped with until it is installed again; nothing in the editor compares hashes — a
+map's data set is matched by id — and the play page takes an older stamp by its own older form).
+
+**Measured** on Cosmonarchy's release as it is on this machine (`/mnt/c/Cosmonarchy/Release`, copied to a Linux disk;
+7,796 files, `mpq/sound/desktop.ini` and `mpq/sound/cm/desktop.ini`, 44 bytes each). A finding first: **the two files
+are also members of `temp.mpq`**, the archive the mod's hotloader packs `mpq/` into when the game is launched, so every
+route that reads archives had their lines whether or not the loose files were handed over. Four trees: with and
+without the loose files ("seen" / "not seen"), each with and without `temp.mpq`.
+
+| Route | before: seen | before: not seen | before, no `temp.mpq`: seen / not seen | after, all four |
+| --- | --- | --- | --- | --- |
+| `scmjs mod info` | `1c41a2d7701fe842` | `1c41a2d7701fe842` | `1c41…` / `20e1c6d89ae2af75` | `20e1c6d89ae2af75` |
+| the play page's `buildMod` (in Node) | `1c41…` | `1c41…` | `1c41…` / `20e1…` | `20e1…` |
+| scm-sim's runners (`modHashOf`: the exe's archive and `mpq/`, no `temp.mpq`) | `1c41…` | `20e1…` | `1c41…` / `20e1…` | `20e1…` |
+| the Mod Editor (`session.hash()`, core 0.13.0) | `1c41…` | `1c41…` | `1c41…` / `20e1…` | `20e1…` |
+| the editor's data set stamp (the worker's `onmessage` in Node) | `1c41…` | `1c41…` | `1c41…` / `20e1…` | `20e1…` |
+| Aftermath's `folderHashes` (loose files only) | `75c10a2152fb8e0e` | `cb799542a475430f` | the same two | `cb799542a475430f` |
+
+Without plugins: `49815591a7a5a504` before, `db23a1f9dd8cef66` after. Files 7,769 → 7,767. `older` is
+`1c41a2d7701fe842` / `49815591a7a5a504` wherever the two files were seen, loose or in `temp.mpq` (Aftermath:
+`75c10a2152fb8e0e` when loose). The made mod's pinned values (`a8069f18058ec876` / `ac98e7b447476c80`) are unchanged:
+it holds none.
 
 ## `mod header` (C4 of the capstone, 2026-11-08, branch `mod-header`)
 

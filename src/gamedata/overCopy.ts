@@ -24,7 +24,7 @@ import type { Params } from "../i18n";
 import { storedPathOf } from "./paths.ts";
 import { decodeDat, type DatFile } from "../formats/dat/table.ts";
 import { DAT_SCHEMAS } from "../formats/dat/schema.ts";
-import { fileDigest, gameName } from "../formats/mod/sources.ts";
+import { fileDigest, gameName, isSystemFile } from "../formats/mod/sources.ts";
 import { isFiregraftProject, isModCode, isPluginFile, modHashOfDigests, type Digest, type ModHash } from "../formats/mod/hash.ts";
 import {
   DATEX_TABLES, EXTRA_TABLES, extractGameData, ExtractError, ICON_FILES, reportStep, SOUND_TABLES, UNIT_EXTRA_FILES, UNIT_TABLES,
@@ -183,17 +183,20 @@ export type MemberBytes = (member: string) => Uint8Array | null | Promise<Uint8A
  * a member an archive lists and does not hold). A plugin or FireGraft file among the names is
  * not a game file: a FireGraft project in the mod's archive is a line of its own, a plugin there
  * is not (the play page does not load it). `code` is the plugins and FireGraft files the set
- * carries as files. Files are read and digested one at a time. Null when the set has no game
+ * carries as files. Files are read and digested one at a time. An operating system's file
+ * among the names (`isSystemFile`: a `desktop.ini` in the folder, or packed into the mod's
+ * archive from one) is not the set's: not read, and no line. Null when the set has no game
  * file at all.
  */
 export async function dataSetHashOf(names: Iterable<string>, own: MemberBytes, code: readonly { name: string; bytes: Uint8Array }[] = []): Promise<ModHash | null> {
   const files: Digest[] = [], plugins: Digest[] = [], firegraft: Digest[] = [];
   for (const c of code) {
+    if (isSystemFile(c.name)) continue;
     if (isPluginFile(c.name)) plugins.push({ name: c.name, sha256: await fileDigest(c.bytes) });
     else if (isFiregraftProject(c.name)) firegraft.push({ name: c.name, sha256: await fileDigest(c.bytes) });
   }
   for (const name of new Set([...names].map(gameName))) {
-    if (isModCode(name) && !isFiregraftProject(name)) continue;
+    if (isSystemFile(name) || (isModCode(name) && !isFiregraftProject(name))) continue;
     const mine = await Promise.resolve(own(name)).catch(() => null);
     if (!mine) continue;
     (isFiregraftProject(name) ? firegraft : files).push({ name, sha256: await fileDigest(mine) });

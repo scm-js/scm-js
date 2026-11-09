@@ -404,7 +404,14 @@ The mods plan's slice M4 (`scm-sim` branch mods-plan, `docs/mods-plan.md`, "Tier
   `.fgd` from `splitPickedFiles`, anywhere in the pick) → plugin and project lines; an own archive's `.fgp` member is a
   project line, its `.qdp`/`.fgd` members nothing. `splitPickedFiles` also takes `.exe` as an archive (installDataSet
   keeps `exeArchive(bytes).archive`, drops an exe with none) and skips `.dll`. Base-only (the game's own copy): no own
-  file → no hash, as before. Proof: the worker's `onmessage` in Node over `fixtures/data` + Cosmonarchy's release
+  file → no hash, as before. **An operating system's files** (`sources.ts#isSystemFile`: `desktop.ini`, `Thumbs.db`,
+  `.DS_Store`, `._*`, `__MACOSX/`, …; `mods.md`, "An operating system's files have no line", 2026-11-09) are not the
+  set's: `splitPickedFiles` passes them over before anything else (no archive, no code, no loose member), `isGamePath`
+  is false for one, `installDataSet` skips one handed in by a plugin, `folderSet.ts#folderSet` (a mod's folder drawn
+  from in memory) lists none, `dataSetHashOf` does not read one among the
+  names (a member of the mod's own archive, packed from a folder Explorer had been in) and core's hash has no line for
+  it. A set installed before then keeps the stamp it has (with those lines) until it is installed again; the stamp
+  keeps no older form. Proof: the worker's `onmessage` in Node over `fixtures/data` + Cosmonarchy's release
   folder as `splitPickedFiles` gives it → stamp `ac3f86533e4b5a31` (the page's), 2 s; `tests/datasets-widths.test.ts`
   "a made data set installed through the editor's extraction" (now counts the weapons.dat it ships unchanged).
 - **The map's member** `scmjs\dataset.json` (`services/mapDataSet.ts`): `stampDataSet` before `buildOutgoing` in

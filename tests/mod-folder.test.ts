@@ -57,6 +57,10 @@ describe("a mod's folder as the files the editor asks for", () => {
     expect([...folderSet([piece("arr/units.dat", 1)]).files.keys()]).toEqual(["arr\\units.dat"]);
     expect(folderSet([piece("Stuff/readme.txt", 1), piece("Stuff/deep/notes.txt", 1)]).files.size).toBe(0);
     expect(folderSet([]).name).toBe("");
+    // An operating system's files are not the mod's: Explorer's, the Finder's, and the halves macOS's zips carry.
+    const withSystem = folderSet([piece("My Mod/arr/units.dat", 1), piece("My Mod/sound/desktop.ini", 1), piece("My Mod/unit/Thumbs.db", 1), piece("My Mod/arr/.DS_Store", 1), piece("My Mod/arr/._units.dat", 1), piece("My Mod/__MACOSX/arr/._units.dat", 1), piece("My Mod/._Mod.mpq", 1), piece("My Mod/samase/config.ini", 1)]);
+    expect([...withSystem.files.keys()]).toEqual(["arr\\units.dat", "samase\\config.ini"]);
+    expect(withSystem.archives).toEqual([]);
   });
 
   it("answers a file when it is asked for and not before, by the member the editor names", async () => {

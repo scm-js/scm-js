@@ -2525,9 +2525,10 @@ scmjs mod play "Cosmonarchy BW" --map "(4)Exodus 1.0.scx" --bot mybot/out/mybot.
 
 opens scmjs.dev/play in your browser and hands it every file of the mod, with its plugins
 and FireGraft files, and the mod's hash. The page keeps the files that differ from your
-copy of the game. Nothing is uploaded: the page keeps the mod in your browser. The play
-page's support for mods arrives with its next release. A mod with plugins or a FireGraft
-project is handed to the page at `?lift=live`, the address where the page runs them.
+copy of the game. Nothing is uploaded: the page keeps the mod in your browser. A mod with
+plugins or a FireGraft project is handed to the page at `?lift=live`, the address where
+the page runs them. [On the play page](mods.md#on-the-play-page) has what the page does
+with a mod once it has it.
 
 `--bot` puts a [community bot](#bots) on the other side: one of the play page's bots by
 its key (`cosmonarchy-example`, `mcrave`, `ualbertabot`, `example`), or a `.scmbot` file
@@ -2606,12 +2607,12 @@ scmjs map trace ridge.scx --mod MyMod.mpq
 ```
 
 `mod test` is `map test` with the mod's files laid over the game's; `map test`,
-`map trace` and `map cost` take `--mod`. A scenario with a bot on the other side is not
-there yet: `map test` plays the person's seat and the map's own computers. `bot run` and
-`bot ladder` take it too, and run the mod's plugins and FireGraft project beside the bot
-([a bot on a mod](#a-bot-on-a-mod)). The engine's runners take a mod from the play page's
-next release; with an engine from before, the command names the version it needs and
-stops.
+`map trace` and `map cost` take `--mod`. These lay the mod's files only and run none of
+its plugins. A scenario with a bot on the other side is not there yet: `map test` plays
+the person's seat and the map's own computers. `bot run` and `bot ladder` take `--mod`
+too, and run the mod's plugins and FireGraft project beside the bot ([a bot on a
+mod](#a-bot-on-a-mod)). With an engine older than the one a command needs, the command
+names the version it needs and stops.
 
 A mod that changes animation scripts, pictures, overlays or the sound table makes the game
 read its startup data again before the game starts, and that opens every unit picture and
@@ -2822,8 +2823,10 @@ scmjs bot build     # out/<key>.scmbot
 ```
 
 With no bot yet, `scmjs bot new` writes one to start from, which mines, trains workers and
-builds supply. A build needs a licence file for the bot (`LICENSE`, with any licence you
-choose), since it goes into every build and is shown with the bot.
+builds supply. A bot for a mod is written against the mod's own names, which
+`scmjs mod header --bot` puts in its folder ([a bot made for a
+mod](#a-bot-made-for-a-mod)). A build needs a licence file for the bot (`LICENSE`, with
+any licence you choose), since it goes into every build and is shown with the bot.
 
 `scmjs bot update` fetches the newest toolchain, the one the play page expects. The
 toolchain's guide, with what it does for code written for Visual Studio and the fields of
@@ -3053,8 +3056,7 @@ your maps in git or give the tool copies. `map_run` runs a plugin, which is code
 your privileges, as `scmjs map run` does; the AI tool asks you before it calls a tool, and
 you can leave that one unapproved.
 
-`map_trace` and `map_cost` take `mod`, as the commands take `--mod`; the engine's runners
-must take a mod, as the play page's next release does.
+`map_trace` and `map_cost` take `mod`, as the commands take `--mod`.
 
 `map_preview`, `map_analyze`, `map_trace`, `map_cost` and `map_coverage` need [your copy
 of the game](#commands-that-need-starcraft), and the runs fetch the engine the first time;

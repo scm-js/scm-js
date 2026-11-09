@@ -7,29 +7,35 @@ keeps a mod as a folder of text and pictures that you can edit with any editor, 
 git and pack back into the files the scene's launchers load.
 
 Everything here works on your own copy of the game and your own copy of the mod. Nothing
-is uploaded, and nothing a mod carries as a program is run.
+is uploaded, and nothing a mod carries as a program is run on your computer: its plugins
+run only inside the game that the play page and the engine's bot runners play.
 
 ## Three ways in
 
 **The command line.** `scmjs mod` reads a mod from what it ships as — a folder of files,
 an `.mpq`, a self-executing `.exe` or a `.zip` — says what it is, unpacks it into a folder
 of text, checks it, compares two versions, packs it again and hands it to the play page.
-This is the part that is ready today, and the rest of this guide is mostly about it.
+[The commands](#the-commands) go through each.
 
-**The play page.** The play page at scmjs.dev/play takes a mod dropped on it (Game Menu ▸
-Mods ▸ Add a Mod…: the mod's folder as its makers ship it, an `.mpq`, a self-executing
-`.exe` or a `.zip`), keeps the files that differ from your game in your browser, runs its
-plugins and FireGraft project inside the game, and plays with them; a replay saved there
-names the mod, and the page plays such a replay with it. `scmjs mod play` hands a mod to
-it from a terminal, with a map and a bot made for the mod if you like.
+**The play page.** The play page at scmjs.dev/play plays a mod from your own copy of
+StarCraft, 1.16.1 or Remastered. Add it once (Game Menu ▸ Mods ▸ Add a Mod…: the mod's
+folder as its makers ship it, an `.mpq`, a self-executing `.exe` or a `.zip`), and the
+page keeps it, runs its plugins and FireGraft project inside the game, seats bots made for
+it, and writes the mod into every replay it saves. [On the play page](#on-the-play-page)
+has the details. `scmjs mod play` hands a mod to it from a terminal, with a map and a bot
+made for the mod if you like.
 
 **The editor.** The editor makes maps for a mod through its [data
 sets](game-data.md#data-sets-made-from-a-mod): Help ▸ Game Data… ▸ Add a data set… takes a
 folder of the mod's archives and loose files and lays them over the game's. Its tables are
 read at any width, so its new unit types are in the palette with their names and pictures,
-and a map saved with it remembers the data set, which Test Map passes on. The folder holds
-`.mpq` archives, a mod's self-executing `.exe` (read for its archive, never run) and the
-game's paths; a mod that ships as a `.zip` is unzipped first.
+under the race the mod gives them. Upgrade and technology settings, the trigger editor's
+unit lists and the trigger text use the mod's names. A map saved with it remembers the
+data set, and every export, share and Test Map build carries it. The folder holds `.mpq`
+archives, a mod's self-executing `.exe` (read for its archive, never run) and the game's
+paths; a mod that ships as a `.zip` is unzipped first. A replay of a mod opens in the
+editor too, and plays with the mod your browser keeps from the play page ([Replays of a
+mod](guide.md#replays-of-a-mod)).
 
 ## A mod as a folder
 
@@ -273,9 +279,12 @@ scmjs map test ridge.scx --mod mymod
 scmjs map trace ridge.scx --mod MyMod.mpq
 ```
 
-The game engine's runners play a map with the mod's files laid over the game's. They need
-an engine whose runners take a mod, which the play page's next release brings; until then
-the command says which version it needs and stops.
+The game engine's runners play a map with the mod's files laid over the game's, fetched
+from the play page once like any [command that plays the
+game](cli.md#commands-that-need-starcraft). These three lay the mod's files only; its
+plugins and FireGraft project run beside a bot in `scmjs bot run` and `bot ladder` ([a bot
+for your mod](#a-bot-for-your-mod)). A scenario with a bot on the other side is not there
+yet.
 
 ### Replays of modded games
 
@@ -299,10 +308,18 @@ What reads it:
   runners do not run plugins.
 - `scmjs replay watch`, `replay export`, `map heatmap`, `map coverage` and
   `map test record` refuse a mod's replay, or leave it out of a list, for now.
-- The Aftermath plugin, the editor's replay viewer, shows the mod and its link, and takes
-  the names and costs from the mod's folder when you attach it.
+- The play page plays it with the mod it names, switching to that mod when your browser
+  keeps it, or saying which mod it needs and where its makers publish it ([On the play
+  page](#on-the-play-page)).
+- The Aftermath plugin, the editor's replay viewer, shows the mod and its link, plays the
+  replay with the mod your browser keeps, and takes the names and costs from the mod's
+  folder when you attach it ([Replays of a mod](guide.md#replays-of-a-mod)).
 
-The play page's Save Replay writes the section for a game of a mod from its next release.
+The play page writes the section into every replay it saves of a game of a mod: Save
+Replay, and Watch the Replay and Analyse in the Editor at the end of a game. A replay
+StarCraft itself recorded with a mod has no such section. On the play page, choose the mod
+under Mods first; the page then asks whether to watch the replay with the mod or without
+it. Such replays are expected to play, but none has been checked yet.
 
 ### A bot for your mod
 
@@ -336,12 +353,79 @@ and hand the mod with a map and a bot to the play page in your browser, which it
 link to and what the page answered. `map_trace` and `map_cost` take a `mod`. See [AI
 tools](cli.md#ai-tools).
 
+## On the play page
+
+The play page at [scmjs.dev/play](https://scmjs.dev/play/) runs the game in a browser tab
+from your own copy of StarCraft, which it asks for the first time: the folder the game is
+installed in. A mod is laid over that copy. A Remastered installation works as well as a
+1.16.1 one.
+
+### Adding a mod
+
+Open the Game Menu, then **Mods ▸ Add a Mod…**, and pick the mod's folder as its makers
+ship it; **Or choose a .mpq, .exe or .zip** takes a single file instead. Dropping the mod
+anywhere on the page does the same. The page says in one line what it found, keeps the
+files that differ from your copy of the game in your browser, and plays with the mod from
+then on. Nothing is uploaded. A mod of Cosmonarchy's size takes a few minutes the first
+time.
+
+The Mods list shows every mod the page keeps, with what each changes. **Use** plays one,
+**None** goes back to the game's own data, and **Remove** forgets one. Choosing loads the
+page again, since every table and picture is read again through the mod. A mod the page
+kept is found again by [its hash](#the-mods-hash) on later visits.
+
+### Its plugins and FireGraft project
+
+A mod's plugins, and the changes its FireGraft project makes to the game's program, run
+inside the game on the live engine, at scmjs.dev/play/?lift=live. Without that address the
+page lays the mod's files over the game and runs none of its code, and the Mods list says
+so beside the mod. You seldom type it: `scmjs mod play` opens the page there for a mod
+with code, and a replay or an invitation to a game that needs it loads the page there by
+itself. A game with a mod's plugins needs 2 GB of the browser's memory; close other tabs
+if the page says it was given less.
+
+### Maps and bots
+
+The maps the mod carries are offered beside the page's own, and the setup screen shows a
+map's forces and slots as the game's lobby does. With a mod in use, the game's own
+computer players are the mod's AI, and their rows say so ("Computer — Cosmonarchy BW's
+AI"). A community bot's row says whether it was made for the mod, plays vanilla data, or
+was made for another mod, which plays all the same with a warning. The catalogue's
+Cosmonarchy Example is a small bot made for Cosmonarchy BW; Options ▸ Community bots ▸ Add
+a bot from a file… adds one [you built](#a-bot-for-your-mod). The catalogue's bots need a
+scmjs.dev account; your own file does not.
+
+### Games between people
+
+A game between people carries the mod. The host's invitation link names the mod, its hash
+and where its makers publish it, and a page that keeps the mod and follows the link loads
+itself again on the mod, run the way the host runs it. A joiner without the mod is told
+which mod it is and where to get it, and plays nothing until it is added under Mods. A
+replay saved by either player is the same file up to where each stopped.
+
+A mod with a FireGraft project and no plugins is the one case the page cannot settle
+alone: if you join by typing the invitation on a page opened another way, the page tells
+you how the host runs the mod rather than switching. Join by the host's link.
+
+### Replays
+
+A replay saved on the page [names its mod](#replays-of-modded-games). Opening it later,
+from Watch a Replay, a drop, a link or the editor, plays it with that mod: the page
+switches to the mod when your browser keeps it, and otherwise says which mod it needs and
+where its makers publish it, with an **Add a Mod…** button; once you add it, the replay
+plays. A browser that keeps another version of the mod is refused with both hashes.
+
+Going back in a replay of a mod whose plugins run starts it again from its first frame and
+plays forward, which takes a while; the Watch Replay menu says so under Go to frame.
+
 ## From a mod folder to a replay
 
 The whole path, from a mod as its makers ship it to a bot made for it playing you on the
 play page, and the game's replay played on from a moment. Cosmonarchy BW is the example;
-any mod goes the same way. You need your copy of StarCraft, Node, and Docker for building
-the bot. The play page's part arrives with its next release.
+any mod goes the same way. You need your copy of StarCraft, Node (for
+`npm install -g @scm-js/cli`, which gives the `scmjs` command), and Docker for building
+the bot. To play the catalogue's example bot instead of your own, skip steps 3 and 4 and
+give `--bot cosmonarchy-example` in step 5.
 
 1. **The mod.** Use the release folder as its makers ship it, here `Cosmonarchy BW`, or a
    folder `scmjs mod unpack` wrote. `scmjs mod info "Cosmonarchy BW"` names it, counts its
@@ -358,13 +442,14 @@ the bot. The play page's part arrives with its next release.
    the toolchain, a Docker image. To try it without a page,
    `scmjs bot run out/<key>.scmbot "(4)Exodus 1.0.scx" --mod "../Cosmonarchy BW"` plays
    it, and its first lines say "made for Cosmonarchy BW".
-5. **Hand it all to the play page.** With Exodus, one of the mod's maps,
+5. **Hand it all to the play page.** With Exodus, one of the mod's maps (`--map` takes the
+   map's file, so give its path if it is not in this folder),
    `scmjs mod play "../Cosmonarchy BW" --map "(4)Exodus 1.0.scx" --bot out/<key>.scmbot`
-   opens the play page in your browser. The first time, the page keeps the mod (a few
-   minutes for a mod of Cosmonarchy's size) and loads again; then Exodus is on the setup
-   screen with its own settings, and the row beside yours names your bot "made for
-   Cosmonarchy BW". The terminal says the same and returns. With
-   `--bot cosmonarchy-example` the page's own example bot plays instead.
+   opens the play page in your browser. The first time, the page asks for your StarCraft
+   folder, then keeps the mod (a few minutes for a mod of Cosmonarchy's size) and loads
+   again; then Exodus is on the setup screen with its own settings, and the row beside
+   yours names your bot "made for Cosmonarchy BW". The terminal says the same and returns.
+   With `--bot cosmonarchy-example` the page's own example bot plays instead.
 6. **Play.** Press Start Game. The mod's plugins run in the game, the mod's AI plays the
    map's computers, and your bot plays its side.
 7. **Save the replay.** Game Menu ▸ Save Replay downloads the game as a `.rep`, with [the
@@ -373,9 +458,14 @@ the bot. The play page's part arrives with its next release.
    hash, and its makers' link if you gave the page one) and the `Plugins` line (the four
    that ran, and the FireGraft project). `--builds --mod "../Cosmonarchy BW"` lists what
    each player ordered by the mod's names.
-9. **Open it in the editor.** At scmjs.dev, File ▸ Open Replay… opens it with Aftermath,
-   which shows the mod and its link. The Replay view plays the game with the mod the play
-   page kept in step 5; the analysis is off for a mod's replay.
+9. **Open it in the editor.** At [scmjs.dev/editor](https://scmjs.dev/editor/), File ▸
+   Open Replay… opens it with Aftermath, which shows the mod and its link. The Replay view
+   plays the game with the mod the play page kept in step 5, and the analysis plays it
+   through the same way: the Game, Analysis and Cast tabs fill as for any replay. With the
+   mod's plugins running, the analysis goes at about the game's own pace, so a long game
+   takes a while, and the Fights tab lists the fights without playing them again ([Replays
+   of a mod](guide.md#replays-of-a-mod)). Help ▸ Game Data… ▸ Add a data set… with the
+   mod's folder, or Aftermath's **Attach the Mod's Folder…**, names the units by the mod.
 10. **Play from a moment.** Stop the timeline where you want and press Play From Here. The
     play page opens with the mod and its plugins running, at that moment; take a player
     and play on, alone or against a community bot such as yours.
@@ -404,7 +494,15 @@ the bot. The play page's part arrives with its next release.
 - The command line keeps and lists plugins (`.qdp`, `.bwl`) and never runs them on your
   computer; a FireGraft file's edits to the game's program are applied only inside the
   game that the play page and the engine's bot runners play, where the plugins run too.
-- `scmjs mod test` has no scenario with a bot on the other side yet.
+- `scmjs mod test`, `map test`, `map trace` and `map cost` lay a mod's files over the game
+  but run none of its plugins, and have no scenario with a bot on the other side yet.
+- With a mod's plugins running, a replay cannot be put back to an earlier moment: going
+  back starts it again from the first frame, and Aftermath's Fights tab does not play a
+  fight again. Analysing such a replay runs at about the game's own pace.
+- In a game between people, a mod with a FireGraft project and no plugins needs the host's
+  invitation link; a page joined another way is told, not switched.
+- Replays recorded by StarCraft itself with a mod are expected to play with the mod, but
+  none has been checked.
 - The editor does not open a mod's `.zip` or `.exe` itself; its data sets take a folder (a
   loader `.exe` in the folder is read for its archive).
 - `mod pack` does not make a self-executing exe; MPQDraft does.

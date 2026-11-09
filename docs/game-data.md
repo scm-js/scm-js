@@ -8,9 +8,10 @@ Remastered, copies what it needs once, and keeps the copy.
 
 This document is for map makers who want to know where the graphics come from and what is
 kept where, and for mod makers who want the editor to use a mod's files in place of the
-game's. It ends with how the pictures are drawn. The steps of the first-run dialog are in
-the [installing guide](installing.md#the-graphics); building the editor from source is in
-[Extracting for a source build](#extracting-for-a-source-build).
+game's. Playing a mod, and keeping one as a folder of text, are in the [mods
+guide](mods.md). It ends with how the pictures are drawn. The steps of the first-run
+dialog are in the [installing guide](installing.md#the-graphics); building the editor from
+source is in [Extracting for a source build](#extracting-for-a-source-build).
 
 Attribution is not permission. Before publishing a fork or hosting a build, read
 [ATTRIBUTION.md](../ATTRIBUTION.md#starcraft-and-brood-war-data).
@@ -255,6 +256,12 @@ Many mods change more than single files. A data set takes what the larger ones s
   tileset with more than 2,048 groups a tile's group takes twelve bits of the map's tile
   value (on the game's own tilesets the top bit is the creep flag, as before), so a map
   placing group 2,774 draws it.
+- **The editor's plugins.** The plugins that come with the editor follow the data set:
+  Repair leaves a mod's own unit types alone, Melee Wizard lays bases out with the mod's
+  footprint sizes, Section Explorer reads an extended tileset's tile groups, and
+  TrigScript and Magenta name the mod's units. Where a part still reads the game's own
+  data, it says so: Walkability's walks in the game, Magenta's EUD and build rows, and
+  TrigScript's memory-level features and tests in the game.
 - **Remastered pictures.** On a data set laid over a Remastered copy, an image whose
   picture or image-table row the data set changed is drawn from its classic picture even
   with View ▸ Remastered Graphics on, since the 2x picture on file is of the original.
@@ -265,8 +272,8 @@ What does not work yet:
   fixed size in the file format: 228 unit types, 61 upgrades, 44 technologies. A type past
   227 has no per-map settings; Unit Settings says so for it. Upgrades and technologies
   past the game's are listed under the data set's heading, and their dialogs say the same.
-- **Plugins.** Plugins that read the tables see the wider tables, but most were written
-  for the game's sizes and may show only the game's types.
+- **Other plugins.** A plugin from elsewhere sees the wider tables, but may have been
+  written for the game's sizes and show only the game's types.
 - **Triggers.** The trigger editor lists the unit types in the palette's groups, the data
   set's among them; ids 228 to 232 stay the game's None and unit classes. In the text
   form, a unit's name is the data set's (see [Unit classes](triggers.md#unit-classes)).

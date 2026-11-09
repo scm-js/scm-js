@@ -22,6 +22,10 @@ You do not need to read all of it. Pick the path that matches what you came to d
   with [Check Map](#check-map) and play them with [Test Map](#test-map).
 - **An existing project from SCMDraft 2.** [Coming from SCMDraft
   2](#coming-from-scmdraft-2) says what carries over and what works differently.
+- **A map for a mod.** Add the mod as a data set ([Data sets made from a
+  mod](game-data.md#data-sets-made-from-a-mod)), and the palette, the settings and the
+  triggers follow it. The [mods guide](mods.md) covers the rest: the mod as a folder of
+  text, playing it on the play page with a bot, and its replays.
 
 ## Getting started
 
@@ -1047,6 +1051,12 @@ Run the command again to rebuild the map and start over in the same panel.
 > only in the editor at scmjs.dev, not in the desktop app or an editor hosted elsewhere.
 > There, Test Map goes to StarCraft and Preferences ▸ Testing has no choice to make.
 
+**A map for a mod.** While a mod's data set is in use (see [Data sets made from a
+mod](game-data.md#data-sets-made-from-a-mod)), the map Test Map builds carries it, so the
+play page knows which mod the map was made for. StarCraft, started on its own, plays the
+game's own data rather than the mod's, and the dialog says so; so does a target that
+cannot take the data set.
+
 From a terminal, `scmjs map trace` runs a map's triggers in the game and lists which
 fired, and `scmjs map test` plays scenarios you write and checks how each ended ([Running
 a map in the game](cli.md#running-a-map-in-the-game)).
@@ -1263,6 +1273,36 @@ on the other side, and the end of the game offers it too.
 
 > **Note.** In the desktop app and an editor hosted elsewhere, Aftermath works from the
 > players' orders alone: there is no Replay view and no analysis.
+
+### Replays of a mod
+
+A replay saved on the play page from a game of a mod names the mod. Aftermath then shows
+*Replay of a mod* with the mod's name, its hash, its makers' link and the plugins that
+ran. In the editor at scmjs.dev it plays the replay with the copy of the mod your browser
+keeps, the one added on the play page (Game Menu ▸ Mods ▸ Add a Mod…, see [the mods
+guide](mods.md#on-the-play-page)):
+
+- the Replay view plays the game with the mod, its plugins running where they ran;
+- the analysis plays it the same way, so the Game, Analysis and Cast tabs fill as for any
+  replay;
+- Play From Here opens the play page with the mod.
+
+When the browser has not got the mod, or keeps another version of it, the Replay view and
+the analysis say so, with the mod's hash and its makers' link, and play nothing.
+
+Names and costs come from the data set the editor draws with. Add the mod as a data set
+(Help ▸ Game Data… ▸ Add a data set…, see [Data sets made from a
+mod](game-data.md#data-sets-made-from-a-mod)), or press **Attach the Mod's Folder…** in
+Aftermath's panel, and units, upgrades and technologies are named by the mod. Until then
+they show by number.
+
+A mod whose plugins run has three limits:
+
+- the analysis goes at about the game's own pace, so a twenty-minute game takes over ten
+  minutes;
+- the Fights tab lists the fights but does not play them again, and says why;
+- going back on the timeline starts the replay again from its first frame and plays
+  forward to the moment, which takes a while.
 
 ## Plugins
 

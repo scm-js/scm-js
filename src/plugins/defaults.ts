@@ -51,17 +51,17 @@ export interface DefaultPlugin {
  * item's `after:` finds another plugin's item whichever of the two started first.
  */
 export const DEFAULT_REMOTE_PLUGINS: readonly DefaultPlugin[] = [
-  { spec: "github:scm-js/plugin-aftermath@v0.18.0", enabled: true },
+  { spec: "github:scm-js/plugin-aftermath@v0.20.0", enabled: true },
   { spec: "github:scm-js/plugin-paint@v1.1.0", enabled: true },
-  { spec: "github:scm-js/plugin-repair@v1.6.2", enabled: true },
-  { spec: "github:scm-js/plugin-scm-sim@v0.15.0", enabled: true },
+  { spec: "github:scm-js/plugin-repair@v1.6.3", enabled: true },
+  { spec: "github:scm-js/plugin-scm-sim@v0.18.0", enabled: true },
   { spec: "github:scm-js/plugin-scmjs-dev@v1.40.0", enabled: true },
   { spec: "github:scm-js/plugin-scm-scx@v1.4.0", enabled: true },
   { spec: "github:scm-js/plugin-stamp-library@v1.2.0", enabled: true },
   { spec: "github:scm-js/plugin-image-to-terrain@v1.1.0", enabled: true },
   { spec: "github:scm-js/plugin-trigedit@v1.1.0", enabled: false },
-  { spec: "github:scm-js/plugin-trigscript@v4.2.0", enabled: true },
-  { spec: "github:scm-js/plugin-walkability@v1.4.0", enabled: true },
+  { spec: "github:scm-js/plugin-trigscript@v4.3.0", enabled: true },
+  { spec: "github:scm-js/plugin-walkability@v1.4.1", enabled: true },
 ];
 
 /**

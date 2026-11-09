@@ -2281,9 +2281,12 @@ Help ▸ Game Data…. The `"gameData"` event fires on every change.
 A mod's files replace the game's in the same formats, so `data`, `tileset`, `graphics` and
 `names` follow them automatically, at whatever width the mod's tables have: `data.units()`
 can hold more than 228 types, `names.unitGroups()` then ends with the set's own groups,
-and `graphics.icon` pictures the new types where the set has a sheet for them. A plugin
-written only for the game's own data can check `profile().id` (`"starcraft"`) and turn
-itself off for anything else.
+and `graphics.icon` pictures the new types where the set has a sheet for them. So take
+counts, names and widths from `api.data` and `api.palette` rather than the game's numbers
+(228 unit types, 130 weapons): the editor's own plugins do, and a mod's tables are wider
+and named differently. A plugin written only for the game's own data can check
+`profile().id` (`"starcraft"`) and turn itself off for anything else, or say which of its
+parts read the game's own data, as Walkability and Magenta do.
 
 ```ts
 const source = api.gameData.source();

@@ -35,6 +35,14 @@ Plugins ▸ Browse Plugins….
 - **Test in the game or the browser.** Tools ▸ Test Map puts the map in the game's Maps
   folder; at scmjs.dev, Tools ▸ Test in Browser plays it in a browser tab from your own
   StarCraft files. See [Test Map](docs/guide.md#test-map).
+- **Mods.** A mod such as Cosmonarchy BW plays in the browser at
+  [scmjs.dev/play](https://scmjs.dev/play/) with its own plugins, against a bot made for
+  it if you like, and its replays play back and are analysed in the editor. The editor
+  makes maps for a mod with its units by their own names, and `scmjs mod` keeps a mod as a
+  folder of text you can edit and keep in git. See [Mods](docs/mods.md).
+- **A command line.** `scmjs` looks inside maps and replays, checks maps on every push
+  with a GitHub Action, plays a map's triggers in the game, builds and plays bots, and
+  gives AI tools the same commands. See [the command line guide](docs/cli.md).
 - **Several people on one map.** Share the open map and anyone with the link edits it with
   you, live. See [Editing a map together](docs/guide.md#editing-a-map-together).
 - **Triggers as code.** [TrigScript](docs/trigscript.md) writes triggers in TypeScript,
@@ -101,7 +109,7 @@ same release as the editor at [scmjs.dev/editor](https://scmjs.dev/editor/).
 
 | Document | Covers |
 | --- | --- |
-| [docs/guide.md](docs/guide.md) | The user guide: a first map, then each layer and dialog, saving, sharing, plugins and preferences |
+| [docs/guide.md](docs/guide.md) | The user guide: a first map, then each layer and dialog, testing and saving, replays, sharing, plugins and preferences |
 | [docs/installing.md](docs/installing.md) | The hosted editor, the desktop app, the container, and getting the game's graphics |
 | [docs/trigscript.md](docs/trigscript.md) | TrigScript, triggers written as TypeScript: the script window, tests, programs that run in the game, examples and the reference |
 | [docs/trigscript-language.md](docs/trigscript-language.md) | The language of TrigScript programs: values, arrays, functions, classes, errors, tasks, units, events, input, text, sounds and libraries |

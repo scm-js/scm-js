@@ -15,8 +15,22 @@
  * hand-over has always taken a map. Every `scmjs.*` message the play page sends back is forwarded to the command;
  * `scmjs.play.started`, `scmjs.play.shown` or `scmjs.taken` end the wait, `scmjs.play.error` ends it with the page's
  * words. Nothing of the mod leaves this computer: the page is on the person's own browser.
+ *
+ * With `--bot` (the mods plan's C6) the message also carries
+ *
+ *   bot: { key, race? } | { file, name, race? }, setup: true unless --start, useMapSettings: true | null
+ *
+ * — a bot of the play page's catalogue by its key, or a `.scmbot` file's bytes as a `File` (the page keeps it as
+ * Options → Add a bot from a file… keeps one); `race` its race (0 zerg, 1 terran, 2 protoss, 6 random); the setup
+ * screen shown with the bot's row filled, or the game started at once; the map with its own settings for a mod with
+ * plugins or a FireGraft project (as the runners play one), else the page's guess. The page answers `shown` or
+ * `started` with `bot`, the row as the screen words it, and `scmjs.play.waiting` while it asks the person to sign in
+ * (a catalogue bot takes an account). A mod with plugins or a FireGraft project is handed to the page at
+ * `?lift=live`, where they run.
  */
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { createServer } from "node:http";
+import { basename } from "node:path";
 import { Creator } from "mopaq";
 import { randomBytes } from "node:crypto";
 import { gameName } from "../../../src/formats/mod/sources";
@@ -81,15 +95,69 @@ export const HANDED_MEMBERS = "scmjs-members.mpq";
  */
 export const notLoose = (name: string): boolean => !name.includes("\\") || /^(plugins|firegraft)\\/.test(name) || /\.(dll|zip|mpq|exe|qdp|bwl|fgp|fgd)$/.test(name);
 
-/** What the play page said. */
-export interface PlayOutcome { started: boolean; shown: boolean; error: string | null; said: { type: string; [key: string]: unknown }[] }
+/** What the play page said; `bot` is the bot's row as its setup screen words it. */
+export interface PlayOutcome { started: boolean; shown: boolean; error: string | null; bot: string | null; said: { type: string; [key: string]: unknown }[] }
+
+/** The bot for the other side: a catalogue bot by its key, or a `.scmbot` file. */
+export type PlayBot = { key: string } | { name: string; bytes: Uint8Array };
 
 export interface PlayOptions {
   map?: { name: string; bytes: Uint8Array } | null;
+  /** A bot for the other side, and its race (0 zerg, 1 terran, 2 protoss, 6 random). */
+  bot?: PlayBot | null;
+  botRace?: number;
+  /** Start the game at once rather than show the setup screen (with a bot; a map alone always starts). */
+  start?: boolean;
   play?: string;
+  /** Hand over at `?lift=live`, where plugins and FireGraft's exe edits run: by default when the mod has either. */
+  lift?: boolean;
   live?: (line: string) => void;
   onAddress?: (page: string) => void;
   timeout?: number;
+}
+
+/** What the loopback page adds to the `scmjs.play` message besides the mod and the map (absent: nothing). */
+export interface HandoffExtra {
+  setup?: boolean;
+  useMapSettings?: boolean | null;
+  bot?: ({ key: string } | { file: string }) & { race?: number };
+}
+
+/** The races `--race` takes, as the play page numbers them. */
+export const PAGE_RACES: Record<string, number> = { z: 0, zerg: 0, t: 1, terran: 1, p: 2, protoss: 2, r: 6, random: 6 };
+
+/** `--race`: a race's name or letter, as the play page numbers it. */
+export function pageRace(race: string): number {
+  const n = PAGE_RACES[race.trim().toLowerCase()];
+  if (n === undefined) throw new CliError(t("--race {value} is not a race: zerg, terran, protoss or random", { value: race }), null, 2);
+  return n;
+}
+
+/**
+ * `--bot`: a `.scmbot` file (read here, handed over as bytes), or the key of a bot in the play page's catalogue
+ * (`example`, `mcrave`, `ualbertabot`, `cosmonarchy-example`), which the page checks.
+ */
+export function playBotOf(bot: string): PlayBot {
+  if (/\.scmbot$/i.test(bot) || /[\\/]/.test(bot) || (existsSync(bot) && statSync(bot).isFile())) {
+    if (!existsSync(bot) || !statSync(bot).isFile()) throw new CliError(t("No bot file {file}", { file: bot }), t("--bot takes a .scmbot file (scmjs bot build writes one in out/) or a bot of the play page by its key, such as cosmonarchy-example."), 2);
+    return { name: basename(bot), bytes: new Uint8Array(readFileSync(bot)) };
+  }
+  if (!/^[A-Za-z0-9][\w.-]{0,63}$/.test(bot)) throw new CliError(t("--bot {value} is neither a .scmbot file nor a bot's key", { value: bot }), t("A key is a word such as cosmonarchy-example or mcrave."), 2);
+  return { key: bot };
+}
+
+/**
+ * The hand-over's additions for `o`: with a bot, the bot (a file by its name: its bytes are fetched apart), the setup
+ * screen unless `start`, and the map's own settings for a mod with code (null: the page's guess).
+ */
+export function handoffExtra(set: PlaySet, o: PlayOptions): HandoffExtra | null {
+  if (!o.bot) return null;
+  const race = o.botRace !== undefined ? { race: o.botRace } : {};
+  return {
+    ...(o.start ? {} : { setup: true }),
+    useMapSettings: set.plugins + set.firegraft > 0 ? true : null,
+    bot: "key" in o.bot ? { key: o.bot.key, ...race } : { file: o.bot.name, ...race },
+  };
 }
 
 /** Hands the set to the play page through a loopback page and waits for it to start (or show, or refuse). */
@@ -97,11 +165,16 @@ export async function playOnPage(set: PlaySet, o: PlayOptions = {}): Promise<Pla
   const token = randomBytes(12).toString("hex");
   const target = new URL(o.play ?? process.env.SCMJS_PLAY_URL ?? PLAY_PAGE_URL);
   target.searchParams.set("handoff", "1");
+  // (the page runs a mod's plugins and FireGraft's exe edits only at ?lift=live)
+  if ((o.lift ?? set.plugins + set.firegraft > 0) && !target.searchParams.has("lift")) target.searchParams.set("lift", "live");
   const say = o.live ?? (() => {});
-  const outcome: PlayOutcome = { started: false, shown: false, error: null, said: [] };
+  const outcome: PlayOutcome = { started: false, shown: false, error: null, bot: null, said: [] };
   let done: () => void = () => {};
   const finished = new Promise<void>((r) => { done = r; });
-  const manifest = { name: set.name, hash: set.hash, files: set.files.map((f) => ({ path: f.path, size: f.bytes.length })), map: o.map?.name ?? null };
+  const extra = handoffExtra(set, o);
+  const botBytes = o.bot && "bytes" in o.bot ? o.bot.bytes : null;
+  const manifest = { name: set.name, hash: set.hash, files: set.files.map((f) => ({ path: f.path, size: f.bytes.length })), map: o.map?.name ?? null, ...(extra ? { handoff: extra } : {}) };
+  let readies = 0;
   const server = createServer((req, res) => {
     const url = new URL(req.url ?? "/", "http://127.0.0.1");
     const p = url.pathname;
@@ -110,6 +183,7 @@ export async function playOnPage(set: PlaySet, o: PlayOptions = {}): Promise<Pla
     const file = /^\/([0-9a-f]+)\/file\/(\d+)$/.exec(p);
     if (file && file[1] === token && set.files[Number(file[2])]) { res.writeHead(200, { "content-type": "application/octet-stream" }); res.end(set.files[Number(file[2])].bytes); return; }
     if (p === `/${token}/map` && o.map) { res.writeHead(200, { "content-type": "application/octet-stream" }); res.end(o.map.bytes); return; }
+    if (p === `/${token}/bot` && botBytes) { res.writeHead(200, { "content-type": "application/octet-stream" }); res.end(botBytes); return; }
     if (p === `/${token}/message` && req.method === "POST") {
       const chunks: Buffer[] = [];
       req.on("data", (c: Buffer) => chunks.push(c));
@@ -119,10 +193,12 @@ export async function playOnPage(set: PlaySet, o: PlayOptions = {}): Promise<Pla
         try { m = JSON.parse(Buffer.concat(chunks).toString("utf8")); } catch { /* not ours */ }
         if (!m || typeof m.type !== "string") return;
         outcome.said.push(m);
+        if (typeof m.bot === "string") outcome.bot = m.bot;
         if (m.type === "scmjs.play.started" || m.type === "scmjs.taken") { outcome.started = true; done(); }
         else if (m.type === "scmjs.play.shown") { outcome.shown = true; done(); }
         else if (m.type === "scmjs.play.error" || m.type === "scmjs.error") { outcome.error = String(m.message ?? t("the play page could not take the mod")); done(); }
-        else if (m.type === "scmjs.waiting") say(`${mark.info} ${String(m.message ?? m.reason ?? t("waiting"))}`);
+        else if (m.type === "scmjs.waiting" || m.type === "scmjs.play.waiting") say(`${mark.info} ${String(m.message ?? m.reason ?? t("waiting"))}`);
+        else if (m.type === "scmjs.ready" || m.type === "scmjs.play.ready") say(`${mark.info} ${readies++ ? t("The play page is ready again: the mod is handed over again") : t("The play page is ready: the mod is handed over")}`);
       });
       return;
     }
@@ -167,6 +243,15 @@ async function message() {
   }
   built = { type: "scmjs.play", dataSet: { name: m.name, hash: m.hash, files } };
   if (m.map) { built.map = new Uint8Array(await (await fetch("/" + token + "/map")).arrayBuffer()); built.name = m.map; }
+  const h = m.handoff;
+  if (h) {
+    if (h.setup) built.setup = true;
+    if ("useMapSettings" in h) built.useMapSettings = h.useMapSettings;
+    if (h.bot) {
+      const race = typeof h.bot.race === "number" ? { race: h.bot.race } : {};
+      built.bot = h.bot.file ? { file: new File([await (await fetch("/" + token + "/bot")).arrayBuffer()], h.bot.file), name: h.bot.file, ...race } : { key: h.bot.key, ...race };
+    }
+  }
   return built;
 }
 addEventListener("message", async (e) => {
@@ -174,7 +259,7 @@ addEventListener("message", async (e) => {
   const type = e.data?.type;
   if (typeof type !== "string" || !type.startsWith("scmjs.")) return;
   // (each time it says it is ready: a first visit takes the game's files and loads again)
-  if (type === "scmjs.ready" || type === "scmjs.play.ready") { win.postMessage(await message(), origin); say("Handed to the play page."); return; }
+  if (type === "scmjs.ready" || type === "scmjs.play.ready") { win.postMessage(await message(), origin); say("Handed to the play page."); await tell({ type }); return; }
   const { type: _t, ...rest } = e.data;
   await tell({ type, ...Object.fromEntries(Object.entries(rest).filter(([, v]) => typeof v === "string")) });
   if (ENDS.includes(type)) { say(type.endsWith("error") ? (e.data.message || "The play page could not take the mod.") : "Playing. You can close this tab and go back to the terminal."); }

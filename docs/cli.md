@@ -2519,12 +2519,36 @@ work without it and say what they could not look at.
 ```sh
 scmjs mod play mymod
 scmjs mod play MyMod.mpq --map "(2)Ridge.scx"
+scmjs mod play "Cosmonarchy BW" --map "(4)Exodus 1.0.scx" --bot cosmonarchy-example --race terran
+scmjs mod play "Cosmonarchy BW" --map "(4)Exodus 1.0.scx" --bot mybot/out/mybot.scmbot --start
 ```
 
 opens scmjs.dev/play in your browser and hands it every file of the mod, with its plugins
 and FireGraft files, and the mod's hash. The page keeps the files that differ from your
 copy of the game. Nothing is uploaded: the page keeps the mod in your browser. The play
-page's support for mods arrives with its next release.
+page's support for mods arrives with its next release. A mod with plugins or a FireGraft
+project is handed to the page at `?lift=live`, the address where the page runs them.
+
+`--bot` puts a [community bot](#bots) on the other side: one of the play page's bots by
+its key (`cosmonarchy-example`, `mcrave`, `ualbertabot`, `example`), or a `.scmbot` file
+of your own, which the page keeps as Options → Add a bot from a file… keeps one. `--race`
+is the bot's race where the map leaves it open. The map is on the page's setup screen with
+the bot in the row beside yours, which says whether the bot was [made for the
+mod](#a-bot-made-for-a-mod), plays vanilla data, or was made for another; you press Start
+Game. `--start` starts the game at once instead. A mod with plugins plays the map with its
+own settings, as the engine's runners play it. The play page's own bots need a scmjs.dev
+account: the page asks you to sign in, and the command prints that it is waiting. The
+command prints what the page said and the bot's row:
+
+```
+Cosmonarchy BW: 7,769 files to hand over (and 9 plugins and FireGraft files) · 931.1 MB · hash ac3f86533e4b5a31
+ℹ Opening the play page with Cosmonarchy BW in your browser
+  If nothing opens, go to http://127.0.0.1:33525/58aab12d25f4b5a8cf293c11
+ℹ The play page is ready: the mod is handed over
+ℹ The play page is ready again: the mod is handed over again
+✔ On the play page's setup screen: press Start Game
+  Bot  Cosmonarchy Example — made for Cosmonarchy BW
+```
 
 The hand-over is the one `map play` uses: the command serves a page on 127.0.0.1, which
 opens the play page with `?handoff=1` and, each time that page says `scmjs.ready` or
@@ -2540,8 +2564,14 @@ opens the play page with `?handoff=1` and, each time that page says `scmjs.ready
   },
   map: Uint8Array,                      // with --map: the map's bytes
   name: "(2)Ridge.scx",                 // and its file name
+  bot: { key: "cosmonarchy-example", race: 1 },   // with --bot: a key, or { file: File, name, race }
+  setup: true,                          // with --bot and without --start: show the setup screen
 }
 ```
+
+`race` is 0 for zerg, 1 terran, 2 protoss and 6 random. With a bot, the message also says
+the kind of game: the map's own settings for a mod with plugins or a FireGraft project,
+otherwise the page's own guess.
 
 `path` is the game's path in lower case with forward slashes; a plugin the mod carries is
 under `plugins/` and a FireGraft file under `firegraft/`. A game file the page would not
@@ -2562,7 +2592,10 @@ with that hash can skip storing it again. The editor records the same hash for a
 made from the same files (see [Game data](game-data.md#a-map-remembers-its-data-set)). The
 page answers with `scmjs.play.started`, `scmjs.play.shown` or `scmjs.taken`, which end the
 wait, or `scmjs.play.error` with a `message`, which the command prints before it exits 1;
-`scmjs.waiting` messages are printed as they come. The command waits five minutes.
+`scmjs.waiting` and `scmjs.play.waiting` messages are printed as they come. With a bot,
+`shown` and `started` carry `bot`, the bot's row as the setup screen words it, and a bot
+the page has not got, or a map with no place for it, is an error in words. The command
+waits five minutes.
 
 ### A mod in the game engine
 
@@ -2573,10 +2606,12 @@ scmjs map trace ridge.scx --mod MyMod.mpq
 ```
 
 `mod test` is `map test` with the mod's files laid over the game's; `map test`,
-`map trace` and `map cost` take `--mod`. `bot run` and `bot ladder` take it too, and run
-the mod's plugins and FireGraft project beside the bot ([a bot on a
-mod](#a-bot-on-a-mod)). The engine's runners take a mod from the play page's next release;
-with an engine from before, the command names the version it needs and stops.
+`map trace` and `map cost` take `--mod`. A scenario with a bot on the other side is not
+there yet: `map test` plays the person's seat and the map's own computers. `bot run` and
+`bot ladder` take it too, and run the mod's plugins and FireGraft project beside the bot
+([a bot on a mod](#a-bot-on-a-mod)). The engine's runners take a mod from the play page's
+next release; with an engine from before, the command names the version it needs and
+stops.
 
 A mod that changes animation scripts, pictures, overlays or the sound table makes the game
 read its startup data again before the game starts, and that opens every unit picture and
@@ -3009,6 +3044,7 @@ with the command's text and its `--json` data:
 | `map_balance` | Games played on a melee map with your bots, to see whether its starts are fair; it takes minutes |
 | `replay_info`, `replay_map` | What a replay holds (the mod it was played with; with `builds`, what each player ordered, named by `mod`), and its map written out |
 | `mod_info`, `mod_check`, `mod_diff`, `mod_unpack`, `mod_pack`, `mod_new` | [Mods](#mods): what a mod is, its check, a changelog, the folder of text and back, a new one |
+| `mod_header`, `mod_play` | [A bot made for a mod](#a-bot-made-for-a-mod): the header and ids, written into a bot's folder with `bot`; and the mod [handed to the play page](#playing-a-mod-on-the-play-page) with a `map` and a `bot`. `mod_play` opens your browser and answers with the hand-over page's link and what the play page said |
 | `doctor` | What this computer has, so the model knows what it can call |
 
 A map reads as the editor reads it, so what the model is told is what the editor would
@@ -3016,6 +3052,9 @@ show. Tools that change a map write over it unless given `out`, like the command
 your maps in git or give the tool copies. `map_run` runs a plugin, which is code, with
 your privileges, as `scmjs map run` does; the AI tool asks you before it calls a tool, and
 you can leave that one unapproved.
+
+`map_trace` and `map_cost` take `mod`, as the commands take `--mod`; the engine's runners
+must take a mod, as the play page's next release does.
 
 `map_preview`, `map_analyze`, `map_trace`, `map_cost` and `map_coverage` need [your copy
 of the game](#commands-that-need-starcraft), and the runs fetch the engine the first time;
@@ -3241,7 +3280,7 @@ gives its options.
 | [`scmjs mod check <mods…>`](#checking-and-comparing-mods) | Mistakes across the tables: references, pictures, scripts, sounds, buttons, requirements |
 | [`scmjs mod diff <a> [b]`](#checking-and-comparing-mods) | A changelog between two mods, or what one changes in the game |
 | [`scmjs mod build <folder>`](#checking-and-comparing-mods) | Check, then pack; stops on an error unless `--force` |
-| [`scmjs mod play <mod>`](#playing-a-mod-on-the-play-page) | Every file of the mod handed to the play page with its hash; `--map` starts a map with it |
+| [`scmjs mod play <mod>`](#playing-a-mod-on-the-play-page) | Every file of the mod handed to the play page with its hash; `--map` starts a map with it, `--bot` puts a bot on the other side |
 | [`scmjs mod test <mod> <map> [tests…]`](#a-mod-in-the-game-engine) | `map test` with the mod laid over the game; `map test`, `trace` and `cost` take `--mod` |
 | [`scmjs mod header <mod>`](#a-bot-made-for-a-mod) | The mod's units, weapons, upgrades and techs by name for a bot made for it: a C++ header and JSON; `--bot` writes the mod into the bot's `scmbot.json` |
 

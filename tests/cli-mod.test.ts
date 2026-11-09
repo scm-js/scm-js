@@ -33,10 +33,11 @@ import { packFolder, packMod, readModFolder, writeMpq } from "../cli/src/mod/pac
 import { checkModSource } from "../cli/src/mod/check";
 import { diffModSources, printModDiff } from "../cli/src/mod/diff";
 import { newMod } from "../cli/src/mod/new";
-import { playOnPage, playSet } from "../cli/src/mod/play";
+import { handoffExtra, pageRace, playBotOf, playOnPage, playSet, type PlayOptions, type PlaySet } from "../cli/src/mod/play";
+import { runInNewContext } from "node:vm";
 import { gameLayer, modOverlay } from "../cli/src/mod/overlay";
 import { runMapInGame } from "../cli/src/trace";
-import { visible } from "../cli/src/ui";
+import { CliError, visible } from "../cli/src/ui";
 import { cosmonarchyPath, gameFile, gameImagePaths, haveCosmonarchy, haveGameArchives } from "./support/modFiles";
 
 const root = mkdtempSync(join(tmpdir(), "scmjs-mod-"));
@@ -390,6 +391,111 @@ describe("scmjs mod play", () => {
     while (!page) await new Promise((r) => setTimeout(r, 10));
     await fetch(`${page}/message`, { method: "POST", body: JSON.stringify({ type: "scmjs.play.error", message: "Not this mod" }) });
     expect(await done).toMatchObject({ started: false, error: "Not this mod" });
+  });
+});
+
+/**
+ * The loopback page `mod play` serves, run as the browser would run it (its script in a context of its own with the
+ * page's globals stood in): what it posts to the play page once the page says it is ready, the address it opens, and
+ * what the command hears back. The play page's side of the same message is scm-sim's `tests/handoff.test.ts`.
+ */
+async function handedOver(set: PlaySet, o: PlayOptions, answer: { type: string; [k: string]: unknown }) {
+  process.env.BROWSER = "none";
+  let page = "";
+  const done = playOnPage(set, { play: "http://play.test/?debug", ...o, onAddress: (a) => { page = a; }, timeout: 10_000 });
+  while (!page) await new Promise((r) => setTimeout(r, 10));
+  const html = await (await fetch(page)).text();
+  const script = html.slice(html.indexOf("<script>") + 8, html.lastIndexOf("</script>"));
+  const posted: { m: Record<string, unknown>; origin: string }[] = [];
+  const win = { postMessage: (m: Record<string, unknown>, origin: string) => posted.push({ m, origin }) };
+  const handlers: ((e: unknown) => Promise<void>)[] = [];
+  const els: Record<string, { textContent: string; hidden: boolean; onclick: unknown }> = {};
+  let opened = "";
+  runInNewContext(script, {
+    fetch: (u: string, init?: RequestInit) => fetch(new URL(u, page).href, init), File, JSON, Object, Uint8Array, console,
+    document: { getElementById: (id: string) => (els[id] ??= { textContent: "", hidden: false, onclick: null }) },
+    addEventListener: (type: string, fn: (e: unknown) => Promise<void>) => { if (type === "message") handlers.push(fn); },
+    open: (url: string) => { opened = url; return win; },
+  });
+  await handlers[0]({ origin: "http://play.test", source: win, data: { type: "scmjs.play.ready" } });
+  await handlers[0]({ origin: "http://play.test", source: win, data: answer });
+  return { opened, posted, outcome: await done };
+}
+
+describe("scmjs mod play --bot", () => {
+  const made = async () => playSet(await openMod((() => { const d = tmp("bot"); writeFolder(d, madeMod()); return d; })(), null));
+
+  it("reads --bot as a .scmbot file or a key, and --race by name or letter", () => {
+    const dir = tmp("botfile"); mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, "mine.scmbot"), latin("SCMBOT"));
+    expect(playBotOf("cosmonarchy-example")).toEqual({ key: "cosmonarchy-example" });
+    expect(playBotOf(join(dir, "mine.scmbot"))).toEqual({ name: "mine.scmbot", bytes: latin("SCMBOT") });
+    expect(() => playBotOf(join(dir, "gone.scmbot"))).toThrow(/No bot file/);
+    expect(() => playBotOf("not a key")).toThrow(CliError);
+    expect([pageRace("zerg"), pageRace("T"), pageRace("protoss"), pageRace("r")]).toEqual([0, 1, 2, 6]);
+    expect(() => pageRace("human")).toThrow(/is not a race/);
+  });
+
+  it("asks for the setup screen with the bot unless --start, and the map's own settings for a mod with code", async () => {
+    const set = await made();
+    expect(handoffExtra(set, {})).toBeNull();
+    expect(handoffExtra(set, { bot: { key: "mcrave" } })).toEqual({ setup: true, useMapSettings: null, bot: { key: "mcrave" } });
+    expect(handoffExtra({ ...set, plugins: 4, firegraft: 1 }, { bot: { key: "cosmonarchy-example" }, botRace: 1, start: true })).toEqual({ useMapSettings: true, bot: { key: "cosmonarchy-example", race: 1 } });
+    expect(handoffExtra(set, { bot: { name: "mine.scmbot", bytes: latin("x") }, botRace: 6 })).toEqual({ setup: true, useMapSettings: null, bot: { file: "mine.scmbot", race: 6 } });
+  });
+
+  it("hands a catalogue bot over by its key, and says the page's row for it", async () => {
+    const set = { ...(await made()), plugins: 2, firegraft: 1 };
+    const map = { name: "(4)Exodus 1.0.scx", bytes: latin("a map") };
+    const lines: string[] = [];
+    const r = await handedOver(set, { map, bot: { key: "cosmonarchy-example" }, botRace: 1, live: (l) => lines.push(visible(l)) },
+      { type: "scmjs.play.shown", name: map.name, bot: "Cosmonarchy Example — made for Cosmonarchy BW" });
+    // (a mod with plugins goes to the page at ?lift=live, keeping what the address had)
+    expect(new URL(r.opened).searchParams.get("lift")).toBe("live");
+    expect(new URL(r.opened).searchParams.has("debug")).toBe(true);
+    expect(r.posted).toHaveLength(1);
+    const m = r.posted[0].m as { type: string; dataSet: { name: string; hash: string; files: { path: string; file: File }[] }; map: Uint8Array; name: string; setup: boolean; useMapSettings: unknown; bot: unknown };
+    expect(r.posted[0].origin).toBe("http://play.test");
+    expect(m.type).toBe("scmjs.play");
+    expect(m.dataSet.hash).toBe(set.hash);
+    expect(m.dataSet.files.map((f) => f.path)).toEqual(set.files.map((f) => f.path));
+    expect(new Uint8Array(await m.dataSet.files[0].file.arrayBuffer())).toEqual(set.files[0].bytes);
+    expect(m.name).toBe("(4)Exodus 1.0.scx");
+    expect(new TextDecoder().decode(m.map)).toBe("a map");
+    expect(JSON.parse(JSON.stringify({ setup: m.setup, useMapSettings: m.useMapSettings, bot: m.bot }))).toEqual({ setup: true, useMapSettings: true, bot: { key: "cosmonarchy-example", race: 1 } });
+    expect(r.outcome).toMatchObject({ shown: true, started: false, error: null, bot: "Cosmonarchy Example — made for Cosmonarchy BW" });
+    expect(r.outcome.said.map((x) => x.type)).toEqual(["scmjs.play.ready", "scmjs.play.shown"]);
+    expect(lines).toContain("ℹ The play page is ready: the mod is handed over");
+  });
+
+  it("hands a .scmbot file over as a File, and --start starts the game", async () => {
+    const set = await made();
+    const bytes = latin("SCMBOT bytes");
+    const r = await handedOver(set, { map: { name: "a.scx", bytes: latin("m") }, bot: { name: "mine.scmbot", bytes }, botRace: 2, start: true },
+      { type: "scmjs.play.started", name: "a.scx", bot: "Mine (your file) — plays vanilla data" });
+    // (no plugins: the address as given)
+    expect(new URL(r.opened).searchParams.has("lift")).toBe(false);
+    const m = r.posted[0].m as { setup?: boolean; useMapSettings: unknown; bot: { file: File; name: string; race: number } };
+    expect(m.setup).toBeUndefined();
+    expect(m.useMapSettings).toBeNull();
+    expect(m.bot.name).toBe("mine.scmbot");
+    expect(m.bot.race).toBe(2);
+    expect(m.bot.file.name).toBe("mine.scmbot");
+    expect(new Uint8Array(await m.bot.file.arrayBuffer())).toEqual(bytes);
+    expect(r.outcome).toMatchObject({ started: true, bot: "Mine (your file) — plays vanilla data" });
+  });
+
+  it("says the page's wait for a sign-in, then its refusal of a bot it has not got", async () => {
+    const set = await made();
+    const lines: string[] = [];
+    process.env.BROWSER = "none";
+    let page = "";
+    const done = playOnPage(set, { map: { name: "a.scx", bytes: latin("m") }, bot: { key: "nobody" }, play: "http://play.test/", live: (l) => lines.push(visible(l)), onAddress: (a) => { page = a; }, timeout: 10_000 });
+    while (!page) await new Promise((r) => setTimeout(r, 10));
+    await fetch(`${page}/message`, { method: "POST", body: JSON.stringify({ type: "scmjs.play.waiting", reason: "sign-in", message: "Playing Nobody takes a scmjs.dev account" }) });
+    await fetch(`${page}/message`, { method: "POST", body: JSON.stringify({ type: "scmjs.play.error", message: "This play page has no community bot \"nobody\"" }) });
+    expect(await done).toMatchObject({ started: false, error: "This play page has no community bot \"nobody\"" });
+    expect(lines).toContain("ℹ Playing Nobody takes a scmjs.dev account");
   });
 });
 

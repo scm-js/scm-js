@@ -2431,7 +2431,7 @@ The whole design, the proofs and the traps are in **`mods.md`**. Here, what touc
   own Remastered reader has not got them); `mods.md` "Remastered copy and the engine's reload".
 - `mod play` has its own loopback page (`play.ts`), not `open.ts`'s `handOver`: it serves `/manifest`, `/file/<i>` and
   `/map`, builds `File`s in the page and posts `scmjs.play` with `dataSet`; `tests/cli-mod.test.ts` stands in for the page.
-- MCP: six tools (`mod_info|check|diff|unpack|pack|new`), 31 in all with `map_analyze`; `mod_unpack`'s data leaves out the manifest.
+- MCP: six tools (`mod_info|check|diff|unpack|pack|new`), 31 in all with `map_analyze`; `mod_unpack`'s data leaves out the manifest. (C6 added `mod_header`, `mod_play`: 33.)
 - **In Korean** (merged after the Korean slice): every printed word of `cli/src/mod/` and the `mod` commands in
   main.ts goes through `t()`, as the rest; the files a mod command writes (mod.json, README, the tables' text) stay
   English, as map unpack's do, and so does the play page hand-over's loopback page, as `open.ts`'s. **Left English**:
@@ -2447,6 +2447,10 @@ The whole design, the proofs and the traps are in **`mods.md`**. Here, what touc
   `Header`/`Ids`/`Bot` rows are new one-word catalogue keys.
 - `bot run` and `bot ladder` take `--mod`, `--ums`, `--melee` (C4): the mod with its code, overlay version 2; the start
   line's mod, code and fit words. See `mods.md` "`bot run --mod`, `bot ladder --mod`".
+- `mod play --bot|--race|--start` (C6, 2026-11-08): the bot handed to the play page with the mod and the map, the setup
+  screen with its row filled; a mod with code goes to `?lift=live`. MCP `mod_header`, `mod_play`, and `mod` on
+  `map_trace`/`map_cost`: 33 tools. `mod test --bot` is designed (scm-sim `docs/mods-plan.md` "Open"), not built.
+  See `mods.md` "`mod play --bot`, `mod_header`, `mod_play`".
 
 ## A replay's mod (R1 of the capstone, 2026-11-08, branch `replay-tag`)
 

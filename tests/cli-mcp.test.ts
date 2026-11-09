@@ -14,6 +14,8 @@ import { findGameCopy } from "../cli/src/engine";
 import { createMcpServer, INSTRUCTIONS, MAX_FRAMES, type McpOptions } from "../cli/src/mcp";
 import { classicCopy, stagedEngine } from "./support/mapRunner";
 import { TEST_MAPS_DIR } from "./support/maps";
+import { emptyDat, encodeDat } from "../src/formats/dat/table";
+import { encodeTblFile } from "../src/formats/dat/tblFile";
 
 type Result = { content: { type: string; text?: string }[]; structuredContent?: Record<string, unknown>; isError?: boolean };
 
@@ -52,7 +54,7 @@ describe("scmjs mcp", () => {
   it("lists the tools with what each is for, and says how they fit together", async () => {
     const { tools } = await client.listTools();
     const names = tools.map((t) => t.name).sort();
-    expect(names).toEqual(["doctor", "map_analyze", "map_balance", "map_build", "map_check", "map_cost", "map_coverage", "map_diff", "map_dump", "map_find", "map_info", "map_new", "map_optimize", "map_preview", "map_resize", "map_run", "map_set", "map_strings_export", "map_strings_import", "map_strings_prune", "map_trace", "map_triggers_export", "map_triggers_import", "mod_check", "mod_diff", "mod_info", "mod_new", "mod_pack", "mod_unpack", "replay_info", "replay_map"]);
+    expect(names).toEqual(["doctor", "map_analyze", "map_balance", "map_build", "map_check", "map_cost", "map_coverage", "map_diff", "map_dump", "map_find", "map_info", "map_new", "map_optimize", "map_preview", "map_resize", "map_run", "map_set", "map_strings_export", "map_strings_import", "map_strings_prune", "map_trace", "map_triggers_export", "map_triggers_import", "mod_check", "mod_diff", "mod_header", "mod_info", "mod_new", "mod_pack", "mod_play", "mod_unpack", "replay_info", "replay_map"]);
     for (const t of tools) {
       expect(t.description?.length ?? 0, t.name).toBeGreaterThan(60);
       expect((t.inputSchema as { properties?: object }).properties, t.name).toBeDefined();
@@ -60,7 +62,9 @@ describe("scmjs mcp", () => {
     expect(tools.find((t) => t.name === "map_info")?.annotations?.readOnlyHint).toBe(true);
     expect(tools.find((t) => t.name === "map_set")?.annotations?.destructiveHint).toBe(true);
     for (const name of ["map_trace", "map_cost", "map_coverage", "doctor", "mod_info", "mod_check", "mod_diff"]) expect(tools.find((t) => t.name === name)?.annotations?.readOnlyHint, name).toBe(true);
-    for (const name of ["mod_unpack", "mod_pack", "mod_new"]) expect(tools.find((t) => t.name === name)?.annotations?.destructiveHint, name).toBe(true);
+    for (const name of ["mod_unpack", "mod_pack", "mod_new", "mod_header"]) expect(tools.find((t) => t.name === name)?.annotations?.destructiveHint, name).toBe(true);
+    expect(tools.find((t) => t.name === "mod_play")?.annotations?.openWorldHint).toBe(true);
+    for (const name of ["map_trace", "map_cost"]) expect(Object.keys((tools.find((t) => t.name === name)!.inputSchema.properties ?? {}) as object), name).toContain("mod");
     expect(INSTRUCTIONS).toMatch(/mod_unpack writes it as a folder of text/);
     const trace = tools.find((t) => t.name === "map_trace")!;
     expect(trace.description).toMatch(/copy of StarCraft.*about 25 MB.*doctor/);
@@ -311,6 +315,13 @@ describe("scmjs mcp: the game tools", () => {
       expect(text(refused)).toMatch(/^the game did not take this map\n/);
       const tooLong = await staged.call("map_trace", { path: ums, frames: MAX_FRAMES.trace + 1 });
       expect(tooLong.isError).toBe(true);
+      // `mod` (the command's --mod) on an engine whose runners take no mod: the version it needs, nothing written
+      const modDir = join(tmp(), "mod");
+      mkdirSync(join(modDir, "arr"), { recursive: true });
+      writeFileSync(join(modDir, "arr", "units.dat"), new Uint8Array(8));
+      const noMods = await staged.call("map_trace", { path: ums, starcraft: classicCopy(tmp()), mod: modDir });
+      expect(noMods.isError).toBe(true);
+      expect(text(noMods)).toMatch(/cannot lay a mod over the game: --mod needs runners of mod overlay version 1/);
     } finally { stderr.mockRestore(); await staged.client.close(); await older.client.close(); }
   });
 });
@@ -422,5 +433,82 @@ describe("scmjs mcp: the mod tools", () => {
     const missing = await call("mod_pack", { path: join(dir, "nowhere") });
     expect(text(missing)).toMatch(/has no mod\.json: it is not a mod folder/);
     await client.close();
+  });
+});
+
+describe("scmjs mcp: mod_header and mod_play", () => {
+  /** A mod folder with every table the header names: units by unitnames.tbl, the rest by stat_txt.tbl's labels. */
+  function testMod(): string {
+    const folder = join(tmp(), "Test Mod");
+    const stat = [...Array.from({ length: 228 }, () => "\0"), "Gauss Rifle\0", "Stim Packs\0", "U-238 Shells\0"];
+    const label = (x: string) => stat.indexOf(`${x}\0`) + 1;
+    const names = Array.from({ length: 228 }, () => "\0");
+    names[7] = "Terran Mason\0";
+    const weapons = emptyDat("weapons"); weapons.columns.label[0] = label("Gauss Rifle");
+    const upgrades = emptyDat("upgrades"); upgrades.columns.label[16] = label("U-238 Shells");
+    const techs = emptyDat("techdata"); techs.columns.label[0] = label("Stim Packs");
+    const files: [string, Uint8Array][] = [
+      ["arr/units.dat", encodeDat(emptyDat("units"))], ["arr/weapons.dat", encodeDat(weapons)], ["arr/upgrades.dat", encodeDat(upgrades)], ["arr/techdata.dat", encodeDat(techs)],
+      ["rez/unitnames.tbl", encodeTblFile({ strings: names, encoding: "windows-1252" })], ["rez/stat_txt.tbl", encodeTblFile({ strings: stat, encoding: "windows-1252" })],
+    ];
+    for (const [name, bytes] of files) { mkdirSync(join(folder, name, ".."), { recursive: true }); writeFileSync(join(folder, name), bytes); }
+    return folder;
+  }
+
+  it("mod_header writes the header and ids, and with `bot` the mod into the bot's scmbot.json", async () => {
+    const { client, call } = await connected();
+    try {
+      const mod = testMod(), bot = tmp();
+      writeFileSync(join(bot, "scmbot.json"), JSON.stringify({ key: "mine", name: "Mine" }, null, 2));
+      const r = await call("mod_header", { path: mod, out: bot, bot: true });
+      expect(r.isError).toBeFalsy();
+      const lines = text(r).split("\n");
+      expect(lines[0]).toMatch(/^Test Mod: \d+ units, 1 weapons, 1 upgrades, 1 techs named · hash [0-9a-f]{16}$/);
+      expect(lines).toContain(`Header: ${join(bot, "Test_Mod.h")}`);
+      expect(text(r)).toMatch(/scmbot\.json now names the mod: build the bot again \(scmjs bot build\)/);
+      const data = r.structuredContent as { mod: { name: string; hash: string }; counts: { units: number }; files: { header: string; scmbot: string | null } };
+      expect(data.mod.name).toBe("Test Mod");
+      expect(readFileSync(join(bot, "Test_Mod.h"), "utf8")).toContain("Terran_Mason");
+      expect(JSON.parse(readFileSync(join(bot, "scmbot.json"), "utf8")).mod).toEqual({ name: "Test Mod", hash: data.mod.hash });
+      const notABot = await call("mod_header", { path: mod, out: tmp(), bot: true });
+      expect(notABot.isError).toBe(true);
+      expect(text(notABot)).toMatch(/has no scmbot\.json: --bot writes into a bot's folder/);
+    } finally { await client.close(); }
+  });
+
+  it("mod_play hands the mod over and returns the link and what the page said; a page never reached is said", { timeout: 30_000 }, async () => {
+    const { client, call } = await connected();
+    const was = { browser: process.env.BROWSER, play: process.env.SCMJS_PLAY_URL };
+    process.env.BROWSER = "none";
+    process.env.SCMJS_PLAY_URL = "http://play.test/";
+    const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    const linkOf = () => { for (const c of stderr.mock.calls) { const m = /http:\/\/127\.0\.0\.1:\d+\/[0-9a-f]+/.exec(String(c[0])); if (m) return m[0]; } return null; };
+    try {
+      const mod = testMod(), map = join(tmp(), "ums.scx");
+      copyFileSync(join(TEST_MAPS_DIR, "ums.scx"), map);
+      const noMap = await call("mod_play", { path: mod, bot: "cosmonarchy-example" });
+      expect(text(noMap)).toMatch(/`bot` needs `map`/);
+      const pending = call("mod_play", { path: mod, map, bot: "cosmonarchy-example", race: "terran" });
+      const link = await until(linkOf);
+      const manifest = await (await fetch(`${link}/manifest`)).json();
+      expect(manifest.handoff).toEqual({ setup: true, useMapSettings: null, bot: { key: "cosmonarchy-example", race: 1 } });
+      await fetch(`${link}/message`, { method: "POST", body: JSON.stringify({ type: "scmjs.play.ready" }) });
+      await fetch(`${link}/message`, { method: "POST", body: JSON.stringify({ type: "scmjs.play.shown", name: "ums.scx", bot: "Cosmonarchy Example — made for Cosmonarchy BW" }) });
+      const r = await pending;
+      expect(r.isError).toBeFalsy();
+      expect(text(r).split("\n")).toEqual([
+        "Test Mod is on the play page's setup screen, the bot's row: Cosmonarchy Example — made for Cosmonarchy BW. The person presses Start Game.",
+        `Hand-over page: ${link}`, "The page said: scmjs.play.ready, scmjs.play.shown",
+      ]);
+      expect(r.structuredContent).toMatchObject({ link, name: "Test Mod", shown: true, started: false, error: null, bot: "Cosmonarchy Example — made for Cosmonarchy BW" });
+      stderr.mockClear();
+      const unanswered = await call("mod_play", { path: mod, wait: 10 });
+      expect(unanswered.isError).toBe(true);
+      expect(text(unanswered)).toMatch(/^The play page did not take the mod\. The hand-over page was http:\/\/127\.0\.0\.1:\d+\/[0-9a-f]+; the person can open it/);
+    } finally {
+      stderr.mockRestore();
+      for (const [k, v] of [["BROWSER", was.browser], ["SCMJS_PLAY_URL", was.play]] as const) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
+      await client.close();
+    }
   });
 });

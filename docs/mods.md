@@ -377,12 +377,11 @@ kept is found again by [its hash](#the-mods-hash) on later visits.
 ### Its plugins and FireGraft project
 
 A mod's plugins, and the changes its FireGraft project makes to the game's program, run
-inside the game on the live engine, at scmjs.dev/play/?lift=live. Without that address the
-page lays the mod's files over the game and runs none of its code, and the Mods list says
-so beside the mod. You seldom type it: `scmjs mod play` opens the page there for a mod
-with code, and a replay or an invitation to a game that needs it loads the page there by
-itself. A game with a mod's plugins needs 2 GB of the browser's memory; close other tabs
-if the page says it was given less.
+inside the game on the live engine. The page loads itself again there when you choose or
+add a mod with code under Mods, when `scmjs mod play` hands one over, and when a replay or
+an invitation to a game needs it, so you never type its address. A game with a mod's
+plugins needs 2 GB of the browser's memory; close other tabs if the page says it was given
+less.
 
 ### Maps and bots
 

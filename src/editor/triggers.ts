@@ -17,7 +17,7 @@ import {
   type ReadonlyTrigger,
 } from "../formats/chk/sections/triggers";
 import { actionDef, conditionDef, DEATHS_TABLE_ADDRESS, UNIT_CLASS_CHOICES, type ActionDef, type ArgKind, type ConditionDef } from "../data/triggerDefs";
-import { UNIT_NAMES, UNIT_TYPE_COUNT, unitName, unitTypeCount } from "../data/units";
+import { currentLoadedNames, UNIT_NAMES, UNIT_TYPE_COUNT, unitName, unitTypeCount, type LoadedNames } from "../data/units";
 import { PALETTE_AVAILABILITY, type UnitsDat } from "../formats/dat/dat";
 import { locationName } from "./locations";
 import { internString, unitCustomName } from "./settings";
@@ -29,6 +29,35 @@ import type { TriggerNames } from "../formats/triggers/text";
 export function switchName(scn: Scenario, index: number): string {
   const s = scn.switchNames ? getString(scn.strings, scn.switchNames[index] ?? 0) : null;
   return s ?? `Switch ${index + 1}`;
+}
+
+const lowerName = (s: string) => s.trim().toLowerCase();
+
+/** The trigger class a name (or alias) means, if any. */
+function classByName(name: string) {
+  const key = lowerName(name);
+  return UNIT_CLASS_CHOICES.find((u) => lowerName(u.label) === key || u.aliases?.some((al) => lowerName(al) === key));
+}
+
+let nameIndex: { names: LoadedNames | null; count: number; byName: Map<string, number[]> } | null = null;
+
+/**
+ * Every unit type's name as the loaded data set gives it (`unitName`), lower-cased, to the ids
+ * that carry it in id order — the trigger classes left out, which print as their class. Built
+ * once a data set: a mod's table is thousands of rows and a trigger list asks for every unit.
+ */
+function unitNameIndex(): Map<string, number[]> {
+  const names = currentLoadedNames(), count = unitTypeCount();
+  if (nameIndex && nameIndex.names === names && nameIndex.count === count) return nameIndex.byName;
+  const byName = new Map<string, number[]>();
+  for (let id = 0; id < count; id++) {
+    if (UNIT_CLASS_CHOICES.some((u) => u.value === id)) continue;
+    const key = lowerName(unitName(id));
+    const ids = byName.get(key);
+    if (ids) ids.push(id); else byName.set(key, [id]);
+  }
+  nameIndex = { names, count, byName };
+  return byName;
 }
 
 /**
@@ -54,23 +83,31 @@ export function triggerNames(scn: Scenario): TriggerNames {
       if (m) return Number(m[1]) + 1;
       return undefined;
     },
-    unit: (id) => UNIT_CLASS_CHOICES.find((u) => u.value === id)?.label ?? unitName(id),
+    unit: (id) => {
+      const cls = UNIT_CLASS_CHOICES.find((u) => u.value === id);
+      if (cls) return cls.label;
+      const name = unitName(id);
+      // A name another type shares, or a class's, would read back as that one: the id is written instead.
+      return (unitNameIndex().get(lower(name))?.length ?? 0) > 1 || classByName(name) ? `Unit #${id}` : name;
+    },
     unitByName: (name) => {
       const key = lower(name);
-      const cls = UNIT_CLASS_CHOICES.find((u) => lower(u.label) === key || u.aliases?.some((al) => lower(al) === key));
+      const cls = classByName(key);
       if (cls) return cls.value;
+      const m = /^unit #(\d+)$/.exec(key);
+      if (m) return Number(m[1]);
+      // The loaded data set's names first (what `unit` printed), StarEdit's only for a name the set does not use.
+      const loaded = unitNameIndex().get(key);
+      if (loaded) return loaded[0];
       const byDefault = UNIT_NAMES.findIndex((n) => lower(n) === key);
       if (byDefault >= 0) return byDefault;
-      // The loaded data set's own names (a mod's): what `unit` printed, so text round-trips.
-      for (let id = 0; id < unitTypeCount(); id++) if (lower(unitName(id)) === key) return id;
       if (scn.unitSettings) {
         for (let id = 0; id < UNIT_NAMES.length; id++) {
           const custom = unitCustomName(scn, id);
           if (custom && lower(custom) === key) return id;
         }
       }
-      const m = /^unit #(\d+)$/.exec(key);
-      return m ? Number(m[1]) : undefined;
+      return undefined;
     },
     switch: (index) => switchName(scn, index),
     switchByName: (name) => {

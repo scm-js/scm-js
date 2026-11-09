@@ -19,7 +19,8 @@ import {
   ACTION_DEFS, AI_SCRIPT_CHOICES, aiScriptCode, aiScriptId, BRIEFING_ACTION_DEFS, CHOICES, CONDITION_DEFS, PLAYER_GROUP_CHOICES,
   UNIT_CLASS_CHOICES, actionDef, conditionDef, type ActionDef, type ArgDef, type ArgKind, type ConditionDef,
 } from "../../data/triggerDefs";
-import { UNIT_NAMES, unitLabel } from "../../data/units";
+import { shownUnitGroups, unitLabel, unitTypeCount } from "../../data/units";
+import { gameDataSourceAtom } from "../../atoms/gameDataAtoms";
 import type { Scenario } from "../../formats/chk/scenario";
 import {
   ActionFlag, ConditionFlag, ConditionType, MAX_ACTIONS, MAX_CONDITIONS, PlayerGroup, SWITCH_COUNT, cloneTrigger,
@@ -95,10 +96,26 @@ function playerChoiceLabel(c: { value: number; label: string }): string {
 }
 
 /** A select whose current value is kept selectable even when the table does not list it. */
-function ChoiceSelect({ value, onChange, options, width }: { value: number; onChange: (v: number) => void; options: { value: number; label: string }[]; width?: number }) {
+/** 228 (the game's "None") and the four classes: never a type the unit picker lists among the groups. */
+const CLASS_IDS = new Set([228, ...UNIT_CLASS_CHOICES.map((c) => c.value)]);
+
+interface ChoiceGroup { label: string; options: { value: number; label: string }[] }
+
+function ChoiceSelect({ value, onChange, options, groups, width }: { value: number; onChange: (v: number) => void; options: { value: number; label: string }[]; groups?: ChoiceGroup[]; width?: number }) {
   const opts = options.map((o) => ({ value: String(o.value), label: options === PLAYER_GROUP_CHOICES ? playerChoiceLabel(o) : o.label }));
-  if (!options.some((o) => o.value === value)) opts.push({ value: String(value), label: t("{value} (raw)", { value }) });
-  return <Select value={String(value)} onChange={(e) => onChange(Number(e.target.value))} options={opts} style={width ? { width } : undefined} />;
+  const known = options.some((o) => o.value === value) || (groups ?? []).some((g) => g.options.some((o) => o.value === value));
+  if (!known) opts.push({ value: String(value), label: t("{value} (raw)", { value }) });
+  if (!groups) return <Select value={String(value)} onChange={(e) => onChange(Number(e.target.value))} options={opts} style={width ? { width } : undefined} />;
+  return (
+    <select className="select" value={String(value)} onChange={(e) => onChange(Number(e.target.value))} style={width ? { width } : undefined}>
+      {opts.map((o) => <option key={o.value} value={o.value}>{translate(o.label)}</option>)}
+      {groups.map((g) => (
+        <optgroup key={g.label} label={g.label}>
+          {g.options.map((o) => <option key={o.value} value={String(o.value)}>{o.label}</option>)}
+        </optgroup>
+      ))}
+    </select>
+  );
 }
 
 import { addressOfEpd, CREATING_ACTIONS, epdOf, sameTriggers, triggerCanCreate, TRIGGER_OWNERS } from "../../editor/triggers";
@@ -134,6 +151,7 @@ function PlayerArg({ value, onChange }: { value: number; onChange: (v: number) =
 
 function ArgWidget({ kind, value, onChange, names, scenario, unit, creates }: ArgProps) {
   const open = useSetAtom(openDialogAtom);
+  const dataSet = useAtomValue(gameDataSourceAtom)?.profile.name ?? "";
   switch (kind) {
     case "cuwp": {
       // The action stores the slot 1-based; 0 is what StarEdit writes for "no slot yet".
@@ -149,15 +167,18 @@ function ArgWidget({ kind, value, onChange, names, scenario, unit, creates }: Ar
       return <PlayerArg value={value} onChange={onChange} />;
     case "unit": {
       const dat = creates ? peekUnitAssets()?.units ?? null : null;
-      const options = [
-        // Create Unit makes nothing of a class or of a type off StarEdit's palette.
-        ...(creates ? [] : UNIT_CLASS_CHOICES),
-        // An `<option>` cannot carry the colours, so a custom name's codes show escaped
-        // rather than as the raw bytes the browser draws as tofu.
-        ...UNIT_NAMES.map((_, id) => ({ value: id, label: escapeControls(unitCustomName(scenario, id) || unitLabel(id)) }))
-          .filter((o) => !creates || triggerCanCreate(dat, o.value)),
-      ];
-      return <ChoiceSelect value={value} onChange={onChange} options={options} width={260} />;
+      // An `<option>` cannot carry the colours, so a custom name's codes show escaped
+      // rather than as the raw bytes the browser draws as tofu.
+      const label = (id: number) => escapeControls(unitCustomName(scenario, id) || unitLabel(id));
+      // The palette's groups, so a data set's types past the game's 228 are listed by name; 228–232 are the classes.
+      const groups = shownUnitGroups(dataSet)
+        .map((g) => ({ label: g.label, options: g.units.filter((id) => !CLASS_IDS.has(id) && (!creates || triggerCanCreate(dat, id))).map((id) => ({ value: id, label: label(id) })) }))
+        .filter((g) => g.options.length > 0);
+      // Create Unit makes nothing of a class or of a type off StarEdit's palette.
+      const options = creates ? [] : [...UNIT_CLASS_CHOICES];
+      // A type the groups do not list (a data set's unnamed one) still shows by its name.
+      if (!options.some((o) => o.value === value) && !groups.some((g) => g.options.some((o) => o.value === value)) && value < unitTypeCount()) options.push({ value, label: label(value) });
+      return <ChoiceSelect value={value} onChange={onChange} options={options} groups={groups} width={260} />;
     }
     case "location": {
       const options = [{ value: 0, label: t("No Location") }, ...usedLocations(scenario).map((i) => ({ value: i + 1, label: names.location(i + 1) }))];

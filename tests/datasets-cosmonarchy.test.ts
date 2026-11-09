@@ -8,6 +8,14 @@ import { UNIT_TYPES } from "../src/formats/chk/sections/settings";
 import { decodeUnitsDat } from "../src/formats/dat/dat";
 import { decodeCv5 } from "../src/formats/tileset/decode";
 import { cosmonarchyFile, haveCosmonarchy } from "./support/modFiles";
+import { decodeTechdataDat, decodeUpgradesDat } from "../src/formats/dat/dat";
+import { decodeTblEntries } from "../src/formats/dat/tbl";
+import { namesFromAssets, unitCatalogue } from "../src/data/gameNames";
+import { installNames, techName } from "../src/data/units";
+import { nameFileText } from "../src/formats/mod/data";
+import { triggerNames } from "../src/editor/triggers";
+import { formatTriggers, parseTriggers } from "../src/formats/triggers/text";
+import { actionDef, conditionDef } from "../src/data/triggerDefs";
 
 /**
  * Cosmonarchy's maps, the corpus for maps made with a data set wider than the game's: unit
@@ -61,4 +69,48 @@ describe.skipIf(maps.length === 0)("Cosmonarchy's maps", () => {
     expect(units.flingy.length).toBe(3000);
     expect(decodeCv5(cosmonarchyFile("release/mpq/tileset/badlands.cv5")).length).toBe(4094);
   });
+});
+
+/** The set's names as the editor installs them from the release's files. */
+function installCosmonarchy(): void {
+  const mpq = (p: string) => cosmonarchyFile(`release/mpq/${p}`);
+  const units = decodeUnitsDat(mpq("arr/units.datex"), "units.datex");
+  const assets = {
+    units, statTxt: decodeTblEntries(mpq("rez/stat_txt.tbl")), unitNames: decodeTblEntries(mpq("rez/unitnames.tbl")),
+    weapons: null, upgrades: decodeUpgradesDat(mpq("arr/upgrades.datex"), "upgrades.datex"), techs: decodeTechdataDat(mpq("arr/techdata.datex"), "techdata.datex"),
+    nameTexts: { stat: nameFileText(mpq("rez/stat.txt")), upgrades: nameFileText(mpq("arr/upgrades.txt")), techdata: nameFileText(mpq("arr/techdata.txt")) },
+  };
+  const names = namesFromAssets(assets);
+  installNames(names, unitCatalogue(assets, names));
+}
+
+describe.skipIf(maps.length === 0 || !haveCosmonarchy)("Cosmonarchy's maps under its own names", () => {
+  it("every map's triggers come back from the text format unit for unit", async () => {
+    installCosmonarchy();
+    try {
+      expect(techName(1)).toBe("Lobotomy Grenade (Francisco Goska)");
+      const failed: string[] = [];
+      let lists = 0;
+      for (const path of maps) {
+        const scn = parseScenario((await loadMap(new Uint8Array(readFileSync(path)))).chk);
+        for (const [list, briefing] of [[scn.triggers, false], [scn.briefing, true]] as const) {
+          if (!list?.length) continue;
+          lists++;
+          const names = triggerNames(scn);
+          const text = formatTriggers(list, names, briefing);
+          const back = parseTriggers(text, names, briefing).map((t) => t.trigger);
+          // The unit arguments only: a record's unit field under a type that takes none is not in the text.
+          const ids = (l: typeof list) => l.flatMap((t) => [
+            ...t.conditions.filter((c) => conditionDef(c.type)?.args.some((a) => a.kind === "unit")).map((c) => c.unitId),
+            ...t.actions.filter((a) => actionDef(a.type, briefing)?.args.some((x) => x.kind === "unit")).map((a) => a.unitId),
+          ]);
+          if (JSON.stringify(ids(back)) !== JSON.stringify(ids(list)) || formatTriggers(back, names, briefing) !== text) failed.push(path.slice(mapsDir.length + 1));
+        }
+      }
+      console.log(`Cosmonarchy maps: ${lists} trigger lists round-tripped under the set's names`);
+      expect(failed).toEqual([]);
+    } finally {
+      installNames(null);
+    }
+  }, 600_000);
 });

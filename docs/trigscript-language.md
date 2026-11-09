@@ -28,7 +28,7 @@ what each part does, and what to write instead of the few parts that are not the
 | [Reading the game](#reading-the-game) | Every condition's quantity as a number; facts about the players |
 | [Units](#units) | Loops over units, picks, a unit's fields and what it can be told |
 | [Events](#events) | `on.created`, `on.died`, `on.killed`, `on.morphed`, `on.order` |
-| [The game's tables and memory](#the-games-tables-and-memory) | `stats()` for costs, weapons, upgrades and colours; `memory` |
+| [The game's tables and memory](#the-games-tables-and-memory) | `stats()` for costs, weapons, upgrades and colours; `memory`; what changes with a mod |
 | [Keys, the mouse and chat](#keys-the-mouse-and-chat) | Presses, clicks, the cursor, typed lines; `local` and `sync()` |
 | [Text](#text) | Texts with values, `string` variables and their methods, lines of JSX |
 | [Sounds and imported files](#sounds-and-imported-files) | Clips made when the script is built; videos, pictures, sounds and MIDI the script imports |
@@ -1142,6 +1142,37 @@ program(() => {
 
 `memory(address, comparison, value)` and `setMemory(address, modifier, value)` reach any
 value of the game's memory by its address (EUD), in a trigger or a program.
+
+### With a mod
+
+When the editor draws from a data set other than the game's own (Help ▸ Game Data…), such
+as a mod with units of its own, the script's names follow the set. `units.`, `weapons.`,
+`upgrades.` and `techs.` list the names the set gives, and `units.` lists every unit type
+it names, past the game's 228. A trigger can name any of them.
+
+The names become identifiers the way `scmjs mod header` makes them for a bot, so a map and
+a bot made for the same mod call a unit the same thing. Each run of characters other than
+letters, digits and `_` becomes one `_`. A name that starts with a digit, or is a C++
+keyword, gets a `_` in front. A second unit of the same name gets `_` and its id, and a
+name with no letters left is `Unit_` and its id. Cosmonarchy's worker is
+`units.Terran_Mason`, and `units["Terran Mason"]` works too. The game's own identifiers,
+such as `units.TerranSCV`, are not there while such a set is in use, because the mod may
+have another unit at that id. `AnyUnit`, `Men`, `Buildings` and `Factories` stay as they
+are. A data set that keeps the game's names, one that changes only pictures or numbers,
+leaves every name as it is.
+
+A program follows the set as far as a unit's type. Its loops over units and its events
+take any type the set has, up to its count (`allUnits({ type: units.Terran_Mason })`,
+`on.created(…)`), and compare it with each unit's type as the game keeps it. The rest of a
+program reads and writes the game's memory where StarCraft's own data keeps it.
+`units.Men`, `units.Buildings` and `units.Factories` in a filter look the type up in the
+game's table of 228 types, so they say nothing sure of a mod's type past it. `stats()`
+reaches the game's 228 unit types, 130 weapons, 61 upgrades and 44 technologies. An action
+takes a unit type the program works out while the game runs, such as `u.type`, only below
+228. A mod with plugins of its own can move the game's tables, so these parts are made for
+the game's own data. While another set is in use, Problems says so on the first program,
+and so does the build in Output. Tests run in the game always run with StarCraft's own
+data, and their result says so.
 
 ## Keys, the mouse and chat
 

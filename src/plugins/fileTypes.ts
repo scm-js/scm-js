@@ -10,7 +10,7 @@ import { pluginFileTypesAtom, type PluginFileTypeEntry } from "../atoms/pluginAt
 import { logError, logInfo, logWarn } from "../editor/log";
 import { folderReadsAtom, type FolderRead } from "../atoms/uiAtoms";
 import type { FolderFile } from "./api";
-import { directoryHandlePaths, droppedFolders, entryFile, entryPaths, handleFile, readFound, type DataTransferLike, type DroppedFolder } from "./folders";
+import { droppedFileReader, droppedFolders, entryPaths, readFound, type DataTransferLike, type DroppedFolder } from "./folders";
 import { count, countReplays, extOf, pluginName } from "../services/usage";
 
 type Store = ReturnType<typeof createStore>;
@@ -61,11 +61,12 @@ export function handFilesToPlugins(store: Store, files: readonly File[]): File[]
  * The folders of a drop, for the plugins that open folders (`FileTypeSpec.openFolder`):
  * each is walked for its paths and offered on its own, in registration order, to the first
  * type whose `acceptsFolder` passes (or that has none); only then are its `File`s read, for
- * that type's `openFolder`. The status bar says the folder is being read, with a count, from
- * the drop until it is handed over or left. Answers the indexes among the drop's files of
- * the folders' placeholders, which the caller leaves out of the files it opens, and a
- * promise of the offers being made. With no plugin that opens folders nothing is taken and
- * a drop goes on as it always has.
+ * that type's `openFolder`. Every file in the folder is listed and handed over, the ones a
+ * browser keeps back from a folder pick among them (`droppedFolderPaths`). The status bar
+ * says the folder is being read, with a count, from the drop until it is handed over or
+ * left. Answers the indexes among the drop's files of the folders' placeholders, which the
+ * caller leaves out of the files it opens, and a promise of the offers being made. With no
+ * plugin that opens folders nothing is taken and a drop goes on as it always has.
  */
 export function takeDroppedFolders(store: Store, data: DataTransferLike): { taken: Set<number>; done: Promise<void> } {
   const types = store.get(pluginFileTypesAtom).filter((t) => typeof t.spec.openFolder === "function");
@@ -77,23 +78,31 @@ export function takeDroppedFolders(store: Store, data: DataTransferLike): { take
 }
 
 /**
- * A dropped folder's paths, and how to get its `File`s: by its handle where the drop gave one
- * (the browser answers `getFile()` many at a time), else — or when the handle's walk fails —
- * by its entry. No `File` is asked for until `files` is called.
+ * A dropped folder's paths, and how to get its `File`s. The paths are the entry's, which
+ * lists every file; a handle leaves out the names the browser keeps back from it
+ * (`folders.ts`), so it is never what says which files there are. The `File`s come by the
+ * handle wherever the drop gave one and it has the file, since the browser answers its
+ * `getFile()` many at a time, and by the entry for the rest: with no handle, or one that
+ * fails, that is all of them. No `File` is asked for, and nothing of the handle is listed,
+ * until `files` is called.
  */
 async function droppedFolderPaths(folder: DroppedFolder, onFound: (n: number) => void): Promise<{ paths: string[]; files: (onRead: (n: number) => void) => Promise<FolderFile[]> }> {
   const { entry } = folder;
-  const handle = folder.handle ? await folder.handle : null;
-  if (handle) {
-    try {
-      const found = await directoryHandlePaths(handle, entry.name, onFound);
-      return { paths: found.map((f) => f.path), files: (onRead) => readFound(found, handleFile, onRead) };
-    } catch (err) {
-      logWarn("plugins", `Reading the dropped folder ${entry.name} by its handle failed; reading it by its entry`, { error: err instanceof Error ? err.message : String(err) });
-    }
-  }
   const found = await entryPaths(entry, entry.name, onFound);
-  return { paths: found.map((f) => f.path), files: (onRead) => readFound(found, entryFile, onRead) };
+  const files = async (onRead: (n: number) => void) => {
+    const handle = folder.handle ? await folder.handle : null;
+    let warned = false;
+    const { read, reads } = droppedFileReader(handle, entry.name, (err, path) => {
+      // Once a folder: a handle that fails for one file usually fails for more.
+      if (warned) return;
+      warned = true;
+      logWarn("plugins", `Reading ${path} of a dropped folder by its handle failed; the entry reads what the handle does not`, { error: err instanceof Error ? err.message : String(err) });
+    });
+    const out = await readFound(found, read, onRead);
+    logInfo("plugins", `Read the dropped folder ${entry.name}`, { files: out.length, byHandle: reads.byHandle, byEntry: reads.byEntry, firstByEntry: reads.firstByEntry ?? undefined });
+    return out;
+  };
+  return { paths: found.map((f) => f.path), files };
 }
 
 async function offerFolder(store: Store, types: readonly PluginFileTypeEntry[], folder: DroppedFolder): Promise<void> {

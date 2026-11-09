@@ -611,5 +611,55 @@ the `webkitdirectory` input needs neither, the browser walks before `change`. Af
 cell, 46 s to `acceptsFolder`, 120 s to "Opening Release…" (was 134 s, silent), the plugin's own open 7.8 s more.
 The measuring scripts (CDP drop, a probe plugin served with CORS, `readEntries` / `file()` counted by patching the
 prototypes found on the drop's entry) lived in that session's scratchpad; the recipe is the paragraph above.
+
+**A dropped folder is listed by its entry and read by its handle (2026-11-09, branch `folder-drop-complete`).** This replaces
+"walks the handle when there is one" above, the same day: the handle walk's trade-off was larger than `desktop.ini`. A directory
+handle lists only the children Chromium's `FileSystemAccessManagerImpl::IsSafePathComponent` passes, on every system, and says
+nothing about the rest, so since #208 a dropped mod could reach `acceptsFolder` / `openFolder` short of its own files
+(Cosmonarchy's `mpq/samase/*.ini` on Windows). The entry walk sees everything; the handle reads fast. A drop has both, so:
+`droppedFolderPaths` lists with `entryPaths` only (the handle is not even awaited before `acceptsFolder`), and for the type that
+takes the folder `folders.ts#droppedFileReader` reads each listed path by the handle's `getFile()` where the handle has that path
+and by the entry's `file()` where it does not. `handleFinder(root, prefix)` is how a path gets its file handle: a directory of the
+handle is listed (`values()` into two maps by name) the first time a file in it is asked for, parents first, memoised by path.
+What the handle lacks answers null (a kept-back name, anything under a kept-back directory, everything under a directory whose
+listing threw), and a `getFile()` that rejects goes to the entry for that file, so "no handle", "refused handle" and "failing
+handle" are all the same code path and end with the entry reading everything. Only the entry's own `file()` failing fails the
+read ("Reading the dropped folder … failed", as before). One warning a folder for the handle's failures; one info line a folder
+when read, `Read the dropped folder X` with `files` / `byHandle` / `byEntry` / `firstByEntry` (the first path in order the entry
+read for a handle that did not), which is how to see on a machine what its browser kept back. A file only the handle lists is
+not handed over: the entry is the list. The status cell counts the entry's files, so "N files found" and "done of N" are whole.
+
+Mechanisms measured before choosing (a bare page, CDP drop of the 7,796-file / 838-folder mirror on a Linux disk, headless
+Chromium 153, a browser per run, four runs each, ms): entry listing 117–139, handle listing 186–211, both at once 262 (they do not
+overlap, and the paths then arrive at ~250 instead of ~115); handle alone, list + read, as #208: 464–619. Entry list then:
+the whole handle walked first, 576–628; the handle listed on demand a directory at a time (chosen), 588–608; the same with eight
+directories listed ahead, 569–580 (not worth the code); `getDirectoryHandle` / `getFileHandle` by name for every file, 753–791.
+Two pools (handle-read files in one, entry-read in another) on a folder half kept back (8,000 files, 4,000 `.lnk`): no gain, the
+handle's pool ends no sooner than the entry's, so one pool of 32. In the editor, same mirror, drop → `acceptsFolder` →
+`openFolder`: main 0.20 s → 0.52 s (7,794 files), this 0.16 s → 0.65 s (7,796 files, 2 by the entry); a folder nobody takes
+0.21 s → 0.16 s with no call on the handle at all. The 0.13 s is the entry's listing, which the handle's own listing cannot
+stand in for. Worst case, every file kept back: the entry's rate, as before #208. The same holds for a folder whose
+handle the browser refuses altogether (the picker refuses anything under Program Files, `gamedata.md`; whether a drop's
+`getAsFileSystemHandle()` does too was not run): no handle, the entry reads everything.
+
+Proof of the list: a probe folder of 53 files (`mkprobe.py` in the session's scratchpad: each kind below, files inside kept-back
+directories, ordinary files beside them), dropped on the dev server: main handed 13, this hands 53 with their bytes, 40 by the
+entry. Kept back by the handle on Linux, measured: `desktop.ini`, `thumbs.db` (any case), `conin$`, `conout$`; device names alone
+or before the first dot (`aux`, `aux.wav`, `nul.txt`, `COM1.grp`, `sub/NUL`), as files and as directories; `.lnk` / `.url` /
+`.scf` in any case, also as a directory's name; a `{CLSID}` extension; any of `"*:<>?|`; a control or format character (U+0001,
+U+200B, U+202E); a leading or trailing space or `~`, a trailing dot, two leading dots (**one leading dot is listed**:
+`.gitignore`); a backslash (Linux only can make one). Listed on Linux: `.ini`, `.cfg`, `.dll`, `.manifest`, `.exe`, `.bat` —
+Chrome's download table hides file types on **Windows only**, which is read from the source and **has not been run**; the
+check is to drop a mod's folder in Windows Chrome and read the info line's `byEntry`.
+
+The picker (`host.ts#pickFolder`, so `ui.pickFiles({ directory: true })` and `missingTerrain.ts`'s Choose the mod's folder…) has
+only the handle and cannot be made whole, and cannot honestly say it is short: the handle gives no count of what it skipped, and
+`getFileHandle` / `getDirectoryHandle` by a kept-back name throws `TypeError: Name is not allowed` whether the file is there or
+not (measured), so there is nothing to probe. Nothing was built for it; the readers' docs say which kinds are left out and that
+such a folder is better dropped (`docs/plugins.md` "What a folder pick leaves out", linked from `mods.md` and `game-data.md`).
+The `<input webkitdirectory>` fallback is the browser's own walk and may be whole, but it could not be measured here (Playwright
+fills a folder input from its own listing) and Chrome puts an "Upload N files to this site?" question in front of it; swapping
+the picker for it is a decision nobody has taken. Tests: `tests/fileTypes.test.ts` "a dropped folder" (made entries and handles
+whose `File`s differ, so a handed file says which route read it).
 Also `graphics.grpImage(bytes, frame, { palette, teamColor, flipped, shadow })` → `Promise<PluginImage | null>`
 (`graphics.ts`; throws on a palette that is no tileset file name; `tests/grp-picture.test.ts`) — see `gamedata.md`.

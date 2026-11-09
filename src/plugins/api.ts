@@ -3631,9 +3631,14 @@ export interface PickFilesOptions {
   accept?: string;
   multiple?: boolean;
   /**
-   * Pick a folder rather than files: `pickFiles` then resolves with every file in it and
+   * Pick a folder rather than files: `pickFiles` then resolves with the files in it and
    * its subfolders as `FolderFile`s, with their paths. The browser's folder picker where it
    * has one, else the file input's folder mode; an empty list when the user cancels.
+   *
+   * The folder picker leaves out, without saying so, the files the browser keeps back from
+   * a page: `desktop.ini`, shortcuts, names Windows keeps for devices and, on Windows, whole
+   * file types such as `.ini` and `.dll`. A folder dropped on the editor
+   * (`FileTypeSpec.openFolder`) comes with every file.
    */
   directory?: boolean;
 }

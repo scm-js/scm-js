@@ -1595,9 +1595,11 @@ and Walkability is the plugin to read.
 - **`pickObject`** resolves with the unit or location clicked, outlining what is under the
   pointer as it moves.
 - **`pickFiles`** opens the browser's file picker and resolves with the files, or an empty
-  list. With `{ directory: true }` it asks for a folder instead and resolves with every
-  file in it as `{ path, file }`, where `path` runs from the folder's name with forward
-  slashes (`My Mod/arr/units.dat`).
+  list. With `{ directory: true }` it asks for a folder instead and resolves with the
+  files in it as `{ path, file }`, where `path` runs from the folder's name with forward
+  slashes (`My Mod/arr/units.dat`). The browser's folder picker keeps some files back; a
+  dropped folder has them all ([what a folder pick leaves
+  out](#what-a-folder-pick-leaves-out)).
 
 The map picks resolve `null` on Esc or a right-click. Only one runs at a time, and a new
 one cancels the previous.
@@ -1630,9 +1632,7 @@ The editor reads the folder's names first and asks `acceptsFolder`, and only for
 that takes it reads the files themselves, so a large folder nobody wants is passed over
 quickly. While it reads, the status bar shows the folder's name with a count of its files;
 the count goes away when `openFolder` is called, and from then on saying what is happening
-is up to your plugin. In Chrome, Edge and the desktop app the dropped folder is read the
-way a picked one is, so the files the browser keeps out of a folder pick, such as
-`desktop.ini`, are left out of a drop too.
+is up to your plugin.
 
 ```ts
 // A mod's folder dropped on the editor: one with the game's tables in it.
@@ -1643,6 +1643,30 @@ api.ui.fileType({
   openFolder: (files) => api.log(`${files.length} files, the first ${files[0]?.path}`),
 });
 ```
+
+#### What a folder pick leaves out
+
+A dropped folder comes to `acceptsFolder` and `openFolder` with every file in it. A folder
+chosen in the browser's folder picker, which is what `pickFiles({ directory: true })`
+opens in Chrome, Edge and the desktop app, does not. The browser keeps some files back
+from a page that was given a folder, and does not say that it did or how many: the list
+your plugin gets is simply shorter. Left out are:
+
+- `desktop.ini` and `thumbs.db`;
+- shortcuts: `.lnk`, `.url` and `.scf` files;
+- names Windows keeps for devices, alone or before the first dot: `aux.wav`, `nul.txt`,
+  `COM1.grp`;
+- a name that begins or ends with a space or `~`, ends with a dot or begins with two, or
+  holds any of `" * : < > ? |` or a character that is not shown;
+- everything inside a folder with such a name;
+- on Windows, whole file types as well, `.ini`, `.cfg`, `.dll` and `.manifest` among them.
+  This last part is read from the browser's source and has not been run on Windows here;
+  the rest was measured in Chromium on Linux, where it holds too.
+
+Some of those can be a mod's own files, a plugin's `config.ini` for one, and only a
+dropped folder has them. A plugin that asks for a folder does well to take a dropped one
+too, with `openFolder`, and to say where it asks that dropping the folder hands over every
+file.
 
 ### Map views
 

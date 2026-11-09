@@ -166,12 +166,29 @@ the fence's language: the ts/js/json family, `sh`, `yaml` and `trigedit`, one re
 each rather than a grammar, so the site keeps `marked` as its only dependency. A `text` fence or one
 with no language is left as marked's own block, uncoloured. The classes are `k s n c t f` under
 `pre` in `docs.css` (`f` is a trigger condition's or action's name). The site is plain
-static files in the editor's palette, like `scm-js/site`: one stylesheet, one script
-(`assets/search.js`, a JSON index fetched on first use and scanned in the page), no
-framework and nothing fetched at runtime. `tests/docs.test.ts` pins the split (a `#` inside
+static files in the editor's palette, like `scm-js/site`: one stylesheet, two scripts
+(`assets/search.js`, a JSON index fetched on first use and scanned in the page; and
+`assets/copy.js`, below), no framework and nothing fetched at runtime. `tests/docs.test.ts` pins the split (a `#` inside
 a fenced shell block is not a page; no line of a guide is dropped between them), the link
 rules, and the reference's shape; the API cases `describe.skipIf` when the bundle is not on
 disk, as a fresh clone's are.
+
+### Copy buttons (`assets/copy.js`, 2026-11-09)
+
+Every ```` ```sh ```` block, and every plain block that shows a terminal session (a line starting
+`$ `), gets a "Copy" button over its top-right corner, added in the page rather than at build
+time — it needs script anyway, and a block marked renders itself keeps no wrapper to hang it on.
+Which blocks: by `<code>`'s class — `language-sh|bash|shell|zsh`, or no class and a `^\$ ` line.
+Not ts/trigedit/yaml: the ask was commands, and ts blocks already own that corner with Try it.
+What is copied is what a terminal should run: a session gives only its `$` lines with the `$`
+dropped; a shell block loses its `# comments` (a `#` starting a word, outside quotes). That is
+not cosmetic: zsh, the Mac's default shell, has `interactivecomments` off, so a pasted
+`brew install scm-js/tap/scmjs   # macOS and Linux` passes `#`, `macOS`, `and`, `Linux` to brew.
+The button shows on hover/focus and always under `(hover: none)`. **A block copies whole**, so
+a block of alternatives ("one of these per platform") copies all of them. So a guide writes one
+block per alternative, with the prose naming which is which, rather than one block with a
+`# Homebrew` / `# winget` comment per line: installing.md's install commands and cli.md's
+updating, shell-completion and `SCMJS_LANG` blocks were split that way when the button came in.
 
 ### Try it links (`scripts/lib/docs/tryit.mjs`, 2026-09-23)
 

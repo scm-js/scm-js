@@ -235,10 +235,19 @@ Many mods change more than single files. A data set takes what the larger ones s
   it then names the game's types too), and its command card picture comes from
   `unit\cmdbtns\uniticons.grp` when there is one. Without a name file the new types are
   listed as "Unit #N".
+- **Names of weapons, upgrades and technologies.** Where a mod keeps its own name lists,
+  `arr\weapons.txt`, `arr\upgrades.txt` and `arr\techdata.txt` (one name a line, a line
+  for every entry of the table), those names are shown; otherwise the names come through
+  the tables' labels, from `rez\stat_txt.tbl` and, for entries it does not have, the mod's
+  `rez\stat.txt`. A label that is a button's tooltip shows only its first line. A data set
+  installed before these lists were read shows the labels' names until it is added again.
 - **The palette.** Types past 227 appear under their own heading named for the data set,
   grouped by the race their group flags give and whether they are buildings. With a name
   file, only the types it names are listed (mods leave the rest of a wide table filled
-  with copies). The types below 228 keep StarEdit's grouping.
+  with copies). The types below 228 keep StarEdit's grouping, except one the data set
+  renamed into something StarEdit's group no longer describes (a Zerg unit in the slot of
+  a Terran building), which is listed under the data set's heading by its own race. The
+  game's own data, under any name, moves nothing.
 - **Placing, drawing and saving.** A new type is placed, drawn from its own pictures and
   saved in the map's unit list like any other.
 - **Extended tilesets.** A tileset's files are read at any size: more than 1,024 tile
@@ -255,11 +264,12 @@ What does not work yet:
 - **Settings for the new types.** A map's unit, upgrade and technology settings have a
   fixed size in the file format: 228 unit types, 61 upgrades, 44 technologies. A type past
   227 has no per-map settings; Unit Settings says so for it. Upgrades and technologies
-  past the game's are not listed.
+  past the game's are listed under the data set's heading, and their dialogs say the same.
 - **Plugins.** Plugins that read the tables see the wider tables, but most were written
   for the game's sizes and may show only the game's types.
-- **Triggers.** The trigger editor lists the game's unit types, then the data set's from
-  233 on; ids 228 to 232 stay the game's None and unit classes.
+- **Triggers.** The trigger editor lists the unit types in the palette's groups, the data
+  set's among them; ids 228 to 232 stay the game's None and unit classes. In the text
+  form, a unit's name is the data set's (see [Unit classes](triggers.md#unit-classes)).
 
 ### A map remembers its data set
 
@@ -270,8 +280,13 @@ game and other editors ignore it. Opening such a map while another data set is i
 editor asks once: to switch, when that data set is installed here, or, when it is not, it
 says where its makers publish it and offers Help ▸ Game Data…. Nothing is downloaded.
 
-Test Map passes the data set on in the same way, so a test target that plays the map, such
-as the play page, knows which files the map was made for.
+The note goes with the map wherever else it leaves the editor too: an export, a map put in
+My Maps or shared, and the file Test Map builds all carry it while a data set other than
+the game's is in use, even for a map that was never saved with it. The map open in the
+editor is changed only by Save. Test Map also passes the data set on, so a test target
+that plays the map, such as the play page, knows which files the map was made for.
+StarCraft itself, started on its own, plays with the game's own data, and Test Map says
+so.
 
 The hash is [the mod's hash](mods.md#the-mods-hash): it covers every file of the data
 set's own — its loose files, the members of its archives (a loader `.exe` in the folder is

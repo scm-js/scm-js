@@ -430,3 +430,10 @@ The mods plan's slice M4 (`scm-sim` branch mods-plan, `docs/mods-plan.md`, "Tier
   Remastered pictures, new canvas each call, not cached) and core exporting the WAV codec (`decodeWav`, `encodeWav`,
   `decodePcmWav`, `decodeImaAdpcm` — now exported from `formats/wav.ts` — `isPlainPcm`, `canDecodeWav`, `wavFrames`,
   `wavCodecName`, `WAV_FORMAT`).
+- **Name lists (C7 audit (2026-11-08, branch `c7-editor`)):** `extract.ts#UNIT_EXTRA_FILES` gained `rez\stat.txt`, `arr\weapons.txt`, `upgrades.txt`,
+  `techdata.txt` (`formats/mod/data.ts#NAME_TEXT_FILES`), copied and listed in `optional` when present; `units/load.ts`
+  `fetchNameTexts` reads them into `UnitAssets.nameTexts` for `namesFromAssets`. They were already in the install's
+  overlay (`isMemberPath`: `arr\`, `rez\`), so the hash does not change (`ac3f86533e4b5a31` after reinstalling). A copy
+  installed before shows the labels' names until it is added again. The list rules (`nameList`: a line for every entry
+  or not at all, `""` keeps the label; `statWithText`) are shared with `scmjs mod header` (`cli/src/mod/header.ts#modNames`
+  now calls them; core exports them).

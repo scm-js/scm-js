@@ -116,3 +116,12 @@ number in the triple's third byte (Orange played orange); Random and Player choi
 lobby shows both as Random). No COLR is read in those revisions, so `playerRgbFor(colors, rgb, fileVersion)`
 writes CRGB whenever a colour is not the slot's own there, and `changeMapVersion` re-runs
 `applyPlayerColors`. In 205/206 COLR overrides the Palette byte (R13). 1.16.1 reads neither in 59/63.
+
+**Upgrade / technology names and entries past the format (C7 audit (2026-11-08, branch `c7-editor`)).** `namesFromAssets` takes the mod's own lists
+(`assets.nameTexts`, see `gamedata.md`) over the labels, `rez\stat.txt` where `stat_txt.tbl` has no entry, and
+`cleanLabel` cuts at the first line break (five Cosmonarchy techs' labels point at button tooltips: "Hijack (C)Leaps to
+the target…"). `LoadedNames.upgrades/techs/weapons` are as long as the table (Cosmonarchy 100/100); `upgradeTypeCount()` /
+`techTypeCount()`. The dialogs list every one; ids ≥ `UPGRADES_BW` / `TECHS_BW` get `CatalogueItem.group` = the set's
+name (a heading after the races, no "unused" badge) and the sentence "No per-map settings for this upgrade/technology"
+instead of the form — the sections stay 61/44. The tech dialog's title read `TECH_NAMES[sel]` (StarEdit's, never the
+set's) — now `techLabel`. `api.names.upgrades()/techs()` still list 61/44 (the audit's design question).

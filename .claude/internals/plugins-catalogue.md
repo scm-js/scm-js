@@ -208,6 +208,26 @@ checks; `plugin.ts` is three map tools (starts, a press-and-drag base with `api.
 the preview, a blocking patch) over `placeUnit` / `canPlaceUnit` / `updateUnits` in one `document.edit`,
 plus bases at every start location, mirroring the selection and the symmetry check.
 
+**Mod Editor** (`github.com/scm-js/plugin-mods`, 2026-11-08, not a default — installed from Browse Plugins; first
+release 0.1.0 needs editor 0.13.0) edits a mod beside the map: File ▸ Open a Mod… (a folder, `.mpq`, a mod's `.exe`,
+`.zip`, or a folder `scmjs mod unpack` wrote; `ui.fileType` with `openFolder` so a dropped folder lands there too)
+opens a bottom panel with Tables, Strings, Pictures, Sounds, Overlays, Scripts (PyICE / PyAI in TrigScript's Monaco,
+fetched from jsDelivr at a tag; storage key `monacoDist` points it elsewhere) and Requirements and Buttons (the
+`datreq\*.graft` files). It is the worked example for **a data set held in memory**: `gameData.attach(profile, read,
+{ hash })` with a reader over the session's current files (the `GameDataReadContext` `member` / `under`, host side in
+`plugins-host.md` "The Mod Editor's asks"), so the palette, settings defaults and drawn units follow every edit; a mod
+under 64 MB is hashed before attaching, a larger one attaches without a hash and `gameData.rehash(hash)` follows once
+worked out. Also `ui.pickFiles({ directory: true })`, `graphics.grpImage` (Pictures), `gameData.storedPath`. The
+codecs and the folder form are `@scm-js/core`'s (the mod formats and the WAV codec, published in core 0.13.0; until
+then the repository read core's sources from a `file:` checkout of the `mods` branch and carried its own plugin-api
+declarations — gone in the 0.1.0 PR). The session (`session.ts`) has no DOM, so the tests drive it in Node from a
+mod made by the codecs; `SCMJS_COSMONARCHY=<release folder with mpq/>` adds a large-mod test. A file nobody changed
+saves byte for byte. **Play** is the `scmjs.play` message conversation with `/play/` on the same origin (a dev
+server of the editor alone has none); with plugin-scm-sim installed, `services.watch("scm-sim.live")` turns it into
+Start Test Game, and table edits, imported pictures and moved buttons go into the running game (iscript, sounds and
+strings wait for a restart; a game between people refuses). The mods side of the editor is `mods.md`; why all of
+`arr\` is kept in the stored copy (its `mapdata` / `portdata` diff) is in `gamedata.md`.
+
 **Trigger Map** (`github.com/scm-js/plugin-trigger-map`, 2026-09-26, not a default) is the worked example for
 `triggers.references` (host side in `triggers.md`). `graph.ts` folds the references into trigger nodes and thing nodes
 (`<kind>:<id>`, `timer`, `memory:<address>`; Ore-and-gas splits into both) with one link per (trigger, thing, access);

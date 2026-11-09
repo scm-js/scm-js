@@ -40,9 +40,9 @@ the Text Trigger Editor, comes with the editor too but starts off; tick it on in
 Manage Plugins… when you need it.
 
 The rest are in Plugins ▸ **Browse Plugins…**: Melee Wizard, Section Explorer, Magenta,
-Trigger Map, Timelapse, Hello World and the API Playground among them. The [user
-guide](guide.md#plugins) says what each one does and where it appears, and each repository
-has its own README.
+Trigger Map, Timelapse, the Mod Editor, Hello World and the API Playground among them. The
+[user guide](guide.md#plugins) says what each one does and where it appears, and each
+repository has its own README.
 
 The plugins that come with the editor are *defaults*: they are built in, so a fresh
 install has them without going to the network. A default can be turned off but not
@@ -2716,5 +2716,6 @@ closest to what you are writing.
 | [Stamp Library](https://github.com/scm-js/plugin-stamp-library) | `api.storage` for user data, `clipboard.capture`, `tx.paste`, rendered thumbnails. |
 | [Trigger Map](https://github.com/scm-js/plugin-trigger-map) | `triggers.references`, a large resizable panel drawn in SVG, a button in the Trigger Editor's slot, `view.goTo` a trigger. |
 | [Timelapse](https://github.com/scm-js/plugin-timelapse) | The `"commit"` event, `graphics.renderClip`, IndexedDB for large data, a preferences page. |
+| [Mod Editor](https://github.com/scm-js/plugin-mods) | A data set held in memory (`gameData.attach` with a reader, `gameData.rehash`), a file type that takes folders, `graphics.grpImage`, and a service used only when another plugin provides it. |
 | [Aftermath](https://github.com/scm-js/plugin-aftermath) | Claiming a file type, view-only maps from `document.open`, a map view in the map's place, docked and bottom panels, game icons and chart tooltips. |
 | [scmjs.dev](https://github.com/scm-js/plugin-scmjs-dev) | Services, its own menu, status items, docked panels, dialog slots, `api.sync` for shared maps. |

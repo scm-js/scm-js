@@ -581,5 +581,30 @@ overload so a caller holding a plain `PickFilesOptions` still compiles; the host
 order) whose `acceptsFolder` passes; none takes it → a log line, the folder is dropped. With no folder-opening type
 nothing is taken and a folder drop behaves as before. Not done: the Open dialog's own drop zone (it reads one file).
 Proofs: `tests/dataset-reader.test.ts`, `tests/fileTypes.test.ts` ("a folder's files", "a dropped folder").
+
+**Reading a dropped folder: paths first, then the `File`s (2026-11-09, branch `folder-drop-reading`).** Before, `entryFiles`
+awaited `entry.file()` one file at a time inside the walk, and nothing showed until a plugin's `openFolder` ran: Cosmonarchy's
+`Release` (7,796 files, 838 folders) took 6.4 s on a Linux disk and 134 s on WSL's `/mnt/c` with the editor silent throughout.
+Measured in headless Chromium with a real CDP folder drop (`Input.dispatchDragEvent` with `data.files: [dir]` *does* give
+`webkitGetAsEntry()` a directory; the app's store is the `<Provider>`'s, so a test type has to come in as a plugin). Findings:
+listing is cheap (0.12 s for that tree on a Linux disk), a `File` is not; `entry.file()` does not go faster when 32 are in
+flight (2.8 s either way: the browser answers them in turn), but the same folder's **handle** (`DataTransferItem.getAsFileSystemHandle()`,
+Chromium only) answers `getFile()` 32 at a time in 0.38 s (one at a time: 2.6 s). On `/mnt/c` every route costs ~10 ms a file
+(WSL's 9P stat), so there only the silence and the not-taken case improve. Now: `folders.ts` walks in two steps —
+`entryPaths` / `directoryHandlePaths` (`walkPaths`: 8 directories listed at once, `onFound` after each piece, sorted at the end,
+no `File`) then `readFound` (32 `File`s in flight, same order, the first failure thrown and the rest not started).
+`droppedFolders` asks for the handle inside the event beside the entry (a rejection → null); `fileTypes.ts#offerFolder` walks
+the handle when there is one, falls back to the entry (logged as a warning) if that walk fails, asks `acceptsFolder` with the
+paths, and reads the `File`s only for the type that took it. Trade-off: a handle walk leaves out what the File System Access API
+keeps to itself — `desktop.ini` (Release has two) and the like — exactly as the folder picker always has. `folderReading(store, name)`
+puts a `FolderRead` on `folderReadsAtom` (uiAtoms, global, not per document) at once; `StatusBar` draws each as a cell with the
+`status-spinner` ("Reading the folder {name} · N files found", then "· done of N files"); counts are written at most every
+150 ms; `end()` (idempotent) runs before `openFolder` — from then the plugin speaks — and in `finally`, so a folder nobody takes
+or a failed read clears it too. `pickFolder` uses the same two steps and the same cell for the picker's folder (`pickFolder(store)`);
+the `webkitdirectory` input needs neither, the browser walks before `change`. After, the same drop: Linux disk 0.07 s to the cell,
+0.25 s to `acceptsFolder`, 0.62 s to `openFolder` (Mod Editor's "Opening Release…" at 0.68 s, was 6.5 s); `/mnt/c` 0.07 s to the
+cell, 46 s to `acceptsFolder`, 120 s to "Opening Release…" (was 134 s, silent), the plugin's own open 7.8 s more.
+The measuring scripts (CDP drop, a probe plugin served with CORS, `readEntries` / `file()` counted by patching the
+prototypes found on the drop's entry) lived in that session's scratchpad; the recipe is the paragraph above.
 Also `graphics.grpImage(bytes, frame, { palette, teamColor, flipped, shadow })` → `Promise<PluginImage | null>`
 (`graphics.ts`; throws on a palette that is no tileset file name; `tests/grp-picture.test.ts`) — see `gamedata.md`.

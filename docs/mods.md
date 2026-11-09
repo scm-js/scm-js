@@ -41,10 +41,11 @@ mod](guide.md#replays-of-a-mod)).
 Editor](https://github.com/scm-js/plugin-mods) plugin from Plugins ▸ Browse Plugins…. File
 ▸ Open a Mod… opens a mod's folder, an `.mpq`, a mod's self-executing `.exe` or a `.zip`
 in a panel under the map, where its tables, strings, pictures, sounds, animation scripts
-and AI scripts can be edited. While the mod is open the editor draws from its files as
-they are now: change a unit's hit points and Unit Settings shows the new default. It saves
-the mod as an MPQ or as the folder of text `scmjs mod unpack` writes, and plays it on the
-play page.
+and AI scripts can be edited. Dropping the mod's folder on the editor opens it too; the
+status bar counts the folder's files while the editor reads them. While the mod is open
+the editor draws from its files as they are now: change a unit's hit points and Unit
+Settings shows the new default. It saves the mod as an MPQ or as the folder of text
+`scmjs mod unpack` writes, and plays it on the play page.
 
 ## A mod as a folder
 

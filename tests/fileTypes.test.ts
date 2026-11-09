@@ -1,8 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createStore } from "jotai";
 import { pluginFileTypesAtom } from "../src/atoms/pluginAtoms";
+import { folderReadsAtom } from "../src/atoms/uiAtoms";
+import { logEntries, resetLogForTests } from "../src/editor/log";
 import { handFilesToPlugins, pickerFileTypes, takeDroppedFolders } from "../src/plugins/fileTypes";
-import { directoryHandleFiles, entryFiles, folderInputFiles, type DirectoryHandleLike, type EntryLike, type FileHandleLike } from "../src/plugins/folders";
+import { directoryHandleFiles, entryFiles, entryPaths, folderInputFiles, readFound, type DirectoryHandleLike, type EntryLike, type FileHandleLike } from "../src/plugins/folders";
 import type { FolderFile } from "../src/plugins/api";
 import { Contributions, createPluginApi } from "../src/plugins/host";
 
@@ -49,14 +51,27 @@ describe("kinds of file plugins open", () => {
 type Tree = { [name: string]: Tree | File };
 const isFile = (v: Tree | File): v is File => v instanceof File;
 
-/** What a drop's `webkitGetAsEntry()` gives, made: a reader that hands a folder over two entries at a time, as Chromium does in pieces. */
-function entryOf(name: string, node: Tree | File): EntryLike {
-  if (isFile(node)) return { isFile: true, isDirectory: false, name, file: (ok) => ok(node) };
+/** What the made entries and handles were asked: `File`s, and the most asked for at once. */
+const asked = { files: 0, inFlight: 0, most: 0 };
+const resetAsked = () => Object.assign(asked, { files: 0, inFlight: 0, most: 0 });
+/** A `File` handed over a moment later, as the browser does, counting how many are in flight. */
+function later(file: File): Promise<File> {
+  asked.files++;
+  asked.most = Math.max(asked.most, ++asked.inFlight);
+  return new Promise((ok) => setTimeout(() => { asked.inFlight--; ok(file); }, 0));
+}
+
+/**
+ * What a drop's `webkitGetAsEntry()` gives, made: a reader that hands a folder over `piece`
+ * entries at a time (Chromium: 100), as the browser does. `fails` names a file whose `file()` fails.
+ */
+function entryOf(name: string, node: Tree | File, piece = 2, fails?: string): EntryLike {
+  if (isFile(node)) return { isFile: true, isDirectory: false, name, file: (ok, fail) => (name === fails ? fail?.(new Error(`${name} could not be read`)) : void later(node).then(ok)) };
   return {
     isFile: false, isDirectory: true, name,
     createReader: () => {
-      const children = Object.entries(node).map(([n, v]) => entryOf(n, v));
-      return { readEntries: (ok) => ok(children.splice(0, 2)) };
+      const children = Object.entries(node).map(([n, v]) => entryOf(n, v, piece, fails));
+      return { readEntries: (ok) => ok(children.splice(0, piece)) };
     },
   };
 }
@@ -66,7 +81,7 @@ function handleOf(name: string, node: Tree): DirectoryHandleLike {
   return {
     kind: "directory", name,
     async *values() {
-      for (const [n, v] of Object.entries(node)) yield isFile(v) ? ({ kind: "file", name: n, getFile: async () => v } satisfies FileHandleLike) : handleOf(n, v);
+      for (const [n, v] of Object.entries(node)) yield isFile(v) ? ({ kind: "file", name: n, getFile: () => later(v) } satisfies FileHandleLike) : handleOf(n, v);
     },
   };
 }
@@ -85,6 +100,34 @@ describe("a folder's files with their paths", () => {
     expect(picked[0].file).toBe(input[0]);
   });
 
+  it("keep their order and every piece of a folder handed over 100 at a time, and come many at once", async () => {
+    // 250 files in one folder (three pieces), named so the walk's order is not the sorted one.
+    const big: Tree = { sub: { "b.txt": file("b.txt") } };
+    for (let i = 249; i >= 0; i--) big[`f${String(i).padStart(3, "0")}.dat`] = file(`f${i}.dat`);
+    resetAsked();
+    const files = await entryFiles(entryOf("Big", big, 100));
+    expect(files.length).toBe(251);
+    expect(paths(files)).toEqual([...paths(files)].sort());
+    expect(files[0]).toEqual({ path: "Big/f000.dat", file: big["f000.dat"] });
+    expect(files.at(-1)!.path).toBe("Big/sub/b.txt");
+    // Asked for together, but never more than a bounded number at a time.
+    expect(asked.files).toBe(251);
+    expect(asked.most).toBeGreaterThan(1);
+    expect(asked.most).toBeLessThanOrEqual(32);
+  });
+
+  it("are found by their paths without asking for a single File", async () => {
+    resetAsked();
+    const counts: number[] = [];
+    const found = await entryPaths(entryOf("My Mod", MOD), undefined, (n) => counts.push(n));
+    expect(found.map((f) => f.path)).toEqual(MOD_PATHS);
+    expect(asked.files).toBe(0);
+    expect(counts.at(-1)).toBe(MOD_PATHS.length);
+    const reads: number[] = [];
+    await readFound(found, (e) => new Promise<File>((ok, fail) => e.file!(ok, fail)), (n) => reads.push(n));
+    expect(reads).toEqual([1, 2, 3, 4]);
+  });
+
   it("come from ui.pickFiles({ directory: true }): the folder picker, nothing on cancel", async () => {
     const g = globalThis as unknown as { window?: unknown; document?: unknown };
     const had = { window: g.window, document: g.document };
@@ -92,9 +135,11 @@ describe("a folder's files with their paths", () => {
     g.document = {};
     g.window = { showDirectoryPicker: () => answer() };
     try {
-      const api = createPluginApi(createStore(), { id: "p", name: "P", source: "s" }, new Contributions());
+      const store = createStore();
+      const api = createPluginApi(store, { id: "p", name: "P", source: "s" }, new Contributions());
       const picked = await api.ui.pickFiles({ directory: true });
       expect(paths(picked)).toEqual(MOD_PATHS);
+      expect(store.get(folderReadsAtom)).toEqual([]);
       expect(picked.every((f) => f.file instanceof File)).toBe(true);
       answer = async () => { throw Object.assign(new Error("The user aborted a request."), { name: "AbortError" }); };
       expect(await api.ui.pickFiles({ directory: true })).toEqual([]);
@@ -132,6 +177,54 @@ describe("a dropped folder", () => {
     expect([...taken]).toEqual([1]);
     await done;
     expect(got).toEqual([["b", MOD_PATHS]]);
+    expect(store.get(folderReadsAtom)).toEqual([]);
+  });
+
+  it("asks for no File when no plugin takes it, and says so in the status bar only while it reads", async () => {
+    const store = createStore();
+    const api = createPluginApi(store, { id: "a", name: "A", source: "s" }, new Contributions());
+    let offered: string[] = [];
+    let opened = false;
+    api.ui.fileType({ name: "Pictures", extensions: [], acceptsFolder: (p) => { offered = p; return false; }, openFolder: () => { opened = true; } });
+    resetAsked();
+    const { done } = takeDroppedFolders(store, drop());
+    // At once, before anything is read.
+    expect(store.get(folderReadsAtom).map((r) => [r.name, r.found, r.read])).toEqual([["My Mod", 0, null]]);
+    await done;
+    expect(offered).toEqual(MOD_PATHS);
+    expect(opened).toBe(false);
+    expect(asked.files).toBe(0);
+    expect(store.get(folderReadsAtom)).toEqual([]);
+  });
+
+  it("says what failed when a file cannot be read, opens nothing and clears the status bar", async () => {
+    resetLogForTests();
+    const store = createStore();
+    const api = createPluginApi(store, { id: "a", name: "A", source: "s" }, new Contributions());
+    let opened = false;
+    api.ui.fileType({ name: "Mods", extensions: [], openFolder: () => { opened = true; } });
+    const { done } = takeDroppedFolders(store, { items: [{ kind: "file", webkitGetAsEntry: () => entryOf("My Mod", MOD, 2, "units.dat") }] });
+    await done;
+    expect(opened).toBe(false);
+    expect(store.get(folderReadsAtom)).toEqual([]);
+    expect(logEntries().some((e) => e.level === "error" && e.message.startsWith("Reading the dropped folder My Mod failed") && e.message.includes("units.dat could not be read"))).toBe(true);
+  });
+
+  it("is read by its handle where the drop gives one, and by its entry when the handle is refused", async () => {
+    const store = createStore();
+    const api = createPluginApi(store, { id: "a", name: "A", source: "s" }, new Contributions());
+    const got: string[][] = [];
+    api.ui.fileType({ name: "Mods", extensions: [], openFolder: (files) => { got.push(paths(files)); } });
+    const viaEntry = vi.fn();
+    const entry = entryOf("My Mod", MOD);
+    const watched: EntryLike = { ...entry, createReader: () => { viaEntry(); return entry.createReader!(); } };
+    await takeDroppedFolders(store, { items: [{ kind: "file", webkitGetAsEntry: () => watched, getAsFileSystemHandle: async () => handleOf("My Mod", MOD) }] }).done;
+    expect(got).toEqual([MOD_PATHS]);
+    expect(viaEntry).not.toHaveBeenCalled();
+    await takeDroppedFolders(store, { items: [{ kind: "file", webkitGetAsEntry: () => watched, getAsFileSystemHandle: () => Promise.reject(new DOMException("no", "NotAllowedError")) }] }).done;
+    expect(got).toEqual([MOD_PATHS, MOD_PATHS]);
+    expect(viaEntry).toHaveBeenCalled();
+    expect(store.get(folderReadsAtom)).toEqual([]);
   });
 
   it("is left alone when no plugin opens folders", async () => {

@@ -1626,6 +1626,14 @@ yours. When several plugins open folders, the first to register whose `acceptsFo
 agrees gets the folder, and a folder nobody takes is left alone. A type that only opens
 folders can have an empty `extensions`.
 
+The editor reads the folder's names first and asks `acceptsFolder`, and only for the type
+that takes it reads the files themselves, so a large folder nobody wants is passed over
+quickly. While it reads, the status bar shows the folder's name with a count of its files;
+the count goes away when `openFolder` is called, and from then on saying what is happening
+is up to your plugin. In Chrome, Edge and the desktop app the dropped folder is read the
+way a picked one is, so the files the browser keeps out of a folder pick, such as
+`desktop.ini`, are left out of a drop too.
+
 ```ts
 // A mod's folder dropped on the editor: one with the game's tables in it.
 api.ui.fileType({

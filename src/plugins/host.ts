@@ -35,7 +35,7 @@ import {
 } from "../atoms/pluginAtoms";
 import { browserStorage, STORAGE_PREFIX } from "../atoms/storage";
 import { isVerbose, log, logError, logInfo, logWarn } from "../editor/log";
-import { MAP_EXTENSIONS, normalExtension } from "./fileTypes";
+import { folderReading, MAP_EXTENSIONS, normalExtension } from "./fileTypes";
 import { activationOrder, installFor, requiredInstalls, requirementsOf, type ManifestLookup } from "./requires";
 import { specLabel } from "./failures";
 import { TILESET_BY_ID, TILESETS } from "../data/tilesets";
@@ -124,7 +124,7 @@ import {
   type ContextMenuContext, type NewDocumentOptions, type OpenDocumentOptions, type SettingsApi, type TriggerListUpdate, type TriggerRecord, type TriggersApi, type UnitTypeView, type UpdateResult,
   type UpdateTransaction, type ViewApi, type FolderFile, type PickFilesOptions, type UiApi,
 } from "./api";
-import { directoryHandleFiles, directoryPicker, folderInputFiles, isAbort } from "./folders";
+import { directoryHandlePaths, directoryPicker, folderInputFiles, handleFile, isAbort, readFound } from "./folders";
 import { canonicalSpec, githubSource, HASH_REF, isPinned, listTags, loadPlugin, newestTag, parseSpec, previewPlugin, recordingDeps, resolveCommit, resolvePlugin, storedDeps, unpin, type LoaderDeps, type PluginPreview, type RepoTag } from "./loader";
 import { loadImage, readClipboardImage } from "./images";
 import { BUILTIN_PLUGINS } from "./builtin";
@@ -1684,13 +1684,21 @@ export function gameDataApi(store: Store): GameDataApi {
 /**
  * `ui.pickFiles({ directory: true })`: the browser's folder picker where it has one, else the
  * file input's folder mode; the folder's files with their paths (`folders.ts`), or none on cancel.
+ * The picker's folder is walked here, one call a file, so the status bar counts it as it goes
+ * (`folderReading`); the input's is walked by the browser before it answers.
  */
-async function pickFolder(): Promise<FolderFile[]> {
+async function pickFolder(store: Store): Promise<FolderFile[]> {
   if (typeof document === "undefined") return [];
   const picker = directoryPicker();
   if (picker) {
     try {
-      return await directoryHandleFiles(await picker({ mode: "read", id: "plugin-folder" }));
+      const handle = await picker({ mode: "read", id: "plugin-folder" });
+      const reading = folderReading(store, handle.name);
+      try {
+        return await readFound(await directoryHandlePaths(handle, handle.name, reading.found), handleFile, reading.read);
+      } finally {
+        reading.end();
+      }
     } catch (err) {
       if (isAbort(err)) return [];
       // Refused (a page in a frame, a folder the browser keeps to itself): the input may still be allowed.
@@ -2577,7 +2585,7 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
       },
       mapTool: (spec) => startMapTool(store, bag, info, spec),
       overlay: (spec) => registerOverlay(store, bag, info, spec),
-      pickFiles: ((options: PickFilesOptions = {}) => (options.directory === true ? pickFolder() : new Promise<File[]>((resolve) => {
+      pickFiles: ((options: PickFilesOptions = {}) => (options.directory === true ? pickFolder(store) : new Promise<File[]>((resolve) => {
         if (typeof document === "undefined") { resolve([]); return; }
         const input = document.createElement("input");
         input.type = "file";

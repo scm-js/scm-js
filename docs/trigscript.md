@@ -131,6 +131,9 @@ Units, locations and switches are named the way the map names them:
   are under `players`: `players.Force1`, `players.Foes`, `players.Allies`.
 - A plain number works wherever a name does. That is how an EUD player or an unusual unit
   id gets in.
+- With a mod's data set in use (Help ▸ Game Data…), units, weapons, upgrades and
+  technologies go by the mod's names instead, made identifiers as `scmjs mod header` makes
+  them: `units.Terran_Mason`. See [With a mod](trigscript-language.md#with-a-mod).
 
 The editor checks the names as you type. A location passed where a unit belongs is an
 error, and so is a name the map no longer has.
@@ -1204,7 +1207,7 @@ subtitle setting.
 | --- | --- |
 | `P1` … `P12`, `CurrentPlayer`, `AllPlayers` | Constants. |
 | `players.` | Every player group: `Force1` … `Force4` (and the force's own name), `Foes`, `Allies`, `Neutral`, `NonAlliedVictory`, and the twelve players. |
-| `units.` | Every unit type by name as an identifier (`TerranMarine`) or a string (`units["Terran Marine"]`), and by the map's custom names. `AnyUnit`, `Men`, `Buildings`, `Factories`. |
+| `units.` | Every unit type by name as an identifier (`TerranMarine`) or a string (`units["Terran Marine"]`), and by the map's custom names. `AnyUnit`, `Men`, `Buildings`, `Factories`. With a mod's data set, the mod's names (`Terran_Mason`). |
 | `locations.` | The map's locations by name; `Anywhere` and `NoLocation`. |
 | `switches.` | `Switch1` … `Switch256`, and any name the map sets. |
 | `aiScripts.` | The AI scripts by StarEdit name; a four-letter code as a string works too. |

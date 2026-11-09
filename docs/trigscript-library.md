@@ -43,6 +43,13 @@ and `cutscene` each take one of the map's first 63 locations that the map does n
 The reason each location was taken shows with the map's requirements. `fog` uses eleven
 flying hero unit types as its brushes, and `screen` needs players set up for its colours.
 
+**With a mod.** While the editor draws from a mod's data set, the examples' unit names are
+the mod's: `units.Terran_Mason` rather than `units.TerranSCV` (see [With a
+mod](trigscript-language.md#with-a-mod)). The modules name the units they make by the
+game's own ids: `fog`'s eleven heroes, and `screen`'s Overlords, Pylons and Map Revealers.
+So they build the same with any data set, and in a mod each of those ids is whatever unit
+the mod keeps there. Like any program, they are made for the game's own data.
+
 Every example on these pages compiles as it is written, against a map with the locations
 `Beacon`, `Spawn` and `Base`. A line that ends with a comment such as `// 50` prints that
 when the example runs.

@@ -157,3 +157,8 @@ then part of the group — and `& 0x7FF` otherwise, where bit 15 stays Remastere
 site that turns a tile into a group passes `tileset.groups.length`. The atlas for 40k megatiles is ~2,176 × 21,300 px;
 it drew in headless Chromium, and a lazy atlas (like `hd.ts`'s pages) is the way out if a browser refuses the size.
 See `gamedata.md` "Data sets widened".
+
+Detection is not drawing (2026-11-09): Check Map and the missing-terrain toast ask whose a tile is and whether the
+data set has it by the *whole* group, bit 15 included (`data/remasteredTiles.ts`), on every tileset; `tileGroupOf`
+keeps the eleven-bit rule for drawing on a table of ≤ 2,048 groups. Reasons and the survey in `editor-operations.md`
+"Check Map: terrain made for a mod".

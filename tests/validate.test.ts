@@ -8,6 +8,7 @@ import { START_LOCATION } from "../src/data/units";
 import { makeUnit } from "../src/editor/units";
 import { newAction, newCondition, newTrigger } from "../src/editor/triggers";
 import { issueCounts, triggerIssues, UNIT_LIMIT, validateScenario } from "../src/editor/validate";
+import { decodeCv5, type Tileset } from "../src/formats/tileset/decode";
 
 function fresh() {
   const scn = createScenario({ width: 64, height: 64, era: 0, name: "v" });
@@ -261,5 +262,46 @@ describe("tiles only StarCraft: Remastered has", () => {
     install.tiles.fill((1264 << 4) | 0);
     install.tiles[0] = (1265 << 4) | 0;
     expect(validateScenario(install).some((i) => i.text.includes("Remastered added"))).toBe(false);
+  });
+});
+
+describe("terrain made for a mod", () => {
+  /** A tileset of `groups` empty groups: Check Map reads only how many it has. */
+  const tilesetOf = (groups: number): Tileset => ({
+    palette: new Uint8Array(1024), minitiles: new Uint8Array(0), megatileRefs: new Uint32Array(0), megatileCount: 0,
+    extended: false, megatileFlags: new Uint16Array(0), groups: decodeCv5(new Uint8Array(groups * 52)),
+  });
+  const terrain = (scn: ReturnType<typeof fresh>, ctx = {}) => texts(scn, ctx).filter((line) => /StarCraft has not got|Remastered added|does not have/.test(line));
+  /** Jungle: 1,578 groups in 1.16, 2,046 in Remastered, 4,095 in Cosmonarchy. */
+  const jungle = () => {
+    const scn = createScenario({ width: 64, height: 64, era: 4, name: "j" });
+    scn.tiles[3 * 64 + 4] = (3734 << 4) | 2; // bit 15 set; the eleven bits below it read 1,686, inside Remastered's additions
+    scn.tiles[3 * 64 + 5] = 2046 << 4; // the first group past Remastered's table, without bit 15
+    scn.tiles[6 * 64] = 1600 << 4; // one Remastered added
+    return scn;
+  };
+
+  it("takes a group past Remastered's table for a mod's, by all twelve bits", () => {
+    expect(terrain(jungle())).toEqual([
+      expect.stringMatching(/^warn: 2 tiles are terrain StarCraft has not got, in 1\.16\.1 or Remastered \(the first at 4, 3\)\. The map was made for a mod, and it draws and plays as made only with that mod's files\.$/),
+      expect.stringMatching(/^info: 1 tile is from what StarCraft: Remastered added to this tileset \(the first at 0, 6\)/),
+    ]);
+    expect(validateScenario(jungle()).find((i) => i.text.includes("StarCraft has not got"))?.target).toEqual({ kind: "dialog", id: "gameData" });
+  });
+
+  it("says the same over the game's own tilesets, 1.16's or Remastered's", () => {
+    for (const groups of [1578, 2046]) {
+      expect(terrain(jungle(), { tileset: tilesetOf(groups) }).map((line) => line.slice(0, 30)), `${groups} groups`).toEqual([
+        "warn: 2 tiles are terrain Star",
+        "info: 1 tile is from what Star",
+      ]);
+    }
+  });
+
+  it("is quiet when the data set in use has the terrain, and counts what a smaller one lacks", () => {
+    // The mod is the data set: its tiles are its own, including those numbered among Remastered's additions.
+    expect(terrain(jungle(), { tileset: tilesetOf(4095) })).toEqual([]);
+    // A mod's tileset that stops short of group 3,734.
+    expect(terrain(jungle(), { tileset: tilesetOf(3000) })).toEqual([expect.stringMatching(/^warn: 1 tile is terrain StarCraft has not got, .*\(the first at 4, 3\)/)]);
   });
 });

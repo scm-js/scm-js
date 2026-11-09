@@ -109,6 +109,23 @@ Remastered files when `SCM_REMASTERED_DIR` is set — which is what caught Twili
 written without its low range. Info, not warn: the map is fine in Remastered. No jump target —
 `IssueTarget` has no tile kind — so the text carries the first tile's coordinates.
 
+**Check Map: terrain made for a mod** (2026-11-09). Three cases now, all by the tile's *whole*
+group, `tile >> 4` with bit 15 (`remasteredTiles.ts#fullGroup`): `isModTile` (past Remastered's
+count) → a `warn` "terrain StarCraft has not got, in 1.16.1 or Remastered … made for a mod", target
+the `gameData` dialog; `isRemasteredOnlyTile` → the info above; anything else past the loaded table
+→ the old "names groups this tileset does not have" warn (now nearly unreachable: a loaded table
+shorter than 1.16's). The bug fixed: `isRemasteredOnlyTile` masked with `0x7ff`, so Cosmonarchy's
+BattleGuard (Jungle, group 3,734 = bit 15 + 1,686) was "Remastered's" and its mod tiles never
+named. With `ctx.tileset`, a tile the loaded table has (`tilesetHasTile`) is not a mod finding, and
+when that table is longer than Remastered's (a mod's) its tiles in Remastered's range are not the
+Remastered info either. Why the whole group although bit 15 is the game's creep flag: surveyed
+2026-11-09, of ~600 non-mod maps on this machine (fixtures, the 1.16 install's ladder folders, the
+user's Remastered maps folder) only our probe `Audit/R2 creep flag.scx` sets bit 15; 291 of
+Cosmonarchy's 404 maps do, and 191 of those have every bit-15 tile's eleven-bit group inside the
+1.16 table, so no per-map "is it a creep flag" rule separates them. A creep-flagged probe now gets
+both the creep info and the mod warn; accepted. `tileGroupOf` (drawing) is unchanged.
+`tests/validate.test.ts` "terrain made for a mod".
+
 Check Map follows the game (2026-10-17 audit, PR 2; evidence `~/github/scm-sim-reader/editor-audit/`):
 - `formats/chk/game.ts` holds the game's reads per revision (`gameReadSections`), its length rules
   (`gameSizeRule`/`gameAcceptsSize`) and the VCOD hash (`vcodPasses`); `tests/check-map-game.test.ts`

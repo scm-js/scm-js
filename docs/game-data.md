@@ -157,7 +157,8 @@ need to move; see [Remastered graphics](#remastered-graphics). A Remastered copy
 Remastered also added tiles, and so doodads, to seven of the eight tilesets (Installation
 is unchanged). Everything the 1.16 tile tables hold is in Remastered's tables unchanged,
 so a map made for 1.16 draws the same from either copy. A map that uses the added tiles
-needs the Remastered files: from a 1.16 copy those tiles have no picture.
+needs the Remastered files: from a 1.16 copy those tiles have no picture, and the editor
+says so when it opens such a map.
 
 There are two ways in:
 
@@ -255,7 +256,8 @@ Many mods change more than single files. A data set takes what the larger ones s
   groups, `.vx4ex` megatile tables with 32-bit references, any number of megatiles. On a
   tileset with more than 2,048 groups a tile's group takes twelve bits of the map's tile
   value (on the game's own tilesets the top bit is the creep flag, as before), so a map
-  placing group 2,774 draws it.
+  placing group 2,774 draws it. Opened with a data set that has not got those groups, the
+  map says so ([below](#a-map-remembers-its-data-set)).
 - **The editor's plugins.** The plugins that come with the editor follow the data set:
   Repair leaves a mod's own unit types alone, Melee Wizard lays bases out with the mod's
   footprint sizes, Section Explorer reads an extended tileset's tile groups, and
@@ -294,6 +296,19 @@ editor is changed only by Save. Test Map also passes the data set on, so a test 
 that plays the map, such as the play page, knows which files the map was made for.
 StarCraft itself, started on its own, plays with the game's own data, and Test Map says
 so.
+
+A map made for a mod that carries no such note, because it was made in another editor or
+is the map of a replay, still shows it in its terrain: a mod's tileset can have far more
+tile groups than the game's (Cosmonarchy's Jungle has 4,095, Remastered's 2,046). When the
+data set in use has not got some of the open map's terrain, the editor says so once for
+that map and data set, in a notice that stays until you close it. It names the data set
+and the tileset, counts the tiles, and says whether they are past even Remastered's
+tables, so the map was made for a mod, or are tiles Remastered added, over a 1.16 copy.
+Here those tiles draw black, or as other tiles. Open the mod (the Mod Editor plugin's File
+▸ Open a Mod… lays its files over the game's while it is open) or choose its data set in
+Help ▸ Game Data…; the notice goes once the data set in use has the terrain. A map whose
+note names another data set gets the offer to switch instead. Check Map lists the same
+tiles under Terrain.
 
 The hash is [the mod's hash](mods.md#the-mods-hash): it covers every file of the data
 set's own — its loose files, the members of its archives (a loader `.exe` in the folder is
@@ -538,6 +553,7 @@ under `src/formats/`.
 | `src/gamedata/profiles.ts`, `src/services/gameData.ts` | Data sets: the id and name, the stored choice, and the switch that drops every decoded table and loads again. |
 | `src/gamedata/overCopy.ts` | A data set laid over a copy rather than the game's archives, the images whose Remastered pictures it turns off, and the digest of its files. |
 | `src/services/mapDataSet.ts` | The note a map keeps of its data set, and the question asked when it opens elsewhere. `tests/map-dataset.test.ts`. |
+| `src/services/missingTerrain.ts`, `src/data/remasteredTiles.ts` | Whose a tile is (the game's, Remastered's additions, a mod's) and the notice when the data set in use has not got some of a map's terrain. `tests/missing-terrain.test.ts`. |
 | `src/formats/dat/table.ts`, `src/formats/dat/schema.ts` | Every table at any width (the game's, DatExtend's expanded layout, `.datex`); the editor's readers in `dat.ts` pick their columns from it. `tests/datasets-widths.test.ts`, and `tests/datasets-cosmonarchy.test.ts` over a mod's maps where `SCMJS_COSMONARCHY` points at them. |
 | `src/data/gameNames.ts` | The per-entry naming rule; `tests/names.test.ts` pins the differences against the real files. |
 | `src/formats/tileset/hd.ts` | Remastered's 2x terrain and where its water and lava are. `tests/hd-terrain.test.ts`. |

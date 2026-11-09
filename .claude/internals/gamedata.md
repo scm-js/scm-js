@@ -412,6 +412,18 @@ The mods plan's slice M4 (`scm-sim` branch mods-plan, `docs/mods-plan.md`, "Tier
   never removed; `offerMapDataSet` after `openFileInto` and the Open dialog's own load → the `mapDataSet` dialog
   (`NEEDS_PAYLOAD` in `dialogs.spec.ts`). The "Switch" / "Keep" buttons use `tc("data set", …)` because "Switch" is
   already the trigger switch in Korean.
+- **Terrain the data set lacks** (2026-11-09, `services/missingTerrain.ts`, `hooks/useMissingTerrain.ts`): the map in
+  front with tiles the loaded tileset has not got (`remasteredTiles.ts#missingTerrain`, by the whole twelve-bit group)
+  gets one `warn` toast, `ttl: 0`, action Game Data…: the data set's name, the tileset, a count, and mod (past
+  Remastered's table) vs Remastered's additions (over a shorter table). Once per map (the `Scenario` object, a
+  `WeakMap`, so a parked tab keeps it and no `parkRegisters` entry is needed) and data set id; taken down when the
+  map in front or the data set changes or the new tileset has the tiles. Nothing for a map whose `dataset.json` names
+  another set (`offerMapDataSet` speaks) or with no data. `MapViewport` mounts the hook with `useTileset`'s
+  `loaded`, but the hook reads `peekTileset` and decides only when the two agree: on the render after a switch the
+  hook's state still holds the dropped set's tileset. A toast, not a `.viewport-notice`, because a replay's map
+  (Aftermath) opens under the Game view, which hides the map's own notices, and the minimap still draws the tiles.
+  Drawing is unchanged: a missing megatile stays black, as only part of a mod map's tiles reach that path (the rest
+  draw as another tile by the eleven-bit rule), so a marker would mislead. `tests/missing-terrain.test.ts`.
 - **Test Map**: `TestMapFile.dataSet {id,name,hash}` (`testMap.ts#testDataSet`); plugin-scm-sim (branch `mods`)
   posts it as `dataSet` in `scmjs.play`. The play page's acceptance is M1's.
 - **Proofs**: `tests/datasets-widths.test.ts` (readers at three widths, grown tables made with `encodeDat`, tilesets

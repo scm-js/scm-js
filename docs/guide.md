@@ -964,8 +964,9 @@ each is played.
   and Ogg sounds, which only Remastered plays; switches tested for Set but never set.
 - **Terrain:** tiles with bit 15 set, which the game files as a creep flag, though in play
   such a tile shows no creep and takes no Zerg building; tiles from groups the tileset
-  does not have; tiles only Remastered's tilesets have; a missing or outdated isometric
-  record.
+  does not have; tiles only Remastered's tilesets have; tiles from terrain neither
+  StarCraft 1.16.1 nor Remastered has, which means the map was made for a mod (not listed
+  while that mod's data set is in use); a missing or outdated isometric record.
 
 A map with triggers gets three more checks:
 
@@ -1289,6 +1290,10 @@ guide](mods.md#on-the-play-page)):
 
 When the browser has not got the mod, or keeps another version of it, the Replay view and
 the analysis say so, with the mod's hash and its makers' link, and play nothing.
+
+The replay's map itself is drawn from the editor's data set, like any map. When that data
+set has not got the mod's terrain, the editor says so ([A map remembers its data
+set](game-data.md#a-map-remembers-its-data-set)).
 
 Names and costs come from the data set the editor draws with. Add the mod as a data set
 (Help ▸ Game Data… ▸ Add a data set…, see [Data sets made from a

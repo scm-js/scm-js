@@ -14,7 +14,7 @@ import { msg, t, translate } from "../i18n";
 import { ActionFlag, ActionType, ConditionFlag, ConditionType, PlayerGroup, SwitchAction, SwitchState, TriggerFlag, type TriggerRecord } from "../formats/chk/sections/triggers";
 import { actionDef, AI_SCRIPT_CHOICES, aiScriptCode, aiScriptId, conditionDef, UNIT_CLASS_CHOICES } from "../data/triggerDefs";
 import { CREATING_ACTIONS, triggerCanCreate } from "./triggers";
-import { isRemasteredOnlyTile } from "../data/remasteredTiles";
+import { isModTile, isRemasteredOnlyTile, tileGroupRanges, tilesetHasTile } from "../data/remasteredTiles";
 import { START_LOCATION, UNIT_TYPE_COUNT, unitLabel, unitTypeCount } from "../data/units";
 import { PLAYER_COLORS } from "../data/players";
 import { UnitClass } from "../formats/chk/sections/triggers";
@@ -469,11 +469,26 @@ export function validateScenario(scn: Scenario, ctx: ValidateContext = {}): Issu
   }
 
   // Bit 15 of a tile is the game's creep flag; a group past the tileset's table is drawn as
-  // plain ground by Remastered and read past the table's end by 1.16.1.
-  let creep = 0, outside = 0, firstOutside = -1;
+  // plain ground by Remastered and read past the table's end by 1.16.1. Whose a tile is goes
+  // by its whole group (`remasteredTiles.ts`): past Remastered's table it is a mod's, unless
+  // the data set in use has it, and a loaded table longer than Remastered's is a mod's own,
+  // whose tiles are not Remastered's additions however they are numbered.
+  const groups = ctx.tileset?.groups.length;
+  const hasTile = (tile: number) => groups !== undefined && tilesetHasTile(era, tile, groups);
+  const modTable = groups !== undefined && groups > tileGroupRanges(era).remastered;
+  let creep = 0, outside = 0, firstOutside = -1, mod = 0, firstMod = -1, added = 0, first = -1;
   for (let i = 0; i < scn.tiles.length; i++) {
-    if (hasCreepFlag(scn.tiles[i], ctx.tileset?.groups.length)) creep++;
-    if (ctx.tileset && tileGroupOf(scn.tiles[i], ctx.tileset.groups.length) >= ctx.tileset.groups.length && !isRemasteredOnlyTile(era, scn.tiles[i])) {
+    const tile = scn.tiles[i];
+    if (hasCreepFlag(tile, groups)) creep++;
+    if (isModTile(era, tile)) {
+      if (hasTile(tile)) continue;
+      if (firstMod < 0) firstMod = i;
+      mod++;
+    } else if (isRemasteredOnlyTile(era, tile)) {
+      if (modTable && hasTile(tile)) continue;
+      if (first < 0) first = i;
+      added++;
+    } else if (groups !== undefined && tileGroupOf(tile, groups) >= groups) {
       if (firstOutside < 0) firstOutside = i;
       outside++;
     }
@@ -481,14 +496,15 @@ export function validateScenario(scn: Scenario, ctx: ValidateContext = {}): Issu
   if (creep > 0) add("info", t("{n, plural, one {# tile carries} other {# tiles carry}} bit 15, which the game files as a creep flag: it draws the tile the other bits name, and in play the flag shows no creep and lets no Zerg building go there.", { n: creep }), msg("Terrain"));
   if (outside > 0) add("warn", t("{n, plural, one {# tile names a group} other {# tiles name groups}} this tileset does not have (the first at {x}, {y}): Remastered draws plain ground there, and StarCraft 1.16.1 reads past the end of its tileset table.", { n: outside, x: firstOutside % scn.width, y: Math.floor(firstOutside / scn.width) }), msg("Terrain"));
 
+  // Terrain past Remastered's table: a mod's. Neither game draws it as made — 1.16.1 reads
+  // past its table, Remastered takes bit 15 as the creep flag and draws another tile — so it
+  // is a warning, with the data sets one jump away. Quiet when the data set in use has it.
+  if (mod > 0) {
+    add("warn", t("{n, plural, one {# tile is} other {# tiles are}} terrain StarCraft has not got, in 1.16.1 or Remastered (the first at {x}, {y}). The map was made for a mod, and it draws and plays as made only with that mod's files.", { n: mod, x: firstMod % scn.width, y: Math.floor(firstMod / scn.width) }), msg("Terrain"), { kind: "dialog", id: "gameData" });
+  }
+
   // Tiles only Remastered has: doodads it added. Worth knowing rather than wrong — the map
   // plays in Remastered — but it is drawn only from Remastered's files, here and in the game.
-  let added = 0, first = -1;
-  for (let i = 0; i < scn.tiles.length; i++) {
-    if (!isRemasteredOnlyTile(era, scn.tiles[i])) continue;
-    if (first < 0) first = i;
-    added++;
-  }
   if (added > 0) {
     add("info", t("{n, plural, one {# tile is} other {# tiles are}} from what StarCraft: Remastered added to this tileset (the first at {x}, {y}). The map draws in full only with Remastered's game data, and the 1.16 game's files do not have these tiles.", { n: added, x: first % scn.width, y: Math.floor(first / scn.width) }), msg("Terrain"));
   }

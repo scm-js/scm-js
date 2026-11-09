@@ -31,11 +31,12 @@ folder of the mod's archives and loose files and lays them over the game's. Its 
 read at any width, so its new unit types are in the palette with their names and pictures,
 under the race the mod gives them. Upgrade and technology settings, the trigger editor's
 unit lists and the trigger text use the mod's names. A map saved with it remembers the
-data set, and every export, share and Test Map build carries it. The folder holds `.mpq`
-archives, a mod's self-executing `.exe` (read for its archive, never run) and the game's
-paths; a mod that ships as a `.zip` is unzipped first. A replay of a mod opens in the
-editor too, and plays with the mod your browser keeps from the play page ([Replays of a
-mod](guide.md#replays-of-a-mod)).
+data set, and every export, share and Test Map build carries it; a map made for a mod
+opened without it says which of its terrain the data set in use has not got. The folder
+holds `.mpq` archives, a mod's self-executing `.exe` (read for its archive, never run) and
+the game's paths; a mod that ships as a `.zip` is unzipped first. A replay of a mod opens
+in the editor too, and plays with the mod your browser keeps from the play page ([Replays
+of a mod](guide.md#replays-of-a-mod)).
 
 **The Mod Editor.** To change the mod itself, install the [Mod
 Editor](https://github.com/scm-js/plugin-mods) plugin from Plugins ▸ Browse Plugins…. File

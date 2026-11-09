@@ -198,6 +198,9 @@ read in the first effect pass is still null.
   animation frame or a hover ghost no longer re-blits every visible megatile. Anything that changes
   what is under the ground must already bump `terrainRevisionAtom` / `doodadsRevisionAtom` (or
   replace the scenario), which is the same contract the repaint itself relies on.
+  A tile whose megatile is -1 (group past the loaded table) is filled black, deliberately
+  unchanged by the missing-terrain work (2026-11-09): `useMissingTerrain`, mounted here with
+  `useTileset`'s `loaded`, says it as a toast instead — see `gamedata.md` "Terrain the data set lacks".
   **A scroll shifts the layer** (2026-10-04). The layer used to be redrawn whole on every
   scroll frame — one `drawImage` per visible megatile, 10,793 of them at 25% in a 1400×900
   window. It is now anchored at the scroll position *rounded to a device pixel* (`ox`, `oy`),

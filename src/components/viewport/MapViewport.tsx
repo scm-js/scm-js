@@ -54,6 +54,7 @@ import { animateUnitsSpeedAtom, animateWaterSpeedAtom, gridLookAtom, preferences
 import { openDialogAtom, statusMessageAtom } from "../../atoms/uiAtoms";
 import { activeDocumentIdAtom, canEdit, doodadsRevisionAtom, locationsAtom, scenarioAtom, startLocationsAtom, terrainRevisionAtom, unitsRevisionAtom, viewOnlyAtom } from "../../atoms/documentAtoms";
 import { useTileset } from "../../hooks/useTileset";
+import { useMissingTerrain } from "../../hooks/useMissingTerrain";
 import { paintsTiles, useTerrainTools, type MapPoint } from "../../hooks/useTerrainTools";
 import { cancelMapPickAtom, cancelMapToolAtom, mapPickAtom, mapViewStateAtom, mapToolAtom, mapToolRevisionAtom, pluginOverlayRevisionAtom, pluginOverlaysAtom, shownMapViewAtom, viewFlashesAtom, type PluginOverlayEntry } from "../../atoms/pluginAtoms";
 import type { MapPointer, MapView, OverlayAbove, PickedObject } from "../../plugins/api";
@@ -321,6 +322,8 @@ export default function MapViewport() {
   const mapStarts = useAtomValue(startLocationsAtom);
   const startLocations = useMemo(() => (scenario ? mapStarts : []), [scenario, mapStarts]);
   const { loaded: tilesetAssets, loading: tilesetLoading, error: tilesetError } = useTileset();
+  // Terrain the data set in use has not got (a mod's map over the game's files): said once, as a toast.
+  useMissingTerrain(tilesetAssets);
 
   const tilePx = TILE * zoom;
   const worldW = mapW * tilePx;

@@ -69,6 +69,7 @@ import { modInfo, printModInfo } from "./mod/info";
 import { newMod } from "./mod/new";
 import { gameFilesOrNull, openMod } from "./mod/open";
 import { sourceHash } from "./mod/hash";
+import { writeModHeader } from "./mod/header";
 import { modOverlay } from "./mod/overlay";
 import { modWords } from "./engine";
 import { MOD_COMPRESSIONS, packMod, readModFolder, type ModCompression } from "./mod/pack";
@@ -1601,6 +1602,28 @@ page.`))
       if (r.error) process.exitCode = 1;
     });
 
+  modCmd.command("header").description(t("the mod's units, weapons, upgrades and techs by name, for a bot made for it (C++ and JSON)")).argument("<mod>", t("a folder, an .mpq, a mod's .exe, a .zip, or a folder mod unpack wrote")).addOption(json)
+    .option("--out <folder>", t("where the files go (the working folder by default)"))
+    .option("--namespace <name>", t("the C++ namespace, and the files' name (the mod's name made an identifier by default)"))
+    .option("--bot", t("--out is a bot's folder: its scmbot.json gains the mod, which the bot file then carries"))
+    .addOption(starcraftOption())
+    .addHelpText("after", "\n" + t(`Writes <Mod>.h, C++ for a BWAPI bot built with scmbot (Cosmonarchy_BW::UnitTypes::Terran_Mason is a
+BWAPI::UnitType, Ids::Units::Terran_Mason the number), and <Mod>.ids.json, the same for other languages. Every name
+in the mod's tables is there, as the editor shows it. Both carry the mod's name and hash; with --bot, scmbot build
+writes them into the .scmbot file, and the runners say whether the game is the mod the bot was made for.`))
+    .action(async (path: string, o: { json?: boolean; out?: string; namespace?: string; bot?: boolean; starcraft?: string }) => {
+      const base = await gameFilesOrNull(o.starcraft);
+      const r = await writeModHeader(await openMod(path, base), base, { out: o.out, namespace: o.namespace, bot: o.bot });
+      if (o.json) { print(JSON.stringify(r, null, 2)); return; }
+      print(`${mark.ok} ${pc.bold(r.mod.name)}: ${t("{units} units, {weapons} weapons, {upgrades} upgrades, {techs} techs named", { units: num(r.counts.units), weapons: num(r.counts.weapons), upgrades: num(r.counts.upgrades), techs: num(r.counts.techs) })}${dot}${pc.dim(t("hash {hash}", { hash: r.mod.hash }))}`,
+        ...rows([
+          [t("Header"), pc.cyan(shownPath(r.files.header))],
+          [t("Ids"), pc.cyan(shownPath(r.files.ids))],
+          [t("Bot"), r.files.scmbot ? t("{file} now names the mod: build the bot again", { file: shownPath(r.files.scmbot) }) : null],
+          [t("From the game"), r.fromGame.length ? t("the names of {list}: the mod has not got them", { list: r.fromGame.join(", ") }) : null],
+        ]));
+    });
+
   modCmd.command("test").description(t("map test with the mod laid over the game")).argument("<mod>").argument("<map>").argument("[tests...]", t("tests files (JSON); <map>.tests.json beside the map by default")).addOption(json)
     .option("--format <kind>", `${FORMATS.join(", ")}`, "text")
     .option("--out <folder>", t("where the replays of failing scenarios go (<map>.tests/ beside the map)"))
@@ -1666,16 +1689,26 @@ ${pc.dim(t("Guide: {url}", { url: BOT_GUIDE }))}`);
     .option("--frames <n>", t("stop after this many frames when nobody has won (24 a second)"), "50000")
     .option("--every <n>", t("frames between progress lines; 0 for none"), "1000")
     .option("--data <folder>", t("a folder the bot keeps its files in between games"))
+    .option("--mod <mod>", t("play a mod: its files, its plugins and its FireGraft project (a mod folder, an .mpq, a mod's .exe or .zip, or the release as its makers ship it)"))
+    .option("--ums", t("play the map with its own settings (the default for a mod with plugins)"))
+    .option("--melee", t("play a melee game even on a mod with plugins"))
     .option("--starcraft <folder>", t("your installation of StarCraft (SCMJS_STARCRAFT); found in the usual places otherwise"))
     .addOption(new Option("--engine <where>", t("the play page's address, or a folder holding the engine (SCMJS_PLAY_URL)")).hideHelp())
     .addHelpText("after", "\n" + t(`The game is the play page's engine, fetched once (about 25 MB) and kept; the game's own files come from your copy
 of StarCraft, Remastered or 1.16.1. Prints what the bot says and each side's purse and supply as it plays, then who
-won. Exits 1 when the bot printed errors, 2 when the game could not start.`))
-    .action(async (botFile: string, map: string, o: { json?: boolean; race: string; opponents: string; seed?: string; frames: string; every: string; data?: string; starcraft?: string; engine?: string }) => {
-      const r = await runBotGame(botFile, map, {
-        race: o.race, opponents: o.opponents.split(",").map((s) => s.trim()).filter(Boolean), seed: o.seed === undefined ? undefined : Number(o.seed), frames: Number(o.frames), every: Number(o.every),
-        data: o.data, starcraft: o.starcraft, engine: o.engine, live: o.json ? undefined : (line) => print(line),
-      });
+won. Exits 1 when the bot printed errors, 2 when the game could not start.`) + "\n\n" + t(`With --mod the mod's plugins run beside the bot, and the first lines say whether the bot was made for the mod
+(scmjs mod header --bot), plays vanilla data, or was made for another mod, which plays all the same.`))
+    .action(async (botFile: string, map: string, o: { json?: boolean; race: string; opponents: string; seed?: string; frames: string; every: string; data?: string; mod?: string; ums?: boolean; melee?: boolean; starcraft?: string; engine?: string }) => {
+      if (o.ums && o.melee) throw new CliError(t("--ums and --melee: one kind of game"), null, 2);
+      const overlay = o.mod ? modOverlay(o.mod, () => gameFilesOrNull(o.starcraft), { code: true }) : null;
+      let r;
+      try {
+        r = await runBotGame(botFile, map, {
+          race: o.race, opponents: o.opponents.split(",").map((s) => s.trim()).filter(Boolean), seed: o.seed === undefined ? undefined : Number(o.seed), frames: Number(o.frames), every: Number(o.every),
+          data: o.data, starcraft: o.starcraft, engine: o.engine, live: o.json ? undefined : (line) => print(line),
+          mod: overlay, game: o.ums ? "ums" : o.melee ? "melee" : undefined,
+        });
+      } finally { overlay?.remove(); }
       if (o.json) print(JSON.stringify({ bot: botFile, map, ...r }, null, 2));
       if (r.exitCode) process.exitCode = r.exitCode;
     });
@@ -1691,6 +1724,9 @@ won. Exits 1 when the bot printed errors, 2 when the game could not start.`))
     .option("--data <folder>", t("where each bot keeps its files between games (default: the ladder's folder)"))
     .option("--parallel <n>", t("games played at once"), "1")
     .option("--timeout <seconds>", t("how long a bot may think over one frame before it counts as hung (the first frame: 5 minutes at least)"), "60")
+    .option("--mod <mod>", t("play a mod: its files, its plugins and its FireGraft project (a mod folder, an .mpq, a mod's .exe or .zip, or the release as its makers ship it)"))
+    .option("--ums", t("play the map with its own settings (the default for a mod with plugins)"))
+    .option("--melee", t("play a melee game even on a mod with plugins"))
     .option("--starcraft <folder>", t("your installation of StarCraft (SCMJS_STARCRAFT); found in the usual places otherwise"))
     .addOption(new Option("--engine <where>", t("the play page's address, or a folder holding the engine (SCMJS_PLAY_URL)")).hideHelp())
     .addHelpText("after", "\n" + t(`Every pairing plays on every map: a bot against the computer once a seed, two bots both ways round (who is first in
@@ -1699,8 +1735,10 @@ then the standing with Elo, each bot's time a frame, and the head-to-head. Each 
 ladder's folder for scmjs replay watch. Exits 1 when a game could not be played or a bot's copy failed.`) + `
 
   scmjs bot ladder out/mybot.scmbot:p computer --maps "(2)Boxer.scm" --races tzp --games 3
-  scmjs bot ladder a.scmbot b.scmbot c.scmbot --maps maps/*.scx --frames 30000`)
-    .action(async (specs: string[], o: { json?: boolean; maps: string[]; races: string; games: string; seeds?: string; frames: string; out?: string; data?: string; parallel: string; timeout: string; starcraft?: string; engine?: string }) => {
+  scmjs bot ladder a.scmbot b.scmbot c.scmbot --maps maps/*.scx --frames 30000
+  scmjs bot ladder cosmo.scmbot:t other.scmbot:t --maps "(4)Exodus 1.0.scx" --mod "Cosmonarchy BW"`)
+    .action(async (specs: string[], o: { json?: boolean; maps: string[]; races: string; games: string; seeds?: string; frames: string; out?: string; data?: string; parallel: string; timeout: string; mod?: string; ums?: boolean; melee?: boolean; starcraft?: string; engine?: string }) => {
+      if (o.ums && o.melee) throw new CliError(t("--ums and --melee: one kind of game"), null, 2);
       const races = parseRaces(o.races);
       const count = (v: string, name: string, least = 1) => { const n = Number(v); if (!Number.isInteger(n) || n < least) throw new CliError(t("--{flag} {value} is not a whole number of {least} or more", { flag: name, value: v, least }), null, 2); return n; };
       const games = count(o.games, "games");
@@ -1716,12 +1754,13 @@ ladder's folder for scmjs replay watch. Exits 1 when a game could not be played 
         if (game.converted) say(pc.dim(t("{name} is an original StarCraft map: it is played converted to Brood War.", { name: input.name })));
       }
       let r;
+      const overlay = o.mod ? modOverlay(o.mod, () => gameFilesOrNull(o.starcraft), { code: true }) : null;
       try {
         r = await runLadder(entrants, {
           maps: o.maps, play, races, seeds, frames: count(o.frames, "frames"), out: o.out, data: o.data, parallel: count(o.parallel, "parallel"), timeout: count(o.timeout, "timeout"),
-          starcraft: o.starcraft, engine: o.engine, live: say,
+          starcraft: o.starcraft, engine: o.engine, live: say, mod: overlay, game: o.ums ? "ums" : o.melee ? "melee" : undefined,
         });
-      } finally { for (const p of play.values()) removeGameMap(p); }
+      } finally { for (const p of play.values()) removeGameMap(p); overlay?.remove(); }
       if (o.json) print(JSON.stringify(ladderJson(r), null, 2));
       else printLadder(r);
       if (r.results.some((x) => !x.end || x.end.by === "desync" || x.end.bots.some((b) => b.state === "crashed" || b.state === "failed"))) process.exitCode = 1;

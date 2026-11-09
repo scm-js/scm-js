@@ -291,6 +291,29 @@ What reads it:
 
 The play page's Save Replay writes the section for a game of a mod from its next release.
 
+### A bot for your mod
+
+```sh
+scmjs mod header "Cosmonarchy BW" --out mybot --bot
+```
+
+A [community bot](https://github.com/scm-js/scmbot) made for a mod names the mod's units,
+weapons, upgrades and technologies, which BWAPI's own names (`Terran_SCV`) do not cover.
+`mod header` writes them for it: `<Mod>.h`, C++ for a bot built with scmbot
+(`Cosmonarchy_BW::UnitTypes::Terran_Mason` is a `BWAPI::UnitType`), and `<Mod>.ids.json`,
+the same ids and names for bots and tools in other languages. Every name the mod has is
+there, not only the ones it added, since a mod may rename everything. Both files carry the
+mod's name and [its hash](#the-mods-hash). With `--bot`, `--out` is the bot's folder and
+its `scmbot.json` gains the mod; `scmbot build` writes it into the `.scmbot` file, and
+when the bot plays, the runners say "made for" the mod when the game's mod is that one,
+"plays vanilla data" for a bot made for no mod, and warn (the game still plays) for a bot
+made for another. The scmbot repository's `examples/cosmonarchy/` is a small bot for
+Cosmonarchy written against such a header. See [the command](cli.md#a-bot-made-for-a-mod)
+for the names' rules. To try a bot on the mod without a page,
+`scmjs bot run mybot/out/mybot.scmbot "(4)Exodus 1.0.scx" --mod "Cosmonarchy BW"` plays it
+with the mod's plugins, and `scmjs bot ladder … --mod` plays a ladder on the mod ([a bot
+on a mod](cli.md#a-bot-on-a-mod)).
+
 ### For AI tools
 
 `scmjs mcp` has the mod commands as tools: `mod_info`, `mod_check`, `mod_diff`,

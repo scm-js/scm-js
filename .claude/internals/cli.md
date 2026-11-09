@@ -2442,6 +2442,12 @@ The whole design, the proofs and the traps are in **`mods.md`**. Here, what touc
   the clips on the play page without the mod (the replay is the modded game's): a clip of a mod that changes the
   units can go out of step. Not guarded.
 
+- `mod header <mod> [--out] [--namespace] [--bot]` (C4, 2026-11-08): a bot's C++ header and JSON of the mod's ids by
+  name; design and Cosmonarchy's numbers in `mods.md` "`mod header`". No MCP tool (a bot author's command). Its
+  `Header`/`Ids`/`Bot` rows are new one-word catalogue keys.
+- `bot run` and `bot ladder` take `--mod`, `--ums`, `--melee` (C4): the mod with its code, overlay version 2; the start
+  line's mod, code and fit words. See `mods.md` "`bot run --mod`, `bot ladder --mod`".
+
 ## A replay's mod (R1 of the capstone, 2026-11-08, branch `replay-tag`)
 
 scm-sim `docs/mods-plan.md` "Capstone (M10)", decision 3 and slice R1. `@scm-js/replay` 1.1.0 (branch `scmj` in

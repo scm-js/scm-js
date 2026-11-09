@@ -2573,9 +2573,10 @@ scmjs map trace ridge.scx --mod MyMod.mpq
 ```
 
 `mod test` is `map test` with the mod's files laid over the game's; `map test`,
-`map trace` and `map cost` take `--mod`. The engine's runners take a mod from the play
-page's next release; with an engine from before, the command names the version it needs
-and stops.
+`map trace` and `map cost` take `--mod`. `bot run` and `bot ladder` take it too, and run
+the mod's plugins and FireGraft project beside the bot ([a bot on a
+mod](#a-bot-on-a-mod)). The engine's runners take a mod from the play page's next release;
+with an engine from before, the command names the version it needs and stops.
 
 A mod that changes animation scripts, pictures, overlays or the sound table makes the game
 read its startup data again before the game starts, and that opens every unit picture and
@@ -2585,6 +2586,58 @@ runs on a Remastered copy as on a 1.16.1 one. They are the classic pictures, the
 both. The first line under the run says how many of the mod's files the game read and
 whether the startup data was read again without a missing file; `--json` has the same
 under `mod`.
+
+### A bot made for a mod
+
+```sh
+scmjs mod header "Cosmonarchy BW"
+scmjs mod header MyMod.mpq --out mybot --bot
+scmjs mod header mymod --namespace MyMod --json
+```
+
+writes two files for a [community bot](#bots) made for the mod: `<Mod>.h`, C++ for a BWAPI
+bot built with scmbot, and `<Mod>.ids.json`. `<Mod>` is the mod's name made an identifier
+(`Cosmonarchy_BW`), or `--namespace`. The header is one namespace holding `MOD_NAME` and
+`MOD_HASH` ([the mod's hash](mods.md#the-mods-hash), the one `mod info` prints), then the
+mod's units in `UnitTypes` (each a `BWAPI::UnitType` made from its id), its weapons in
+`WeaponTypes`, upgrades in `UpgradeTypes`, technologies in `TechTypes`, and the same ids
+as plain numbers (`constexpr int`) in `Ids::Units`, `Ids::Weapons`, `Ids::Upgrades` and
+`Ids::Techs`:
+
+```cpp
+#include "Cosmonarchy_BW.h"
+namespace cosmo = Cosmonarchy_BW;
+// …
+if (unit->getType() == cosmo::UnitTypes::Terran_Ministry) unit->train(cosmo::UnitTypes::Terran_Mason);
+```
+
+The JSON is
+`{ "mod": { "name", "hash" }, "units": [{ "id", "name", "identifier" }], "weapons", "upgrades", "techs" }`.
+
+The names are the mod's, every one of them. A unit is named as the editor names it (the
+mod's `unitnames.tbl`, else `stat_txt.tbl`); a weapon, upgrade or technology by its
+table's label in the mod's strings, where a GPTP mod's `rez\stat.txt` fills the entries
+`stat_txt.tbl` leaves empty, and by the mod's own name list (`arr\weapons.txt`,
+`upgrades.txt`, `techdata.txt`, one line an entry, as Cosmonarchy ships them) when it has
+one for every entry. A name becomes an identifier by turning every run of other characters
+than letters, digits and `_` into one `_` (`U-238 Shells` is `U_238_Shells`,
+`Terran Ogun (Worker Mode)` is `Terran_Ogun_Worker_Mode`); one that starts with a digit,
+or is a C++ keyword or a Windows macro's name, gets a `_` in front; one with no such
+characters left is its kind and id (`Unit_612`). When two entries of a kind have the same
+name, the first keeps it and each later one gets `_` and its id (`Floor_Hatch_385`). Rows
+that name nothing are left out: an empty name, "None", "Reserved", "Unused", "*", and a
+data editor's "Extended Tech #54". The header says it was generated, from which mod and
+hash and on what day; run the command again rather than edit it.
+
+With `--bot`, `--out` must be a bot's folder (one with `scmbot.json`): the two files go
+there and `scmbot.json` gains `"mod": { "name", "hash" }` (and `"link"` when the mod's
+`mod.json` has one), the rest of it as it was. The next `scmbot build` writes the mod into
+the `.scmbot` file, and `bot run` and `bot ladder` say whether the game's mod is the one
+the bot was made for ([a bot on a mod](#a-bot-on-a-mod)). A small bot written this way for
+Cosmonarchy, which mines, builds Stockades and attacks with Mavericks, is in the scmbot
+repository's `examples/cosmonarchy` folder. On Cosmonarchy BW the header names 621 units,
+330 weapons, 67 upgrades and 54 technologies. `--starcraft` names the copy of the game
+whose tables are read for any the mod has not got.
 
 ## Sharing from the terminal
 
@@ -2766,10 +2819,44 @@ UAlbertaBot on (2)Jungle Duel.scx 128 × 128, jungle · bot zerg vs computer zer
 | `--frames` | Stops a game nobody has won, at 24 frames a second: 50,000 is about 35 minutes of play |
 | `--every` | The frames between progress lines; 0 for none |
 | `--data folder` | Keeps the files the bot writes between games (its `bwapi-data/write`), as the play page does |
+| `--mod` | Plays a mod, its plugins and FireGraft project with it ([a bot on a mod](#a-bot-on-a-mod)) |
+| `--ums`, `--melee` | The map with its own settings, or a melee game; by default the map's own settings when it looks made for them, or when the mod has plugins |
 | `--json` | Everything as data |
 
 The bot's own text is printed as it comes. The command exits with 1 when the bot printed
 errors, and with 2 when the game could not start.
+
+#### A bot on a mod
+
+```sh
+scmjs bot run out/cosmonarchy-example.scmbot "(4)Exodus 1.0.scx" --mod "Cosmonarchy BW" --race terran
+```
+
+`--mod` takes a mod as `mod info` does: a mod folder, an `.mpq`, a mod's `.exe` or `.zip`,
+or the release folder as its makers ship it. The mod's files are laid over the game's, and
+its code runs beside the bot: the plugins it carries as files and the FireGraft project
+its patcher holds, loaded before the game starts, as the play page loads them. The map is
+played with its own settings, as a mod's maps are meant to be; `--melee` plays a melee
+game instead. The first lines say what the game read of the mod, the mod's name and
+[hash](mods.md#the-mods-hash), the plugins loaded, and how the bot fits the mod:
+
+```
+Cosmonarchy Example on (4)Exodus 1.0.scx 128 × 128, desert · computer terran vs … · seed 7 · 1.16.1 files
+  mod: 1823 of the mod's 7,762 files read; the startup data read again (2,367 files)
+  mod: Cosmonarchy BW · ac3f86533e4b5a31 · 4 plugins loaded · FireGraft project Cosmonarchy BW.fgp (7 edits) · the map's own settings
+  ✔ made for Cosmonarchy BW
+  …
+✖ the bot lost at frame 11308 · 80 KB of orders · 12.26 ms a frame game, 0.52 bot · 150.9 s
+```
+
+"Made for" means the `.scmbot` file names the mod by the same hash ([a bot made for a
+mod](#a-bot-made-for-a-mod)). A bot that names no mod "plays vanilla data": it plays, and
+reads the mod's types from the game, but its plans are for the game's own units. A bot
+made for another mod, or for another version of this one, plays all the same, with a
+warning that names both. The game's own computer players are the mod's AI. A mod with
+plugins needs a game of 2 GB and the bot's room above it, which the engine makes; a bot
+built before bots could sit beside a mod's plugins is refused with the sentence that says
+to build it again.
 
 ### A ladder for bots
 
@@ -2819,6 +2906,12 @@ or the folder `--out` names:
 - `bwapi-data/`, what each bot wrote to its `bwapi-data/write` folder, which it reads
   again before its next game, as in the tournaments. Nothing is kept from a game in which
   the bot failed. `--data folder` keeps these files somewhere that outlasts one ladder.
+
+`--mod` plays every game of the ladder on a mod, with its plugins, as
+[`bot run`](#a-bot-on-a-mod) does: the lines before the first result name the mod and say,
+for each bot, whether it was made for the mod, plays vanilla data or was made for another;
+`ladder.json` has the same under each game's `mod`. Two bots on a map with its own
+settings take its first two slots open to a person.
 
 ### How ladder games are played
 
@@ -3150,6 +3243,7 @@ gives its options.
 | [`scmjs mod build <folder>`](#checking-and-comparing-mods) | Check, then pack; stops on an error unless `--force` |
 | [`scmjs mod play <mod>`](#playing-a-mod-on-the-play-page) | Every file of the mod handed to the play page with its hash; `--map` starts a map with it |
 | [`scmjs mod test <mod> <map> [tests…]`](#a-mod-in-the-game-engine) | `map test` with the mod laid over the game; `map test`, `trace` and `cost` take `--mod` |
+| [`scmjs mod header <mod>`](#a-bot-made-for-a-mod) | The mod's units, weapons, upgrades and techs by name for a bot made for it: a C++ header and JSON; `--bot` writes the mod into the bot's `scmbot.json` |
 
 ### `scmjs plugin` and `scmjs bot`
 

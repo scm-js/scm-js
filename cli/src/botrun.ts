@@ -3,11 +3,16 @@
  * and no editor. The game is scm-sim's lifted engine, fetched once and kept, and the player's own copy of the game
  * (`engine.ts`); the bot runner is run in a process of its own and speaks JSON lines — start, text, progress, end —
  * which this turns into the terminal's lines.
+ *
+ * `--mod` lays a mod over the game with its code (overlay version 2, `mod/overlay.ts`): its plugins and FireGraft
+ * project run beside the bot, its maps are played with their own settings, and the run says whether the bot was made
+ * for the mod (its `.scmbot`'s `mod`, from `scmjs mod header --bot`), plays vanilla data, or was made for another.
  */
 import { createInterface } from "node:readline";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
-import { ensureEngine, findGameCopy, runnerFor, startRunner } from "./engine";
+import { codeWords, ensureEngine, findGameCopy, fitWords, MOD_CODE, modArgs, modWords, runnerFor, startRunner, type BotFitReport, type RunnerCodeReport, type RunnerModReport } from "./engine";
+import type { ModOverlay } from "./mod/overlay";
 import { t, translate } from "./i18n";
 import { CliError, dot, mark, pc, print, size } from "./ui";
 
@@ -18,7 +23,11 @@ export { cacheRoot, ensureEngine, findGameCopy, gameCopyKind, PLAY_URL, usualGam
 /* ── The runner's lines ───────────────────────────────────── */
 
 export interface PlayerLine { slot: number; kind: "bot" | "computer"; race: string; minerals: number; gas: number; supplyUsed: number; supplyAvailable: number; outcome: "victory" | "defeat" | "draw" | null }
-export interface StartLine { kind: "start"; bot: { name: string; commit: string; memoryPages: number }; map: { name: string; width: number; height: number; tileset: string }; copy: string; seed: number; players: PlayerLine[]; ms: { load: number; start: number } }
+export interface StartLine {
+  kind: "start"; bot: { name: string; commit: string; memoryPages: number; mod?: { name: string; hash: string; link?: string } }; map: { name: string; width: number; height: number; tileset: string }; copy: string; seed: number; players: PlayerLine[]; ms: { load: number; start: number };
+  /** With `--mod`: what the game read of it; its code and name (overlay 2); the kind of game; how the bot fits the mod. */
+  mod?: RunnerModReport; code?: RunnerCodeReport; game?: "melee" | "ums"; fit?: BotFitReport;
+}
 export interface ProgressLine { kind: "progress"; frame: number; units: { visible: number; hidden: number }; players: PlayerLine[]; ms: { game: number; bot: number } }
 export interface EndLine extends Omit<ProgressLine, "kind"> { kind: "end"; bot: StartLine["bot"]; seed: number; ended: boolean; outcome: "victory" | "defeat" | "draw" | null; reason: string | null; commandBytes: number; errors: string[]; hash: number; ms: { game: number; bot: number; load: number; start: number; total: number } }
 export type RunnerLine = StartLine | { kind: "text"; text: string } | ProgressLine | EndLine | { kind: "error"; message: string };
@@ -38,6 +47,10 @@ export interface BotRunOptions {
   live?: (line: string) => void;
   /** The `node` to run the runner with. */
   node?: string;
+  /** A mod laid over the game with its code (`--mod`, `modOverlay(…, { code: true })`). */
+  mod?: ModOverlay | null;
+  /** The kind of game (`--ums`, `--melee`); the runner's rule without. */
+  game?: "melee" | "ums";
 }
 
 export interface BotRunOutcome {
@@ -57,7 +70,12 @@ const side = (p: PlayerLine) => `P${p.slot + 1} ${pc.bold(p.kind === "bot" ? t("
 /** A runner's line as the terminal's. Null for lines that say nothing to a person. */
 export function wordLine(l: RunnerLine): string | null {
   switch (l.kind) {
-    case "start": return `${t("{bot} on {map}", { bot: pc.bold(l.bot.name), map: pc.cyan(l.map.name) })} ${pc.dim(`${l.map.width} × ${l.map.height}, ${translate(l.map.tileset)}`)}${dot}${l.players.map((p) => `${p.kind === "bot" ? t("bot") : t("computer")} ${p.race}`).join(" vs ")}${dot}${t("seed {seed}", { seed: l.seed })}${dot}${l.copy === "remastered" ? t("Remastered files") : t("1.16.1 files")}`;
+    case "start": {
+      const first = `${t("{bot} on {map}", { bot: pc.bold(l.bot.name), map: pc.cyan(l.map.name) })} ${pc.dim(`${l.map.width} × ${l.map.height}, ${translate(l.map.tileset)}`)}${dot}${l.players.map((p) => `${p.kind === "bot" ? t("bot") : t("computer")} ${p.race}`).join(" vs ")}${dot}${t("seed {seed}", { seed: l.seed })}${dot}${l.copy === "remastered" ? t("Remastered files") : t("1.16.1 files")}`;
+      // (with a mod: what the game read of it, its code, and how the bot fits it)
+      const mod = [l.mod ? modWords(l.mod) : null, l.code ? codeWords(l.code, l.game) : null, l.fit && (l.code || l.fit.mod) ? fitWords(l.fit, l.code ? { name: l.code.name, hash: l.code.hash } : null) : null];
+      return [first, ...mod.filter((x): x is string => !!x)].join("\n");
+    }
     case "text": return `  ${pc.dim(l.text)}`;
     case "progress": return `  ${pc.dim(`${t("frame")} ${String(l.frame).padStart(6)}`)}  ${l.players.map(side).join(pc.dim("  |  "))}`;
     case "end": {
@@ -85,6 +103,9 @@ export async function runBotGame(bot: string, map: string, o: BotRunOptions = {}
   if (o.frames !== undefined) args.push("--frames", String(o.frames));
   if (o.every !== undefined) args.push("--every", String(o.every));
   if (o.data) args.push("--data", resolve(o.data));
+  // (the engine is asked first, so that an older one is said before the mod is written out)
+  if (o.mod) { modArgs(engine, "?", MOD_CODE); args.push(...modArgs(engine, await o.mod.layers(), MOD_CODE)); }
+  if (o.game) args.push(`--${o.game}`);
   const outcome: BotRunOutcome = { engine: { build: engine.build, dir: engine.dir, fetched: engine.fetched }, game, start: null, texts: [], progress: [], end: null, exitCode: 0 };
   const child = startRunner(runnerFor(engine, "bot"), args, { node: o.node });
   let stderr = "";
@@ -94,7 +115,7 @@ export async function runBotGame(bot: string, map: string, o: BotRunOptions = {}
   for await (const raw of lines) {
     let l: RunnerLine;
     try { l = JSON.parse(raw) as RunnerLine; } catch { continue; }
-    if (l.kind === "start") outcome.start = l;
+    if (l.kind === "start") { if (l.mod && o.mod) l.mod = o.mod.report(l.mod); outcome.start = l; }
     else if (l.kind === "text") outcome.texts.push(l.text);
     else if (l.kind === "progress") outcome.progress.push(l);
     else if (l.kind === "end") outcome.end = l;

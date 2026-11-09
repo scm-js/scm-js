@@ -8,7 +8,8 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
+import { stripVTControlCharacters } from "node:util";
 import { afterAll, describe, expect, it } from "vitest";
 import { Archive } from "mopaq";
 import { DAT_SCHEMAS, DAT_TABLES, type DatTableName } from "../src/formats/dat/schema";
@@ -22,7 +23,8 @@ import { encodeReqGraft } from "../src/formats/dat/graft";
 import { dataSetHash, exeArchive, gameName, modRoot, readZip } from "../src/formats/mod/sources";
 import { readManifest } from "../src/formats/mod/folder";
 import { archiveFiles, storageFiles, type GameFiles } from "../cli/src/gamefiles";
-import { modArgs, MOD_OVERLAY, type Engine } from "../cli/src/engine";
+import { codeWords, fitWords, MOD_CODE, modArgs, MOD_OVERLAY, type Engine } from "../cli/src/engine";
+import { sourceHash } from "../cli/src/mod/hash";
 import { modInfo, printModInfo } from "../cli/src/mod/info";
 import { gameFilesOrNull, openMod } from "../cli/src/mod/open";
 import { gameSource } from "../cli/src/mod/source";
@@ -396,9 +398,47 @@ describe("scmjs mod test and --mod", () => {
 
   it("lays a mod under the game only for runners that take one, and says which version that is", async () => {
     expect(modArgs(engine(0), null)).toEqual([]);
-    expect(() => modArgs(engine(0), "/x")).toThrow(`--mod needs runners of mod overlay version ${MOD_OVERLAY} or newer`);
-    expect(modArgs(engine(MOD_OVERLAY), "/x")).toEqual(["--mod", "/x"]);
+    expect(() => modArgs(engine(0), "/x")).toThrow("--mod needs runners of mod overlay version 1 or newer");
+    expect(modArgs(engine(1), "/x")).toEqual(["--mod", "/x"]);
     expect(modArgs(engine(MOD_OVERLAY), ["/game", "/x"])).toEqual(["--mod", "/game", "--mod", "/x"]);
+    // A bot beside the mod's code (bot run, bot ladder) needs version 2: an engine of 1 says what 2 adds
+    expect(MOD_OVERLAY).toBe(2);
+    expect(() => modArgs(engine(1), "/x", MOD_CODE)).toThrow(/cannot run its plugins beside a bot: that needs runners of mod overlay version 2 .*loads a mod's plugins and FireGraft project/);
+    expect(modArgs(engine(2), "/x", MOD_CODE)).toEqual(["--mod", "/x"]);
+  });
+
+  it("writes the mod's code beside its files for a bot's runner: plugins, the project, and mod.json with the hash", async () => {
+    const dir = tmp("overlay-code"); writeFolder(dir, madeMod());
+    mkdirSync(join(dir, "plugins"), { recursive: true });
+    writeFileSync(join(dir, "plugins", "gptp.qdp"), latin("a plugin"));
+    mkdirSync(join(dir, "Firegraft"), { recursive: true });
+    writeFileSync(join(dir, "Firegraft", "My Mod.fgp"), latin("a project"));
+    const overlay = modOverlay(dir, async () => null, { code: true });
+    const [folder] = await overlay.layers();
+    expect(readFileSync(join(folder, "plugins", "gptp.qdp"), "latin1")).toBe("a plugin");
+    expect(readFileSync(join(folder, "firegraft", "My Mod.fgp"), "latin1")).toBe("a project");
+    const manifest = JSON.parse(readFileSync(join(folder, "mod.json"), "utf8"));
+    const hash = await sourceHash(await openMod(dir, null));
+    expect(manifest).toEqual({ name: basename(dir), hash: hash.hash, withoutPlugins: hash.withoutPlugins });
+    expect(hash.plugins).toBe(1);
+    overlay.remove();
+    // without `code` (map trace, map test): the files alone, as before
+    const plain = modOverlay(dir, async () => null);
+    const [only] = await plain.layers();
+    expect(existsSync(join(only, "mod.json"))).toBe(false);
+    plain.remove();
+  });
+
+  it("says the mod's code and how a bot fits it", () => {
+    const code = { name: "Cosmonarchy BW", hash: "ac3f86533e4b5a31", withoutPlugins: "b13e467fb5abb298", plugins: ["Cosmonarchy initialized", "mtl.qdp failed: no"], skipped: [], firegraft: { name: "Cosmonarchy BW.fgp", from: "Cosmonarchy BW.exe", edits: 7 }, hashMs: 1 };
+    const words = stripVTControlCharacters(codeWords(code, "ums"));
+    expect(words).toMatch(/Cosmonarchy BW · ac3f86533e4b5a31 · 1 plugin loaded · FireGraft project Cosmonarchy BW.fgp \(7 edits\) · the map's own settings/);
+    expect(words).toMatch(/mtl.qdp failed: no/);
+    const game = { name: code.name, hash: code.hash };
+    const plain = (s: string) => stripVTControlCharacters(s);
+    expect(plain(fitWords({ mod: { name: "Cosmonarchy BW", hash: code.hash }, fit: "made", words: "" }, game))).toMatch(/made for Cosmonarchy BW$/);
+    expect(plain(fitWords({ mod: null, fit: "vanilla", words: "" }, game, "mcrave"))).toMatch(/mcrave: plays vanilla data$/);
+    expect(plain(fitWords({ mod: { name: "Other", hash: "0123456789abcdef" }, fit: "other", words: "" }, game))).toMatch(/made for Other \(0123456789abcdef\), not for this game's Cosmonarchy BW \(ac3f86533e4b5a31\): it plays all the same/);
   });
 
   it("writes the mod's files in the game's paths for the runner, and removes them after", async () => {

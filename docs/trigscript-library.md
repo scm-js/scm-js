@@ -591,10 +591,75 @@ more is refused. Notes that overlap add up with no limiter, so keep volumes down
 note exactly in time and only one sound playing, but nothing can change while it plays. A
 program plays to its own player; a per-player program plays to each.
 
+**Played music.** `music.perform` plays music as a person plays it rather than on a grid:
+each part written as a score has it, with its own note lengths, dynamics and the sustain
+pedal, at a tempo that can move. A note is its name and octave, then its length after `/`
+(`E5/16` a sixteenth, `A4/8.` a dotted eighth, `16t` a triplet's), the last length when
+left out. `pp` to `ff` set how hard what follows is struck and `<` and `>` move there
+evenly; `r` is a rest; `ped` puts the pedal down and `*` lifts it; `|` is a bar line, and
+a bar too long or too short is refused. A list of texts is a text a bar. `tempo` is
+`[bar, bpm]` points the tempo moves between, and `humanize` adds a player's unevenness,
+the same on every build.
+
+```ts
+import { music } from "trigscript/music";
+
+const take = music.perform({ meter: "3/8", bpm: 132, pickup: "1/8", tempo: [[1, 132], [2, 112]] }, {
+  right: { instrument: music.presets.keys(), notes: ["pp E5/16 D#5", "E5 D#5 E5 B4 D5 C5", "A4/8 r/16 C4 E4 A4"] },
+  left: { instrument: music.presets.keys(), notes: ["r/8", "r/4.", "A2/16 E3 A3 r/16 r/8"] },
+});
+const piece = music.render(take, { reverb: { decay: 0.85 }, loudness: -16 });
+
+program(async () => {
+  playWav(piece, 0);
+});
+```
+
+What `perform` gives back also says when each note is struck, how hard, by which part and
+on which frame (`take.notes`), and where each bar begins (`take.bars`): what a picture
+that follows the music needs. `music.excerpt(take, from, to)` is a span of bars as a
+performance of its own, to render a long piece a section at a time.
+`music.render(take, { parts: [...] })` mixes only some parts, so a melody can be mixed
+apart from what is under it and the rest ducked under it with `Clip.duck`.
+
+**Recordings as instruments.** `music.sampled` plays an instrument made of recordings:
+each note from the recording made nearest its key, and of those, the one made at the
+note's strength, so a soft note is a soft recording and not a loud one turned down. A note
+let go dies away and the instrument's release sound plays; in a performance the sustain
+pedal holds notes and makes its own sound, and with `resonance` the strings ring with the
+pedal down. In a pattern, `@` picks the strength. The recordings come from a `.samples`
+file the script imports (`import piano from "./piano.samples"`), made from an SFZ
+instrument by `scripts/make-samples.mts` in the [TrigScript
+repository](https://github.com/scm-js/plugin-trigscript), or from clips the script already
+has with `samples()`, one zone a clip at the key it was recorded at:
+
+```ts
+import { music } from "trigscript/music";
+
+// Three clips of a bell, recorded at C3, C4 and C5: each note is played by the nearest.
+const bell = (key: string) => music.presets.bell().note(key, 2);
+const bells = music.sampled(samples([
+  { clip: bell("C3"), key: "C3" },
+  { clip: bell("C4"), key: "C4" },
+  { clip: bell("C5"), key: "C5" },
+]));
+const tune = music.song({ bpm: 100 }, music.track(bells, "C4 - E4 - G4 - C5@0.5 - - -"));
+
+program(async () => {
+  await music.play(tune);
+});
+```
+
+A whole sampled piano is far too large for a map: the Salamander Grand Piano used by the
+[Für Elise](trigscript.md#für-elise) showcase is 140 MB of recordings. Only the notes the
+script plays reach the map, mixed into the sounds it makes.
+
 | Name | What it is |
 | --- | --- |
 | `synth(options)`, `fmSynth(options)`, `strings(options)`, `sampler(clip, root?)` | Instruments. `instrument.note(name, seconds)` is one note as a sound. |
-| `presets.supersaw()` … `presets.pluck()` | Instruments to start from, each taking the options of what it is made with. |
+| `sampled(samples, options?)`, `samples(zones)` | An instrument of recordings, from a `.samples` file or from clips. Options: `volume`, `release`, `releases`, `resonance`, `ring`, `transpose`, `velocity`. |
+| `hits(clips)` | An instrument of one-shots, a clip a key, for percussion and effects in a performance. |
+| `presets.supersaw()` … `presets.pluck()` | Instruments to start from, each taking the options of what it is made with: also `trance`, `arp`, `stab`, `pulse`, `sub` and `braam`. |
 | `drums(options?)`, `kit(hits)` | Drum kits: one made from nothing, or one from a clip per letter. |
 | `track(instrument, pattern, options?)`, `song(options, ...tracks)` | A pattern for an instrument, and tracks played together. Options: `pan`, `volume`, `fx`, `reverb`; `bpm`, `steps`, `beats`, `swing`. |
 | `part(instrument, options?)`, `section(bars, parts, options?)`, `arrange(options, parts, ...sections)` | A song in sections. `section.with({ … })` is a section with some parts changed, `null` resting one. |
@@ -602,8 +667,9 @@ program plays to its own player; a per-player program plays to each.
 | `beat(hits, steps?)` | A drum bar from the steps each letter plays on. |
 | `transpose(p, semitones)`, `stretch(p, by)`, `repeat(p, n)` | Patterns changed. |
 | `midi(notes, parts, options?)` | A song from a MIDI file the script imports. |
-| `riser(seconds)`, `impact()`, `pump(beat)` | A rise into a drop, a boom to land on, and a pumping effect. |
-| `render(song, options?)` | The song mixed into one sound when the script is built. |
+| `perform(options, parts)`, `excerpt(performance, from, to?)` | Music played as written in a score, and a span of its bars. |
+| `riser(seconds)`, `sweep(seconds, options?)`, `impact()`, `pump(beat)` | A rise into a drop, a filtered noise sweep up or down, a boom to land on, and a pumping effect. |
+| `render(song, options?)` | A song or a performance mixed into one sound when the script is built. Options: `reverb`, `master`, `limit`, `loudness`, `parts`. |
 | `play(song)`, `loop(song)` | Play a song note by note, once or again and again. |
 | `stems(song, options)`, `new Band()`, `conduct(stems, band)` | Music that follows the game: `band.go`, `queue`, `mute`, `unmute`, `sting`, `stop`. |
 

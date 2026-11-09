@@ -10,6 +10,14 @@
  * the `File`s (`readFound`), so a drop can ask the plugins about the paths before paying a
  * browser call for every file, and both steps report a count as they go.
  *
+ * The two do not see the same folder. An entry lists every file; a handle leaves out the
+ * names the browser keeps back from the File System Access API (`desktop.ini`, shortcuts,
+ * device names and, on Windows, whole file types such as `.ini` and `.dll`), and does not
+ * say that it did. But a handle's `getFile()` answers many at once where an entry's
+ * `file()` answers one after another. A drop has both, so it lists by the entry and reads
+ * by the handle wherever the handle has the file (`droppedFileReader`); the picker has only
+ * the handle, and what the browser keeps back cannot be read there.
+ *
  * The browser types are described structurally here, so the tests can hand in made ones.
  */
 import type { FolderFile } from "./api";
@@ -43,8 +51,9 @@ export interface DataTransferLike {
 /**
  * A dropped folder: its item's index among the drop's files, its entry, and — where the
  * browser has `getAsFileSystemHandle` (Chromium, so the desktop app too) — a promise of its
- * handle. Both are asked for inside the drop event; either walks the same folder, and the
- * handle's `getFile()` answers many at once where the entry's `file()` answers one after another.
+ * handle. Both are asked for inside the drop event. The entry is what lists the folder, since
+ * it sees every file; the handle is what reads the files it has, since its `getFile()` answers
+ * many at once where the entry's `file()` answers one after another.
  */
 export interface DroppedFolder {
   index: number;
@@ -121,7 +130,7 @@ async function walkPaths<D, F>(
  * The `File`s of found files, in the same order, asked for `FILES_AT_ONCE` at a time rather
  * than one after another; `onRead` hears how many have arrived. The first failure is thrown.
  */
-export async function readFound<F>(found: readonly FoundFile<F>[], read: (from: F) => Promise<File>, onRead?: (read: number) => void): Promise<FolderFile[]> {
+export async function readFound<F>(found: readonly FoundFile<F>[], read: (from: F, path: string) => Promise<File>, onRead?: (read: number) => void): Promise<FolderFile[]> {
   const out: FolderFile[] = Array.from({ length: found.length });
   let next = 0;
   let done = 0;
@@ -130,7 +139,7 @@ export async function readFound<F>(found: readonly FoundFile<F>[], read: (from: 
     while (next < found.length && !failed) {
       const i = next++;
       try {
-        out[i] = { path: found[i].path, file: await read(found[i].from) };
+        out[i] = { path: found[i].path, file: await read(found[i].from, found[i].path) };
       } catch (err) {
         failed = true;
         throw err;
@@ -184,6 +193,99 @@ export const entryFile = (entry: EntryLike) => new Promise<File>((ok, fail) => e
 /** Every file under a dropped folder's entry, its path from the folder's parent. */
 export async function entryFiles(entry: EntryLike, prefix = entry.name): Promise<FolderFile[]> {
   return readFound(await entryPaths(entry, prefix), entryFile);
+}
+
+/** One directory of a handle, listed: its directories and its files by name. */
+interface HandleListing {
+  dirs: Map<string, DirectoryHandleLike>;
+  files: Map<string, FileHandleLike>;
+}
+
+/**
+ * The file handles under a directory handle, found by path (`prefix` names the handle
+ * itself, as in the walks). A directory of the handle is listed the first time a file in it
+ * is asked for, its parents first, and once: so the listing goes on beside the reading
+ * rather than before it, and a directory nobody asks about is never listed. (Measured on a
+ * folder of 7,796 files in 838 directories: as fast as walking the whole handle first, and
+ * faster than `getFileHandle` by name for every file.)
+ *
+ * Answers null for a path the handle does not have: a name the browser keeps back from
+ * handles, anything under a directory it keeps back, and everything under a directory whose
+ * listing failed, which `onFail` hears once with the directory's path.
+ */
+export function handleFinder(root: DirectoryHandleLike, prefix = root.name, onFail?: (err: unknown, path: string) => void): (path: string) => Promise<FileHandleLike | null> {
+  const listed = new Map<string, Promise<HandleListing | null>>();
+  const list = async (dir: DirectoryHandleLike | undefined, path: string): Promise<HandleListing | null> => {
+    if (!dir) return null;
+    try {
+      const listing: HandleListing = { dirs: new Map(), files: new Map() };
+      for await (const child of dir.values()) {
+        if (child.kind === "directory") listing.dirs.set(child.name, child);
+        else listing.files.set(child.name, child);
+      }
+      return listing;
+    } catch (err) {
+      onFail?.(err, path);
+      return null;
+    }
+  };
+  const directory = (path: string): Promise<HandleListing | null> => {
+    let listing = listed.get(path);
+    if (!listing) {
+      const cut = path.lastIndexOf("/");
+      listing = path === prefix ? list(root, path)
+        : cut < 0 ? Promise.resolve(null)
+        : directory(path.slice(0, cut)).then((parent) => list(parent?.dirs.get(path.slice(cut + 1)), path));
+      listed.set(path, listing);
+    }
+    return listing;
+  };
+  return async (path) => {
+    const cut = path.lastIndexOf("/");
+    if (cut < 0) return null;
+    return (await directory(path.slice(0, cut)))?.files.get(path.slice(cut + 1)) ?? null;
+  };
+}
+
+/** How a dropped folder's `File`s were read: how many by its handle, how many by its entry, and the first path, in the folder's order, the entry read for a handle that did not. */
+export interface DroppedReads {
+  byHandle: number;
+  byEntry: number;
+  firstByEntry: string | null;
+}
+
+/**
+ * The `File`s of a dropped folder listed by its entry (`entryPaths`), for `readFound`: each
+ * by the handle's `getFile()` where the handle has that path, and by the entry's `file()`
+ * where it does not — a name the browser keeps back from handles, a directory the handle
+ * could not list, a `getFile()` that failed — so every file the entry listed is read, and
+ * the ones the handle has are read at the handle's speed. With no handle the entry reads
+ * everything. `onFail` hears what failed on the handle's side; a failure of the entry's
+ * `file()` is the read's own and is thrown. `reads` counts as the reading goes.
+ */
+export function droppedFileReader(handle: DirectoryHandleLike | null, prefix: string, onFail?: (err: unknown, path: string) => void): { read: (entry: EntryLike, path: string) => Promise<File>; reads: DroppedReads } {
+  const reads: DroppedReads = { byHandle: 0, byEntry: 0, firstByEntry: null };
+  const byEntry = (entry: EntryLike, path: string) => {
+    reads.byEntry++;
+    if (handle && (reads.firstByEntry === null || path < reads.firstByEntry)) reads.firstByEntry = path;
+    return entryFile(entry);
+  };
+  if (!handle) return { read: byEntry, reads };
+  const find = handleFinder(handle, prefix, onFail);
+  const read = async (entry: EntryLike, path: string): Promise<File> => {
+    const found = await find(path);
+    if (found) {
+      try {
+        const file = await found.getFile();
+        reads.byHandle++;
+        return file;
+      } catch (err) {
+        onFail?.(err, path);
+      }
+    }
+    return byEntry(entry, path);
+  };
+  return { read, reads };
 }
 
 /**

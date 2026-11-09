@@ -339,11 +339,14 @@ are tiles Remastered added. It offers what can be done from where you are:
   is turned down with a pointer to Help ▸ Game Data… ▸ Add a data set…, which reads
   archives, and so is a folder that has not got the map's terrain either: the notice says
   which, and the data set in use is left alone. A folder that has some of the terrain and
-  not all is taken, and the notice comes back with what is left. The mod's hash is not
-  worked out this way (it covers every file of the mod), so a map saved meanwhile records
-  the data set by the folder's name alone. To keep the mod, or to work from its hash,
-  install it as a data set; to change the mod, open it in the [Mod
-  Editor](mods.md#three-ways-in).
+  not all is taken, and the notice comes back with what is left. The browser's folder
+  picker keeps a few kinds of file back from the editor (`desktop.ini`, shortcuts and, on
+  Windows, `.ini`, `.cfg` and `.dll` files: [what a folder pick leaves
+  out](plugins.md#what-a-folder-pick-leaves-out)); a tileset's files are not among them,
+  so the terrain is drawn whole. The mod's hash is not worked out this way (it covers
+  every file of the mod), so a map saved meanwhile records the data set by the folder's
+  name alone. To keep the mod, or to work from its hash, install it as a data set; to
+  change the mod, open it in the [Mod Editor](mods.md#three-ways-in).
 - **Game Data…** opens the dialog.
 
 The notice goes once the data set in use has the terrain, and comes back if you switch to

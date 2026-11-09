@@ -1324,6 +1324,7 @@ come installed and on; a few more are a click away in **Plugins ▸ Browse Plugi
 | [TrigEdit](https://github.com/scm-js/plugin-trigedit) | Off | Triggers ▸ Text Trigger Editor… (Ctrl+Shift+T) | Triggers as SCMDraft text |
 | [Magenta](https://github.com/scm-js/plugin-magenta) | Browse | Triggers ▸ Magenta… | Triggers as sentences, with Remastered EUD |
 | [Melee Wizard](https://github.com/scm-js/plugin-melee-wizard) | Browse | Tools ▸ Melee Wizard… (Ctrl+Shift+M) | Start locations and mineral lines |
+| [Mod Editor](https://github.com/scm-js/plugin-mods) | Browse | File ▸ Open a Mod… | A mod's tables, strings, pictures and scripts, with the map drawn from them; see [Mods](mods.md) |
 | [Section Explorer](https://github.com/scm-js/plugin-section-explorer) | Browse | Tools ▸ Section Explorer… (Ctrl+Shift+H) | The map file, section by section and byte by byte |
 | [Timelapse](https://github.com/scm-js/plugin-timelapse) | Browse | View ▸ Timelapse… | Records the map as you build it |
 | [Trigger Map](https://github.com/scm-js/plugin-trigger-map) | Browse | Triggers ▸ Trigger Map… | The triggers as a graph |

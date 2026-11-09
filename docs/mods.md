@@ -37,6 +37,15 @@ paths; a mod that ships as a `.zip` is unzipped first. A replay of a mod opens i
 editor too, and plays with the mod your browser keeps from the play page ([Replays of a
 mod](guide.md#replays-of-a-mod)).
 
+**The Mod Editor.** To change the mod itself, install the [Mod
+Editor](https://github.com/scm-js/plugin-mods) plugin from Plugins ▸ Browse Plugins…. File
+▸ Open a Mod… opens a mod's folder, an `.mpq`, a mod's self-executing `.exe` or a `.zip`
+in a panel under the map, where its tables, strings, pictures, sounds, animation scripts
+and AI scripts can be edited. While the mod is open the editor draws from its files as
+they are now: change a unit's hit points and Unit Settings shows the new default. It saves
+the mod as an MPQ or as the folder of text `scmjs mod unpack` writes, and plays it on the
+play page.
+
 ## A mod as a folder
 
 `scmjs mod unpack` writes a mod as a folder like this one:

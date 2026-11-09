@@ -53,7 +53,7 @@ import { currentAssetSource, readFrom, readUnder, resolveAssetSource, type Asset
 import { cleanStoredPath, storedPathOf } from "../gamedata/paths";
 import { attachReaderDataSet, installDataSetInto, listDataSets, rehashDataSet, reloadDataSet, removeDataSet, switchDataSet } from "../services/gameData";
 import { displayColorHex, PLAYER_RACES, PLAYER_TYPES, playerRaceLabel, playerTypeLabel } from "../data/players";
-import { dataSetUnitGroups, TECH_NAMES, techName, UNIT_GROUPS, UNIT_NAMES, unitName, unitTypeCount, UPGRADE_NAMES, upgradeName } from "../data/units";
+import { dataSetUnitGroups, starEditUnitGroups, TECH_NAMES, techName, UNIT_NAMES, unitName, unitTypeCount, UPGRADE_NAMES, upgradeName } from "../data/units";
 import { WEAPON_NAMES, weaponName } from "../data/weapons";
 import {
   ACTION_DEFS, actionDef, aiScriptName, BRIEFING_ACTION_DEFS, CHOICES, choiceLabel, choiceValue, CONDITION_DEFS, conditionDef, DEATHS_TABLE_ADDRESS, PLAYER_GROUP_CHOICES, UNIT_CLASS_CHOICES,
@@ -133,6 +133,7 @@ import { transpileInBackground } from "./transpileClient";
 import { activateDocumentIn, askDialog, closeDocumentIn, guardedAction, newMapInto, openFileInto, saveDocument } from "../hooks/useMapFileActions";
 import { DEFAULT_SAVE_OPTIONS, defaultSaveOptions } from "../editor/save";
 import { buildOutgoing } from "../services/mapBuild";
+import { outgoingExtras } from "../services/mapDataSet";
 import { writeTestFile } from "../services/testMap";
 import { currentSync, startSync } from "../services/sync";
 import { saveBlob } from "../services/mapIo";
@@ -2076,7 +2077,7 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
         const extras = store.get(archiveExtrasAtom), stored = store.get(archiveStoredAtom);
         // A failed step answers the map without it, as Save does; the log has the reason.
         const bytes = options.built === false
-          ? await writeMapBytes(scn, { format, extras, stored, options: saveOptions })
+          ? await writeMapBytes(scn, { format, extras: outgoingExtras(store, extras), stored, options: saveOptions })
           : (await buildOutgoing(store, { options: saveOptions, fileName: name, purpose: "export" })).bytes;
         return new File([bytes as unknown as BlobPart], name, { type: "application/octet-stream" });
       },
@@ -2461,7 +2462,7 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
       setLocationSnap: (step) => store.set(locationSnapAtom, step),
       // The types a data set has past the game's 228 follow, their groups named for the data set.
       unitGroups: () => [
-        ...UNIT_GROUPS.map((g) => ({ ...g, units: [...g.units] })),
+        ...starEditUnitGroups().map((g) => ({ ...g, units: [...g.units] })),
         ...dataSetUnitGroups().map((g) => ({ ...g, label: `${(store.get(gameDataSourceAtom) ?? currentAssetSource())?.profile.name ?? ""} · ${g.label}`, units: [...g.units] })),
       ],
       unitName,

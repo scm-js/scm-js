@@ -269,3 +269,18 @@ game data, exported from `@scm-js/core` (index.ts "Mods" block), and walk clean 
 - **Tests**: `tests/formats-{dat,tbl,graphics,iscript,aiscript,graft}.test.ts`; the game's files from
   `fixtures/data/*.mpq` (`tests/support/modFiles.ts`), Cosmonarchy's from `SCMJS_COSMONARCHY` (the download's root);
   both skip when absent.
+
+### The palette's groups under a data set (C7 audit (2026-11-08, branch `c7-editor`))
+
+`gameNames.ts#unitCatalogue(assets, names)` now also puts ids 0–227 into `extended` when the data set **renamed** the
+type (`names.units[id] != null`, i.e. `namesFromAssets`' rule says it differs from the game's own) **and** the set's
+race (group flags) / building / hero flags no longer fit StarEdit's group for that id (`STAREDIT_GROUP_OF`, read off
+`UNIT_GROUPS`' labels: race groups' Units = !building !hero, Buildings = building, Heroes = hero; the neutral groups
+take any neutral). `starEditUnitGroups()` is `UNIT_GROUPS` less those ids (the same object when none moved);
+`dataSetUnitGroups()` lists them first in id order under the set's heading. The palette, `shownUnitGroups` (object
+dialogs, Unit Settings, the trigger unit pick) and `api.palette.unitGroups` read it. Why "renamed": a Remastered or
+StarEdit profile is not the default profile but has the game's data, whose flags do not fit StarEdit's groups either
+(turrets are Terran, the Overmind is in Special) — keyed on the names, the game's data moves nothing under any profile.
+The catalogue now exists for a 228-type set that moved something. Cosmonarchy: Liiralisk (112) and Manifold (16) under
+"Cosmonarchy BW · Zerg/Protoss Units"; Terran Maverick (0) stays in Terran Units; Protoss Heroes keeps 1, Turrets &
+Unused 1, Special 5. `tests/palette-groups.test.ts`.

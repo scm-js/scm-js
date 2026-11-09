@@ -230,3 +230,18 @@ zlib is Remastered-only (2026-10-17 audit, archive T1): 1.16.1's storm.dll decod
 PKWARE alone — its decompressor, run under Unicorn on the editor's own sectors, refused every zlib
 one and decoded every PKWARE one. The labels, the save warning, scm.ts and the docs say so. The
 scm-sim lifted engine reads archives with mopaq, so it cannot catch this kind of thing.
+
+### The data set member on every way out (C7 audit (2026-11-08, branch `c7-editor`))
+
+`scmjs\dataset.json` was written only by Save (`stampDataSet` into `archiveExtrasAtom`); Export, My Maps, shares and
+Test Map's bytes of a map never saved under the set left without it. `services/mapDataSet.ts#withDataSet(extras, set)`
+(pure) and `outgoingExtras(store, extras)` (the set in use; the same Map for the game's own data or a map that already
+says exactly that) now feed `buildOutgoing`'s `document()` (Save, Test Map, `document.export`), `document.export` with
+`built: false`, and the sync `snapshot()` (shares, someone joining). Only Save changes the document (`stampDataSet` is
+`outgoingExtras` + the atom); the others stamp the outgoing copy, so exporting does not mark the map modified. A joiner's
+extras then hold the member the host's do not — harmless (an extras op carries it back), noted in case it matters.
+The Save dialog's preview bytes are built from the atom's extras; Save stamps first and drops them when it changed.
+`tests/map-dataset.test.ts` "on the way out" (export built and plain, Test Map, snapshot, none for the game's data);
+headless: Diplomacy (no member in the original) exported and Test-Mapped with `{ cosmonarchy-bw, ac3f86533e4b5a31 }`.
+Test Map's hint: `testTargets.ts#dropsDataSet` (StarCraft always; plugin `scm-sim` before 0.16.0) and
+`droppedDataSetHint` — a line in `TestMapDialog`, a warn toast when a plugin target that drops it is started.

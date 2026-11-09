@@ -477,7 +477,10 @@ buildings, heroes, critters, resources, start locations, beacons and powerups. T
 groups them by race, and the search box takes a name or an id. With a data set made from a
 mod that has more unit types than the game, the extra types appear under a heading named
 for the data set, by race and buildings; see [Data sets made from a
-mod](game-data.md#data-sets-made-from-a-mod).
+mod](game-data.md#data-sets-made-from-a-mod). A type of the game's that the mod renamed
+into something else (a Zerg unit where the game has a Terran building) moves under that
+heading too, by the race and kind the mod gives it. The Trigger Editor's unit lists follow
+the same groups.
 
 ![The Units layer: marines placed, and a tank refused because it overlaps them](images/units.webp)
 
@@ -837,9 +840,11 @@ A row on *use default* shows the game's own numbers greyed out, and starts from 
 you untick it.
 
 A map's settings cover the game's 228 unit types, 61 upgrades and 44 technologies; that
-size is fixed by the map format. A unit type a mod's data set adds past those is listed in
-Unit Settings, which says it has no per-map settings ([Data sets made from a
-mod](game-data.md#data-sets-made-from-a-mod)).
+size is fixed by the map format. A unit type, upgrade or technology a mod's data set adds
+past those is listed in its dialog, which says it has no per-map settings ([Data sets made
+from a mod](game-data.md#data-sets-made-from-a-mod)). Upgrades and technologies are named
+as the mod's own lists name them where it has them (`arr\upgrades.txt` and
+`arr\techdata.txt`).
 
 ### Strings
 

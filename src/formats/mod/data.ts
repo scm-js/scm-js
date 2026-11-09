@@ -6,7 +6,7 @@
  */
 import { DAT_SCHEMAS, DAT_TABLES, type DatTableName } from "../dat/schema";
 import { datRow, decodeDat, type DatFile } from "../dat/table";
-import { decodeTblFile } from "../dat/tblFile";
+import { decodeTblFile, tblFromText } from "../dat/tblFile";
 import { readIscriptHeaders } from "../dat/iscriptText";
 import { cleanLabel, composeUnitName } from "../../data/gameNames";
 import type { ModNames } from "./folder";
@@ -100,6 +100,44 @@ export function namesOf(tables: ModData["tables"], strings: ModData["strings"]):
     units, weapons: labels(tables.weapons), upgrades: labels(tables.upgrades), technologies: labels(tables.techdata),
     images: paths(tables.images, "grp_file", strings.images, "unit\\"), sounds: paths(tables.sfxdata, "sound_file", strings.sfxdata, "sound\\"),
   };
+}
+
+/**
+ * The files a GPTP mod names things in beside the game's string tables:
+ *
+ * - `rez\stat.txt`: PyTBL text the mod's plugin loads as the game's strings (Cosmonarchy's weapons' labels point
+ *   past `stat_txt.tbl`'s end, into it).
+ * - `arr\weapons.txt`, `upgrades.txt`, `techdata.txt`: the mod's own name lists, one line an entry, which its makers'
+ *   data editors show (Cosmonarchy: "Gauss Rifle (Maverick)", "Lobotomy Grenade (Francisco Goska)").
+ */
+export const NAME_TEXT_FILES = { stat: "rez\\stat.txt", weapons: "arr\\weapons.txt", upgrades: "arr\\upgrades.txt", techdata: "arr\\techdata.txt" } as const;
+
+/** A text file's bytes as text: UTF-8 where it is that, else Windows-1252, as the mods' tools write them. */
+export function nameFileText(bytes: Uint8Array): string {
+  try { return new TextDecoder("utf-8", { fatal: true }).decode(bytes); } catch { return new TextDecoder("windows-1252").decode(bytes); }
+}
+
+/**
+ * `stat_txt.tbl`'s whole entries with `rez\stat.txt` (null: none) filling those the table leaves empty or does not
+ * reach; where both have an entry, the table's stands (the text holds button strings at some of the techs' label
+ * numbers).
+ */
+export function statWithText(table: readonly string[], text: string | null): string[] {
+  const lines = text === null ? [] : tblFromText(text.replace(/\r\n/g, "\n"));
+  return Array.from({ length: Math.max(lines.length, table.length) }, (_, i) => (entryText(table[i]) ? table[i] : lines[i] ?? ""));
+}
+
+/** How many of `rez\stat.txt`'s entries have text. */
+export const statTextEntries = (text: string | null): number => (text === null ? 0 : tblFromText(text.replace(/\r\n/g, "\n")).filter((l) => entryText(l)).length);
+
+/**
+ * A mod's name list (`arr\upgrades.txt`, …) over a table of `count` entries: one name an entry, `""` where its line is
+ * empty (the label stands there); null when there is no list or it has not exactly a line an entry, which is not one.
+ */
+export function nameList(text: string | null, count: number): string[] | null {
+  if (text === null || !count) return null;
+  const rows = text.replace(/\r\n?/g, "\n").replace(/\n$/, "").split("\n");
+  return rows.length === count ? rows.map((r) => r.trim()) : null;
 }
 
 /** A row with struct fields spread out (`unit_extents.left`). */

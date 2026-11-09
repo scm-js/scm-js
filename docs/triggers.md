@@ -2337,6 +2337,11 @@ whole group of types. A melee map's defeat trigger is "commands at most 0 Buildi
 | Factories | 232 |
 <!-- /generated -->
 
+In the text form a unit is written by its name: StarEdit's name for the game's own data,
+or the data set's name when one is in use, so a mod's "Terran Civilian" reads as the mod's
+type and not the game's type of that name. A name two types share, or a class's name, is
+written as `"Unit #332"` instead, which always reads back as that number.
+
 ### AI scripts
 
 The scripts StarEdit offers. An action stores the script's four-letter code; the

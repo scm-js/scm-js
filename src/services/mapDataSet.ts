@@ -66,19 +66,38 @@ export function readDataSet(extras: ReadonlyMap<string, Uint8Array>): MapDataSet
 }
 
 /**
+ * `extras` with the member `set` says (the map's own member replaced when it says something
+ * else); `extras` itself when there is no set (the game's own data) or the map already says
+ * exactly that.
+ */
+export function withDataSet<T extends ReadonlyMap<string, Uint8Array>>(extras: T, set: MapDataSet | null): T | Map<string, Uint8Array> {
+  if (!set) return extras;
+  const was = readDataSet(extras);
+  if (was && was.id === set.id && was.name === set.name && was.hash === set.hash && was.url === set.url) return extras;
+  const next = new Map(extras);
+  for (const name of next.keys()) if (name.toLowerCase() === DATASET_MEMBER) next.delete(name);
+  next.set(DATASET_MEMBER, encodeDataSet(set));
+  return next;
+}
+
+/**
+ * The extras a map leaves the editor with — Export, Test Map, a share, My Maps — when it is
+ * not Save: the document's, with the data set in use stamped in when it is not the game's
+ * own. The document itself is left as it is (Save is what writes the member into it).
+ */
+export function outgoingExtras(store: Store, extras: Map<string, Uint8Array>): Map<string, Uint8Array> {
+  return withDataSet(extras, dataSetOf(store.get(gameDataSourceAtom) ?? currentAssetSource()));
+}
+
+/**
  * Before a save: put the data set in use into the map's extras when it is not the game's
  * own and the map does not already say exactly that. True when the extras changed (bytes
  * built before this are stale).
  */
 export function stampDataSet(store: Store): boolean {
-  const set = dataSetOf(store.get(gameDataSourceAtom) ?? currentAssetSource());
-  if (!set) return false;
   const extras = store.get(archiveExtrasAtom);
-  const was = readDataSet(extras);
-  if (was && was.id === set.id && was.name === set.name && was.hash === set.hash && was.url === set.url) return false;
-  const next = new Map(extras);
-  for (const name of next.keys()) if (name.toLowerCase() === DATASET_MEMBER) next.delete(name);
-  next.set(DATASET_MEMBER, encodeDataSet(set));
+  const next = outgoingExtras(store, extras);
+  if (next === extras) return false;
   store.set(archiveExtrasAtom, next);
   return true;
 }

@@ -33,6 +33,7 @@ import { rebaseTables } from "../editor/tableHistory";
 import { logInfo, logWarn } from "../editor/log";
 import { DEFAULT_SAVE_OPTIONS, defaultSaveOptions } from "../editor/save";
 import { writeMapBytes } from "./mapIo";
+import { outgoingExtras } from "./mapDataSet";
 import type { SyncHold, SyncReport, SyncSession, SyncStartOptions } from "../plugins/api";
 
 type Store = ReturnType<typeof createStore>;
@@ -308,7 +309,7 @@ export function startSync(store: Store, options: SyncStartOptions): SyncSession 
       if (ended || !scn || !inFront() || core.pending.length || inbox.length) return null;
       // Everything is read now, before the first await: the file is this moment's map.
       const copy = parseScenario(serializeScenario(scn));
-      const extras = new Map(store.get(archiveExtrasAtom));
+      const extras = outgoingExtras(store, new Map(store.get(archiveExtrasAtom)));
       const stored = store.get(archiveStoredAtom);
       const remembered = store.get(saveOptionsAtom) ?? defaultSaveOptions(scn, store.get(mapOriginAtom), store.get(mapFilePathAtom));
       return writeMapBytes(copy, { format: remembered.format, extras, stored, options: { ...DEFAULT_SAVE_OPTIONS, ...remembered } });

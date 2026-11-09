@@ -7,7 +7,9 @@ import { pluginTestTargetsAtom, type PluginTestTargetEntry } from "../src/atoms/
 import { dialogStackAtom, statusMessageAtom, toastsAtom } from "../src/atoms/uiAtoms";
 import { Contributions, createPluginApi } from "../src/plugins/host";
 import type { TestMapFile, TestTargetSpec } from "../src/plugins/api";
-import { resolveTarget, startTest, STARCRAFT } from "../src/services/testTargets";
+import { droppedDataSetHint, dropsDataSet, resolveTarget, startTest, STARCRAFT } from "../src/services/testTargets";
+import { gameDataSourceAtom } from "../src/atoms/gameDataAtoms";
+import { DEFAULT_PROFILE } from "../src/gamedata/profiles";
 
 function storeWithMap() {
   const store = createStore();
@@ -84,5 +86,26 @@ describe("where Test Map sends the map", () => {
     expect(run).toHaveBeenCalledTimes(1);
     expect(store.get(statusMessageAtom)).toBe("Open or create a map first.");
     bag.dispose();
+  });
+});
+
+describe("a target that plays without the data set", () => {
+  const scmSim = (version: string): PluginTestTargetEntry => ({ ...entry("scm-sim"), plugin: { id: "scm-sim", name: "scm-sim", source: "s", version } });
+  it("is StarCraft, and the scm-sim plugin before 0.16.0", () => {
+    expect(dropsDataSet(null)).toBe(true);
+    expect(dropsDataSet(scmSim("0.15.0"))).toBe(true);
+    expect(dropsDataSet(scmSim("0.16.0"))).toBe(false);
+    expect(dropsDataSet(scmSim("v0.17.0"))).toBe(false);
+    expect(dropsDataSet(entry("other"))).toBe(false);
+  });
+
+  it("is said in a sentence only while a data set other than the game's is in use", () => {
+    const store = storeWithMap();
+    store.set(gameDataSourceAtom, { kind: "bundled", label: "", tried: [], profile: DEFAULT_PROFILE, base: "/" });
+    expect(droppedDataSetHint(store, null)).toBeNull();
+    store.set(gameDataSourceAtom, { kind: "stored", label: "", tried: [], profile: { id: "cmbw", name: "Cosmonarchy BW" } } as never);
+    expect(droppedDataSetHint(store, null)).toMatch(/StarCraft plays the map with its own data, not Cosmonarchy BW/);
+    expect(droppedDataSetHint(store, scmSim("0.15.0"))).toBe("scm-sim plays the map with the game's own data, not Cosmonarchy BW.");
+    expect(droppedDataSetHint(store, scmSim("0.17.0"))).toBeNull();
   });
 });

@@ -4,7 +4,7 @@ import { FlaskConical, RotateCcw, Search, Swords, TrendingUp } from "lucide-reac
 import { commitSettingsAtom, scenarioAtom, settingsRevisionAtom } from "../../atoms/documentAtoms";
 import { displayColorHex } from "../../data/players";
 import {
-  RACE_LABEL, shownUnitGroups, TECH_NAMES, TECH_RACE, techLabel, unitLabel, UPGRADE_NAMES, UPGRADE_RACE, upgradeLabel, type RaceKey,
+  RACE_LABEL, shownUnitGroups, TECH_RACE, techLabel, techTypeCount, unitLabel, UPGRADE_RACE, upgradeLabel, upgradeTypeCount, type RaceKey,
 } from "../../data/units";
 import { weaponName } from "../../data/weapons";
 import { NO_UNIT, NO_WEAPON } from "../../formats/dat/dat";
@@ -15,7 +15,7 @@ import {
 import {
   cloneTechRestrictions, cloneTechSettings, cloneUnitAvailability, cloneUnitSettings, cloneUpgradeRestrictions, cloneUpgradeSettings,
   defaultTechRestrictions, defaultTechSettings, defaultUnitAvailability, defaultUnitSettings, defaultUpgradeRestrictions, defaultUpgradeSettings,
-  PLAYER_SLOTS, puniIndex, techIndex, techState, TECHS_ORIGINAL, UNIT_TYPES, upgradeIndex, upgradeLevels, UPGRADES_ORIGINAL,
+  PLAYER_SLOTS, puniIndex, techIndex, techState, TECHS_BW, TECHS_ORIGINAL, UNIT_TYPES, upgradeIndex, upgradeLevels, UPGRADES_BW, UPGRADES_ORIGINAL,
 } from "../../formats/chk/sections/settings";
 import {
   applyTechSettings, applyUnitSettings, applyUpgradeSettings, readTechSettings, readUnitSettings, readUpgradeSettings, unitCustomName,
@@ -31,7 +31,7 @@ import { msg, t, translate } from "../../i18n";
 
 /* ── Shared pieces for the data dialogs ─────────────────── */
 
-interface CatalogueItem { id: number; name: string; race: RaceKey | null }
+interface CatalogueItem { id: number; name: string; race: RaceKey | null; /** A heading of its own instead of the race's: a data set's entries past the map's settings. */ group?: string }
 type CatalogueRow = { kind: "head"; label: string } | { kind: "item"; item: CatalogueItem };
 
 /** Terran, Zerg, Protoss, then the ids nothing in the game refers to. */
@@ -40,10 +40,17 @@ const RACE_ORDER: readonly (RaceKey | null)[] = ["terran", "zerg", "protoss", nu
 function catalogueRows(items: readonly CatalogueItem[], needle: string): CatalogueRow[] {
   const q = needle.trim().toLowerCase();
   const rows: CatalogueRow[] = [];
+  const matches = (it: CatalogueItem) => !q || it.name.toLowerCase().includes(q) || String(it.id) === q;
   for (const race of RACE_ORDER) {
-    const group = items.filter((it) => it.race === race && (!q || it.name.toLowerCase().includes(q) || String(it.id) === q));
+    const group = items.filter((it) => it.group === undefined && it.race === race && matches(it));
     if (group.length === 0) continue;
     rows.push({ kind: "head", label: race ? translate(RACE_LABEL[race]) : t("Unused") });
+    for (const item of group) rows.push({ kind: "item", item });
+  }
+  for (const label of new Set(items.flatMap((it) => (it.group === undefined ? [] : [it.group])))) {
+    const group = items.filter((it) => it.group === label && matches(it));
+    if (group.length === 0) continue;
+    rows.push({ kind: "head", label });
     for (const item of group) rows.push({ kind: "item", item });
   }
   return rows;
@@ -66,7 +73,7 @@ function CatalogueList({ items, selected, onSelect, placeholder }: { items: read
         onSelect={(_, r) => { if (r.kind === "item") onSelect(r.item.id); }}
         render={(r) => r.kind === "head"
           ? <span className="faint" style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: ".06em" }}>{translate(r.label)}</span>
-          : <><span className="idx">{r.item.id}</span>{r.item.name}{r.item.race === null && <span className="badge" style={{ marginLeft: "auto" }}>{t("unused")}</span>}</>}
+          : <><span className="idx">{r.item.id}</span>{r.item.name}{r.item.race === null && r.item.group === undefined && <span className="badge" style={{ marginLeft: "auto" }}>{t("unused")}</span>}</>}
         style={{ flex: 1 }}
         empty={t("No match.")}
       />
@@ -316,7 +323,9 @@ export function UnitSettingsDialog({ entry }: DialogProps) {
 /* ── Upgrade Settings ───────────────────────────────────── */
 
 /** Built per render: the names follow the loaded data set. */
-const upgradeItems = (): CatalogueItem[] => UPGRADE_NAMES.map((_, id) => ({ id, name: upgradeLabel(id), race: UPGRADE_RACE[id] }));
+const upgradeItems = (dataSet: string): CatalogueItem[] => Array.from({ length: upgradeTypeCount() }, (_, id) => ({
+  id, name: upgradeLabel(id), race: UPGRADE_RACE[id] ?? null, ...(id >= UPGRADES_BW ? { group: dataSet } : {}),
+}));
 const UPGRADE_COST_ROWS = [
   { label: msg("Minerals"), base: "mineralCost", factor: "mineralFactor", datBase: "mineralCost", datFactor: "mineralFactor" },
   { label: msg("Vespene gas"), base: "gasCost", factor: "gasFactor", datBase: "vespeneCost", datFactor: "vespeneFactor" },
@@ -338,6 +347,7 @@ export function UpgradeSettingsDialog({ entry }: DialogProps) {
   useAtomValue(settingsRevisionAtom);
   const commit = useSetAtom(commitSettingsAtom);
   const { loaded: assets } = useUnitAssets();
+  const dataSet = useAtomValue(gameDataSourceAtom)?.profile.name ?? "";
   const [sel, setSel] = useState(0);
   const [state, setState, guard] = useScenarioForm(scenario, readUpgradeSettings);
   const [, bump] = useState(0); // the copies are typed arrays edited in place
@@ -352,6 +362,8 @@ export function UpgradeSettingsDialog({ entry }: DialogProps) {
   const edit = (fn: () => void) => { fn(); bump((n) => n + 1); guard.touch(); };
   // A file of an original revision with no Brood War tables has nowhere to keep these.
   const beyondOriginal = !upgradeSettingsSections(scenario).includes("UPGx") && sel >= UPGRADES_ORIGINAL;
+  // A data set's upgrades past the game's 61 are listed by name, but the CHK's settings sections hold 61 rows.
+  const unsettable = sel >= UPGRADES_BW;
 
   const setDefault = (on: boolean) => edit(() => {
     settings.useDefault[sel] = on ? 1 : 0;
@@ -408,15 +420,16 @@ export function UpgradeSettingsDialog({ entry }: DialogProps) {
       footerLeft={<div className="row"><Button size="sm" onClick={resetAll} title={t("Every upgrade back to its dat costs, every player back to the default levels")}><RotateCcw size={11} /> {" "}{t("Reset all to defaults")}</Button><span className="mono hint">{t("writes {sections}", { sections })}</span></div>}
     >
       <div className="split" style={{ ["--split" as string]: "260px" }}>
-        <CatalogueList items={upgradeItems()} selected={sel} onSelect={setSel} placeholder={t("Find upgrade… (name or id)")} />
+        <CatalogueList items={upgradeItems(dataSet)} selected={sel} onSelect={setSel} placeholder={t("Find upgrade… (name or id)")} />
         <div className="col" style={{ gap: 12, overflow: "auto" }}>
           <div className="unit-header">
             <div className="col" style={{ gap: 2, flex: 1 }}>
               <span className="title">{upgradeLabel(sel)}</span>
-              <span className="hint">id {sel} · {raceOf(UPGRADE_RACE[sel])}{dat && dat.broodWar[sel] ? t(" · Brood War") : ""}{dat ? t(" · {v, plural, one {# level} other {# levels}} in the game", { v: dat.maxRepeats[sel] }) : ""}</span>
+              <span className="hint">id {sel}{unsettable ? "" : ` · ${raceOf(UPGRADE_RACE[sel])}`}{dat && dat.broodWar[sel] ? t(" · Brood War") : ""}{dat ? t(" · {v, plural, one {# level} other {# levels}} in the game", { v: dat.maxRepeats[sel] }) : ""}</span>
             </div>
-            <Check label={t("Use default upgrade settings")} checked={useDefault} onChange={(e) => setDefault(e.target.checked)} />
+            {!unsettable && <Check label={t("Use default upgrade settings")} checked={useDefault} onChange={(e) => setDefault(e.target.checked)} />}
           </div>
+          {unsettable ? <p className="hint">{t("No per-map settings for this upgrade: a map's settings cover the game's {v} upgrades.", { v: UPGRADES_BW })}</p> : <>
           {beyondOriginal && <p className="hint">{t("Only the Brood War tables (UPGx / PUPx) hold upgrades past #{v}, and this map has none, so these settings are not saved. A hybrid or Brood War revision keeps them.", { v: UPGRADES_ORIGINAL - 1 })}</p>}
           <Group title={t("Cost")}>
             <table className="table dense">
@@ -461,6 +474,7 @@ export function UpgradeSettingsDialog({ entry }: DialogProps) {
               </table>
             </div>
           </Group>
+          </>}
         </div>
       </div>
     </DialogFrame>
@@ -469,7 +483,9 @@ export function UpgradeSettingsDialog({ entry }: DialogProps) {
 
 /* ── Technology Settings ────────────────────────────────── */
 
-const techItems = (): CatalogueItem[] => TECH_NAMES.map((_, id) => ({ id, name: techLabel(id), race: TECH_RACE[id] }));
+const techItems = (dataSet: string): CatalogueItem[] => Array.from({ length: techTypeCount() }, (_, id) => ({
+  id, name: techLabel(id), race: TECH_RACE[id] ?? null, ...(id >= TECHS_BW ? { group: dataSet } : {}),
+}));
 const TECH_COST_ROWS = [
   { label: msg("Minerals"), key: "mineralCost", dat: "mineralCost" },
   { label: msg("Vespene gas"), key: "gasCost", dat: "vespeneCost" },
@@ -491,6 +507,7 @@ export function TechSettingsDialog({ entry }: DialogProps) {
   useAtomValue(settingsRevisionAtom);
   const commit = useSetAtom(commitSettingsAtom);
   const { loaded: assets } = useUnitAssets();
+  const dataSet = useAtomValue(gameDataSourceAtom)?.profile.name ?? "";
   const [sel, setSel] = useState(0);
   const [state, setState, guard] = useScenarioForm(scenario, readTechSettings);
   const [, bump] = useState(0);
@@ -504,6 +521,7 @@ export function TechSettingsDialog({ entry }: DialogProps) {
   const useDefault = settings.useDefault[sel] !== 0;
   const edit = (fn: () => void) => { fn(); bump((n) => n + 1); guard.touch(); };
   const beyondOriginal = !techSettingsSections(scenario).includes("TECx") && sel >= TECHS_ORIGINAL;
+  const unsettable = sel >= TECHS_BW;
 
   const setDefault = (on: boolean) => edit(() => {
     settings.useDefault[sel] = on ? 1 : 0;
@@ -548,15 +566,16 @@ export function TechSettingsDialog({ entry }: DialogProps) {
       footerLeft={<div className="row"><Button size="sm" onClick={resetAll} title={t("Every ability back to its dat costs, every player back to the default availability")}><RotateCcw size={11} /> {" "}{t("Reset all to defaults")}</Button><span className="mono hint">{t("writes {sections}", { sections })}</span></div>}
     >
       <div className="split" style={{ ["--split" as string]: "260px" }}>
-        <CatalogueList items={techItems()} selected={sel} onSelect={setSel} placeholder={t("Find technology… (name or id)")} />
+        <CatalogueList items={techItems(dataSet)} selected={sel} onSelect={setSel} placeholder={t("Find technology… (name or id)")} />
         <div className="col" style={{ gap: 12, overflow: "auto" }}>
           <div className="unit-header">
             <div className="col" style={{ gap: 2, flex: 1 }}>
-              <span className="title">{TECH_NAMES[sel]}</span>
-              <span className="hint">id {sel} · {raceOf(TECH_RACE[sel])}{dat && dat.broodWar[sel] ? t(" · Brood War") : ""}</span>
+              <span className="title">{techLabel(sel)}</span>
+              <span className="hint">id {sel}{unsettable ? "" : ` · ${raceOf(TECH_RACE[sel])}`}{dat && dat.broodWar[sel] ? t(" · Brood War") : ""}</span>
             </div>
-            <Check label={t("Use default technology settings")} checked={useDefault} onChange={(e) => setDefault(e.target.checked)} />
+            {!unsettable && <Check label={t("Use default technology settings")} checked={useDefault} onChange={(e) => setDefault(e.target.checked)} />}
           </div>
+          {unsettable ? <p className="hint">{t("No per-map settings for this technology: a map's settings cover the game's {v} technologies.", { v: TECHS_BW })}</p> : <>
           {beyondOriginal && <p className="hint">{t("Only the Brood War tables (TECx / PTEx) hold abilities past #{v}, and this map has none, so these settings are not saved. A hybrid or Brood War revision keeps them.", { v: TECHS_ORIGINAL - 1 })}</p>}
           <Group title={t("Cost")}>
             <div className="form" style={{ gridTemplateColumns: "max-content 160px max-content 160px" }}>
@@ -586,6 +605,7 @@ export function TechSettingsDialog({ entry }: DialogProps) {
               </table>
             </div>
           </Group>
+          </>}
         </div>
       </div>
     </DialogFrame>

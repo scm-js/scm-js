@@ -214,3 +214,22 @@ Owners and units the game honours (2026-10-17 audit, T1/T3/T4; runs EA01–EA03)
 - Check Map: Create Unit / CUWP of a class or a non-palette type (`triggerCanCreate`, needs units.dat for the
   palette half); Run AI Script owned only by Human/Rescuable/Neutral slots outside `HUMAN_AI_SCRIPTS` (Neutral
   also runs Rscu, ledger A15).
+
+### Unit names under a data set (C7 audit (2026-11-08, branch `c7-editor`))
+
+`triggerNames(scn).unitByName` read StarEdit's `UNIT_NAMES` first and the loaded names second, so with
+Cosmonarchy 14 of the mod's names resolved to *other* ids (332 "Terran Civilian" → 15, 338 "Zerg Overmind" → 148,
+471–475, 486–488, 613 …) and Titan Stealer's `Kill("Terran Civilian")` became unit 15 on TrigEdit's Compile, no
+word. Now: class labels/aliases, then `Unit #N`, then the loaded names (`unitNameIndex()`: `unitName(id)` lower-cased
+→ ids, classes 229–232 left out, built once per `currentLoadedNames()`/`unitTypeCount()` identity — a mod's table is
+3,000 rows and Diplomacy asks 1,202 triggers' worth), then StarEdit's names (old text keeps reading), then UNIx custom
+names. `unit(id)` prints `Unit #id` when the name belongs to two ids (Floor Hatch 204/385, Terran Lodestone 384/387) or
+is a class's. Vanilla: `UNIT_NAMES` has no duplicates, so nothing prints differently (`tests/trigger-dataset-names`
+checks all 228 both ways). Proof: `tests/datasets-cosmonarchy.test.ts` "under its own names" round-trips all 442
+trigger lists of the 404 CMBW maps (unit arguments only — a record's `unitId` under a type that takes no unit, e.g.
+Waterwar and vt01, is not in the text); on origin/main it fails on Titan Stealer alone. Headless with the set installed:
+Titan Stealer's 43 summary lines identical before/after Compile, the Civilian row still 332.
+The Classic editor's unit pick (`TriggerDialogs.tsx` case `"unit"`) is `shownUnitGroups(dataSet)` as `<optgroup>`s
+(`ChoiceSelect`'s `groups`), 228–232 filtered out of the groups (`CLASS_IDS`), the classes first unless creating;
+a value no group lists (an unnamed type of the set) is added by its name. It listed `UNIT_NAMES` (0–227) before, so 332
+was "332 (raw)". For vanilla this changes the order from id order to the palette's.

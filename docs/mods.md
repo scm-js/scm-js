@@ -16,10 +16,12 @@ an `.mpq`, a self-executing `.exe` or a `.zip` — says what it is, unpacks it i
 of text, checks it, compares two versions, packs it again and hands it to the play page.
 This is the part that is ready today, and the rest of this guide is mostly about it.
 
-**The play page.** The play page at scmjs.dev/play takes a mod dropped on it, keeps the
-files that differ from your game in your browser, and plays with them. `scmjs mod play`
-hands a mod to it from a terminal. The play page's support for mods is new and arrives
-with its next release; until then the page does not take a mod.
+**The play page.** The play page at scmjs.dev/play takes a mod dropped on it (Game Menu ▸
+Mods ▸ Add a Mod…: the mod's folder as its makers ship it, an `.mpq`, a self-executing
+`.exe` or a `.zip`), keeps the files that differ from your game in your browser, runs its
+plugins and FireGraft project inside the game, and plays with them; a replay saved there
+names the mod, and the page plays such a replay with it. `scmjs mod play` hands a mod to
+it from a terminal, with a map and a bot made for the mod if you like.
 
 **The editor.** The editor makes maps for a mod through its [data
 sets](game-data.md#data-sets-made-from-a-mod): Help ▸ Game Data… ▸ Add a data set… takes a

@@ -101,6 +101,7 @@ ${footer(version, repoUrl, url)}
   ${toc}
 </div>
 <script src="${base}/search.js" defer></script>
+<script src="${base}/copy.js" defer></script>
 </body>
 </html>
 `;

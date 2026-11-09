@@ -128,16 +128,22 @@ root of any static web server.
 ## On the command line
 
 `scmjs` is scmJS in a terminal: it reads, checks, changes and shares maps and replays
-without the editor's window. Install it with a package manager:
+without the editor's window. Install it with a package manager, Homebrew on macOS and
+Linux:
 
 ```sh
-brew install scm-js/tap/scmjs        # macOS and Linux
-winget install scm-js.scmjs          # Windows
+brew install scm-js/tap/scmjs
 ```
 
-or with Scoop (`scoop bucket add scm-js https://github.com/scm-js/scoop-bucket`, then
-`scoop install scmjs`), or with npm on Node.js 22.12 or newer
-(`npm install -g @scm-js/cli`). Without either, download it from the [releases
+or winget on Windows:
+
+```sh
+winget install scm-js.scmjs
+```
+
+Scoop works too (`scoop bucket add scm-js https://github.com/scm-js/scoop-bucket`, then
+`scoop install scmjs`), and so does npm on Node.js 22.12 or newer
+(`npm install -g @scm-js/cli`). Without any of these, download it from the [releases
 page](https://github.com/scm-js/scm-js/releases/latest). [Installing](cli.md#installing)
 in the command line guide has each way in full.
 

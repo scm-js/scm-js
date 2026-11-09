@@ -215,13 +215,29 @@ when it does not, so it runs there too.
 
 `scmjs about` prints this version, whether a newer one is out and the line that installs
 it, how this copy was installed, the desktop app and Docker if they are installed, and the
-addresses of the editor, the docs and the source. Update the way you installed:
+addresses of the editor, the docs and the source. Update the way you installed. With
+Homebrew:
 
 ```sh
-brew upgrade scmjs                   # Homebrew
-scoop update scmjs                   # Scoop
-winget upgrade scm-js.scmjs          # winget
-npm install -g @scm-js/cli@latest    # npm
+brew upgrade scmjs
+```
+
+With Scoop:
+
+```sh
+scoop update scmjs
+```
+
+With winget:
+
+```sh
+winget upgrade scm-js.scmjs
+```
+
+With npm:
+
+```sh
+npm install -g @scm-js/cli@latest
 ```
 
 For a downloaded program, download the newer file from the [releases
@@ -231,11 +247,22 @@ way of installing gets each version on the same day.
 ### Shell completion
 
 `scmjs completion bash`, `zsh` or `fish` prints a completion script with every command and
-option in it. Install it once:
+option in it. Install it once, for the shell you use. For bash, add this line to
+`~/.bashrc`:
 
 ```sh
-eval "$(scmjs completion bash)"                        # in ~/.bashrc
-scmjs completion zsh > ~/.zsh/completions/_scmjs       # a folder on $fpath
+eval "$(scmjs completion bash)"
+```
+
+For zsh, write it into a folder on your `$fpath` (`~/.zsh/completions` here):
+
+```sh
+scmjs completion zsh > ~/.zsh/completions/_scmjs
+```
+
+For fish:
+
+```sh
 scmjs completion fish > ~/.config/fish/completions/scmjs.fish
 ```
 
@@ -243,11 +270,17 @@ scmjs completion fish > ~/.config/fish/completions/scmjs.fish
 
 `scmjs` speaks English and Korean. It follows the computer's language: the locale on Linux
 and macOS (`LANG`, or `LC_ALL` or `LC_MESSAGES` where one is set), the display language on
-Windows. To choose, set `SCMJS_LANG` to `ko` or `en`, or give one command `--lang`:
+Windows. To choose for one command, give it `--lang`:
 
 ```sh
 scmjs --lang ko info maps/*.scx
-export SCMJS_LANG=ko                 # every command, in ~/.bashrc
+```
+
+To choose for every command, set `SCMJS_LANG` to `ko` or `en`, in `~/.bashrc` or your
+shell's own startup file:
+
+```sh
+export SCMJS_LANG=ko
 ```
 
 The help, the reports, Check Map's findings and the errors change language. What stays the

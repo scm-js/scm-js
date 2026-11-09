@@ -14,9 +14,21 @@
  * the first sixteen hex digits of their SHA-256. A page that does not run the plugins presents the hash of the lines
  * without the plugins' ("without plugins").
  *
+ * **No line for an operating system's files** (`sources.ts#SYSTEM_FILES`: `desktop.ini`, `Thumbs.db`, `.DS_Store`, a
+ * zip's `__MACOSX/` and the rest of that list), wherever one lies: loose in a game folder, or a member of an archive
+ * that was packed from such a folder. The game never asks for one, and not every route hands them over (a browser's
+ * folder handle hides `desktop.ini`), so with them a mod's hash followed how its folder was read. `hashLines` drops
+ * such lines itself, so the hash is the same whatever list a caller made; the readers leave the files out too, so the
+ * counts agree.
+ *
+ * **The older form.** Until 2026-11-09 those files had lines. A mod kept in a browser and a replay tagged before then
+ * name the mod by that hash, so where hashes are matched it is still accepted: `hashLinesAsWere` is the rule as it
+ * was, and `ModHash.older` the mod's hashes by it, there only when the files were seen (a route that never saw them
+ * cannot work the older hash out).
+ *
  * Pure: the command line, the editor's worker and any page share it.
  */
-import { fileDigest, gameName } from "./sources";
+import { fileDigest, gameName, isSystemFile } from "./sources";
 
 /** A plugin a mod carries: MPQDraft's `.qdp`, Chaoslauncher's `.bwl`. */
 export const isPluginFile = (name: string): boolean => /\.(qdp|bwl)$/i.test(name);
@@ -34,10 +46,25 @@ export const firegraftLine = (name: string, sha256: string): string => `${leafOf
 /** A game file's line: its game name. */
 export const gameLine = (name: string, sha256: string): string => `${gameName(name)}\t${sha256}`;
 
-/** The hash of lines `name<TAB>sha256` in any order: sorted by name, joined with "\n", SHA-256, sixteen hex digits. */
+const lineName = (l: string) => l.slice(0, l.indexOf("\t"));
+
+/** Whether a line `name<TAB>sha256` is of an operating system's file (`isSystemFile`), which the hash has no line for. */
+export const isSystemLine = (line: string): boolean => isSystemFile(lineName(line));
+
+/**
+ * The hash of lines `name<TAB>sha256` in any order: sorted by name, joined with "\n", SHA-256, sixteen hex digits. A
+ * line of an operating system's file (`isSystemLine`) is dropped first.
+ */
 export async function hashLines(lines: readonly string[]): Promise<string> {
-  const name = (l: string) => l.slice(0, l.indexOf("\t"));
-  const sorted = [...lines].sort((a, b) => (name(a) < name(b) ? -1 : name(a) > name(b) ? 1 : 0));
+  return hashLinesAsWere(lines.filter((l) => !isSystemLine(l)));
+}
+
+/**
+ * `hashLines` as it was until 2026-11-09: every line given, an operating system's files among them. For matching a
+ * hash made then (a replay's tag, a mod kept in a browser), never for naming a mod now.
+ */
+export async function hashLinesAsWere(lines: readonly string[]): Promise<string> {
+  const sorted = [...lines].sort((a, b) => (lineName(a) < lineName(b) ? -1 : lineName(a) > lineName(b) ? 1 : 0));
   return (await fileDigest(new TextEncoder().encode(sorted.join("\n")))).slice(0, 16);
 }
 
@@ -62,29 +89,42 @@ export interface ModHash {
   lines: string[];
   /** The plugins' lines (sorted). */
   pluginLines: string[];
+  /**
+   * There when an operating system's files were among what was given (`isSystemFile`): the mod's hashes as they were
+   * while those files had lines (`hashLinesAsWere`), and the names left out. Matched as an older form, never presented.
+   */
+  older?: { hash: string; withoutPlugins: string; left: string[] };
 }
 
 /**
  * The mod's hash and its hash without plugins. Game files are taken once by game name (the last given wins, as a
  * later layer does in the game); plugins and FireGraft projects once by file name, any case (the first given wins,
- * as on the play page).
+ * as on the play page). An operating system's files have no line, and `older` says what the hashes were with them.
  */
 export async function modHashOfDigests(input: ModHashInput): Promise<ModHash> {
-  const game = new Map<string, string>();
-  for (const f of input.files) game.set(gameName(f.name), f.sha256);
+  // Every line as the rule had it until 2026-11-09, each marked when it is of an operating system's file (by the name
+  // given, folders and all: a plugin's line keeps only the file's name).
+  const game = new Map<string, { sha256: string; system: boolean }>();
+  for (const f of input.files) game.set(gameName(f.name), { sha256: f.sha256, system: isSystemFile(f.name) });
   const once = (list: readonly Digest[], keep: (name: string) => boolean, line: (name: string, sha: string) => string) => {
-    const seen = new Set<string>(), out: string[] = [];
+    const seen = new Set<string>(), out: { line: string; system: boolean }[] = [];
     for (const f of list) {
       const key = leafOf(f.name).toLowerCase();
       if (!keep(f.name) || seen.has(key)) continue;
       seen.add(key);
-      out.push(line(f.name, f.sha256));
+      out.push({ line: line(f.name, f.sha256), system: isSystemFile(f.name) });
     }
     return out;
   };
-  const lines = [...[...game].map(([name, sha]) => `${name}\t${sha}`), ...once(input.firegraft ?? [], isFiregraftProject, firegraftLine)].sort();
-  const pluginLines = once(input.plugins ?? [], isPluginFile, pluginLine).sort();
-  return { hash: await hashLines([...lines, ...pluginLines]), withoutPlugins: await hashLines(lines), lines, pluginLines };
+  const byLine = (a: { line: string }, b: { line: string }) => (a.line < b.line ? -1 : a.line > b.line ? 1 : 0);
+  const were = [...[...game].map(([name, f]) => ({ line: `${name}\t${f.sha256}`, system: f.system })), ...once(input.firegraft ?? [], isFiregraftProject, firegraftLine)].sort(byLine);
+  const pluginsWere = once(input.plugins ?? [], isPluginFile, pluginLine).sort(byLine);
+  const lines = were.filter((l) => !l.system).map((l) => l.line), pluginLines = pluginsWere.filter((l) => !l.system).map((l) => l.line);
+  const left = [...were, ...pluginsWere].filter((l) => l.system).map((l) => lineName(l.line));
+  return {
+    hash: await hashLines([...lines, ...pluginLines]), withoutPlugins: await hashLines(lines), lines, pluginLines,
+    ...(left.length ? { older: { hash: await hashLinesAsWere([...were, ...pluginsWere].map((l) => l.line)), withoutPlugins: await hashLinesAsWere(were.map((l) => l.line)), left } } : {}),
+  };
 }
 
 /** `modHashOfDigests` from the files' bytes. */

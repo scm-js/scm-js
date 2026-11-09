@@ -2312,8 +2312,11 @@ reads them. The names and costs then come from the mod's tables. The mod is chec
 [its hash](mods.md#the-mods-hash), with its plugins or without them, must be the one the
 replay names, or the command stops and says both. A replay tagged before the hash had
 lines for the plugins and the FireGraft project is matched by the hash of the game files
-alone, or of those that differ from your copy of the game. With a replay that names no
-mod, `--mod` warns that the names may not be the game's and uses them.
+alone, or of those that differ from your copy of the game. One tagged before 9 November
+2026, when the hash still had lines for the files an operating system leaves in folders
+(`desktop.ini`, `Thumbs.db`), is matched by [the hash the mod had
+then](mods.md#the-mods-hash), when the mod you name holds such files. With a replay that
+names no mod, `--mod` warns that the names may not be the game's and uses them.
 
 ```sh
 scmjs replay info game.rep --builds --mod "Cosmonarchy BW"
@@ -2505,9 +2508,10 @@ says what a mod is: its files and their sizes by kind, its tables and which are 
 the game's (DatExtend's expanded `.dat`, GPTP's `.datex`), its scripts, the plugins and
 FireGraft files it carries (kept, never run), a self-executing exe's archive, the game it
 is for, and [the mod's hash](mods.md#the-mods-hash) with the hash without its plugins
-beside it. It reads a folder (the game's paths at its root or in a folder under it), an
-`.mpq`, a self-executing `.exe` (MPQDraft's or FireGraft's patcher, read and never run) or
-a `.zip`. `--json` prints the same as data.
+beside it, and the older hash of a mod that holds an operating system's files. It reads a
+folder (the game's paths at its root or in a folder under it), an `.mpq`, a self-executing
+`.exe` (MPQDraft's or FireGraft's patcher, read and never run) or a `.zip`. `--json`
+prints the same as data.
 
 ### A mod as a folder of text
 
@@ -2620,7 +2624,9 @@ file, sorted by name and joined with newlines; its first sixteen hex digits. A g
 name is the game's, lower case with backslashes (`arr\weapons.dat`); a plugin's is
 `plugins\` and its file name, lower case (`plugins\gptp.qdp`); the FireGraft project's is
 its file name, lower case (`cosmonarchy bw.fgp`). FireGraft's database has no line, nor a
-plugin inside the mod's archive, which the page does not load. Without the plugins' lines
+plugin inside the mod's archive, which the page does not load, nor a file an operating
+system leaves in folders (`desktop.ini`, `Thumbs.db`, `.DS_Store` and [the rest of that
+list](mods.md#the-mods-hash)), which is not handed over either. Without the plugins' lines
 it is the hash a page that runs none of them presents. A page that already keeps a mod
 with that hash can skip storing it again. The editor records the same hash for a data set
 made from the same files (see [Game data](game-data.md#a-map-remembers-its-data-set)). The

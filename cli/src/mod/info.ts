@@ -59,6 +59,11 @@ export interface ModInfo {
   /** The mod's hash, and without its plugins' lines (null when not worked out). */
   hash: string | null;
   withoutPlugins: string | null;
+  /**
+   * The hash as it was while an operating system's files (`left`: `sound\desktop.ini`, …) had lines; null when the
+   * mod has no such file. A replay tagged before 2026-11-09, or a mod a browser kept then, names the mod by it.
+   */
+  older: { hash: string; withoutPlugins: string; left: string[] } | null;
 }
 
 /** The layout a table is in, in words. */
@@ -100,7 +105,7 @@ export function modInfo(source: ModSource, hash: SourceHash | null = null): ModI
     firegraft: source.firegraft.map((p) => ({ name: p.name.split(/[\\/]/).pop()!, bytes: p.bytes })),
     exes: source.exes, maps: [...source.files.values()].filter((f) => kindOf(f.name) === "maps").map((f) => f.name).sort(),
     game, duplicates: source.duplicates, left: source.left, probed: source.probed, unheld: source.unheld,
-    hash: hash?.hash ?? null, withoutPlugins: hash?.withoutPlugins ?? null,
+    hash: hash?.hash ?? null, withoutPlugins: hash?.withoutPlugins ?? null, older: hash?.older ?? null,
   };
 }
 
@@ -151,6 +156,9 @@ export function printModInfo(r: ModInfo): string[] {
     [t("Layers"), r.layers.length > 1 ? r.layers.map(shownPath).join(pc.dim(` ${t("then")} `)) : null],
     [t("Hash"), r.hash],
     [t("Without plugins"), r.hash && r.withoutPlugins && r.withoutPlugins !== r.hash ? `${r.withoutPlugins} ${pc.dim(t("(a page that runs none of the plugins)"))}` : null],
+    [t("Older hash"), r.older ? `${r.older.hash} ${pc.dim(r.older.left.length > 3
+      ? t("(with {list} and {more} more, which the hash leaves out)", { list: r.older.left.slice(0, 3).join(", "), more: num(r.older.left.length - 3) })
+      : t("(with {list}, which the hash leaves out)", { list: r.older.left.join(", ") }))}` : null],
   ]));
   if (r.probed.length) lines.push("", `${pc.yellow("▲")} ${t("{archives} has no list of its files: only the names the game reads were looked for", { archives: r.probed.join(", ") })}`);
   if (r.unheld.length) lines.push("", pc.dim(t("Listed by its archive and not in it, left out: {list}", { list: `${r.unheld.slice(0, 3).join(", ")}${r.unheld.length > 3 ? ` ${t("and {n} more", { n: num(r.unheld.length - 3) })}` : ""}` })));

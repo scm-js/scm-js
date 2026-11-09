@@ -10,6 +10,10 @@ import { DEFAULT_PROFILE } from "../src/gamedata/profiles";
 import type { AssetSource } from "../src/gamedata/source";
 import { clearStoredCopy, keepInMemory } from "../src/gamedata/store";
 import { DATASET_MEMBER, dataSetOf, offerMapDataSet, readDataSet, stampDataSet } from "../src/services/mapDataSet";
+import { loadDocumentAtom } from "../src/atoms/documentAtoms";
+import { Contributions, createPluginApi } from "../src/plugins/host";
+import { testMapBytes } from "../src/services/testMap";
+import { startSync } from "../src/services/sync";
 
 /** A map remembers the data set it was made with (`scmjs\dataset.json`), and says so when it opens elsewhere. */
 const mod: AssetSource = {
@@ -72,5 +76,49 @@ describe("the map's data set member", () => {
     } finally {
       await clearStoredCopy("my-mod");
     }
+  });
+});
+
+/** Every way a map leaves the editor carries the member when a data set other than the game's is in use (C7 audit). */
+describe("the member on the way out", () => {
+  function opened(source: AssetSource) {
+    const store = createStore();
+    store.set(gameDataSourceAtom, source);
+    store.set(loadDocumentAtom, { scenario: createScenario({ width: 16, height: 16, era: 2, name: "leaving" }), extras: new Map(), fileName: "leaving.scx" });
+    return store;
+  }
+  const memberOf = async (bytes: Uint8Array | null | undefined) => {
+    const file = await loadMap(bytes!);
+    return readDataSet((await readMembers(file.archive!, file.files, new Set())).extras);
+  };
+  const set = dataSetOf(mod);
+
+  it("is in what Export makes, built or not, and the document is left as it was", async () => {
+    const store = opened(mod);
+    const api = createPluginApi(store, { id: "p", name: "P", source: "s" }, new Contributions());
+    const file = await api.document.export({ format: "scx" });
+    expect(await memberOf(new Uint8Array(await file!.arrayBuffer()))).toEqual(set);
+    const plain = await api.document.export({ format: "scx", built: false });
+    expect(await memberOf(new Uint8Array(await plain!.arrayBuffer()))).toEqual(set);
+    expect(store.get(archiveExtrasAtom).size).toBe(0);
+  });
+
+  it("is in the bytes Test Map builds", async () => {
+    expect(await memberOf(await testMapBytes(opened(mod)))).toEqual(set);
+  });
+
+  it("is in the copy a shared map hands someone joining", async () => {
+    const store = opened(mod);
+    const session = startSync(store, { send: () => {} })!;
+    expect(await memberOf(await session.snapshot())).toEqual(set);
+    session.stop();
+  });
+
+  it("is not added for the game's own data", async () => {
+    expect(await memberOf(await testMapBytes(opened(game)))).toBeNull();
+    const store = opened(game);
+    const api = createPluginApi(store, { id: "p", name: "P", source: "s" }, new Contributions());
+    const file = await api.document.export({ format: "scx" });
+    expect(await memberOf(new Uint8Array(await file!.arrayBuffer()))).toBeNull();
   });
 });

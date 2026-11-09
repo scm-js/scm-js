@@ -23,6 +23,7 @@ import { buildChk, buildMapFile, keptExtras, planSave, type SaveOptions } from "
 import type { BuildPurpose } from "../plugins/api";
 import { t } from "../i18n";
 import { count, pluginName } from "./usage";
+import { outgoingExtras } from "./mapDataSet";
 
 type Store = ReturnType<typeof createStore>;
 
@@ -74,7 +75,8 @@ export async function buildOutgoing(store: Store, req: OutgoingRequest): Promise
   const document = () => {
     const scenario = store.get(scenarioAtom);
     if (!scenario) throw new Error(t("No map is open."));
-    return { scenario, extras: store.get(archiveExtrasAtom), stored: store.get(archiveStoredAtom) };
+    // The data set in use goes with the map wherever it leaves for (`mapDataSet.ts`); the document is left as it is.
+    return { scenario, extras: outgoingExtras(store, store.get(archiveExtrasAtom)), stored: store.get(archiveStoredAtom) };
   };
   const plainOf = async (given?: Uint8Array) => {
     const { scenario, extras, stored } = document();

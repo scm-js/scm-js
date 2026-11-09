@@ -133,6 +133,7 @@ import { transpileInBackground } from "./transpileClient";
 import { activateDocumentIn, askDialog, closeDocumentIn, guardedAction, newMapInto, openFileInto, saveDocument } from "../hooks/useMapFileActions";
 import { DEFAULT_SAVE_OPTIONS, defaultSaveOptions } from "../editor/save";
 import { buildOutgoing } from "../services/mapBuild";
+import { outgoingExtras } from "../services/mapDataSet";
 import { writeTestFile } from "../services/testMap";
 import { currentSync, startSync } from "../services/sync";
 import { saveBlob } from "../services/mapIo";
@@ -2076,7 +2077,7 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
         const extras = store.get(archiveExtrasAtom), stored = store.get(archiveStoredAtom);
         // A failed step answers the map without it, as Save does; the log has the reason.
         const bytes = options.built === false
-          ? await writeMapBytes(scn, { format, extras, stored, options: saveOptions })
+          ? await writeMapBytes(scn, { format, extras: outgoingExtras(store, extras), stored, options: saveOptions })
           : (await buildOutgoing(store, { options: saveOptions, fileName: name, purpose: "export" })).bytes;
         return new File([bytes as unknown as BlobPart], name, { type: "application/octet-stream" });
       },

@@ -19,6 +19,9 @@ import { logWarn } from "../editor/log";
 import type { TestMapFile } from "../plugins/api";
 import { pluginText, t } from "../i18n";
 import { count } from "./usage";
+import { gameDataSourceAtom } from "../atoms/gameDataAtoms";
+import { isDefaultProfile } from "../gamedata/profiles";
+import { currentAssetSource } from "../gamedata/source";
 
 type Store = ReturnType<typeof createStore>;
 
@@ -35,6 +38,34 @@ export function resolveTarget(chosen: string, targets: readonly PluginTestTarget
   if (chosen === STARCRAFT) return null;
   if (chosen === "") return targets[0] ?? null;
   return targets.find((e) => e.plugin.id === chosen) ?? null;
+}
+
+/** The scm-sim plugin's first version that hands its play page the data set (`TestMapFile.dataSet`). */
+const SCM_SIM_DATA_SETS = [0, 16, 0];
+
+/**
+ * Whether a target plays the map with the game's own data whatever data set the editor is
+ * using: StarCraft (null) always does — the game reads its own files — and the scm-sim
+ * plugin did before 0.16.0. Another plugin's target is taken at its word.
+ */
+export function dropsDataSet(target: PluginTestTargetEntry | null): boolean {
+  if (!target) return true;
+  if (target.plugin.id !== "scm-sim") return false;
+  const v = (target.plugin.version ?? "0").replace(/^v/i, "").split(/[.-]/).map((p) => Number(p) || 0);
+  for (let i = 0; i < SCM_SIM_DATA_SETS.length; i++) if ((v[i] ?? 0) !== SCM_SIM_DATA_SETS[i]) return (v[i] ?? 0) < SCM_SIM_DATA_SETS[i];
+  return false;
+}
+
+/**
+ * The sentence Test Map says when `target` would play the map without the data set in use,
+ * or null: the game's own data is in use, or the target carries the set.
+ */
+export function droppedDataSetHint(store: Store, target: PluginTestTargetEntry | null): string | null {
+  const source = store.get(gameDataSourceAtom) ?? currentAssetSource();
+  if (!source || source.kind === "none" || isDefaultProfile(source.profile.id) || !dropsDataSet(target)) return null;
+  return target
+    ? t("{target} plays the map with the game's own data, not {dataSet}.", { target: pluginText(target.plugin.id, target.spec.label), dataSet: source.profile.name })
+    : t("StarCraft plays the map with its own data, not {dataSet}, unless it is started through {dataSet}'s own launcher.", { dataSet: source.profile.name });
 }
 
 /** The target Test Map uses now. */
@@ -69,6 +100,8 @@ export function startTest(store: Store, which: string = "chosen"): void {
     store.set(pushToastAtom, { kind: "error", title: t("The map was not tested"), detail: t("{target}: {message}", { target: name(target.spec.label), message }) });
   };
   count("map.test", { route: "plugin", target: target.plugin.id });
+  const dropped = droppedDataSetHint(store, target);
+  if (dropped) store.set(pushToastAtom, { kind: "warn", title: dropped });
   try {
     const ran = target.spec.run(map);
     if (ran && typeof (ran as Promise<unknown>).then === "function") {

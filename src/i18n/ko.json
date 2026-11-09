@@ -3211,6 +3211,8 @@
   "The map has been replaced since, so your version cannot be put back.": "그 사이 맵이 통째로 바뀌어 내 버전을 되돌릴 수 없습니다.",
   "Put back my changes": "내 변경 되돌리기",
   "The browser did not allow writing into {name}.": "브라우저가 {name}에 쓰기를 허용하지 않았습니다.",
+  "{target} plays the map with the game's own data, not {dataSet}.": "{target}은(는) {dataSet}이(가) 아니라 게임 본래의 데이터로 맵을 실행합니다.",
+  "StarCraft plays the map with its own data, not {dataSet}, unless it is started through {dataSet}'s own launcher.": "스타크래프트는 {dataSet}의 실행 프로그램으로 시작하지 않으면 {dataSet}이(가) 아니라 게임 본래의 데이터로 맵을 실행합니다.",
   "The map was not tested": "맵을 테스트하지 못했습니다",
   "{target}: {message}": "{target}: {message}"
 }

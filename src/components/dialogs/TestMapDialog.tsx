@@ -14,6 +14,8 @@ import type { DialogProps } from "./DialogHost";
 import { GameFolderRow, TestFolderRow, useGameInfo, useTestFolder } from "./TestFolder";
 import { t } from "../../i18n";
 import { count } from "../../services/usage";
+import { droppedDataSetHint } from "../../services/testTargets";
+import { gameDataSourceAtom } from "../../atoms/gameDataAtoms";
 
 /**
  * Tools ▸ Test Map (Ctrl+F5): where the map will be written for the game, and Run. The
@@ -36,6 +38,8 @@ export function TestMapDialog({ entry }: DialogProps) {
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
   const name = testFileName(store);
+  useAtomValue(gameDataSourceAtom); // the hint below follows the data set in use
+  const dropped = droppedDataSetHint(store, null);
   const setDir = (dir: string) => setPrefs({ ...prefs, testMap: { ...prefs.testMap, dir } });
 
   const ready = bridge ? info?.mapsDir !== null && info !== null : folder !== null && folder !== undefined || !canPickTestFolder();
@@ -111,6 +115,7 @@ export function TestMapDialog({ entry }: DialogProps) {
           <p className="hint" style={{ marginTop: 6 }}>{t("The game has no way to open a map from the outside, so it starts on its menu; the map is under Single Player ▸ Custom Game ▸ scmJS. A running game is not restarted.")}</p>
         </Group>
       )}
+      {dropped && <p className="hint">{dropped}</p>}
       {problem && <p className="error">{problem}</p>}
     </DialogFrame>
   );

@@ -1,7 +1,10 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { parseScenario, serializeScenario } from "../src/formats/chk/scenario";
+import { parseScenario, serializeScenario, tilesetIndex } from "../src/formats/chk/scenario";
+import { isModTile, missingTerrain, tileGroupRanges } from "../src/data/remasteredTiles";
+import { TILESET_FILENAMES } from "../src/formats/tileset/load";
+import { validateScenario } from "../src/editor/validate";
 import { loadMap } from "../src/formats/mpq/scm";
 import { tileGroup } from "../src/formats/chk/sections/terrain";
 import { UNIT_TYPES } from "../src/formats/chk/sections/settings";
@@ -62,6 +65,38 @@ describe.skipIf(maps.length === 0)("Cosmonarchy's maps", () => {
     console.log(`Cosmonarchy maps: ${maps.length} found, ${opened} open, ${same} save byte for byte; units to id ${maxUnit} (${past227} placed past 227), tile groups to ${maxGroup}`);
     expect(failed).toEqual([]);
     expect(opened).toBe(maps.length);
+  }, 600_000);
+
+  it.skipIf(!haveCosmonarchy)("have terrain the game's tilesets have not got, and the mod's own have all of it", async () => {
+    const groupsOf = new Map<number, number>();
+    const modGroups = (era: number) => {
+      // The release names some of its tilesets in capitals (Jungle.cv5, AshWorld.cv5).
+      const file = readdirSync(join(root, "release/mpq/tileset")).find((n) => n.toLowerCase() === `${TILESET_FILENAMES[era]}.cv5`);
+      if (!groupsOf.has(era)) groupsOf.set(era, decodeCv5(cosmonarchyFile(`release/mpq/tileset/${file}`)).length);
+      return groupsOf.get(era)!;
+    };
+    let onMod = 0, lacking = 0;
+    const short: string[] = [];
+    for (const path of maps) {
+      const scn = parseScenario((await loadMap(new Uint8Array(readFileSync(path)))).chk);
+      const era = tilesetIndex(scn);
+      const { classic, remastered } = tileGroupRanges(era);
+      if (scn.tiles.some((tile) => isModTile(era, tile))) onMod++;
+      // Over Remastered's files a map on the mod's terrain is missing exactly its mod tiles; over the mod's own, nothing.
+      const overRemastered = missingTerrain(scn.tiles, era, remastered);
+      expect(overRemastered.remastered, path).toBe(0);
+      const overClassic = missingTerrain(scn.tiles, era, classic);
+      if (overClassic.mod + overClassic.remastered > 0) lacking++;
+      const own = missingTerrain(scn.tiles, era, modGroups(era));
+      if (own.mod + own.remastered > 0) short.push(`${path.slice(mapsDir.length + 1)}: ${own.mod} past the mod's own table`);
+      if (/BattleGuard 1\.3/.test(path)) {
+        expect(overClassic.mod, path).toBeGreaterThan(0);
+        expect(validateScenario(scn).some((i) => i.text.includes("terrain StarCraft has not got")), path).toBe(true);
+      }
+    }
+    console.log(`Cosmonarchy maps: ${onMod} of ${maps.length} use terrain past Remastered's tables, ${lacking} lack terrain over 1.16's; ${short.length} lack any over the mod's own`, short.slice(0, 5));
+    expect(onMod).toBeGreaterThan(0);
+    expect(short).toEqual([]);
   }, 600_000);
 
   it.skipIf(!haveCosmonarchy)("the release's tables and tilesets are wide enough for them", () => {

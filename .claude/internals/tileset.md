@@ -157,3 +157,14 @@ then part of the group — and `& 0x7FF` otherwise, where bit 15 stays Remastere
 site that turns a tile into a group passes `tileset.groups.length`. The atlas for 40k megatiles is ~2,176 × 21,300 px;
 it drew in headless Chromium, and a lazy atlas (like `hd.ts`'s pages) is the way out if a browser refuses the size.
 See `gamedata.md` "Data sets widened".
+
+Detection by the whole group (2026-11-09): Check Map, the missing-terrain toast **and the drawing** ask whose a tile
+is and whether the data set has it by the *whole* group, bit 15 included (`data/remasteredTiles.ts`), on every
+tileset. `tileGroupOf` keeps the eleven-bit rule on a table of ≤ 2,048 groups, but the ground layer, the minimap and
+the image export ask `missingGroups` first and hatch a tile the table has not got instead of resolving it
+(`viewport-ui.md` "A tile the data set has not got is hatched") — so over a short table a tile with bit 15 set is
+never drawn as the eleven-bit group's megatile any more. The known cost: a vanilla map with a deliberate creep flag on
+a tile shows that tile hatched (one probe map of ~600 surveyed). Reasons and the survey in `editor-operations.md`
+"Check Map: terrain made for a mod". `megatileForTile` takes `Pick<Tileset, "groups" | "megatileCount">` now, and
+`CV5_ENTRY_BYTES` (52) is exported: a table's length in groups is its file's size over it, which is how a stored
+data set or a folder is asked whether it has a map's terrain without decoding anything (`gamedata.md`).

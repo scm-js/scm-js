@@ -55,4 +55,19 @@ export interface Toast {
    * check's "Download". Pressing it dismisses the toast as well as running this.
    */
   action?: { label: string; run: () => void };
+  /**
+   * Buttons in a row under the text, for a notice that offers more than one way on — the
+   * terrain notice's data set to switch to, folder to draw from and Game Data…. Pressing
+   * one dismisses the toast unless it says `keep` (a button that opens a picker the person
+   * may back out of).
+   */
+  actions?: ToastAction[];
+}
+
+/** One of a toast's `actions`. */
+export interface ToastAction {
+  label: string;
+  run: () => void;
+  /** Leave the toast up when pressed. */
+  keep?: boolean;
 }

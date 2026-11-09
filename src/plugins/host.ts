@@ -1686,8 +1686,9 @@ export function gameDataApi(store: Store): GameDataApi {
  * file input's folder mode; the folder's files with their paths (`folders.ts`), or none on cancel.
  * The picker's folder is walked here, one call a file, so the status bar counts it as it goes
  * (`folderReading`); the input's is walked by the browser before it answers.
+ * Also how the editor itself asks for a mod's folder (`services/missingTerrain.ts`).
  */
-async function pickFolder(store: Store): Promise<FolderFile[]> {
+export async function pickFolder(store: Store): Promise<FolderFile[]> {
   if (typeof document === "undefined") return [];
   const picker = directoryPicker();
   if (picker) {

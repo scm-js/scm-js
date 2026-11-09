@@ -198,6 +198,33 @@ read in the first effect pass is still null.
   animation frame or a hover ghost no longer re-blits every visible megatile. Anything that changes
   what is under the ground must already bump `terrainRevisionAtom` / `doodadsRevisionAtom` (or
   replace the scenario), which is the same contract the repaint itself relies on.
+  **A tile the data set has not got is hatched** (2026-11-09, `viewport/missingTile.ts`): `Ground.lacks` is
+  `remasteredTiles.ts#mapLacks(tiles, era, groups, terrainRevision + doodadsRevision)` — a 4,096-byte table of the
+  groups `tilesetHasTile` refuses, or **null when the map uses none of them**, worked out once per tile array, tileset
+  and revision (a `WeakMap`), so a map with all its terrain takes the old path with one null test a tile. In
+  `blitTiles` a lacked tile gets `megatile = -1` *before* `megatileForTile` (which by the eleven-bit rule would hand
+  most of a mod's tiles another group's megatile: BattleGuard over 1.16 is 464 black and 844 wrong, over Remastered
+  nearly all wrong), is filled with `missingTilePattern` and `continue`s: no overlay (elevation / buildability of a
+  tile nobody knows), no mask picture (black in the mask, so no water bends over it), never `animated`. The pattern
+  is one stamp a device scale (plate `--bg-2`, lines `--warn` at 0.6, period 8 screen px "\" — the buildability
+  hatch is one blue "/" a tile), written pixel by pixel so it tiles without antialiasing, and laid from the map's
+  corner by `CanvasPattern.setTransform(translate(-ox, -oy))`: a strip a scroll uncovers continues its neighbours'
+  lines, and the layer's shift-and-blit stays exact. Same at the flat zooms (< 4 px a tile). A megatile of -1 that
+  is *not* lacked (an in-range group naming a megatile the table has not got) stays black. The minimap
+  (`panels/minimapTerrain.ts#fillTerrain`, split out of `MinimapPanel` so `tests/missing-terrain.test.ts` runs it
+  without a canvas) asks `missingTileRgb(px, py)` — period 4, lines 2, `--warn` at full strength, in the picture's
+  own pixels — and `mapImage.ts#drawTerrain` fills with the same pattern at scale 1 (its context is already
+  translated to the map's corner). Not marked, on purpose: the paste and brush ghosts (`paint/ghosts.ts`: a
+  transient preview at part strength; palette tiles are the tileset's own and always exist; a clip copied off
+  missing tiles previews by the old rule and is hatched once pasted), the tile palette, doodad thumbs and the New
+  Scenario previews (they draw the *tileset's* tiles, never a map's), and `plugins/graphics.ts` /
+  `api.terrain.color` (a plugin asks for a tile id's picture or colour of the loaded tileset; null/another tile as
+  before — changing what a plugin gets is a contract change, not taken here). `useMissingTerrain`, mounted here
+  with `useTileset`'s `loaded`, is the notice — see `gamedata.md` "Terrain the data set lacks".
+- **Toasts with several buttons** (`Toast.actions`, 2026-11-09): a row under the text (`.toast-actions`, wraps),
+  each `{ label, run, keep? }`; pressing one dismisses the toast unless `keep` (the terrain notice's folder button:
+  the picker can be backed out of, and the notice should still be there). `Toast.action` (one button beside the
+  text) is unchanged.
   **A scroll shifts the layer** (2026-10-04). The layer used to be redrawn whole on every
   scroll frame — one `drawImage` per visible megatile, 10,793 of them at 25% in a 1400×900
   window. It is now anchored at the scroll position *rounded to a device pixel* (`ox`, `oy`),

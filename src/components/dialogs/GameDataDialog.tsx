@@ -71,7 +71,7 @@ function explain(source: AssetSource | null): string {
   switch (source.kind) {
     case "bundled": return source.desktop ? t("Extracted into the app's data folder from your StarCraft installation.") : t("The graphics ship with this build.");
     case "stored": return t("Terrain and units draw from this copy, and it is here next time.");
-    case "reader": return t("A plugin hands these files over as they are asked for; nothing is kept for next time.");
+    case "reader": return t("These files are read from a folder, or handed over by a plugin, as they are asked for; nothing is kept for next time.");
     case "none": return t("The editor is running without Blizzard’s assets — terrain is flat colours and units are markers.");
   }
 }

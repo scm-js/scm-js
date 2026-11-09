@@ -16,6 +16,8 @@ import { START_LOCATION } from "../data/units";
 import { boundsOf, locationName } from "../editor/locations";
 import { isResource, unitGeometry } from "../editor/units";
 import { drawFogOverlay } from "../components/viewport/fog";
+import { missingTilePattern } from "../components/viewport/missingTile";
+import { isLackedTile, lackedGroups } from "../data/remasteredTiles";
 import type { Rect } from "../editor/terrain";
 import { t } from "../i18n";
 
@@ -202,13 +204,20 @@ function drawTerrain(ctx: CanvasRenderingContext2D, scn: Scenario, loaded: Loade
   }
   const { atlas, tileset } = loaded;
   const flat = tilePx < FLAT_PX;
+  // Terrain the data set has not got is hatched as the viewport hatches it: the picture says what was not drawn.
+  const lacks = lackedGroups(scn.tiles, tilesetIndex(scn), tileset.groups.length);
+  const marker = lacks ? missingTilePattern(ctx, 1) : null;
   ctx.imageSmoothingEnabled = !flat && tilePx < atlasTileSize(atlas);
   for (let ty = area.y0; ty < area.y1; ty++) {
     for (let tx = area.x0; tx < area.x1; tx++) {
-      const megatile = megatileForTile(tileset, scn.tiles[ty * scn.width + tx]);
+      const id = scn.tiles[ty * scn.width + tx];
+      const megatile = megatileForTile(tileset, id);
       const px = tx * tilePx;
       const py = ty * tilePx;
-      if (megatile < 0) {
+      if (isLackedTile(lacks, id)) {
+        ctx.fillStyle = marker!;
+        ctx.fillRect(px, py, tilePx, tilePx);
+      } else if (megatile < 0) {
         ctx.fillStyle = "#000";
         ctx.fillRect(px, py, tilePx, tilePx);
       } else if (flat) {

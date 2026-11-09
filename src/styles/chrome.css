@@ -440,6 +440,8 @@
   cursor: default;
 }
 .toast-action:hover { background: var(--bg-4); border-color: var(--border-strong, var(--border)); }
+/* Several buttons (a toast's `actions`) sit in a row under the text and wrap. */
+.toast-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
 .toast-close {
   flex: none;
   display: inline-flex;

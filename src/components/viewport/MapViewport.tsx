@@ -54,6 +54,7 @@ import { animateUnitsSpeedAtom, animateWaterSpeedAtom, gridLookAtom, preferences
 import { openDialogAtom, statusMessageAtom } from "../../atoms/uiAtoms";
 import { activeDocumentIdAtom, canEdit, doodadsRevisionAtom, locationsAtom, scenarioAtom, startLocationsAtom, terrainRevisionAtom, unitsRevisionAtom, viewOnlyAtom } from "../../atoms/documentAtoms";
 import { useTileset } from "../../hooks/useTileset";
+import { useMissingTerrain } from "../../hooks/useMissingTerrain";
 import { paintsTiles, useTerrainTools, type MapPoint } from "../../hooks/useTerrainTools";
 import { cancelMapPickAtom, cancelMapToolAtom, mapPickAtom, mapViewStateAtom, mapToolAtom, mapToolRevisionAtom, pluginOverlayRevisionAtom, pluginOverlaysAtom, shownMapViewAtom, viewFlashesAtom, type PluginOverlayEntry } from "../../atoms/pluginAtoms";
 import type { MapPointer, MapView, OverlayAbove, PickedObject } from "../../plugins/api";
@@ -73,6 +74,7 @@ import { onGrpLoaded } from "../../formats/units/load";
 import { UnitAnimator } from "../../formats/units/animate";
 import { ANYWHERE_INDEX } from "../../formats/chk/sections/objects";
 import { tilesetIndex } from "../../formats/chk/scenario";
+import { mapLacks } from "../../data/remasteredTiles";
 import { unitAt, unitBox, unitGeometry } from "../../editor/units";
 import { unitLabel } from "../../data/units";
 import { symmetryAvailable, symmetryAxes } from "../../editor/symmetry";
@@ -321,6 +323,8 @@ export default function MapViewport() {
   const mapStarts = useAtomValue(startLocationsAtom);
   const startLocations = useMemo(() => (scenario ? mapStarts : []), [scenario, mapStarts]);
   const { loaded: tilesetAssets, loading: tilesetLoading, error: tilesetError } = useTileset();
+  // Terrain the data set in use has not got (a mod's map over the game's files): said once, as a toast.
+  useMissingTerrain(tilesetAssets);
 
   const tilePx = TILE * zoom;
   const worldW = mapW * tilePx;
@@ -385,6 +389,7 @@ export default function MapViewport() {
     if (tiles && tilesetAssets) {
       ({ animated: animatedInView, moving: movingInView } = paintGround(v, groundLayerRef, {
         scenario, tiles, assets: tilesetAssets, terrainRevision, doodadsRevision, elevation: flags.elevation, buildability: flags.buildability,
+        lacks: scenario ? mapLacks(tiles, tilesetIndex(scenario), tilesetAssets.tileset.groups.length, terrainRevision + doodadsRevision) : null,
         motion: flags.animateWater ? { pass: effectPass, seconds: (performance.now() / 1000) * waterSpeed, tune: effectTune } : null,
       }));
     } else if (tiles && tilesetLoading) {

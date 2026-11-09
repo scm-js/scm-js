@@ -157,7 +157,10 @@ need to move; see [Remastered graphics](#remastered-graphics). A Remastered copy
 Remastered also added tiles, and so doodads, to seven of the eight tilesets (Installation
 is unchanged). Everything the 1.16 tile tables hold is in Remastered's tables unchanged,
 so a map made for 1.16 draws the same from either copy. A map that uses the added tiles
-needs the Remastered files: from a 1.16 copy those tiles have no picture.
+needs the Remastered files: from a 1.16 copy those tiles have no picture. The editor draws
+them hatched and says so when it opens such a map, and when a Remastered data set is
+already installed the notice offers to switch to it
+([below](#terrain-the-data-set-has-not-got)).
 
 There are two ways in:
 
@@ -255,7 +258,8 @@ Many mods change more than single files. A data set takes what the larger ones s
   groups, `.vx4ex` megatile tables with 32-bit references, any number of megatiles. On a
   tileset with more than 2,048 groups a tile's group takes twelve bits of the map's tile
   value (on the game's own tilesets the top bit is the creep flag, as before), so a map
-  placing group 2,774 draws it.
+  placing group 2,774 draws it. Opened with a data set that has not got those groups, the
+  map says so ([below](#terrain-the-data-set-has-not-got)).
 - **The editor's plugins.** The plugins that come with the editor follow the data set:
   Repair leaves a mod's own unit types alone, Melee Wizard lays bases out with the mod's
   footprint sizes, Section Explorer reads an extended tileset's tile groups, and
@@ -294,6 +298,57 @@ editor is changed only by Save. Test Map also passes the data set on, so a test 
 that plays the map, such as the play page, knows which files the map was made for.
 StarCraft itself, started on its own, plays with the game's own data, and Test Map says
 so.
+
+### Terrain the data set has not got
+
+A map made for a mod that carries no such note, because it was made in another editor or
+is the map of a replay, still shows it in its terrain: a mod's tileset can have far more
+tile groups than the game's (Cosmonarchy's Jungle has 4,095, Remastered's 2,046). The same
+goes, on a smaller scale, for a map on the tiles Remastered added, opened over a 1.16
+copy.
+
+**The tiles are hatched.** Every tile the data set in use has no picture for is drawn as a
+dark plate with thin amber diagonals, in the map at every zoom, in the minimap and in an
+exported image. Nothing of the map changes: it is only how the tile is drawn, and it is
+drawn so on purpose. Left to the game's own rule most of a mod's tiles would not come out
+empty but as *other* tiles, since the game reads a tile's group with one bit fewer than a
+mod's long tileset uses, and a map of wrong terrain looks fine until it is played. The
+elevation and buildability overlays say nothing on a hatched tile, as nothing is known of
+it. (One case reads wrongly: a map of the game's own that sets the creep flag, the top bit
+of a tile value, on a tile by hand has that tile hatched and counted as a mod's, because
+the flag is the bit a mod's tileset uses. Maps do not do this outside of tests.)
+
+**The editor says so**, once for the map while the data set stays the same, in a notice
+that stays until you close it. It names the data set and the tileset, counts the tiles,
+and says whether they are past even Remastered's tables, so the map was made for a mod, or
+are tiles Remastered added. It offers what can be done from where you are:
+
+- **Switch to *name*.** When a data set already installed here has the terrain, the notice
+  names it and the button switches to it. The editor only compares how long each data
+  set's tile table is for the map's tileset with what the map uses, so the offer costs
+  nothing, and it is an offer: a switch changes the units' pictures and names too. When
+  several fit, the one offered is the first in this order: the game's own files,
+  StarCraft: Remastered, then the others by name as the dialog lists them. Help ▸ Game
+  Data… switches to any of the others.
+- **Choose the mod's folder…**, for a mod's terrain. Pick the folder the mod's files are
+  in and the editor draws from it straight away. Nothing is installed or kept: a file is
+  read from the folder when the map needs it, so a mod of thousands of files is in view in
+  seconds, and a reload, or another data set in Help ▸ Game Data…, goes back. It reads the
+  mod's *loose* files, the game's folders (`arr`, `unit`, `tileset`…) in the folder you
+  pick or in one inside it. A folder that holds only archives (`.mpq`, the mod's `.exe`)
+  is turned down with a pointer to Help ▸ Game Data… ▸ Add a data set…, which reads
+  archives, and so is a folder that has not got the map's terrain either: the notice says
+  which, and the data set in use is left alone. A folder that has some of the terrain and
+  not all is taken, and the notice comes back with what is left. The mod's hash is not
+  worked out this way (it covers every file of the mod), so a map saved meanwhile records
+  the data set by the folder's name alone. To keep the mod, or to work from its hash,
+  install it as a data set; to change the mod, open it in the [Mod
+  Editor](mods.md#three-ways-in).
+- **Game Data…** opens the dialog.
+
+The notice goes once the data set in use has the terrain, and comes back if you switch to
+one that has not. A map whose note names another data set gets the offer to switch
+instead. Check Map lists the same tiles under Terrain.
 
 The hash is [the mod's hash](mods.md#the-mods-hash): it covers every file of the data
 set's own — its loose files, the members of its archives (a loader `.exe` in the folder is
@@ -538,6 +593,9 @@ under `src/formats/`.
 | `src/gamedata/profiles.ts`, `src/services/gameData.ts` | Data sets: the id and name, the stored choice, and the switch that drops every decoded table and loads again. |
 | `src/gamedata/overCopy.ts` | A data set laid over a copy rather than the game's archives, the images whose Remastered pictures it turns off, and the digest of its files. |
 | `src/services/mapDataSet.ts` | The note a map keeps of its data set, and the question asked when it opens elsewhere. `tests/map-dataset.test.ts`. |
+| `src/services/missingTerrain.ts`, `src/data/remasteredTiles.ts` | Whose a tile is (the game's, Remastered's additions, a mod's), the notice when the data set in use has not got some of a map's terrain, the installed data set it offers and the folder it draws from. `tests/missing-terrain.test.ts`. |
+| `src/gamedata/folderSet.ts` | A mod's folder as a data set in memory: its loose files by the game's names, read when asked for. `tests/mod-folder.test.ts`. |
+| `src/components/viewport/missingTile.ts` | The hatch drawn for a tile the data set has no picture for. |
 | `src/formats/dat/table.ts`, `src/formats/dat/schema.ts` | Every table at any width (the game's, DatExtend's expanded layout, `.datex`); the editor's readers in `dat.ts` pick their columns from it. `tests/datasets-widths.test.ts`, and `tests/datasets-cosmonarchy.test.ts` over a mod's maps where `SCMJS_COSMONARCHY` points at them. |
 | `src/data/gameNames.ts` | The per-entry naming rule; `tests/names.test.ts` pins the differences against the real files. |
 | `src/formats/tileset/hd.ts` | Remastered's 2x terrain and where its water and lava are. `tests/hd-terrain.test.ts`. |

@@ -10,59 +10,14 @@ import { TILESET_BY_ID } from "../../data/tilesets";
 import { displayColorHex } from "../../data/players";
 import { isResource, unitGeometry } from "../../editor/units";
 import { useUnitAssets } from "../../hooks/useUnitAssets";
-import { hashNoise } from "../viewport/noise";
 import { locationsAtom, scenarioAtom, startLocationsAtom, terrainRevisionAtom, unitsRevisionAtom } from "../../atoms/documentAtoms";
 import { useTileset } from "../../hooks/useTileset";
-import { megatileForTile } from "../../formats/tileset/decode";
-import type { LoadedTileset } from "../../formats/tileset/load";
+import { fillTerrain } from "./minimapTerrain";
 import { t } from "../../i18n";
 import { mapViewCamerasAtom, mapViewMinimapRevisionAtom, shownMapViewAtom } from "../../atoms/pluginAtoms";
 
 /** The minimap's backing size in pixels, each side. */
 const SIZE = 256;
-
-/** The ground at minimap scale: the tiles' mean colours, a plain plate while the graphics load, the tileset's colour without them. */
-function fillTerrain(img: ImageData, w: number, h: number, scale: number, tiles: ArrayLike<number> | undefined, assets: LoadedTileset | null, loading: boolean, fallback: string) {
-  if (tiles && assets) {
-    // One mean colour per megatile is exactly what a minimap wants.
-    const { atlas, tileset: ts } = assets;
-    for (let py = 0; py < img.height; py++) {
-      const ty = Math.min(h - 1, Math.floor(py / scale));
-      for (let px = 0; px < img.width; px++) {
-        const tx = Math.min(w - 1, Math.floor(px / scale));
-        const megatile = megatileForTile(ts, tiles[ty * w + tx]);
-        const rgb = megatile < 0 ? 0 : atlas.averages[megatile];
-        const i = (py * img.width + px) * 4;
-        img.data[i] = rgb >> 16;
-        img.data[i + 1] = (rgb >> 8) & 255;
-        img.data[i + 2] = rgb & 255;
-        img.data[i + 3] = 255;
-      }
-    }
-  } else if (tiles && loading) {
-    // Graphics for the map just opened are still coming; a plain plate reads as
-    // "loading" instead of pretending to be terrain.
-    img.data.fill(255);
-    for (let i = 0; i < img.data.length; i += 4) {
-      img.data[i] = 0x12; img.data[i + 1] = 0x16; img.data[i + 2] = 0x1d;
-    }
-  } else {
-    const base = parseInt(fallback.slice(1), 16);
-    const br = (base >> 16) & 255, bg = (base >> 8) & 255, bb = base & 255;
-    for (let py = 0; py < img.height; py++) {
-      for (let px = 0; px < img.width; px++) {
-        const tx = Math.floor(px / scale), ty = Math.floor(py / scale);
-        const n = (hashNoise(tx, ty) - 0.5) * 0.12 + (hashNoise(tx >> 2, ty >> 2) - 0.5) * 0.16;
-        const k = 1 + n;
-        const i = (py * img.width + px) * 4;
-        img.data[i] = br * k;
-        img.data[i + 1] = bg * k;
-        img.data[i + 2] = bb * k;
-        img.data[i + 3] = 255;
-      }
-    }
-  }
-}
 
 export default function MinimapPanel() {
   const ref = useRef<HTMLCanvasElement>(null);
@@ -116,7 +71,7 @@ export default function MinimapPanel() {
     let terrain = terrainRef.current;
     if (!terrain || terrain.key.some((x, i) => x !== terrainKey[i])) {
       const img = ctx.createImageData(Math.max(1, Math.round(w * scale)), Math.max(1, Math.round(h * scale)));
-      fillTerrain(img, w, h, scale, tiles, tilesetAssets, tilesetLoading, tileset.color);
+      fillTerrain(img, w, h, scale, tiles, tilesetAssets, tilesetLoading, tileset.color, scenario ? tilesetIndex(scenario) : 0);
       terrain = terrainRef.current = { key: terrainKey, img };
     }
     ctx.putImageData(terrain.img, ox, oy);

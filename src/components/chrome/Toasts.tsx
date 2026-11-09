@@ -32,6 +32,20 @@ function ToastView({ toast }: { toast: Toast }) {
       <div className="toast-text">
         <div className="toast-title">{toast.title}</div>
         {toast.detail && <div className="toast-detail">{toast.detail}</div>}
+        {toast.actions && toast.actions.length > 0 && (
+          <div className="toast-actions">
+            {toast.actions.map((action, i) => (
+              <button
+                key={i}
+                type="button"
+                className="toast-action"
+                onClick={() => { if (!action.keep) dismiss(toast.id); action.run(); }}
+              >
+                {action.label}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
       {toast.action && (
         <button

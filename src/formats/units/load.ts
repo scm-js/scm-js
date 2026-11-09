@@ -15,6 +15,7 @@ import { currentAssetSource, fetchAsset } from "../../gamedata/source";
 import { t } from "../../i18n";
 import { installNames } from "../../data/units";
 import { namesFromAssets, unitCatalogue } from "../../data/gameNames";
+import { nameFileText, NAME_TEXT_FILES } from "../mod/data";
 import { buildStockSounds, type StockSounds } from "../../editor/stockSounds";
 import { decodePalette } from "../tileset/decode";
 
@@ -53,6 +54,12 @@ export interface UnitAssets {
    * than 228 types names the rest — GPTP's convention. Null without one.
    */
   unitNames: string[][] | null;
+  /**
+   * The text a GPTP mod names its weapons, upgrades and technologies in, where the data set
+   * has it (`formats/mod/data.ts#NAME_TEXT_FILES`: `rez\stat.txt`, `arr\upgrades.txt`, …),
+   * by that table's key; absent for the game's own data.
+   */
+  nameTexts?: Partial<Record<keyof typeof NAME_TEXT_FILES, string>>;
 }
 
 export class UnitAssetsMissingError extends Error {
@@ -140,6 +147,7 @@ export function getUnitAssets(): Promise<UnitAssets> {
         // Only where the extraction found one: a data set with more unit types than the game names them here.
         manifest?.optional.includes(UNIT_NAMES_FILE) ? fetchPart(UNIT_NAMES_FILE, isTbl).catch(() => null) : Promise.resolve(null),
       ]);
+      const nameTexts = await fetchNameTexts(manifest);
       const teamColors = decodePcx(pcx).pixels;
       if (teamColors.length < TEAM_COLOR_ROWS * TEAM_SLOT_COUNT) throw new Error("tunit.pcx: too small");
       const assets: UnitAssets = {
@@ -155,9 +163,11 @@ export function getUnitAssets(): Promise<UnitAssets> {
         techs,
         statTxt: statTxt ? decodeTblEntries(statTxt) : null,
         unitNames: unitNames ? decodeTblEntries(unitNames) : null,
+        nameTexts,
       };
       assetsReady = assets;
-      installNames(namesFromAssets(assets), unitCatalogue(assets));
+      const names = namesFromAssets(assets);
+      installNames(names, unitCatalogue(assets, names));
       return assets;
     } catch (err) {
       assetsPromise = null; // let a later attempt retry after the files are installed
@@ -166,6 +176,19 @@ export function getUnitAssets(): Promise<UnitAssets> {
   })();
   return assetsPromise;
 }
+
+/** The mod's name files the extraction found (its manifest's `optional`), as text; a file that does not come is left out. */
+async function fetchNameTexts(manifest: UnitManifestView | null): Promise<AssetNameTexts> {
+  const out: AssetNameTexts = {};
+  await Promise.all((Object.entries(NAME_TEXT_FILES) as [keyof typeof NAME_TEXT_FILES, string][]).map(async ([key, member]) => {
+    const path = member.toLowerCase().replaceAll("\\", "/");
+    if (!manifest?.optional.includes(path)) return;
+    const data = await fetchPart(path, () => true).catch(() => null);
+    if (data) out[key] = nameFileText(data);
+  }));
+  return out;
+}
+type AssetNameTexts = NonNullable<UnitAssets["nameTexts"]>;
 
 /** A data set's animation script that this reader cannot make sense of costs the animation, not the units. */
 function decodeIscriptSafely(data: Uint8Array): IscriptBin | null {

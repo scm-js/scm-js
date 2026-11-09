@@ -12,8 +12,7 @@
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { entryText, loadModData, namesOf, type ModData } from "../../../src/formats/mod/data";
-import { tblFromText } from "../../../src/formats/dat/tblFile";
+import { loadModData, nameFileText, nameList, NAME_TEXT_FILES, namesOf, statTextEntries, statWithText, type ModData } from "../../../src/formats/mod/data";
 import { CliError } from "../ui";
 import { t } from "../i18n";
 import type { GameFiles } from "../gamefiles";
@@ -201,26 +200,18 @@ export interface HeaderResult {
 export async function modNames(source: ModSource, data: ModData): Promise<{ names: ModData["names"]; statText: number; lists: string[] }> {
   const text = async (name: string): Promise<string | null> => {
     const f = source.files.get(name);
-    if (!f) return null;
-    const bytes = await f.read();
-    try { return new TextDecoder("utf-8", { fatal: true }).decode(bytes); } catch { return new TextDecoder("windows-1252").decode(bytes); }
+    return f ? nameFileText(await f.read()) : null;
   };
-  const statText = await text("rez\\stat.txt");
-  const lines = statText === null ? [] : tblFromText(statText.replace(/\r\n/g, "\n"));
-  const table = data.strings.stat ?? [];
-  const stat = Array.from({ length: Math.max(lines.length, table.length) }, (_, i) => (entryText(table[i]) ? table[i] : lines[i] ?? ""));
-  const names = namesOf(data.tables, { ...data.strings, stat });
+  const statText = await text(NAME_TEXT_FILES.stat);
+  const names = namesOf(data.tables, { ...data.strings, stat: statWithText(data.strings.stat ?? [], statText) });
   const lists: string[] = [];
   for (const [table, kind] of [["weapons", "weapons"], ["upgrades", "upgrades"], ["techdata", "technologies"]] as const) {
-    const count = data.tables[table]?.count ?? 0;
-    const list = await text(`arr\\${table}.txt`);
-    if (list === null || !count) continue;
-    const rows = list.replace(/\r\n?/g, "\n").replace(/\n$/, "").split("\n");
-    if (rows.length !== count) continue;
-    names[kind] = names[kind].map((label, id) => rows[id].trim() || label);
-    lists.push(`arr\\${table}.txt`);
+    const rows = nameList(await text(NAME_TEXT_FILES[table]), data.tables[table]?.count ?? 0);
+    if (!rows) continue;
+    names[kind] = names[kind].map((label, id) => rows[id] || label);
+    lists.push(NAME_TEXT_FILES[table]);
   }
-  return { names, statText: lines.filter((l) => entryText(l)).length, lists };
+  return { names, statText: statTextEntries(statText), lists };
 }
 
 /** Writes `<Mod>.h` and `<Mod>.ids.json` for the mod (and the mod into the bot's `scmbot.json` with `bot`). */

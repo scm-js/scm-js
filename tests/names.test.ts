@@ -10,7 +10,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   cleanLabel, composeUnitName, GAME_TECH_NAMES, GAME_UNIT_NAMES, GAME_UPGRADE_NAMES, GAME_WEAPON_NAMES, gameUnitName, gameWeaponName, namesAreTheGames, namesFromAssets,
 } from "../src/data/gameNames";
-import { installNames, TECH_NAMES, techName, UNIT_NAMES, unitName, UPGRADE_NAMES, UPGRADE_RACE, upgradeName } from "../src/data/units";
+import { installNames, TECH_NAMES, techName, techTypeCount, UNIT_NAMES, unitName, UPGRADE_NAMES, UPGRADE_RACE, upgradeName, upgradeTypeCount } from "../src/data/units";
 import { WEAPON_NAMES, weaponName } from "../src/data/weapons";
 import { decodeTechdataDat, decodeUpgradesDat, decodeWeaponsDat } from "../src/formats/dat/dat";
 import { decodeTbl, decodeTblEntries } from "../src/formats/dat/tbl";
@@ -58,6 +58,11 @@ describe("stat_txt reading", () => {
     expect(cleanLabel("Gauss Rifle")).toBe("Gauss Rifle");
     expect(cleanLabel("i")).toBe("i");
     expect(cleanLabel("x\u0003")).toBe("");
+  });
+
+  it("keeps a button tooltip's first line, not its description", () => {
+    expect(cleanLabel("c\u0001Hijack (\u0003C\u0001)\nLeaps to the target and takes control of it.")).toBe("Hijack (C)");
+    expect(cleanLabel("Gauss Rifle\r\nmore")).toBe("Gauss Rifle");
   });
 });
 
@@ -112,6 +117,48 @@ describe("the naming rule", () => {
     expect(weaponName(2)).toBe("C-10 Canister Rifle");
     expect(upgradeName(1)).toBe("X-Ray Beam");
     expect(techName(0)).toBe("Stim Packs");
+  });
+
+  it("takes a mod's own name lists over the labels, and names entries past the game's count", () => {
+    const entries = statTxt();
+    entries.push(["Lockdown"], ["l\u0001Hijack\nLeaps to the target"]);
+    const at = (i: number) => UNIT_NAMES.length + i + 1;
+    const techLabels = new Uint16Array(50);
+    techLabels[1] = at(0);
+    techLabels[9] = at(1);
+    const upgradeLabels = new Uint16Array(70);
+    const lines = (count: number, set: Record<number, string>) => Array.from({ length: count }, (_, id) => set[id] ?? "").join("\r\n") + "\r\n";
+    const names = namesFromAssets({
+      statTxt: entries, weapons: null,
+      upgrades: { label: upgradeLabels } as never,
+      techs: { label: techLabels } as never,
+      nameTexts: {
+        techdata: lines(50, { 1: "Lobotomy Grenade (Francisco Goska)", 45: "Mod Tech" }),
+        upgrades: lines(70, { 65: "Mod Upgrade" }),
+        weapons: lines(3, { 0: "ignored: not a line an entry" }),
+      },
+    })!;
+    expect(names.techs[1]).toBe("Lobotomy Grenade (Francisco Goska)"); // the list over "Lockdown"
+    expect(names.techs[9]).toBe("Hijack"); // no line in the list: the label's first line
+    expect(names.techs[45]).toBe("Mod Tech");
+    expect(names.techs).toHaveLength(50);
+    expect(names.upgrades[65]).toBe("Mod Upgrade");
+    installNames(names);
+    expect(techName(1)).toBe("Lobotomy Grenade (Francisco Goska)");
+    expect(upgradeTypeCount()).toBe(70);
+    expect(techTypeCount()).toBe(50);
+    installNames(null);
+    expect(upgradeTypeCount()).toBe(UPGRADE_NAMES.length);
+  });
+
+  it("fills stat_txt.tbl's gaps from a mod's rez\\stat.txt", () => {
+    const entries = statTxt();
+    const at = UNIT_NAMES.length + 3; // past the table's end: label 231 is the text's entry 230
+    const weaponLabels = new Uint16Array(WEAPON_NAMES.length);
+    weaponLabels[1] = at;
+    const text = Array.from({ length: at }, (_, i) => (i === at - 1 ? "Plasma Lance" : "")).join("\n") + "\n";
+    const names = namesFromAssets({ statTxt: entries, weapons: { label: weaponLabels } as never, upgrades: null, techs: null, nameTexts: { stat: text } })!;
+    expect(names.weapons[1]).toBe("Plasma Lance");
   });
 
   it("answers null without a names file, which leaves the tables alone", () => {

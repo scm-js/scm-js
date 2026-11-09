@@ -169,11 +169,13 @@ export const SOUND_TABLES = ["arr\\sfxdata.dat", "arr\\sfxdata.tbl"];
  */
 export const ICON_FILES = ["unit\\cmdbtns\\cmdicons.grp", "unit\\cmdbtns\\ticon.pcx"];
 /**
- * Files a data set with more unit types than the game's 228 names and pictures them with,
- * copied when present and listed in the manifest's `optional`: the names of every type by
- * id, and a command card picture for each (GPTP's DatExtend convention).
+ * Files a data set names and pictures its types with, copied when present and listed in the
+ * manifest's `optional`: the names of every unit type by id, and a command card picture for
+ * each (GPTP's DatExtend convention), then the text a GPTP mod names its weapons, upgrades and
+ * technologies in (`formats/mod/data.ts#NAME_TEXT_FILES`: `rez\stat.txt` and the
+ * `arr\<table>.txt` lists). The game's own archives have none of them.
  */
-export const UNIT_EXTRA_FILES = ["rez\\unitnames.tbl", "unit\\cmdbtns\\uniticons.grp"];
+export const UNIT_EXTRA_FILES = ["rez\\unitnames.tbl", "unit\\cmdbtns\\uniticons.grp", "rez\\stat.txt", "arr\\weapons.txt", "arr\\upgrades.txt", "arr\\techdata.txt"];
 /** Images the engine creates without an opcode: damage flames/sparks/blood (450–493) and geyser smoke (430–439). */
 const ENGINE_IMAGES = [...Array.from({ length: 44 }, (_, i) => 450 + i), ...Array.from({ length: 10 }, (_, i) => 430 + i)];
 

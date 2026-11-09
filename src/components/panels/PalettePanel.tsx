@@ -62,7 +62,7 @@ import { ALL_FOG_PLAYERS, FOG_PLAYERS, fogCount, playerBit } from "../../editor/
 import { useFogTools } from "../../hooks/useFogTools";
 import { TILESET_BY_ID } from "../../data/tilesets";
 import { displayColorHex } from "../../data/players";
-import { dataSetUnitGroups, RACE_LABEL, UNIT_GROUPS, unitLabel, type RaceKey, type UnitGroup } from "../../data/units";
+import { dataSetUnitGroups, RACE_LABEL, starEditUnitGroups, unitLabel, type RaceKey, type UnitGroup } from "../../data/units";
 import { SPRITE_COUNT, spriteCatalogue, spriteLabel } from "../../data/sprites";
 import { SpriteFlag } from "../../formats/chk/sections/objects";
 import type { SpriteKind } from "../../editor/sprites";
@@ -305,7 +305,7 @@ function UnitPalette() {
       .map((g) => ({ ...g, units: q ? g.units.filter((id) => unitLabel(id).toLowerCase().includes(q) || String(id) === q) : g.units }))
       .filter((g) => g.units.length > 0);
     // The types a data set has past the game's 228, under a heading of its own.
-    return [matching(UNIT_GROUPS), matching(dataSetUnitGroups())];
+    return [matching(starEditUnitGroups()), matching(dataSetUnitGroups())];
     // The revision and the tables are dependencies for the names and the data set's types: they follow the loaded data set.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query, dataRevision, assets]);
@@ -460,7 +460,7 @@ function SpritePalette() {
   }, [assets]);
   // `assets` for the names, which follow the loaded data set.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const unitGroups = useMemo<PickerGroup[]>(() => [...UNIT_GROUPS, ...dataSetUnitGroups()].map((g) => ({ label: g.label, items: g.units.map((id) => ({ id, label: unitLabel(id) })) })), [assets]);
+  const unitGroups = useMemo<PickerGroup[]>(() => [...starEditUnitGroups(), ...dataSetUnitGroups()].map((g) => ({ label: g.label, items: g.units.map((id) => ({ id, label: unitLabel(id) })) })), [assets]);
 
   const pick = (k: SpriteKind, id: number) => { setKind(k); (k === "pure" ? setActive : setActiveUnit)(id); setPlacing(true); };
   const activeId = kind === "pure" ? active : activeUnit;

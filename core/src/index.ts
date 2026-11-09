@@ -139,7 +139,7 @@ export {
   recordRendered, tidyManifest, ModFolderError,
   type MemberForm, type ModTable, type ModCarried, type ModManifest, type ModNames, type RenderContext, type Rendered, type PackContext,
 } from "../../src/formats/mod/folder";
-export { loadModData, namesOf, entryText, flatRow, rowChanges, ownEntry, type ReadMember, type ModData } from "../../src/formats/mod/data";
+export { loadModData, namesOf, entryText, flatRow, rowChanges, ownEntry, NAME_TEXT_FILES, nameFileText, nameList, statTextEntries, statWithText, type ReadMember, type ModData } from "../../src/formats/mod/data";
 export { checkMod, GAME_ISCRIPT_LAST, type ModFinding, type CheckFiles } from "../../src/formats/mod/check";
 export { diffMods, type ModChange, type ModChangeKind, type DiffSide } from "../../src/formats/mod/diff";
 

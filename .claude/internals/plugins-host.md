@@ -638,7 +638,9 @@ Two pools (handle-read files in one, entry-read in another) on a folder half kep
 handle's pool ends no sooner than the entry's, so one pool of 32. In the editor, same mirror, drop → `acceptsFolder` →
 `openFolder`: main 0.20 s → 0.52 s (7,794 files), this 0.16 s → 0.65 s (7,796 files, 2 by the entry); a folder nobody takes
 0.21 s → 0.16 s with no call on the handle at all. The 0.13 s is the entry's listing, which the handle's own listing cannot
-stand in for. Worst case, every file kept back: the entry's rate, as before #208.
+stand in for. Worst case, every file kept back: the entry's rate, as before #208. The same holds for a folder whose
+handle the browser refuses altogether (the picker refuses anything under Program Files, `gamedata.md`; whether a drop's
+`getAsFileSystemHandle()` does too was not run): no handle, the entry reads everything.
 
 Proof of the list: a probe folder of 53 files (`mkprobe.py` in the session's scratchpad: each kind below, files inside kept-back
 directories, ordinary files beside them), dropped on the dev server: main handed 13, this hands 53 with their bytes, 40 by the

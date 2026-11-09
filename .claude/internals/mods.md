@@ -240,7 +240,9 @@ Of these only `desktop.ini`, `thumbs.db` and `Icon\r` are on our list. The rest 
 (Cosmonarchy's `mpq/samase/config.ini`, `mtl.ini`, `mtl_campaign.ini`: on Windows Chrome a handle would not hand them
 over), so they keep their lines: a route that cannot read one has a mod short of a file, and another hash is the truth
 about it. **That gap is in the reading, not in the hash**: closing it means not reading a mod's folder through a handle
-alone (an entry walk, `<input webkitdirectory>` and Node see everything).
+alone (an entry walk, `<input webkitdirectory>` and Node see everything). Closed the same day for a folder dropped on
+the editor, which is listed by its entry and only read by its handle (`plugins-host.md`, "A dropped folder is listed by
+its entry and read by its handle"); the folder picker has only the handle and stays short.
 
 **Where the filter is.** (1) In the hash: `hashLines` drops a system file's line itself, `modHashOfDigests` marks a
 digest by the name it was given (a plugin's line keeps only the leaf, so `__MACOSX/y.fgp` is told there), and

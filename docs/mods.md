@@ -298,10 +298,9 @@ form](cli.md#playing-a-mod-on-the-play-page)).
 `desktop.ini` and `Thumbs.db` into folders it has shown, the macOS Finder `.DS_Store`, and
 a mod's loader that packs its folder into an archive packs them in too. The game never
 asks for them, and not every way of reading a folder hands them over: a browser's folder
-picker never shows `desktop.ini` or `Thumbs.db`, nor does a folder dropped on the editor,
-while a folder dropped on the play page and the command line do. So they have no line in
-the hash, wherever they lie, and the same mod has the same hash however it was read. They
-are, by name in any case:
+picker never shows `desktop.ini` or `Thumbs.db`, while a dropped folder and the command
+line do. So they have no line in the hash, wherever they lie, and the same mod has the
+same hash however it was read. They are, by name in any case:
 
 | Name | What leaves it |
 | --- | --- |
@@ -314,13 +313,12 @@ are, by name in any case:
 A file whose name only holds one of these (`mydesktop.ini`, `thumbs.db.txt`) is a file of
 the mod like any other. So is every other file a browser's folder picker does not show.
 Chrome hides more than the two names above: shortcuts (`.lnk`, `.url`, `.scf`), names
-Windows keeps for devices (`aux.wav`, `con.grp`), and names that begin or end with a
-space, a dot or `~`; on Windows its list of file types it does not hand to a page adds
-`.ini`, `.cfg`, `.dll` and `.manifest`. Those may be a mod's own (a plugin's
-`config.ini`), so they keep their lines: a mod read through the folder picker, or dropped
-on the editor, is short of them, and its hash says so by being another. Read such a mod
-with `scmjs`, or drop its folder on the play page, which reads a dropped folder file by
-file.
+Windows keeps for devices (`aux.wav`, `con.grp`), and names that begin or end with a space
+or `~` or end with a dot; on Windows its list of file types it does not hand to a page
+adds `.ini`, `.cfg`, `.dll` and `.manifest`. Those may be a mod's own (a plugin's
+`config.ini`), so they keep their lines: a mod read through the folder picker is short of
+them, and its hash says so by being another. Read such a mod with `scmjs`, or drop its
+folder on the editor or the play page: a dropped folder is read whole.
 
 **The hash before 9 November 2026** had lines for those files, so a mod whose folder holds
 any had another hash then: Cosmonarchy's release, with a `desktop.ini` in two of its sound

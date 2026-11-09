@@ -235,6 +235,17 @@ FireGraft files with them, and [the mod's hash](#the-mods-hash); the page keeps 
 that differ from your copy of the game. With `--map` the map starts with the mod. The
 hand-over is described in the [command line's guide](cli.md#mods).
 
+```sh
+scmjs mod play "Cosmonarchy BW" --map "(4)Exodus 1.0.scx" --bot cosmonarchy-example
+```
+
+`--bot` puts a community bot on the other side: one of the play page's bots by its key, or
+a `.scmbot` file you built. The map waits on the page's setup screen with the bot in the
+row beside yours, saying whether it was [made for the mod](#a-bot-for-your-mod), and you
+press Start Game; `--start` starts it at once. `--race` sets the bot's race. The page's
+own bots need a scmjs.dev account, and the page asks you to sign in; a file of your own
+does not.
+
 ### The mod's hash
 
 A mod goes by a hash of sixteen hex digits, worked out the same way by the play page,
@@ -317,8 +328,55 @@ on a mod](cli.md#a-bot-on-a-mod)).
 ### For AI tools
 
 `scmjs mcp` has the mod commands as tools: `mod_info`, `mod_check`, `mod_diff`,
-`mod_unpack`, `mod_pack` and `mod_new`. An AI tool can unpack a mod, change a table's text
-and pack it again, as you would. See [AI tools](cli.md#ai-tools).
+`mod_unpack`, `mod_pack`, `mod_new`, `mod_header` and `mod_play`. An AI tool can unpack a
+mod, change a table's text and pack it again, as you would, write the header for a bot,
+and hand the mod with a map and a bot to the play page in your browser, which it says the
+link to and what the page answered. `map_trace` and `map_cost` take a `mod`. See [AI
+tools](cli.md#ai-tools).
+
+## From a mod folder to a replay
+
+The whole path, from a mod as its makers ship it to a bot made for it playing you on the
+play page, and the game's replay played on from a moment. Cosmonarchy BW is the example;
+any mod goes the same way. You need your copy of StarCraft, Node, and Docker for building
+the bot. The play page's part arrives with its next release.
+
+1. **The mod.** Use the release folder as its makers ship it, here `Cosmonarchy BW`, or a
+   folder `scmjs mod unpack` wrote. `scmjs mod info "Cosmonarchy BW"` names it, counts its
+   files, plugins and FireGraft project, and prints its hash.
+2. **Check it.** `scmjs mod check "Cosmonarchy BW"` lists the mistakes it finds across the
+   tables, pictures, scripts and sounds, errors first. Nothing here stops on a warning.
+3. **A bot for it.** In a new folder beside the mod's, `scmjs bot new` writes a bot to
+   start from. Then `scmjs mod header "../Cosmonarchy BW" --bot` writes `Cosmonarchy_BW.h`
+   and `Cosmonarchy_BW.ids.json` beside it and names the mod in its `scmbot.json`; the
+   command prints how many units, weapons, upgrades and techs it named. Write the bot
+   against the header's names (`Cosmonarchy_BW::UnitTypes::Terran_Mason`); the scmbot
+   repository's `examples/cosmonarchy/` is one to start from.
+4. **Build it.** `scmjs bot build` writes `out/<key>.scmbot`. The first build downloads
+   the toolchain, a Docker image. To try it without a page,
+   `scmjs bot run out/<key>.scmbot "(4)Exodus 1.0.scx" --mod "../Cosmonarchy BW"` plays
+   it, and its first lines say "made for Cosmonarchy BW".
+5. **Hand it all to the play page.** With Exodus, one of the mod's maps,
+   `scmjs mod play "../Cosmonarchy BW" --map "(4)Exodus 1.0.scx" --bot out/<key>.scmbot`
+   opens the play page in your browser. The first time, the page keeps the mod (a few
+   minutes for a mod of Cosmonarchy's size) and loads again; then Exodus is on the setup
+   screen with its own settings, and the row beside yours names your bot "made for
+   Cosmonarchy BW". The terminal says the same and returns. With
+   `--bot cosmonarchy-example` the page's own example bot plays instead.
+6. **Play.** Press Start Game. The mod's plugins run in the game, the mod's AI plays the
+   map's computers, and your bot plays its side.
+7. **Save the replay.** Game Menu ▸ Save Replay downloads the game as a `.rep`, with [the
+   mod's name and hash](#replays-of-modded-games) at the end of the file.
+8. **Read it.** `scmjs replay info game.rep` shows the `Mod` line (Cosmonarchy BW, its
+   hash, and its makers' link if you gave the page one) and the `Plugins` line (the four
+   that ran, and the FireGraft project). `--builds --mod "../Cosmonarchy BW"` lists what
+   each player ordered by the mod's names.
+9. **Open it in the editor.** At scmjs.dev, File ▸ Open Replay… opens it with Aftermath,
+   which shows the mod and its link. The Replay view plays the game with the mod the play
+   page kept in step 5; the analysis is off for a mod's replay.
+10. **Play from a moment.** Stop the timeline where you want and press Play From Here. The
+    play page opens with the mod and its plugins running, at that moment; take a player
+    and play on, alone or against a community bot such as yours.
 
 ## Working with other tools
 
@@ -341,9 +399,10 @@ and pack it again, as you would. See [AI tools](cli.md#ai-tools).
 
 ## What it does not do yet
 
-- Plugins (`.qdp`, `.bwl`) are kept and listed, never run, and a FireGraft file's edits to
-  the game's program are not applied. Playing a mod that needs them waits for the play
-  page to run a plugin's code.
+- The command line keeps and lists plugins (`.qdp`, `.bwl`) and never runs them on your
+  computer; a FireGraft file's edits to the game's program are applied only inside the
+  game that the play page and the engine's bot runners play, where the plugins run too.
+- `scmjs mod test` has no scenario with a bot on the other side yet.
 - The editor does not open a mod's `.zip` or `.exe` itself; its data sets take a folder (a
   loader `.exe` in the folder is read for its archive).
 - `mod pack` does not make a self-executing exe; MPQDraft does.

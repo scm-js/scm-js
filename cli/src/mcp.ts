@@ -45,6 +45,9 @@ import { gameFilesOrNull, openMod } from "./mod/open";
 import { sourceHash } from "./mod/hash";
 import { MOD_COMPRESSIONS, packMod, readModFolder, type ModCompression } from "./mod/pack";
 import { unpackMod } from "./mod/unpack";
+import { writeModHeader } from "./mod/header";
+import { modOverlay } from "./mod/overlay";
+import { pageRace, playBotOf, playOnPage, playSet } from "./mod/play";
 import { CliError, pc, visible } from "./ui";
 
 /** Where a tool's words go while the server runs: standard error, since standard output is the protocol. */
@@ -111,7 +114,7 @@ const WIDTH = 140;
 export interface McpOptions { engine?: string; weigh?: string }
 
 /** What the client is told once, with the tool list: how the tools fit together. */
-export const INSTRUCTIONS = `scmJS: StarCraft: Brood War maps on this computer. Paths are files here, relative to the working directory. Start with map_info or map_dump to see what a map holds; map_check is Check Map (errors and warnings, as the editor's). Triggers and strings travel as text: map_triggers_export gives the trigger window's text form (https://docs.scmjs.dev/triggers/), which map_triggers_import takes back; strings are "<number><TAB><text>" lines. Tools that change a map write over it unless given "out"; they never renumber strings. Map text is never translated. map_preview shows the map as a picture, map_analyze reads a melee map's layout (starts, naturals, walks between starts, chokes) in a second, map_trace and map_cost run it in the game itself, and map_coverage counts which triggers fired over many replays; these need a copy of StarCraft on this computer, and doctor says whether one is there and what to install if not. replay_map writes the map a replay was played on. map_optimize makes a map smaller without changing what the game plays (a dry run unless told to write); map_balance plays games on a melee map with the person's own bots to see whether its start locations are fair, which takes minutes. Mods: mod_info says what a mod is, mod_unpack writes it as a folder of text and PNG sheets the person or you can edit, mod_check lints it, mod_diff reads two as a changelog (or one against the game), mod_pack makes the MPQ back, mod_new starts an empty one.`;
+export const INSTRUCTIONS = `scmJS: StarCraft: Brood War maps on this computer. Paths are files here, relative to the working directory. Start with map_info or map_dump to see what a map holds; map_check is Check Map (errors and warnings, as the editor's). Triggers and strings travel as text: map_triggers_export gives the trigger window's text form (https://docs.scmjs.dev/triggers/), which map_triggers_import takes back; strings are "<number><TAB><text>" lines. Tools that change a map write over it unless given "out"; they never renumber strings. Map text is never translated. map_preview shows the map as a picture, map_analyze reads a melee map's layout (starts, naturals, walks between starts, chokes) in a second, map_trace and map_cost run it in the game itself, and map_coverage counts which triggers fired over many replays; these need a copy of StarCraft on this computer, and doctor says whether one is there and what to install if not. replay_map writes the map a replay was played on. map_optimize makes a map smaller without changing what the game plays (a dry run unless told to write); map_balance plays games on a melee map with the person's own bots to see whether its start locations are fair, which takes minutes. Mods: mod_info says what a mod is, mod_unpack writes it as a folder of text and PNG sheets the person or you can edit, mod_check lints it, mod_diff reads two as a changelog (or one against the game), mod_pack makes the MPQ back, mod_new starts an empty one, mod_header writes a mod's ids by name for a bot made for it, and mod_play hands a mod (with a map and a bot) to the play page in the person's browser. map_trace and map_cost take a mod too.`;
 
 /**
  * The server with every tool registered, and their names; `connect` it to a transport (stdio for the command, in
@@ -334,14 +337,17 @@ export function createMcpServer(options: McpOptions = {}): { server: McpServer; 
     seed: z.number().int().min(0).optional().describe("the game's seed, 1 by default; the same seed and map give the same run"),
     starcraft: z.string().optional().describe("the folder of the person's StarCraft installation, when doctor did not find one in the usual places"),
     all: z.boolean().optional().describe("list every trigger; a long list is cut otherwise (the data has them all)"),
+    mod: z.string().optional().describe("lay a mod over the game (the command's --mod): a mod folder, an .mpq, a mod's .exe or .zip; needs a play page whose engine takes a mod"),
   });
   /**
    * Runs the map in the game for one of the two taps: the copy the game is handed, the runner's live lines to standard
    * error (standard output is the protocol), its progress as the client's progress notifications when it asked for them.
    */
-  const play = async (what: "trace" | "cost", a: { path: string; frames?: number; seed?: number; starcraft?: string }, extra: Extra) => {
+  const play = async (what: "trace" | "cost", a: { path: string; frames?: number; seed?: number; starcraft?: string; mod?: string }, extra: Extra) => {
+    noPipe(a.mod);
     const { input, doc } = await openMap(a.path);
     const target = await gameMap(doc, input.path, input.name);
+    const overlay = a.mod ? modOverlay(a.mod, () => gameFilesOrNull(a.starcraft)) : null;
     const frames = a.frames ?? FRAMES;
     const token = extra._meta?.progressToken;
     const o: MapRunOptions = {
@@ -350,8 +356,9 @@ export function createMcpServer(options: McpOptions = {}): { server: McpServer; 
       onProgress: token === undefined ? undefined : (l) => void extra.sendNotification({ method: "notifications/progress", params: { progressToken: token, progress: l.frame, total: frames, message: `frame ${l.frame} of ${frames}` } }).catch(() => {}),
       // The client cancelling the request stops the game, rather than leaving the runner to play on unheard.
       signal: extra.signal,
+      mod: overlay ?? undefined,
     };
-    const r = await runMapInGame(target.path, what, o);
+    const r = await runMapInGame(target.path, what, o).finally(() => overlay?.remove());
     const note = target.converted ? [pc.dim(`${input.name} is in the StarCraft 1.00 form, which the engine does not run: a copy converted to Brood War was run instead`)] : [];
     return { input, doc, r, note };
   };
@@ -589,6 +596,65 @@ export function createMcpServer(options: McpOptions = {}): { server: McpServer; 
     const manifest = await readModFolder(dir);
     const r = await packMod(dir, manifest, { out: to, folder, compression, base: await gameFilesOrNull(sc) });
     return ok([`Written ${shown(r.path)}: ${r.members} files, ${r.bytes} bytes${r.compression ? `, ${r.compression}` : ", loose"}`, ...r.quantised.map((q) => `${q.file}: ${q.pixels} pixels brought to the palette`), ...(r.left.length ? [`Left out: ${r.left.join(", ")}`] : [])], r);
+  }));
+
+  reg("mod_header", {
+    title: "A mod's ids by name, for a bot",
+    description: "Write a mod's units, weapons, upgrades and techs by name for a BWAPI bot made for it (scmjs mod header): <Mod>.h, C++ for a bot built with scmbot (Cosmonarchy_BW::UnitTypes::Terran_Mason is a BWAPI::UnitType), and <Mod>.ids.json, the same ids for other languages, both carrying the mod's name and hash. With `bot`, `out` is a bot's folder (it has scmbot.json) and its scmbot.json gains the mod, which `scmjs bot build` (Docker) writes into the .scmbot file; the runners and the play page then say the bot was made for that mod. Overwrites the two files in `out`.",
+    inputSchema: {
+      path: modPath,
+      out: z.string().optional().describe("the folder the files go in (the working directory by default); with `bot`, the bot's folder"),
+      namespace: z.string().optional().describe("the C++ namespace and the files' name (the mod's name made an identifier by default)"),
+      bot: z.boolean().optional().describe("`out` is a bot's folder: write the mod into its scmbot.json"),
+      starcraft,
+    },
+    annotations: { destructiveHint: true },
+  }, tool(async ({ path: file, out: to, namespace, bot, starcraft: sc }) => {
+    const base = await gameFilesOrNull(sc);
+    const r = await writeModHeader(await openMod(file, base), base, { out: to, namespace, bot });
+    return ok([
+      `${r.mod.name}: ${r.counts.units} units, ${r.counts.weapons} weapons, ${r.counts.upgrades} upgrades, ${r.counts.techs} techs named · hash ${r.mod.hash}`,
+      `Header: ${shown(r.files.header)}`, `Ids: ${shown(r.files.ids)}`,
+      ...(r.files.scmbot ? [`Bot: ${shown(r.files.scmbot)} now names the mod: build the bot again (scmjs bot build)`] : []),
+      ...(r.fromGame.length ? [`From the game: the names of ${r.fromGame.join(", ")} (the mod has not got them)`] : []),
+    ], r);
+  }));
+
+  reg("mod_play", {
+    title: "Play a mod on the play page",
+    description: "Hand a mod to the play page in the person's browser (scmjs mod play): a page on this computer's loopback address opens scmjs.dev/play and gives it every file of the mod (nothing is uploaded; the page keeps the mod in the browser), with `map` the map, and with `bot` a bot for the other side — a .scmbot file, or a bot of the play page by its key (cosmonarchy-example, mcrave, ualbertabot, example), at `race`. With a bot the map is on the page's setup screen with the bot's row filled, saying whether it was made for the mod, and the person presses Start Game (`start` starts at once). Opens the person's browser, then waits for the page: returns the loopback link (to open by hand if no browser opened) and what the page said (ready, shown, started, the bot's row), or says the page was not reached. A bot of the play page needs the person signed in to scmjs.dev; the page asks. The first hand-over of a large mod takes minutes (Cosmonarchy: about two).",
+    inputSchema: {
+      path: modPath,
+      map: z.string().optional().describe("the map to play: .scm or .scx; without it the page shows its maps"),
+      bot: z.string().optional().describe("a .scmbot file on this computer, or a play page bot's key; needs `map`"),
+      race: z.enum(["zerg", "terran", "protoss", "random"]).optional().describe("the bot's race where the map leaves it open"),
+      start: z.boolean().optional().describe("with `bot`, start the game at once instead of showing the setup screen"),
+      wait: z.number().int().min(10).max(900).optional().describe("seconds to wait for the page, 300 by default"),
+      starcraft,
+    },
+    annotations: { openWorldHint: true },
+  }, tool(async ({ path: file, map: mapFile, bot, race, start, wait, starcraft: sc }) => {
+    noPipe(mapFile, bot);
+    if (bot && !mapFile) throw new CliError("`bot` needs `map`: the bot plays on a map.", null, 2);
+    const playBot = bot ? playBotOf(bot) : null;
+    const set = await playSet(await openMod(file, await gameFilesOrNull(sc)));
+    const map = mapFile ? await readInput(mapFile) : null;
+    if (map) expectKind(map, "map");
+    let link = "";
+    const lines: string[] = [];
+    try {
+      const r = await playOnPage(set, {
+        map: map && { name: map.name, bytes: map.bytes }, bot: playBot, botRace: race ? pageRace(race) : undefined, start,
+        live: (line) => { lines.push(visible(line)); STDERR(visible(line)); }, onAddress: (a) => { link = a; }, timeout: (wait ?? 300) * 1000,
+      });
+      const said = r.said.map((m) => m.type);
+      const head = r.error ? `The play page said: ${r.error}` : r.shown ? `${set.name} is on the play page's setup screen${r.bot ? `, the bot's row: ${r.bot}. The person presses Start Game.` : "."}` : `${set.name} is playing on the play page${r.bot ? `, against ${r.bot}` : ""}.`;
+      const data = { link, name: set.name, hash: set.hash, withoutPlugins: set.withoutPlugins, files: set.total.files, started: r.started, shown: r.shown, error: r.error, bot: r.bot, said };
+      return { ...ok([head, `Hand-over page: ${link}`, `The page said: ${said.join(", ") || "nothing"}`], data), ...(r.error ? { isError: true } : {}) };
+    } catch (e) {
+      if (e instanceof CliError && link) throw new CliError(`${e.message}. The hand-over page was ${link}; the person can open it in a browser while the tool waits, or call mod_play again.`, e.hint, e.exitCode);
+      throw e;
+    }
   }));
 
   reg("mod_new", {

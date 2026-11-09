@@ -252,6 +252,38 @@ root) and orders own archives by name (the page: as given); the page's `GAME_FOL
   cosmonarchy-example.scmbot "(4)Exodus 1.0.scx" --mod <release> --race terran --seed 7`: "made for Cosmonarchy BW",
   4 plugins, FireGraft 7 edits, defeat at frame 11,308, 12.26 + 0.52 ms a frame, 150.9 s.
 
+## `mod play --bot`, `mod_header`, `mod_play` (C6 of the capstone, 2026-11-08, branch `mod-surface`)
+
+scm-sim `docs/mods-plan.md` "C6, as built"; the page's side is scm-sim branch `mod-handoff-bot` (`web/handed.ts`
+`readBot`, `web/main.ts` `handedBotKey`/`seatedBotRow`, `web/setup.ts` `choose`, `web/smoke-mod-play.mjs`).
+- **`mod play <mod> --map <map> --bot <bot> [--race r] [--start]`** (`cli/src/mod/play.ts`): `playBotOf` — a path
+  (`.scmbot`, a separator, or an existing file) is read and handed as bytes, else a key (`[A-Za-z0-9][\w.-]{0,63}`,
+  the page checks it against its catalogue); `pageRace` (z/t/p/r and the names → 0/1/2/6); `--bot` needs `--map`,
+  `--race` needs `--bot`. `handoffExtra(set, o)` is what the manifest gains as `handoff` (absent without a bot, so
+  the old manifest shape stands): `setup: true` unless `--start`, `useMapSettings: true` for a mod with plugins or a
+  FireGraft project (the runners' rule) else `null` (the page's guess — **send null, not absent**: the page reads an
+  absent `useMapSettings` as true, the first editors' default), `bot: { key | file: <name>, race? }`. The loopback page
+  fetches `/<token>/bot` for a file and posts `bot: { file: File, name, race? }`. `PlayOutcome.bot` is the row the page
+  answers `shown`/`started` with; `scmjs.play.waiting` (the page's sign-in for a catalogue bot) prints as
+  `scmjs.waiting` does; `ready` is now forwarded and printed ("ready", then "ready again" after the page loads on the
+  kept mod).
+- **`?lift=live` (all `mod play`, not only `--bot`)**: a mod with plugins or a FireGraft project is handed to the page
+  at `?lift=live` unless the address has a `lift` already (`PlayOptions.lift` overrides). Before C6, `mod play` of
+  Cosmonarchy ran the game without its plugins (the page runs them only there) — a finding of this slice.
+- **`--start` without `--bot`** changes nothing: a handed map without `setup` always started at once (unchanged).
+- **MCP**: `mod_header` (path, out, namespace, bot, starcraft; `destructiveHint`) → `writeModHeader`, the data its
+  `HeaderResult`. `mod_play` (path, map, bot, race enum, start, wait 10–900 s, starcraft; `openWorldHint`) →
+  `playOnPage` with `onAddress` kept: the text is the outcome, `Hand-over page: <link>`, the page's message types; the
+  data `{ link, name, hash, withoutPlugins, files, started, shown, error, bot, said }`; a page error is `isError`; the
+  timeout's CliError gains the link. Its live lines go to stderr. `map_trace`/`map_cost` gained `mod` (the commands'
+  `--mod`: `modOverlay` handed to `runMapInGame`, removed after). 33 tools.
+- **Help**: `bot run` and `bot ladder` say `--mod` needs `"mods": 2`; `bot build` says it needs Docker.
+- **Tests**: `tests/cli-mod.test.ts` "scmjs mod play --bot" (5) runs **the loopback page's own script** in a `vm`
+  context (fetch, File, `open`, `addEventListener` stood in) and checks the message it posts after `ready` — key and
+  file, `setup`, `useMapSettings`, `?lift=live` kept beside the address's own query; `tests/cli-mcp.test.ts`
+  "mod_header and mod_play" (2) plus the tool list and `map_trace` `mod` on an engine without mods.
+- **Proof** (the real CLI against a dev server, scm-sim `web/smoke-mod-play.mjs`): see scm-sim's record.
+
 ## Open
 
 - The hash is one rule everywhere since `mod-hash` ("The mod hash, one rule" above, with its known gaps). The copy

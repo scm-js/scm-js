@@ -73,7 +73,7 @@ import { writeModHeader } from "./mod/header";
 import { modOverlay } from "./mod/overlay";
 import { modWords } from "./engine";
 import { MOD_COMPRESSIONS, packMod, readModFolder, type ModCompression } from "./mod/pack";
-import { playOnPage, playSet } from "./mod/play";
+import { pageRace, playBotOf, playOnPage, playSet } from "./mod/play";
 import { unpackMod } from "./mod/unpack";
 import { shownPath } from "./mod/source";
 import { chooseLocale, inEnglish, locale, setLocale, t, translate } from "./i18n";
@@ -1583,22 +1583,32 @@ Exits 1 when there is an error.`))
 
   modCmd.command("play").description(t("play the mod on the play page in your browser")).argument("<mod>", t("a folder, an .mpq, a mod's .exe, a .zip, or a folder mod unpack wrote")).addOption(json)
     .option("--map <file>", t("start this map with the mod (otherwise the page offers its maps)"))
+    .option("--bot <bot>", t("a bot for the other side: a .scmbot file, or a bot of the play page by its key (cosmonarchy-example, mcrave, ualbertabot, example)"))
+    .option("--race <race>", t("the bot's race: zerg, terran, protoss or random"))
+    .option("--start", t("with --bot, start the game at once instead of showing the setup screen"))
     .addOption(starcraftOption())
     .addOption(new Option("--play <url>", t("the play page's address (SCMJS_PLAY_URL)")).hideHelp())
     .addHelpText("after", "\n" + t(`Opens scmjs.dev/play in your browser and hands it every file of the mod, its plugins and FireGraft files with them,
 and the mod's hash, which the page works out again from the same files. The page keeps the files that differ from
-your copy of the game. Nothing is uploaded: the page keeps the mod in your browser. Waits up to five minutes for the
-page.`))
-    .action(async (path: string, o: { json?: boolean; map?: string; starcraft?: string; play?: string }) => {
+your copy of the game. Nothing is uploaded: the page keeps the mod in your browser. A mod with plugins or a
+FireGraft project is opened with ?lift=live, where they run. Waits up to five minutes for the page.`) + "\n\n" + t(`With --bot the map is on the setup screen with the bot in the row beside yours, saying whether it was made for the mod
+(scmjs mod header --bot), plays vanilla data, or was made for another; press Start Game, or give --start. A mod with
+plugins plays the map with its own settings, as the runners do. A bot of the play page needs a scmjs.dev account (the
+page asks you to sign in); your own .scmbot file does not, and the page keeps it as Options → Add a bot from a file…
+does.`))
+    .action(async (path: string, o: { json?: boolean; map?: string; bot?: string; race?: string; start?: boolean; starcraft?: string; play?: string }) => {
+      if (o.bot && !o.map) throw new CliError(t("--bot needs --map: the bot plays on a map."), null, 2);
+      if (o.race && !o.bot) throw new CliError(t("--race is the bot's: use it with --bot."), null, 2);
+      const bot = o.bot ? playBotOf(o.bot) : null, botRace = o.race ? pageRace(o.race) : undefined;
       const base = await gameFilesOrNull(o.starcraft);
       const set = await playSet(await openMod(path, base));
       const map = o.map ? await readInput(o.map) : null;
       if (map) expectKind(map, "map");
       if (!o.json) print(`${pc.bold(set.name)}: ${t("{n, plural, one {# file} other {# files}} to hand over", { n: set.total.files })}${set.plugins + set.firegraft ? pc.dim(` ${t("(and {n, plural, one {# plugin or FireGraft file} other {# plugins and FireGraft files}})", { n: set.plugins + set.firegraft })}`) : ""}${dot}${size(set.total.bytes)}${dot}${pc.dim(t("hash {hash}", { hash: set.hash }))}`);
-      const r = await playOnPage(set, { map: map && { name: map.name, bytes: map.bytes }, play: o.play, live: o.json ? undefined : (line) => print(line) });
+      const r = await playOnPage(set, { map: map && { name: map.name, bytes: map.bytes }, bot, botRace, start: o.start, play: o.play, live: o.json ? undefined : (line) => print(line) });
       if (o.json) { print(JSON.stringify({ name: set.name, hash: set.hash, withoutPlugins: set.withoutPlugins, files: set.files.map((f) => ({ path: f.path, bytes: f.bytes.length })), ...r }, null, 2)); }
       else if (r.error) throw new CliError(t("The play page said: {error}", { error: r.error }), null, 1);
-      else print(`${mark.ok} ${r.shown ? t("On the play page's setup screen") : t("Playing on the play page")}`);
+      else print(`${mark.ok} ${r.shown ? (r.bot ? t("On the play page's setup screen: press Start Game") : t("On the play page's setup screen")) : t("Playing on the play page")}`, ...(r.bot ? rows([[t("Bot"), r.bot]]) : []));
       if (r.error) process.exitCode = 1;
     });
 
@@ -1679,6 +1689,7 @@ ${pc.dim(t("Guide: {url}", { url: BOT_GUIDE }))}`);
   bot.command("init").description(t("scmbot.json from the bot's Visual Studio project")).argument("[project]", t("the .vcxproj, when the folder has several"))
     .action(async (project?: string) => { await runBot(project ? ["init", project] : ["init"]); });
   bot.command("build").description(t("out/<key>.scmbot, to add on the play page"))
+    .addHelpText("after", "\n" + t("Needs Docker: the toolchain is a Docker image, downloaded the first time. scmjs mod play --bot hands the file to the play page."))
     .action(async () => { await runBot(["build"]); });
   bot.command("update").description(t("the newest toolchain, the one the play page expects"))
     .action(async () => { await updateBot(); });
@@ -1697,7 +1708,8 @@ ${pc.dim(t("Guide: {url}", { url: BOT_GUIDE }))}`);
     .addHelpText("after", "\n" + t(`The game is the play page's engine, fetched once (about 25 MB) and kept; the game's own files come from your copy
 of StarCraft, Remastered or 1.16.1. Prints what the bot says and each side's purse and supply as it plays, then who
 won. Exits 1 when the bot printed errors, 2 when the game could not start.`) + "\n\n" + t(`With --mod the mod's plugins run beside the bot, and the first lines say whether the bot was made for the mod
-(scmjs mod header --bot), plays vanilla data, or was made for another mod, which plays all the same.`))
+(scmjs mod header --bot), plays vanilla data, or was made for another mod, which plays all the same.`) + "\n" + t(`--mod needs a play page whose engine runs a mod's code ("mods": 2 in its engine/current.json); with an older one
+the command stops and says which version it needs.`))
     .action(async (botFile: string, map: string, o: { json?: boolean; race: string; opponents: string; seed?: string; frames: string; every: string; data?: string; mod?: string; ums?: boolean; melee?: boolean; starcraft?: string; engine?: string }) => {
       if (o.ums && o.melee) throw new CliError(t("--ums and --melee: one kind of game"), null, 2);
       const overlay = o.mod ? modOverlay(o.mod, () => gameFilesOrNull(o.starcraft), { code: true }) : null;
@@ -1736,7 +1748,8 @@ ladder's folder for scmjs replay watch. Exits 1 when a game could not be played 
 
   scmjs bot ladder out/mybot.scmbot:p computer --maps "(2)Boxer.scm" --races tzp --games 3
   scmjs bot ladder a.scmbot b.scmbot c.scmbot --maps maps/*.scx --frames 30000
-  scmjs bot ladder cosmo.scmbot:t other.scmbot:t --maps "(4)Exodus 1.0.scx" --mod "Cosmonarchy BW"`)
+  scmjs bot ladder cosmo.scmbot:t other.scmbot:t --maps "(4)Exodus 1.0.scx" --mod "Cosmonarchy BW"` + "\n\n" + t(`--mod needs a play page whose engine runs a mod's code ("mods": 2 in its engine/current.json); with an older one
+the command stops and says which version it needs.`))
     .action(async (specs: string[], o: { json?: boolean; maps: string[]; races: string; games: string; seeds?: string; frames: string; out?: string; data?: string; parallel: string; timeout: string; mod?: string; ums?: boolean; melee?: boolean; starcraft?: string; engine?: string }) => {
       if (o.ums && o.melee) throw new CliError(t("--ums and --melee: one kind of game"), null, 2);
       const races = parseRaces(o.races);

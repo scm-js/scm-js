@@ -802,7 +802,10 @@ instead.)
 ![Player Settings](images/player-settings.webp)
 
 **Player Settings** is each slot's controller (Human, Computer, Rescuable, Neutral…),
-race, colour and force.
+race, colour and force. Under a mod's data set the race list also has the races the mod
+adds, when they are named ([Races a data set
+adds](game-data.md#a-map-remembers-its-data-set)); a race the map holds that nothing names
+shows as *Race* and its number and is kept as it is.
 
 ![Force Settings](images/force-settings.webp)
 

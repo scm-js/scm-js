@@ -11,6 +11,7 @@
  * which set is loaded beyond what the files say (names, types, pictures) and this label.
  */
 import { browserStorage } from "../atoms/storage";
+import { normalizeRaces, type DataSetRace } from "../formats/mod/races";
 
 export interface GameDataProfile {
   /** Lower-case letters, digits and hyphens, up to 40 characters; the copy's folder name. */
@@ -23,6 +24,12 @@ export interface GameDataProfile {
    * is told where to get it. The editor never fetches it.
    */
   url?: string;
+  /**
+   * The races the data set adds to the game's own (race bytes 8–255), when they are declared:
+   * no game file says what a mod's races are called. Kept with the profile's id
+   * (`keptRaces`), so they outlive a new release of the mod and a re-attach.
+   */
+  races?: DataSetRace[];
 }
 
 export const DEFAULT_PROFILE: GameDataProfile = { id: "starcraft", name: "StarCraft: Brood War" };
@@ -64,7 +71,72 @@ export function normalizeProfile(profile: GameDataProfile): GameDataProfile | nu
   if (!isProfileId(profile.id)) return null;
   const name = profile.name.trim();
   const url = typeof profile.url === "string" && /^https?:\/\/\S+$/i.test(profile.url.trim()) ? profile.url.trim() : undefined;
-  return { id: profile.id, name: name || profile.id, ...(url ? { url } : {}) };
+  const races = normalizeRaces(profile.races);
+  return { id: profile.id, name: name || profile.id, ...(url ? { url } : {}), ...(races.length ? { races } : {}) };
+}
+
+/* ── Races a data set adds ──────────────────────────────── */
+
+/** The stored key: `{ "<profile id>": DataSetRace[] }`, the races declared for each data set. */
+export const RACES_KEY = "scmjs.dataSetRaces";
+
+/**
+ * Whether a data set takes declared races: not the game's own, nor a Remastered
+ * installation's, whose races are the game's eight.
+ */
+export const takesRaces = (id: string) => isProfileId(id) && !isDefaultProfile(id) && id !== REMASTERED_PROFILE.id;
+
+function readKept(): Record<string, unknown> {
+  try {
+    const raw = browserStorage().getItem(RACES_KEY);
+    const parsed: unknown = raw ? JSON.parse(raw) : null;
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Record<string, unknown> : {};
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * The races kept for the data set `id` — an empty table when they were declared as none —
+ * or null when nothing was ever declared for it here.
+ */
+export function keptRaces(id: string): DataSetRace[] | null {
+  if (!takesRaces(id)) return null;
+  const kept = readKept();
+  return Object.prototype.hasOwnProperty.call(kept, id) ? normalizeRaces(kept[id]) : null;
+}
+
+/**
+ * The stored table with `races` (normalized) for the data set `id`, for
+ * `gameDataAtoms.ts#keepRacesAtom` to write: the one writer of the key, so that Preferences ▸
+ * Storage can clear and import it live. An empty table is kept too: it says the set has
+ * none, and a map's races do not replace it. Null for the game's own sets, which take none.
+ */
+export function racesTableWith(id: string, races: readonly DataSetRace[]): Record<string, DataSetRace[]> | null {
+  if (!takesRaces(id)) return null;
+  const table: Record<string, DataSetRace[]> = {};
+  for (const [k, v] of Object.entries(readKept())) if (isProfileId(k)) table[k] = normalizeRaces(v);
+  table[id] = normalizeRaces(races);
+  return table;
+}
+
+/**
+ * The races of a data set: those kept for its id; none when nothing is kept, and none for
+ * the game's own. A profile's own `races` is not read here: a profile handed in with races
+ * (`attach`, `install`, a folder's `mod.json`) has them kept first, so clearing what is
+ * kept clears them everywhere.
+ */
+export function racesOf(profile: Pick<GameDataProfile, "id"> | null | undefined): DataSetRace[] {
+  if (!profile || !takesRaces(profile.id)) return [];
+  return keptRaces(profile.id) ?? [];
+}
+
+/** `profile` carrying its races (`racesOf`), or without the field when it has none. */
+export function withRaces<P extends GameDataProfile>(profile: P): P {
+  const races = racesOf(profile);
+  const { races: _was, ...rest } = profile;
+  void _was;
+  return (races.length ? { ...rest, races } : rest) as P;
 }
 
 /** The id the user chose, read straight from storage; the default when none or unusable. */

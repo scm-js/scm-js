@@ -2487,3 +2487,16 @@ handed to it; it reads the four sections and nothing after.
 - Tests: `tests/cli-replay-mod.test.ts` (9, no game data: a two-file mod of units.dat + unitnames.tbl made by the codecs).
 - Not done: `replay watch|export` with a mod (needs the replay runner / viewer to take a data set: R2); the hash rule
   will gain the plugins and the project in step 7a — `sourceHashes` must follow.
+
+## Races a mod adds (2026-11-10, branch `mod-races`)
+
+`replay.ts`: `replayRaceName(race, tag, races)` — 0–2 by `RACES`, then the tag's `dataSet.races` (normalized: the
+installed `@scm-js/replay` types it `unknown`), then `--mod`'s `mod.json` races, else `Race {n}` (3–7 kept as
+`Race n` as before, on purpose: no JSON value changes for the game's bytes). `players[].raceId` added (the byte).
+The table shows `t("Race {n}")` for an unnamed one (`raceShown`); the matchup letter is the declared `letter`, else the
+name's first, else `?` (was the `R` of "Race"). `Namer.races` (replaymod.ts) carries `source.races` from `--mod`;
+`replayInfo` and MCP `replay_info` now run `replayNamer` before `replayReport`. `heatmap.ts#raceLetter(race, races)`:
+the runner's race string; a numeric one maps to a declared letter — but `map heatmap` skips every tagged (mod) replay,
+so no table reaches it today. `mod` side: `mods.md` "Races a mod adds". Tests: `tests/cli-races.test.ts` (made replays
+with race 69; the real BattleGuard replay when `SCMJS_COSMONARCHY` names the release folder — either the folder itself or
+a root holding `release/` — and the replay is in `~/.cache/scmjs-cosmonarchy/replays/` or `SCMJS_COSMONARCHY_REPLAY`).

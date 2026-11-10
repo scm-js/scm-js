@@ -116,6 +116,47 @@ names stay as they were (`Units.graft`, `arr\units.datex`).
 entries again, wider columns, no header). Each is written as text in the same way and
 packed back in the layout it came in, at the width its text has.
 
+### Races a mod adds
+
+To the game a race is a number: one byte in each player's record, in a map and in a
+replay. 0 to 7 are the game's own: Zerg, Terran, Protoss, then Independent, Neutral, User
+Selectable, Random and Inactive. A mod can give its players other numbers, and nothing in
+its files says what those races are called (the names are in its plugin's code). So the
+tools keep the number as it is and, until something names it, show it as *Race* and the
+number: `Race 69` in `replay info`'s player list, in Player Settings and in Statistics.
+
+`mod.json` names them, under `races`:
+
+```json
+"races": [
+  { "id": 69, "name": "Askosi", "letter": "a", "like": 1 }
+]
+```
+
+- `id` is the race's number, 8 to 255.
+- `name` is what it is called, up to 40 characters.
+- `letter` (optional) is the letter the race's own files go by, as `game\aconsole.pcx` and
+  `rez\statbtna.bin` do for `a`.
+- `like` (optional) is the game's race it plays as: 0 Zerg, 1 Terran, 2 Protoss.
+
+A row with one of the game's numbers, a number an earlier row has, or no name is left out.
+`mod.json` is not one of the mod's files, so naming races leaves [the mod's
+hash](#the-mods-hash) as it was. It is read at the top of a folder of the game's files as
+well as in a folder `mod unpack` wrote, and `mod unpack` keeps the races when it unpacks a
+new release over a folder that has them.
+
+`mod info` lists them, `replay info --mod` names a player's race by them when the replay
+does not name it itself, and `mod play --race` takes one by its name or its number.
+`mod check` mentions it when a mod's files suggest races of its own and `mod.json` names
+none: strings past the game's own in `rez\network.tbl`, or a console picture
+`game\<letter>console.pcx` or `rez\statbtn<letter>.bin` under a letter other than z, t, p
+and n. That is a hint, not a finding: the check fills in no name and fails nothing for it.
+
+In the editor, a data set added from a folder (Help ▸ Game Data… ▸ Add a data set…) takes
+the races of the `mod.json` directly in that folder; a plugin can name them too, and a map
+made with the data set carries them ([A map remembers its data
+set](game-data.md#a-map-remembers-its-data-set)).
+
 ## The commands
 
 ### What a mod is
@@ -281,9 +322,10 @@ scmjs mod play "Cosmonarchy BW" --map "(4)Exodus 1.0.scx" --bot cosmonarchy-exam
 `--bot` puts a community bot on the other side: one of the play page's bots by its key, or
 a `.scmbot` file you built. The map waits on the page's setup screen with the bot in the
 row beside yours, saying whether it was [made for the mod](#a-bot-for-your-mod), and you
-press Start Game; `--start` starts it at once. `--race` sets the bot's race. The page's
-own bots need a scmjs.dev account, and the page asks you to sign in; a file of your own
-does not.
+press Start Game; `--start` starts it at once. `--race` sets the bot's race: zerg, terran,
+protoss or random, or a race the mod's `mod.json` [names](#races-a-mod-adds), by its name
+or its number. The page's own bots need a scmjs.dev account, and the page asks you to sign
+in; a file of your own does not.
 
 ### The mod's hash
 
@@ -370,7 +412,10 @@ What reads it:
 
 - `scmjs replay info` shows it on the `Mod` line. With `--builds` it lists what each
   player ordered, by id until `--mod` names the mod's folder, and then with the mod's
-  names and costs. A mod whose data set is not the one the replay names is refused.
+  names and costs. A mod whose data set is not the one the replay names is refused. A
+  player of a race the mod adds is named by the section's `races` when it has them, else
+  by the [`races` of the mod's `mod.json`](#races-a-mod-adds) with `--mod`, else `Race`
+  and the number.
 - `scmjs map trace --replay` and `map cost --replay` need the mod named with `--mod` and
   check it the same way. A game the mod's plugins ran in is refused, as the engine's
   runners do not run plugins.
@@ -591,6 +636,7 @@ give `--bot cosmonarchy-example` in step 5.
 | `src/formats/mod/folder.ts` | The folder's form: where each file goes, each form written and read back with the same function, `mod.json` |
 | `src/formats/mod/data.ts` | A mod's tables, string tables and scripts over the game's, and which entries it changed |
 | `src/formats/mod/check.ts` | The lints |
+| `src/formats/mod/races.ts` | Races a mod adds: the `races` table's rule, a race's name by its number, the hints a mod's files give |
 | `src/formats/mod/diff.ts` | The changelog, the animation scripts compared an animation at a time |
 | `src/formats/dat/` | The codecs: every table in all three layouts, PyMS's texts, GRP, PCX, overlays, iscript, AI scripts, `.graft` |
 | `cli/src/mod/` | The `scmjs mod` commands: the source opened, unpack, pack, info, check, diff, new, play, the engine's overlay |

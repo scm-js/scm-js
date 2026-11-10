@@ -1,6 +1,6 @@
 /**
  * A map remembers the data set it was made with: an archive member `scmjs\dataset.json`
- * (`{ id, name, hash, url? }`, through the archive extras every plugin's members ride in)
+ * (`{ id, name, hash, url?, races? }`, through the archive extras every plugin's members ride in)
  * written when the map is saved while a data set other than the game's own is in use, and
  * kept as it is otherwise — a map made for a mod and touched up without it still says what
  * it was made for. The game and other editors ignore the member.
@@ -11,9 +11,10 @@
  */
 import type { getDefaultStore } from "jotai";
 import { archiveExtrasAtom } from "../atoms/documentAtoms";
-import { gameDataSourceAtom } from "../atoms/gameDataAtoms";
+import { gameDataSourceAtom, keepRacesAtom } from "../atoms/gameDataAtoms";
 import { openDialogAtom } from "../atoms/uiAtoms";
-import { isDefaultProfile, isProfileId } from "../gamedata/profiles";
+import { isDefaultProfile, isProfileId, keptRaces } from "../gamedata/profiles";
+import { normalizeRaces, sameRaces, type DataSetRace } from "../formats/mod/races";
 import { currentAssetSource, type AssetSource } from "../gamedata/source";
 import { listStoredCopies, profileOf } from "../gamedata/store";
 
@@ -30,6 +31,8 @@ export interface MapDataSet {
   hash: string;
   /** Where the data set's makers publish it, when the data set says. */
   url?: string;
+  /** The races the data set adds to the game's own, when it declares them (absent otherwise). */
+  races?: DataSetRace[];
 }
 
 /** The member a source would write, or null for the game's own data (nothing is written then). */
@@ -37,7 +40,8 @@ export function dataSetOf(source: AssetSource | null): MapDataSet | null {
   if (!source || source.kind === "none" || isDefaultProfile(source.profile.id)) return null;
   const hash = source.stored?.hash ?? source.reader?.hash ?? "";
   const url = source.profile.url ?? source.stored?.profile?.url;
-  return { id: source.profile.id, name: source.profile.name, hash, ...(url ? { url } : {}) };
+  const races = normalizeRaces(source.profile.races);
+  return { id: source.profile.id, name: source.profile.name, hash, ...(url ? { url } : {}), ...(races.length ? { races } : {}) };
 }
 
 export function encodeDataSet(set: MapDataSet): Uint8Array {
@@ -54,11 +58,14 @@ export function readDataSet(extras: ReadonlyMap<string, Uint8Array>): MapDataSet
     if (!raw || typeof raw !== "object") return null;
     const { id, name, hash, url } = raw as Record<string, unknown>;
     if (!isProfileId(id)) return null;
+    // (A table that is no table, or rows that are no races, read as none: the rest of the member stands.)
+    const races = normalizeRaces((raw as Record<string, unknown>).races);
     return {
       id,
       name: typeof name === "string" && name.trim() ? name.trim() : id,
       hash: typeof hash === "string" ? hash : "",
       ...(typeof url === "string" && /^https?:\/\/\S+$/i.test(url.trim()) ? { url: url.trim() } : {}),
+      ...(races.length ? { races } : {}),
     };
   } catch {
     return null;
@@ -73,7 +80,7 @@ export function readDataSet(extras: ReadonlyMap<string, Uint8Array>): MapDataSet
 export function withDataSet<T extends ReadonlyMap<string, Uint8Array>>(extras: T, set: MapDataSet | null): T | Map<string, Uint8Array> {
   if (!set) return extras;
   const was = readDataSet(extras);
-  if (was && was.id === set.id && was.name === set.name && was.hash === set.hash && was.url === set.url) return extras;
+  if (was && was.id === set.id && was.name === set.name && was.hash === set.hash && was.url === set.url && sameRaces(was.races ?? [], set.races ?? [])) return extras;
   const next = new Map(extras);
   for (const name of next.keys()) if (name.toLowerCase() === DATASET_MEMBER) next.delete(name);
   next.set(DATASET_MEMBER, encodeDataSet(set));
@@ -110,7 +117,19 @@ export async function offerMapDataSet(store: Store, extras: ReadonlyMap<string, 
   const set = readDataSet(extras);
   if (!set) return;
   const current = store.get(gameDataSourceAtom) ?? currentAssetSource();
+  adoptMapRaces(store, set, current);
   if ((current?.profile.id ?? "") === set.id) return;
   const installed = (await listStoredCopies().catch(() => [])).some((c) => profileOf(c).id === set.id);
   store.set(openDialogAtom, "mapDataSet", { ...set, installed });
+}
+
+/**
+ * The races a map's member declares for its data set, kept for that set only when it is the
+ * set in use and nothing was declared for it here (declared here, even as none, they
+ * stand). A map is someone else's file: it names no races for a set that is not loaded, and
+ * its member itself is kept and written back as it is either way.
+ */
+export function adoptMapRaces(store: Store, set: MapDataSet, current: AssetSource | null): void {
+  if (!set.races?.length || current?.profile.id !== set.id || keptRaces(set.id) !== null) return;
+  store.set(keepRacesAtom, { id: set.id, races: set.races });
 }

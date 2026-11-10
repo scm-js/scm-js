@@ -10,7 +10,8 @@ import { UnitFlag, type UnitsDat } from "../formats/dat/dat";
 import type { Tileset } from "../formats/tileset/decode";
 import { isFlatPair } from "../formats/tileset/palette";
 import { TILESETS, type TerrainName } from "../data/tilesets";
-import { playerRaceLabel, playerTypeLabel } from "../data/players";
+import { playerTypeLabel } from "../data/players";
+import { dataSetRaceLabel } from "../data/races";
 import { START_LOCATION, unitName } from "../data/units";
 import { DEFAULT_GAS, DEFAULT_MINERALS, isResource, VESPENE_GEYSER } from "./units";
 import { spriteKind } from "./sprites";
@@ -55,7 +56,7 @@ export interface MapStatistics {
 
 export function mapStatistics(scn: Scenario, tileset: Tileset | null, terrainNames: readonly TerrainName[] | null, dat: UnitsDat | null): MapStatistics {
   const players: PlayerStatistics[] = Array.from({ length: PLAYER_SLOTS }, (_, slot) => ({
-    slot, type: playerTypeLabel(scn.playerTypes[slot] ?? 0), race: playerRaceLabel(scn.playerRaces[slot] ?? 0), units: 0, buildings: dat ? 0 : null, startLocations: 0,
+    slot, type: playerTypeLabel(scn.playerTypes[slot] ?? 0), race: dataSetRaceLabel(scn.playerRaces[slot] ?? 0), units: 0, buildings: dat ? 0 : null, startLocations: 0,
   }));
   let unownedUnits = 0;
   let buildings = 0;

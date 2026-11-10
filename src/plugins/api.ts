@@ -2035,6 +2035,26 @@ export interface GameDataProfile {
    * editor never fetches it.
    */
   url?: string;
+  /**
+   * The races the data set adds to the game's own, when they are declared (no game file says
+   * what a mod's races are called). Kept with the id: a profile handed to `attach` or
+   * `install` with races keeps them, and one without gets those kept before for the same id —
+   * after a new release of the mod (a new hash) as well. `setRaces` changes them. Absent in an
+   * editor from before races a data set adds (`api.gameData.source()?.profile.races ?? []`).
+   */
+  races?: DataSetRace[];
+}
+
+/** A race a data set adds to the game's own. */
+export interface DataSetRace {
+  /** The race byte: 8–255. (0–7 are the game's and cannot be declared.) */
+  id: number;
+  /** What it is called, 40 characters at most, trimmed, not empty. */
+  name: string;
+  /** The lower-case letter its per-race files go by (`game\<letter>console.pcx`, `rez\statbtn<letter>.bin`), when it has them. */
+  letter?: string;
+  /** The game's race it plays as, where only the game's three are known: 0, 1 or 2. Absent: not declared. */
+  like?: 0 | 1 | 2;
 }
 
 /** Where the session's game data comes from. */
@@ -2228,6 +2248,38 @@ export interface GameDataApi {
    * api.gameData.rehash(await modHashOfTheFiles());
    */
   rehash(hash: string | null): GameDataSource | null;
+  /**
+   * The races the data set in use adds; empty for the game's own or when none is declared.
+   * Absent in an editor from before races a data set adds: call it as
+   * `api.gameData.races?.() ?? []`.
+   */
+  races(): DataSetRace[];
+  /**
+   * Declare the races a data set adds, replacing its table: the data set in use by default,
+   * or the profile `id`. Kept with the profile's id (it survives a new release of the mod and
+   * a re-attach). Rows are normalized: sorted by id, a row with an id outside 8–255, an id an
+   * earlier row has, or no name (or one over 40 characters) dropped; an empty list forgets
+   * them. The game's own data set (and a Remastered installation's) takes none: returns null.
+   * For the set in use, returns its source with the races, and fires what a change of the
+   * data set fires (the `"gameData"` event), so open panels repaint; for another set, keeps
+   * them for when it is used and returns null.
+   *
+   * @example
+   * api.gameData.setRaces?.([{ id: 9, name: "Hivemind Remnant", letter: "h", like: 0 }]);
+   * api.names.race(9); // "Hivemind Remnant"
+   */
+  setRaces(races: readonly DataSetRace[], id?: string): GameDataSource | null;
+  /**
+   * What the data set in use suggests about races it adds, for a person naming them: `names`,
+   * the strings its `rez\network.tbl` has past the game's own table, and `letters`, the
+   * letters other than z, t, p and n with a `game\<letter>console.pcx` or
+   * `rez\statbtn<letter>.bin` of its own. Names and letters already declared are left out;
+   * empty for the game's own data set. These are hints a person confirms, never names to fill
+   * in. A set in memory (`attach`) is asked through its function; a stored copy keeps none of
+   * these files, so it gives none. Absent in an editor from before it
+   * (`api.gameData.raceCandidates?.()`).
+   */
+  raceCandidates(): Promise<{ names: string[]; letters: string[] }>;
 }
 
 /* ── The numbers a record is written in ─────────────────── */
@@ -2743,8 +2795,12 @@ export interface NamesApi {
   /** An OWNR / IOWN controller byte: `Human`, `Computer`, `Neutral`, … */
   playerType(value: number): string;
   playerTypes(): NamedValue[];
-  /** A SIDE race byte. */
+  /**
+   * A SIDE race byte: the game's eight by name, a race the data set in use declares
+   * (`gameData.races()`) by its name, any other `Race {n}`.
+   */
   race(value: number): string;
+  /** The game's eight races in StarEdit's order, then the races the data set in use declares, by id. */
   races(): NamedValue[];
   /** One of the 27 trigger player groups (`Player 1` … `Non Allied Victory Players`). */
   playerGroup(value: number): string;
@@ -3427,9 +3483,10 @@ export interface TestMapFile {
    * The data set the map is being made with, when it is not the game's own: its id and
    * name as `gameData.profile()` gives them, and the digest of its files (empty when none
    * is known). A target that plays the map should play it with those files — the site's
-   * play page is handed it as `dataSet` in its `scmjs.play` message.
+   * play page is handed it as `dataSet` in its `scmjs.play` message. `races` when the data
+   * set declares the races it adds (`gameData.races()`), so the target can name them.
    */
-  dataSet?: { id: string; name: string; hash: string };
+  dataSet?: { id: string; name: string; hash: string; races?: DataSetRace[] };
 }
 
 /** What a preferences page's `mount` is handed. */

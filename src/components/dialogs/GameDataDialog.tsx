@@ -7,7 +7,7 @@ import { desktopBridge, type DesktopLocateResult } from "../../gamedata/desktop"
 import { isGameArchive } from "../../gamedata/archives";
 import { hostTerms } from "../../editor/platform";
 import {
-  ARCHIVE_NAMES, BLIZZARD_ZIP_URL, installFromFiles, installFromRemastered, installFromZipUrl, isRemasteredFolder, pickArchives, splitPickedFiles,
+  ARCHIVE_NAMES, BLIZZARD_ZIP_URL, installFromFiles, installFromRemastered, installFromZipUrl, isRemasteredFolder, pickArchives, pickedFolderRaces, splitPickedFiles,
   type InstallProgress, type RemasteredFolder,
 } from "../../gamedata/install";
 import { DEFAULT_PROFILE, isDefaultProfile, profileIdFrom, type GameDataProfile } from "../../gamedata/profiles";
@@ -247,10 +247,12 @@ export function GameDataBody({ onReady }: { onReady?: (next: AssetSource) => voi
     if (!id) throw new Error(t("Give the data set a name first."));
     if (sets.some((p) => p.id === id)) throw new Error(t("There is already a data set called {name}.", { name }));
     const input = splitPickedFiles(files);
+    // (The races the folder's mod.json names come with it, kept for the set's id.)
+    const races = await pickedFolderRaces(files);
     // A mod's folder without the game's archives is laid over the copy in use (or the one that copy was laid over).
     const games = input.archives.filter((a) => isGameArchive(a.name)).length;
     const base = games >= ARCHIVE_NAMES.length ? undefined : source?.stored?.base ?? (source?.kind === "stored" || source?.kind === "bundled" ? source.profile.id : undefined);
-    const next = await installDataSetInto(store, { id, name }, { ...input, ...(base ? { base } : {}) }, progress);
+    const next = await installDataSetInto(store, { id, name, ...(races.length ? { races } : {}) }, { ...input, ...(base ? { base } : {}) }, progress);
     setAdding(false);
     setNewName("");
     setMessage({ text: t("Installed {name}: {summary}.", { name, summary: next.stored ? summaryText(next.stored.summary) : next.label }) + kept(next.stored?.where ?? "opfs") });

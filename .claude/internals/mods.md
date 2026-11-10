@@ -416,6 +416,36 @@ layer order otherwise, `temp.mpq`.
 `Maps`, 441 files rooted at `Maps/CMBW-Root/CMBW-maps`; now refused, exit 2. Tests: `tests/mod-game-copy.test.ts`
 (made archives only; the last suite runs only where `SCMJS_COSMONARCHY_HANDED` names the folder, ~50 s).
 
+## Races a mod adds (2026-11-10, branch `mod-races`)
+
+The contract is shared with Aftermath and the play page (scm-sim `docs/mods-plan.md` keeps the durable record): a race
+is a byte, 0–7 the game's, anything else the data set's; carried unchanged everywhere; `Race {n}` when unnamed. Found
+on a Cosmonarchy replay (a player of race 69, the mod's fourth race; ids 69–71 are in the plugin's code, never a file).
+
+- **Core** `src/formats/mod/races.ts` (exported in core's Mods block): `DataSetRace { id 8–255, name ≤ 40, letter?,
+  like? 0|1|2 }`; `normalizeRaces(unknown)` (never throws; invalid rows dropped, a bad `letter`/`like` dropped from a
+  row that stays, first of a duplicate id wins, extra fields kept, sorted); `sameRaces`; `GAME_RACE_NAMES` (from
+  `PLAYER_RACES`, English); `raceLabel(id, races = [])` (= `playerRaceLabel` with no table; a row cannot take 0–7);
+  `raceChoices`; `raceCandidates({ network, gameNetwork?, paths })` — names past the game's `rez\network.tbl` length
+  (the copy's, else `GAME_NETWORK_TBL_ENTRIES` = 168, BrooDat's; StarDat's has 142) and letters ∉ {z,t,p,n} with
+  `game\<x>console.pcx` or `rez\statbtn<x>.bin`; `racePlaysAs(unitIds, { groupFlags })` — per-bit counts of group
+  flags bits 0–2, the most; a tie, no flags or no units → null.
+- **mod.json** `ModManifest.races?`: `readManifest` and `tidyManifest` normalize and **delete the key when empty**, so a
+  manifest without races serialises byte for byte as before. `ModSource.races` (CLI): `packFolder` sets it from the
+  manifest; `fromPieces` reads it from a top-level (or one-down) `mod.json` beside the name. `mod unpack` writes the
+  source's races, else those of the folder's earlier `mod.json` (a new release unpacked over keeps them).
+- **Hash**: top-level `mod.json` was already out of the hash (a folder's name file; a mod folder's manifest is never a
+  member). `tests/races.test.ts` pins it: raw folder with/without `mod.json` races, unpacked folder with/without.
+- **CLI**: `mod info` `races` + a `Races` row; `mod check` `hints: string[]` (`racesHint`, `modRaceCandidates` — reads
+  the mod's and the copy's `network.tbl`), printed with `mark.info`, not counted in errors/warnings, never fails;
+  `mod play --race` / `mod_play race` (now a string) take a declared name or id (`pageRace(race, source.races)`, parsed
+  after the mod is opened). Measured on the release: candidates Askosi, Bloodsummon, Kogri, Forerunner (168–171) and
+  letters a, f; the race-69 player's 52 build orders plays as Terran (1).
+- Editor routes in: the Game Data dialog's folder route reads a `mod.json` directly in the picked folder
+  (`install.ts#pickedFolderRaces`); a plugin's `api.gameData.setRaces`; a map's `dataset.json` for the set in use.
+  Not done: an editor dialog to name races; `api.gameData.raceCandidates` gives nothing for a stored copy
+  (`gamedata.md`).
+
 ## Open
 
 - The hash is one rule everywhere since `mod-hash` ("The mod hash, one rule" above, with its known gaps). The copy

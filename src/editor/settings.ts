@@ -19,7 +19,8 @@ import {
   type TechRestrictions, type TechSettings, type UnitAvailability, type UnitSettings, type UpgradeRestrictions, type UpgradeSettings,
 } from "../formats/chk/sections/settings";
 import { NO_UNIT, NO_WEAPON, type TechdataDat, type UnitsDat, type UpgradesDat, type WeaponsDat } from "../formats/dat/dat";
-import { displayColorHex, playerRaceLabel, playerTypeLabel } from "../data/players";
+import { displayColorHex, playerTypeLabel } from "../data/players";
+import { dataSetRaceLabel } from "../data/races";
 import { techName, unitName, upgradeName } from "../data/units";
 import { weaponName } from "../data/weapons";
 
@@ -247,7 +248,7 @@ export function playerSlotViews(scn: Scenario): PlayerSlotView[] {
       type: scn.playerTypes[slot] ?? 0,
       typeName: playerTypeLabel(scn.playerTypes[slot] ?? 0),
       race: scn.playerRaces[slot] ?? 0,
-      raceName: playerRaceLabel(scn.playerRaces[slot] ?? 0),
+      raceName: dataSetRaceLabel(scn.playerRaces[slot] ?? 0),
       color: playable ? scn.playerColors[slot] ?? 0 : null,
       colorHex: playable ? displayColorHex(scn.playerColors, scn.playerRgb, slot) : null,
       rgb: custom ? [custom[0], custom[1], custom[2]] : null,

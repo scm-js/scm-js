@@ -51,8 +51,10 @@ import { gameDataRevisionAtom, gameDataSourceAtom } from "../atoms/gameDataAtoms
 import { DEFAULT_PROFILE, isProfileId } from "../gamedata/profiles";
 import { currentAssetSource, readFrom, readUnder, resolveAssetSource, type AssetSource } from "../gamedata/source";
 import { cleanStoredPath, storedPathOf } from "../gamedata/paths";
-import { attachReaderDataSet, installDataSetInto, listDataSets, rehashDataSet, reloadDataSet, removeDataSet, switchDataSet } from "../services/gameData";
-import { displayColorHex, PLAYER_RACES, PLAYER_TYPES, playerRaceLabel, playerTypeLabel } from "../data/players";
+import { attachReaderDataSet, dataSetRaceCandidates, installDataSetInto, listDataSets, rehashDataSet, reloadDataSet, removeDataSet, setDataSetRaces, switchDataSet } from "../services/gameData";
+import { displayColorHex, PLAYER_TYPES, playerTypeLabel } from "../data/players";
+import { dataSetRaceLabel, dataSetRaces } from "../data/races";
+import { normalizeRaces, raceChoices } from "../formats/mod/races";
 import { dataSetUnitGroups, starEditUnitGroups, TECH_NAMES, techName, UNIT_NAMES, unitName, unitTypeCount, UPGRADE_NAMES, upgradeName } from "../data/units";
 import { WEAPON_NAMES, weaponName } from "../data/weapons";
 import {
@@ -1655,14 +1657,14 @@ export function gameDataApi(store: Store): GameDataApi {
   const publish = (s: AssetSource): GameDataSource => {
     const hash = s.stored?.hash ?? s.reader?.hash;
     const base = s.stored?.base ?? s.reader?.base?.profile.id;
-    return { kind: s.kind, label: s.label, profile: { ...s.profile }, desktop: s.desktop === true, ...(hash ? { hash } : {}), ...(base ? { base } : {}) };
+    return { kind: s.kind, label: s.label, profile: { ...s.profile, ...(s.profile.races ? { races: s.profile.races.map((r) => ({ ...r })) } : {}) }, desktop: s.desktop === true, ...(hash ? { hash } : {}), ...(base ? { base } : {}) };
   };
   const source = () => store.get(gameDataSourceAtom) ?? currentAssetSource();
   return {
     source: () => { const s = source(); return s ? publish(s) : null; },
-    profile: () => ({ ...(source()?.profile ?? DEFAULT_PROFILE) }),
+    profile: () => { const p = source()?.profile ?? DEFAULT_PROFILE; return { ...p, ...(p.races ? { races: p.races.map((r) => ({ ...r })) } : {}) }; },
     profiles: listDataSets,
-    install: async (profile, files, progress) => publish(await installDataSetInto(store, { id: profile.id, name: profile.name, ...(profile.url ? { url: profile.url } : {}) }, files, progress)),
+    install: async (profile, files, progress) => publish(await installDataSetInto(store, { id: profile.id, name: profile.name, ...(profile.url ? { url: profile.url } : {}), ...(profile.races ? { races: normalizeRaces(profile.races) } : {}) }, files, progress)),
     attach: async (profile, read, options) => {
       if (!isProfileId(profile.id)) throw new Error(`"${profile.id}" is not a data set id: lower-case letters, digits and hyphens, up to 40 characters.`);
       if (typeof read !== "function") throw new Error("gameData.attach needs a function that reads a file");
@@ -1678,6 +1680,14 @@ export function gameDataApi(store: Store): GameDataApi {
     remove: (id) => removeDataSet(store, id),
     read: (path, options) => readGameFile(path, options?.under === true),
     storedPath: (member) => storedPathOf(String(member)),
+    races: () => (source()?.profile.races ?? []).map((r) => ({ ...r })),
+    raceCandidates: () => dataSetRaceCandidates(store),
+    setRaces: (races, id) => {
+      if (!Array.isArray(races)) throw new Error("gameData.setRaces takes a list of races");
+      if (id !== undefined && !isProfileId(id)) throw new Error(`"${String(id)}" is not a data set id: lower-case letters, digits and hyphens, up to 40 characters.`);
+      const next = setDataSetRaces(store, races, id);
+      return next ? publish(next) : null;
+    },
   };
 }
 
@@ -2234,8 +2244,8 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
       weapons: () => WEAPON_NAMES.map((_, id) => ({ value: id, label: weaponName(id) })),
       playerType: playerTypeLabel,
       playerTypes: () => PLAYER_TYPES.map((t) => ({ value: t.value, label: t.label })),
-      race: playerRaceLabel,
-      races: () => PLAYER_RACES.map((r) => ({ value: r.value, label: r.label })),
+      race: (value) => dataSetRaceLabel(value),
+      races: () => raceChoices(dataSetRaces()),
       playerGroup: (value) => PLAYER_GROUP_CHOICES.find((c) => c.value === value)?.label ?? `Group ${value}`,
       playerGroups: () => PLAYER_GROUP_CHOICES.map((c) => ({ value: c.value, label: c.label })),
       condition: (type) => (type === 0 ? "None" : conditionDef(type)?.name ?? `Condition ${type}`),

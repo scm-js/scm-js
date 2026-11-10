@@ -2309,6 +2309,24 @@ Help ▸ Game Data…. The `"gameData"` event fires on every change.
   null for a file the copy does not have. `read(path, { under: true })` reads the set
   under a set in memory, without asking its function. `storedPath(member)` turns the
   game's name for a file into the path these take.
+- **Races a set adds.** A race is a number, and 0 to 7 are the game's; a mod may give its
+  players others, which no file of the mod names ([Races a mod
+  adds](mods.md#races-a-mod-adds)). `races()` lists those the set in use declares,
+  `{ id, name, letter?, like? }` sorted by id (empty for the game's own), and
+  `setRaces(races, id?)` declares them for the set in use or the set `id`, replacing what
+  it had. They are kept with the set's id, so they come back after a new release of the
+  mod and when a set is attached again with the same id; races in the profile given to
+  `attach` or `install` are kept the same way. The game's own set takes none (`setRaces`
+  returns null). Declaring them fires `"gameData"`, `names.race` and `names.races` name
+  them, a map saved with the set records them, and Test Map hands them on in
+  `dataSet.races`. In an editor from before this, call `setRaces?.(…)` and read
+  `source()?.profile.races ?? []`. `raceCandidates()` resolves to what the set in use
+  suggests, `{ names, letters }`: the strings its `rez\network.tbl` has past the game's
+  own, and the letters other than z, t, p and n with a `game\<letter>console.pcx` or
+  `rez\statbtn<letter>.bin` of its own, less what is already declared, and nothing for the
+  game's own set. These are hints a person confirms, never names to fill in. A set
+  attached in memory is asked through its function; a stored copy keeps none of these
+  files and gives none.
 
 A mod's files replace the game's in the same formats, so `data`, `tileset`, `graphics` and
 `names` follow them automatically, at whatever width the mod's tables have: `data.units()`
@@ -2568,7 +2586,9 @@ The names behind the numbers in a map: units, upgrades, techs, weapons, player t
 races, player groups, trigger types and AI scripts from the game (with a mod's own names
 under a mod's data set, see [docs/game-data.md](game-data.md#names)), and strings,
 locations, switches, players and tiles from the open map. The list forms return
-`{ value, label }[]` for a drop-down.
+`{ value, label }[]` for a drop-down. `race(value)` names the game's eight races and the
+races the data set in use declares (`gameData.races()`), and any other number as `Race`
+and the number; `races()` lists the game's eight, then the declared ones.
 
 ```ts
 // How many of each unit type the map has, by name.

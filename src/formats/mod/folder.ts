@@ -38,6 +38,7 @@ import { buttonGraftFromText, buttonGraftToText, decodeButtonGraft, decodeReqGra
 import { decodePng, isPng } from "../png";
 import type { TextEncoding } from "../text/encoding";
 import { gameName } from "./sources";
+import { normalizeRaces, type DataSetRace } from "./races";
 
 /** The manifest's file name, at the folder's root. */
 export const MOD_MANIFEST = "mod.json";
@@ -97,6 +98,12 @@ export interface ModManifest {
   kept: { why: string; files: string[] }[];
   /** Anything else a person should know about the folder (raw bytes in a text, …). */
   notes: string[];
+  /**
+   * The races the mod adds to the game's own (race bytes 8–255), when the person who made the folder declared them: no
+   * file of a mod says what its races are called. Absent when none are declared. `mod.json` is no file of the mod, so
+   * declaring a race leaves the mod's hash as it was.
+   */
+  races?: DataSetRace[];
 }
 
 export function emptyManifest(name = ""): ModManifest {
@@ -112,6 +119,11 @@ export function readManifest(text: string): ModManifest | null {
   try { raw = JSON.parse(text); } catch { return null; }
   if (!raw || typeof raw !== "object" || typeof (raw as { scmjs?: unknown }).scmjs !== "number") return null;
   const m = { ...emptyManifest(), ...(raw as Partial<ModManifest>) };
+  // (A row that is no race is dropped, never thrown on: the rest of the folder reads as before.)
+  if ("races" in m) {
+    const races = normalizeRaces(m.races);
+    if (races.length) m.races = races; else delete m.races;
+  }
   if (m.scmjs > MOD_FORMAT) throw new ModFolderError(`${MOD_MANIFEST} is of folder format ${m.scmjs}, which a newer scmjs wrote`, MOD_MANIFEST, 0);
   return m;
 }
@@ -488,5 +500,10 @@ export function tidyManifest(m: ModManifest): ModManifest {
   m.encodings = sortObject(m.encodings);
   m.tables = Object.fromEntries(Object.entries(m.tables).sort(([a], [b]) => (a < b ? -1 : 1))) as ModManifest["tables"];
   m.notes = [...new Set(m.notes)].sort();
+  // (Absent when there are none, so a folder that declares none writes the file it always did.)
+  if ("races" in m) {
+    const races = normalizeRaces(m.races);
+    if (races.length) m.races = races; else delete m.races;
+  }
   return m;
 }

@@ -442,7 +442,7 @@ export function createMcpServer(options: McpOptions = {}): { server: McpServer; 
 
   reg("replay_info", {
     title: "What a replay holds",
-    description: "Who played a replay (.rep), their races, colours, teams and APM, on which map, for how long, when, and at what speed, as `scmjs replay info` prints it, and the mod it was played with when the replay says (`mod`: the data set's name, hash and link, the plugins that ran; null for the game itself). `builds` adds what each player ordered (units, buildings, upgrades, technologies) by name with their cost. A mod's replay names them only with `mod`, the mod's folder (or .mpq, .exe, .zip), which is refused when its data set's hash is not the replay's; without it the orders are ids.",
+    description: "Who played a replay (.rep), their races (a race a mod adds by the name the replay's tag or the mod's mod.json declares, else \"Race\" and its number; `raceId` is the byte), colours, teams and APM, on which map, for how long, when, and at what speed, as `scmjs replay info` prints it, and the mod it was played with when the replay says (`mod`: the data set's name, hash and link, the plugins that ran; null for the game itself). `builds` adds what each player ordered (units, buildings, upgrades, technologies) by name with their cost. A mod's replay names them only with `mod`, the mod's folder (or .mpq, .exe, .zip), which is refused when its data set's hash is not the replay's; without it the orders are ids.",
     inputSchema: {
       path: z.string().describe("the replay file (.rep)"),
       builds: z.boolean().optional().describe("also list what each player ordered, by name, with its cost"),
@@ -454,14 +454,15 @@ export function createMcpServer(options: McpOptions = {}): { server: McpServer; 
     const input = await readInput(file);
     expectKind(input, "replay");
     const rep = await loadReplayInput(input);
-    const r = replayReport(input, rep);
     const warnings: string[] = [];
-    if (mod || builds) {
-      const names = await replayNamer(rep, input.name, { mod, starcraft, costs: !!builds, warn: (line) => warnings.push(line) });
+    const names = mod || builds ? await replayNamer(rep, input.name, { mod, starcraft, costs: !!builds, warn: (line) => warnings.push(line) }) : null;
+    const races = names?.races ?? [];
+    const r = replayReport(input, rep, races);
+    if (names) {
       r.names = names.from;
       if (builds) r.builds = buildOrders(rep, names);
     }
-    return ok([...warnings, ...printReplayInfo(r)], r);
+    return ok([...warnings, ...printReplayInfo(r, races)], r);
   }));
 
   reg("map_preview", {
@@ -536,7 +537,7 @@ export function createMcpServer(options: McpOptions = {}): { server: McpServer; 
 
   reg("mod_info", {
     title: "What a mod is",
-    description: "A StarCraft mod's name, files and sizes by kind (tables, scripts, pictures, sounds, terrain, strings, AI), which tables are wider than the game's and in which layout (DatExtend's expanded .dat, GPTP's .datex), the plugins and FireGraft files it carries (never run), the game it is for, and its hash (`hash`: the name the play page and a replay know the mod by, over every file it provides, its plugins and its FireGraft project; `withoutPlugins`: the same without the plugins, what a page that runs none of them presents), as `scmjs mod info` prints it. A copy of the game in the folder (a folder that holds StarDat.mpq) is not the mod: its own archives and everything under its Maps folder are left out, and the archives among them are named in `gameCopy`.",
+    description: "A StarCraft mod's name, files and sizes by kind (tables, scripts, pictures, sounds, terrain, strings, AI), which tables are wider than the game's and in which layout (DatExtend's expanded .dat, GPTP's .datex), the plugins and FireGraft files it carries (never run), the game it is for, and its hash (`hash`: the name the play page and a replay know the mod by, over every file it provides, its plugins and its FireGraft project; `withoutPlugins`: the same without the plugins, what a page that runs none of them presents), as `scmjs mod info` prints it. A copy of the game in the folder (a folder that holds StarDat.mpq) is not the mod: its own archives and everything under its Maps folder are left out, and the archives among them are named in `gameCopy`. `races` lists the races the mod adds as its mod.json declares them (empty when none are declared).",
     inputSchema: { path: modPath, starcraft },
     annotations: { readOnlyHint: true },
   }, tool(async ({ path: file, starcraft: sc }) => {
@@ -547,7 +548,7 @@ export function createMcpServer(options: McpOptions = {}): { server: McpServer; 
 
   reg("mod_check", {
     title: "Check a mod",
-    description: "The lints across a mod's tables, strings, scripts and files (scmjs mod check): references past their tables, strings past their string table, images with no GRP or no iscript entry, button sets and requirements for things that are not there (errors); weapons and iscript entries the mod added that nothing uses, sound rows with no file, mixed extended layouts, units with one name (warnings). Each finding has where and why; `failed` is true when there is an error. What the mod leaves as the game had it is not judged.",
+    description: "The lints across a mod's tables, strings, scripts and files (scmjs mod check): references past their tables, strings past their string table, images with no GRP or no iscript entry, button sets and requirements for things that are not there (errors); weapons and iscript entries the mod added that nothing uses, sound rows with no file, mixed extended layouts, units with one name (warnings). Each finding has where and why; `failed` is true when there is an error. What the mod leaves as the game had it is not judged. `hints` are not findings and fail nothing: one says when the mod's files suggest races of its own (names past the game's in network.tbl, per-race console files) and its mod.json declares none.",
     inputSchema: { path: modPath, all: z.boolean().optional().describe("list every finding in the text; the data always has them all"), starcraft },
     annotations: { readOnlyHint: true },
   }, tool(async ({ path: file, all, starcraft: sc }) => {
@@ -627,7 +628,7 @@ export function createMcpServer(options: McpOptions = {}): { server: McpServer; 
       path: modPath,
       map: z.string().optional().describe("the map to play: .scm or .scx; without it the page shows its maps"),
       bot: z.string().optional().describe("a .scmbot file on this computer, or a play page bot's key; needs `map`"),
-      race: z.enum(["zerg", "terran", "protoss", "random"]).optional().describe("the bot's race where the map leaves it open"),
+      race: z.string().optional().describe("the bot's race where the map leaves it open: zerg, terran, protoss or random, or a race the mod's mod.json declares, by its name or number"),
       start: z.boolean().optional().describe("with `bot`, start the game at once instead of showing the setup screen"),
       wait: z.number().int().min(10).max(900).optional().describe("seconds to wait for the page, 300 by default"),
       starcraft,
@@ -637,14 +638,16 @@ export function createMcpServer(options: McpOptions = {}): { server: McpServer; 
     noPipe(mapFile, bot);
     if (bot && !mapFile) throw new CliError("`bot` needs `map`: the bot plays on a map.", null, 2);
     const playBot = bot ? playBotOf(bot) : null;
-    const set = await playSet(await openMod(file, await gameFilesOrNull(sc)));
+    const source = await openMod(file, await gameFilesOrNull(sc));
+    const botRace = race ? pageRace(race, source.races) : undefined;
+    const set = await playSet(source);
     const map = mapFile ? await readInput(mapFile) : null;
     if (map) expectKind(map, "map");
     let link = "";
     const lines: string[] = [];
     try {
       const r = await playOnPage(set, {
-        map: map && { name: map.name, bytes: map.bytes }, bot: playBot, botRace: race ? pageRace(race) : undefined, start,
+        map: map && { name: map.name, bytes: map.bytes }, bot: playBot, botRace, start,
         live: (line) => { lines.push(visible(line)); STDERR(visible(line)); }, onAddress: (a) => { link = a; }, timeout: (wait ?? 300) * 1000,
       });
       const said = r.said.map((m) => m.type);

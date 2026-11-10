@@ -290,10 +290,11 @@ What does not work yet:
 
 When a map is saved while a data set other than the game's own is in use, it carries a
 small note naming it (a file `scmjs\dataset.json` inside the map's archive, with the data
-set's id, name, a hash of its files and, when known, where its makers publish it). The
-game and other editors ignore it. Opening such a map while another data set is in use, the
-editor asks once: to switch, when that data set is installed here, or, when it is not, it
-says where its makers publish it and offers Help ▸ Game Data…. Nothing is downloaded.
+set's id, name, a hash of its files, when known where its makers publish it, and the races
+it adds when it names them). The game and other editors ignore it. Opening such a map
+while another data set is in use, the editor asks once: to switch, when that data set is
+installed here, or, when it is not, it says where its makers publish it and offers Help ▸
+Game Data…. Nothing is downloaded.
 
 The note goes with the map wherever else it leaves the editor too: an export, a map put in
 My Maps or shared, and the file Test Map builds all carry it while a data set other than
@@ -302,6 +303,17 @@ editor is changed only by Save. Test Map also passes the data set on, so a test 
 that plays the map, such as the play page, knows which files the map was made for.
 StarCraft itself, started on its own, plays with the game's own data, and Test Map says
 so.
+
+**Races a data set adds.** A mod can give players races past the game's eight, which none
+of its files name ([Races a mod adds](mods.md#races-a-mod-adds)). They are named for a
+data set by the `races` of the `mod.json` in the folder you add it from (Help ▸ Game Data…
+▸ Add a data set…), or by a plugin, and they are kept with the data set, through a new
+release of the mod. Player Settings and Statistics then show them by name and offer them
+in the race list; without a name such a race shows as *Race* and its number, and Player
+Settings keeps it as the map has it. A map's note carries the races of its data set, and
+opening the map gives them to that data set when the map's data set is the one in use and
+none were named for it here. They are kept in the browser with your other settings:
+Preferences ▸ Storage lists them, and clearing them there takes the names away at once.
 
 ### Terrain the data set has not got
 

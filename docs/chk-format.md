@@ -795,7 +795,10 @@ Revealers, Dark Swarm and Disruption Web. A map that places units for a player s
 that player a race. 1.16.1 and Remastered both do this.
 
 The game does not check the values. In the lobby it turns User Selectable into Random.
-`SIDE` is one of the two sections the [`VCOD`](#vcod) check covers.
+`SIDE` is one of the two sections the [`VCOD`](#vcod) check covers. A mod can use values
+past 7 for races of its own; scmJS keeps such a value as it is and shows it as *Race* and
+the number unless the data set in use names it ([Races a mod
+adds](mods.md#races-a-mod-adds)).
 
 <!-- generated: section SIDE -->
 | Name | `SIDE` (53 49 44 45) |

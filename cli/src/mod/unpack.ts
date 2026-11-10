@@ -55,8 +55,8 @@ export async function unpackMod(source: ModSource, dir: string, o: UnpackOptions
   // Over an earlier unpack, its folders are replaced (what a person added beside them stays); anything else must be empty.
   let existing: string[] = [];
   try { existing = await readdir(out); } catch { /* a new folder */ }
+  let earlier: ModManifest | null = null;
   if (existing.length) {
-    let earlier: ModManifest | null = null;
     try { earlier = readManifest(await readFile(join(out, MOD_MANIFEST), "utf8")); } catch { earlier = null; }
     if (!earlier) throw new CliError(t("{folder} is there and is not an unpacked mod.", { folder: dir }), t("Name a new folder, or an empty one."), 2);
     for (const f of KNOWN) await rm(join(out, f), { recursive: true, force: true });
@@ -68,6 +68,10 @@ export async function unpackMod(source: ModSource, dir: string, o: UnpackOptions
   const manifest = emptyManifest(source.name);
   manifest.layers = [...source.layers];
   manifest.palette = o.palette ?? DEFAULT_PALETTE;
+  // The races a person declared: the mod's own mod.json's, else those of the folder unpacked over (a new release of the
+  // mod into the folder of the last keeps them). No file of a mod says them.
+  const races = source.races.length ? source.races : earlier?.races ?? [];
+  if (races.length) manifest.races = races.map((r) => ({ ...r }));
 
   // The names the texts are written with: the mod's own string tables, else the game's.
   // Each table's member; a mod with both a .dat and a .datex of one table is read by GPTP from the .datex.

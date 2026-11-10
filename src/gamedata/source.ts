@@ -27,7 +27,8 @@
  */
 import { desktopBridge, type DesktopBridge } from "./desktop";
 import { hostTerms } from "../editor/platform";
-import { activeProfileId, DEFAULT_PROFILE, isDefaultProfile, type GameDataProfile } from "./profiles";
+import { activeProfileId, DEFAULT_PROFILE, isDefaultProfile, withRaces, type GameDataProfile } from "./profiles";
+import { installDataSetRaces } from "../data/races";
 import { profileOf, readStored, storedCopy, type StoredCopy } from "./store";
 import { cleanStoredPath, memberOfStored } from "./paths";
 import { t, translate } from "../i18n";
@@ -227,7 +228,8 @@ const listeners = new Set<(source: AssetSource) => void>();
  */
 export function resolveAssetSource(report?: InstallProgressLike, options?: ResolveOptions): Promise<AssetSource> {
   if (!resolving) {
-    resolving = locateGameData(defaultDeps(options), report).then((source) => {
+    resolving = locateGameData(defaultDeps(options), report).then((found) => {
+      const source = withDataSetRaces(found);
       current = source;
       for (const l of listeners) l(source);
       return source;
@@ -247,6 +249,16 @@ export function onAssetSource(listener: (source: AssetSource) => void): () => vo
   return () => { listeners.delete(listener); };
 }
 
+/**
+ * The source with its profile carrying the races declared for its data set (`profiles.ts#racesOf`: kept for its id,
+ * else its own), made the table the editor names races by. The source object itself is given the new profile.
+ */
+function withDataSetRaces(source: AssetSource): AssetSource {
+  if (source.profile) source.profile = withRaces(source.profile);
+  installDataSetRaces(source.profile?.races ?? []);
+  return source;
+}
+
 /** Forget the resolution so the next `fetchAsset` runs the chain again (after an install or a clear). */
 export function resetAssetSource(): void {
   resolving = null;
@@ -255,6 +267,7 @@ export function resetAssetSource(): void {
 
 /** Make `source` the session's source without running the chain — an install just produced it. */
 export function setAssetSource(source: AssetSource): void {
+  withDataSetRaces(source);
   resolving = Promise.resolve(source);
   current = source;
   for (const l of listeners) l(source);

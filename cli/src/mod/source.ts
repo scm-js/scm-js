@@ -12,6 +12,7 @@ import { Archive } from "mopaq";
 import { exeArchive, GAME_ARCHIVES, GAME_FOLDERS, gameCopyFiles, gameName, isMpq, isSystemFile, isZip, modRoot, readZip, ModSourceError } from "../../../src/formats/mod/sources";
 import { probeNames } from "../../../src/formats/mod/hash";
 import { MOD_MANIFEST, readManifest, type ModManifest } from "../../../src/formats/mod/folder";
+import { normalizeRaces, type DataSetRace } from "../../../src/formats/mod/races";
 import type { GameFiles } from "../gamefiles";
 import { t } from "../i18n";
 import { CliError, num } from "../ui";
@@ -62,6 +63,11 @@ export interface ModSource {
   system: Map<string, SourceFile>;
   /** A mod folder's manifest. */
   manifest: ModManifest | null;
+  /**
+   * The races the mod adds, as its `mod.json` declares them (a mod folder's manifest, or a `mod.json` at the top of a
+   * folder of the game's files); empty when none are declared. Never worked out from the mod's files.
+   */
+  races: DataSetRace[];
   /** Archives with no file list, read by the names the game uses. */
   probed: string[];
   /** Members an archive lists and does not hold (by game name, with the archive's): not the mod's files. */
@@ -120,7 +126,7 @@ export async function gameSource(files: GameFiles, names: readonly string[]): Pr
 }
 
 export function emptySource(path: string, kind: SourceKind, name: string): ModSource {
-  return { path, kind, name, layers: [], files: new Map(), plugins: [], firegraft: [], exes: [], duplicates: [], left: [], gameCopy: [], system: new Map(), manifest: null, probed: [], unheld: [] };
+  return { path, kind, name, layers: [], files: new Map(), plugins: [], firegraft: [], exes: [], duplicates: [], left: [], gameCopy: [], system: new Map(), manifest: null, races: [], probed: [], unheld: [] };
 }
 
 async function fromPieces(path: string, kind: SourceKind, name: string, pieces: Piece[]): Promise<ModSource> {
@@ -128,6 +134,7 @@ async function fromPieces(path: string, kind: SourceKind, name: string, pieces: 
   const loose: Piece[] = [], systemPieces: Piece[] = [];
   const archives: { label: string; archive: Archive }[] = [];
   let modName: string | null = null;
+  let modRaces: DataSetRace[] = [];
   const take = async (list: Piece[], depth: number): Promise<void> => {
     // (A copy of the game among the pieces is not the mod: its own archives and everything under its Maps folder are
     // never read. An archive is said as the game's; any other file — a map, a campaign's music — is left out as any file
@@ -145,7 +152,11 @@ async function fromPieces(path: string, kind: SourceKind, name: string, pieces: 
       // (A program's library is never one of the game's files, wherever it is: the play page leaves it out too.)
       if (leaf.endsWith(".dll")) { source.left.push(p.path); continue; }
       if (leaf === "mod.json" && p.path.split("/").length <= 2) {
-        try { const n = JSON.parse(new TextDecoder().decode(await p.read())).name; if (typeof n === "string" && n.trim()) modName = n.trim(); } catch { /* not ours to read */ }
+        try {
+          const json = JSON.parse(new TextDecoder().decode(await p.read()));
+          if (typeof json.name === "string" && json.name.trim()) modName = json.name.trim();
+          if (json.races !== undefined) modRaces = normalizeRaces(json.races);
+        } catch { /* not ours to read */ }
         // (Beside the game's folders it is left out below, as a read-me is; under them it is a file of the mod's.)
         if (!p.path.includes("/")) continue;
       }
@@ -228,6 +239,7 @@ async function fromPieces(path: string, kind: SourceKind, name: string, pieces: 
   // A folder the mod's makers ship holds its launcher: the one exe with an archive in it is named as the mod is.
   if (kind === "folder" && source.exes.length === 1) source.name = source.exes[0].file.split("/").pop()!.replace(/\.exe$/i, "");
   if (modName) source.name = modName;
+  source.races = modRaces;
   return source;
 }
 

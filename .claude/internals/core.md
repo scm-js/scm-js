@@ -102,3 +102,9 @@ save plan and the built-file packer, so a script can do what Save does; `cli.md`
 `readArchive`/`writeArchiveBytes` (`mapFile.ts`: the archive as it is, which `openMapBytes` now builds on). A `@scm-js/core`
 alias inside the repository for new code and the plugin host (towards `scmjs map run`). A browser smoke (the
 package claims to bundle; untested in a page).
+
+Done 2026-11-10 (races a mod adds, `mods.md`): `normalizeRaces`, `sameRaces`, `raceLabel`, `raceChoices`,
+`raceCandidates`, `hasRaceCandidates`, `racePlaysAs`, `GAME_RACE_NAMES`, `FIRST_DATASET_RACE`, `RACE_NAME_MAX`,
+`GAME_NETWORK_TBL_ENTRIES`, `DataSetRace`, `RaceCandidates` from `formats/mod/races.ts` (imports `data/players`,
+`dat/tbl`, `mod/sources`: no new edge for the walk). `ModManifest.races?`. The editor's `data/races.ts` (installed table,
+translated text) is not exported.

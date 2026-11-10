@@ -39,6 +39,7 @@ import { t } from "../i18n";
 import { CliError, mark, pc } from "../ui";
 import { modHashOfDigests } from "../../../src/formats/mod/hash";
 import { fileDigest } from "../../../src/formats/mod/sources";
+import type { DataSetRace } from "../../../src/formats/mod/races";
 import type { ModSource } from "./source";
 
 export interface PlayFile { path: string; name: string; bytes: Uint8Array }
@@ -103,7 +104,7 @@ export type PlayBot = { key: string } | { name: string; bytes: Uint8Array };
 
 export interface PlayOptions {
   map?: { name: string; bytes: Uint8Array } | null;
-  /** A bot for the other side, and its race (0 zerg, 1 terran, 2 protoss, 6 random). */
+  /** A bot for the other side, and its race (0 zerg, 1 terran, 2 protoss, 6 random, or a race the mod declares). */
   bot?: PlayBot | null;
   botRace?: number;
   /** Start the game at once rather than show the setup screen (with a bot; a map alone always starts). */
@@ -126,11 +127,16 @@ export interface HandoffExtra {
 /** The races `--race` takes, as the play page numbers them. */
 export const PAGE_RACES: Record<string, number> = { z: 0, zerg: 0, t: 1, terran: 1, p: 2, protoss: 2, r: 6, random: 6 };
 
-/** `--race`: a race's name or letter, as the play page numbers it. */
-export function pageRace(race: string): number {
-  const n = PAGE_RACES[race.trim().toLowerCase()];
-  if (n === undefined) throw new CliError(t("--race {value} is not a race: zerg, terran, protoss or random", { value: race }), null, 2);
-  return n;
+/**
+ * `--race`: a race's name or letter, as the play page numbers it; or a race the mod declares (`races`, its mod.json's),
+ * by its name or its number. (A play page from before races a mod adds may refuse such a number.)
+ */
+export function pageRace(race: string, races: readonly DataSetRace[] = []): number {
+  const said = race.trim().toLowerCase();
+  const n = PAGE_RACES[said] ?? races.find((r) => r.name.toLowerCase() === said || String(r.id) === said)?.id;
+  if (n !== undefined) return n;
+  if (races.length) throw new CliError(t("--race {value} is not a race: zerg, terran, protoss, random, or one the mod declares ({list})", { value: race, list: races.map((r) => `${r.name} ${r.id}`).join(", ") }), null, 2);
+  throw new CliError(t("--race {value} is not a race: zerg, terran, protoss or random", { value: race }), null, 2);
 }
 
 /**

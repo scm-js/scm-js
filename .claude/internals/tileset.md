@@ -172,6 +172,9 @@ site that turns a tile into a group passes `tileset.groups.length`. The atlas fo
 it drew in headless Chromium, and a lazy atlas (like `hd.ts`'s pages) is the way out if a browser refuses the size.
 See `gamedata.md` "Data sets widened".
 
+What those added groups are to the brushes (they carry no terrain type and no ISOM links) is in `terrain.md`
+"Pair terrains": `palette.ts#isLoosePair` / `terrainCopies` / `pairTerrain`, and why pixels alone cannot find them.
+
 Detection by the whole group (2026-11-09): Check Map, the missing-terrain toast **and the drawing** ask whose a tile
 is and whether the data set has it by the *whole* group, bit 15 included (`data/remasteredTiles.ts`), on every
 tileset. `tileGroupOf` keeps the eleven-bit rule on a table of ≤ 2,048 groups, but the ground layer, the minimap and

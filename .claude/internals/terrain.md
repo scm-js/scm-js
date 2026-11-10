@@ -80,6 +80,39 @@ Terrain-type ids in the palette are CV5 group indices of flat tile pairs (the sa
 Rect mode paints in left/right pairs following map column parity, sharing one random variation per
 pair — the tests in `tests/terrain-edit.test.ts` pin this behaviour.
 
+**Pair terrains — flat ground the tileset does not type (2026-11-10).** A mod's added groups all have CV5
+`index` 0 and no links or stack values (Cosmonarchy's Jungle: 2,517 groups past the game's 1,578, used on 81 of its
+86 Jungle maps, up to 64% of a map), so they have no ISOM id and `isomTables` has nothing to build from; the maps'
+own ISOM under those tiles is unrelated terrain (hand-placed). The tile-laying tools take them through a second
+kind of terrain id: `palette.ts#PAIR_TERRAIN` (0x10000) + the pair's even group. `terrainOf` / `pairTerrain`
+resolve one, `flatGroupOf` / `matchingTiles` / `replaceTerrain` accept one, the Rect flood compares
+`terrainKeyOfTile` (index, or the pair where the index is 0 — before, a flood from an untyped tile took every
+untyped tile), `fillMap` leaves ISOM alone for one, and `pickAt` in isometric mode switches to Rect when the
+pick is one. They are never written to a map and the isometric brush ignores them (`currentIsomTerrain` falls
+back). `api.terrain.types()` is unchanged (the game's types), though `tx.replaceTerrain` and `flatGroupOf` take
+the ids since they share the functions.
+**Which pairs are offered is a matter of evidence, and the files alone do not give it.** `isLoosePair` is only a
+shape (two index-0 groups, same slots, a left and a right that differ, one megatile height, one buildability:
+675 of them in that Jungle). Measured before settling: seam distance (`edgeDistance`, pair / wrap / vertical) and
+quadrant colour spread do **not** separate flat pairs from seam pieces — the game's own mud-to-dirt edge groups
+(index 22) score better on both than several typed flat terrains, and the mod's dry-grass flat (2082) and a
+grass seam block (2024) come out the same. So a pair is listed on one of three grounds: (1) `terrainCopies` — every
+picture is pixel for pixel a picture of one typed flat pair and the flags differ (megatile VF4 words or the CV5
+buildable bit); named "{terrain} ({low|mid|high} ground)" from `megatileHeight`, lowest typed group as the source
+where several share pictures (Jungle / High Jungle), flag-for-flag duplicates left out, same megatile in both
+halves not a pair at all (Installation 16–46 repeat megatile 1). The game's eight tilesets yield none; Cosmonarchy's
+yield 0–7 each (Jungle: Mud at mid 2466 and high 2482). (2) `terrain.ts#laidPairs` — the open map lays the pair
+left-on-even-column with the right half beside it in the same slot at least `LAID_PAIR_MIN` (8) times; over the
+mod's 86 Jungle maps a pair past the game's groups is laid so on 30–100% of its tiles or on none (seam pieces are
+single tiles), and 348 maps on the game's tilesets yield no pair at all. Index-0 groups only: the game's edge
+sets are laid in pairs too. (3) the person picks it — the palette's context row in Tile mode, or Alt+click on a
+pair laid whole there (`laidPairAt`). `useTerrainTools().types` is the game's types plus the copies (stable per
+tileset); `useRectTerrains(tools)` adds the laid pairs and the active ad-hoc pair and is what the Rect tab and
+Replace Terrain list — it subscribes to the terrain revision, the tools hook does not. Names: `TerrainType.name`
+stays English, `label` is the localized composition, shown through `terrainLabel`. `tests/pair-terrain.test.ts`.
+A real isometric brush for such ground needs a table nobody ships (type rows, adjacency, and links for groups laid
+out in the mod's own compact blocks, not StarEdit's fourteen shapes) — not attempted.
+
 The Blend brush (`src/editor/blend.ts`) is pixel-based: `edgeTable` lifts every megatile's four
 outermost pixel strips straight from the VR4 (cached per `Tileset` in a WeakMap, ~40 ms once), and
 `blendCandidates(tileset, anchorId, side)` ranks `drawableTiles` (one id per megatile) by

@@ -32,7 +32,7 @@ import { spriteKind } from "../../editor/sprites";
 import { SpriteFlag } from "../../formats/chk/sections/objects";
 import { doodadOrigin } from "../../formats/tileset/doodads";
 import { DoodadThumb } from "./DoodadThumb";
-import { heightLabel, hexTile, tileGroupLabel, tileInfo } from "../../formats/tileset/palette";
+import { heightLabel, hexTile, isPairTerrain, terrainLabel, terrainOf, tileGroupLabel, tileInfo } from "../../formats/tileset/palette";
 import { UnitUsed } from "../../editor/units";
 import type { UnitRecord } from "../../formats/chk/sections/objects";
 import { Button, Check, NumberInput } from "../ui";
@@ -65,13 +65,15 @@ function TerrainProps() {
 
   const underId = scenario && cursor.x < scenario.width && cursor.y < scenario.height ? scenario.tiles[cursor.y * scenario.width + cursor.x] : null;
   const under = loaded && underId !== null ? tileInfo(loaded.tileset, info.terrain, underId) : null;
+  // A pair terrain (a mod's added ground) has no name in the tileset's table; the Rect brush's is asked of the files.
+  const brushTerrain = isPairTerrain(terrain) && mode === "rect" ? terrainOf(loaded?.tileset ?? null, info.terrain, terrain) : null;
   const dash = <span className="faint">—</span>;
 
   return (
     <div className="props">
       <Row k={t("Brush")}>
         {mode === "isom" || mode === "rect"
-          ? <>{translate(terrainName(info, terrain))}{mode === "rect" && variation >= 0 ? <span className="faint"> {t("· var {variation}", { variation })}</span> : null}</>
+          ? <>{brushTerrain ? terrainLabel(brushTerrain) : translate(terrainName(info, terrain))}{mode === "rect" && variation >= 0 ? <span className="faint"> {t("· var {variation}", { variation })}</span> : null}</>
           : <span className="row" style={{ gap: 6 }}><TileThumb loaded={loaded} id={tile} size={16} /><span className="mono">{hexTile(tile)}</span></span>}
       </Row>
       <Row k={t("Mode")}>{MODE_LABEL[mode]}</Row>

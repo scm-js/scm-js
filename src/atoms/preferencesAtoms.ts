@@ -18,7 +18,7 @@ import { dockWidthsAtom, panelsAtom, whatsNewSeenAtom } from "./uiAtoms";
 import { consoleHeightAtom, debugConsoleAtom } from "./logAtoms";
 import { clearHandles } from "../services/handleStore";
 import { recentFilesAtom } from "./documentAtoms";
-import { gameDataProfileAtom } from "./gameDataAtoms";
+import { gameDataProfileAtom, keptRacesAtom, refreshDataSetRacesAtom } from "./gameDataAtoms";
 import { resolveHotkeys } from "../editor/commands";
 import { desktopBridge } from "../gamedata/desktop";
 
@@ -118,6 +118,8 @@ const STORED_RESETS: Record<string, (set: Setter) => void> = {
   "scmjs.plugin-updates": (set) => set(pluginUpdateCheckAtom, RESET),
   // The choice only; the copies themselves are in the origin's file storage, which Game Data… removes.
   "scmjs.gameData": (set) => set(gameDataProfileAtom, RESET),
+  // The races named for each data set; the source in use loses them at once and the panels repaint.
+  "scmjs.dataSetRaces": (set) => { set(keptRacesAtom, RESET); set(refreshDataSetRacesAtom); },
 };
 
 /** The keys an atom owns — everything Preferences can clear *and* put back live. */
@@ -207,6 +209,7 @@ const RELOADS: Record<string, (get: Getter, set: Setter) => void> = {
   "scmjs.plugin-registry": () => {},
   "scmjs.plugin-updates": () => {},
   "scmjs.gameData": (get, set) => set(gameDataProfileAtom, parsedMerged("scmjs.gameData", get(gameDataProfileAtom))),
+  "scmjs.dataSetRaces": (_get, set) => { set(keptRacesAtom, parsed<Record<string, never>>("scmjs.dataSetRaces", {})); set(refreshDataSetRacesAtom); },
 };
 
 function parsed<T>(key: string, fallback: T): T {

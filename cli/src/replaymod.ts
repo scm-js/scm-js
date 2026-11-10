@@ -13,6 +13,7 @@ import { FRAME_MS, type ModTag, type Replay } from "@scm-js/replay";
 import { techName, unitName, upgradeName } from "../../src/data/units";
 import type { DatFile } from "../../src/formats/dat/table";
 import { loadModData, type ModData } from "../../src/formats/mod/data";
+import type { DataSetRace } from "../../src/formats/mod/races";
 import { hashLinesAsWere } from "../../src/formats/mod/hash";
 import { dataSetHashOfDigests, fileDigest, gameName } from "../../src/formats/mod/sources";
 import { sourceHash } from "./mod/hash";
@@ -137,6 +138,8 @@ export interface NamesFrom {
 /** Names and costs by id, as the replay's game had them. Costs are null where no table is at hand. */
 export interface Namer {
   from: NamesFrom;
+  /** The races the mod named with `--mod` declares in its mod.json (empty without one, or when it declares none). */
+  races: DataSetRace[];
   unit(id: number): string;
   upgrade(id: number): string;
   tech(id: number): string;
@@ -158,6 +161,7 @@ function tableNamer(data: ModData, from: NamesFrom, fallback: (kind: "unit" | "u
   const { units, upgrades, techdata } = data.tables;
   return {
     from,
+    races: [],
     unit: (id) => data.names.units[id] || fallback("unit", id),
     upgrade: (id) => data.names.upgrades[id] || fallback("upgrade", id),
     tech: (id) => data.names.technologies[id] || fallback("tech", id),
@@ -182,11 +186,11 @@ export async function replayNamer(rep: Replay, file: string, o: { mod?: string; 
   if (o.mod) {
     const { source, base, hash } = await checkReplayMod(rep, file, o.mod, o.starcraft, o.warn);
     const data = await loadModData(reader(source), base ? (n) => base.read(n) : null, modTables(source), iscriptMembers(source));
-    return tableNamer(data, { kind: "mod", name: source.name, hash }, bare);
+    return { ...tableNamer(data, { kind: "mod", name: source.name, hash }, bare), races: source.races };
   }
   if (rep.mod) {
     const none = () => null;
-    return { from: { kind: "ids", name: null, hash: null }, unit: (id) => bare("unit", id), upgrade: (id) => bare("upgrade", id), tech: (id) => bare("tech", id), unitCost: none, upgradeCost: none, techCost: none };
+    return { from: { kind: "ids", name: null, hash: null }, races: [], unit: (id) => bare("unit", id), upgrade: (id) => bare("upgrade", id), tech: (id) => bare("tech", id), unitCost: none, upgradeCost: none, techCost: none };
   }
   const game = (kind: "unit" | "upgrade" | "tech", id: number) => {
     const name = kind === "unit" ? unitName(id) : kind === "upgrade" ? upgradeName(id) : techName(id);
@@ -200,7 +204,7 @@ export async function replayNamer(rep: Replay, file: string, o: { mod?: string; 
     return { ...tableNamer(data, from, game), unit: (id) => game("unit", id), upgrade: (id) => game("upgrade", id), tech: (id) => game("tech", id) };
   }
   const none = () => null;
-  return { from, unit: (id) => game("unit", id), upgrade: (id) => game("upgrade", id), tech: (id) => game("tech", id), unitCost: none, upgradeCost: none, techCost: none };
+  return { from, races: [], unit: (id) => game("unit", id), upgrade: (id) => game("upgrade", id), tech: (id) => game("tech", id), unitCost: none, upgradeCost: none, techCost: none };
 }
 
 /* ── What each player ordered ──────────────────────────── */

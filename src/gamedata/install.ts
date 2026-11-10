@@ -22,6 +22,7 @@ import { findMembers, httpRangeReader, readZipDirectory, readZipMember, ZipError
 import { t, translate } from "../i18n";
 import { exeArchive, GAME_FOLDERS, isSystemFile } from "../formats/mod/sources";
 import { isModCode } from "../formats/mod/hash";
+import { normalizeRaces, type DataSetRace } from "../formats/mod/races";
 
 export type InstallProgress = (fraction: number, label: string) => void;
 
@@ -165,6 +166,25 @@ export function splitPickedFiles(files: readonly File[]): GameDataFiles {
     }
   }
   return { archives, files: loose, ...(code.length ? { code } : {}) };
+}
+
+/**
+ * The races a picked folder's `mod.json` declares (`[]` for none, or no such file, or one
+ * that is not JSON): only a `mod.json` directly in the folder picked, the one `scmjs mod`
+ * reads as the mod's name. It is no game file and does not change the set's hash.
+ */
+export async function pickedFolderRaces(files: readonly File[]): Promise<DataSetRace[]> {
+  const manifest = files.find((f) => {
+    const segments = ((f as File & { webkitRelativePath?: string }).webkitRelativePath || f.name).split(/[\\/]/).filter(Boolean);
+    return segments.length <= 2 && segments.at(-1)?.toLowerCase() === "mod.json";
+  });
+  if (!manifest) return [];
+  try {
+    const json: unknown = JSON.parse(await manifest.text());
+    return json && typeof json === "object" ? normalizeRaces((json as { races?: unknown }).races) : [];
+  } catch {
+    return [];
+  }
 }
 
 /** The archives in the game's order: `StarDat`, `BrooDat`, then the rest as given. */

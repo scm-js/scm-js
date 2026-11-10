@@ -2286,6 +2286,13 @@ game of a mod: the mod's name, the hash of its data set, its makers' link, and a
 line below it with the plugins that ran. A replay of the game itself says `none`. See
 [Replays of modded games](mods.md#replays-of-modded-games).
 
+A player whose race is one a mod adds (a number past the game's eight) is named by the
+replay's mod section when it lists the mod's races, else by the `races` of the `mod.json`
+of the mod `--mod` names ([Races a mod adds](mods.md#races-a-mod-adds)), and otherwise
+shows as `Race` and the number, `Race 69`. In the matchup such a race is the letter the
+mod gives it (or the first of its name), or `?` when nothing names it. `--json` has each
+player's `race` as shown in English and `raceId`, the number.
+
 `--builds` adds what each player ordered: every unit, building, upgrade and technology,
 when it was first ordered, how many times, and what one costs. These are the players'
 orders, not what the game made: a player who clicks Train five times with money for two
@@ -2508,13 +2515,14 @@ says what a mod is: its files and their sizes by kind, its tables and which are 
 the game's (DatExtend's expanded `.dat`, GPTP's `.datex`), its scripts, the plugins and
 FireGraft files it carries (kept, never run), a self-executing exe's archive, the game it
 is for, and [the mod's hash](mods.md#the-mods-hash) with the hash without its plugins
-beside it, and the older hash of a mod that holds an operating system's files. It reads a
-folder (the game's paths at its root or in a folder under it), an `.mpq`, a self-executing
-`.exe` (MPQDraft's or FireGraft's patcher, read and never run) or a `.zip`. A copy of the
-game inside the folder, a folder that holds `StarDat.mpq`, is not the mod: its own
-archives and everything under its `Maps` folder are left out, and the command says so
-([which files](mods.md#what-a-mod-is)). `--json` prints the same as data, the files left
-out as `gameCopy`.
+beside it, the older hash of a mod that holds an operating system's files, and the races
+its `mod.json` [names](mods.md#races-a-mod-adds). It reads a folder (the game's paths at
+its root or in a folder under it), an `.mpq`, a self-executing `.exe` (MPQDraft's or
+FireGraft's patcher, read and never run) or a `.zip`. A copy of the game inside the
+folder, a folder that holds `StarDat.mpq`, is not the mod: its own archives and everything
+under its `Maps` folder are left out, and the command says so ([which
+files](mods.md#what-a-mod-is)). `--json` prints the same as data, the files left out as
+`gameCopy`.
 
 ### A mod as a folder of text
 
@@ -2546,7 +2554,9 @@ scmjs mod build mymod -o MyMod.mpq
 reference past its table, an image with no GRP, an image whose animation script is
 missing, a string past its table, a button set or requirement for something not there) and
 for what is probably a mistake (a weapon the mod added that no unit carries, a sound row
-with no file, units with one name). It exits 1 on an error. `mod diff` reads as a
+with no file, units with one name). It exits 1 on an error. When the mod's files suggest
+races of its own and its `mod.json` names none, it says so in one line, which is a hint
+and fails nothing ([Races a mod adds](mods.md#races-a-mod-adds)). `mod diff` reads as a
 changelog, "Terran Marine: ground weapon damage 6 → 7", against your copy of the game when
 given one mod. `mod build` checks, then packs, and stops on an error unless `--force`.
 
@@ -2573,8 +2583,9 @@ with a mod once it has it.
 `--bot` puts a [community bot](#bots) on the other side: one of the play page's bots by
 its key (`cosmonarchy-example`, `mcrave`, `ualbertabot`, `example`), or a `.scmbot` file
 of your own, which the page keeps as Options → Add a bot from a file… keeps one. `--race`
-is the bot's race where the map leaves it open. The map is on the page's setup screen with
-the bot in the row beside yours, which says whether the bot was [made for the
+is the bot's race where the map leaves it open: zerg, terran, protoss or random, or a race
+the mod's `mod.json` names, by its name or its number. The map is on the page's setup
+screen with the bot in the row beside yours, which says whether the bot was [made for the
 mod](#a-bot-made-for-a-mod), plays vanilla data, or was made for another; you press Start
 Game. `--start` starts the game at once instead. A mod with plugins plays the map with its
 own settings, as the engine's runners play it. The play page's own bots need a scmjs.dev

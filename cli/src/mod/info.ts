@@ -7,6 +7,7 @@
 import { DAT_SCHEMAS, datTableOf } from "../../../src/formats/dat/schema";
 import { datShape } from "../../../src/formats/dat/table";
 import { gameName } from "../../../src/formats/mod/sources";
+import type { DataSetRace } from "../../../src/formats/mod/races";
 import { t } from "../i18n";
 import { dot, num, pc, rows, size } from "../ui";
 import type { SourceHash } from "./hash";
@@ -51,6 +52,8 @@ export interface ModInfo {
   maps: string[];
   /** The game the mod is for, as far as its files say. */
   game: string;
+  /** The races the mod adds, as its mod.json declares them (empty when none are declared). */
+  races: DataSetRace[];
   duplicates: string[];
   left: string[];
   /** A copy of the game in what was handed over: its own archives, as the folder spells them, not read (not the mod's). */
@@ -106,7 +109,7 @@ export function modInfo(source: ModSource, hash: SourceHash | null = null): ModI
     plugins: source.plugins.map((p) => ({ name: p.name.split(/[\\/]/).pop()!, bytes: p.bytes })),
     firegraft: source.firegraft.map((p) => ({ name: p.name.split(/[\\/]/).pop()!, bytes: p.bytes })),
     exes: source.exes, maps: [...source.files.values()].filter((f) => kindOf(f.name) === "maps").map((f) => f.name).sort(),
-    game, duplicates: source.duplicates, left: source.left, gameCopy: source.gameCopy, probed: source.probed, unheld: source.unheld,
+    game, races: source.races, duplicates: source.duplicates, left: source.left, gameCopy: source.gameCopy, probed: source.probed, unheld: source.unheld,
     hash: hash?.hash ?? null, withoutPlugins: hash?.withoutPlugins ?? null, older: hash?.older ?? null,
   };
 }
@@ -138,6 +141,12 @@ function fromWords(kind: ModSource["kind"], game: string): string {
   }
 }
 
+/** A declared race's byte and what else is declared of it: "race 69, letter a, plays as Terran". */
+function raceDetail(r: DataSetRace): string {
+  const like = r.like === 0 ? t("plays as Zerg") : r.like === 1 ? t("plays as Terran") : r.like === 2 ? t("plays as Protoss") : "";
+  return [t("race {n}", { n: r.id }), r.letter ? t("letter {letter}", { letter: r.letter }) : "", like].filter(Boolean).join(", ");
+}
+
 export function printModInfo(r: ModInfo): string[] {
   const lines = [pc.bold(r.name), pc.dim(fromWords(r.kind, r.game)), ""];
   const kinds = MOD_KINDS.filter((k) => r.kinds[k]).map((k) => `${kindWords(k, r.kinds[k]!.files)} ${pc.dim(`(${size(r.kinds[k]!.bytes)})`)}`);
@@ -154,6 +163,7 @@ export function printModInfo(r: ModInfo): string[] {
     [t("Plugins"), r.plugins.length ? `${r.plugins.map((p) => `${p.name} ${pc.dim(`(${size(p.bytes)})`)}`).join(", ")} ${pc.dim(t("— kept, not run"))}` : null],
     ["FireGraft", r.firegraft.length ? `${r.firegraft.map((p) => `${p.name} ${pc.dim(`(${size(p.bytes)})`)}`).join(", ")} ${pc.dim(t("— kept, not applied"))}` : null],
     ...r.exes.map((e) => ["Exe", t("{file}: {what}, its archive at byte {at}", { file: e.file, what: e.kind === "firegraft" ? patcher(e) : t("MPQDraft's self-executing MPQ"), at: num(e.at) })] as [string, string]),
+    [t("Races"), r.races.length ? r.races.map((x) => `${x.name} ${pc.dim(`(${raceDetail(x)})`)}`).join(", ") : null],
     [t("Maps"), r.maps.length ? `${t("{n, plural, one {# map} other {# maps}}", { n: r.maps.length })}${r.maps.length <= 4 ? `: ${r.maps.map((m) => m.split("\\").pop()).join(", ")}` : ""}` : null],
     [t("Layers"), r.layers.length > 1 ? r.layers.map(shownPath).join(pc.dim(` ${t("then")} `)) : null],
     [t("Hash"), r.hash],

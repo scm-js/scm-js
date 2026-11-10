@@ -8,6 +8,8 @@ import { mapTilesetAtom } from "../../atoms/editorAtoms";
 import { closeDialogAtom } from "../../atoms/uiAtoms";
 import { TILESET_BY_ID } from "../../data/tilesets";
 import { displayColorHex } from "../../data/players";
+import { raceText } from "../../data/races";
+import { dataSetRacesAtom } from "../../atoms/gameDataAtoms";
 import { mapStatistics, statisticsText } from "../../editor/statistics";
 import { useTileset } from "../../hooks/useTileset";
 import { useUnitAssets } from "../../hooks/useUnitAssets";
@@ -26,12 +28,13 @@ export function StatisticsDialog({ entry }: DialogProps) {
   const info = TILESET_BY_ID[useAtomValue(mapTilesetAtom)];
   const { loaded: tileset } = useTileset();
   const { loaded: assets } = useUnitAssets();
+  const races = useAtomValue(dataSetRacesAtom);
   const [copied, setCopied] = useState(false);
   const stats = useMemo(() => {
     void revisions;
     return scenario ? mapStatistics(scenario, tileset?.tileset ?? null, info.terrain, assets?.units ?? null) : null;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scenario, tileset, assets, info, ...revisions]);
+  }, [scenario, tileset, assets, info, races, ...revisions]);
 
   if (!scenario || !stats) {
     return <DialogFrame dialogKey={entry.key} title={t("Statistics")} icon={<BarChart3 size={14} />} size="sm"><p className="hint">{t("Open or create a map first.")}</p></DialogFrame>;
@@ -92,7 +95,7 @@ export function StatisticsDialog({ entry }: DialogProps) {
                   <tr key={p.slot} className={p.type === "Inactive" && p.units === 0 ? "faint" : ""}>
                     <td><span className="row" style={{ gap: 6 }}><span className="swatch" style={{ background: displayColorHex(scenario.playerColors, scenario.playerRgb, p.slot), width: 10, height: 10 }} />{p.slot + 1}</span></td>
                     <td style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={translate(p.type)}>{translate(p.type)}</td>
-                    <td style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={translate(p.race)}>{translate(p.race)}</td>
+                    <td style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={raceText(scenario.playerRaces[p.slot] ?? 0, races)}>{raceText(scenario.playerRaces[p.slot] ?? 0, races)}</td>
                     <td className="num">{p.units}</td><td className="num">{na(p.buildings)}</td><td className="num">{p.startLocations}</td>
                   </tr>
                 ))}

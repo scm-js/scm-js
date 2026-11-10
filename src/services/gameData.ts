@@ -15,15 +15,17 @@
  */
 import type { getDefaultStore } from "jotai";
 import { viewFlagsAtom } from "../atoms/editorAtoms";
-import { gameDataProfileAtom, gameDataRevisionAtom, gameDataSourceAtom } from "../atoms/gameDataAtoms";
+import { gameDataProfileAtom, gameDataRevisionAtom, gameDataSourceAtom, keepRacesAtom } from "../atoms/gameDataAtoms";
 import { preferencesAtom } from "../atoms/preferencesAtoms";
 import { releaseAllTilesets, retryTilesetParts } from "../formats/tileset/load";
 import { resetUnitAssets, retryFailedParts } from "../formats/units/load";
 import { clearFrameCache } from "../formats/units/sprites";
 import { installDataSet, InstallError, installFromRemastered, type GameDataFiles, type InstallProgress, type RemasteredFolder, type RemasteredOptions } from "../gamedata/install";
-import { DEFAULT_PROFILE, isDefaultProfile, isProfileId, type GameDataProfile } from "../gamedata/profiles";
+import { DEFAULT_PROFILE, isDefaultProfile, isProfileId, racesOf, takesRaces, type GameDataProfile } from "../gamedata/profiles";
+import { normalizeRaces, raceCandidates, type DataSetRace } from "../formats/mod/races";
+import { storedPathOf } from "../gamedata/paths";
 import { REMASTERED_PROFILE } from "../gamedata/profiles";
-import { adoptStoredCopy, currentAssetSource, resetAssetSource, resolveAssetSource, setAssetSource, type AssetSource, type DataSetReader } from "../gamedata/source";
+import { adoptStoredCopy, currentAssetSource, readContext, readFrom, resetAssetSource, resolveAssetSource, setAssetSource, type AssetSource, type DataSetReader } from "../gamedata/source";
 import { clearStoredCopy, listStoredCopies, profileOf } from "../gamedata/store";
 import { relayBlankTerrain } from "../hooks/useMapFileActions";
 import { clearComposedImages } from "../plugins/graphics";
@@ -99,6 +101,7 @@ export async function switchDataSet(store: Store, id: string): Promise<AssetSour
  */
 export async function installDataSetInto(store: Store, profile: GameDataProfile, input: GameDataFiles, progress?: InstallProgress): Promise<AssetSource> {
   const copy = await installDataSet(profile, input, progress);
+  keepGivenRaces(store, profile);
   const before = store.get(gameDataSourceAtom);
   store.set(gameDataProfileAtom, { profile: profileOf(copy).id });
   const next = adoptStoredCopy(copy);
@@ -128,6 +131,8 @@ export async function installRemasteredInto(store: Store, folder: RemasteredFold
  * remembered: a reload, or a switch to another data set, leaves it.
  */
 export function attachReaderDataSet(store: Store, profile: GameDataProfile, read: DataSetReader["read"], hash?: string): AssetSource {
+  // (Races the profile brings are kept for its id; without any, those kept before for the id come back.)
+  keepGivenRaces(store, profile);
   const before = store.get(gameDataSourceAtom) ?? currentAssetSource();
   const base = before?.kind === "reader" ? before.reader?.base ?? null : before;
   const next: AssetSource = {
@@ -140,6 +145,68 @@ export function attachReaderDataSet(store: Store, profile: GameDataProfile, read
   setAssetSource(next);
   adoptSource(store, next, true);
   return next;
+}
+
+/** Keep the races a profile handed in declares, for its id; a profile with none leaves what was kept. */
+function keepGivenRaces(store: Store, profile: GameDataProfile): void {
+  const races = normalizeRaces(profile.races);
+  if (races.length) store.set(keepRacesAtom, { id: profile.id, races });
+}
+
+/**
+ * Declare the races a data set adds (`races`, normalized; empty forgets them), for the set in
+ * use or the set `id`, kept with the id so they outlive a new release and a re-attach. When
+ * the set is the one in use its source is replaced by one whose profile carries them, which
+ * the `"gameData"` event and every panel reading the source see. Null for the game's own
+ * sets (nothing is kept) and for a set not in use (kept for when it is).
+ */
+export function setDataSetRaces(store: Store, races: readonly DataSetRace[], id?: string): AssetSource | null {
+  const current = store.get(gameDataSourceAtom) ?? currentAssetSource();
+  const target = id ?? current?.profile.id ?? DEFAULT_PROFILE.id;
+  // (Keeping them redraws the set in use with them.)
+  if (!store.set(keepRacesAtom, { id: target, races })) return null;
+  if (!current || current.profile.id !== target) return null;
+  return store.get(gameDataSourceAtom) ?? currentAssetSource();
+}
+
+/** The letters a race's own files may go by: every letter but the game's (z, t, p and the neutral n). */
+const RACE_LETTERS = [..."abcdefghijklmnopqrstuvwxyz"].filter((c) => !"ztpn".includes(c));
+
+/**
+ * What the data set in use suggests about races it adds (`api.gameData.raceCandidates`):
+ * the strings its `rez\network.tbl` has past the game's own table (the one under a set in
+ * memory, where there is one, else the length 1.16.1's has) and the letters with a
+ * `game\<x>console.pcx` or `rez\statbtn<x>.bin` of the set's own, less the names and letters
+ * already declared for it. Hints for a person to confirm, never names to fill in. Empty
+ * for the game's own sets. A set in memory is asked through its function alone; a stored
+ * copy holds only what the extraction kept, which is none of these files.
+ */
+export async function dataSetRaceCandidates(store: Store): Promise<{ names: string[]; letters: string[] }> {
+  const source = store.get(gameDataSourceAtom) ?? currentAssetSource();
+  if (!source || source.kind === "none" || !takesRaces(source.profile.id)) return { names: [], letters: [] };
+  const reader = source.kind === "reader" ? source.reader ?? null : null;
+  const own = async (member: string): Promise<Uint8Array | null> => {
+    const path = storedPathOf(member);
+    try {
+      if (source.kind === "reader") return reader ? (await reader.read(path, readContext(reader, path))) ?? null : null;
+      return await readFrom(source, path);
+    } catch {
+      return null;
+    }
+  };
+  const network = await own("rez\\network.tbl");
+  const gameNetwork = reader?.base ? await readFrom(reader.base, storedPathOf("rez\\network.tbl")).catch(() => null) : null;
+  const paths: string[] = [];
+  for (const x of RACE_LETTERS) {
+    for (const member of [`game\\${x}console.pcx`, `rez\\statbtn${x}.bin`]) if (await own(member)) paths.push(member);
+  }
+  const found = raceCandidates({ network, gameNetwork, paths });
+  const declared = racesOf(source.profile);
+  const names = new Set(declared.map((r) => r.name.toLowerCase())), letters = new Set(declared.map((r) => r.letter).filter(Boolean));
+  return {
+    names: [...new Set(found.names.map((n) => n.name))].filter((n) => !names.has(n.toLowerCase())),
+    letters: found.letters.filter((l) => !letters.has(l)),
+  };
 }
 
 /**

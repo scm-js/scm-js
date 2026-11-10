@@ -86,6 +86,13 @@ tick comes off; `units.dat` now also yields `buildTime`, `armor`, `groundWeapon`
 (optional — an older extraction shows weapon defaults as 0). `tests/settings.test.ts` pins the codecs,
 the section choice per revision and byte-for-byte re-encoding against the fixture maps.
 
+**Races a data set adds (2026-11-10).** Player Settings' race column is a plain `Select` over
+`data/races.ts#raceOptions(value, races)`: the game's eight (StarEdit's order), the set's declared races
+(`dataSetRacesAtom`), and the slot's own byte as `t("Race {n}")` when neither has it — so a 69 the map holds stays
+selected and `applyPlayerSettings` (which diffs) leaves SIDE clean. `ByteSelect`'s "(raw)" is no longer used for races.
+`playerSlotViews().raceName` and `mapStatistics().players[].race` are `dataSetRaceLabel` (English: the set's name or
+`Race {n}`); the Statistics dialog shows `raceText` (translated) from the scenario byte.
+
 ### Pairs that disagree (`scenario.ts#readPair`, 2026-10-09)
 
 Found through a fixture the user added, `(8)Ashworld Hunters.scm`: `VER` 59 (original StarCraft)

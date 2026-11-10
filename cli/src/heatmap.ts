@@ -37,6 +37,7 @@ import { DEFAULT_PNG_SCALE, drawMarks, loadGraphics, mapPicture, placeMarks, PNG
 import { clock, parseClock } from "./watch";
 import { t, translate } from "./i18n";
 import { CliError, dot, gameText, mark, num, pc, size } from "./ui";
+import type { DataSetRace } from "../../src/formats/mod/races";
 
 /* ── The replays ────────────────────────────────────────────── */
 
@@ -198,14 +199,26 @@ function counted(what: HeatWhat, n: number): string {
 }
 const RACE_LETTER: Record<string, string> = { zerg: "Z", terran: "T", protoss: "P" };
 
+/**
+ * A player's race in a replay's line: Z, T or P; a race a data set declares (`races`) by its letter, when it declares
+ * one and the runner names the race by its number; else `?`.
+ */
+export function raceLetter(race: string, races: readonly DataSetRace[] = []): string {
+  const game = RACE_LETTER[race];
+  if (game) return game;
+  const id = /^\D*(\d+)$/.exec(race.trim())?.[1];
+  const letter = id === undefined ? undefined : races.find((r) => r.id === Number(id))?.letter;
+  return letter ? letter.toUpperCase() : "?";
+}
+
 /** Replays played at once: half the processors, four at most, and a game to each GB of memory (one takes about 750 MB). */
 export const defaultParallel = (cpus = availableParallelism(), memory = totalmem()): number => Math.max(1, Math.min(4, Math.floor(cpus / 2), Math.floor(memory / 2 ** 30)));
 
 /** The line a replay gets as it is done. */
-export function replayLine(k: number, total: number, file: string, ev: GameEvents | null, o: { cached?: boolean; error?: string; what: HeatWhat; count?: number }): string {
+export function replayLine(k: number, total: number, file: string, ev: GameEvents | null, o: { cached?: boolean; error?: string; what: HeatWhat; count?: number; races?: readonly DataSetRace[] }): string {
   const at = pc.dim(`${String(k).padStart(String(total).length)}/${total}`);
   if (!ev) return `${at} ${mark.error} ${file}: ${o.error ?? t("not played")}`;
-  const races = ev.players.map((p) => RACE_LETTER[p.race] ?? "?").join("");
+  const races = ev.players.map((p) => raceLetter(String(p.race), o.races)).join("");
   const count = o.what === "paths" ? "" : `${dot}${counted(o.what, o.count ?? 0)}`;
   return `${at} ${mark.ok} ${file}  ${pc.dim(races)}${dot}${clock(ev.end.frame || ev.frames)}${count}${dot}${pc.dim(o.cached ? t("cached") : `${(ev.end.ms / 1000).toFixed(1)} s`)}`;
 }

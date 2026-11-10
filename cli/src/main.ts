@@ -120,13 +120,15 @@ async function mapInfo(input: Input) {
 async function replayInfo(input: Input, o: ReplayNameOptions = {}) {
   expectKind(input, "replay");
   const rep = await loadReplayInput(input);
-  const data = replayReport(input, rep);
-  if (o.mod || o.builds) {
-    const names = await replayNamer(rep, input.name, { mod: o.mod, starcraft: o.starcraft, costs: !!o.builds, warn: (line) => process.stderr.write(`${mark.warn} ${line}\n`) });
+  const names = o.mod || o.builds ? await replayNamer(rep, input.name, { mod: o.mod, starcraft: o.starcraft, costs: !!o.builds, warn: (line) => process.stderr.write(`${mark.warn} ${line}\n`) }) : null;
+  // (A race the replay's tag does not name, the mod named with --mod may declare.)
+  const races = names?.races ?? [];
+  const data = replayReport(input, rep, races);
+  if (names) {
     data.names = names.from;
     if (o.builds) data.builds = buildOrders(rep, names);
   }
-  return { data, lines: printReplayInfo(data) };
+  return { data, lines: printReplayInfo(data, races) };
 }
 /** A bot file's header (the scm-sim toolchain's `.scmbot`). */
 async function botInfo(input: Input) {
@@ -1584,7 +1586,7 @@ Exits 1 when there is an error.`))
   modCmd.command("play").description(t("play the mod on the play page in your browser")).argument("<mod>", t("a folder, an .mpq, a mod's .exe, a .zip, or a folder mod unpack wrote")).addOption(json)
     .option("--map <file>", t("start this map with the mod (otherwise the page offers its maps)"))
     .option("--bot <bot>", t("a bot for the other side: a .scmbot file, or a bot of the play page by its key (cosmonarchy-example, mcrave, ualbertabot, example)"))
-    .option("--race <race>", t("the bot's race: zerg, terran, protoss or random"))
+    .option("--race <race>", t("the bot's race: zerg, terran, protoss or random, or a race the mod's mod.json declares, by its name or number"))
     .option("--start", t("with --bot, start the game at once instead of showing the setup screen"))
     .addOption(starcraftOption())
     .addOption(new Option("--play <url>", t("the play page's address (SCMJS_PLAY_URL)")).hideHelp())
@@ -1599,9 +1601,12 @@ does.`))
     .action(async (path: string, o: { json?: boolean; map?: string; bot?: string; race?: string; start?: boolean; starcraft?: string; play?: string }) => {
       if (o.bot && !o.map) throw new CliError(t("--bot needs --map: the bot plays on a map."), null, 2);
       if (o.race && !o.bot) throw new CliError(t("--race is the bot's: use it with --bot."), null, 2);
-      const bot = o.bot ? playBotOf(o.bot) : null, botRace = o.race ? pageRace(o.race) : undefined;
+      const bot = o.bot ? playBotOf(o.bot) : null;
       const base = await gameFilesOrNull(o.starcraft);
-      const set = await playSet(await openMod(path, base));
+      const source = await openMod(path, base);
+      // (A race the mod declares in its mod.json is taken by its name or number.)
+      const botRace = o.race ? pageRace(o.race, source.races) : undefined;
+      const set = await playSet(source);
       const map = o.map ? await readInput(o.map) : null;
       if (map) expectKind(map, "map");
       if (!o.json) print(`${pc.bold(set.name)}: ${t("{n, plural, one {# file} other {# files}} to hand over", { n: set.total.files })}${set.plugins + set.firegraft ? pc.dim(` ${t("(and {n, plural, one {# plugin or FireGraft file} other {# plugins and FireGraft files}})", { n: set.plugins + set.firegraft })}`) : ""}${dot}${size(set.total.bytes)}${dot}${pc.dim(t("hash {hash}", { hash: set.hash }))}`);

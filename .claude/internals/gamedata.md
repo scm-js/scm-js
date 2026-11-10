@@ -499,6 +499,31 @@ The mods plan's slice M4 (`scm-sim` branch mods-plan, `docs/mods-plan.md`, "Tier
   Remastered pictures, new canvas each call, not cached) and core exporting the WAV codec (`decodeWav`, `encodeWav`,
   `decodePcmWav`, `decodeImaAdpcm` — now exported from `formats/wav.ts` — `isPlainPcm`, `canDecodeWav`, `wavFrames`,
   `wavCodecName`, `WAV_FORMAT`).
+- **Races a data set adds** (2026-11-10, branch `mod-races`; contract in `mods.md` "Races a mod adds"):
+  `GameDataProfile.races?` (`normalizeProfile` keeps them, absent when empty). **The truth is the stored key**
+  `scmjs.dataSetRaces` (`{ <id>: DataSetRace[] }`), owned by `gameDataAtoms.ts#keptRacesAtom` (atomWithStorage, in
+  `STORED_RESETS` and `RELOADS`: a clear or an import resets/reloads it and runs `refreshDataSetRacesAtom`, so the
+  source loses or regains its races live). `keepRacesAtom` is the one writer (`profiles.ts#racesTableWith` builds the
+  table from storage, normalized; refreshes when the id is the set in use); `profiles.ts#keptRaces/racesOf` read storage
+  directly (the source runs outside the store). `racesOf` = kept ?? [] — **a profile's own `races` is never read**
+  (it was, and a clear could not take races the source's profile already carried); a profile handed in with races is
+  kept first (`keepGivenRaces`: `attach`, `install`, and the dialog's folder route via
+  `install.ts#pickedFolderRaces`, a `mod.json` directly in the picked folder, ≤ 2 path segments; `splitPickedFiles`
+  never takes it, so no hash change). An empty table is kept as "declared none". Never for `starcraft`/`remastered`.
+  **Where they join the source:** `source.ts#withDataSetRaces`, run by `resolveAssetSource` and `setAssetSource`,
+  gives the source a profile with `races` and installs the table into `data/races.ts` (module state, as
+  `installNames`: `dataSetRaceLabel`, `raceText`, `raceOptions`; read by `editor/settings.ts` / `statistics.ts`).
+  `refreshDataSetRacesAtom` = `setAssetSource({...current})` + the source atom (the `"gameData"` event; no revision
+  bump). `services/gameData.ts#setDataSetRaces` = keep, then the source in use or null. `dataSetRacesAtom` (derived)
+  is what Player Settings / Statistics subscribe to. `mapDataSet.ts`: `MapDataSet.races?` written by `dataSetOf`, read
+  with `normalizeRaces`, compared with `sameRaces`; `adoptMapRaces` keeps a map's races **only for the set in use and
+  only when nothing is kept for its id** (a map is someone else's file). `testDataSet` adds `races` when declared.
+  `dataSetRaceCandidates` (`api.gameData.raceCandidates`): core's `raceCandidates` over the set's own
+  `rez\network.tbl` (a reader asked through its function alone; base's table via `readFrom(reader.base)`, else 168) and
+  44 probes (`game\<x>console.pcx`, `rez\statbtn<x>.bin`, x ∉ ztpn), less declared names (any case) and letters.
+  **A stored copy gives nothing**: the extraction keeps neither `rez\network.tbl` nor a mod's console/statbtn files;
+  adding them to `extract.ts#UNIT_EXTRA_FILES` (and so `optional`, pinned counts in `tests/datasets-widths.test.ts`)
+  would be the change. `tests/races.test.ts`.
 - **Name lists (C7 audit (2026-11-08, branch `c7-editor`)):** `extract.ts#UNIT_EXTRA_FILES` gained `rez\stat.txt`, `arr\weapons.txt`, `upgrades.txt`,
   `techdata.txt` (`formats/mod/data.ts#NAME_TEXT_FILES`), copied and listed in `optional` when present; `units/load.ts`
   `fetchNameTexts` reads them into `UnitAssets.nameTexts` for `namesFromAssets`. They were already in the install's

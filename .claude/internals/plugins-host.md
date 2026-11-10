@@ -566,6 +566,14 @@ test targets. `api.data`'s tables are as wide as the data set (`UnitsDat.flingy`
 (`"<set> · Terran Units"`), and `api.graphics.icon("unit", id)` pictures types past 227 from `uniticons.grp` where the
 set has one. See `gamedata.md` "Data sets widened".
 
+**Races a data set adds (2026-11-10, branch `mod-races`)**, additive: `DataSetRace` (declared in `api.ts`, same
+shape as core's), `GameDataProfile.races?`, `gameData.races()`, `gameData.setRaces(races, id?)` (throws on a non-array
+or a bad id; null for the game's own and for a set not in use, else the published source),
+`gameData.raceCandidates()` (`services/gameData.ts#dataSetRaceCandidates`: hints, `{ names, letters }` as strings), `install` passes `races`
+through, `publish`/`profile()` copy the rows. `names.race` = `dataSetRaceLabel`, `names.races` = `raceChoices(dataSetRaces())`
+(eight, then declared). `TestMapFile.dataSet.races?`. Plugins feature-detect (`setRaces?.()`). `gamedata.md` has the
+storage and source side.
+
 **The Mod Editor's asks (2026-11-08, branch `mods-api`)**, all additive: `GameDataReader` takes a second argument
 `GameDataReadContext { member, under(path) }`; `GameDataReadOptions { under? }` on `gameData.read`;
 `gameData.storedPath(member)`; `gameData.rehash(hash | null)` (sync, null when no reader source); `GameDataSource.base`

@@ -142,6 +142,12 @@ export {
 export { loadModData, namesOf, entryText, flatRow, rowChanges, ownEntry, NAME_TEXT_FILES, nameFileText, nameList, statTextEntries, statWithText, type ReadMember, type ModData } from "../../src/formats/mod/data";
 export { checkMod, GAME_ISCRIPT_LAST, type ModFinding, type CheckFiles } from "../../src/formats/mod/check";
 export { diffMods, type ModChange, type ModChangeKind, type DiffSide } from "../../src/formats/mod/diff";
+// Races a data set adds to the game's own: the table `mod.json`'s `races` holds, a race's name by its byte, the hints a
+// mod's files give, and which of the game's three races a list of units plays as.
+export {
+  normalizeRaces, sameRaces, raceLabel, raceChoices, raceCandidates, hasRaceCandidates, racePlaysAs, GAME_RACE_NAMES, FIRST_DATASET_RACE, RACE_NAME_MAX, GAME_NETWORK_TBL_ENTRIES,
+  type DataSetRace, type RaceCandidates,
+} from "../../src/formats/mod/races";
 
 // ── Names and tables ──
 export { TILESETS, TILESET_BY_ID, MAP_SIZES, type TilesetId, type TilesetInfo } from "../../src/data/tilesets";

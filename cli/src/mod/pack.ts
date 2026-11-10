@@ -15,6 +15,7 @@ import { DEFAULT_PALETTE, MOD_MANIFEST, ModFolderError, packFile, readManifest, 
 import { gameName, isSystemFile } from "../../../src/formats/mod/sources";
 import { isModCode } from "../../../src/formats/mod/hash";
 import { loadModData } from "../../../src/formats/mod/data";
+import { normalizeRaces } from "../../../src/formats/mod/races";
 import type { NamedPalette, QuantiseReport } from "../../../src/formats/dat/grpPng";
 import type { GameFiles } from "../gamefiles";
 import { t } from "../i18n";
@@ -129,6 +130,7 @@ export async function packFolder(dir: string, manifest: ModManifest, options: Pa
   const members = [...out.values()].sort((a, b) => (gameName(a.member) < gameName(b.member) ? -1 : gameName(a.member) > gameName(b.member) ? 1 : 0));
   const source = emptySource(dir, "mod folder", manifest.name || dir.replace(/[\\/]+$/, "").split(/[\\/]/).pop()!);
   source.manifest = manifest;
+  source.races = normalizeRaces(manifest.races);
   source.layers.push(...manifest.layers);
   // (A plugin or FireGraft file that was in the mod's archive goes back in as a member, and is the mod's code, not a game file.)
   for (const m of members) if (!isModCode(m.member)) source.files.set(gameName(m.member), { name: m.member, size: m.data.length, read: async () => m.data, layer: m.file });

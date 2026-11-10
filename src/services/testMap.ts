@@ -21,6 +21,7 @@ import { ensurePermission, loadHandle, removeHandle, storeHandle, type StoredHan
 import { saveBytes } from "./mapIo";
 import { t } from "../i18n";
 import { dataSetOf } from "./mapDataSet";
+import type { DataSetRace } from "../formats/mod/races";
 import { gameDataSourceAtom } from "../atoms/gameDataAtoms";
 import { currentAssetSource } from "../gamedata/source";
 
@@ -55,10 +56,13 @@ export function testFileName(store: Store): string | null {
   return name;
 }
 
-/** The data set the map is tested with, as a test target is handed it (`TestMapFile.dataSet`); null for the game's own data. */
-export function testDataSet(store: Store): { id: string; name: string; hash: string } | null {
+/**
+ * The data set the map is tested with, as a test target is handed it (`TestMapFile.dataSet`); null for the game's own
+ * data. `races` only when the set declares some.
+ */
+export function testDataSet(store: Store): { id: string; name: string; hash: string; races?: DataSetRace[] } | null {
   const set = dataSetOf(store.get(gameDataSourceAtom) ?? currentAssetSource());
-  return set ? { id: set.id, name: set.name, hash: set.hash } : null;
+  return set ? { id: set.id, name: set.name, hash: set.hash, ...(set.races?.length ? { races: set.races } : {}) } : null;
 }
 
 /** The map as the game should get it: the remembered save options, in an archive. */

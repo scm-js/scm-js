@@ -2,6 +2,7 @@
 import { parseScenario, MAP_VERSIONS, mapVersionOf, tilesetIndex } from "../../src/formats/chk/scenario";
 import { TILESETS } from "../../src/data/tilesets";
 import { FRAME_MS, type ModTag, type Replay } from "@scm-js/replay";
+import { normalizeRaces, type DataSetRace } from "../../src/formats/mod/races";
 import type { Input } from "./files";
 import { msg, t, translate } from "./i18n";
 import { printBuilds, type NamesFrom, type PlayerBuilds } from "./replaymod";
@@ -28,7 +29,11 @@ export interface ReplayReport {
   title: string;
   host: string;
   map: { name: string; width: number; height: number; tileset: string | null; version: string | null };
-  players: { name: string; race: string; computer: boolean; team: number; color: string; commands: number; apm: number }[];
+  /**
+   * `race` is the race's name: Zerg, Terran or Protoss, a race the mod adds as the replay's tag (or the mod named with
+   * `--mod`) declares it, else `Race {n}`. `raceId` is the race byte as the replay holds it.
+   */
+  players: { name: string; race: string; raceId: number; computer: boolean; team: number; color: string; commands: number; apm: number }[];
   chat: number;
   /** The mod the game was played with, as the replay's SCMJ section says; null for the game itself. */
   mod: ModTag | null;
@@ -38,7 +43,22 @@ export interface ReplayReport {
   builds?: PlayerBuilds[];
 }
 
-export function replayReport(input: Input, rep: Replay): ReplayReport {
+/**
+ * A player's race by its byte: the game's three by name, then a race the replay's tag declares, then one `races`
+ * declares (the mod named with `--mod`), else `Race {n}` (English, as the report is).
+ */
+export function replayRaceName(race: number, tag: ModTag | null, races: readonly DataSetRace[] = []): string {
+  return RACES[race] ?? normalizeRaces(tag?.dataSet.races).find((r) => r.id === race)?.name ?? races.find((r) => r.id === race)?.name ?? `Race ${race}`;
+}
+
+/** A race in the matchup (`ZvA`): the game's letter, a declared race's letter (else its name's first), else `?`. */
+function matchupLetter(race: number, name: string, tag: ModTag | null, races: readonly DataSetRace[]): string {
+  if (race >= 0 && race < 3) return name[0];
+  const declared = normalizeRaces(tag?.dataSet.races).find((r) => r.id === race) ?? races.find((r) => r.id === race);
+  return declared ? (declared.letter ?? declared.name[0]).toUpperCase() : "?";
+}
+
+export function replayReport(input: Input, rep: Replay, races: readonly DataSetRace[] = []): ReplayReport {
   const h = rep.header, ms = h.frames * FRAME_MS;
   // APM as Aftermath counts it (analysis.ts): what a player does in the game, not talk, leaving or the session's
   // traffic, over the time until they left.
@@ -63,7 +83,7 @@ export function replayReport(input: Input, rep: Replay): ReplayReport {
     title: h.title, host: h.host, map,
     players: rep.players.map((p) => {
       const commands = actions.get(p.id) ?? 0, end = left.get(p.id) ?? frames;
-      return { name: p.name, race: RACES[p.race] ?? `Race ${p.race}`, computer: p.type === 1, team: p.team, color: p.color, commands, apm: end > 0 ? Math.round(commands / ((end * FRAME_MS) / 60000)) : 0 };
+      return { name: p.name, race: replayRaceName(p.race, rep.mod, races), raceId: p.race, computer: p.type === 1, team: p.team, color: p.color, commands, apm: end > 0 ? Math.round(commands / ((end * FRAME_MS) / 60000)) : 0 };
     }),
     chat,
     mod: rep.mod,
@@ -76,10 +96,14 @@ function localTime(d: Date): string {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
-export function printReplayInfo(r: ReplayReport): string[] {
+/** A race as shown: a game's race in the language in use, a mod's as it declares it, else "Race {n}" translated. */
+const raceShown = (p: ReplayReport["players"][number]) => (p.race === `Race ${p.raceId}` ? t("Race {n}", { n: p.raceId }) : translate(p.race));
+
+/** `races`: those the mod named with `--mod` declares, for the matchup's letters. */
+export function printReplayInfo(r: ReplayReport, races: readonly DataSetRace[] = []): string[] {
   const teams = new Set(r.players.map((p) => p.team));
   const matchup = teams.size > 1 && teams.size <= 4
-    ? [...teams].map((t) => r.players.filter((p) => p.team === t).map((p) => p.race[0]).join("")).join("v")
+    ? [...teams].map((t) => r.players.filter((p) => p.team === t).map((p) => matchupLetter(p.raceId, p.race, r.mod, races)).join("")).join("v")
     : null;
   const when = r.started ? new Date(r.started) : null;
   return [
@@ -101,7 +125,7 @@ export function printReplayInfo(r: ReplayReport): string[] {
     "",
     pc.dim(`  ${t("Players")}`),
     ...table(r.players.map((p) => [
-      (truecolor ? rgb(p.color, "■") + " " : "") + gameText(p.name), translate(p.race), p.computer ? pc.dim(t("computer")) : `${num(p.apm)} APM`, teams.size > 1 ? pc.dim(t("team {n}", { n: p.team })) : "",
+      (truecolor ? rgb(p.color, "■") + " " : "") + gameText(p.name), raceShown(p), p.computer ? pc.dim(t("computer")) : `${num(p.apm)} APM`, teams.size > 1 ? pc.dim(t("team {n}", { n: p.team })) : "",
     ])),
     ...(r.builds && r.names ? printBuilds(r.builds, r.names, r.mod) : []),
   ];

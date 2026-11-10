@@ -3,7 +3,9 @@ import { useAtomValue, useSetAtom } from "jotai";
 import { ChevronLeft, ChevronRight, Palette, Shield, Users } from "lucide-react";
 import { commitSettingsAtom, scenarioAtom, settingsRevisionAtom } from "../../atoms/documentAtoms";
 import { openDialogAtom } from "../../atoms/uiAtoms";
-import { displayColorHex, hexToRgb, PLAYER_COLORS, PLAYER_RACES, PLAYER_TYPES, playerTypeLabel, rgbToHex } from "../../data/players";
+import { displayColorHex, hexToRgb, PLAYER_COLORS, PLAYER_TYPES, playerTypeLabel, rgbToHex } from "../../data/players";
+import { raceOptions } from "../../data/races";
+import { dataSetRacesAtom } from "../../atoms/gameDataAtoms";
 import { ColorMode, defaultPlayerRgb, ForceFlag, FORCE_SLOTS, isPaletteMode, PLAYER_SLOTS, type PlayerRgb } from "../../formats/chk/sections/players";
 import { applyForceSettings, applyPlayerColors, applyPlayerSettings, CLASSIC_COLORS, playerRgbFor, readForceSettings, readPlayerSettings, withPaletteBytes } from "../../editor/settings";
 import { useScenarioForm } from "../../hooks/useScenarioForm";
@@ -39,6 +41,7 @@ export function PlayerSettingsDialog({ entry }: DialogProps) {
   useAtomValue(settingsRevisionAtom);
   const commit = useSetAtom(commitSettingsAtom);
   const open = useSetAtom(openDialogAtom);
+  const races = useAtomValue(dataSetRacesAtom);
   const [local, setLocal] = useScenarioForm(scenario, readPlayerSettings);
   if (!scenario || !local) return <NoMap entry={entry} title={t("Player Settings")} icon={<Users size={14} />} />;
 
@@ -67,7 +70,7 @@ export function PlayerSettingsDialog({ entry }: DialogProps) {
               <tr key={i}>
                 <td><span className="row" style={{ gap: 6 }}><span className="swatch" style={{ background: displayColorHex(local.colors, scenario.playerRgb, i) }} />{t("P{v}", { v: i + 1 })}</span></td>
                 <td><ByteSelect value={local.types[i]} onChange={(v) => patch("types", i, v)} options={PLAYER_TYPES} /></td>
-                <td><ByteSelect value={local.races[i]} onChange={(v) => patch("races", i, v)} options={PLAYER_RACES} /></td>
+                <td><Select value={String(local.races[i])} onChange={(e) => patch("races", i, Number(e.target.value))} options={raceOptions(local.races[i], races).map((o) => ({ value: String(o.value), label: o.label }))} /></td>
                 <td>
                   {i < FORCE_SLOTS
                     ? <ByteSelect value={local.colors[i]} onChange={(v) => patch("colors", i, v)} options={PLAYER_COLORS.map((c) => ({ value: c.id, label: c.name }))} />

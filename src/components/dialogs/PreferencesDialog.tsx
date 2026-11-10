@@ -68,6 +68,7 @@ import { discardCopy, leftoverEntries } from "../../hooks/useRecovery";
 import { formatBytes } from "../../editor/save";
 import { DEFAULT_PROFILE } from "../../gamedata/profiles";
 import { LOCALES, msg, pluginText, t, translate } from "../../i18n";
+import { STORED_LABELS } from "./storedLabels";
 import { count, countingHere } from "../../services/usage";
 import { Button, Check, Field, IconSelect, NumberInput, Select } from "../ui";
 import DialogFrame from "../ui/DialogFrame";
@@ -774,32 +775,6 @@ interface StoredEntry {
   keys: string[];
   size: number;
 }
-
-const STORED_LABELS: Record<string, string> = {
-  "scmjs.prefs": msg("Preferences"),
-  "scmjs.grid": msg("Grid look"),
-  "scmjs.gridSize": msg("Grid spacing"),
-  "scmjs.locationSnap": msg("Location snap"),
-  "scmjs.placement": msg("Unit placement options"),
-  "scmjs.doodadPlacement": msg("Doodad placement options"),
-  "scmjs.doodadThumbSize": msg("Doodad preview size"),
-  "scmjs.symmetry": msg("Symmetry options"),
-  "scmjs.panels": msg("Panels shown"),
-  "scmjs.docks": msg("Panel widths"),
-  "scmjs.console": msg("Debug console shown"),
-  "scmjs.consoleHeight": msg("Debug console height"),
-  "scmjs.recents": msg("Recent files"),
-  "scmjs.plugins": msg("Installed plugins"),
-  "scmjs.plugin-code": msg("Plugin code copies"),
-  "scmjs.plugin-manifests": msg("Plugin manifests"),
-  "scmjs.plugin-registries": msg("Plugin sources"),
-  "scmjs.plugin-registry": msg("Browse Plugins cache"),
-  "scmjs.plugin-updates": msg("Last plugin update check"),
-  // Written by the hosted site's visit count (the front-door worker's script), not the editor.
-  "scmjs.visits": msg("Visit count dates"),
-  // Preferences ▸ General ▸ Privacy turned off, for the site's script to read.
-  "scmjs.counting": msg("Counting turned off"),
-};
 
 /**
  * Group the editor's keys into the rows the dialog lists. A plugin's keys

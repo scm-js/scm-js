@@ -11,6 +11,7 @@ import { browserStorage, clearStoredData, removeStoredKeys, STORAGE_PREFIX, stor
 import { clearStoredDataAtom, clearStoredKeysAtom, DEFAULT_PREFERENCES, ownedStoredKeys, preferencesAtom } from "../src/atoms/preferencesAtoms";
 import { gridSizeAtom } from "../src/atoms/editorAtoms";
 import { installedPluginsAtom } from "../src/atoms/pluginAtoms";
+import { STORED_LABELS } from "../src/components/dialogs/storedLabels";
 
 const store = browserStorage();
 
@@ -136,5 +137,9 @@ function storedAtomKeys(): string[] {
 describe("ownedStoredKeys", () => {
   it("covers every atom that writes to storage", () => {
     expect(ownedStoredKeys()).toEqual(storedAtomKeys());
+  });
+
+  it("each has a label in Preferences ▸ Storage, so none is listed by its raw key", () => {
+    expect(ownedStoredKeys().filter((key) => !STORED_LABELS[key])).toEqual([]);
   });
 });

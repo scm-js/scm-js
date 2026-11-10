@@ -915,7 +915,7 @@ function StorageSection({ onCleared }: { onCleared: (keys: string[]) => void }) 
       <div className="listbox stored-list">
         {entries.length === 0 && <div className="empty">{t("Nothing stored.")}</div>}
         {entries.map((e) => (
-          <StoredRow key={e.detail} entry={e} onClear={() => { setCleared(null); setAsking({ what: e.label, keys: e.keys }); }} />
+          <StoredRow key={e.keys.join("\n")} entry={e} onClear={() => { setCleared(null); setAsking({ what: e.label, keys: e.keys }); }} />
         ))}
       </div>
       <div className="row">

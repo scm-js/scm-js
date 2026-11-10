@@ -152,6 +152,14 @@ archive's list of its files is taken as its files; an archive with no list is se
 the names the game reads. A name the list holds and the archive does not (Cosmonarchy's
 loader lists six tileset files it never packed) is left out and said.
 
+A copy of the game in the folder is not the mod. Some downloads carry the whole game the
+mod runs on beside the mod itself; a folder that holds a `StarDat.mpq` is taken for such a
+copy, and its own archives (`StarDat.mpq`, `BrooDat.mpq`, `patch_rt.mpq`, `StarCraft.mpq`,
+`BroodWar.mpq`) and everything under its `Maps` folder are left out; a ▲ line names the
+archives among them. Anything else in it, a mod's own archive or exe put there for one, is
+read as before. A folder that holds only a copy of the game is refused. A single
+`patch_rt.mpq` named by itself, the form some older mods ship in, opens as a mod.
+
 The last two lines are [the mod's hash](#the-mods-hash). An `Older hash` line follows them
 when the mod holds files an operating system left in its folders (`desktop.ini`,
 `Thumbs.db`, `.DS_Store`): the hash it had while those counted.
@@ -575,7 +583,7 @@ give `--bot cosmonarchy-example` in step 5.
 
 | File | Does |
 | --- | --- |
-| `src/formats/mod/sources.ts` | What a mod comes in: where the game's paths start in a folder, the archive in a self-executing exe, a zip read |
+| `src/formats/mod/sources.ts` | What a mod comes in: where the game's paths start in a folder, a copy of the game beside the mod, the archive in a self-executing exe, a zip read |
 | `src/formats/mod/hash.ts` | The mod's hash and the hash without plugins, and the names looked for in an archive with no list |
 | `src/formats/mod/folder.ts` | The folder's form: where each file goes, each form written and read back with the same function, `mod.json` |
 | `src/formats/mod/data.ts` | A mod's tables, string tables and scripts over the game's, and which entries it changed |

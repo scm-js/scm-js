@@ -61,6 +61,35 @@ export function isSystemFile(path: string): boolean {
     || parts.some((folder) => (SYSTEM_FILES.folders as readonly string[]).includes(folder));
 }
 
+/** The game's own archives, by file name (lower case): what a 1.16.1 installation holds beside its program. */
+export const GAME_ARCHIVES = ["stardat.mpq", "broodat.mpq", "patch_rt.mpq", "starcraft.mpq", "broodwar.mpq"] as const;
+
+/**
+ * The files among `paths` (forward slashes) that are a copy of the game's own and so no part of a mod: in every folder
+ * that holds a `StarDat.mpq`, that folder's `GAME_ARCHIVES` and every file under its `Maps` folder.
+ *
+ * A copy of the game in what was handed over is not the mod. A person hands over a folder that holds the mod's release
+ * and, beside it, the whole game the mod runs on (Cosmonarchy's download: `Release/` and `Starcraft/`); laid as layers
+ * of the mod, the game's archives became "the mod's" files, and in Windows' folder order `StarDat.mpq` came last and
+ * carried original StarCraft's tables and iscript over Brood War's. A copy's `Maps` folder is the person's maps folder:
+nothing under it is a mod's (Cosmonarchy's copy keeps campaigns at `Maps/CMBW-Root/CMBW-maps/campaign/…`, and
+`campaign` is one of the game's folders, so they were taken for a mod's root). Apply it to each list a walk is given (a folder's
+ * files, a zip's members), never to a single file the person names: some old mods ship as a replaced `patch_rt.mpq`.
+ * The same rule is in the play page and the Mod Editor plugin: change them together.
+ */
+export function gameCopyFiles(paths: readonly string[]): Set<string> {
+  const dir = (p: string) => p.slice(0, Math.max(0, p.lastIndexOf("/")));
+  const leaf = (p: string) => p.slice(p.lastIndexOf("/") + 1).toLowerCase();
+  const copies = new Set(paths.filter((p) => leaf(p) === "stardat.mpq").map((p) => dir(p).toLowerCase()));
+  const out = new Set<string>();
+  if (!copies.size) return out;
+  for (const p of paths) {
+    if (copies.has(dir(p).toLowerCase()) && (GAME_ARCHIVES as readonly string[]).includes(leaf(p))) { out.add(p); continue; }
+    for (const c of copies) if (p.toLowerCase().startsWith(c ? `${c}/maps/` : "maps/")) { out.add(p); break; }
+  }
+  return out;
+}
+
 /**
  * The folder of a set of paths the game's paths start in: the one that holds `arr/`, else the one holding the most
  * files under the game's folders, the shallower on a tie; "" is the root. Paths use forward slashes. At any depth, as

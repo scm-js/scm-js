@@ -2,17 +2,19 @@
  * A mod as the person names it, opened into its files by the game's names: a folder of loose files (the game's paths
  * at its root or a folder down), one `.mpq`, a self-executing `.exe` (MPQDraft's or FireGraft's — read, never run), a
  * `.zip` of any of these, or a mod folder `scmjs mod unpack` wrote (packed in memory). Archives are laid first, in
- * the order found, and loose files over them, the later winning as the game layers its own archives.
+ * the order found, and loose files over them, the later winning as the game layers its own archives. A copy of the
+ * game among a folder's or a zip's files (a folder that holds `StarDat.mpq`) is not the mod: its own archives and
+ * everything under its `Maps` folder are not read (`gameCopyFiles`, `gameCopy`).
  */
 import { readdir, readFile, stat } from "node:fs/promises";
 import { basename, join, relative, resolve } from "node:path";
 import { Archive } from "mopaq";
-import { exeArchive, gameName, isMpq, isSystemFile, isZip, modRoot, readZip, ModSourceError } from "../../../src/formats/mod/sources";
+import { exeArchive, GAME_ARCHIVES, GAME_FOLDERS, gameCopyFiles, gameName, isMpq, isSystemFile, isZip, modRoot, readZip, ModSourceError } from "../../../src/formats/mod/sources";
 import { probeNames } from "../../../src/formats/mod/hash";
 import { MOD_MANIFEST, readManifest, type ModManifest } from "../../../src/formats/mod/folder";
 import type { GameFiles } from "../gamefiles";
 import { t } from "../i18n";
-import { CliError } from "../ui";
+import { CliError, num } from "../ui";
 
 export interface SourceFile {
   /** The name as the source spells it (`arr\units.datex`, `unit/Terran/marine.grp` made `unit\Terran\marine.grp`). */
@@ -45,6 +47,13 @@ export interface ModSource {
   duplicates: string[];
   /** Files that are not the game's (a read-me beside the game's folders, a dll), left out. */
   left: string[];
+  /**
+   * A copy of the game in what was handed over (`gameCopyFiles`): in a folder that holds a `StarDat.mpq`, the game's own
+   * archives and the archives (`.mpq`, `.exe`, `.zip`) under its `Maps` folder, as the folder or zip spells them. Not
+   * read, not the mod's, and not in `left` either (which says "not the game's"). The copy's other files under `Maps`
+   * (maps, a campaign's music) are not read either and are in `left`.
+   */
+  gameCopy: string[];
   /**
    * An operating system's files where a file of the mod's would be (`isSystemFile`: `desktop.ini`, `Thumbs.db`, …), by
    * the game's name: not the mod's files and not in its hash. Kept apart only for the hash the mod had while such
@@ -111,7 +120,7 @@ export async function gameSource(files: GameFiles, names: readonly string[]): Pr
 }
 
 export function emptySource(path: string, kind: SourceKind, name: string): ModSource {
-  return { path, kind, name, layers: [], files: new Map(), plugins: [], firegraft: [], exes: [], duplicates: [], left: [], system: new Map(), manifest: null, probed: [], unheld: [] };
+  return { path, kind, name, layers: [], files: new Map(), plugins: [], firegraft: [], exes: [], duplicates: [], left: [], gameCopy: [], system: new Map(), manifest: null, probed: [], unheld: [] };
 }
 
 async function fromPieces(path: string, kind: SourceKind, name: string, pieces: Piece[]): Promise<ModSource> {
@@ -120,7 +129,13 @@ async function fromPieces(path: string, kind: SourceKind, name: string, pieces: 
   const archives: { label: string; archive: Archive }[] = [];
   let modName: string | null = null;
   const take = async (list: Piece[], depth: number): Promise<void> => {
+    // (A copy of the game among the pieces is not the mod: its own archives and everything under its Maps folder are
+    // never read. An archive is said as the game's; any other file — a map, a campaign's music — is left out as any file
+    // outside the mod is, and never scores a root. Only where a list is walked — a folder, a zip's members — never the
+    // single file the person named, which may be a mod shipped as patch_rt.mpq.)
+    const game = kind === "folder" || depth > 0 ? gameCopyFiles(list.map((p) => p.path)) : new Set<string>();
     for (const p of list) {
+      if (game.has(p.path)) { (/\.(mpq|exe|zip)$/i.test(p.path) ? source.gameCopy : source.left).push(p.path); continue; }
       const leaf = p.path.split("/").pop()!.toLowerCase();
       // (An operating system's file is nothing of the mod's, whatever its name ends in: macOS's `._gptp.qdp` is no plugin.
       // Where a game file would be it is set aside below, for the hash the mod had while such files counted.)
@@ -202,10 +217,42 @@ async function fromPieces(path: string, kind: SourceKind, name: string, pieces: 
     if (!rel.includes("/") || top === "plugins" || top === "firegraft") continue;
     source.system.set(gameName(rel), { name: rel.replace(/\//g, "\\"), size: p.size, read: p.read, layer: root ? `${root}/` : "./" });
   }
+  // A copy of the game and nothing else is no mod: said rather than opened as one. Nothing else means no archive laid,
+  // no plugin or FireGraft file, and no loose file (a zip's members count as loose) under one of the game's folders,
+  // `maps` aside, as `modRoot` scores them: an installation's read-me, dlls, maps and tools' folders are no mod.
+  source.gameCopy.sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+  const underGameFolder = (path: string) => path.split("/").slice(0, -1).some((f) => { const l = f.toLowerCase(); return l !== "maps" && GAME_FOLDERS.includes(l); });
+  if (source.gameCopy.length && !archives.length && !source.plugins.length && !source.firegraft.length && !loose.some((p) => underGameFolder(p.path))) {
+    throw new CliError(t("{folder} is a copy of the game, and there is no mod in it.", { folder: gameCopyFolders(source)[0].folder }), null, 2);
+  }
   // A folder the mod's makers ship holds its launcher: the one exe with an archive in it is named as the mod is.
   if (kind === "folder" && source.exes.length === 1) source.name = source.exes[0].file.split("/").pop()!.replace(/\.exe$/i, "");
   if (modName) source.name = modName;
   return source;
+}
+
+/**
+ * The copies of the game a source held, each with the files of it left out (`gameCopy`): the folder as handed over
+ * (the path the person named when the copy is the folder itself, or a zip's own root), the files by their leaf names.
+ */
+export function gameCopyFolders(source: Pick<ModSource, "path" | "gameCopy">): { folder: string; files: string[] }[] {
+  const dir = (p: string) => p.slice(0, Math.max(0, p.lastIndexOf("/")));
+  // (Every copy's own StarDat.mpq is among the files left out: the folders are those that hold one.)
+  const folders = [...new Map(source.gameCopy.filter((p) => /(^|\/)stardat\.mpq$/i.test(p)).map((p) => [dir(p).toLowerCase(), dir(p)])).values()];
+  return folders.map((folder) => {
+    const lower = folder.toLowerCase();
+    // (The game's own archives first, in `GAME_ARCHIVES`' order, then those under Maps by path: as the Mod Editor and the play page name them.)
+    const rank = (p: string) => { const i = dir(p).toLowerCase() === lower ? (GAME_ARCHIVES as readonly string[]).indexOf(p.slice(p.lastIndexOf("/") + 1).toLowerCase()) : -1; return i < 0 ? GAME_ARCHIVES.length : i; };
+    const files = source.gameCopy.filter((p) => dir(p).toLowerCase() === lower || p.toLowerCase().startsWith(lower ? `${lower}/maps/` : "maps/"))
+      .sort((a, b) => rank(a) - rank(b) || (a < b ? -1 : a > b ? 1 : 0));
+    return { folder: folder || shownPath(source.path), files: files.map((p) => p.slice(p.lastIndexOf("/") + 1)) };
+  });
+}
+
+/** The sentence a copy of the game left out is said with (as `mod info` prints it, `mod unpack` notes it). */
+export function gameCopyWords(copy: { folder: string; files: string[] }): string {
+  const list = copy.files.length > 6 ? `${copy.files.slice(0, 6).join(", ")} ${t("and {n} more", { n: num(copy.files.length - 6) })}` : copy.files.join(", ");
+  return t("{folder} is a copy of the game. Its own archives ({list}) are not part of the mod and were left out.", { folder: copy.folder, list });
 }
 
 /** A path for the person: relative to where they are when that is shorter. */

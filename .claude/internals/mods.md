@@ -363,6 +363,59 @@ scm-sim `docs/mods-plan.md` "C6, as built"; the page's side is scm-sim branch `m
   "mod_header and mod_play" (2) plus the tool list and `map_trace` `mod` on an engine without mods.
 - **Proof** (the real CLI against a dev server, scm-sim `web/smoke-mod-play.mjs`): see scm-sim's record.
 
+## A copy of the game is not the mod (2026-11-09, branch `mod-game-copy`)
+
+**Why.** Someone handed over `C:\Cosmonarchy` as a mod: `Release/` (the mod as shipped) beside `Starcraft/` (a whole
+1.16.1 copy: `StarDat/BrooDat/patch_rt/StarCraft/BroodWar.mpq`, `StarCraft.exe`, `Maps/CMBW-Root/CMBW-editor/
+CMBW-editor.mpq` and `…/grafting/graftc.exe`). Every opener laid every `.mpq`/`.exe` it found as a layer of the mod, so
+the game's archives became the mod's files. In the Mod Editor (Windows' folder order, `StarDat.mpq` last) the mod
+carried original StarCraft's 34,880-byte `scripts\iscript.bin` and a replay failed ("script 12052 at 167 lacks the SCPE
+marker"). The command line had the same walk; its byte order put `patch_rt.mpq` last instead, so it carried 1.16.1's
+iscript (40,482 bytes, from `Starcraft/patch_rt.mpq`), `arr\units.dat` from patch_rt and `arr\images.dat` from
+`CMBW-editor.mpq`: wrong in another way, and a hash no other route gave.
+
+**The rule** (the same in scm-sim's play page and plugin-mods' Mod Editor: change all three together). A folder that
+directly holds `StarDat.mpq` (any case) is a copy of the game; `gameCopyFiles` names `GAME_ARCHIVES` directly in that
+folder and **every file under its `Maps` folder** (any case, any depth). None of them is read or is the mod's. In the
+walk an archive by name (`.mpq`/`.exe`/`.zip`, so the five too) goes to `gameCopy` and is said; any other (a map, a
+campaign's music) goes to `left` like every file outside the mod, and never reaches the loose files, so it neither
+scores a root in `modRoot` nor counts for the refusal. A copy's `Maps` is the person's maps folder: the first cut took
+only archives there, and Cosmonarchy's `Starcraft/` alone still opened as "a mod" of 441 files, because its campaigns
+sit at `Maps/CMBW-Root/CMBW-maps/campaign/…` and `campaign` is one of `GAME_FOLDERS`, so that folder became the root.
+Everything else in the game folder (a mod's own exe or archive dropped in, loose `arr/…` files, plugins) is as before.
+Applied to each list a walk is given — a folder's files, a zip's members (`fromPieces#take`: `kind === "folder" ||
+depth > 0`) — never to a single named file: `scmjs mod info patch_rt.mpq` (old mods ship so), even `StarDat.mpq` named
+alone, opens as before.
+
+**Where.** Core `src/formats/mod/sources.ts`: `GAME_ARCHIVES`, `gameCopyFiles(paths)` (exported in core's Mods block).
+CLI `cli/src/mod/source.ts`: `ModSource.gameCopy` (the archives, paths as the folder/zip spells them, sorted; not in
+`left`, which means "not the game's"), `gameCopyFolders` (per copy: the folder as handed over, or the named path when
+the copy is the folder itself / a zip's root; leaf names), `gameCopyWords` (the sentence, through `t()`; past six,
+`and {n} more`). The sentence is a ▲ line in `mod info` (so `mod_info` over MCP), `gameCopy` in `--json`, and an
+English note in `mod unpack`'s `mod.json` (`inEnglish`, so `mod_unpack`'s lines too). No other command printed
+`probed`, so none prints this. When a copy was left out and nothing of a mod remains, `fromPieces` throws
+`CliError(…, 2)`: "{folder} is a copy of the game, and there is no mod in it." Nothing remains (the same in the three
+repositories) = no archive laid as a layer, no plugin or FireGraft file, and no loose file (a zip's members count as
+loose) with a `GAME_FOLDERS` segment other than `maps` before its name — what `modRoot` scores. Read-me, dlls,
+`lua_lsp/`, a `Shaders/*.zip` of `.glsl` files and anything under the copy's `Maps` do not make a mod. No documented or
+tested flow hands the game's own folder to `scmjs mod` (`gameSource` takes the game's files by name;
+`overlay.ts#gameLayer` reads `gamefiles.ts`; the check tests' "game" is loose files).
+Not changed: `src/gamedata/install.ts` (Add a data set from a folder names the three archives on purpose), the hash rule,
+layer order otherwise, `temp.mpq`.
+
+**Measured** (`scmjs mod info --json`, `/mnt/c/Cosmonarchy`, ~50 s each):
+
+| | files | hash / without plugins | layers |
+| --- | --- | --- | --- |
+| root, before | 7,892 | `898987e2e9b750b4` / `a34a3c2a6ccfbfad` | the exe, `temp.mpq`, 6 of `Starcraft/`'s archives, `mpq/` |
+| root, after | 7,767 | `20e1c6d89ae2af75` / `db23a1f9dd8cef66` | `Release/Cosmonarchy BW.exe`, `Release/temp.mpq`, `Release/mpq/` |
+| `Release/`, before and after | 7,767 | `20e1c6d89ae2af75` / `db23a1f9dd8cef66` | |
+
+`gameCopy` after: 7 files (the five archives, `CMBW-editor.mpq`, `graftc.exe`). `scmjs mod info
+/mnt/c/Cosmonarchy/Starcraft` (the copy alone): before, "a mod" of every archive's files; with archives-only under
+`Maps`, 441 files rooted at `Maps/CMBW-Root/CMBW-maps`; now refused, exit 2. Tests: `tests/mod-game-copy.test.ts`
+(made archives only; the last suite runs only where `SCMJS_COSMONARCHY_HANDED` names the folder, ~50 s).
+
 ## Open
 
 - The hash is one rule everywhere since `mod-hash` ("The mod hash, one rule" above, with its known gaps). The copy

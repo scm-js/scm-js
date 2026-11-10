@@ -10,7 +10,7 @@ import { gameName } from "../../../src/formats/mod/sources";
 import { t } from "../i18n";
 import { dot, num, pc, rows, size } from "../ui";
 import type { SourceHash } from "./hash";
-import { shownPath, type ModSource } from "./source";
+import { gameCopyFolders, gameCopyWords, shownPath, type ModSource } from "./source";
 
 /** The kinds of file a mod changes, in the order they are named (the play page names them alike). */
 export const MOD_KINDS = ["tables", "scripts", "pictures", "sounds", "terrain", "strings", "AI", "maps", "other"] as const;
@@ -53,6 +53,8 @@ export interface ModInfo {
   game: string;
   duplicates: string[];
   left: string[];
+  /** A copy of the game in what was handed over: its own archives, as the folder spells them, not read (not the mod's). */
+  gameCopy: string[];
   probed: string[];
   /** Members an archive lists and does not hold: left out. */
   unheld: string[];
@@ -104,7 +106,7 @@ export function modInfo(source: ModSource, hash: SourceHash | null = null): ModI
     plugins: source.plugins.map((p) => ({ name: p.name.split(/[\\/]/).pop()!, bytes: p.bytes })),
     firegraft: source.firegraft.map((p) => ({ name: p.name.split(/[\\/]/).pop()!, bytes: p.bytes })),
     exes: source.exes, maps: [...source.files.values()].filter((f) => kindOf(f.name) === "maps").map((f) => f.name).sort(),
-    game, duplicates: source.duplicates, left: source.left, probed: source.probed, unheld: source.unheld,
+    game, duplicates: source.duplicates, left: source.left, gameCopy: source.gameCopy, probed: source.probed, unheld: source.unheld,
     hash: hash?.hash ?? null, withoutPlugins: hash?.withoutPlugins ?? null, older: hash?.older ?? null,
   };
 }
@@ -160,6 +162,7 @@ export function printModInfo(r: ModInfo): string[] {
       ? t("(with {list} and {more} more, which the hash leaves out)", { list: r.older.left.slice(0, 3).join(", "), more: num(r.older.left.length - 3) })
       : t("(with {list}, which the hash leaves out)", { list: r.older.left.join(", ") }))}` : null],
   ]));
+  for (const copy of gameCopyFolders(r)) lines.push("", `${pc.yellow("▲")} ${gameCopyWords(copy)}`);
   if (r.probed.length) lines.push("", `${pc.yellow("▲")} ${t("{archives} has no list of its files: only the names the game reads were looked for", { archives: r.probed.join(", ") })}`);
   if (r.unheld.length) lines.push("", pc.dim(t("Listed by its archive and not in it, left out: {list}", { list: `${r.unheld.slice(0, 3).join(", ")}${r.unheld.length > 3 ? ` ${t("and {n} more", { n: num(r.unheld.length - 3) })}` : ""}` })));
   if (r.duplicates.length) lines.push("", `${pc.yellow("▲")} ${t("{n, plural, one {# file} other {# files}} twice, in another case: {list}", { n: r.duplicates.length, list: `${r.duplicates.slice(0, 3).join("; ")}${r.duplicates.length > 3 ? " …" : ""}` })}`);

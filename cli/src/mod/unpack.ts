@@ -13,9 +13,9 @@ import { gameName } from "../../../src/formats/mod/sources";
 import { loadModData } from "../../../src/formats/mod/data";
 import { datTableOf, type DatTableName } from "../../../src/formats/dat/schema";
 import type { GameFiles } from "../gamefiles";
-import { t } from "../i18n";
+import { inEnglish, t } from "../i18n";
 import { CliError } from "../ui";
-import { reader, type ModSource } from "./source";
+import { gameCopyFolders, gameCopyWords, reader, type ModSource } from "./source";
 
 export interface UnpackReport {
   dir: string;
@@ -149,6 +149,8 @@ export async function unpackMod(source: ModSource, dir: string, o: UnpackOptions
     }
   }
   if (source.probed.length) manifest.notes.push(`${source.probed.join(", ")} had no list of its files: only the names the game reads were found in it`);
+  // (mod.json is in English whatever the language, as every file a command writes.)
+  for (const copy of gameCopyFolders(source)) manifest.notes.push(inEnglish(() => gameCopyWords(copy)));
   if (!palette) manifest.notes.push(`no palette ${paletteName} was found (the mod's tileset\\${paletteName}.wpe, or the game's): the GRPs are kept as bytes`);
   tidyManifest(manifest);
   await writeFile(join(out, MOD_MANIFEST), `${JSON.stringify(manifest, null, 2)}\n`);

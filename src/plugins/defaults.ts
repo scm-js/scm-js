@@ -54,7 +54,7 @@ export const DEFAULT_REMOTE_PLUGINS: readonly DefaultPlugin[] = [
   { spec: "github:scm-js/plugin-aftermath@v0.22.1", enabled: true },
   { spec: "github:scm-js/plugin-paint@v1.1.0", enabled: true },
   { spec: "github:scm-js/plugin-repair@v1.6.3", enabled: true },
-  { spec: "github:scm-js/plugin-scm-sim@v0.19.0", enabled: true },
+  { spec: "github:scm-js/plugin-scm-sim@v0.19.1", enabled: true },
   { spec: "github:scm-js/plugin-scmjs-dev@v1.40.0", enabled: true },
   { spec: "github:scm-js/plugin-scm-scx@v1.4.0", enabled: true },
   { spec: "github:scm-js/plugin-stamp-library@v1.2.0", enabled: true },

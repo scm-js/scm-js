@@ -233,6 +233,8 @@ let hdMode = false;
 /** A tileset's 2x variant; null when the data set in use has no 2x file for it. Kept while the option is off, so flipping back is instant. */
 const hdReady = new Map<TilesetFileName, LoadedTileset | null>();
 const hdLoading = new Map<TilesetFileName, Promise<LoadedTileset | null>>();
+/** The tilesets whose 2x file is there and is of other tile tables than the ones loaded (`hdTerrainUnfit`). */
+const hdUnfit = new Set<TilesetFileName>();
 
 /** Turn the 2x pictures on or off for every reader. Returns whether that changed anything. */
 export function setHdTerrain(on: boolean): boolean {
@@ -249,6 +251,16 @@ export const hdTerrain = (): boolean => hdMode;
  */
 export function hdTerrainMissing(name: TilesetFileName): boolean {
   return hdReady.get(name) === null;
+}
+
+/**
+ * Whether the reason `hdTerrainMissing` is true is the tile tables and not the file: the data
+ * set has 2x pictures for `name`, and they are numbered for other tables than the ones it
+ * draws with. That is a data set laid over a Remastered copy that brings a tileset of its own
+ * (a mod's, with more megatiles): the pictures underneath are of the game's.
+ */
+export function hdTerrainUnfit(name: TilesetFileName): boolean {
+  return hdReady.get(name) === null && hdUnfit.has(name);
 }
 
 /** Whether a `peekTileset` right now is the final answer for the current option, or a load would improve on it. */
@@ -326,7 +338,11 @@ function ensureHd(loaded: LoadedTileset): Promise<LoadedTileset | null> {
         variant = { ...loaded, atlas: { ...loaded.atlas, hd } };
       }
       // Released or replaced while this was in flight: the answer describes a tileset nobody holds.
-      if (ready.get(name) === loaded) hdReady.set(name, variant);
+      if (ready.get(name) === loaded) {
+        hdReady.set(name, variant);
+        if (file !== null && !usable) hdUnfit.add(name);
+        else hdUnfit.delete(name);
+      }
       hdLoading.delete(name);
       return variant;
     })();
@@ -362,6 +378,7 @@ export function releaseTileset(name: TilesetFileName): boolean {
   cache.delete(name);
   hdReady.delete(name);
   hdLoading.delete(name);
+  hdUnfit.delete(name);
   return true;
 }
 
@@ -369,7 +386,12 @@ export function releaseTileset(name: TilesetFileName): boolean {
 export function retryTilesetParts(): void {
   statTxt = null;
   // A tileset found to have no 2x file may have one now.
-  for (const [name, variant] of hdReady) if (variant === null) hdReady.delete(name);
+  for (const [name, variant] of hdReady) {
+    if (variant === null) {
+      hdReady.delete(name);
+      hdUnfit.delete(name);
+    }
+  }
   effectTextures.clear();
 }
 
@@ -386,6 +408,7 @@ export function releaseAllTilesets(): number {
   cache.clear();
   hdReady.clear();
   hdLoading.clear();
+  hdUnfit.clear();
   effectTextures.clear();
   statTxt = null;
   return held;
@@ -397,4 +420,5 @@ export function primeTileset(loaded: LoadedTileset) {
   ready.set(loaded.name, loaded);
   hdReady.delete(loaded.name);
   hdLoading.delete(loaded.name);
+  hdUnfit.delete(loaded.name);
 }

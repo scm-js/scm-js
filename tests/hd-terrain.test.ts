@@ -5,7 +5,7 @@ import {
   buildHdEffects, decodeDxt1, decodeHdCell, decodeRawDds, HD_GUTTER, HD_TILE_PX, looksLikeHdTiles, parseDdsGrp, parseHdTiles, parseTileMasks,
 } from "../src/formats/tileset/hd";
 import {
-  ensureTileset, hdTerrainMissing, peekTileset, primeTileset, releaseTileset, retryTilesetParts, setHdTerrain, tilesetSettled, type LoadedTileset,
+  ensureTileset, hdTerrainMissing, hdTerrainUnfit, peekTileset, primeTileset, releaseTileset, retryTilesetParts, setHdTerrain, tilesetSettled, type LoadedTileset,
 } from "../src/formats/tileset/load";
 import { extractTilesets } from "../src/gamedata/extract";
 import { adoptStoredCopy, resetAssetSource } from "../src/gamedata/source";
@@ -201,6 +201,8 @@ describe("Remastered terrain in the tileset loader", () => {
     setHdTerrain(true);
     expect(await ensureTileset("jungle")).toBe(classic);
     expect(hdTerrainMissing("jungle")).toBe(true);
+    // No file at all: nothing here is of other tables.
+    expect(hdTerrainUnfit("jungle")).toBe(false);
     expect(tilesetSettled("jungle")).toBe(true);
     expect(peekTileset("jungle")).toBe(classic);
   });
@@ -227,6 +229,16 @@ describe("Remastered terrain in the tileset loader", () => {
     setHdTerrain(true);
     expect(await ensureTileset("desert")).toBe(classic);
     expect(hdTerrainMissing("desert")).toBe(true);
+    // The pictures are there: it is the tables that are another set's (a mod's tileset over a Remastered copy).
+    expect(hdTerrainUnfit("desert")).toBe(true);
+
+    // The tileset gone, so is what was known of it; loaded again with tables the file covers, it is drawn at 2x.
+    releaseTileset("desert");
+    expect(hdTerrainUnfit("desert")).toBe(false);
+    primeTileset(fakeTileset("desert", 2));
+    expect(atlasTileSize((await ensureTileset("desert")).atlas)).toBe(64);
+    expect(hdTerrainMissing("desert")).toBe(false);
+    expect(hdTerrainUnfit("desert")).toBe(false);
   });
 
   it("forgets the variant with the tileset", async () => {

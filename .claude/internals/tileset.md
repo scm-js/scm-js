@@ -64,6 +64,20 @@ wrong ground silently.
   "this is the answer"; the classic picture keeps drawing during the fetch. A tileset with no
   usable file is cached as `null` (`hdTerrainMissing`), the hook says so once per game-data
   revision in a toast, and `retryTilesetParts` drops the nulls after an install.
+  **Two reasons, two toasts** (2026-11-09): `hdTerrainUnfit(name)` is true when the file *is* there and
+  has fewer pictures than the loaded tables have megatiles (`hdUnfit`, set beside `hdReady` in `ensureHd`,
+  dropped wherever `hdReady`'s entry is). That is a mod's tileset over a Remastered copy — a data set in
+  memory (the Mod Editor's attach, `drawFromModFolder`) or one installed over the copy, whose extraction
+  copies the base's `.hd.vr4`. `useTileset` then says "Classic terrain with {set}" instead of "No
+  Remastered graphics here", which told someone with a Remastered copy to install one. Measured on
+  Cosmonarchy against 1.16's tables: every tileset is replaced (Badlands 39,851 megatiles to the game's
+  4,844) and **renumbered** — by index 4 of Badlands' 4,844 megatiles are the game's, Installation alone
+  keeps all 1,431 — so the count rule refuses rightly and drawing 2x by index below the file's count would
+  be wrong. By *picture* the mod keeps most of the game's tiles (tile ids whose megatile has the same
+  pixels: Badlands 3,504 of 3,609, Desert and Installation all, Jungle 2,677 of 3,533, whose palette
+  differs); a table from the mod's megatile to the game megatile with the same pixels (about 0.3 s a
+  tileset unoptimised, the base's `.vx4`/`.vr4`/`.wpe` read from under the set) would keep the 2x
+  pictures for those. Not built: the water masks (`.hd.tmsk`, by megatile) need the same table.
 - **`AtlasSource.size`.** `atlasSource` answers 32 or 64 and every blit takes `src.size` for the
   source rect; `atlasTileSize(atlas)` is what smoothing and the terrain layer's whole-factor
   test are decided against (a 2x tile is *reduced* up to 200% and copied exactly there, so the

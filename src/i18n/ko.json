@@ -3066,6 +3066,8 @@
   "Nothing {side, select, left {left} top {top} right {right} other {bottom}} of {x}, {y} — that is off the map": "{x}, {y}의 {side, select, left {왼쪽} top {위쪽} right {오른쪽} other {아래쪽}}에는 아무것도 없습니다 — 맵 밖입니다",
   "Blend {tile} {side, select, left {left} top {top} right {right} other {bottom}} of {x}, {y}": "{x}, {y}의 {side, select, left {왼쪽} top {위쪽} right {오른쪽} other {아래쪽}}에 {tile} 블렌드",
   "{hexTile} is already {side, select, left {left} top {top} right {right} other {bottom}} of {x}, {y}": "{hexTile}이(가) 이미 {x}, {y}의 {side, select, left {왼쪽} top {위쪽} right {오른쪽} other {아래쪽}}에 있습니다",
+  "Classic terrain with {name}": "{name}: 지형은 클래식 그림",
+  "{name} has its own terrain tiles, and Remastered's pictures are of the game's. The terrain is drawn with the classic pictures while this data set is in use.": "{name}에는 자체 지형 타일이 있고, 리마스터 그림은 게임의 타일을 그린 것입니다. 이 데이터 세트를 쓰는 동안 지형은 클래식 그림으로 그립니다.",
   "No Remastered graphics here": "리마스터 그래픽이 없습니다",
   "The game data in use has only the classic pictures. Help ▸ Game Data… adds StarCraft: Remastered from your installation.": "지금 쓰는 게임 데이터에는 클래식 그림만 있습니다. 도움말 ▸ 게임 데이터…에서 설치된 스타크래프트: 리마스터를 추가할 수 있습니다.",
   "Can't place {unit} here: {reason} (Placement ▸ Check terrain)": "여기에 {unit}을(를) 놓을 수 없습니다: {reason} (배치 ▸ 지형 검사)",

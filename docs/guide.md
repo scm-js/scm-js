@@ -1302,13 +1302,13 @@ mod](game-data.md#data-sets-made-from-a-mod)), or press **Attach the Mod's Folde
 Aftermath's panel, and units, upgrades and technologies are named by the mod. Until then
 they show by number.
 
-A mod whose plugins run has three limits:
+A mod whose plugins run plays at about the game's own pace, which shows in two places:
 
-- the analysis goes at about the game's own pace, so a twenty-minute game takes over ten
-  minutes;
-- the Fights tab lists the fights but does not play them again, and says why;
-- going back on the timeline starts the replay again from its first frame and plays
-  forward to the moment, which takes a while.
+- the analysis takes over ten minutes for a twenty-minute game;
+- going ahead on the timeline to a part the game has not played yet plays forward to the
+  moment, and the timeline says how far it has got. Going back is quick: the game returns
+  to a moment kept on the way. A drag along the timeline moves the game once, when the
+  drag ends.
 
 ## Plugins
 

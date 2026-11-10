@@ -9,9 +9,9 @@
  * vocabulary for, which is exactly what SCMDraft does in its Rectangular/Subtile modes.
  */
 import { markDirty, type Scenario } from "../formats/chk/scenario";
-import type { Tileset } from "../formats/tileset/decode";
+import { tileGroupOf, type Tileset } from "../formats/tileset/decode";
 import { pickVariation, variationsOf } from "../formats/tileset/terrain";
-import { isFlatPair } from "../formats/tileset/palette";
+import { isFlatPair, isLoosePair, isPairTerrain, pairTerrainGroup } from "../formats/tileset/palette";
 
 export interface TileChange {
   /** Flat index into `scenario.tiles`. */
@@ -111,7 +111,11 @@ export function stampTerrain(
   return out;
 }
 
-/** What Replace Terrain matches or writes: a flat terrain type (by ISOM id) or one exact tile. */
+/**
+ * What Replace Terrain matches or writes: a flat terrain type or one exact tile. A terrain's id
+ * is its ISOM id (the CV5 `index` of the flat pair), or a pair id (`palette.ts#PAIR_TERRAIN`)
+ * for flat ground the tileset does not type — a mod's added pairs.
+ */
 export type TerrainPick = { kind: "terrain"; id: number; variation?: number } | { kind: "tile"; id: number };
 
 /**
@@ -125,6 +129,11 @@ export function matchingTiles(scn: Scenario, tileset: Tileset | null, from: Terr
   if (from.kind === "tile") return cells.filter((at) => scn.tiles[at] === from.id);
   if (!tileset) return [];
   const groups = tileset.groups;
+  if (isPairTerrain(from.id)) {
+    const pair = pairTerrainGroup(from.id);
+    if (!isLoosePair(tileset, pair)) return [];
+    return cells.filter((at) => (tileGroupOf(scn.tiles[at], groups.length) & ~1) === pair);
+  }
   return cells.filter((at) => groups[scn.tiles[at] >> 4]?.index === from.id && isFlatPair(tileset, (scn.tiles[at] >> 4) & ~1));
 }
 
@@ -143,12 +152,61 @@ export function replaceTerrain(scn: Scenario, tileset: Tileset | null, from: Ter
   return stampTerrain(scn, tileset, { group, variation: to.variation }, cells, random);
 }
 
-/** The even CV5 group of the flat pair carrying an ISOM terrain id, or -1. */
+/** The even CV5 group of the flat pair a terrain id names (an ISOM id, or a pair id), or -1. */
 export function flatGroupOf(tileset: Tileset, terrainId: number): number {
+  if (isPairTerrain(terrainId)) {
+    const pair = pairTerrainGroup(terrainId);
+    return isLoosePair(tileset, pair) ? pair : -1;
+  }
   for (let g = 2; g + 1 < tileset.groups.length; g += 2) {
     if (tileset.groups[g].index === terrainId && isFlatPair(tileset, g)) return g;
   }
   return -1;
+}
+
+/** Whole pairs a map must hold before an untyped pair counts as ground laid on it. */
+export const LAID_PAIR_MIN = 8;
+
+/**
+ * The untyped pairs this map lays as flat ground: the left half on an even column with the
+ * right half beside it in the same variation, at least `min` times. Even groups, ascending.
+ *
+ * This is the evidence the tileset's files cannot give (`palette.ts#isLoosePair`). Over the 86
+ * Jungle maps Cosmonarchy ships, a pair past the game's groups is either laid this way on 30–100%
+ * of its tiles or on none of them — the pieces of the mod's seams are single tiles and never
+ * pair up — so a low count is enough. Only `index` 0 groups are counted: the game's own edge
+ * sets are laid in pairs too, and they are not ground.
+ */
+export function laidPairs(scn: Scenario, tileset: Tileset, min = LAID_PAIR_MIN): number[] {
+  const { width, tiles } = scn;
+  const groups = tileset.groups;
+  const counts = new Map<number, number>();
+  for (let at = 0; at + 1 < tiles.length; at++) {
+    const x = at % width;
+    if (x % 2 !== 0 || x + 1 >= width) continue;
+    const left = tiles[at];
+    const g = tileGroupOf(left, groups.length);
+    if (g % 2 !== 0 || groups[g]?.index !== 0) continue;
+    const right = tiles[at + 1];
+    if (tileGroupOf(right, groups.length) === g + 1 && (right & 15) === (left & 15)) counts.set(g, (counts.get(g) ?? 0) + 1);
+  }
+  const out: number[] = [];
+  for (const [g, n] of counts) if (n >= min && isLoosePair(tileset, g)) out.push(g);
+  return out.sort((a, b) => a - b);
+}
+
+/** Whether the tile at (x, y) is half of an untyped pair laid there as a pair; the pair's even group, or -1. */
+export function laidPairAt(scn: Scenario, tileset: Tileset, x: number, y: number): number {
+  const n = tileset.groups.length;
+  const id = scn.tiles[y * scn.width + x];
+  const g = tileGroupOf(id, n);
+  const pair = g & ~1;
+  const px = x - (x % 2);
+  if (g % 2 !== x % 2 || px + 1 >= scn.width || tileset.groups[pair]?.index !== 0) return -1;
+  const left = scn.tiles[y * scn.width + px];
+  const right = scn.tiles[y * scn.width + px + 1];
+  if (tileGroupOf(left, n) !== pair || tileGroupOf(right, n) !== pair + 1 || (left & 15) !== (right & 15)) return -1;
+  return isLoosePair(tileset, pair) ? pair : -1;
 }
 
 /**

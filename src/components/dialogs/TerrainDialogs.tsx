@@ -8,8 +8,8 @@ import { DEFAULT_START_PLACEMENT, placeStartLocations, playableCount, type Start
 import { matchingTiles, type TerrainPick } from "../../editor/terrain";
 import { START_LOCATION } from "../../data/units";
 import { peekTileset } from "../../formats/tileset/load";
-import { hexTile } from "../../formats/tileset/palette";
-import { useTerrainTools } from "../../hooks/useTerrainTools";
+import { hexTile, terrainLabel } from "../../formats/tileset/palette";
+import { useRectTerrains, useTerrainTools } from "../../hooks/useTerrainTools";
 import { useUnitAssets } from "../../hooks/useUnitAssets";
 import { Check, Field, Group, NumberInput, Select } from "../ui";
 import DialogFrame from "../ui/DialogFrame";
@@ -35,7 +35,7 @@ export function ReplaceTerrainDialog({ entry }: DialogProps) {
   const activeTerrain = useAtomValue(activeTerrainAtom);
   const activeTile = useAtomValue(activeTileAtom);
   const tools = useTerrainTools();
-  const types = tools.types;
+  const types = useRectTerrains(tools);
   const firstId = types[0]?.id ?? 2;
   const [fromKind, setFromKind] = useState<PickKind>(mode === "tile" ? "tile" : "terrain");
   const [toKind, setToKind] = useState<PickKind>(mode === "tile" ? "tile" : "terrain");
@@ -60,7 +60,7 @@ export function ReplaceTerrainDialog({ entry }: DialogProps) {
     return <DialogFrame dialogKey={entry.key} title={t("Replace Terrain")} icon={<Replace size={14} />} size="sm"><p className="hint">{t("Open or create a map first.")}</p></DialogFrame>;
   }
 
-  const options = types.map((t) => ({ value: String(t.id), label: t.name }));
+  const options = types.map((t) => ({ value: String(t.id), label: terrainLabel(t) }));
   const picker = (kind: PickKind, setKind: (k: PickKind) => void, terrain: number, setTerrain: (id: number) => void, tile: number, setTile: (id: number) => void, what: string) => (
     <div className="form">
       <Field label={t("Match")}>

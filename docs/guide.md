@@ -387,6 +387,32 @@ editor's work.
 
 These three leave the isometric record alone.
 
+### Ground a mod adds
+
+A mod's tileset can hold flat ground the game never had, and the tileset's files give that
+ground no terrain type and nothing the isometric brush could join it with: Cosmonarchy's
+Jungle has mud on high ground, a swamp, asphalt and more, all of it placed tile by tile in
+the mod's own maps. The Isometric tab therefore lists only the game's terrain types. The
+Rect tab lists the rest it can stand behind, below the game's:
+
+- **The game's ground at another height.** Where a pair of tile groups has exactly the
+  pictures of one of the game's terrains under other flags, it is listed under that
+  terrain's name and its height: *Mud (mid ground)*, *Mud (high ground)*. Mid ground is
+  the level of High Dirt. The Tile tab names those groups the same way, and its *Flat
+  terrain* filter includes them.
+- **Ground the open map lays.** A pair the map already uses as ground, left and right
+  halves side by side, is listed as *Group* and its number. Nothing in a tileset tells
+  flat ground from the pieces of a seam between two terrains of nearly one colour, so the
+  map is what the editor goes by.
+- **A pair you pick.** In the Tile tab, right-click and choose **Paint This Tile's Pair
+  with the Rect Brush** to lay any pair as ground, on a map that has none of it yet.
+  Alt+click on such ground in the map picks it too.
+
+All of these paint, flood-fill and take part in **Tools ▸ Replace Terrain…** like the
+game's terrains — replacing Mud with *Mud (mid ground)* raises a mud flat without changing
+how it looks. The seams around them are the mod's own pieces: lay them with the Tile
+brush, or let the Blend brush find the tiles that continue an edge.
+
 ### Overlays and tools
 
 Two overlays on the View menu show what the ground means to the game:
@@ -2040,6 +2066,8 @@ rely on a feature.
 
 - The isometric brush needs the map's isometric record. The Repair plugin, on by default,
   rebuilds one a protected map had stripped.
+- The isometric brush paints the game's terrain types only. Flat ground a mod adds is laid
+  with the Rect brush and its seams by hand ([Ground a mod adds](#ground-a-mod-adds)).
 - Symmetry does not mirror the Blend brush or pasting. The Tile brush copies the same tile
   to each image, so an edge tile faces the same way on both sides; use the isometric brush
   for cliffs and shores.

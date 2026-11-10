@@ -7,7 +7,7 @@ import {
 import { commitTerrainAtom, scenarioAtom, terrainRevisionAtom, tilesetFileNameAtom, type HistoryEntry } from "../atoms/documentAtoms";
 import { statusMessageAtom } from "../atoms/uiAtoms";
 import {
-  applyChanges, brushRect, floodRegion, replaceTerrain, stampTerrain, stampTile,
+  applyChanges, brushRect, floodRegion, laidPairAt, laidPairs, replaceTerrain, stampTerrain, stampTile,
   Stroke, type Rect, type TerrainPick, type TileChange,
 } from "../editor/terrain";
 import { mirrorIndices, mirrorPixel, mirrorRect } from "../editor/symmetry";
@@ -18,7 +18,11 @@ import { flatTerrain } from "../formats/tileset/terrain";
 import { inMap, neighbourOf, placeBlend, type Side } from "../editor/blend";
 import { tilesetIndex, type Scenario } from "../formats/chk/scenario";
 import { peekTileset } from "../formats/tileset/load";
-import { hexTile, terrainTypes, type TerrainType } from "../formats/tileset/palette";
+import { tileGroupOf } from "../formats/tileset/decode";
+import {
+  copiedTerrains, hexTile, isPairTerrain, pairTerrain, terrainKeyOfTile, terrainLabel, terrainOf as terrainOfTileset, terrainTypes,
+  type TerrainType,
+} from "../formats/tileset/palette";
 import { TILESET_BY_ID, terrainName } from "../data/tilesets";
 import { t, translate } from "../i18n";
 
@@ -64,7 +68,20 @@ export function useTerrainTools() {
   const info = TILESET_BY_ID[useAtomValue(mapTilesetAtom)];
   const loaded = peekTileset(useAtomValue(tilesetFileNameAtom));
   const scenarioForTables = useAtomValue(scenarioAtom);
-  const types = useMemo(() => terrainTypes(loaded?.tileset ?? null, info.terrain), [loaded, info]);
+  /**
+   * The flat terrains the files vouch for: the game's types, then the pairs that are the game's
+   * own ground under other flags (a mod's Mud on high ground). `useRectTerrains` adds what the
+   * open map lays.
+   */
+  const types = useMemo(
+    () => [...terrainTypes(loaded?.tileset ?? null, info.terrain), ...copiedTerrains(loaded?.tileset ?? null, info.terrain)],
+    [loaded, info],
+  );
+  /** The terrain an id names: one of `types`, or any other pair of the tileset by its pair id. */
+  const terrainOf = useCallback(
+    (id: number): TerrainType | null => types.find((t) => t.id === id) ?? (isPairTerrain(id) ? terrainOfTileset(loaded?.tileset ?? null, info.terrain, id) : null),
+    [types, loaded, info],
+  );
   /** CV5 indices the isometric brush can paint on this tileset. */
   const isomTypes = useMemo(
     () => (loaded && scenarioForTables ? isomTerrains(isomTables(loaded.tileset, tilesetIndex(scenarioForTables))) : []),
@@ -83,9 +100,8 @@ export function useTerrainTools() {
 
   /** The Rect brush as a flat pair, or null when the graphics (and so the groups) are missing. */
   const currentTerrain = useCallback((): TerrainType | null => {
-    const id = store.get(activeTerrainAtom);
-    return types.find((t) => t.id === id) ?? types[0] ?? null;
-  }, [store, types]);
+    return terrainOf(store.get(activeTerrainAtom)) ?? types[0] ?? null;
+  }, [store, types, terrainOf]);
 
   /** The isometric brush's terrain: the active one when paintable, else the tileset's first. */
   const currentIsomTerrain = useCallback((): number | null => {
@@ -170,7 +186,7 @@ export function useTerrainTools() {
     isomStroke.current = new Stroke();
     lastDiamond.current = null;
     strokeLabel.current =
-      mode === "rect" ? (currentTerrain() ? t("Paint {terrain}", { terrain: translate(currentTerrain()!.name) }) : t("Paint terrain"))
+      mode === "rect" ? (currentTerrain() ? t("Paint {terrain}", { terrain: terrainLabel(currentTerrain()!) }) : t("Paint terrain"))
         : mode === "isom" ? t("Paint {terrain} (isometric)", { terrain: translate(terrainName(info, currentIsomTerrain() ?? -1)) })
           : t("Place tile {tile}", { tile: hexTile(store.get(activeTileAtom)) });
     paintAt(x, y, p);
@@ -212,12 +228,11 @@ export function useTerrainTools() {
         setStatus(t("Fill needs the tileset graphics — Help ▸ Game Data…"));
         return;
       }
-      const groups = loaded.tileset.groups;
-      const typeOf = (id: number) => groups[id >> 4]?.index ?? -1;
+      const typeOf = (id: number) => terrainKeyOfTile(loaded.tileset, id);
       const seedType = typeOf(seed);
       const region = mirrorIndices(store.get(symmetryAtom), floodRegion(scn, x, y, (id) => typeOf(id) === seedType), scn.width, scn.height);
       changes = stampTerrain(scn, loaded.tileset, { group: terrain.group, variation: store.get(rectVariationAtom) }, region);
-      label = t("Fill {terrain}", { terrain: translate(terrain.name) });
+      label = t("Fill {terrain}", { terrain: terrainLabel(terrain) });
     } else {
       const tile = store.get(activeTileAtom);
       if (tile === seed) return;
@@ -255,11 +270,12 @@ export function useTerrainTools() {
       }
       const flat = flatTerrain(scn.width, scn.height, { id: terrain.id, group: terrain.group }, loaded.tileset, Math.random, tilesetIndex(scn));
       for (let at = 0; at < flat.tiles.length; at++) if (scn.tiles[at] !== flat.tiles[at]) changes.push({ at, before: scn.tiles[at], after: flat.tiles[at] });
-      if (hasIsom(scn) && scn.isom.length === flat.isom.length) {
+      // A pair the tileset does not type has no ISOM value: its tiles are laid and the lattice is left as it was.
+      if (hasIsom(scn) && scn.isom.length === flat.isom.length && !isPairTerrain(terrain.id)) {
         isom = [];
         for (let i = 0; i < flat.isom.length; i++) if (scn.isom[i] !== flat.isom[i]) isom.push({ at: i, before: scn.isom[i], after: flat.isom[i] });
       }
-      label = t("Fill map with {terrain}", { terrain: translate(terrain.name) });
+      label = t("Fill map with {terrain}", { terrain: terrainLabel(terrain) });
     }
     if (changes.length === 0 && !(isom && isom.length > 0)) {
       setStatus(t("The map is already that terrain — nothing to fill."));
@@ -287,17 +303,22 @@ export function useTerrainTools() {
       setStatus(t("Nothing to replace — no tile matches, or the replacement is what is there already."));
       return 0;
     }
-    const name = (p: TerrainPick) => (p.kind === "tile" ? hexTile(p.id) : translate(terrainName(TILESET_BY_ID[store.get(mapTilesetAtom)], p.id)));
+    const name = (p: TerrainPick) => {
+      if (p.kind === "tile") return hexTile(p.id);
+      const type = terrainOf(p.id);
+      return type ? terrainLabel(type) : translate(terrainName(TILESET_BY_ID[store.get(mapTilesetAtom)], p.id));
+    };
     const label = t("Replace {from} with {to}", { from: name(from), to: name(to) });
     applyChanges(scn, changes);
     commitTerrain(scn, { label, changes }, rect ? t("{label} — {n, plural, one {# tile} other {# tiles}} in the marked area", { label, n: changes.length }) : t("{label} — {n, plural, one {# tile} other {# tiles}}", { label, n: changes.length }));
     return changes.length;
-  }, [store, loaded, commitTerrain, setStatus]);
+  }, [store, loaded, terrainOf, commitTerrain, setStatus]);
 
   /**
    * Eyedropper. Isometric mode reads the diamond's terrain straight from the ISOM, so
    * clicking a cliff face picks the ground it belongs to; in Rect mode a flat tile
-   * picks its terrain type; anything else (a cliff piece, a doodad tile) drops into
+   * picks its terrain type — and so does half of an untyped pair the map lays as a pair
+   * there, a mod's added ground; anything else (a cliff piece, a doodad tile) drops into
    * Tile mode so it can be placed as-is. Blend mode picks the cell itself as the
    * anchor the palette matches against.
    */
@@ -325,10 +346,13 @@ export function useTerrainTools() {
       }
     }
     if (mode === "rect" || mode === "isom") {
-      const type = types.find((t) => t.group === (id >> 4 & ~1));
+      const pair = tileGroupOf(id, loaded?.tileset.groups.length) & ~1;
+      const laid = loaded ? laidPairAt(scn, loaded.tileset, x, y) : -1;
+      const type = types.find((t) => t.group === pair) ?? (loaded && laid >= 0 ? pairTerrain(loaded.tileset, info.terrain, laid) : null);
       if (type) {
         setActiveTerrain(type.id);
-        setStatus(t("Picked {name}", { name: translate(type.name) }));
+        if (mode === "isom" && isPairTerrain(type.id)) setMode("rect");
+        setStatus(t("Picked {name}", { name: terrainLabel(type) }));
         return;
       }
       setMode("tile");
@@ -404,7 +428,42 @@ export function useTerrainTools() {
   }, [store]);
 
   return useMemo(
-    () => ({ types, isomTypes, isomReady, loaded, beginStroke, paintAt, endStroke, isStroking, fillAt, fillMap, replace, pickAt, blendAt, ghostAt, ghostDiamondsAt }),
-    [types, isomTypes, isomReady, loaded, beginStroke, paintAt, endStroke, isStroking, fillAt, fillMap, replace, pickAt, blendAt, ghostAt, ghostDiamondsAt],
+    () => ({ types, terrainOf, isomTypes, isomReady, loaded, beginStroke, paintAt, endStroke, isStroking, fillAt, fillMap, replace, pickAt, blendAt, ghostAt, ghostDiamondsAt }),
+    [types, terrainOf, isomTypes, isomReady, loaded, beginStroke, paintAt, endStroke, isStroking, fillAt, fillMap, replace, pickAt, blendAt, ghostAt, ghostDiamondsAt],
   );
+}
+
+/**
+ * Every flat terrain the Rect brush and Replace Terrain offer on the open map: the tools'
+ * `types`, then the untyped pairs the map itself lays as ground (`laidPairs`), then the active
+ * terrain when it is a pair that is neither — one picked from the Tile palette to start with.
+ * The list follows the map, so a pair appears once enough of it has been painted.
+ */
+export function useRectTerrains(tools: Pick<ReturnType<typeof useTerrainTools>, "types" | "terrainOf" | "loaded">): TerrainType[] {
+  const info = TILESET_BY_ID[useAtomValue(mapTilesetAtom)];
+  const scenario = useAtomValue(scenarioAtom);
+  const revision = useAtomValue(terrainRevisionAtom);
+  const active = useAtomValue(activeTerrainAtom);
+  const { types, terrainOf, loaded } = tools;
+  // As a string, so a stroke that lays no new pair leaves the list below as it was.
+  const laid = useMemo(
+    () => (loaded && scenario ? laidPairs(scenario, loaded.tileset).join(",") : ""),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [loaded, scenario, revision],
+  );
+  return useMemo(() => {
+    const out = [...types];
+    if (loaded && laid !== "") {
+      for (const g of laid.split(",").map(Number)) {
+        if (out.some((t) => t.group === g)) continue;
+        const type = pairTerrain(loaded.tileset, info.terrain, g);
+        if (type) out.push(type);
+      }
+    }
+    if (isPairTerrain(active) && !out.some((t) => t.id === active)) {
+      const type = terrainOf(active);
+      if (type) out.push(type);
+    }
+    return out;
+  }, [types, terrainOf, loaded, info, laid, active]);
 }

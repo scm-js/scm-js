@@ -14,9 +14,13 @@ import { pluginContextRows } from "../../plugins/contextMenu";
 import { TILESET_BY_ID } from "../../data/tilesets";
 import { useTileset } from "../../hooks/useTileset";
 import { useIsomStatus } from "../../hooks/useIsom";
-import { useTerrainTools } from "../../hooks/useTerrainTools";
+import { useRectTerrains, useTerrainTools } from "../../hooks/useTerrainTools";
 import { variationsOf } from "../../formats/tileset/terrain";
-import { heightLabel, hexTile, terrainTypes, tileGroupLabel, tileGroups, tileInfo, type GroupKind, type TileGroupInfo } from "../../formats/tileset/palette";
+import {
+  heightLabel, hexTile, isLoosePair, isPairTerrain, pairTerrainId, terrainLabel, terrainTypes, tileGroupLabel, tileGroups, tileInfo,
+  type GroupKind, type TileGroupInfo,
+} from "../../formats/tileset/palette";
+import { tileGroupOf } from "../../formats/tileset/decode";
 import { blendSides, DEFAULT_BLEND_OPTIONS, inMap, SIDES, type BlendCandidate, type Side } from "../../editor/blend";
 import { symmetryAvailable, symmetryLabel } from "../../editor/symmetry";
 import { Button, Check, NumberInput, Tabs, Tip } from "../ui";
@@ -157,12 +161,12 @@ function IsomTab() {
 /* ── Rect: flat terrain in left/right pairs ─────────────── */
 
 function RectTab() {
-  const info = TILESET_BY_ID[useAtomValue(mapTilesetAtom)];
   const { loaded, error } = useTileset();
   const [active, setActive] = useAtom(activeTerrainAtom);
   const [variation, setVariation] = useAtom(rectVariationAtom);
-  const types = useMemo(() => terrainTypes(loaded?.tileset ?? null, info.terrain), [loaded, info]);
+  const types = useRectTerrains(useTerrainTools());
   const current = types.find((t) => t.id === active) ?? types[0] ?? null;
+  const pairs = types.filter((t) => isPairTerrain(t.id)).length;
   const variations = useMemo(() => (loaded && current ? variationsOf(loaded.tileset, current.group) : { common: [], rare: [] }), [loaded, current]);
   const slots = [...variations.common, ...variations.rare];
   const chosen = variation >= 0 && slots.includes(variation) ? variation : -1;
@@ -196,16 +200,21 @@ function RectTab() {
           {types.map((t) => (
             <div key={t.id} className={`item ${current?.id === t.id ? "selected" : ""}`} onClick={() => { setActive(t.id); setVariation(-1); }}>
               <TileThumb loaded={loaded} id={t.group << 4} size={18} className="swatch" />
-              <span>{translate(t.name)}</span>
+              <span>{terrainLabel(t)}</span>
               <span className="elev">{heightLabel(t.height)}{t.buildable ? "" : " · ✕"}</span>
             </div>
           ))}
         </div>
       </div>
       <div className="palette-footer">
-        <span>{current ? t("{name} · groups {group}/{v}", { name: current.name, group: current.group, v: current.group + 1 }) : "—"}</span>
+        <span>{current ? t("{name} · groups {group}/{v}", { name: terrainLabel(current), group: current.group, v: current.group + 1 }) : "—"}</span>
         <span>{chosen < 0 ? t("random variation") : t("variation {chosen}", { chosen })}</span>
       </div>
+      {pairs > 0 && (
+        <div className="palette-footer sub" title={t("Ground this tileset holds without an isometric entry: the game's own ground under other flags, and pairs this map lays as ground. The Rect brush, its fills and Replace Terrain lay it; the Isometric brush has no table for it.")}>
+          <span>{t("{pairs, plural, one {# terrain} other {# terrains}} past the game's — Rect and Replace Terrain only", { pairs })}</span>
+        </div>
+      )}
       <SymmetryNote applies />
     </>
   );
@@ -460,11 +469,25 @@ export default function TerrainPalette() {
   const markedArea = useAtomValue(clipSelectionAtom);
   const pluginItems = useAtomValue(pluginContextItemsAtom);
   const tools = useTerrainTools();
+  const activeTile = useAtomValue(activeTileAtom);
+  const setActiveTerrain = useSetAtom(activeTerrainAtom);
+  // The Tile brush's tile as ground for the Rect brush: one of the listed terrains, or any untyped pair of the tileset.
+  const tilePair = tools.loaded ? tileGroupOf(activeTile, tools.loaded.tileset.groups.length) & ~1 : -1;
+  const tileTerrain = tools.loaded && tilePair >= 0
+    ? tools.types.find((t) => t.group === tilePair)?.id ?? (isLoosePair(tools.loaded.tileset, tilePair) ? pairTerrainId(tilePair) : null)
+    : null;
 
   // The palette's own menu, then whatever plugins registered for the "terrainPalette" surface.
   const rows: { label: string; disabled?: boolean; onSelect?: () => void; sep?: boolean }[] = [
     { label: mode === "tile" ? t("Fill Map with This Tile") : t("Fill Map with This Terrain"), disabled: !scenario || mode === "blend", onSelect: tools.fillMap },
   ];
+  if (mode === "tile") {
+    rows.push({
+      label: t("Paint This Tile's Pair with the Rect Brush"),
+      disabled: tileTerrain === null,
+      onSelect: () => { if (tileTerrain !== null) { setActiveTerrain(tileTerrain); setMode("rect"); } },
+    });
+  }
   const pluginRows = pluginContextRows(pluginItems, "terrainPalette", { surface: "terrainPalette", tile: null, point: null, layer, terrainMode: mode, terrain: activeTerrain, markedArea });
   if (pluginRows.length > 0) rows.push({ label: "", sep: true }, ...pluginRows);
 

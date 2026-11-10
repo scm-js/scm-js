@@ -37,6 +37,11 @@ paths; a mod that ships as a `.zip` is unzipped first. A replay of a mod opens i
 editor too, and plays with the mod your browser keeps from the play page ([Replays of a
 mod](guide.md#replays-of-a-mod)).
 
+With the mod's data set in use, the flat ground its tilesets add can be painted: the Rect
+brush lists the game's terrains the mod repeats at another height, and the pairs the open
+map lays as ground ([Ground a mod adds](guide.md#ground-a-mod-adds)). The isometric brush
+stays with the game's terrain types.
+
 To only look at a map made for a mod, nothing needs installing. Opened without the mod,
 the map has the terrain the data set in use lacks drawn hatched, and a notice that offers
 to switch to the mod's data set when it is installed here, or to draw from the mod's

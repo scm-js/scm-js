@@ -482,8 +482,10 @@ switches to the mod when your browser keeps it, and otherwise says which mod it 
 where its makers publish it, with an **Add a Mod…** button; once you add it, the replay
 plays. A browser that keeps another version of the mod is refused with both hashes.
 
-Going back in a replay of a mod whose plugins run starts it again from its first frame and
-plays forward, which takes a while; the Watch Replay menu says so under Go to frame.
+A replay of a mod whose plugins run plays at about the game's own pace. Going ahead to a
+part it has not played yet plays forward to the moment, and the page says how far it has
+run. Going back is quick: the page keeps a moment about every ten seconds of the game as
+it plays, returns to the one before the moment asked for, and plays on from there.
 
 ## From a mod folder to a replay
 
@@ -563,9 +565,10 @@ give `--bot cosmonarchy-example` in step 5.
   game that the play page and the engine's bot runners play, where the plugins run too.
 - `scmjs mod test`, `map test`, `map trace` and `map cost` lay a mod's files over the game
   but run none of its plugins, and have no scenario with a bot on the other side yet.
-- With a mod's plugins running, a replay cannot be put back to an earlier moment: going
-  back starts it again from the first frame, and Aftermath's Fights tab does not play a
-  fight again. Analysing such a replay runs at about the game's own pace.
+- With a mod's plugins running, a game goes at about the game's own pace: analysing its
+  replay takes about as long, and so does going ahead in it to a part not yet played. A
+  game being played, as opposed to a replay, cannot be taken back to an earlier moment
+  with plugins running.
 - In a game between people, a mod with a FireGraft project and no plugins needs the host's
   invitation link; a page joined another way is told, not switched.
 - Replays recorded by StarCraft itself with a mod are expected to play with the mod, but

@@ -7,6 +7,7 @@ import { pushToastAtom } from "../atoms/uiAtoms";
 import {
   ensureTileset,
   hdTerrainMissing,
+  hdTerrainUnfit,
   peekTileset,
   releaseTileset,
   setHdTerrain,
@@ -14,6 +15,7 @@ import {
   type LoadedTileset,
   type TilesetFileName,
 } from "../formats/tileset/load";
+import { currentAssetSource } from "../gamedata/source";
 import { t } from "../i18n";
 
 export interface TilesetState {
@@ -34,13 +36,24 @@ function initial(name: TilesetFileName): Internal {
 }
 
 /**
- * Remastered Graphics was asked for and the data set has no such pictures: said once per
- * game data revision, however many panels are showing the tileset.
+ * Remastered Graphics was asked for and the terrain stays classic: said once per game data
+ * revision, however many panels are showing the tileset. Either the data set has no such
+ * pictures, or it has them and draws with a tileset of its own they are not of (a mod's, laid
+ * over a Remastered copy) — two different things to be told, the second with nothing to install.
  */
 let toldMissingAt = -1;
-function tellHdMissing(store: ReturnType<typeof useStore>, revision: number) {
+function tellHdMissing(store: ReturnType<typeof useStore>, revision: number, name: TilesetFileName) {
   if (toldMissingAt === revision) return;
   toldMissingAt = revision;
+  if (hdTerrainUnfit(name)) {
+    const set = currentAssetSource()?.profile.name ?? "";
+    store.set(pushToastAtom, {
+      kind: "info",
+      title: t("Classic terrain with {name}", { name: set }),
+      detail: t("{name} has its own terrain tiles, and Remastered's pictures are of the game's. The terrain is drawn with the classic pictures while this data set is in use.", { name: set }),
+    });
+    return;
+  }
   store.set(pushToastAtom, {
     kind: "info",
     title: t("No Remastered graphics here"),
@@ -84,7 +97,7 @@ export function useTileset(): TilesetState {
     const cached = peekTileset(name);
     if (cached && tilesetSettled(name)) {
       setState({ name, loaded: cached, loading: false, error: null });
-      if (hd && hdTerrainMissing(name)) tellHdMissing(store, revision);
+      if (hd && hdTerrainMissing(name)) tellHdMissing(store, revision, name);
       return;
     }
 
@@ -95,7 +108,7 @@ export function useTileset(): TilesetState {
       (loaded) => {
         if (cancelled) return;
         setState({ name, loaded, loading: false, error: null });
-        if (hd && hdTerrainMissing(name)) tellHdMissing(store, revision);
+        if (hd && hdTerrainMissing(name)) tellHdMissing(store, revision, name);
       },
       (error: Error) => { if (!cancelled) setState({ name, loaded: null, loading: false, error }); },
     );

@@ -269,6 +269,10 @@ Many mods change more than single files. A data set takes what the larger ones s
 - **Remastered pictures.** On a data set laid over a Remastered copy, an image whose
   picture or image-table row the data set changed is drawn from its classic picture even
   with View ▸ Remastered Graphics on, since the 2x picture on file is of the original.
+  Terrain goes by the whole tileset: a data set that brings a tileset of its own draws
+  that tileset with the classic pictures, because Remastered's are numbered for the game's
+  tiles, and the editor says so once. A mod open in the Mod Editor is drawn the same way,
+  with every unit and sprite from its classic picture.
 
 What does not work yet:
 

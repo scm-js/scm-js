@@ -1415,7 +1415,9 @@ map's sounds by its name (`sounds.Name`, from the Sound Editor's list), or a cli
 script makes when it is built. `tone()`, `noise()`, `pluck()`, `fm()` and `silence()` make
 clips; `.fade()`, `.filter()`, `.delay()`, `.reverb()` and `.limit()` change them;
 `mixdown()` lays clips over one another, and `together()` turns down clips the game will
-play at once.
+play at once. `.lufs` says how loud a clip is as a whole, in LUFS, the measure streaming
+services use, and `.loudness(lufs)` makes it that loud. `.duck(key)` turns a clip down
+while another sounds, to make room for a melody in what plays under it.
 
 ```ts
 const beep = tone("A5", 0.1, { wave: "square", volume: 0.3 });
@@ -1446,6 +1448,12 @@ the script:
   `crop`, `threshold`, `tones` and `halftone` turn into rows for `fog.picture`;
 - a sound file becomes a `.sound` file: a clip for `playWav` and the music library;
 - a MIDI file becomes a `.notes` file: each track's notes, which `music.midi` plays.
+
+A `.samples` file, a sampled instrument for `music.sampled`, is not made by the editor. It
+is made from an SFZ instrument by a tool in the [TrigScript
+repository](https://github.com/scm-js/plugin-trigscript) (`scripts/make-samples.mts`), and
+a whole piano's recordings are far larger than a map can hold. `samples()` makes a smaller
+one from `.sound` files the script already has ([Music](trigscript-library.md#music)).
 
 All of it is worked out when the script is built, and what reaches the game is what the
 script makes of it. `cover(picture, shapes)` gives the brushes of your own shapes that

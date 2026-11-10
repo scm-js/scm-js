@@ -55,6 +55,7 @@ describe("splitting a guide into pages", () => {
   it("slugs a heading the way GitHub does, so the documents' own `#fragment` links still land", () => {
     expect(slug("What works, and what does not")).toBe("what-works-and-what-does-not");
     expect(slug("`api.terrain` and ISOM")).toBe("apiterrain-and-isom");
+    expect(slug("Für Elise")).toBe("für-elise");
   });
 
   it("keeps every line of every guide: nothing is dropped between the pages", () => {

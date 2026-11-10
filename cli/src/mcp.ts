@@ -536,7 +536,7 @@ export function createMcpServer(options: McpOptions = {}): { server: McpServer; 
 
   reg("mod_info", {
     title: "What a mod is",
-    description: "A StarCraft mod's name, files and sizes by kind (tables, scripts, pictures, sounds, terrain, strings, AI), which tables are wider than the game's and in which layout (DatExtend's expanded .dat, GPTP's .datex), the plugins and FireGraft files it carries (never run), the game it is for, and its hash (`hash`: the name the play page and a replay know the mod by, over every file it provides, its plugins and its FireGraft project; `withoutPlugins`: the same without the plugins, what a page that runs none of them presents), as `scmjs mod info` prints it.",
+    description: "A StarCraft mod's name, files and sizes by kind (tables, scripts, pictures, sounds, terrain, strings, AI), which tables are wider than the game's and in which layout (DatExtend's expanded .dat, GPTP's .datex), the plugins and FireGraft files it carries (never run), the game it is for, and its hash (`hash`: the name the play page and a replay know the mod by, over every file it provides, its plugins and its FireGraft project; `withoutPlugins`: the same without the plugins, what a page that runs none of them presents), as `scmjs mod info` prints it. A copy of the game in the folder (a folder that holds StarDat.mpq) is not the mod: its own archives and everything under its Maps folder are left out, and the archives among them are named in `gameCopy`.",
     inputSchema: { path: modPath, starcraft },
     annotations: { readOnlyHint: true },
   }, tool(async ({ path: file, starcraft: sc }) => {

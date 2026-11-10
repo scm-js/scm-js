@@ -1804,6 +1804,8 @@
   "{path} is not a mod: not an MPQ, a self-executing exe or a zip.": "{path|은} 모드가 아닙니다: MPQ도, 자체 실행 exe도, zip도 아닙니다.",
   "{file} could not be opened as an archive: {why}": "{file|을} 아카이브로 열지 못했습니다: {why}",
   "The archive inside {file} could not be opened: {why}": "{file} 안의 아카이브를 열지 못했습니다: {why}",
+  "{folder} is a copy of the game, and there is no mod in it.": "{folder|은} 게임의 사본이고, 그 안에 모드가 없습니다.",
+  "{folder} is a copy of the game. Its own archives ({list}) are not part of the mod and were left out.": "{folder|은} 게임의 사본입니다. 게임 자체의 아카이브({list})는 모드의 일부가 아니므로 뺐습니다.",
   "The folder to write is the mod itself.": "쓸 폴더가 모드 자체입니다.",
   "Name another folder.": "다른 폴더를 지정하세요.",
   "{folder} is there and is not an unpacked mod.": "{folder|이} 이미 있고 풀어 둔 모드가 아닙니다.",

@@ -2510,8 +2510,11 @@ FireGraft files it carries (kept, never run), a self-executing exe's archive, th
 is for, and [the mod's hash](mods.md#the-mods-hash) with the hash without its plugins
 beside it, and the older hash of a mod that holds an operating system's files. It reads a
 folder (the game's paths at its root or in a folder under it), an `.mpq`, a self-executing
-`.exe` (MPQDraft's or FireGraft's patcher, read and never run) or a `.zip`. `--json`
-prints the same as data.
+`.exe` (MPQDraft's or FireGraft's patcher, read and never run) or a `.zip`. A copy of the
+game inside the folder, a folder that holds `StarDat.mpq`, is not the mod: its own
+archives and everything under its `Maps` folder are left out, and the command says so
+([which files](mods.md#what-a-mod-is)). `--json` prints the same as data, the files left
+out as `gameCopy`.
 
 ### A mod as a folder of text
 

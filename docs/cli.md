@@ -247,8 +247,10 @@ way of installing gets each version on the same day.
 ### Shell completion
 
 `scmjs completion bash`, `zsh` or `fish` prints a completion script with every command and
-option in it. Install it once, for the shell you use. For bash, add this line to
-`~/.bashrc`:
+option in it. An option that takes one of a few values completes them (`--lang` gives
+`en ko`), an option or argument that names a file completes files, and the script is made
+again from the commands themselves, so it is regenerated, not edited, after an update.
+Install it once, for the shell you use. For bash, add this line to `~/.bashrc`:
 
 ```sh
 eval "$(scmjs completion bash)"

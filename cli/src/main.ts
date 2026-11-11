@@ -5,7 +5,7 @@
 import { existsSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { basename, relative } from "node:path";
-import { Command, CommanderError, Help, Option, type HelpContext } from "commander";
+import { Argument, Command, CommanderError, Help, Option, type HelpContext } from "commander";
 import { aboutReport, printAbout, VERSION } from "./about";
 import { listMembers, MANIFEST_FILE, packMap, unpackMap } from "./archive";
 import { rootHelp } from "./banner";
@@ -59,7 +59,7 @@ import { heatmapMap, type HeatmapOptions as HeatmapFlags } from "./heatmap";
 import { printGenerated, runGenerate, type GenerateFlags } from "./generatecmd";
 import { GEN_PLAYERS, GEN_STYLES, GEN_SYMMETRIES } from "./generate";
 import { accountReport, login, logout, PROVIDERS, printAccount, serverLabel } from "./account";
-import { printShare, shareMap } from "./share";
+import { KEEP, printShare, shareMap } from "./share";
 import { qrFor } from "./qr";
 import { exportSounds, printSounds, readSounds } from "./sounds";
 import { editInEditor, type EditKind, type EditOutcome } from "./texteditor";
@@ -1341,7 +1341,7 @@ answer (within 10 seconds), 2 when the file is there already (--force overwrites
     .option("--name <name>", t("the map's name on your account and in the link; the scenario's name by default"))
     .option("--note <text>", t("a note for this revision, as My Maps shows it"))
     .option("--edit", t("a link to edit the map together (Account ▸ Share this Map…), not a copy"))
-    .option("--keep <how long>", t("with --edit: keep it open day, week, month or forever after its last edit; by default it is open until everyone leaves"))
+    .addOption(new Option("--keep <how long>", t("with --edit: keep it open this long after its last edit; by default it is open until everyone leaves")).choices(Object.keys(KEEP)))
     .option("--new", t("store it as a new map even when your account has one with this file name"))
     .option("--no-picture", t("upload no picture for the link's card"))
     .option("--starcraft <folder>", t("your installation of StarCraft, for the picture (SCMJS_STARCRAFT); found in the usual places otherwise"))
@@ -1849,7 +1849,7 @@ the command stops and says which version it needs.`))
     if (!r.was) { print(`${mark.info} ${t("Not signed in")}`); return; }
     print(`${mark.ok} ${r.was.name ? t("Signed out of {server} ({name})", { server: serverLabel(r.was.server), name: r.was.name }) : t("Signed out of {server}", { server: serverLabel(r.was.server) })}`, r.told ? null : pc.dim(`  ${t("The server could not be reached to end the session there; {file} is deleted.", { file: r.file })}`));
   };
-  const providerOption = () => new Option("--provider <name>", t("the sign-in to use: {list}", { list: PROVIDERS.join(", ") })).default("discord");
+  const providerOption = () => new Option("--provider <name>", t("the sign-in to use")).choices(PROVIDERS).default("discord");
   const account = program.command("account").description(t("sign in to scmjs.dev, see your account, sign out")).helpGroup(t("This tool:"))
     .addHelpText("after", "\n" + t(`The sign-in opens Discord in your browser, as the editor's does (--provider google or battlenet for the others). The
 session is kept in your configuration folder (~/.config/scmjs/session.json; SCMJS_SESSION names another file), and
@@ -1865,7 +1865,7 @@ scmjs logout ends it. scmjs login and scmjs logout are the same as account login
   program.command("login", { hidden: true }).description(t("sign in to scmjs.dev in your browser (scmjs account login)")).addOption(providerOption()).action(signIn);
   program.command("logout", { hidden: true }).description(t("sign out of scmjs.dev (scmjs account logout)")).action(signOut);
 
-  program.command("completion", { hidden: true }).description(t("a completion script for your shell")).argument("<shell>", SHELLS.join("|"))
+  program.command("completion", { hidden: true }).description(t("a completion script for your shell")).addArgument(new Argument("<shell>", t("the shell")).choices(SHELLS))
     .addHelpText("after", `
   eval "$(scmjs completion bash)"                        # ${t("in ~/.bashrc")}
   scmjs completion zsh > ~/.zsh/completions/_scmjs       # ${t("a folder on $fpath")}

@@ -310,13 +310,13 @@ describe("scmjs completion", () => {
   const tree = commandTree(program);
   const names = (n: ReturnType<typeof commandTree>): string[] => [n.name, ...n.children.flatMap(names)];
 
-  it("is made from the command tree, hidden commands and help left out", () => {
+  it("is made from the command tree, the hidden commands the guide documents in it", () => {
     const all = names(tree);
     for (const n of ["info", "map", "triggers", "export", "import", "strings", "diff", "replay", "plugin", "bot", "mod", "unpack"]) expect(all).toContain(n);
-    expect(all).not.toContain("completion");
-    expect(all).not.toContain("help");
-    // Hidden from the overview to make room for `mod` (banner.ts holds 23 lines), and so from completion too.
-    expect(all).not.toContain("about");
+    // Hidden from the overview (banner.ts holds 23 lines), not from completion: the guide documents them.
+    for (const n of ["about", "lsp", "completion", "login", "logout", "help"]) expect(tree.children.map((c) => c.name), n).toContain(n);
+    // `help` once, at the top.
+    expect(all.filter((n) => n === "help")).toHaveLength(1);
   });
 
   it("writes a script for each shell that names every command", () => {
@@ -326,7 +326,10 @@ describe("scmjs completion", () => {
       expect(script).toContain(shell === "fish" ? "-l json" : "--json");
     }
     expect(completionScript(program, "zsh").startsWith("#compdef scmjs")).toBe(true);
-    expect(completionScript(program, "fish")).toContain("complete -c scmjs -n '__fish_use_subcommand' -a map");
+    expect(completionScript(program, "fish")).toContain("complete -c scmjs -n '__scmjs_at' -f -a map");
+    expect(completionScript(program, "fish")).toContain("-l lang -x -a 'en ko'");
+    // A value after --lang is the language, not a command, in every shell.
+    expect(completionScript(program, "zsh")).toContain("'--lang[the language: en or ko (also SCMJS_LANG)]:value:(en ko)'");
   });
 
   it("writes bash that bash accepts", () => {

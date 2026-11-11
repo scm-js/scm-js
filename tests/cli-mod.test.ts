@@ -25,7 +25,7 @@ import { readManifest } from "../src/formats/mod/folder";
 import { archiveFiles, storageFiles, type GameFiles } from "../cli/src/gamefiles";
 import { codeWords, fitWords, MOD_CODE, modArgs, MOD_OVERLAY, type Engine } from "../cli/src/engine";
 import { sourceHash } from "../cli/src/mod/hash";
-import { modInfo, printModInfo } from "../cli/src/mod/info";
+import { bigSize, modInfo, printModInfo } from "../cli/src/mod/info";
 import { checkModAndMap, gameFilesOrNull, openMod } from "../cli/src/mod/open";
 import { gameSource } from "../cli/src/mod/source";
 import { unpackMod } from "../cli/src/mod/unpack";
@@ -191,7 +191,14 @@ describe("scmjs mod info: what a mod ships as", () => {
       expect(r.scripts, path).toEqual(["scripts\\aiscript.bin", "scripts\\iscript.bin"]);
     }
     const fromFolder = modInfo(await openMod(folder, null));
-    expect(fromFolder.plugins).toEqual([{ name: "gptp.qdp", bytes: 7 }]);
+    expect(fromFolder.plugins).toEqual([{ name: "gptp.qdp", bytes: 7, path: "plugins/gptp.qdp" }]);
+    // Two plugins of one name are told apart by where they are; a size past a thousand megabytes is in gigabytes.
+    mkdirSync(join(folder, "more"));
+    writeFileSync(join(folder, "more", "gptp.qdp"), latin("other"));
+    const two = printModInfo(modInfo(await openMod(folder, null))).map(visible).join("\n");
+    expect(two).toMatch(/Plugins +more\/gptp\.qdp \(5 B\), plugins\/gptp\.qdp \(7 B\)/);
+    expect(bigSize(1093341184)).toBe("1.0 GB");
+    expect(bigSize(723.7 * 1048576)).toBe("723.7 MB");
     expect(fromFolder.left).toEqual(["README.md"]);
     expect(fromFolder.layers).toEqual(["mpq/"]);
     const fromExe = modInfo(await openMod(exe, null));

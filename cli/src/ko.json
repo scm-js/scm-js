@@ -1302,6 +1302,7 @@
   "A mod is a folder of text and pictures: its tables as PyDAT's text, its string tables, iscript and AI as PyMS's text,\nits GRPs as PNG sheets, its sounds as they are. unpack makes one from what a mod ships as (a folder, an .mpq, a mod's\n.exe, a .zip); pack makes the MPQ the launchers load; check looks for mistakes across the tables; play plays it on the\nplay page. docs.scmjs.dev/mods has the folder's form.": "모드는 텍스트와 그림의 폴더입니다: 표는 PyDAT의 텍스트로, 문자열 표와 iscript,\nAI는 PyMS의 텍스트로, GRP는 PNG 시트로, 사운드는 그대로 둡니다. unpack은 모드가\n배포되는 형태(폴더, .mpq, 모드의 .exe, .zip)에서 이 폴더를 만들고, pack은 런처가\n읽는 MPQ를 만들고, check는 표 전체에서 실수를 찾고, play는 플레이 페이지에서\n플레이합니다. 폴더의 형식은 docs.scmjs.dev/mods에 있습니다.",
   "what a mod is: its files, tables, plugins and the game it is for": "모드가 무엇인지: 파일, 표, 플러그인, 대상 게임",
   "mods: a folder, an .mpq, a mod's .exe, a .zip, or a folder mod unpack wrote": "모드: 폴더, .mpq, 모드의 .exe, .zip, 또는 mod unpack이 쓴 폴더",
+  "Reading {mod} and working out its hash…": "{mod|을} 읽고 해시를 계산하는 중…",
   "a mod as a folder of text and pictures, to edit and keep in git": "모드를 편집하고 git에 둘 수 있는 텍스트와 그림의 폴더로",
   "a folder, an .mpq, a mod's .exe or a .zip": "폴더, .mpq, 모드의 .exe 또는 .zip",
   "the folder to write": "쓸 폴더",

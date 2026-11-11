@@ -48,3 +48,17 @@ export async function checkModAndMap(mod: string, map: string): Promise<void> {
   try { dir = (await stat(map)).isDirectory(); } catch { /* said where the map is read */ }
   if (dir) throw new CliError(t("{folder} is a folder, not a map.", { folder: map }), "scmjs mod test <mod> <map>", 2);
 }
+
+/**
+ * A line on standard error when reading a mod takes more than `after` milliseconds (a large .exe or .zip takes many
+ * seconds, all of them silent otherwise); in a terminal it is cleared again once done. Returns the function that ends it.
+ */
+export function slowLine(text: string, after = 1500, stream: NodeJS.WriteStream = process.stderr): () => void {
+  let shown = false;
+  const timer = setTimeout(() => { shown = true; stream.write(stream.isTTY ? `${text}` : `${text}\n`); }, after);
+  timer.unref?.();
+  return () => {
+    clearTimeout(timer);
+    if (shown && stream.isTTY) stream.write("\r\x1b[2K");
+  };
+}

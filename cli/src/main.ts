@@ -67,7 +67,7 @@ import { checkModSource, printModCheck } from "./mod/check";
 import { diffModSources, printModDiff } from "./mod/diff";
 import { modInfo, printModInfo } from "./mod/info";
 import { newMod } from "./mod/new";
-import { checkModAndMap, gameFilesOrNull, openMod } from "./mod/open";
+import { checkModAndMap, gameFilesOrNull, openMod, slowLine } from "./mod/open";
 import { sourceHash } from "./mod/hash";
 import { writeModHeader } from "./mod/header";
 import { modOverlay } from "./mod/overlay";
@@ -1467,7 +1467,11 @@ play page. docs.scmjs.dev/mods has the folder's form.`));
     .addOption(starcraftOption())
     .action(async (paths: string[], o: { json?: boolean; starcraft?: string }) => {
       const base = await gameFilesOrNull(o.starcraft);
-      await eachMod(paths, !!o.json, async (path) => { const source = await openMod(path, base); const r = modInfo(source, await sourceHash(source)); return { data: r, lines: printModInfo(r) }; });
+      await eachMod(paths, !!o.json, async (path) => {
+        // (a mod of hundreds of megabytes takes seconds to read and hash: said on standard error after a moment)
+        const done = slowLine(pc.dim(t("Reading {mod} and working out its hash…", { mod: path })));
+        try { const source = await openMod(path, base); const r = modInfo(source, await sourceHash(source)); return { data: r, lines: printModInfo(r) }; } finally { done(); }
+      });
     });
 
   modCmd.command("unpack").description(t("a mod as a folder of text and pictures, to edit and keep in git")).argument("<mod>", t("a folder, an .mpq, a mod's .exe or a .zip")).argument("<folder>", t("the folder to write")).addOption(json)

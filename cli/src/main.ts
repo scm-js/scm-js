@@ -454,7 +454,7 @@ trigger whose text does. Prints what matched and where. Exits 1 when nothing mat
     .option("--description <text>", t("the map's description"))
     .option("--revision <which>", t("the file's revision: {versions}", { versions: VERSIONS.join(", ") }))
     .option("--encoding <id>", t("the text encoding: {encodings}", { encodings: ENCODINGS.join(", ") }))
-    .option("--out <map>", t("write the result here instead of over the map; - for standard output"))
+    .option("-o, --out <map>", t("write the result here instead of over the map; - for standard output"))
     .addHelpText("after", t(`
 Scenario ▸ Map Properties from the terminal: what is given is set, the rest is left. Nothing is written when nothing
 changed. A revision change does what the editor's does (the string table's form, the colour section the revision
@@ -475,7 +475,7 @@ needs); the encoding is how the map's text is written for 1.16.1, where Remaster
     .requiredOption("--size <WxH>", t("the new width and height, each 64, 96, 128, 192 or 256"))
     .option("--anchor <where>", t("{anchors}: which part of the map stays", { anchors: Object.keys(ANCHORS).filter((k) => k !== "centre").join(", ") }), "center")
     .option("--no-clamp", t("leave locations that hang past the new edge where the shift put them"))
-    .option("--out <map>", t("write the result here instead of over the map; - for standard output"))
+    .option("-o, --out <map>", t("write the result here instead of over the map; - for standard output"))
     .addHelpText("after", t(`
 The map is moved under the anchor; what falls outside is dropped (units, sprites, doodads) or pulled inside
 (locations, unless --no-clamp), and new ground is the tileset's base terrain. Says what was dropped.`))
@@ -496,7 +496,7 @@ The map is moved under the anchor; what falls outside is dropped (units, sprites
 The text form is the trigger window's (docs.scmjs.dev/triggers); a .trg holds the raw records, as SCMDraft trades
 them. Text in a file beside the map can be diffed and edited, and imported back.`));
   triggers.command("export").description(t("the triggers as text (to stdout), or as .trg with --out x.trg")).argument("<map>")
-    .option("--out <file>", t("write to this file instead of stdout; .trg writes the raw records"))
+    .option("-o, --out <file>", t("write to this file instead of stdout; .trg writes the raw records"))
     .option("--briefing", t("the mission briefing's triggers instead"))
     .action(async (file: string, o: { out?: string; briefing?: boolean }) => {
       const { doc } = await openForEdit(file);
@@ -505,7 +505,7 @@ them. Text in a file beside the map can be diffed and edited, and imported back.
       else await emit(r.text!, o.out, triggerCount(r.count));
     });
   triggers.command("import").description(t("replace the map's triggers with a text or .trg file's")).argument("<map>").argument("<file>", t("the triggers: text, or .trg"))
-    .option("--out <map>", t("write the result here instead of over the map; - for standard output"))
+    .option("-o, --out <map>", t("write the result here instead of over the map; - for standard output"))
     .option("--append", t("add the file's triggers after the map's own instead of replacing them"))
     .option("--briefing", t("the mission briefing's triggers instead"))
     .action(async (file: string, from: string, o: { out?: string; append?: boolean; briefing?: boolean }) => {
@@ -518,7 +518,7 @@ them. Text in a file beside the map can be diffed and edited, and imported back.
   const editorOption = () => new Option("--editor <command>", t("the editor to open, such as \"code --wait\"; VISUAL or EDITOR otherwise, else vi (Notepad on Windows)"));
   triggers.command("edit").description(t("the triggers as text in your editor, imported when you close it")).argument("<map>")
     .addOption(editorOption())
-    .option("--out <map>", t("write the result here instead of over the map"))
+    .option("-o, --out <map>", t("write the result here instead of over the map"))
     .option("--briefing", t("the mission briefing's triggers instead"))
     .addHelpText("after", t(`
 Writes the text export to a file of its own, opens it in your editor and waits for the editor to close. Saved with
@@ -532,14 +532,14 @@ for its window to close: code --wait, subl -w, gedit -s.`))
 One line per string: its number, a tab, its text. Colour codes are written <XX>. Importing sets the numbered
 strings in place and adds any past the end; nothing is renumbered, since triggers and locations hold the numbers.`));
   strings.command("export").description(t("the strings as <number><TAB><text> lines (to stdout)")).argument("<map>")
-    .option("--out <file>", t("write to this file instead of stdout"))
+    .option("-o, --out <file>", t("write to this file instead of stdout"))
     .action(async (file: string, o: { out?: string }) => {
       const { doc } = await openForEdit(file);
       const r = exportStrings(doc);
       await emit(r.text, o.out, t("{n, plural, one {# string} other {# strings}}", { n: r.count }));
     });
   strings.command("import").description(t("set the map's strings from such a file")).argument("<map>").argument("<file>")
-    .option("--out <map>", t("write the result here instead of over the map; - for standard output"))
+    .option("-o, --out <map>", t("write the result here instead of over the map; - for standard output"))
     .action(async (file: string, from: string, o: { out?: string }) => {
       const { input, doc } = await openForEdit(file);
       const piped = piping(input, o);
@@ -549,7 +549,7 @@ strings in place and adds any past the end; nothing is renumbered, since trigger
     });
   strings.command("edit").description(t("the strings in your editor, imported when you close it")).argument("<map>")
     .addOption(editorOption())
-    .option("--out <map>", t("write the result here instead of over the map"))
+    .option("-o, --out <map>", t("write the result here instead of over the map"))
     .addHelpText("after", t(`
 As strings import: a line changed sets that string, a line past the end adds one, and a line taken out leaves the
 string as it was (strings prune drops the unused ones).`))
@@ -558,7 +558,7 @@ string as it was (strings prune drops the unused ones).`))
   strings.command("prune").description(t("drop the strings nothing in the map refers to")).argument("<map>").addOption(json)
     .option("--dry-run", t("list them and write nothing"))
     .option("--all", t("list every string dropped; by default a long list is cut at 20"))
-    .option("--out <map>", t("write the result here instead of over the map; - for standard output"))
+    .option("-o, --out <map>", t("write the result here instead of over the map; - for standard output"))
     .addHelpText("after", t(`
 The editor's Delete Unused: a string no trigger, location, name, force, sound or setting refers to is blanked. Nothing
 is renumbered, so what the triggers hold stays right; blank slots at the end of the table are dropped.`))
@@ -582,7 +582,7 @@ is renumbered, so what the triggers hold stays right; blank slots at the end of 
     .option("--compression <method>", t("pkware (every version of the game) or zlib (Remastered only); default pkware, or the smaller for a zlib map"))
     .option("--keep <members...>", t("archive members to keep though nothing names them; a name ending in \\ keeps a folder"))
     .option("--all", t("list everything removed; by default a long list is cut at 20"))
-    .option("--out <map>", t("write the result here instead of over the map; - for standard output"))
+    .option("-o, --out <map>", t("write the result here instead of over the map; - for standard output"))
     .addHelpText("after", t(`
 In order: sounds no trigger or briefing plays and the sound list does not name, the sound list's entries for files
 the map lacks, any other archive member nothing names, the strings nothing refers to, and every member compressed
@@ -610,7 +610,7 @@ switch names. Keep the original to go on editing.
     });
 
   map.command("unpack").description(t("a map's archive as a folder: the scenario, its sounds, scripts and other files")).argument("<map>").addOption(json)
-    .option("--out <folder>", t("the folder to write; by default one named after the map, beside it"))
+    .option("-o, --out <folder>", t("the folder to write; by default one named after the map, beside it"))
     .option("--list", t("list the archive's members and write nothing"))
     .option("--text", t("the scenario as a folder of text files (scenario/), for git, instead of staredit/scenario.chk"))
     .addHelpText("after", t(`
@@ -649,7 +649,7 @@ untouched folder packs back into the same scenario, byte for byte. The scenario/
         ...r.manifest.problems.map((p) => `${mark.warn} ${p}`));
     });
   map.command("pack").description(t("the folder scmjs map unpack wrote, back into a map file")).argument("<folder>").addOption(json)
-    .option("--out <map>", t("the file to write; by default the name {manifest} records, beside the folder", { manifest: MANIFEST_FILE }))
+    .option("-o, --out <map>", t("the file to write; by default the name {manifest} records, beside the folder", { manifest: MANIFEST_FILE }))
     .option("--compression <method>", t("none, pkware or zlib for every member, instead of how the map was stored"))
     .addHelpText("after", t(`
 Every file in the folder goes in: the ones {manifest} names at their archive paths, and any added since at the
@@ -677,7 +677,7 @@ under sound\\ is one of the game's own sounds.`));
       print(...(o.json ? [JSON.stringify(report, null, 2)] : printSounds(report)));
     });
   sounds.command("export").description(t("the sounds as .wav and .ogg files in a folder")).argument("<map>").addOption(json)
-    .option("--out <folder>", t("the folder to write; by default one named after the map with -sounds, beside it"))
+    .option("-o, --out <folder>", t("the folder to write; by default one named after the map with -sounds, beside it"))
     .action(async (file: string, o: { json?: boolean; out?: string }) => {
       const input = await readInput(file);
       expectKind(input, "map");
@@ -690,7 +690,7 @@ under sound\\ is one of the game's own sounds.`));
     });
 
   map.command("build").description(t("apply the map's TrigScript script and build its programs, as Save does")).argument("<map>").addOption(json)
-    .option("--out <map>", t("write the built map here instead of over the map; - for standard output"))
+    .option("-o, --out <map>", t("write the built map here instead of over the map; - for standard output"))
     .option("--check", t("compile (and test, with --test) and write nothing"))
     .option("--test", t("run the script's tests first; a failing test refuses the build"))
     .addHelpText("after", t(`
@@ -711,7 +711,7 @@ compile, a test fails or the build is refused; nothing is written then.`))
   map.command("run").description(t("run a plugin, or a script written like one, over a map with the plugin API")).argument("<plugin>", t("a folder with plugin.json, a plugin.ts/.js file, github:owner/repo or a URL")).argument("<map>").addOption(json)
     .option("--command <id>", t("after it starts, run this command of its (the id it registered)"))
     .option("--arg <value...>", t("arguments for --command"))
-    .option("--out <map>", t("write the changed map here instead of over the map; - for standard output"))
+    .option("-o, --out <map>", t("write the changed map here instead of over the map; - for standard output"))
     .option("--dry-run", t("say what would change, as map diff does, and write nothing"))
     .addHelpText("after", t(`
 The plugin gets the editor's plugin API (docs.scmjs.dev/plugins) with the map open and no editor around it: what it
@@ -873,7 +873,7 @@ Exits 2 for a map with fewer than two start locations.`) + `
     .option("--seeds <list>", t("the seeds to play, comma separated, in place of --games"))
     .option("--frames <n>", t("stop a game nobody has won after this many frames (24 a second)"), "30000")
     .option("--parallel <n>", t("games at once (default: up to 4, as this computer's cores and memory allow)"))
-    .option("--out <folder>", t("keep every game's replay here (by default they are deleted)"))
+    .option("-o, --out <folder>", t("keep every game's replay here (by default they are deleted)"))
     .option("--no-rush", t("leave out the walks between the starts (map rush)"))
     .option("--timeout <seconds>", t("how long a bot may think over one frame before it counts as hung"), "60")
     .option("--starcraft <folder>", t("your installation of StarCraft (SCMJS_STARCRAFT); found in the usual places otherwise"))
@@ -963,7 +963,7 @@ as for scmjs bot ladder. Exits 1 when a game could not be played, 2 when the map
 
   const test = map.command("test").description(t("runs the map's tests in the game: each scenario set up, played and checked, a replay of each that failed")).argument("<map>").argument("[tests...]", t("tests files (JSON); <map>.tests.json beside the map by default")).addOption(json)
     .option("--format <kind>", t("{formats}: github is workflow annotations, junit and sarif the files CI tools read", { formats: FORMATS.join(", ") }), "text")
-    .option("--out <folder>", t("where the replays of failing scenarios go (<map>.tests/ beside the map)"))
+    .option("-o, --out <folder>", t("where the replays of failing scenarios go (<map>.tests/ beside the map)"))
     .option("--frames <n>", t("frames a scenario runs when it does not say (24 a second)"), "2400")
     .option("--seed <n>", t("the game's seed when a scenario does not say; the same seed and map give the same game"), "1")
     .option("-u, --update", t("a scenario driven by a replay: write what the game gives now into the expectations that no longer hold"))
@@ -1015,7 +1015,7 @@ the map as it is then, and scmjs map test -u writes in what has changed.`) + `
     });
 
   map.command("preview").description(t("a picture of the map in the terminal, or as a PNG, with your copy of the game's graphics")).argument("<map>").addOption(json)
-    .option("--out <picture.png>", t("write a PNG instead; - for standard output"))
+    .option("-o, --out <picture.png>", t("write a PNG instead; - for standard output"))
     .option("--scale <n>", t("pixels a tile: {scales} in a PNG (4 by default); in the terminal a pixel is half a character", { scales: PNG_SCALES.join(", ") }))
     .option("--width <columns>", t("the terminal picture's width in characters (as wide as the terminal by default)"))
     .option("--no-units", t("the terrain alone: no units, resources or start locations"))
@@ -1041,7 +1041,7 @@ character is two pixels, in 24-bit colour where the terminal says it has it, els
     .option("--what <kind>", t("deaths, kills, buildings or paths (where armies walked)"), "deaths")
     .option("--player <n|name>", t("one player's: their number (1-8) or their name as the replays have it; for kills, the killer"))
     .option("--until <m:ss>", t("only what happened by this time in each game"))
-    .option("--out <picture.png>", t("write a PNG instead; - for standard output"))
+    .option("-o, --out <picture.png>", t("write a PNG instead; - for standard output"))
     .option("--side-by-side", t("the map as map preview draws it beside the heat"))
     .option("--scale <n>", t("pixels a tile: {scales} in a PNG (4 by default)", { scales: PNG_SCALES.join(", ") }))
     .option("--width <columns>", t("the terminal picture's width in characters"))
@@ -1118,7 +1118,7 @@ their own StarCraft files and no account. Waits up to five minutes for the page.
     .option("--all", t("list every item; by default a long list is cut at 20"))
     .option("--rev <revision>", t("compare the map as git has it at this revision (HEAD, HEAD~1, a branch, a tag) with the file as it is"))
     .option("--picture", t("draw the maps with the changes marked, with your copy of the game's graphics (as map preview)"))
-    .option("--out <picture.png>", t("with --picture: write a PNG instead; - for standard output"))
+    .option("-o, --out <picture.png>", t("with --picture: write a PNG instead; - for standard output"))
     .option("--side-by-side", t("with --picture: the first map, the changes and the second map in one picture"))
     .option("--scale <n>", t("with --picture: pixels a tile, {scales} in a PNG (4 by default)", { scales: PNG_SCALES.join(", ") }))
     .option("--width <columns>", t("with --picture: the terminal picture's width in characters"))
@@ -1214,7 +1214,7 @@ the file is read as it is, and what is not committed yet says so.`) + `
     });
 
   map.command("merge").description(t("merge two versions of a map with their common ancestor, as git's merge driver")).argument("<base>", t("the common ancestor; with no other map, the map git stopped on")).argument("[ours]").argument("[theirs]").addOption(json)
-    .option("--out <map>", t("write the merged map here instead of over <ours>; - for standard output"))
+    .option("-o, --out <map>", t("write the merged map here instead of over <ours>; - for standard output"))
     .option("--ours", t("settle each conflict with ours's version"))
     .option("--theirs", t("settle each conflict with theirs's version"))
     .option("--name <path>", t("the map's name in what is said (git gives it as %P)"))
@@ -1244,7 +1244,7 @@ them. scmjs init sets it up as git's merge driver:`) + `
     .option("--limit <n>", t("how many of the best matches to list, 1 to {max}", { max: MAX_LIMIT }), String(DEFAULT_LIMIT))
     .option("--id <id>", t("download this map: its id from the list, or its address on the site"))
     .option("--first", t("download the best match for the words"))
-    .option("--out <path>", t("the file to write, or a folder to write it in (the site's file name); - for standard output"))
+    .option("-o, --out <path>", t("the file to write, or a folder to write it in (the site's file name); - for standard output"))
     .option("--force", t("overwrite a file that is there"))
     .option("--open", t("open the map in scmJS once it is downloaded, as scmjs map open does"))
     .addHelpText("after", "\n" + t(`The maps come from scmscx.com ({site}), where people have shared StarCraft maps for years; they are their
@@ -1317,7 +1317,7 @@ replay shows ids, never the game's names for them.`) + `
   scmjs replay info game.rep --builds --mod "My Mod"`)
     .action(async (files: string[], o: { json?: boolean } & ReplayNameOptions) => void await eachFile(files, !!o.json, (input) => replayInfo(input, o)));
   replay.command("map").description(t("the map the replay was played on, written out as a map file")).argument("<replay>").addOption(json)
-    .option("--out <map>", t("the file to write (.scx, .scm or .chk); the replay's name with .scx by default; - for standard output"))
+    .option("-o, --out <map>", t("the file to write (.scx, .scm or .chk); the replay's name with .scx by default; - for standard output"))
     .option("--force", t("overwrite a file that is there"))
     .addHelpText("after", "\n" + t(`A replay carries the map the game loaded, so the map is there whole whether or not you still have the file. It is
 written as the game had it: a bare .chk, or an archive like a new map's. Opens in the editor like any map.`) + `
@@ -1380,7 +1380,7 @@ pipe or a file it prints a line per minute of game instead (--every), or JSON li
     });
 
   replay.command("export").description(t("the replay as a video or GIF with the game's own pictures, for sharing")).argument("<replay>").addOption(json)
-    .option("--out <file>", t("the clip: .webm, .mp4 or .gif (the replay's name with .webm beside it by default)"))
+    .option("-o, --out <file>", t("the clip: .webm, .mp4 or .gif (the replay's name with .webm beside it by default)"))
     .option("--from <m:ss>", t("where the clip starts in the game (its start by default)"))
     .option("--to <m:ss>", t("where it ends (the game's end by default)"))
     .option("--follow <player>", t("keep the camera on a player's play: a name, or a number as replay info lists them (the first person by default)"))
@@ -1618,7 +1618,7 @@ does.`))
     });
 
   modCmd.command("header").description(t("the mod's units, weapons, upgrades and techs by name, for a bot made for it (C++ and JSON)")).argument("<mod>", t("a folder, an .mpq, a mod's .exe, a .zip, or a folder mod unpack wrote")).addOption(json)
-    .option("--out <folder>", t("where the files go (the working folder by default)"))
+    .option("-o, --out <folder>", t("where the files go (the working folder by default)"))
     .option("--namespace <name>", t("the C++ namespace, and the files' name (the mod's name made an identifier by default)"))
     .option("--bot", t("--out is a bot's folder: its scmbot.json gains the mod, which the bot file then carries"))
     .addOption(starcraftOption())
@@ -1641,7 +1641,7 @@ writes them into the .scmbot file, and the runners say whether the game is the m
 
   modCmd.command("test").description(t("map test with the mod laid over the game")).argument("<mod>").argument("<map>").argument("[tests...]", t("tests files (JSON); <map>.tests.json beside the map by default")).addOption(json)
     .option("--format <kind>", `${FORMATS.join(", ")}`, "text")
-    .option("--out <folder>", t("where the replays of failing scenarios go (<map>.tests/ beside the map)"))
+    .option("-o, --out <folder>", t("where the replays of failing scenarios go (<map>.tests/ beside the map)"))
     .option("--frames <n>", t("frames a scenario runs when it does not say (24 a second)"), "2400")
     .option("--seed <n>", t("the game's seed when a scenario does not say"), "1")
     .option("-u, --update", t("a scenario driven by a replay: write what the game gives now into the expectations that no longer hold"))
@@ -1737,7 +1737,7 @@ the command stops and says which version it needs.`))
     .option("--games <n>", t("games of each pairing on each map, in each race, a seed each (1, 2, 3, …)"), "1")
     .option("--seeds <list>", t("the seeds to play, comma separated, in place of --games"))
     .option("--frames <n>", t("stop a game nobody has won after this many frames (24 a second)"), "50000")
-    .option("--out <folder>", t("where the replays and ladder.json go (default: ladder-<date>-<time> here)"))
+    .option("-o, --out <folder>", t("where the replays and ladder.json go (default: ladder-<date>-<time> here)"))
     .option("--data <folder>", t("where each bot keeps its files between games (default: the ladder's folder)"))
     .option("--parallel <n>", t("games played at once"), "1")
     .option("--timeout <seconds>", t("how long a bot may think over one frame before it counts as hung (the first frame: 5 minutes at least)"), "60")

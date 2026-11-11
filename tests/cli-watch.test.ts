@@ -171,7 +171,7 @@ const terrain = "1".repeat(64 * 64);
 say({ kind: "start", map: { name: require("node:path").basename(args[0]), width: 64, height: 64, tileset: "jungle" }, frames: 2400, players: [{ slot: 0, name: "A", race: "terran", type: 2 }, { slot: 1, name: "B", race: "zerg", type: 2 }], copy: "classic", terrain, ms: { load: 1, start: 1 } });
 let frame = Number(flag("from") ?? 0);
 const line = () => say({ kind: "frame", frame, players: [[50 + frame, 0, 4, 9, 4], [50, 0, 4, 9, 4]], units: [512, 512, 0, 3, 1536, 1536, 1, 3, 600 + frame, 540, 0, 1], ...(ENDS && frame >= 1900 ? { left: [null, 1900] } : {}) });
-const end = (ended) => { say({ kind: "end", frame, ended, reason: null, check: { named: 1, gone: 0, ahead: 0, parted: null }, ms: { game: 1, load: 1, start: 1, total: 3 }, ...(ENDS ? { left: [null, frame >= 1900 ? 1900 : null], outcomes: ended ? ["victory", "defeat"] : [null, null], by: ended ? "victory" : null } : {}) }); process.exit(0); };
+const end = (ended) => { say({ kind: "end", frame, ended, reason: null, check: { named: 1, gone: 0, ahead: 0, parted: null }, ms: { game: 1, load: 1, start: 1, total: 3 }, ...(ENDS ? { left: [null, frame >= 1900 ? 1900 : null], outcomes: ended ? ["victory", "defeat"] : [null, null], by: ended ? "victory" : null } : {}) }); process.stdout.write("", () => process.exit(0)); };
 line();
 const every = flag("every");
 if (every !== undefined) { while (frame < 2400) { frame = Math.min(2400, frame + Number(every)); line(); } end(true); }

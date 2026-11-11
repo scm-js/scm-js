@@ -1606,10 +1606,12 @@ FireGraft project is opened with ?lift=live, where they run. Waits up to five mi
 (scmjs mod header --bot), plays vanilla data, or was made for another; press Start Game, or give --start. A mod with
 plugins plays the map with its own settings, as the runners do. A bot of the play page needs a scmjs.dev account (the
 page asks you to sign in); your own .scmbot file does not, and the page keeps it as Options → Add a bot from a file…
-does.`))
+does.`) + "\n\n" + t(`BROWSER=none opens no browser: the command prints the page's address and waits for it to be opened. With --json the
+address goes to standard error, and the result to standard output once the page has taken the mod.`))
     .action(async (path: string, o: { json?: boolean; map?: string; bot?: string; race?: string; start?: boolean; starcraft?: string; play?: string }) => {
       if (o.bot && !o.map) throw new CliError(t("--bot needs --map: the bot plays on a map."), null, 2);
       if (o.race && !o.bot) throw new CliError(t("--race is the bot's: use it with --bot."), null, 2);
+      if (o.start && !o.bot) throw new CliError(t("--start is for a game with a bot: use it with --bot (a map alone always starts at once)."), null, 2);
       const bot = o.bot ? playBotOf(o.bot) : null;
       const base = await gameFilesOrNull(o.starcraft);
       const source = await openMod(path, base);
@@ -1619,7 +1621,8 @@ does.`))
       const map = o.map ? await readInput(o.map) : null;
       if (map) expectKind(map, "map");
       if (!o.json) print(`${pc.bold(set.name)}: ${t("{n, plural, one {# file} other {# files}} to hand over", { n: set.total.files })}${set.plugins + set.firegraft ? pc.dim(` ${t("(and {n, plural, one {# plugin or FireGraft file} other {# plugins and FireGraft files}})", { n: set.plugins + set.firegraft })}`) : ""}${dot}${size(set.total.bytes)}${dot}${pc.dim(t("hash {hash}", { hash: set.hash }))}`);
-      const r = await playOnPage(set, { map: map && { name: map.name, bytes: map.bytes }, bot, botRace, start: o.start, play: o.play, live: o.json ? undefined : (line) => print(line) });
+      // (with --json, standard output is the JSON alone: the address and the page's words go to standard error)
+      const r = await playOnPage(set, { map: map && { name: map.name, bytes: map.bytes }, bot, botRace, start: o.start, play: o.play, live: o.json ? (line) => process.stderr.write(`${line}\n`) : (line) => print(line) });
       if (o.json) { print(JSON.stringify({ name: set.name, hash: set.hash, withoutPlugins: set.withoutPlugins, files: set.files.map((f) => ({ path: f.path, bytes: f.bytes.length })), ...r }, null, 2)); }
       else if (r.error) throw new CliError(t("The play page said: {error}", { error: r.error }), null, 1);
       else print(`${mark.ok} ${r.shown ? (r.bot ? t("On the play page's setup screen: press Start Game") : t("On the play page's setup screen")) : t("Playing on the play page")}`, ...(r.bot ? rows([[t("Bot"), r.bot]]) : []));

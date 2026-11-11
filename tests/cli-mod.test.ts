@@ -526,10 +526,23 @@ describe("scmjs mod play", () => {
     const set = await playSet(await openMod(dir, null));
     expect(set.files.length).toBe(madeMod().size);
     let page = "";
-    const done = playOnPage(set, { play: "http://play.test/", onAddress: (a) => { page = a; }, timeout: 10_000 });
+    const said: string[] = [];
+    const done = playOnPage(set, { play: "http://play.test/", onAddress: (a) => { page = a; }, timeout: 10_000, live: (l) => said.push(visible(l)) });
     while (!page) await new Promise((r) => setTimeout(r, 10));
     await fetch(`${page}/message`, { method: "POST", body: JSON.stringify({ type: "scmjs.play.error", message: "Not this mod" }) });
     expect(await done).toMatchObject({ started: false, error: "Not this mod" });
+    // With BROWSER=none nothing is opened, and the line says so with the address.
+    expect(said[0]).toBe(`ℹ Open ${page} in a browser to play ${set.name} on the play page`);
+  });
+
+  it("refuses --start and --race without --bot, before anything is read", async () => {
+    const { buildProgram } = await import("../cli/src/main");
+    for (const [flag, said] of [[["--start"], /--start is for a game with a bot/], [["--race", "terran"], /--race is the bot's/]] as const) {
+      const e = await buildProgram().exitOverride().parseAsync(["node", "scmjs", "mod", "play", join(root, "no-such-mod"), ...flag]).catch((x) => x);
+      expect(e, flag.join(" ")).toBeInstanceOf(CliError);
+      expect(e.message).toMatch(said);
+      expect(e.exitCode).toBe(2);
+    }
   });
 });
 

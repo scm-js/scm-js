@@ -294,11 +294,50 @@ describe("scmjs mod unpack / pack", () => {
     expect(r.files).toEqual(["mod.json", "README.md"]);
     expect(readManifest(readFileSync(join(dir, "mod.json"), "utf8"))).toMatchObject({ scmjs: 1, name: "My Mod", base: "1.16.1" });
     expect(readFileSync(join(dir, "README.md"), "utf8").split("\n").filter((l) => l.trim()).length).toBe(2);
-    await expect(newMod(dir)).rejects.toThrow(/is there and is not empty/);
+    await expect(newMod(dir)).rejects.toThrow(/is a mod folder already/);
     writeFolder(join(dir, "files"), new Map([["arr\\units.dat", table("units", (f) => { f.columns.hit_points[0] = 45 * 256; })]]));
     const packed = await packMod(dir, await readModFolder(dir), { out: join(root, "new.mpq") });
     expect(packed.members).toBe(1);
-    await expect(unpackMod(await openMod(join(root, "new.mpq"), null), root)).rejects.toThrow(/is there and is not an unpacked mod/);
+    await expect(unpackMod(await openMod(join(root, "new.mpq"), null), root)).rejects.toThrow(/The mod is inside/);
+  });
+
+  it("refuses to unpack over a mod folder unless --force, which replaces it whole", async () => {
+    const mpq = join(root, "again.mpq"); writeFileSync(mpq, await writeMpq(members(madeMod()), "zlib"));
+    const dir = tmp("over");
+    await unpackMod(await openMod(mpq, null), dir);
+    const file = join(dir, "tables/weapons.txt");
+    const edited = readFileSync(file, "utf8").replace("\tdamage_amount 7\n", "\tdamage_amount 12\n");
+    writeFileSync(file, edited);
+    writeFileSync(join(dir, "tables/added.txt"), "mine");
+    writeFileSync(join(dir, "notes.txt"), "mine");
+    mkdirSync(join(dir, ".git"));
+    writeFileSync(join(dir, ".git", "HEAD"), "ref");
+    // Without --force the edits stay, and the refusal says why (exit 2).
+    const refused = await unpackMod(await openMod(mpq, null), dir).catch((e) => e);
+    expect(refused).toBeInstanceOf(CliError);
+    expect(refused.message).toMatch(/is a mod folder already/);
+    expect(refused.hint).toMatch(/--force/);
+    expect(refused.exitCode).toBe(2);
+    expect(readFileSync(file, "utf8")).toBe(edited);
+    // With it, nothing of the earlier folder survives but its dot files.
+    await unpackMod(await openMod(mpq, null), dir, { force: true });
+    expect(readFileSync(file, "utf8")).toContain("\tdamage_amount 7\n");
+    for (const gone of ["tables/added.txt", "notes.txt"]) expect(existsSync(join(dir, gone)), gone).toBe(false);
+    expect(readFileSync(join(dir, ".git", "HEAD"), "utf8")).toBe("ref");
+    // An empty folder is fine; a file, or a folder holding something else, is refused even with --force.
+    const empty = tmp("empty"); mkdirSync(empty);
+    await unpackMod(await openMod(mpq, null), empty);
+    const file2 = join(root, "a-file"); writeFileSync(file2, "x");
+    for (const [target, why] of [[file2, /is a file, not a folder/], [join(file2, "under"), /a file is in its path/]] as const) {
+      const e = await unpackMod(await openMod(mpq, null), target, { force: true }).catch((x) => x);
+      expect(e, target).toBeInstanceOf(CliError);
+      expect(e.message).toMatch(why);
+      expect(e.exitCode).toBe(2);
+      await expect(newMod(target)).rejects.toThrow(why);
+    }
+    const other = tmp("other"); mkdirSync(other); writeFileSync(join(other, "keep.txt"), "x");
+    await expect(unpackMod(await openMod(mpq, null), other, { force: true })).rejects.toThrow(/is there and is not a mod folder/);
+    expect(existsSync(join(other, "keep.txt"))).toBe(true);
   });
 });
 

@@ -1476,11 +1476,13 @@ play page. docs.scmjs.dev/mods has the folder's form.`));
 sheet, only when that text or picture packs back into the same bytes; anything else is kept as it is under files/,
 and mod.json says which and why. Sounds, maps and every other file are copied as they are, plugins and FireGraft
 files too (never run). The names beside the tables and in the AI script come from the mod's own string tables, else
-your copy of the game's. Unpacking over an earlier unpack replaces its folders.`))
-    .action(async (path: string, dir: string, o: { json?: boolean; palette: string; starcraft?: string }) => {
+your copy of the game's. A folder an earlier unpack wrote is refused, since your edits are there: --force replaces
+it whole (its dot files, such as .git, are kept).`))
+    .option("--force", t("replace a mod folder that is there"))
+    .action(async (path: string, dir: string, o: { json?: boolean; palette: string; starcraft?: string; force?: boolean }) => {
       const base = await gameFilesOrNull(o.starcraft);
       const source = await openMod(path, base);
-      const r = await unpackMod(source, dir, { base, palette: o.palette });
+      const r = await unpackMod(source, dir, { base, palette: o.palette, force: o.force });
       if (o.json) { print(JSON.stringify(r, null, 2)); return; }
       const text = formsText(r.forms, ["table", "strings", "iscript", "ai", "overlay", "graft"]);
       const kept = r.kept.reduce((n, k) => n + k.count, 0);
@@ -1556,8 +1558,9 @@ Exits 1 when there is an error.`))
 
   modCmd.command("new").description(t("an empty mod folder: mod.json and a README")).argument("<folder>").addOption(json)
     .option("--name <name>", t("the mod's name (the folder's by default)"))
-    .action(async (dir: string, o: { json?: boolean; name?: string }) => {
-      const r = await newMod(dir, o.name);
+    .option("--force", t("replace a mod folder that is there"))
+    .action(async (dir: string, o: { json?: boolean; name?: string; force?: boolean }) => {
+      const r = await newMod(dir, o.name, { force: o.force });
       if (o.json) { print(JSON.stringify(r, null, 2)); return; }
       print(`${mark.ok} ${t("{name}: {files} in {folder}", { name: pc.bold(r.name), files: r.files.join(", "), folder: pc.cyan(relative(process.cwd(), r.dir) || ".") })}`, pc.dim(`  ${t("Put the game's files you change under files/ at their paths, or start from a mod: scmjs mod unpack <mod> {folder}", { folder: dir })}`));
     });

@@ -282,3 +282,90 @@ describe("B1 and the unpacked folder", () => {
     expect(readFileSync(join(dir, "keep.txt"), "utf8")).toBe("x");
   });
 });
+
+/** A command fed `input` on standard input, as `cat x | scmjs …` would. */
+async function piped(input: Uint8Array, ...args: string[]) {
+  const { Readable } = await import("node:stream");
+  const stdin = Object.getOwnPropertyDescriptor(process, "stdin")!;
+  Object.defineProperty(process, "stdin", { value: Readable.from([Buffer.from(input)]), configurable: true });
+  try { return await scmjs(...args); } finally { Object.defineProperty(process, "stdin", stdin); }
+}
+
+describe("B2, B3, B6: map optimize", () => {
+  it("passes a map it cannot make smaller down a pipe, and writes --out whatever happens", async () => {
+    const dir = tmp();
+    const once = join(dir, "pk.scx");
+    // B3: a compression asked for is written though the file is larger, and the list is the one written.
+    const asked = await scmjs("map", "optimize", testMap("ums.scx"), "--compression", "PKWARE", "--out", once);
+    expect(asked.code).toBe(0);
+    expect(asked.out).toMatch(/written to .*pk\.scx \(in the compression asked for, though not smaller\)/);
+    expect(asked.out).toContain("Removed");
+    expect(asked.out).not.toMatch(/ADPCM/);
+    expect((await readArchive(new Uint8Array(readFileSync(once)))).origin?.compression).toBe("pkware");
+    // B2: nothing to gain, still written where it was asked for.
+    const r = await piped(new Uint8Array(readFileSync(once)), "map", "optimize", "-");
+    expect(r.code).toBe(0);
+    expect(r.raw).toEqual(readFileSync(once));
+    expect(r.err).toMatch(/written as it was to standard output/);
+    const out = await scmjs("map", "optimize", once, "--out", join(dir, "copy.scx"));
+    expect(out.code).toBe(0);
+    expect(readFileSync(join(dir, "copy.scx"))).toEqual(readFileSync(once));
+  });
+
+  it("takes --keep once per member, keeps the map argument, and says a name the map lacks", async () => {
+    const r = await scmjs("map", "optimize", "--keep", "notes\\", "--keep", "nope.txt", testMap("ums.scx"), "--dry-run");
+    expect(r.code).toBe(0);
+    expect(r.out).toMatch(/--keep notes\\: the map has no such member/);
+    expect(r.out).toMatch(/--keep nope\.txt: the map has no such member/);
+  });
+});
+
+describe("B2: --out is written when the command succeeds", () => {
+  it("map strings prune with nothing to drop", async () => {
+    const dir = tmp();
+    const once = join(dir, "pruned.scx");
+    await scmjs("map", "strings", "prune", testMap("ums.scx"), "--out", once);
+    const again = await scmjs("map", "strings", "prune", once, "--out", join(dir, "again.scx"));
+    expect(again.code).toBe(0);
+    expect(existsSync(join(dir, "again.scx"))).toBe(true);
+  });
+});
+
+describe("B5, B7: map run", () => {
+  it("passes the map down a pipe unchanged, keeps a script's console off standard output, and makes save quiet", async () => {
+    const dir = tmp();
+    const script = join(dir, "s.mjs");
+    writeFileSync(script, `export default async (api) => {
+  console.log("from the script");
+  api.ui.toast("a plain toast");
+  console.log("save:", await api.document.save());
+  setTimeout(() => api.ui.status("later"), 50);
+};`);
+    const bytes = new Uint8Array(readFileSync(testMap("ums.scx")));
+    const p = await piped(bytes, "map", "run", script, "-");
+    expect(p.code).toBe(0);
+    expect((await openMapBytes(new Uint8Array(p.raw), "x.scx")).scenario.units.length).toBe((await openMapBytes(bytes, "x.scx")).scenario.units.length);
+    const json = await scmjs("map", "run", script, testMap("ums.scx"), "--json", "--dry-run");
+    const r = JSON.parse(json.out);
+    expect(r.file).toBe(testMap("ums.scx"));
+    // The toast by its text; the status the script set after it returned, waited for.
+    expect(r.events.map((e: { text: string }) => e.text)).toEqual(["a plain toast", "later"]);
+    expect(json.err).toContain("from the script");
+    expect(json.err).toContain("save: true");
+    expect(json.err).not.toMatch(/window is not defined|at /);
+    const arg = await scmjs("map", "run", script, testMap("ums.scx"), "--arg", "x");
+    expect(arg.code).toBe(2);
+  });
+
+  it("loads a plugin from its source when its build is not there, and says what a path is not", async () => {
+    const dir = tmp();
+    writeFileSync(join(dir, "plugin.json"), JSON.stringify({ name: "Src", id: "src", version: "1.0.0", entry: "plugin.js", build: "dist/plugin.js", api: 1 }));
+    writeFileSync(join(dir, "plugin.js"), `export function activate(api) { api.ui.status("from source"); }`);
+    const r = await scmjs("map", "run", dir, testMap("ums.scx"), "--dry-run");
+    expect(r.code).toBe(0);
+    expect(r.out).toContain("from source");
+    expect((await scmjs("map", "run", join(dir, "nope.mjs"), testMap("ums.scx"))).err).toMatch(/No file or folder/);
+    writeFileSync(join(dir, "note.txt"), "x");
+    expect((await scmjs("map", "run", join(dir, "note.txt"), testMap("ums.scx"))).err).toMatch(/note\.txt is not a plugin/);
+  });
+});

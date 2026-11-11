@@ -20,7 +20,7 @@ import { stringUsages } from "../../src/editor/strings";
 import { triggerReferences } from "../../src/editor/triggerRefs";
 import { buildChk, DEFAULT_SAVE_OPTIONS, planSave } from "../../src/editor/save";
 import { pruneScenarioStrings } from "./edit";
-import { packStored } from "../../src/formats/mpq/stored";
+import { packStored, REMASTERED_ONLY_METHODS, storedInOtherForm, storedMethods } from "../../src/formats/mpq/stored";
 import { audioType } from "./sounds";
 import { t } from "./i18n";
 import { CliError, dot, mark, num, pc, size, table } from "./ui";
@@ -140,6 +140,8 @@ export async function optimizeMap(bytes: Uint8Array, file: string, o: OptimizeOp
   const warnings: string[] = [];
   const removed: Removed[] = [];
   const keepAsked = keepTest(o.keep ?? []);
+  // A --keep that names nothing in the archive is said: a misspelt name would otherwise keep nothing in silence.
+  for (const k of o.keep ?? []) if (![...archive.extras.keys()].some((name) => keepTest([k])(name))) warnings.push(t("--keep {name}: the map has no such member", { name: k }));
 
   const restored = bare ? { kind: "plain" as const } : await restoreBuiltMap(archive.chk, archive.extras);
   const built = restored.kind !== "plain";
@@ -196,7 +198,11 @@ export async function optimizeMap(bytes: Uint8Array, file: string, o: OptimizeOp
       const probe = (await loadMap(await writeArchiveBytes(archive.chk, { extras: archive.extras, compression, encrypt, listfile: false, carryStored: false }))).archive!;
       for (const name of archive.extras.keys()) {
         const was = memberInfo(a, name)?.storedSize, now = memberInfo(probe, name)?.storedSize;
-        // (A member with no stored bytes is not carried by the writer at all: it is written afresh.)
+        // (A member with no stored bytes is not carried by the writer at all: it is written afresh.) Nor is one in zlib
+        // or bzip2 when the map is for every version: 1.16.1 would not read it.
+        const member = a.members().find((m) => m.slot === a.slotOf(name));
+        const methods = member ? storedMethods(member, name) : null;
+        if (compression !== "zlib" && (methods === null || methods & REMASTERED_ONLY_METHODS)) continue;
         if (was !== undefined && now !== undefined && was > 0 && was < now) set.add(name);
       }
     }
@@ -308,7 +314,12 @@ export async function optimizeMap(bytes: Uint8Array, file: string, o: OptimizeOp
   // the same file written as the editor writes it, nothing removed.
   steps.push({ key: "compression", label: t("Compression"), did: bare ? t("none") : to === opened ? t("{compression}, rewritten", { compression: compressionWord(to) }) : `${compressionWord(opened)} → ${compressionWord(to)}`, saved: bytes.length - baseline + (last.length - final.length), skipped: bare ? t("a bare scenario is not compressed") : null });
 
-  if (carried.length) warnings.push(carried.length <= 3 ? t("{names} {n, plural, one {is} other {are}} carried as stored: smaller so than anything the editor writes (StarEdit stores a sound with ADPCM, a lossy compression the editor reads but cannot write).", { names: carried.join(", "), n: carried.length }) : t("{n, plural, one {# member is} other {# members are}} carried as stored: smaller so than anything the editor writes (StarEdit stores a sound with ADPCM, a lossy compression the editor reads but cannot write).", { n: carried.length }));
+  // ADPCM is said only of the members that have it; another member is carried because it was stored smaller.
+  const sourceArchive = loaded?.archive ?? null;
+  const adpcm = carried.filter((name) => { const m = sourceArchive?.members().find((x) => x.slot === sourceArchive.slotOf(name)); return !!m && storedInOtherForm(m, name); });
+  const plainCarried = carried.filter((name) => !adpcm.includes(name));
+  if (adpcm.length) warnings.push(adpcm.length <= 3 ? t("{names} {n, plural, one {is} other {are}} carried as stored: smaller so than anything the editor writes (StarEdit stores a sound with ADPCM, a lossy compression the editor reads but cannot write).", { names: adpcm.join(", "), n: adpcm.length }) : t("{n, plural, one {# member is} other {# members are}} carried as stored: smaller so than anything the editor writes (StarEdit stores a sound with ADPCM, a lossy compression the editor reads but cannot write).", { n: adpcm.length }));
+  if (plainCarried.length) warnings.push(t("{names} {n, plural, one {is} other {are}} carried as stored, which is smaller than written again.", { names: plainCarried.length <= 3 ? plainCarried.join(", ") : t("{n, plural, one {# member} other {# members}}", { n: plainCarried.length }), n: plainCarried.length }));
   if (archive.stored?.members.length) warnings.push(t("{n, plural, one {# member with no name the editor knows is} other {# members with no name the editor knows are}} kept exactly as stored.", { n: archive.stored.members.length }));
   if (strip && dropped.length) warnings.push(t("Without these sections an editor opening the map has no isometric terrain, no doodads as objects, no sound list and no switch names. The map plays the same; keep the original to go on editing."));
 
@@ -339,13 +350,19 @@ export function sizeLine(before: number, after: number): string {
 }
 
 /** The report's lines: the sizes, the steps as a table, what went, and the warnings. */
-export function printOptimize(r: OptimizeResult, o: { dryRun?: boolean; written?: string | null; all?: boolean } = {}): string[] {
+export function printOptimize(r: OptimizeResult, o: { dryRun?: boolean; written?: string | null; all?: boolean; asked?: boolean; copied?: boolean } = {}): string[] {
   const smaller = r.after < r.before;
-  const head = !smaller
-    ? `${mark.info} ${pc.bold(r.file)}: ${size(r.before)}; ${r.after > r.before
+  const where = o.written ? `${dot}${t("written to {file}", { file: o.written })}` : "";
+  const head = o.asked && !o.dryRun
+    // --compression asked for: written though not smaller.
+    ? `${mark.ok} ${pc.bold(r.file)}: ${sizeLine(r.before, r.after)}${where}${pc.dim(` ${t("(in the compression asked for, though not smaller)")}`)}`
+    : !smaller
+    ? `${mark.info} ${pc.bold(r.file)}: ${size(r.before)}; ${o.copied
+      ? t("the editor cannot write it smaller, so it was written as it was to {file}", { file: o.written ?? "" })
+      : r.after > r.before
       ? (o.dryRun ? t("the editor cannot write it smaller {bigger}, so nothing would be written", { bigger: pc.dim(t("(it would be {size})", { size: size(r.after) })) }) : t("the editor cannot write it smaller {bigger}, so nothing was written", { bigger: pc.dim(t("(it would be {size})", { size: size(r.after) })) }))
       : (o.dryRun ? t("the editor cannot write it smaller, so nothing would be written") : t("the editor cannot write it smaller, so nothing was written"))}`
-    : `${o.dryRun ? mark.info : mark.ok} ${pc.bold(r.file)}: ${sizeLine(r.before, r.after)}${o.dryRun ? pc.dim(` ${t("if written (--dry-run: nothing written)")}`) : o.written ? `${dot}${t("written to {file}", { file: o.written })}` : ""}`;
+    : `${o.dryRun ? mark.info : mark.ok} ${pc.bold(r.file)}: ${sizeLine(r.before, r.after)}${o.dryRun ? pc.dim(` ${t("if written (--dry-run: nothing written)")}`) : where}`;
   const out = [head, ""];
   out.push(...table([
     [t("Step"), "", t("Saved")].map((h) => pc.dim(h)),
@@ -355,7 +372,7 @@ export function printOptimize(r: OptimizeResult, o: { dryRun?: boolean; written?
   const word: Record<Removed["kind"], string> = { sound: t("sound"), entry: t("list entry"), member: t("file"), string: t("string"), section: t("section") };
   const show = (t: string) => { const p = t.replace(/\s+/g, " "); return p.length > 60 ? `${p.slice(0, 57)}…` : p; };
   if (r.removed.length) {
-    out.push("", pc.bold(o.dryRun ? t("Would go") : t("Removed")));
+    out.push("", pc.bold(o.dryRun || !o.written || o.copied ? t("Would go") : t("Removed")));
     const lines = r.removed.map((x) => {
       const what = x.kind === "string" ? `${pc.dim(String(x.index).padStart(4))} ${show(x.name)}` : x.kind === "entry" ? `${pc.dim(t("slot {n}", { n: String(x.index) }))} ${x.name}` : x.name;
       return [pc.dim(word[x.kind]), what, pc.dim(x.bytes ? `${size(x.bytes)} · ${x.why}` : x.why)];

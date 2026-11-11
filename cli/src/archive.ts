@@ -16,7 +16,7 @@ import { mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises"
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { openMapBytes, readArchive, writeArchiveBytes } from "../../src/editor/mapFile";
 import { SCENARIO_PATH, type ArchiveCompression, type StoredMembers } from "../../src/formats/mpq/scm";
-import { keepStoredForm, storedFormOf } from "../../src/formats/mpq/stored";
+import { keepStoredForm, storedFormOf, storedMethods } from "../../src/formats/mpq/stored";
 import { formatOf } from "../../src/editor/save";
 import { writeOutput } from "./exchange";
 import { folderSource, scenarioFromText, scenarioToText, SECTIONS_FILE, TEXT_FOLDER, writeScenarioText, type TextReport } from "./source";
@@ -321,7 +321,8 @@ export async function packMap(dirArg: string, options: PackOptions = {}): Promis
     const { file, sha256: hash, ...rest } = m.stored;
     used.add(file.toLowerCase());
     if (sha256(data) !== hash) { changedSounds++; continue; }
-    keepStoredForm(data, { name: m.name, member: { ...rest, data: await read(file) }, hashTable: stored.hashTable });
+    const member = { ...rest, data: await read(file) };
+    keepStoredForm(data, { name: m.name, member, methods: storedMethods(member, m.name) ?? 0, hashTable: stored.hashTable });
     keptAsStored++;
   }
   // Files the manifest does not know: added to the folder since, members at their paths.

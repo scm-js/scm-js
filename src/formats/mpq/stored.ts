@@ -84,26 +84,42 @@ function sectorBounds(m: StoredMember, key: number | null): number[] | null {
 }
 
 /**
- * Whether a member is stored in a form the writer cannot make: a compressed sector that uses a method other than
- * PKWARE or zlib — StarEdit's ADPCM and Huffman for sounds, or bzip2. Written afresh, such a member comes out larger
- * (ADPCM is lossy) or in another method; carried as stored it stays as it was.
+ * The methods a member's sectors are compressed with, as the sector's method byte has them (0x01 Huffman, 0x02 zlib,
+ * 0x08 PKWARE, 0x10 bzip2, 0x40 and 0x80 ADPCM), OR-ed together: 0x08 for an imploded member, 0 for one stored plain.
+ * Null when the member's sector table does not read.
  */
-export function storedInOtherForm(m: StoredMember, name: string): boolean {
-  if (!(m.block.flags & FILE_COMPRESS) || !movable(m) || m.sectorSize <= 0) return false;
+export function storedMethods(m: StoredMember, name: string): number | null {
+  if (m.block.flags & FILE_IMPLODE) return 0x08;
+  if (!(m.block.flags & FILE_COMPRESS)) return 0;
+  if (!movable(m) || m.sectorSize <= 0) return null;
   const key = keyOf(m, name);
   const bounds = sectorBounds(m, key);
-  if (!bounds) return false;
+  if (!bounds) return null;
+  let methods = 0;
   for (let i = 0; i + 1 < bounds.length; i++) {
     const length = bounds[i + 1] - bounds[i];
     const plain = Math.min(m.sectorSize, m.block.uncompressedSize - i * m.sectorSize);
     // A sector as long as its plain bytes was stored uncompressed and has no method byte.
     if (length === 0 || length >= plain) continue;
     const head = m.data.slice(bounds[i], bounds[i] + Math.min(4, length));
+    // (A sector shorter than a word is not encrypted.)
     if (key !== null && head.length === 4) crypt(head, (key + i) >>> 0, false);
-    if (head.length < 4 && key !== null) continue; // a sector shorter than a word is not encrypted, and is not ADPCM either
-    if (head[0] & ~WRITTEN_METHODS) return true;
+    methods |= head[0];
   }
-  return false;
+  return methods;
+}
+
+/** zlib and bzip2: methods StarCraft 1.16.1 cannot read (it reads PKWARE, Huffman and ADPCM). */
+export const REMASTERED_ONLY_METHODS = 0x02 | 0x10;
+
+/**
+ * Whether a member is stored in a form the writer cannot make: a compressed sector that uses a method other than
+ * PKWARE or zlib — StarEdit's ADPCM and Huffman for sounds, or bzip2. Written afresh, such a member comes out larger
+ * (ADPCM is lossy) or in another method; carried as stored it stays as it was.
+ */
+export function storedInOtherForm(m: StoredMember, name: string): boolean {
+  const methods = storedMethods(m, name);
+  return methods !== null && (methods & ~WRITTEN_METHODS) !== 0;
 }
 
 /**
@@ -166,6 +182,8 @@ export function packStored(named: { member: StoredMember; name: string }[], pinn
 export interface StoredForm {
   /** The member's name in the archive it came from (its key and its hash-table slot are the name's). */
   name: string;
+  /** Its sectors' methods (`storedMethods`): a save for 1.16.1 does not carry one with zlib or bzip2 in it. */
+  methods: number;
   member: StoredMember;
   /** The hash table of the archive it came from, which the slot belongs to; one array for every member of that archive. */
   hashTable: readonly HashEntry[];

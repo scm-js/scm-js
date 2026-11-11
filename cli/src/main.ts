@@ -588,9 +588,10 @@ is renumbered, so what the triggers hold stays right; blank slots at the end of 
       const { input, doc } = await openForEdit(file);
       const piped = piping(input, o);
       const removed = pruneStrings(doc, { dryRun: !!o.dryRun });
-      const w = (removed.length || piped) && !o.dryRun ? await writeBack(doc, input.path, o.out ?? null) : null;
-      if (o.json) { print(JSON.stringify({ file: input.name, removed, dryRun: !!o.dryRun, written: w }, null, 2)); return; }
-      if (!removed.length) { say(piped, `${mark.ok} ${pc.bold(input.name)}: ${t("every string is referred to")}`); return; }
+      // --out or a pipe always gets the map: the next step reads it.
+      const w = (removed.length || piped || o.out) && !o.dryRun ? await writeBack(doc, input.path, o.out ?? null) : null;
+      if (o.json) { print(JSON.stringify({ file: input.path, removed, dryRun: !!o.dryRun, written: w }, null, 2)); return; }
+      if (!removed.length) { say(piped, `${mark.ok} ${pc.bold(input.name)}: ${t("every string is referred to")}${w ? `${dot}${t("written to {out}", { out: outName(w) })}` : ""}`); return; }
       const limit = o.all ? Infinity : 20;
       const show = (s: string) => { const p = s.replace(/\s+/g, " "); return p.length > 70 ? `${p.slice(0, 67)}…` : p; };
       say(piped, `${o.dryRun ? mark.info : mark.ok} ${pc.bold(input.name)}: ${o.dryRun ? t("{n, plural, one {# unused string} other {# unused strings}} would be dropped", { n: removed.length }) : t("{n, plural, one {# unused string} other {# unused strings}} dropped", { n: removed.length })}${w ? `${dot}${t("written to {out}", { out: outName(w) })}${dot}${size(w.bytes)}` : ""}`,
@@ -602,7 +603,7 @@ is renumbered, so what the triggers hold stays right; blank slots at the end of 
     .option("--dry-run", t("say what would go and what each step saves; write nothing"))
     .option("--strip-editor", t("also drop the sections only editors read (ISOM, TILE, DD2, the sound list, switch names…)"))
     .option("--compression <method>", t("pkware (every version of the game) or zlib (Remastered only); default pkware, or the smaller for a zlib map"))
-    .option("--keep <members...>", t("archive members to keep though nothing names them; a name ending in \\ keeps a folder"))
+    .option("--keep <member>", t("an archive member to keep though nothing names it, once per member; a name ending in \\ keeps a folder"), (v: string, list: string[] = []) => [...list, v])
     .option("--all", t("list everything removed; by default a long list is cut at 20"))
     .option("-o, --out <map>", t("write the result here instead of over the map; - for standard output"))
     .addHelpText("after", t(`
@@ -619,16 +620,20 @@ switch names. Keep the original to go on editing.
   scmjs map optimize "My Map.scx" --dry-run
   scmjs map optimize "My Map.scx" --out "My Map (small).scx" --strip-editor`))
     .action(async (file: string, o: { json?: boolean; dryRun?: boolean; stripEditor?: boolean; compression?: string; keep?: string[]; all?: boolean; out?: string }) => {
-      if (o.compression !== undefined && !(COMPRESSIONS as readonly string[]).includes(o.compression)) throw new CliError(t("--compression takes {values}, not \"{value}\"", { values: COMPRESSIONS.join(t(" or ")), value: o.compression }), null, 2);
+      const compression = o.compression?.toLowerCase();
+      if (compression !== undefined && !(COMPRESSIONS as readonly string[]).includes(compression)) throw new CliError(t("--compression takes {values}, not \"{value}\"", { values: COMPRESSIONS.join(t(" or ")), value: o.compression! }), null, 2);
       const input = await readInput(file);
       expectKind(input, "map");
       const piped = piping(input, o);
       const bare = !looksLikeMpq(input.bytes);
       if (o.out && o.out !== STDIO && (formatOf(o.out) === "chk") !== bare) throw new CliError(t("map optimize writes the map in its own form: {how}", { how: bare ? t("a bare scenario stays a .chk") : t("an archive stays a .scx or .scm") }), t("Name an output of the same kind, or convert with the editor first."), 2);
-      const r = await optimizeMap(input.bytes, input.name, { stripEditor: !!o.stripEditor, compression: o.compression as Compression | undefined, keep: o.keep });
-      const w = !o.dryRun && r.after < r.before ? await writeOutput(r.bytes, o.out ?? input.path) : null;
-      if (o.json) { print(JSON.stringify(optimizeJson(r, { dryRun: !!o.dryRun, written: w }), null, 2)); return; }
-      say(piped, ...printOptimize(r, { dryRun: !!o.dryRun, written: w ? outName(w) : null, all: !!o.all }));
+      const r = await optimizeMap(input.bytes, input.name, { stripEditor: !!o.stripEditor, compression: compression as Compression | undefined, keep: o.keep });
+      // Smaller is written; a compression asked for is written even when larger (it is what the file is for). A map
+      // that cannot be made smaller still goes where --out or a pipe wants one, as it was: the next step reads it.
+      const result = r.after < r.before || (compression !== undefined && !bare) ? r.bytes : null;
+      const w = o.dryRun ? null : result ? await writeOutput(result, o.out ?? input.path) : o.out || piped ? await writeOutput(input.bytes, o.out ?? STDIO) : null;
+      if (o.json) { print(JSON.stringify(optimizeJson(r, { file: input.path, dryRun: !!o.dryRun, written: w, changed: !!result }), null, 2)); return; }
+      say(piped, ...printOptimize(r, { dryRun: !!o.dryRun, written: w ? outName(w) : null, all: !!o.all, asked: result !== null && r.after >= r.before, copied: !!w && !result }));
     });
 
   map.command("unpack").description(t("a map's archive as a folder: the scenario, its sounds, scripts and other files")).argument("<map>").addOption(json)
@@ -740,7 +745,7 @@ compile, a test fails or the build is refused; nothing is written then.`))
       if (!r.ok) process.exitCode = 1;
     });
 
-  map.command("run").description(t("run a plugin, or a script written like one, over a map with the plugin API")).argument("<plugin>", t("a folder with plugin.json, a plugin.ts/.js file, github:owner/repo or a URL")).argument("<map>").addOption(json)
+  map.command("run").description(t("run a plugin, or a script written like one, over a map with the plugin API")).argument("<plugin>", t("a folder with plugin.json, a plugin.ts/.js file, github:owner/repo or a URL")).argument("<map>", t("the map to run it over; - reads it from standard input")).addOption(json)
     .option("--command <id>", t("after it starts, run this command of its (the id it registered)"))
     .option("--arg <value...>", t("arguments for --command"))
     .option("-o, --out <map>", t("write the changed map here instead of over the map; - for standard output"))
@@ -751,10 +756,11 @@ would show — its status line, toasts, log — is printed here, and dialogs sho
 activate(api), like a plugin's entry; a .ts needs TypeScript installed. The map is written back only when the
 plugin changed it. Exits 1 when the plugin does not load or throws.`))
     .action(async (target: string, file: string, o: { json?: boolean; command?: string; arg?: string[]; out?: string; dryRun?: boolean }) => {
+      if (o.arg && !o.command) throw new CliError(t("--arg is for --command"), t("Name the command the arguments are for: --command <id> --arg <value>."), 2);
       const { input, doc } = await openForEdit(file);
       const piped = piping(input, o);
       const r = await runOnMap(doc, input.path, input.bytes, target, { command: o.command, args: o.arg, out: o.out ?? null, dryRun: !!o.dryRun, live: o.json ? undefined : (line) => say(piped, line) });
-      if (o.json) print(JSON.stringify({ file: input.name, ...r }, null, 2));
+      if (o.json) print(JSON.stringify({ file: input.path, ...r }, null, 2));
       else say(piped, ...printRun(input.name, r, { dryRun: !!o.dryRun }));
     });
 

@@ -1,6 +1,6 @@
 import { Archive, Creator, MpqError, type CompressionMethod, type HashEntry, type StoredMember } from "mopaq";
 import { t } from "../../i18n";
-import { keepStoredForm, packStored, storedFormOf, storedInOtherForm } from "./stored";
+import { keepStoredForm, packStored, REMASTERED_ONLY_METHODS, storedFormOf, storedMethods } from "./stored";
 
 /** Where StarCraft keeps the scenario inside the archive. */
 export const SCENARIO_PATH = "staredit\\scenario.chk";
@@ -168,6 +168,8 @@ export async function saveMap(chk: Uint8Array, options: SaveOptions = {}): Promi
     for (const [name, data] of extras) {
       const form = storedFormOf(data);
       if (!form || normalize(form.name) !== normalize(name)) continue;
+      // A member with zlib or bzip2 sectors goes only into an archive for Remastered, which reads them.
+      if (method !== "zlib" && form.methods & REMASTERED_ONLY_METHODS) continue;
       // Laid over the source's hash table, the archive keeps its size: one too small for every file is not taken.
       if (!hashTable && form.hashTable.length > extras.length + (options.editorMembers?.size ?? 0) + 2) { hashTable = form.hashTable; sectorSize = form.member.sectorSize; }
       if (form.hashTable !== hashTable || form.member.sectorSize !== sectorSize) continue;
@@ -264,7 +266,8 @@ export async function readMembers(archive: Archive, files: string[] | null, hint
         extras.set(name, bytes);
         // A sound StarEdit stored with ADPCM: remembered, so a save that does not change it can keep it as it was.
         const member = all.find((m) => m.slot === slot);
-        if (member && hasBytes(member) && storedInOtherForm(member, name)) keepStoredForm(bytes, { name, member, hashTable });
+        const methods = member && hasBytes(member) ? storedMethods(member, name) : null;
+        if (member && methods !== null && (methods & ~(0x02 | 0x08)) !== 0) keepStoredForm(bytes, { name, member, methods, hashTable });
       } catch (err) {
         unreadable.push(name);
         keepStored.add(slot);

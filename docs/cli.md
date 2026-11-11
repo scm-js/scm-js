@@ -38,6 +38,9 @@ scoop install scmjs
 winget install scm-js.scmjs
 ```
 
+winget does not list scmjs yet: its first version is waiting for review. Until it does,
+use Scoop or the download.
+
 With npm:
 
 ```sh
@@ -3254,6 +3257,26 @@ While a map is on standard output, what the command says goes to standard error,
 Colour is off when the output is not a terminal, when `NO_COLOR` is set, and with
 `--no-color`. The language is chosen by `--lang` or `SCMJS_LANG` ([In
 Korean](#in-korean)); `--json` keys are English in every language.
+
+Settings the commands read from the environment, each for every command that has the
+option beside it:
+
+| Setting | What it does | Option |
+| --- | --- | --- |
+| `SCMJS_LANG` | The language, `en` or `ko` ([In Korean](#in-korean)) | `--lang` |
+| `SCMJS_STARCRAFT` | Your installation of StarCraft, when it is not in one of the usual places | `--starcraft` |
+| `SCMJS_CACHE` | The folder the game engine is kept in, instead of `~/.cache/scmjs` (or the local app data folder on Windows) | |
+| `SCMJS_PLAY_URL` | Another play page, or a folder holding the game engine: where the game commands fetch the engine, and the page `map play`, `mod play`, `replay export` and `map test --clips` open | |
+| `SCMJS_EDITOR_URL` | Another editor, such as one on your own computer, for `map open`, `replay open` and `plugin dev` | |
+| `SCMJS_APP` | The desktop app's path, when it is installed somewhere unusual | |
+| `SCMJS_BROWSER` | The browser `replay export` and `map test --clips` draw in | `--browser` |
+| `SCMJS_FFMPEG` | The ffmpeg program `replay export` makes an `.mp4` with, when it is not on your `PATH` | |
+| `SCMJS_SESSION` | The file your scmjs.dev session is kept in | |
+| `SCMJS_SERVER` | Another server than `https://api.scmjs.dev`, such as one of your own | |
+| `SCMJS_DEBUG` | Set to `1`: an error says where in the program it came from, and `replay export` says each step | |
+| `SCMBOT_IMAGE` | Another Docker image for the bot toolchain of `bot new`, `init`, `build` and `update` | |
+| `NO_COLOR`, `FORCE_COLOR` | No colour, or colour even into a pipe | `--no-color` |
+| `BROWSER` | `none` opens no browser: the commands that would open one print its address instead | |
 
 For what the commands do not do, such as a script that edits maps or a check of your own,
 the same functions are the [`@scm-js/core` library](core.md); the command is built on it.

@@ -1168,7 +1168,7 @@ their own StarCraft files and no account. Waits up to five minutes for the page.
       if (!r.link) throw new CliError(r.error ?? t("The page opened no lobby"), t("Invite Players on the play page opens one by hand."));
     });
 
-  map.command("diff").description(t("what changed between two maps, or since a git revision")).argument("<a>").argument("[b]", t("the other map; none with --rev")).addOption(json)
+  map.command("diff").description(t("what changed between two maps, or since a git revision")).argument("<a>", t("a map; with --rev, the map whose earlier version it is compared with")).argument("[b]", t("the other map; none with --rev")).addOption(json)
     .option("--all", t("list every item; by default a long list is cut at 20"))
     .option("--rev <revision>", t("compare the map as git has it at this revision (HEAD, HEAD~1, a branch, a tag) with the file as it is"))
     .option("--picture", t("draw the maps with the changes marked, with your copy of the game's graphics (as map preview)"))
@@ -1267,7 +1267,7 @@ the file is read as it is, and what is not committed yet says so.`) + `
       print(...(o.json ? [JSON.stringify(b, null, 2)] : printBlame(b)));
     });
 
-  map.command("merge").description(t("merge two versions of a map with their common ancestor, as git's merge driver")).argument("<base>", t("the common ancestor; with no other map, the map git stopped on")).argument("[ours]").argument("[theirs]").addOption(json)
+  map.command("merge").description(t("merge two versions of a map with their common ancestor, as git's merge driver")).argument("<base>", t("the common ancestor; with no other map, the map git stopped on")).argument("[ours]", t("your version, written over with the result unless --out")).argument("[theirs]", t("the version merged into yours")).addOption(json)
     .option("-o, --out <map>", t("write the merged map here instead of over <ours>; - for standard output"))
     .option("--ours", t("settle each conflict with ours's version"))
     .option("--theirs", t("settle each conflict with theirs's version"))

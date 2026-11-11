@@ -38,7 +38,7 @@ import { DEFAULT_LIMIT, fetchJson, fetchMap, mapIdFrom, MAX_LIMIT, parseLimit, p
 import { baselineLine, baselineWritten, issueLine, mapReport, printIssues, printMapInfo, type MapReport } from "./map";
 import { baselineEntries, BASELINE_FILE, mapKey, matchBaseline, readBaseline, writeBaseline, type BaselineEntry } from "./baseline";
 import type { Issue } from "../../src/editor/validate";
-import { serveStdio } from "./mcp";
+import { createMcpServer, serveStdio } from "./mcp";
 import { serveLsp } from "./lsp";
 import { openInScmjs, playInLobby } from "./open";
 import { checkPlugin, devPlugin, newPlugin, printPluginCheck, type PluginCheck } from "./plugin";
@@ -1910,19 +1910,19 @@ a newer scmjs; then the commands this computer can run now. Nothing is changed. 
     });
 
   program.command("mcp").description(t("these commands as an MCP server, for AI tools")).helpGroup(t("This tool:"))
-    .addHelpText("after", "\n" + t(`Speaks the Model Context Protocol on standard input and output, so an AI tool that runs on this computer (Claude
-Code, Cursor, VS Code, …) can read, check, search, compare and change maps with the same code these commands use:
-map_info, map_check, map_dump, map_find, map_diff, map_triggers_export|import, map_strings_export|import|prune,
-map_set, map_resize, map_new, map_build, map_run, map_preview (the picture itself), map_analyze, map_trace, map_cost,
-replay_info, replay_map, mod_info, mod_check, mod_diff, mod_unpack, mod_pack, mod_new and doctor. map_preview,
-map_analyze, map_trace and map_cost need a copy of StarCraft here, as the commands do; doctor says whether there is
-one. Paths are files on this
-computer, relative to the folder the tool started it in. Claude Code, in your maps folder:`) + `
+    .option("--allow-outside", t("let the tools read and write files outside this folder"))
+    // The tools' names from the server itself, so the list is never short of one; made only when the help is shown.
+    .addHelpText("after", () => "\n" + t(`Speaks the Model Context Protocol on standard input and output, so an AI tool that runs on this computer (Claude
+Code, Cursor, VS Code, …) can read, check, search, compare and change maps with the same code these commands use.
+Each tool is a command, with its options as arguments by the same names:`) + "\n" + wrapWords(createMcpServer().tools.join(", "), 116, "  ") + "\n" + t(`The tools that run the game or draw it (map_preview, map_analyze, map_trace, map_cost, map_coverage, map_balance) need a
+copy of StarCraft here, as the commands do; doctor says whether there is one. Paths are files in the folder the tool
+started the server in, and a path outside it is refused unless the server was started with --allow-outside.
+Claude Code, in your maps folder:`) + `
   claude mcp add scmjs -- npx -y @scm-js/cli mcp
 ${t("Anything else takes the same thing as JSON:")}
   { "mcpServers": { "scmjs": { "command": "npx", "args": ["-y", "@scm-js/cli", "mcp"] } } }`)
     // English whatever the language: the tools' descriptions and results are read by the model, not shown.
-    .action(async () => { setLocale("en"); await serveStdio(); });
+    .action(async (o: { allowOutside?: boolean }) => { setLocale("en"); await serveStdio({ allowOutside: !!o.allowOutside }); });
 
   // Hidden from the overview, which holds 23 lines (banner.ts): an editor starts it, and docs/cli.md says how.
   program.command("lsp", { hidden: true }).description(t("a TrigScript language server, for text editors")).helpGroup(t("This tool:"))
@@ -1967,6 +1967,17 @@ export const COMMAND_GROUPS: Record<string, [heading: string, names: string[]][]
 };
 /** Where a command stands in its noun's help, by COMMAND_GROUPS. */
 const GROUP_RANK = new WeakMap<Command, number>();
+
+/** `text` broken at spaces into lines of at most `width` columns, each after `indent`. */
+function wrapWords(text: string, width: number, indent = ""): string {
+  const lines: string[] = [];
+  let line = "";
+  for (const word of text.split(" ")) {
+    if (line && columns(indent + line + " " + word) > width) { lines.push(indent + line); line = word; } else line = line ? `${line} ${word}` : word;
+  }
+  if (line) lines.push(indent + line);
+  return lines.join("\n");
+}
 
 /** The words that run a command: `scmjs map info`. */
 const commandPath = (cmd: Command): string => (cmd.parent ? `${commandPath(cmd.parent)} ${cmd.name()}` : cmd.name());

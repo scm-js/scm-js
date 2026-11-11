@@ -3065,9 +3065,10 @@ terminal.
 standard input and output, so an AI tool on your computer, such as Claude Code, Cursor or
 VS Code, can work on your maps with the same code these commands use. The tool starts
 `scmjs mcp` in your maps folder and talks to it over the pipe; the paths it gives are
-files in that folder. Nothing goes on the network except what the commands themselves
-fetch: the game engine the first time a map is run in the game, and npm's newest version
-for `doctor`.
+files in that folder, and a path outside it is refused unless you start the server with
+`scmjs mcp --allow-outside`. Nothing goes on the network except what the commands
+themselves fetch: the game engine the first time a map is run in the game, and npm's
+newest version for `doctor`.
 
 With Claude Code, once, in the folder your maps are in:
 
@@ -3085,8 +3086,14 @@ Other tools take the same thing as JSON in their MCP settings:
 { "mcpServers": { "scmjs": { "command": "npx", "args": ["-y", "@scm-js/cli", "mcp"] } } }
 ```
 
-Each tool is a command from this guide. It takes the same arguments by name and answers
-with the command's text and its `--json` data:
+Each tool is a command from this guide. Its arguments are the command's options by name,
+`--dry-run` as `dryRun` and `--in` as `in`, and it answers with the command's text and its
+`--json` data. An argument a tool does not take is refused with the list of those it does,
+so a misspelt `dry_run` cannot write over a map. A few tools have a name of their own
+beside the command's: `map_find` takes `kinds` and `matchCase` as well as `in` and `case`,
+`map_run` `args` as well as `arg`, `map_preview` `marks` as well as `units`.
+`map_optimize` is a dry run unless given `write: true` or `dryRun: false`, the other way
+round from the command, and `mod_play` waits `wait` seconds for the page (300 by default).
 
 | Tools | The commands |
 | --- | --- |
@@ -3109,7 +3116,9 @@ your maps in git or give the tool copies. `map_run` runs a plugin, which is code
 your privileges, as `scmjs map run` does; the AI tool asks you before it calls a tool, and
 you can leave that one unapproved.
 
-`map_trace` and `map_cost` take `mod`, as the commands take `--mod`.
+`map_trace` and `map_cost` take `mod`, `replay`, `order` and `every`, as the commands take
+`--mod`, `--replay`, `--order` and `--every`; with `replay` the map's `path` may be left
+out.
 
 `map_preview`, `map_analyze`, `map_trace`, `map_cost` and `map_coverage` need [your copy
 of the game](#commands-that-need-starcraft), and the runs fetch the engine the first time;
@@ -3256,9 +3265,10 @@ the same functions are the [`@scm-js/core` library](core.md); the command is bui
 | 2 | The command could not start its work: an unknown command or option, a missing argument, a value it does not take, a file or folder that is missing or the wrong kind, a file that could not be written, you need to sign in first, or the game could not start |
 
 A mistake in the command line says what was wrong and which help lists the options, such
-as `(scmjs map info --help lists its options)`. Asking for help — `scmjs map`, `scmjs help
-map diff`, `scmjs map diff --help` — prints it on standard output and exits with 0. A
-command whose output is cut short by a pipe that stops reading (`| head`) ends quietly with 0.
+as `(scmjs map info --help lists its options)`. Asking for help — `scmjs map`,
+`scmjs help map diff`, `scmjs map diff --help` — prints it on standard output and exits
+with 0. A command whose output is cut short by a pipe that stops reading (`| head`) ends
+quietly with 0.
 
 ## Command reference
 

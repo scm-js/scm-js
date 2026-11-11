@@ -11,7 +11,7 @@ import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { findGameCopy } from "../cli/src/engine";
-import { createMcpServer, INSTRUCTIONS, MAX_FRAMES, type McpOptions } from "../cli/src/mcp";
+import { argumentError, createMcpServer, INSTRUCTIONS, MAX_FRAMES, outsideRoot, unreadableLine, type McpOptions } from "../cli/src/mcp";
 import { classicCopy, stagedEngine } from "./support/mapRunner";
 import { TEST_MAPS_DIR } from "./support/maps";
 import { emptyDat, encodeDat } from "../src/formats/dat/table";
@@ -510,5 +510,70 @@ describe("scmjs mcp: mod_header and mod_play", () => {
       for (const [k, v] of [["BROWSER", was.browser], ["SCMJS_PLAY_URL", was.play]] as const) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
       await client.close();
     }
+  });
+});
+
+describe("scmjs mcp: the arguments a tool takes", () => {
+  it("refuses an argument it does not take, naming those it does, and writes nothing", async () => {
+    const { client, call } = await connected();
+    const dir = tmp(), map = join(dir, "prune.scx");
+    copyFileSync(join(TEST_MAPS_DIR, "ums.scx"), map);
+    const before = readFileSync(map);
+    const r = await call("map_strings_prune", { path: map, dry_run: true });
+    expect(r.isError).toBe(true);
+    expect(text(r)).toBe("map_strings_prune: `dry_run` is not an argument of map_strings_prune: it takes `path`, `dryRun`, `out`");
+    expect(readFileSync(map).equals(before)).toBe(true);
+    // The schema the client is shown says so too.
+    const { tools } = await client.listTools();
+    for (const t of tools) expect((t.inputSchema as { additionalProperties?: boolean }).additionalProperties, t.name).toBe(false);
+    const missing = await call("map_info", {});
+    expect(text(missing)).toBe("map_info: `path` is missing (a string)");
+    await client.close();
+  });
+
+  it("takes the command's spellings too, and dryRun wherever the command has --dry-run", async () => {
+    const { client, call } = await connected();
+    const dir = tmp(), map = join(dir, "ums.scx");
+    copyFileSync(join(TEST_MAPS_DIR, "ums.scx"), map);
+    const found = await call("map_find", { text: "force", paths: [map], in: ["strings"], case: true });
+    expect(text(found)).toContain("Nothing in the map matches");
+    expect(text(await call("map_find", { text: "Force", paths: [map], in: ["strings"] }))).toContain("matches");
+    const before = readFileSync(map);
+    expect(text(await call("map_optimize", { path: map, dryRun: true }))).toContain("nothing written");
+    expect(readFileSync(map).equals(before)).toBe(true);
+    expect((await call("map_optimize", { path: map, write: true, dryRun: true })).isError).toBe(true);
+    expect(text(await call("map_optimize", { path: map, dryRun: false }))).toContain("Written to");
+    expect(readFileSync(map).equals(before)).toBe(false);
+    expect(text(await call("map_run", { plugin: "x", path: map, arg: ["a"] }))).toContain("args are for `command`");
+    expect(text(await call("map_trace", { path: map, order: true }))).toContain("`order` lists the firings of a replay's game");
+    // A missing file says what is wrong, without a shell's advice about quotes.
+    expect(text(await call("map_info", { path: join(dir, "nope.scx") }))).not.toContain("quotes");
+    await client.close();
+  });
+
+  it("keeps to the folder it was started in, unless told otherwise", async () => {
+    const root = tmp(), inside = join(root, "ums.scx");
+    copyFileSync(join(TEST_MAPS_DIR, "ums.scx"), inside);
+    const { client, call } = await connected({ root });
+    const inRoot = await call("map_info", { path: inside });
+    expect(inRoot.isError).toBeFalsy();
+    for (const args of [{ path: join(TEST_MAPS_DIR, "melee.scx") }, { path: "../x.scx" }, { path: "/etc/passwd" }]) {
+      const r = await call("map_info", args);
+      expect(r.isError, args.path).toBe(true);
+      expect(text(r)).toContain("outside the folder the server was started in");
+    }
+    expect(text(await call("map_strings_prune", { path: inside, out: join(TEST_MAPS_DIR, "x.scx") }))).toContain("outside the folder");
+    expect(text(await call("map_find", { text: "x", paths: [inside, "../a.scx"] }))).toContain("outside the folder");
+    expect(outsideRoot({ plugin: "github:scm-js/x", bot: "mcrave", starcraft: "/games/StarCraft" }, root)).toBeNull();
+    await client.close();
+  });
+
+  it("answers a line that is not JSON-RPC as JSON-RPC says", () => {
+    let parsed: unknown;
+    try { JSON.parse("{not json"); } catch (e) { parsed = e; }
+    expect(unreadableLine(parsed)?.error.code).toBe(-32700);
+    expect(unreadableLine({ issues: [] })?.error.code).toBe(-32600);
+    expect(unreadableLine(new Error("other"))).toBeNull();
+    expect(argumentError("Input validation error: Invalid arguments for tool map_new: Invalid input: expected number, received string at players")).toBe("map_new: `players` takes a number, not a string");
   });
 });

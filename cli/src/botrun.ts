@@ -197,6 +197,17 @@ export async function botRunValues(o: { race: string; opponents: string; seed?: 
   return { race, opponents, seed, frames, every };
 }
 
+/**
+ * `bot ladder`'s numbers read as values (`values.ts`), each refused with exit 2 before anything starts: `--games`,
+ * `--parallel` and `--timeout` whole numbers of 1 or more, each of `--seeds` a whole number, `--frames` frames or a time.
+ */
+export function ladderValues(o: { games: string; seeds?: string; frames: string; parallel: string; timeout: string }): { seeds: number[]; frames: number; parallel: number; timeout: number } {
+  const games = parseWhole(o.games, "games", 1);
+  const seeds = o.seeds ? o.seeds.split(",").map((x) => x.trim()).filter(Boolean).map((x) => parseWhole(x, "seeds")) : Array.from({ length: games }, (_, k) => k + 1);
+  if (o.seeds !== undefined && !seeds.length) throw new CliError(t("--seeds names no seed"), null, 2);
+  return { seeds, frames: parseFrames(o.frames, "frames"), parallel: parseWhole(o.parallel, "parallel", 1), timeout: parseWhole(o.timeout, "timeout", 1) };
+}
+
 /** What to do when the game would not play: the files it needs, and how to see the game's own words. */
 const RUNNER_HINT = () => t("The game needs a map StarCraft itself opens, a bot scmjs bot build wrote, and your own copy of the game (scmjs doctor checks it). SCMJS_DEBUG=1 shows the game's own words.");
 

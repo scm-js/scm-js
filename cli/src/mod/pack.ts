@@ -104,7 +104,8 @@ export async function packFolder(dir: string, manifest: ModManifest, options: Pa
       if (file.startsWith("sounds/") && !/\.wav$/i.test(file) && list.length) converted.push(file);
       put(file, list);
     } catch (e) {
-      if (e instanceof ModFolderError) throw new CliError(e.message, null, 1);
+      // (the file as it is from where the person is, the mod folder's path before it, so that it opens as printed)
+      if (e instanceof ModFolderError) { const at = `${e.file}${e.line > 0 ? `:${e.line}` : ""}: `; throw new CliError(`${join(dir, ...e.file.split("/"))}${e.line > 0 ? `:${e.line}` : ""}: ${e.message.startsWith(at) ? e.message.slice(at.length) : e.message}`, null, 1); }
       throw e;
     }
   };

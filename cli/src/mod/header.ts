@@ -218,7 +218,7 @@ export async function modNames(source: ModSource, data: ModData): Promise<{ name
 export async function writeModHeader(source: ModSource, base: GameFiles | null, o: HeaderOptions = {}): Promise<HeaderResult> {
   const out = resolve(o.out ?? ".");
   const scmbot = join(out, "scmbot.json");
-  if (o.bot && !existsSync(scmbot)) throw new CliError(t("{folder} has no scmbot.json: --bot writes into a bot's folder.", { folder: out }), t("scmjs bot init or scmjs bot new writes one; without --bot the files go in any folder."), 2);
+  if (o.bot && !existsSync(scmbot)) throw new CliError(t("{folder} has no scmbot.json: --bot writes into a bot's folder.", { folder: o.out ?? "." }), t("scmjs bot init or scmjs bot new writes one; without --bot the files go in any folder."), 2);
   const data = await loadModData(reader(source), base ? (n) => base.read(n) : null, modTables(source), iscriptMembers(source));
   if (!data.tables.units) throw new CliError(t("{mod} has no units.dat, and no copy of StarCraft was found to read the game's: there are no units to name.", { mod: source.name }), t("Name your copy of the game with --starcraft."));
   const names = await modNames(source, data);
@@ -235,6 +235,7 @@ export async function writeModHeader(source: ModSource, base: GameFiles | null, 
   return {
     mod: h.mod, namespace: h.namespace,
     counts: { units: h.units.length, weapons: h.weapons.length, upgrades: h.upgrades.length, techs: h.techs.length },
-    files: { header, ids, scmbot: o.bot ? scmbot : null }, fromGame, statText: names.statText, lists: names.lists,
+    // (paths as typed: the folder named with --out, or none for the working folder's)
+    files: { header: join(o.out ?? "", `${h.namespace}.h`), ids: join(o.out ?? "", `${h.namespace}.ids.json`), scmbot: o.bot ? join(o.out ?? "", "scmbot.json") : null }, fromGame, statText: names.statText, lists: names.lists,
   };
 }

@@ -32,7 +32,7 @@ import { unpackMod } from "../cli/src/mod/unpack";
 import { checkPackOut, packFolder, packMod, readModFolder, writeMpq } from "../cli/src/mod/pack";
 import { checkModSource } from "../cli/src/mod/check";
 import { diffModSources, printModDiff } from "../cli/src/mod/diff";
-import { newMod } from "../cli/src/mod/new";
+import { newMod, parseTables } from "../cli/src/mod/new";
 import { handoffExtra, pageRace, playBotOf, playOnPage, playSet, type PlayOptions, type PlaySet } from "../cli/src/mod/play";
 import { runInNewContext } from "node:vm";
 import { gameLayer, modOverlay } from "../cli/src/mod/overlay";
@@ -369,7 +369,10 @@ describe("scmjs mod unpack / pack", () => {
     expect(same(byName.get("arr\\sfxdata.dat"), madeMod().get("arr\\sfxdata.dat"))).toBe(true);
     expect(new TextDecoder().decode(byName.get("glue\\added.bin"))).toBe("new");
     writeFileSync(file, "Weapon(0):\n\tdamage_amount lots\n");
-    await expect(packFolder(dir, await readModFolder(dir))).rejects.toThrow(/tables\/weapons\.txt:2: expected an entry header/);
+    // Said with the mod folder's path before the file, so that it opens from where the command was run.
+    const e = await packFolder(dir, await readModFolder(dir)).catch((x) => x);
+    expect(e.message).toMatch(/tables\/weapons\.txt:2: expected an entry header/);
+    expect(e.message.startsWith(`${join(dir, "tables", "weapons.txt")}:2: `)).toBe(true);
   });
 
   it("keeps as bytes what does not come back the same, and says why", async () => {
@@ -406,6 +409,20 @@ describe("scmjs mod unpack / pack", () => {
     const packed = await packMod(dir, await readModFolder(dir), { out: join(root, "new.mpq") });
     expect(packed.members).toBe(1);
     await expect(unpackMod(await openMod(join(root, "new.mpq"), null), root)).rejects.toThrow(/The mod is inside/);
+  });
+
+  it("starts a mod from the game's own tables, as text that packs back to the game's bytes", async () => {
+    const game = madeGame();
+    const dir = tmp("from-game");
+    const r = await newMod(dir, "From The Game", { tables: parseTables("weapons, sfxdata"), base: asGame(game) });
+    expect(r.files).toEqual(["mod.json", "README.md", "tables/weapons.txt", "tables/sfxdata.txt"]);
+    expect(readFileSync(join(dir, "tables", "weapons.txt"), "utf8")).toContain("\tdamage_amount ");
+    const packed = await packFolder(dir, await readModFolder(dir));
+    expect((await readModFolder(dir)).name).toBe("From The Game");
+    for (const m of packed.members) expect(same(m.data, game.get(m.member)), m.member).toBe(true);
+    expect(parseTables("all")).toHaveLength(11);
+    expect(() => parseTables("bogus")).toThrow(/"bogus" is not one of the game's tables/);
+    await expect(newMod(tmp("no-game"), undefined, { tables: ["units"], base: null })).rejects.toThrow(/no copy of StarCraft was found/);
   });
 
   it("refuses to unpack over a mod folder unless --force, which replaces it whole", async () => {
@@ -495,6 +512,24 @@ describe("scmjs mod diff", () => {
     expect(lines).toContain("Tables");
     const self = await diffModSources(await openMod(dir, base), await openMod(dir, base), base);
     expect(self.same).toBe(true);
+  });
+
+  it("exits 1 when two mods differ and 0 when they are the same, as map diff does", async () => {
+    const { buildProgram } = await import("../cli/src/main");
+    const a = tmp("diff-a"); writeFolder(a, madeMod());
+    const changed = madeMod(); changed.set("glue\\extra.bin", latin("more"));
+    const b = tmp("diff-b"); writeFolder(b, changed);
+    const was = process.exitCode, write = process.stdout.write;
+    const exitOf = async (...args: string[]) => {
+      process.exitCode = 0;
+      process.stdout.write = (() => true) as typeof process.stdout.write;
+      try { await buildProgram().exitOverride().parseAsync(["node", "scmjs", "mod", "diff", ...args]); } finally { process.stdout.write = write; }
+      return Number(process.exitCode ?? 0);
+    };
+    try {
+      expect(await exitOf(a, b)).toBe(1);
+      expect(await exitOf(a, a)).toBe(0);
+    } finally { process.exitCode = was; }
   });
 });
 

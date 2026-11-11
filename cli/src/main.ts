@@ -10,7 +10,7 @@ import { aboutReport, printAbout, VERSION } from "./about";
 import { listMembers, MANIFEST_FILE, packMap, unpackMap } from "./archive";
 import { rootHelp } from "./banner";
 import { BOT_GUIDE, runBot, updateBot } from "./bot";
-import { botRunValues, gameKind, looksLikeMapSettings, runBotGame } from "./botrun";
+import { botRunValues, gameKind, ladderValues, looksLikeMapSettings, runBotGame } from "./botrun";
 import { ladderJson, parseEntrants, parseRaces, printLadder, runLadder } from "./ladder";
 import { costReport, gameMap, printCost, printTrace, removeGameMap, replayRun, runMapInGame, traceReport } from "./trace";
 import { printRush, runRush, rushJson, unitByName } from "./rush";
@@ -66,7 +66,7 @@ import { editInEditor, type EditKind, type EditOutcome } from "./texteditor";
 import { checkModSource, printModCheck } from "./mod/check";
 import { diffModSources, printModDiff } from "./mod/diff";
 import { modInfo, printModInfo } from "./mod/info";
-import { newMod } from "./mod/new";
+import { newMod, parseTables } from "./mod/new";
 import { checkModAndMap, gameFilesOrNull, openMod, slowLine } from "./mod/open";
 import { sourceHash } from "./mod/hash";
 import { writeModHeader } from "./mod/header";
@@ -868,7 +868,7 @@ Exits 2 for a map with fewer than two start locations.`) + `
 
   map.command("balance").description(t("is the map fair to every start? games played over and over, a row a start location")).argument("<map>").addOption(json)
     .requiredOption("--bots <files>", t("one bot (it plays the game's computer) or two, comma separated; a race after a colon: mybot.scmbot:p"))
-    .option("--races <letters>", t("the races a side plays when it has none of its own: z, t, p and r (random)"), "r")
+    .option("--races <races>", t("the races a side plays when it has none of its own: letters of z, t, p and r (random) run together, or words with commas"), "r")
     .option("--games <n>", t("rounds: every pairing once a seed, seeds 1 to n"), "8")
     .option("--seeds <list>", t("the seeds to play, comma separated, in place of --games"))
     .option("--frames <n>", t("stop a game nobody has won after this many frames (24 a second)"), "30000")
@@ -1332,7 +1332,7 @@ written as the game had it: a bare .chk, or an archive like a new map's. Opens i
       if (piped && o.json) throw new CliError(t("--json and the map both want standard output"), t("Write the map to a file with --out, or leave --json off."), 2);
       if (!piped && existsSync(out) && !o.force) throw new CliError(t("{file} is there already", { file: out }), t("--force overwrites it, --out names another file."), 2);
       const r = await writeReplayMap(await loadReplayInput(input), out);
-      if (o.json) { print(JSON.stringify({ file: input.name, ...r }, null, 2)); return; }
+      if (o.json) { print(JSON.stringify({ file: input.path, ...r }, null, 2)); return; }
       say(piped, `${mark.ok} ${pc.bold(gameText(r.name) || pc.italic(t("Untitled")))}: ${r.width} × ${r.height}${dot}${t("from {file}", { file: input.name })}${dot}${t("written to {file}", { file: outName(r.written) })}${dot}${size(r.written.bytes)}`);
     });
   replay.command("share").description(t("a link to the replay on scmjs.dev, which anyone opens to watch it in the editor")).argument("<replay>", t("the replay, or - for standard input")).addOption(json)
@@ -1433,7 +1433,7 @@ made from the .webm with ffmpeg, when it is installed. The camera follows where 
         if (!asJson) { if (i) print(""); print(...lines); }
       } catch (e) {
         if (!(e instanceof CliError)) throw e;
-        if (asJson) results.push({ file: path, error: e.message }); else fail(e);
+        if (asJson) results.push({ file: path, path, error: e.message }); else fail(e);
         process.exitCode = Math.max(Number(process.exitCode ?? 0), e.exitCode);
       }
     }
@@ -1472,7 +1472,7 @@ play page. docs.scmjs.dev/mods has the folder's form.`));
       await eachMod(paths, !!o.json, async (path) => {
         // (a mod of hundreds of megabytes takes seconds to read and hash: said on standard error after a moment)
         const done = slowLine(pc.dim(t("Reading {mod} and working out its hash…", { mod: path })));
-        try { const source = await openMod(path, base); const r = modInfo(source, await sourceHash(source)); return { data: r, lines: printModInfo(r) }; } finally { done(); }
+        try { const source = await openMod(path, base); const r = modInfo(source, await sourceHash(source)); return { data: { file: path, ...r }, lines: printModInfo(r) }; } finally { done(); }
       });
     });
 
@@ -1551,26 +1551,31 @@ Exits 1 when there is an error.`))
       await eachMod(paths, !!o.json, async (path) => {
         const r = await checkModSource(await openMod(path, base), base);
         if (r.failed) process.exitCode = Math.max(Number(process.exitCode ?? 0), 1);
-        return { data: r, lines: printModCheck(r, { all: !!o.all }) };
+        return { data: { file: path, ...r }, lines: printModCheck(r, { all: !!o.all }) };
       });
     });
 
-  modCmd.command("diff").description(t("what changed between two mods, or what one changes in the game, as a changelog")).argument("<a>").argument("[b]", t("the other mod; with none, the game against <a>")).addOption(json)
+  modCmd.command("diff").description(t("what changed between two mods, or what one changes in the game, as a changelog")).argument("<a>", t("a mod: a folder, an .mpq, a mod's .exe, a .zip, or a folder mod unpack wrote")).argument("[b]", t("the other mod; with none, the game against <a>")).addOption(json)
     .option("--all", t("list every change; by default each kind is cut at 30"))
     .addOption(starcraftOption())
+    .addHelpText("after", "\n" + t("With two mods, exits 1 when they differ and 0 when they are the same, as map diff does; with one, 0 (what it changes in the game is the answer, not a difference found)."))
     .action(async (a: string, b: string | undefined, o: { json?: boolean; all?: boolean; starcraft?: string }) => {
       const base = await gameFilesOrNull(o.starcraft);
       const r = await diffModSources(await openMod(a, base), b ? await openMod(b, base) : null, base);
       print(...(o.json ? [JSON.stringify(r, null, 2)] : printModDiff(r, { all: !!o.all })));
+      if (b && !r.same) process.exitCode = Math.max(Number(process.exitCode ?? 0), 1);
     });
 
   modCmd.command("new").description(t("an empty mod folder: mod.json and a README")).argument("<folder>").addOption(json)
     .option("--name <name>", t("the mod's name (the folder's by default)"))
+    .option("--tables <names>", t("start from the game's own tables, as text from your copy of the game: units,weapons,… or all"))
     .option("--force", t("replace a mod folder that is there"))
-    .action(async (dir: string, o: { json?: boolean; name?: string; force?: boolean }) => {
-      const r = await newMod(dir, o.name, { force: o.force });
+    .addOption(starcraftOption())
+    .action(async (dir: string, o: { json?: boolean; name?: string; tables?: string; force?: boolean; starcraft?: string }) => {
+      const tables = o.tables === undefined ? undefined : parseTables(o.tables);
+      const r = await newMod(dir, o.name, { force: o.force, tables, base: tables ? await gameFilesOrNull(o.starcraft) : null });
       if (o.json) { print(JSON.stringify(r, null, 2)); return; }
-      print(`${mark.ok} ${t("{name}: {files} in {folder}", { name: pc.bold(r.name), files: r.files.join(", "), folder: pc.cyan(relative(process.cwd(), r.dir) || ".") })}`, pc.dim(`  ${t("Put the game's files you change under files/ at their paths, or start from a mod: scmjs mod unpack <mod> {folder}", { folder: dir })}`));
+      print(`${mark.ok} ${t("{name}: {files} in {folder}", { name: pc.bold(r.name), files: r.files.join(", "), folder: pc.cyan(relative(process.cwd(), r.dir) || ".") })}`, pc.dim(`  ${tables ? t("Edit the tables' text, then scmjs mod pack {folder}; more of the game's files go under files/ at their paths.", { folder: dir }) : t("Put the game's files you change under files/ at their paths, start from the game's tables with --tables units,weapons, or from a mod: scmjs mod unpack <mod> {folder}", { folder: dir })}`));
     });
 
   modCmd.command("build").description(t("check the folder, then pack it; a check error stops it")).argument("<folder>").addOption(json)
@@ -1657,7 +1662,7 @@ writes them into the .scmbot file, and the runners say whether the game is the m
         ]));
     });
 
-  modCmd.command("test").description(t("map test with the mod laid over the game")).argument("<mod>").argument("<map>").argument("[tests...]", t("tests files (JSON); <map>.tests.json beside the map by default")).addOption(json)
+  modCmd.command("test").description(t("map test with the mod laid over the game")).argument("<mod>", t("a mod: a folder, an .mpq, a mod's .exe, a .zip, or a folder mod unpack wrote")).argument("<map>", t("the map whose tests run")).argument("[tests...]", t("tests files (JSON); <map>.tests.json beside the map by default")).addOption(json)
     .option("--format <kind>", `${FORMATS.join(", ")}`, "text")
     .option("-o, --out <folder>", t("where the replays of failing scenarios go (<map>.tests/ beside the map)"))
     .option("--frames <n>", t("frames a scenario runs when it does not say (24 a second)"), "2400")
@@ -1716,7 +1721,7 @@ ${pc.dim(t("Guide: {url}", { url: BOT_GUIDE }))}`);
     .action(async () => { await runBot(["build"]); });
   bot.command("update").description(t("the newest toolchain, the one the play page expects"))
     .action(async () => { await updateBot(); });
-  bot.command("run").description(t("play the bot against the game's computers on a map, with no page")).argument("<bot>", t("a .scmbot file")).argument("<map>").addOption(json)
+  bot.command("run").description(t("play the bot against the game's computers on a map, with no page")).argument("<bot>", t("a .scmbot file")).argument("<map>", t("a map StarCraft itself opens: a .scm or .scx")).addOption(json)
     .option("--race <race>", t("the bot's race: zerg, terran, protoss or random"), "random")
     .option("--opponents <races>", t("the game's computers, a race each (zerg,terran)"), "zerg")
     .option("--seed <n>", t("the game's seed; the same seed, bot and map give the same game"))
@@ -1746,18 +1751,20 @@ the command stops and says which version it needs.`))
           mod: overlay, game: o.ums ? "ums" : o.melee ? "melee" : undefined,
         });
       } finally { overlay?.remove(); }
-      if (o.json) print(JSON.stringify({ bot: botFile, map, ...r }, null, 2));
+      // (the mod as mod test's JSON has it, at the top: its name and hash, from what the game ran)
+      if (o.json) print(JSON.stringify({ bot: botFile, map, ...(o.mod ? { mod: r.start?.code ? { name: r.start.code.name, hash: r.start.code.hash } : null } : {}), ...r }, null, 2));
       if (r.exitCode) process.exitCode = r.exitCode;
     });
 
   bot.command("ladder").description(t("a round robin of bots and the game's computer over maps: a table, Elo and every replay"))
     .argument("<bots...>", t("bots (.scmbot files) and computer; a race after a colon: mybot.scmbot:p, computer:t")).addOption(json)
     .requiredOption("--maps <maps...>", t("the maps to play on"))
-    .option("--races <letters>", t("the races a side plays when it has none of its own: z, t, p and r (random)"), "r")
+    .option("--races <races>", t("the races a side plays when it has none of its own: letters of z, t, p and r (random) run together, or words with commas"), "r")
     .option("--games <n>", t("games of each pairing on each map, in each race, a seed each (1, 2, 3, …)"), "1")
     .option("--seeds <list>", t("the seeds to play, comma separated, in place of --games"))
     .option("--frames <n>", t("stop a game nobody has won after this many frames (24 a second)"), "50000")
     .option("-o, --out <folder>", t("where the replays and ladder.json go (default: ladder-<date>-<time> here)"))
+    .option("--force", t("take out the replays and ladder.json of an earlier ladder in --out first"))
     .option("--data <folder>", t("where each bot keeps its files between games (default: the ladder's folder)"))
     .option("--parallel <n>", t("games played at once"), "1")
     .option("--timeout <seconds>", t("how long a bot may think over one frame before it counts as hung (the first frame: 5 minutes at least)"), "60")
@@ -1775,12 +1782,10 @@ ladder's folder for scmjs replay watch. Exits 1 when a game could not be played 
   scmjs bot ladder a.scmbot b.scmbot c.scmbot --maps maps/*.scx --frames 30000
   scmjs bot ladder cosmo.scmbot:t other.scmbot:t --maps "(4)Exodus 1.0.scx" --mod "Cosmonarchy BW"` + "\n\n" + t(`--mod needs a play page whose engine runs a mod's code ("mods": 2 in its engine/current.json); with an older one
 the command stops and says which version it needs.`))
-    .action(async (specs: string[], o: { json?: boolean; maps: string[]; races: string; games: string; seeds?: string; frames: string; out?: string; data?: string; parallel: string; timeout: string; mod?: string; ums?: boolean; melee?: boolean; starcraft?: string; engine?: string }) => {
+    .action(async (specs: string[], o: { json?: boolean; maps: string[]; races: string; games: string; seeds?: string; frames: string; out?: string; force?: boolean; data?: string; parallel: string; timeout: string; mod?: string; ums?: boolean; melee?: boolean; starcraft?: string; engine?: string }) => {
       if (o.ums && o.melee) throw new CliError(t("--ums and --melee: one kind of game"), null, 2);
       const races = parseRaces(o.races);
-      const count = (v: string, name: string, least = 1) => { const n = Number(v); if (!Number.isInteger(n) || n < least) throw new CliError(t("--{flag} {value} is not a whole number of {least} or more", { flag: name, value: v, least }), null, 2); return n; };
-      const games = count(o.games, "games");
-      const seeds = o.seeds ? o.seeds.split(",").map((x) => x.trim()).filter(Boolean).map((x) => count(x, "seeds", 0)) : Array.from({ length: games }, (_, k) => k + 1);
+      const { seeds, frames, parallel, timeout } = ladderValues(o);
       const entrants = parseEntrants(specs, races);
       const say = (l: string) => (o.json ? process.stderr.write(l + "\n") : print(l));
       // A map in the original 1.00 form is played as Brood War (as map trace does), so that its replays play back.
@@ -1799,7 +1804,7 @@ the command stops and says which version it needs.`))
       let r;
       try {
         r = await runLadder(entrants, {
-          maps: o.maps, play, races, seeds, frames: count(o.frames, "frames"), out: o.out, data: o.data, parallel: count(o.parallel, "parallel"), timeout: count(o.timeout, "timeout"),
+          maps: o.maps, play, races, seeds, frames, out: o.out, force: o.force, data: o.data, parallel, timeout,
           starcraft: o.starcraft, engine: o.engine, live: say, mod: overlay, game: o.ums ? "ums" : o.melee ? "melee" : undefined, gameOf,
         });
       } finally { for (const p of play.values()) removeGameMap(p); overlay?.remove(); }

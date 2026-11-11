@@ -224,8 +224,12 @@ scmjs mod unpack MyMod.mpq mymod
   Names          from the mod's string tables
 ```
 
-`--palette badlands` draws the sheets in another tileset's palette. Unpacking over an
-earlier unpack replaces its folders and leaves anything you added beside them.
+`--palette badlands` draws the sheets in another tileset's palette. The folder is the
+mod's source from then on, so unpacking into a folder an earlier unpack wrote stops rather
+than write over your edits. `--force` replaces that folder whole: nothing of it is kept
+but its dot files and folders, such as `.git`, so no file of the old release lingers in
+the new. The races the old folder's `mod.json` named are kept. A folder that holds
+something other than a mod folder is refused either way; an empty one is fine.
 
 ### Back into an MPQ
 
@@ -300,14 +304,23 @@ writes `mod.json` and a README of one paragraph. Put the game's files you change
 `files/` at their paths (`files/arr/units.dat`), or the texts in their folders, and pack.
 Starting from an existing mod is `mod unpack`.
 
+```sh
+scmjs mod new mymod --tables units,weapons
+```
+
+starts it with the game's own tables, read from your copy of StarCraft and written as text
+as `mod unpack` writes a mod's (`tables/units.txt`, with the game's names beside each
+entry); `--tables all` writes all eleven. As they are they pack back into the game's own
+bytes, so the mod changes nothing until you edit them.
+
 ### Check, then pack
 
 ```sh
 scmjs mod build mymod -o MyMod.mpq
 ```
 
-runs `mod check` and, when it finds no error, `mod pack` with the same options. `--force`
-packs anyway.
+runs `mod check` and, when it finds no error, `mod pack` with the same options.
+`--ignore-errors` packs anyway (`--force`, its old name, still works).
 
 ### Playing it
 
@@ -331,6 +344,9 @@ press Start Game; `--start` starts it at once. `--race` sets the bot's race: zer
 protoss or random, or a race the mod's `mod.json` [names](#races-a-mod-adds), by its name
 or its number. The page's own bots need a scmjs.dev account, and the page asks you to sign
 in; a file of your own does not.
+
+With `BROWSER=none` no browser is opened: the command prints the address to open, and
+waits for it.
 
 ### The mod's hash
 

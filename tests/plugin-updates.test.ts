@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createStore } from "jotai";
 import { installedPluginsAtom, pluginManifestCacheAtom, pluginRuntimesAtom, pluginUpdateCheckAtom, pluginUpdatesAtom, type PluginRuntime } from "../src/atoms/pluginAtoms";
 import { RECHECK_MS } from "../src/editor/updates";
-import { defaultPlugins, pluginKey, updateAddress } from "../src/plugins/defaults";
+import { defaultPlugins, isLocalBuiltin, pluginKey, updateAddress } from "../src/plugins/defaults";
 import type { UpdateCheck } from "../src/plugins/host";
 import { unpin, type PluginPreview } from "../src/plugins/loader";
 import { parseRegistry, type Registry } from "../src/plugins/registry";
@@ -77,7 +77,7 @@ describe("plugin updates from the registries", () => {
   });
 
   it("matches a bundled default to its registry entry and asks at the address it was built from", () => {
-    const shipped = defaultPlugins().find((d) => d.spec.startsWith("builtin:"));
+    const shipped = defaultPlugins().find((d) => d.spec.startsWith("builtin:") && !isLocalBuiltin(d.spec));
     if (!shipped) return; // no vendored copies in this checkout
     const key = shipped.spec.slice("builtin:".length);
     const reg = registry({ spec: `github:scm-js/plugin-${key}`, name: key, version: "99.0.0" });
@@ -134,7 +134,7 @@ describe("plugin update pass", () => {
   const mine = "github:me/plugin-mine@v0.3.0";
   const listed = [
     { spec: "github:scm-js/plugin-paint", name: "Paint", version: "1.1.0" },
-    ...defaultPlugins().map((d) => ({ spec: unpin(updateAddress(d.spec)!), name: d.spec, version: "0.0.1" })),
+    ...defaultPlugins().filter((d) => !isLocalBuiltin(d.spec)).map((d) => ({ spec: unpin(updateAddress(d.spec)!), name: d.spec, version: "0.0.1" })),
   ];
   const setup = () => {
     const store = createStore();
@@ -209,7 +209,7 @@ describe("checking and updating every plugin on request", () => {
   const mine = "github:me/plugin-mine@v0.3.0";
   const listed = [
     { spec: "github:scm-js/plugin-paint", name: "Paint", version: "1.1.0" },
-    ...defaultPlugins().filter((d) => d.spec !== paint).map((d) => ({ spec: unpin(updateAddress(d.spec)!), name: d.spec, version: "0.0.1" })),
+    ...defaultPlugins().filter((d) => d.spec !== paint && !isLocalBuiltin(d.spec)).map((d) => ({ spec: unpin(updateAddress(d.spec)!), name: d.spec, version: "0.0.1" })),
   ];
   const setup = (opts: { needsApi?: number } = {}) => {
     const store = createStore();

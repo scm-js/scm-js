@@ -20,6 +20,8 @@
  */
 import type { PluginManifest } from "./api";
 import type { BuiltinPlugin } from "./loader";
+import agentManifest from "../agent/plugin.json";
+import agentIcon from "../agent/icon.svg?url";
 
 const modules = import.meta.glob("../../plugins/*/plugin.ts");
 const manifests = import.meta.glob("../../plugins/*/plugin.json", { eager: true, import: "default" }) as Record<string, PluginManifest>;
@@ -47,3 +49,12 @@ for (const [path, load] of Object.entries(modules)) {
   const { build: _build, ...rest } = manifest;
   BUILTIN_PLUGINS[name] = { manifest: { ...rest, entry: "plugin.ts" }, iconUrl, load: load as () => Promise<unknown> };
 }
+
+// The Claude Agent, a built-in kept in `src/agent` (tracked, and type-checked with the
+// editor) rather than in the generated `plugins/` directory. It was not vendored from
+// anywhere, so `defaults.ts` lists it after the defaults and starts it on.
+BUILTIN_PLUGINS["claude-agent"] = {
+  manifest: { ...(agentManifest as PluginManifest), entry: "plugin.ts" },
+  iconUrl: agentIcon,
+  load: () => import("../agent/plugin"),
+};

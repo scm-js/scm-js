@@ -47,8 +47,8 @@ import { buildOrders, checkPlayedMod, refuseModReplay, replayNamer, type ReplayN
 import { SCMSCX, scmscx } from "./scmscx";
 import { checkMapOut, mapFileFor, writeReplayMap } from "./replaymap";
 import { printReplayShare, shareReplay } from "./replayshare";
-import { exportReplay, exportSummary, type ExportOptions } from "./export";
-import { parseClock, watchReplay, watchSummary } from "./watch";
+import { exportReplay, exportSummary, parseSize as parseClipSize, type ExportOptions } from "./export";
+import { watchReplay, watchSummary, watchValues } from "./watch";
 import { FORMATS, githubAnnotations, githubCoverageAnnotations, githubTestAnnotations, junitCoverageXml, junitTestXml, junitXml, sarifCoverageJson, sarifJson, sarifTestJson, type CheckReport, type Format, type TestReport } from "./report";
 import { coverageForm, coverageJson, coverageScenario, printCoverage, runCoverage } from "./coverage";
 import { defaultOut, defaultTests, readMapForTests, readTests, recordLines, recordTest, runTests, testHeader, testJson, testSummary, updateTests, type PlannedScenario } from "./maptest";
@@ -1355,28 +1355,25 @@ card shows the map's picture when your copy of the game is here to draw it.`) + 
     .addOption(new Option("--editor <url>", t("the editor's address (SCMJS_EDITOR_URL)")).hideHelp())
     .action(async (file: string, o: { browser?: boolean; editor?: string }) => { const input = await readInput(file); expectKind(input, "replay"); await openInScmjs(input, o); });
   replay.command("watch").description(t("play a replay in the terminal: the minimap, each player's figures, the chat")).argument("<replay>").addOption(json)
-    .option("--speed <x>", t("how fast, against the game's Fastest (24 frames a second)"), "8")
+    .option("--speed <x>", t("how fast, against the game's Fastest (24 frames a second); in a terminal"), "8")
     .option("--from <m:ss>", t("start the game here"))
-    .option("--size <WxH>", t("the picture's size in characters; as much of the terminal as the map fills by default"))
-    .option("--every <frames>", t("frames between lines when the output is not a terminal"), "1440")
+    .option("--cells <WxH>", t("the picture's size in characters, in a terminal; as much of it as the map fills by default"))
+    .addOption(new Option("--size <WxH>").hideHelp())
+    .option("--every <frames>", t("into a pipe or a file: frames between lines, 0 for none; a line a minute of the game's clock by default"))
     .option("--starcraft <folder>", t("your installation of StarCraft (SCMJS_STARCRAFT); found in the usual places otherwise"))
     .addOption(new Option("--engine <where>", t("the play page's address, or a folder holding the engine (SCMJS_PLAY_URL)")).hideHelp())
-    .addHelpText("after", "\n" + t(`The game is the play page's engine, fetched once (about 25 MB) and kept; the game's own files come from your copy of
-StarCraft, Remastered or 1.16.1. The replay plays as the game plays it, drawn as a minimap: a dot a unit in its
-player's colour, buildings as blocks, resources dim. Keys: space pauses, + and - change the speed, q stops. Into a
-pipe or a file it prints a line per minute of game instead (--every), or JSON lines with --json.`))
-    .action(async (file: string, o: { json?: boolean; speed: string; from?: string; size?: string; every: string; starcraft?: string; engine?: string }) => {
+    .addHelpText("after", "\n" + t(`The game is the play page's engine, fetched once and kept; the game's own files come from your copy of StarCraft,
+Remastered or 1.16.1. The replay plays as the game plays it, drawn as a minimap: a dot a unit in its player's colour,
+buildings as blocks, resources dim. Keys: space pauses, + and - change the speed, q stops. Into a pipe or a file it
+prints a line at each minute of the game's clock instead (1:00, 2:00, …; --every for another step), every player's
+figures on it, or JSON lines with --json; it then goes as fast as the game plays, and --speed and --cells, which are
+for a terminal, do nothing.`))
+    .action(async (file: string, o: { json?: boolean; speed: string; from?: string; cells?: string; size?: string; every?: string; starcraft?: string; engine?: string }) => {
       const input = await readInput(file);
       expectKind(input, "replay");
       const replay = await loadReplayInput(input);
       refuseModReplay(replay, input.name, "replay watch");
-      const speed = Number(o.speed);
-      if (!(speed > 0 && speed <= 64)) throw new CliError(t("--speed takes a number from 0.25 to 64, not \"{value}\"", { value: o.speed }), null, 2);
-      const every = Number(o.every);
-      if (!Number.isInteger(every) || every < 1) throw new CliError(t("--every takes a number of frames, not \"{value}\"", { value: o.every }), null, 2);
-      let size: { cols: number; rows: number } | undefined;
-      if (o.size) { const m = /^(\d+)x(\d+)$/i.exec(o.size); if (!m || Number(m[1]) < 8 || Number(m[2]) < 4) throw new CliError(t("--size takes WxH in characters, 8x4 or more, not \"{value}\"", { value: o.size }), null, 2); size = { cols: Number(m[1]), rows: Number(m[2]) }; }
-      const r = await watchReplay(input, replay, { speed, from: o.from ? parseClock(o.from) : undefined, size, every, json: !!o.json, starcraft: o.starcraft, engine: o.engine });
+      const r = await watchReplay(input, replay, { ...watchValues(replay, o), json: !!o.json, starcraft: o.starcraft, engine: o.engine });
       if (!o.json) print(watchSummary(input, r));
     });
 
@@ -1386,9 +1383,11 @@ pipe or a file it prints a line per minute of game instead (--every), or JSON li
     .option("--to <m:ss>", t("where it ends (the game's end by default)"))
     .option("--follow <player>", t("keep the camera on a player's play: a name, or a number as replay info lists them (the first person by default)"))
     .option("--at <x,y>", t("hold the camera on this tile"))
-    .option("--all", t("show the whole map, scaled to fit"))
+    .option("--whole-map", t("show the whole map, scaled to fit"))
+    .addOption(new Option("--all").hideHelp())
     .option("--speed <x>", t("game speed against Fastest (1 is the game's own pace)"), "1")
-    .option("--size <WxH>", t("the clip's size in pixels (1280x720; a GIF 640x360)"))
+    .option("--resolution <WxH>", t("the clip's size in pixels, each side even (1280x720; a GIF 640x360)"))
+    .addOption(new Option("--size <WxH>").hideHelp())
     .option("--fps <n>", t("pictures a second (24; a GIF 12)"))
     .option("--starcraft <folder>", t("your installation of StarCraft (SCMJS_STARCRAFT); found in the usual places otherwise"))
     .option("--browser <path>", t("the browser to draw with (SCMJS_BROWSER); Chrome, Chromium or Edge, found in the usual places otherwise"))
@@ -1399,18 +1398,21 @@ so the clip plays at the speed asked whatever the computer's pace. A .webm or a 
 made from the .webm with ffmpeg, when it is installed. The camera follows where the player's army is and fights.`) + `
   scmjs replay export game.rep --from 4:30 --to 5:00
   scmjs replay export game.rep --out fight.mp4 --follow 2 --from 12:10 --to 12:40
-  scmjs replay export game.rep --out game.gif --all --speed 16`)
+  scmjs replay export game.rep --out game.gif --whole-map --speed 16`)
     .action(async (file: string, o: ExportOptions & { json?: boolean }) => {
       const input = await readInput(file);
       expectKind(input, "replay");
       const replay = await loadReplayInput(input);
       refuseModReplay(replay, input.name, "replay export");
-      const tty = !!process.stderr.isTTY && !o.json;
+      // (an odd side is made even, which a video needs: said, as the clip is not the size asked)
+      const asked = o.resolution ?? o.size;
+      if (asked) { const s = parseClipSize(asked); if (s.rounded) process.stderr.write(`${mark.warn} ${t("--resolution {asked} is made {width}x{height}: a video's sides are even.", { asked, width: s.width, height: s.height })}\n`); }
+      const tty = !!process.stderr.isTTY;
       let shown = 0;
+      // (progress is standard error in every mode, --json too: a line in place in a terminal, else one every ten seconds or so)
       const r = await exportReplay(input, replay, o, (line, done) => {
         if (tty) process.stderr.write(`\r\x1b[2K${line}${done ? "\n" : ""}`);
-        // (Into a file or a pipe, a line every ten seconds or so, not a line a picture.)
-        else if (!o.json && (done || Date.now() - shown > 10_000)) { shown = Date.now(); process.stderr.write(`${visible(line)}\n`); }
+        else if (done || Date.now() - shown > 10_000) { shown = Date.now(); process.stderr.write(`${visible(line)}\n`); }
       });
       if (tty) process.stderr.write("\r\x1b[2K");
       if (o.json) print(JSON.stringify(r, null, 2));

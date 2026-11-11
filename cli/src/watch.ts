@@ -18,6 +18,8 @@ import { ensureEngine, findGameCopy, runnerFor, startRunner } from "./engine";
 import type { Input } from "./files";
 import { t, translate } from "./i18n";
 import { CliError, columns, dot, duration, gameText, mark, num, pc, truecolor, unicode, visible } from "./ui";
+import { debug, plainReason, plainRunnerError } from "./runnerwords";
+import { parseWhole } from "./values";
 
 /* ── The runner's lines (scm-sim's src/exact/runReplay.ts) ──────────── */
 
@@ -282,6 +284,14 @@ export function parseClock(spec: string, option = "--from"): number {
 
 /* ── Watching ───────────────────────────────────────────────── */
 
+/** Frames between the runner's lines in a line-a-minute watch: half a second of the game, so no minute is stepped over. */
+export const MINUTE_STEP = 12;
+/** A frame's time on the game's clock in whole seconds, as `clock` rounds it. */
+export const clockSeconds = (frame: number) => Math.round((frame * FRAME_MS) / 1000);
+
+/** What to do when the game would not play a replay. */
+const WATCH_HINT = () => t("The game needs a replay StarCraft itself plays and your own copy of the game (scmjs doctor checks it). SCMJS_DEBUG=1 shows the game's own words.");
+
 export interface WatchOptions {
   /** 1 is the game's Fastest, 24 frames a second; 8 by default. */
   speed?: number;
@@ -289,7 +299,10 @@ export interface WatchOptions {
   from?: number;
   /** The picture's cells; the terminal's size by default. */
   size?: { cols: number; rows: number };
-  /** Frames between lines when not drawing (a pipe); 1,440 (a minute of game) by default. */
+  /**
+   * Frames between lines when not drawing (a pipe); 0 for none. By default a line each minute of the game's clock, at
+   * 1:00, 2:00 and on (a minute is not a whole number of frames: 1,428 4/7).
+   */
   every?: number;
   json?: boolean;
   starcraft?: string;
@@ -367,7 +380,10 @@ export async function watchReplay(input: Input, replay: Replay, o: WatchOptions 
   const paced = tty && !o.json;
   const args = [resolve(input.path), "--engine", engine.dir, "--starcraft", game.folder];
   if (o.from) args.push("--from", String(o.from));
-  if (!paced) args.push("--every", String(o.every ?? 1440));
+  // (a line each minute: the runner is asked every half second of the game, and the first frame whose clock reads the
+  // next whole minute is said; 0: none at all, the runner asked past the end)
+  const minutes = o.every === undefined;
+  if (!paced) args.push("--every", String(minutes ? MINUTE_STEP : o.every === 0 ? Math.max(replay.header.frames, replay.commands.at(-1)?.frame ?? 0) + 1 : o.every));
   let speed = o.speed ?? 8;
   const fps = o.fps ?? 12;
   const starting = pc.dim(`${t("Starting the game")}${dot}${game.kind === "remastered" ? t("Remastered files") : t("1.16.1 files")}${dot}${pc.cyan(input.name)}`);
@@ -376,10 +392,12 @@ export async function watchReplay(input: Input, replay: Replay, o: WatchOptions 
   const first = await r.next();
   if (!first || first.kind !== "start") {
     await r.exit();
-    if (first?.kind === "error") throw new CliError(first.message, t("The runner is scm-sim's; a replay the game itself plays and your own copy of the game are what it needs."));
-    throw new CliError(`${t("The game did not start: the runner stopped without a word.")}${r.stderr.trim() ? `\n${r.stderr.trim().split("\n").slice(-6).join("\n")}` : ""}`);
+    if (first?.kind === "error") throw new CliError(plainRunnerError(first.message), WATCH_HINT(), 2);
+    throw new CliError(`${t("The game did not start: it stopped without a word.")}${debug() && r.stderr.trim() ? `\n${r.stderr.trim().split("\n").slice(-6).join("\n")}` : ""}`, WATCH_HINT(), 2);
   }
   const start = first;
+  // (the runner names the map by the replay's file: the map's own name is the replay's)
+  start.map = { ...start.map, name: replay.header.mapName || start.map.name };
   const sides = sidesOf(start, replay);
   const tally = new Tally(replay, sides);
   const outcome: WatchOutcome = { engine: { build: engine.build, dir: engine.dir, fetched: engine.fetched }, start, end: null, pictures: 0, frame: 0, stopped: false, sides };
@@ -395,17 +413,21 @@ export async function watchReplay(input: Input, replay: Replay, o: WatchOptions 
   };
 
   if (!paced) {
+    let minute = Math.floor(clockSeconds(o.from ?? 0) / 60);
     for (let l = await r.next(); l; l = await r.next()) {
       if (l.kind === "frame") {
+        outcome.frame = l.frame;
+        if (o.every === 0) continue;
+        if (minutes) { const m = Math.floor(clockSeconds(l.frame) / 60); if (m <= minute) continue; minute = m; }
         const v = view(l);
         outcome.pictures++; outcome.frame = l.frame;
         if (o.json) out(JSON.stringify({ kind: "frame", frame: l.frame, clock: clock(l.frame), players: sides.map((s, k) => { const p = l.players[k], at = v.left?.[k] ?? null; return { slot: s.slot, name: s.name, race: s.race, minerals: p[0], gas: p[1], supplyUsed: p[2], supplyAvailable: p[3], units: p[4], apm: v.apm[k], ...(at === null ? {} : { left: at }) }; }), chat: said.map(({ frame, name, text }) => ({ frame, name, text })), units: l.units }) + "\n");
         else { for (const c of said) out(`${pc.dim(clock(c.frame).padStart(5))}  ${gameText(c.name)}${pc.dim(":")} ${gameText(c.text)}\n`); out(summaryLine(v) + "\n"); }
-      } else if (l.kind === "end") { outcome.end = l; if (o.json) out(JSON.stringify(l) + "\n"); }
-      else if (l.kind === "error") { await r.exit(); throw new CliError(l.message); }
+      } else if (l.kind === "end") { l.reason = plainReason(l.reason); outcome.end = l; outcome.frame = Math.max(outcome.frame, l.frame); if (o.json) out(JSON.stringify(l) + "\n"); }
+      else if (l.kind === "error") { await r.exit(); throw new CliError(plainRunnerError(l.message), WATCH_HINT()); }
     }
     await r.exit();
-    if (!outcome.end) throw new CliError(`${t("The game did not finish: the runner stopped without a result.")}${r.stderr.trim() ? `\n${r.stderr.trim().split("\n").slice(-6).join("\n")}` : ""}`);
+    if (!outcome.end) throw new CliError(`${t("The game did not finish: it stopped without a result.")}${debug() && r.stderr.trim() ? `\n${r.stderr.trim().split("\n").slice(-6).join("\n")}` : ""}`, WATCH_HINT());
     return outcome;
   }
 
@@ -448,10 +470,10 @@ export async function watchReplay(input: Input, replay: Replay, o: WatchOptions 
       r.step(Math.max(1, Math.round((24 * speed) / fps)));
       l = await r.next();
     }
-    if (l && l.kind === "error") throw new CliError(l.message);
+    if (l && l.kind === "error") throw new CliError(plainRunnerError(l.message), WATCH_HINT());
     if (quit) { outcome.stopped = true; r.stop(); l = await r.next(); while (l && l.kind !== "end") l = await r.next(); }
-    if (l && l.kind === "end") outcome.end = l;
-    else if (!quit) { r.stop(); for (let e = await r.next(); e; e = await r.next()) if (e.kind === "end") { outcome.end = e; break; } }
+    if (l && l.kind === "end") { l.reason = plainReason(l.reason); outcome.end = l; }
+    else if (!quit) { r.stop(); for (let e = await r.next(); e; e = await r.next()) if (e.kind === "end") { e.reason = plainReason(e.reason); outcome.end = e; break; } }
   } finally {
     out("\x1b[?25h");
     if (keys) { keys.off("data", onKey); if (raw) keys.setRawMode(false); keys.pause(); }
@@ -459,6 +481,28 @@ export async function watchReplay(input: Input, replay: Replay, o: WatchOptions 
     await r.exit();
   }
   return outcome;
+}
+
+/**
+ * `replay watch`'s options read as values, each refused with exit 2 before the game starts: `--speed` from 0.25 to 64,
+ * `--from` a time before the replay's end, `--cells` (`--size`, its old name) at least 8 × 4, `--every` a whole
+ * number of frames (0: no lines).
+ */
+export function watchValues(replay: Replay, o: { speed: string; from?: string; cells?: string; size?: string; every?: string }): Pick<WatchOptions, "speed" | "from" | "size" | "every"> {
+  const speed = Number(o.speed);
+  if (!(speed >= 0.25 && speed <= 64)) throw new CliError(t("--speed takes a number from 0.25 to 64, not \"{value}\"", { value: o.speed }), null, 2);
+  const every = o.every === undefined ? undefined : parseWhole(o.every, "every");
+  const cells = o.cells ?? o.size;
+  let size: { cols: number; rows: number } | undefined;
+  if (cells) {
+    const m = /^(\d+)x(\d+)$/i.exec(cells.trim());
+    if (!m || Number(m[1]) < 8 || Number(m[2]) < 4) throw new CliError(t("--cells takes WxH in characters, 8x4 or more, not \"{value}\"", { value: cells }), null, 2);
+    size = { cols: Number(m[1]), rows: Number(m[2]) };
+  }
+  const frames = Math.max(replay.header.frames, replay.commands.at(-1)?.frame ?? 0);
+  const from = o.from ? parseClock(o.from, "--from") : undefined;
+  if (from !== undefined && from >= frames) throw new CliError(t("--from {from} is past the replay's end ({end})", { from: o.from!, end: duration(frames * FRAME_MS) }), null, 2);
+  return { speed, from, size, every };
 }
 
 /** The line after the picture: how far it went, and how the game kept to the replay. */

@@ -18,6 +18,8 @@ const SPEEDS = [msg("Slowest"), msg("Slower"), msg("Slow"), msg("Normal"), msg("
 const FORMATS = { legacy: msg("1.16 or earlier"), "1.18": msg("Remastered (1.18 to 1.20)"), "1.21": msg("Remastered (1.21 or later)") };
 
 export interface ReplayReport {
+  /** The path as it was typed (an entry that failed is `{ file: <path>, error }`, its `file` the same path). */
+  path: string;
   file: { name: string; bytes: number };
   format: string;
   engine: "StarCraft" | "Brood War";
@@ -76,6 +78,7 @@ export function replayReport(input: Input, rep: Replay, races: readonly DataSetR
     map = { ...map, width: scn.width, height: scn.height, tileset: TILESETS[tilesetIndex(scn)]?.name ?? null, version: MAP_VERSIONS[mapVersionOf(scn.fileVersion)].label };
   } catch { /* the header's own size stands */ }
   return {
+    path: input.path,
     file: { name: input.name, bytes: input.bytes.length },
     format: FORMATS[rep.format], engine: h.engine === 1 ? "Brood War" : "StarCraft",
     // (a replay the engine wrote has no real time in it — a second past 1970 —, which is no time a game was played)

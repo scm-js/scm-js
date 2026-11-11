@@ -158,7 +158,7 @@ export function launchBrowser(path: string, size: { width: number; height: numbe
   toBrowser.on("error", () => { /* it went: said by `exited` */ });
   const exited = new Promise<number | null>((resolve) => {
     child.once("error", (e) => { cdp.close(new CliError(t("{path} could not be started ({reason}).", { path, reason: e.message }), translate(NO_BROWSER))); resolve(null); });
-    child.once("exit", (code) => { cdp.close(new CliError(code ? t("The browser stopped (exit code {code}).", { code }) : t("The browser stopped."), said.trim().split("\n").slice(-3).join("\n") || null)); resolve(code); });
+    child.once("exit", (code) => { cdp.close(new CliError(code ? t("The browser stopped (exit code {code}).", { code }) : t("The browser stopped."), stoppedHint(path, said), 2)); resolve(code); });
   });
   let stopping: Promise<void> | null = null;
   const stop = () => stopping ??= (async () => {
@@ -170,4 +170,13 @@ export function launchBrowser(path: string, size: { width: number; height: numbe
     rmSync(profile, { recursive: true, force: true });
   })();
   return { cdp, process: child, exited, stop };
+}
+
+/**
+ * What to do when the browser stopped: `scmjs doctor` and `--browser`. What the browser said (a crash's register dump,
+ * often) only with `SCMJS_DEBUG`.
+ */
+function stoppedHint(path: string, said: string): string {
+  const hint = t("{path} did not keep running here. scmjs doctor says whether a browser is found and starts; --browser (SCMJS_BROWSER) names another.", { path });
+  return process.env.SCMJS_DEBUG && said.trim() ? `${hint}\n${said.trim().split("\n").slice(-3).join("\n")}` : hint;
 }

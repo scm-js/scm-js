@@ -78,7 +78,7 @@ export async function loadReplayInput(input: Input): Promise<Replay> {
   try {
     return await parseReplay(input.bytes);
   } catch (e) {
-    throw new CliError(t("{name} is not a replay this can read: {reason}", { name: input.name, reason: e instanceof Error ? e.message : String(e) }));
+    throw new CliError(t("{name} is not a replay this can read: {reason}", { name: input.name, reason: e instanceof Error ? e.message : String(e) }), null, 2);
   }
 }
 

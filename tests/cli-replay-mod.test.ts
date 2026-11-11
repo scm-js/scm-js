@@ -16,6 +16,7 @@ import { dataSetHash } from "../src/formats/mod/sources";
 import { printReplayInfo, replayReport } from "../cli/src/replay";
 import { buildOrders, checkPlayedMod, modReplayReason, refuseModReplay, replayNamer } from "../cli/src/replaymod";
 import { CliError, visible } from "../cli/src/ui";
+import { loadReplayInput } from "../cli/src/files";
 import { modOverlay, modTag } from "../cli/src/mod/overlay";
 import { openMod } from "../cli/src/mod/open";
 import { tagModReplay } from "../cli/src/ladder";
@@ -138,6 +139,14 @@ describe("scmjs replay info and a replay's mod", () => {
   it("says a bad --starcraft rather than leaving the costs out in silence", async () => {
     const e = await replayNamer(await parseReplay(plain()), "game.rep", { starcraft: join(dir, "no-such-copy"), costs: true, warn: quiet }).catch((x) => x);
     expect(e).toBeInstanceOf(CliError);
+  });
+
+  it("refuses a replay cut short as a file it cannot read, exit 2", async () => {
+    const whole = plain();
+    const e = await loadReplayInput(input(whole.subarray(0, Math.floor(whole.length / 2)), "cut.rep")).catch((x) => x);
+    expect(e).toBeInstanceOf(CliError);
+    expect(e.message).toMatch(/^cut\.rep is not a replay this can read/);
+    expect(e.exitCode).toBe(2);
   });
 
   it("heads a team game by its sides, and leaves out a time no game was played at", async () => {

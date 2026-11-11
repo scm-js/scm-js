@@ -29,3 +29,12 @@ export function plainRunnerError(message: string): string {
   return text || t("the game stopped");
 }
 
+
+/**
+ * Why a replay's game ended, as a person reads it: a reason in the engine's own words (the frame loop, a reason word
+ * at an address) is "the game ended"; one in plain words stays. With `SCMJS_DEBUG`, as the runner said it.
+ */
+export function plainReason(reason: string | null): string | null {
+  if (reason === null || debug()) return reason;
+  return /0x[0-9a-f]{4,}|reason word|frame loop|stack words|\.dll!/i.test(reason) ? t("the game ended") : reason;
+}

@@ -12,6 +12,7 @@ import { afterAll, describe, expect, it } from "vitest";
 import { botRunValues, cacheRoot, checkBotGame, gameKind, looksLikeMapSettings, ensureEngine, findGameCopy, gameCopyKind, plainRunnerError, runBotGame, usualGameFolders, wordLine, type EndLine } from "../cli/src/botrun";
 import { TEST_MAPS_DIR } from "./support/maps";
 import { CliError, visible } from "../cli/src/ui";
+import { checkBotFolder } from "../cli/src/bot";
 
 const tmp = () => mkdtempSync(join(tmpdir(), "scmjs-botrun-"));
 
@@ -211,6 +212,18 @@ describe("scmjs bot run", () => {
     expect(looksLikeMapSettings({ ...melee, units: [...melee.units, { owner: 1, unitId: 0 }] })).toBe(true);
   });
 
+  it("says a missing licence file before the toolchain starts", () => {
+    const dir = tmp();
+    writeFileSync(join(dir, "scmbot.json"), JSON.stringify({ key: "b", license: "LICENSE" }));
+    const e = (() => { try { checkBotFolder(dir); } catch (x) { return x as CliError; } })();
+    expect(e).toBeInstanceOf(CliError);
+    expect(e!.message).toBe("scmbot.json names LICENSE as the bot's licence, and there is no LICENSE here.");
+    expect(e!.exitCode).toBe(2);
+    writeFileSync(join(dir, "LICENSE"), "MIT");
+    expect(() => checkBotFolder(dir)).not.toThrow();
+    expect(() => checkBotFolder(tmp())).not.toThrow();
+  });
+
   it("says the runner's error without the game's insides", () => {
     delete process.env.SCMJS_DEBUG;
     expect(plainRunnerError("the game did not take this map (it opens only a map StarCraft itself opens: a whole .scm or .scx): no stand-in for kernel32.dll!LoadLibraryA (called from 0x1501E69D; stack words 15052680 0 0 3002007c)"))
@@ -218,6 +231,9 @@ describe("scmjs bot run", () => {
     expect(plainRunnerError("the game stopped reading its startup data again: neither the mod nor the game has unit\\zerg\\avenger.grp; the game ended the process (the game's fatal error, from 0x4d29c5): unit\\zerg\\avenger.grp"))
       .toBe("the game stopped reading its startup data again: neither the mod nor the game has unit\\zerg\\avenger.grp; the game ended the process: unit\\zerg\\avenger.grp");
     expect(plainRunnerError("\"bogus\" is not a race: zerg, terran, protoss or random.")).toBe("\"bogus\" is not a race: zerg, terran, protoss or random.");
+    // The toolchain's commands as this command names them, the newest toolchain first.
+    expect(plainRunnerError("bot1 was built before bots could play beside a mod's plugins (its memory starts at 1 GB, where eudenabler's plugins keep theirs): build it again with the scmbot toolchain (scmbot build) to play it with eudenabler."))
+      .toBe("bot1 was built before bots could play beside a mod's plugins (its memory starts at 1 GB, where eudenabler's plugins keep theirs): build it again with the newest toolchain (scmjs bot update, then scmjs bot build) to play it with eudenabler.");
     process.env.SCMJS_DEBUG = "1";
     try { expect(plainRunnerError("x (from 0x4d29c5)")).toBe("x (from 0x4d29c5)"); } finally { delete process.env.SCMJS_DEBUG; }
   });

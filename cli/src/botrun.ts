@@ -18,6 +18,7 @@ import { looksLikeMpq } from "../../src/formats/mpq/scm";
 import { START_LOCATION } from "../../src/data/units";
 import { PlayerType } from "../../src/formats/chk/sections/players";
 import { kindOf } from "./files";
+import { debug, plainRunnerError } from "./runnerwords";
 import { parseFrames, parseRaceWord, parseWhole, type RaceWord } from "./values";
 import { codeWords, ensureEngine, findGameCopy, fitWords, MOD_CODE, modArgs, modWords, runnerFor, startRunner, type BotFitReport, type RunnerCodeReport, type RunnerModReport } from "./engine";
 import type { ModOverlay } from "./mod/overlay";
@@ -26,6 +27,7 @@ import { CliError, dot, mark, pc, print, size } from "./ui";
 
 // The engine, the cache and the copy of the game are `engine.ts`'s, shared with `scmjs replay watch`; named here still
 // for what imports them from here (doctor.ts, the tests).
+export { plainRunnerError } from "./runnerwords";
 export { cacheRoot, ensureEngine, findGameCopy, gameCopyKind, PLAY_URL, usualGameFolders, type Engine, type EngineCurrent } from "./engine";
 
 /* ── The runner's lines ───────────────────────────────────── */
@@ -170,7 +172,7 @@ export async function runBotGame(bot: string, map: string, o: BotRunOptions = {}
   outcome.exitCode = await new Promise<number>((done) => { child.on("error", () => done(2)); child.on("close", (c) => done(c ?? 2)); });
   // (2 from the runner: the game could not start; anything else, it started and did not go through.)
   const code = outcome.exitCode === 2 ? 2 : 1;
-  if (error) throw new CliError(plainRunnerError(error), RUNNER_HINT(), code);
+  if (error) { const said = plainRunnerError(error); throw new CliError(said, said.includes("scmjs bot update") ? t("In the bot's folder: scmjs bot update, then scmjs bot build.") : RUNNER_HINT(), code); }
   if (!outcome.end) throw new CliError(`${t("The game did not finish: it stopped without a result.")}${debug() && stderr.trim() ? `\n${stderr.trim().split("\n").slice(-6).join("\n")}` : ""}`, RUNNER_HINT(), code);
   return outcome;
 }
@@ -197,27 +199,6 @@ export async function botRunValues(o: { race: string; opponents: string; seed?: 
 
 /** What to do when the game would not play: the files it needs, and how to see the game's own words. */
 const RUNNER_HINT = () => t("The game needs a map StarCraft itself opens, a bot scmjs bot build wrote, and your own copy of the game (scmjs doctor checks it). SCMJS_DEBUG=1 shows the game's own words.");
-
-/** `SCMJS_DEBUG`: the runner's words as it said them, addresses and all. */
-const debug = () => !!process.env.SCMJS_DEBUG && process.env.SCMJS_DEBUG !== "0";
-
-/**
- * A runner's error as a person reads it: the game's insides left out — an address (`from 0x4d29c5`), the stack words, the
- * library function the game called that the engine has no stand-in for. What the game was doing stays. With
- * `SCMJS_DEBUG` set, the words as the runner said them.
- */
-export function plainRunnerError(message: string): string {
-  if (debug()) return message;
-  const inner = /0x[0-9a-f]{4,}|stack words|\b\w+\.dll!|no stand-in for/i;
-  // (a bracket that holds an address or the like goes whole: "(the game's fatal error, from 0x4d29c5)")
-  let text = message.replace(/\s*\([^()]*\)/g, (m) => (inner.test(m) ? "" : m));
-  // (then the first ": "-part that is the engine's own, and all after it)
-  const parts = text.split(": ");
-  const keep: string[] = [];
-  for (const part of parts) { if (inner.test(part)) break; keep.push(part); }
-  text = keep.join(": ").trim();
-  return text || t("the game stopped");
-}
 
 /** The scenario's member in a map's archive. */
 const MAP_ARCHIVE_SCENARIO = "staredit\\scenario.chk";

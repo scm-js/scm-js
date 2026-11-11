@@ -51,10 +51,15 @@ export interface ModOverlay {
 /** What the game's reload of its startup data reads by name besides the pictures (scm-sim `src/exact/mods.ts`, `STARTUP_NAMES`). */
 export const STARTUP_NAMES: readonly string[] = ["scripts\\iscript.bin", "arr\\images.dat", "game\\tselect.pcx", "arr\\images.tbl", "arr\\sfxdata.dat", "arr\\sfxdata.tbl", "arr\\mapdata.dat", "arr\\mapdata.tbl"];
 
-/** Whether the runner reads the startup data again for a mod holding these names (scm-sim's `readsStartupData`). */
+/**
+ * Whether the runner reads the startup data again for a mod holding these names (scm-sim's `readsStartupData`): one
+ * holding startup data — and one holding none of the game's files at all, a mod that is only plugins, which the runner
+ * reloads for too (so on a Remastered copy it needs the game's pictures laid under it as much as any).
+ */
 export function readsStartupData(names: Iterable<string>): boolean {
-  for (const n of names) if (STARTUP_NAMES.includes(n) || n.startsWith("unit\\")) return true;
-  return false;
+  let any = false;
+  for (const n of names) { any = true; if (STARTUP_NAMES.includes(n) || n.startsWith("unit\\")) return true; }
+  return !any;
 }
 
 /** Every picture and overlay file images.tbl names (`unit\zerg\avenger.grp`), by the game's names, each once. */

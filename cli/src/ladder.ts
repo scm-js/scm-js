@@ -14,6 +14,7 @@ import { basename, extname, join, relative, resolve } from "node:path";
 import { codeWords, ensureEngine, findGameCopy, fitWords, MOD_CODE, modArgs, modWords, runnerFor, startRunner, type BotFitReport, type Engine, type RunnerCodeReport, type RunnerModReport } from "./engine";
 import type { ModOverlay } from "./mod/overlay";
 import { t } from "./i18n";
+import { plainRunnerError } from "./runnerwords";
 import { CliError, dot, duration, mark, num, pc, print, table } from "./ui";
 
 /** A frame of the game on Fastest, as the clock counts it. */
@@ -398,7 +399,7 @@ export async function playGame(runner: string, engine: Engine, copy: string, ent
     try { l = JSON.parse(raw) as MatchLine; } catch { continue; }
     if (l.kind === "start") start = l;
     else if (l.kind === "end") end = l;
-    else if (l.kind === "error") error = l.message;
+    else if (l.kind === "error") error = plainRunnerError(l.message);
     else if (l.kind === "text") o.text?.(entrants[g.sides[l.side]]?.label ?? "?", l.text);
   }
   const code = await exit;

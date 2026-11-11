@@ -4,7 +4,8 @@
  * it in the bot's folder, as the toolchain's own `scmbot` wrapper does.
  */
 import { spawn, spawnSync } from "node:child_process";
-import { basename } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { basename, join } from "node:path";
 import { t } from "./i18n";
 import { CliError, mark, pc, print } from "./ui";
 
@@ -43,8 +44,23 @@ function needDocker(): void {
   );
 }
 
+/**
+ * Before a build, what the toolchain would refuse after starting Docker: scmbot.json's licence file missing (`bot new`
+ * names `LICENSE` and writes none — the licence is the author's to choose). Said here with what to do, exit 2.
+ */
+export function checkBotFolder(dir = process.cwd()): void {
+  const file = join(dir, "scmbot.json");
+  if (!existsSync(file)) return;
+  let license: unknown;
+  try { license = (JSON.parse(readFileSync(file, "utf8")) as { license?: unknown }).license; } catch { return; }
+  if (typeof license === "string" && license && !existsSync(join(dir, license))) {
+    throw new CliError(t("scmbot.json names {file} as the bot's licence, and there is no {file} here.", { file: license }), t("Add the licence your bot is under as {file} (any licence you choose: it goes with every build), or name another file in scmbot.json's \"license\".", { file: license }), 2);
+  }
+}
+
 /** Runs the toolchain with `args` in this folder; the toolchain's own output and exit code are the command's. */
 export async function runBot(args: string[], image = process.env.SCMBOT_IMAGE || BOT_IMAGE): Promise<void> {
+  if (args[0] === "build") checkBotFolder();
   needDocker();
   if (!hasImage(image)) print(pc.dim(t("Downloading the bot toolchain ({image}), once. It is a few GB.", { image })));
   const user = process.platform === "win32" || !process.getuid ? null : `${process.getuid()}:${process.getgid?.()}`;

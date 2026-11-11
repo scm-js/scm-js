@@ -742,6 +742,15 @@ describe("scmjs mod test and --mod", () => {
     const classic = modOverlay(dir, async () => asGame(game));
     expect(await classic.layers()).toHaveLength(1);
     classic.remove();
+
+    // A mod that is only plugins holds none of the game's files, and the runner reads the startup data again for it all
+    // the same: the pictures go under it too (else the reload stops at the first picture, unit\zerg\avenger.grp).
+    const plugins = tmp("overlay-plugins"); mkdirSync(plugins); writeFileSync(join(plugins, "EUD.qdp"), latin("plugin"));
+    const code = modOverlay(plugins, async () => remastered, { code: true });
+    const layers = await code.layers();
+    expect(layers).toHaveLength(2);
+    expect(same(readFileSync(join(layers[0], "unit", "zerg", "avenger.grp")), game.get("unit\\zerg\\avenger.grp"))).toBe(true);
+    code.remove();
   });
 });
 

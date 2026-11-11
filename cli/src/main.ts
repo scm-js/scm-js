@@ -1636,7 +1636,7 @@ address goes to standard error, and the result to standard output once the page 
     .addOption(starcraftOption())
     .addHelpText("after", "\n" + t(`Writes <Mod>.h, C++ for a BWAPI bot built with scmbot (Cosmonarchy_BW::UnitTypes::Terran_Mason is a
 BWAPI::UnitType, Ids::Units::Terran_Mason the number), and <Mod>.ids.json, the same for other languages. Every name
-in the mod's tables is there, as the editor shows it. Both carry the mod's name and hash; with --bot, scmbot build
+in the mod's tables is there, as the editor shows it. Both carry the mod's name and hash; with --bot, scmjs bot build
 writes them into the .scmbot file, and the runners say whether the game is the mod the bot was made for.`))
     .action(async (path: string, o: { json?: boolean; out?: string; namespace?: string; bot?: boolean; starcraft?: string }) => {
       const base = await gameFilesOrNull(o.starcraft);

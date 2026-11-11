@@ -180,7 +180,8 @@ describe("scmjs mcp", () => {
       expect(checks.map((c) => c.what)).toEqual(expect.arrayContaining(["Node", "StarCraft", "Game engine"]));
       expect(typeof r.structuredContent?.blocked).toBe("boolean");
     } finally { vi.unstubAllGlobals(); }
-  });
+    // doctor starts the browser it finds to see that it runs, and gives it 5 seconds: room for a machine where it is slow.
+  }, 30_000);
 });
 
 describe("scmjs mcp: map_check with a baseline, map_coverage", () => {

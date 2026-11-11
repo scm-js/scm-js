@@ -231,3 +231,54 @@ describe("S4: an edit whose map cannot be written", () => {
     expect(r.err).toMatch(/--editor needs a command/);
   });
 });
+
+describe("B1 and the unpacked folder", () => {
+  it("map pack --out - writes the map to standard output and its line to standard error; unpack refuses -", async () => {
+    const dir = tmp();
+    await scmjs("map", "unpack", testMap("ums.scx"), "--out", join(dir, "u"));
+    const r = await scmjs("map", "pack", join(dir, "u"), "--out", "-");
+    expect(r.code).toBe(0);
+    expect((await openMapBytes(new Uint8Array(r.raw), "x.scx")).scenario.units.length).toBeGreaterThan(0);
+    expect(r.err).toMatch(/standard output: the scenario and 1 member/);
+    expect(existsSync("-")).toBe(false);
+    expect((await scmjs("map", "pack", join(dir, "u"), "--out", "-", "--json")).code).toBe(2);
+    const json = JSON.parse((await scmjs("map", "pack", join(dir, "u"), "--dry-run", "--json")).out);
+    expect(json).toMatchObject({ members: 1, dryRun: true, file: join(dir, "u") });
+    expect(existsSync(join(dir, "ums.scx"))).toBe(false);
+    const u = await scmjs("map", "unpack", testMap("ums.scx"), "--out", "-");
+    expect(u.code).toBe(2);
+    expect(u.err).toMatch(/--out - cannot be standard output/);
+  });
+
+  it("never merges: an earlier unpack of the map is replaced, anything else refused unless --force", async () => {
+    const dir = tmp();
+    const x = join(dir, "X");
+    // The same name, two versions: the second has no sound, and the first's must not survive into the folder.
+    copyFileSync(testMap("ums.scx"), join(dir, "ums.scx"));
+    expect((await scmjs("map", "unpack", join(dir, "ums.scx"), "--out", x)).code).toBe(0);
+    expect(existsSync(join(x, "staredit", "wav", "tone.wav"))).toBe(true);
+    expect((await scmjs("map", "unpack", join(dir, "ums.scx"), "--out", x)).code).toBe(0);
+    const other = join(tmp(), "ums.scx");
+    copyFileSync(testMap("melee.scx"), other);
+    expect((await scmjs("map", "unpack", other, "--out", x)).code).toBe(0);
+    expect(existsSync(join(x, "staredit", "wav", "tone.wav"))).toBe(false);
+    // Another map, an edit, an added file: refused, and the folder left as it was.
+    const melee = await scmjs("map", "unpack", testMap("original.scm"), "--out", x);
+    expect(melee.code).toBe(2);
+    expect(melee.err).toMatch(/holds the unpack of ums\.scx, not of original\.scm/);
+    writeFileSync(join(x, "staredit", "scenario.chk"), new Uint8Array([1, 2, 3]));
+    const edited = await scmjs("map", "unpack", other, "--out", x);
+    expect(edited.code).toBe(2);
+    expect(edited.err).toMatch(/changed since the unpack: staredit\/scenario\.chk/);
+    expect(readFileSync(join(x, "staredit", "scenario.chk"))).toEqual(Buffer.from([1, 2, 3]));
+    expect((await scmjs("map", "unpack", other, "--out", x, "--force")).code).toBe(0);
+    writeFileSync(join(x, "notes.txt"), "mine");
+    expect((await scmjs("map", "unpack", other, "--out", x)).err).toMatch(/added since the unpack: notes\.txt/);
+    // A folder that is no unpack is refused even with --force.
+    writeFileSync(join(dir, "keep.txt"), "x");
+    const j = await scmjs("map", "unpack", testMap("ums.scx"), "--out", dir, "--force");
+    expect(j.code).toBe(2);
+    expect(j.err).toMatch(/holds other files, not an unpack of a map/);
+    expect(readFileSync(join(dir, "keep.txt"), "utf8")).toBe("x");
+  });
+});

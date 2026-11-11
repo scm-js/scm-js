@@ -644,45 +644,54 @@ With --text the scenario is written as text instead: scenario/map.json (size, ti
 terrain.txt, units.tsv, locations.tsv, strings.txt, triggers.txt and the rest, and the sections the editor does
 not model as bytes under scenario/sections/. Edit the text and scmjs map pack builds the map from it; an
 untouched folder packs back into the same scenario, byte for byte. The scenario/ folder is replaced each time.`, { manifest: MANIFEST_FILE }))
-    .action(async (file: string, o: { json?: boolean; out?: string; list?: boolean; text?: boolean }) => {
+    .option("--force", t("replace an unpack of another map, or files changed or added since the unpack"))
+    .action(async (file: string, o: { json?: boolean; out?: string; list?: boolean; text?: boolean; force?: boolean }) => {
+      if (o.out === STDIO) throw new CliError(t("map unpack writes a folder, so --out - cannot be standard output"), t("Name a folder, or use --list to see the members."), 2);
+      if (o.list && o.text) throw new CliError(t("--list writes nothing, so --text has nothing to do"), t("Leave one of them off."), 2);
       const input = await readInput(file);
       expectKind(input, "map");
       if (o.list) {
         const r = await listMembers(input.bytes);
-        if (o.json) { print(JSON.stringify({ file: input.name, ...r }, null, 2)); return; }
+        if (o.json) { print(JSON.stringify({ file: input.path, ...r }, null, 2)); return; }
         const width = Math.max(...r.members.map((m) => m.name.length));
         print(`${pc.bold(input.name)}${dot}${t("{n, plural, one {# member} other {# members}}", { n: r.members.length })}${r.listfile ? "" : dot + pc.yellow(t("no file list"))}`, ...r.members.map((m) => `  ${(m.kind === "stored" ? pc.dim(m.name) : m.name).padEnd(width + (m.kind === "stored" ? 9 : 0))}  ${pc.dim(size(m.bytes).padStart(8))}`), ...r.problems.map((p) => `${mark.warn} ${p}`));
         return;
       }
       const base = input.path === STDIO ? "stdin" : input.path;
       const dir = o.out ?? base.replace(/\.(scm|scx|chk)$/i, "") + (/\.(scm|scx|chk)$/i.test(base) ? "" : "-unpacked");
-      const r = await unpackMap(input.bytes, input.name, dir, { text: !!o.text });
-      if (o.json) { print(JSON.stringify({ file: input.name, dir: r.dir, files: r.files, bytes: r.bytes, stored: r.stored, manifest: r.manifest, text: r.text }, null, 2)); return; }
+      const r = await unpackMap(input.bytes, input.name, dir, { text: !!o.text, force: !!o.force });
+      if (o.json) { print(JSON.stringify({ file: input.path, dir, files: r.files, bytes: r.bytes, stored: r.stored, manifest: r.manifest, text: r.text }, null, 2)); return; }
       const text = r.text;
       const sections = (names: string[]) => names.map((n) => n.trim()).join(" ");
-      // "Kept as bytes" lines up with "Scenario as text" above it; "Bytes kept beside" is the longer one and stands out.
-      const asText = t("Scenario as text");
+      // The three labels line up, whatever the language: padded to the widest.
+      const labels = [t("Scenario as text"), t("Bytes kept beside"), t("Kept as bytes")];
+      const width = Math.max(...labels.map(columns));
+      const label = (i: number) => pc.dim(padColumns(labels[i], width));
       print(`${mark.ok} ${pc.bold(input.name)}: ${t("{n, plural, one {# file} other {# files}}", { n: r.files })}${r.stored ? pc.dim(t(" ({n} without a name)", { n: r.stored })) : ""}${dot}${size(r.bytes)}${dot}${pc.dim("→")} ${pc.cyan(relative(process.cwd(), r.dir) || ".")}`,
         ...(text ? [
-          `  ${pc.dim(asText)}  ${t("{n, plural, one {# section} other {# sections}}", { n: text.text.length + text.layout.length + text.records.length })}${dot}${t("{size} in {n, plural, one {# file} other {# files}}", { size: size(text.size), n: text.files })}`,
-          ...(text.layout.length || text.records.length ? [`  ${pc.dim(t("Bytes kept beside"))}  ${sections([...text.layout, ...text.records])} ${pc.dim(t("(used while their text is unchanged)"))}`] : []),
-          ...(text.bytes.length ? [`  ${pc.dim(padColumns(t("Kept as bytes"), columns(asText)))}  ${text.bytes.map((b) => `${b.name.trim()}${pc.dim(` (${b.why})`)}`).join(", ")}`] : []),
+          `  ${label(0)}  ${t("{n, plural, one {# section} other {# sections}}", { n: text.text.length + text.layout.length + text.records.length })}${dot}${t("{size} in {n, plural, one {# file} other {# files}}", { size: size(text.size), n: text.files })}`,
+          ...(text.layout.length || text.records.length ? [`  ${label(1)}  ${sections([...text.layout, ...text.records])} ${pc.dim(t("(used while their text is unchanged)"))}`] : []),
+          ...(text.bytes.length ? [`  ${label(2)}  ${text.bytes.map((b) => `${b.name.trim()}${pc.dim(` (${b.why})`)}`).join(", ")}`] : []),
         ] : []),
         ...r.manifest.problems.map((p) => `${mark.warn} ${p}`));
     });
   map.command("pack").description(t("the folder scmjs map unpack wrote, back into a map file")).argument("<folder>").addOption(json)
-    .option("-o, --out <map>", t("the file to write; by default the name {manifest} records, beside the folder", { manifest: MANIFEST_FILE }))
+    .option("-o, --out <map>", t("the file to write; by default the name {manifest} records, beside the folder; - for standard output", { manifest: MANIFEST_FILE }))
     .option("--compression <method>", t("none, pkware or zlib for every member, instead of how the map was stored"))
+    .option("--dry-run", t("build the map and check it opens, and write nothing"))
     .addHelpText("after", t(`
 Every file in the folder goes in: the ones {manifest} names at their archive paths, and any added since at the
 path they have in the folder. The archive is compressed and encrypted as the map was, and written without a file list
 when the map had none. A folder map unpack --text wrote has its scenario built from the text in scenario/. The packed
 file is opened as a map before it is written.`, { manifest: MANIFEST_FILE }))
-    .action(async (dir: string, o: { json?: boolean; out?: string; compression?: string }) => {
-      if (o.compression && !["none", "pkware", "zlib"].includes(o.compression)) throw new CliError(t("--compression takes none, pkware or zlib, not \"{value}\"", { value: o.compression }), null, 2);
-      const r = await packMap(dir, { out: o.out ?? null, compression: o.compression as "none" | "pkware" | "zlib" | undefined });
+    .action(async (dir: string, o: { json?: boolean; out?: string; compression?: string; dryRun?: boolean }) => {
+      if (o.compression && !["none", "pkware", "zlib"].includes(o.compression.toLowerCase())) throw new CliError(t("--compression takes none, pkware or zlib, not \"{value}\"", { value: o.compression }), null, 2);
+      const piped = o.out === STDIO && !o.dryRun;
+      if (piped && o.json) throw new CliError(t("--json and the map both want standard output"), t("Write the map to a file with --out, or leave --json off."), 2);
+      const r = await packMap(dir, { out: o.out ?? null, compression: o.compression?.toLowerCase() as "none" | "pkware" | "zlib" | undefined, dryRun: !!o.dryRun });
       if (o.json) { print(JSON.stringify(r, null, 2)); return; }
-      print(`${mark.ok} ${pc.bold(relative(process.cwd(), r.path) || r.path)}: ${t("{n, plural, one {# member} other {# members}}", { n: r.members + 1 })}${r.fromText ? pc.dim(t(" (the scenario from text)")) : ""}${r.stored ? pc.dim(t(" ({n} without a name)", { n: r.stored })) : ""}${r.added.length ? `${dot}${t("{n, plural, one {# file} other {# files}} added: {list}", { n: r.added.length, list: r.added.join(", ") })}` : ""}${dot}${r.compression}${r.encrypted ? t(", encrypted") : ""}${dot}${size(r.bytes)}`,
+      const where = r.path === STDIO ? t("standard output") : relative(process.cwd(), r.path) || r.path;
+      say(piped, `${o.dryRun ? mark.info : mark.ok} ${pc.bold(where)}: ${t("the scenario and {n, plural, one {# member} other {# members}}", { n: r.members })}${r.fromText ? pc.dim(t(" (the scenario from text)")) : ""}${r.stored ? pc.dim(t(" ({n} without a name)", { n: r.stored })) : ""}${r.added.length ? `${dot}${t("{n, plural, one {# file} other {# files}} added: {list}", { n: r.added.length, list: r.added.join(", ") })}` : ""}${dot}${r.compression}${r.encrypted ? t(", encrypted") : ""}${dot}${size(r.bytes)}${o.dryRun ? pc.dim(` ${t("(--dry-run: nothing written)")}`) : ""}`,
         r.changedSounds ? `${mark.warn} ${t("{n, plural, one {# sound was} other {# sounds were}} changed since the unpack and {n, plural, one {goes} other {go}} in as plain PCM, larger than StarEdit's compression; map optimize cannot make {n, plural, one {it} other {them}} smaller again", { n: r.changedSounds })}` : null);
     });
 

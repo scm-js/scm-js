@@ -18,9 +18,11 @@ import { openMapBytes, readArchive, writeArchiveBytes } from "../../src/editor/m
 import { SCENARIO_PATH, type ArchiveCompression, type StoredMembers } from "../../src/formats/mpq/scm";
 import { keepStoredForm, storedFormOf } from "../../src/formats/mpq/stored";
 import { formatOf } from "../../src/editor/save";
+import { writeOutput } from "./exchange";
 import { folderSource, scenarioFromText, scenarioToText, SECTIONS_FILE, TEXT_FOLDER, writeScenarioText, type TextReport } from "./source";
 import { t } from "./i18n";
 import { CliError } from "./ui";
+import { STDIO, writeError } from "./files";
 
 export const MANIFEST_FILE = "archive.json";
 /** Where the members with no name go, `stored/001.bin` on. */
@@ -55,6 +57,8 @@ export interface ArchiveManifest {
   stored: (Omit<StoredMembers, "members"> & { members: StoredMemberRecord[] }) | null;
   /** What could not be read, in the editor's words. */
   problems: string[];
+  /** Every file the unpack wrote and its fingerprint, so the next unpack can tell an edit from its own earlier files. */
+  files?: Record<string, string>;
 }
 
 /** A character a file system may refuse (Windows's set, and control characters) is written `%XX`; `/` is a folder. */
@@ -87,6 +91,75 @@ export interface Unpacked {
 export interface UnpackOptions {
   /** The scenario as a folder of text (`scenario/`) instead of `staredit/scenario.chk`. */
   text?: boolean;
+  /** Replace an unpack of another map, or one whose files were edited since, instead of refusing. */
+  force?: boolean;
+}
+
+/** A file's fingerprint in the manifest: enough of its SHA-256 to tell an edit. */
+const fingerprint = (data: Uint8Array | string) => createHash("sha256").update(data).digest("hex").slice(0, 16);
+
+/** Every file under `dir` but dotfiles (a `.git` folder), as paths with `/`; none when it is not there. */
+async function filesIn(dir: string): Promise<string[]> {
+  try { return await filesUnder(dir); } catch (e) { if ((e as NodeJS.ErrnoException).code === "ENOENT") return []; throw writeError(dir, e); }
+}
+
+/**
+ * An unpack never merges into what is there: the files an earlier unpack of the same map wrote are removed (so a
+ * member the map no longer has does not come back on pack), and anything else is refused without `force` — another
+ * map's unpack, files added or edited since the unpack (an edit is not thrown away without a word), or a folder that
+ * is no unpack at all, which is refused even with `force`.
+ */
+async function clearEarlierUnpack(out: string, dirArg: string, fileName: string, writes: Map<string, Uint8Array | string>, force: boolean): Promise<void> {
+  try { if (!(await stat(out)).isDirectory()) throw new CliError(t("{folder} is a file, not a folder", { folder: dirArg }), t("Name a folder to unpack into."), 2); } catch (e) { if (e instanceof CliError) throw e; return; }
+  const there = (await filesIn(out)).filter((f) => f !== MANIFEST_FILE);
+  if (!there.length) return;
+  let earlier: Partial<ArchiveManifest> | null = null;
+  try { earlier = JSON.parse(await readFile(join(out, MANIFEST_FILE), "utf8")) as Partial<ArchiveManifest>; } catch { earlier = null; }
+  if (!earlier || !Array.isArray(earlier.members)) throw new CliError(t("{folder} holds other files, not an unpack of a map", { folder: dirArg }), t("Unpack into a new or empty folder; nothing in this one was changed."), 2);
+  // What the earlier unpack wrote: by fingerprint where its manifest kept them, else by its lists (no fingerprint).
+  const known = new Map<string, string | null>(Object.entries(earlier.files ?? {}));
+  if (!earlier.files) {
+    for (const m of earlier.members) known.set(m.file, null);
+    for (const m of earlier.stored?.members ?? []) known.set(m.file, null);
+    for (const m of earlier.members) if (m.stored) known.set(m.stored.file, null);
+    const textDir = earlier.scenario?.text;
+    for (const f of there) if (f.toLowerCase() === fileFor(SCENARIO_PATH).toLowerCase() || (textDir && f.startsWith(`${textDir}/`))) known.set(f, null);
+  }
+  const byLower = new Map([...known.keys()].map((k) => [k.toLowerCase(), k]));
+  const changed: string[] = [], added: string[] = [];
+  for (const f of there) {
+    const k = byLower.get(f.toLowerCase());
+    if (k === undefined) { added.push(f); continue; }
+    const was = known.get(k)!;
+    const now = fingerprint(await readFile(join(out, f)));
+    // With no fingerprint, a file that comes out the same is not an edit; one that differs may be.
+    const fresh = writes.get(f);
+    if (was === null ? !(fresh !== undefined && fingerprint(fresh) === now) : was !== now) changed.push(f);
+  }
+  const other = typeof earlier.fileName === "string" && earlier.fileName !== fileName;
+  if (!force && (other || changed.length || added.length)) {
+    const list = (files: string[]) => `${files.slice(0, 5).join(", ")}${files.length > 5 ? t(", … {n} in all", { n: files.length }) : ""}`;
+    const why = other ? t("{folder} holds the unpack of {other}, not of {map}", { folder: dirArg, other: String(earlier.fileName), map: fileName })
+      : changed.length ? t("{folder} has files changed since the unpack: {list}", { folder: dirArg, list: list(changed) })
+      : t("{folder} has files added since the unpack: {list}", { folder: dirArg, list: list(added) });
+    throw new CliError(why, t("--force replaces them with this unpack; pack the folder first to keep the changes."), 2);
+  }
+  try {
+    for (const f of there) if (f !== MANIFEST_FILE) await rm(join(out, f), { force: true });
+    await removeEmptyFolders(out);
+  } catch (e) {
+    throw writeError(dirArg, e);
+  }
+}
+
+/** The folders left empty under `dir` once their files went (not dot-folders, not `dir` itself). */
+async function removeEmptyFolders(dir: string): Promise<void> {
+  for (const entry of await readdir(dir, { withFileTypes: true })) {
+    if (!entry.isDirectory() || entry.name.startsWith(".")) continue;
+    const sub = join(dir, entry.name);
+    await removeEmptyFolders(sub);
+    if (!(await readdir(sub)).length) await rm(sub, { recursive: true });
+  }
 }
 
 /** The archive into `dir` (made if need be): its members as files and `archive.json`. */
@@ -139,23 +212,22 @@ export async function unpackMap(bytes: Uint8Array, fileName: string, dir: string
     scenario: { compression: a.origin?.compression ?? null, encrypted: a.origin?.encrypted ?? false, sectorSize: a.origin?.sectorSize ?? null, ...(scenarioText ? { text: TEXT_FOLDER } : {}) },
     listfile: a.files !== null || !a.origin, members, stored, problems: a.problems,
   };
+  // What this unpack writes, by its path in the folder: read on the next unpack to tell an edit from an earlier run.
+  const writes = new Map<string, Uint8Array | string>(written.map((w) => [w.file, w.data]));
+  if (scenarioText) for (const [path, data] of scenarioText.files) writes.set(`${TEXT_FOLDER}/${path.replace(/\\/g, "/")}`, data);
+  manifest.files = Object.fromEntries([...writes].sort(([x], [y]) => (x < y ? -1 : x > y ? 1 : 0)).map(([path, data]) => [path, fingerprint(data)]));
+  await clearEarlierUnpack(out, dir, fileName, writes, !!options.force);
   let textBytes = 0;
   try {
     await mkdir(out, { recursive: true });
-    // One form of the scenario in the folder, never both: pack would take the other for a member.
-    if (scenarioText) {
-      await rm(join(out, fileFor(SCENARIO_PATH)), { force: true });
-      textBytes = await writeScenarioText(join(out, TEXT_FOLDER), scenarioText.files);
-    } else {
-      try { if ((await stat(join(out, TEXT_FOLDER, SECTIONS_FILE))).isFile()) await rm(join(out, TEXT_FOLDER), { recursive: true, force: true }); } catch { /* none */ }
-    }
+    if (scenarioText) textBytes = await writeScenarioText(join(out, TEXT_FOLDER), scenarioText.files);
     for (const w of written) {
       await mkdir(dirname(join(out, w.file)), { recursive: true });
       await writeFile(join(out, w.file), w.data);
     }
     await writeFile(join(out, MANIFEST_FILE), JSON.stringify(manifest, null, 2) + "\n");
   } catch (e) {
-    throw new CliError(t("{file} could not be written ({reason})", { file: out, reason: String((e as NodeJS.ErrnoException).code ?? e) }));
+    throw writeError(out, e);
   }
   return {
     dir: out, files: written.length + (scenarioText?.files.size ?? 0), bytes: written.reduce((n, w) => n + w.data.length, 0) + textBytes,
@@ -169,10 +241,13 @@ export interface PackOptions {
   out?: string | null;
   /** Compression for every member, over what the manifest says. */
   compression?: ArchiveCompression;
+  /** Build and check the map, and write nothing. */
+  dryRun?: boolean;
 }
 
 export interface Packed {
-  path: string; bytes: number; members: number; stored: number; added: string[]; compression: ArchiveCompression; encrypted: boolean;
+  /** Where the map went (`-` for standard output); `file` is the folder as it was named. */
+  path: string; file: string; dryRun: boolean; bytes: number; members: number; stored: number; added: string[]; compression: ArchiveCompression; encrypted: boolean;
   /** Whether the scenario was rebuilt from the folder's text. */
   fromText: boolean;
   /** Members put back as they were stored (StarEdit's ADPCM sounds), and those that were edited and so written afresh. */
@@ -261,7 +336,8 @@ export async function packMap(dirArg: string, options: PackOptions = {}): Promis
   const compression: ArchiveCompression = options.compression ?? (manifest?.scenario.compression === "zlib" || manifest?.scenario.compression === "pkware" ? manifest.scenario.compression : manifest?.scenario.compression === "other" ? "pkware" : "none");
   const encrypted = manifest?.scenario.encrypted ?? false;
   let bytes: Uint8Array;
-  if (formatOf(path) === "chk") {
+  // Standard output takes the form the map was unpacked from.
+  if ((path === STDIO ? formatOf(manifest?.fileName ?? null) : formatOf(path)) === "chk") {
     if (extras.size || stored) throw new CliError(t("A bare .chk has no room for the archive's other members."), t("Write an .scx or .scm instead."));
     bytes = chk;
   } else {
@@ -269,16 +345,12 @@ export async function packMap(dirArg: string, options: PackOptions = {}): Promis
   }
   // What was written has to open as a map; the folder's scenario may be anything.
   try {
-    await openMapBytes(bytes, basename(path));
+    await openMapBytes(bytes, basename(path === STDIO ? manifest?.fileName ?? "stdout.scx" : path));
   } catch (e) {
     throw new CliError(t("The packed file is not a map the editor reads: {message}", { message: String(e instanceof Error ? e.message : e) }), textFolder ? t("The text in {folder}/ has to make a scenario.", { folder: textFolder }) : t("{file} has to be a scenario.", { file: fileFor(SCENARIO_PATH) }), 2);
   }
-  try {
-    await writeFile(path, bytes);
-  } catch (e) {
-    throw new CliError(t("{file} could not be written ({reason})", { file: path, reason: String((e as NodeJS.ErrnoException).code ?? e) }));
-  }
-  return { path, bytes: bytes.length, members: extras.size, stored: stored?.members.length ?? 0, added, compression, encrypted, fromText: !!textFolder, keptAsStored, changedSounds };
+  if (!options.dryRun) await writeOutput(bytes, path);
+  return { path, file: dirArg, dryRun: !!options.dryRun, bytes: bytes.length, members: extras.size, stored: stored?.members.length ?? 0, added, compression, encrypted, fromText: !!textFolder, keptAsStored, changedSounds };
 }
 
 const sha256 = (data: Uint8Array) => createHash("sha256").update(data).digest("hex");

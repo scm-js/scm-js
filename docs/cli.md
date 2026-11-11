@@ -203,9 +203,12 @@ itself. They need two things on your computer:
   name its folder with `--starcraft <folder>` or the `SCMJS_STARCRAFT` setting. Nothing of
   the game is fetched or carried by the command.
 - The game engine, for the commands that run the game. It is the engine of
-  [scmjs.dev/play](https://scmjs.dev/play/), about 25 MB, fetched the first time a command
-  needs it and kept in your cache folder (`~/.cache/scmjs` on Linux, the usual place on
-  other systems; `SCMJS_CACHE` moves it).
+  [scmjs.dev/play](https://scmjs.dev/play/), about 25 MB to download (105 MB once on
+  disk), fetched the first time a command needs it and kept in your cache folder
+  (`~/.cache/scmjs` on Linux, the usual place on other systems; `SCMJS_CACHE` moves it).
+  The line that says so goes to standard error, so a `--json` command's output stays JSON.
+  When the play page has newer runners, the next command fetches them and removes the old
+  ones.
 
 None of these run on a build server such as GitHub's, which has no copy of the game.
 `map diff --picture` uses your copy when it finds one and draws the ground in plain greys

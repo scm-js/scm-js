@@ -10,7 +10,7 @@
  * first imported) and speaks JSON lines, which each command turns into the terminal's.
  */
 import type { ChildProcess } from "node:child_process";
-import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { gunzipSync } from "node:zlib";
@@ -100,9 +100,11 @@ export interface Engine {
 /**
  * The engine's folder: `at` is a folder that already holds the files (a staged deploy, a clone's `data/lifted` with
  * the runners beside), else the play page's address, whose `engine/current.json` names the build to fetch into the
- * cache, runners and all.
+ * cache, runners and all. A fetch is said on standard error, by every command alike and whatever else it prints (a
+ * `--json` command's standard output is its JSON alone). The third argument, once where that line went, is not read.
  */
-export async function ensureEngine(at: string = process.env.SCMJS_PLAY_URL || PLAY_URL, cache = cacheRoot(), say: (line: string) => void = () => {}): Promise<Engine> {
+export async function ensureEngine(at: string = process.env.SCMJS_PLAY_URL || PLAY_URL, cache = cacheRoot(), _say?: (line: string) => void): Promise<Engine> {
+  const say = (line: string) => { process.stderr.write(`${line}\n`); };
   if (!/^https?:\/\//.test(at)) {
     const dir = resolve(at);
     const current = join(dir, "current.json");
@@ -127,7 +129,7 @@ export async function ensureEngine(at: string = process.env.SCMJS_PLAY_URL || PL
   const wanted = [...current.files, ...Object.values(runners)];
   const missing = wanted.filter((f) => !existsSync(join(dir, f)));
   // (A build fetched before a runner was deployed lacks only that runner: a small fetch, said as such.)
-  if (missing.some((f) => current.files.includes(f))) say(`${pc.dim(t("Fetching the game engine from {url} (about 25 MB, once) → {dir}", { url: base, dir }))}`);
+  if (missing.some((f) => current.files.includes(f))) say(`${pc.dim(t("Fetching the game engine from {url} (about 25 MB to download, 105 MB on disk, once) → {dir}", { url: base, dir }))}`);
   else if (missing.length) say(`${pc.dim(t("Fetching the newer runners from {url} → {dir}", { url: base, dir }))}`);
   for (const name of missing) {
     const bytes = await fetchBytes(`${base}/engine/${current.build}/${name}`);
@@ -137,7 +139,20 @@ export async function ensureEngine(at: string = process.env.SCMJS_PLAY_URL || PL
     renameSync(part, join(dir, name));
     fetched += bytes.length;
   }
+  if (missing.length) pruneRunners(dir, new Set(wanted));
   return { dir, build: current.build, runner: current.runner, runners, fetched, mods: modsOf(current) };
+}
+
+/**
+ * The runners a build's folder holds that the play page no longer names, removed once newer ones are fetched: every
+ * command reads `current.json` before it plays, so none starts an old one again (a game playing one now has it loaded
+ * already). Only runners: the engine's own files are the build's and stay with it.
+ */
+function pruneRunners(dir: string, named: ReadonlySet<string>): void {
+  for (const name of readdirSafe(dir)) {
+    const runner = (Object.keys(RUNNERS) as RunnerKind[]).some((k) => RUNNERS[k].file.test(name));
+    if (runner && !named.has(name)) { try { rmSync(join(dir, name), { force: true }); } catch { /* in use (Windows): next time */ } }
+  }
 }
 
 const modsOf = (c: EngineCurrent) => (typeof c.mods === "number" && c.mods > 0 ? c.mods : 0);
@@ -211,6 +226,14 @@ export function modWords(m: RunnerModReport): string {
   const refused = r ? `${r.refused.slice(0, 3).join(", ")}${r.refused.length > 3 ? ` ${t("and {n} more", { n: r.refused.length - 3 })}` : ""}` : "";
   const reload = !r ? "" : r.refused.length ? `; ${t("the startup data read again, refused {list}", { list: refused })}` : `; ${t("the startup data read again ({n, plural, one {# file} other {# files}})", { n: r.served })}`;
   return `  ${pc.dim(`${t("mod:")} ${read}${reload}${m.game ? `, ${t("the game's own pictures from your Remastered copy under it")}` : ""}`)}`;
+}
+
+/**
+ * What to do when a runner ended without a word of its game: the game copy or the engine's cache is at fault, and
+ * doctor tells which; a cache it calls ready but that will not play is fetched again once its folder is gone.
+ */
+export function noResultHint(engineDir: string): string {
+  return t("Run scmjs doctor to check your copy of the game and the engine. If it says both are ready, remove the engine's folder {dir}; the next command fetches it again.", { dir: engineDir });
 }
 
 /** The runners `current.json` names, by kind. */

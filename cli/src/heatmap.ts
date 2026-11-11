@@ -22,7 +22,7 @@ import { parseScenario, scenarioName, type Scenario } from "../../src/formats/ch
 import { MEGATILE_PX } from "../../src/formats/tileset/decode";
 import { unitName } from "../../src/data/units";
 import { GAP_COLOR, GEYSER_LANDMARK, START_LANDMARK } from "./diffpicture";
-import { cacheRoot, ensureEngine, findGameCopy, runnerFor, startRunner } from "./engine";
+import { cacheRoot, ensureEngine, findGameCopy, noResultHint, runnerFor, startRunner } from "./engine";
 import { writeOutput, type Written } from "./exchange";
 import { loadReplayInput, readInput, STDIO, type Input } from "./files";
 import { modReplayReason } from "./replaymod";
@@ -129,7 +129,7 @@ export async function playForEvents(runner: string, engineDir: string, starcraft
   const code = await exited;
   if (older) throw new OlderRunner();
   if (error) throw new CliError(error);
-  if (!ev || !ended) throw new CliError(`${t("the runner stopped without a result (exit {code})", { code })}${stderr.trim() ? `: ${stderr.trim().split("\n").at(-1)}` : ""}`);
+  if (!ev || !ended) throw new CliError(`${t("the runner stopped without a result (exit {code})", { code })}${stderr.trim() ? `: ${stderr.trim().split("\n").at(-1)}` : ""}`, noResultHint(engineDir));
   return ev;
 }
 

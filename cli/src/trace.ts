@@ -23,7 +23,7 @@ import { summarizeTrigger } from "../../src/formats/triggers/text";
 import { conditionDef } from "../../src/data/triggerDefs";
 import { createInterface } from "node:readline";
 import { FRAME_MS, type Replay } from "@scm-js/replay";
-import { cacheRoot, ensureEngine, findGameCopy, runnerFor, startRunner, type Engine, modArgs, modWords, type RunnerModReport } from "./engine";
+import { cacheRoot, ensureEngine, findGameCopy, noResultHint, runnerFor, startRunner, type Engine, modArgs, modWords, type RunnerModReport } from "./engine";
 import { VERSION } from "./about";
 import { assetFile, INSTALL } from "./runtime";
 import { diffMaps, summarizeDiff } from "./diff";
@@ -225,7 +225,7 @@ async function runMap(map: string | null, what: "trace" | "cost", o: MapRunOptio
   if (o.signal?.aborted) throw cancelled();
   if (older || (o.replay && error && /--map is needed/.test(error))) throw olderThanReplays(engine.dir);
   if (error) throw new CliError(error, o.replay ? t("The runner is scm-sim's; a replay StarCraft itself plays and your own copy of the game are what it needs.") : t("The runner is scm-sim's; a map StarCraft itself opens, with a slot for a person, and your own copy of the game are what it needs."));
-  if (!end) throw new CliError(`${t("The game did not finish: the runner stopped without a result (exit {code}).", { code: exitCode })}${stderr.trim() ? `\n${stderr.trim().split("\n").slice(-6).join("\n")}` : ""}`);
+  if (!end) throw new CliError(`${t("The game did not finish: the runner stopped without a result (exit {code}).", { code: exitCode })}${stderr.trim() ? `\n${stderr.trim().split("\n").slice(-6).join("\n")}` : ""}`, noResultHint(engine.dir));
   return { engine: { build: engine.build, dir: engine.dir, fetched: engine.fetched }, game, start, progress, end };
 }
 

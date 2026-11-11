@@ -97,8 +97,11 @@ describe("scmjs bot run", () => {
     await new Promise<void>((r) => server.listen(0, "127.0.0.1", () => r()));
     const port = (server.address() as { port: number }).port;
     const cache = tmp();
+    // The line is standard error's, whatever the command (its standard output may be JSON).
     const said: string[] = [];
-    const fetched = await ensureEngine(`http://127.0.0.1:${port}/play`, cache, (l) => said.push(visible(l)));
+    const write = process.stderr.write.bind(process.stderr);
+    process.stderr.write = ((chunk: string) => { said.push(visible(String(chunk))); return true; }) as typeof process.stderr.write;
+    const fetched = await ensureEngine(`http://127.0.0.1:${port}/play`, cache).finally(() => { process.stderr.write = write; });
     expect(fetched.build).toBe(staged.build);
     expect(fetched.fetched).toBeGreaterThan(0);
     expect(said[0]).toMatch(/Fetching the game engine/);

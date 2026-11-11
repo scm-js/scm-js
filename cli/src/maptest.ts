@@ -32,7 +32,7 @@ import { PlayerType } from "../../src/formats/chk/sections/players";
 import { conditionDef } from "../../src/data/triggerDefs";
 import { plainText } from "../../src/editor/textColors";
 import { decodeText, type TextEncoding } from "../../src/formats/text/encoding";
-import { ensureEngine, findGameCopy, modArgs, runnerFor, startRunner, type RunnerModReport } from "./engine";
+import { ensureEngine, findGameCopy, modArgs, noResultHint, runnerFor, startRunner, type RunnerModReport } from "./engine";
 import { unitByName } from "./rush";
 import { gameClock, summarizeRows, type CopyLine, type ReplayCheck, type ReplayPlayerLine } from "./trace";
 import { t } from "./i18n";
@@ -636,7 +636,7 @@ async function runScenario(runner: string, args: string[], engineDir: string, o:
   if (o.signal?.aborted) throw cancelled();
   if (older) throw new CliError(t("The engine at {dir} has a map runner from before {what, select, replay {tests driven by a replay} other {map test}}.", { dir: engineDir, what: played ? "replay" : "test" }), t("A play page deployed since has one; the next run fetches it (or name a newer one with --engine)."));
   if (error) throw new CliError(error, t("The runner is scm-sim's; a map StarCraft itself opens, with a slot for a person, and your own copy of the game are what it needs."), 2);
-  if (!start || !end) throw new CliError(`${t("The game did not finish: the runner stopped without a result (exit {code}).", { code: exitCode })}${stderr.trim() ? `\n${stderr.trim().split("\n").slice(-6).join("\n")}` : ""}`);
+  if (!start || !end) throw new CliError(`${t("The game did not finish: the runner stopped without a result (exit {code}).", { code: exitCode })}${stderr.trim() ? `\n${stderr.trim().split("\n").slice(-6).join("\n")}` : ""}`, noResultHint(engineDir));
   return { start, end };
 }
 

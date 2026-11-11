@@ -11,7 +11,7 @@ import { createInterface } from "node:readline";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { UNIT_NAMES, unitName } from "../../src/data/units";
-import { ensureEngine, findGameCopy, runnerFor, startRunner } from "./engine";
+import { ensureEngine, findGameCopy, noResultHint, runnerFor, startRunner } from "./engine";
 import { removeGameMap } from "./trace";
 import { locale, t, translate } from "./i18n";
 import { CliError, columns, dot, mark, num, padColumns, pc, table, unicode } from "./ui";
@@ -131,7 +131,7 @@ async function rush(map: string, o: RushOptions): Promise<RushOutcome> {
     if (/does not walk/.test(error)) throw new CliError(t("The {unit} does not walk: it is a building, a flyer or a turret.", { unit: unitShown(o.unit ?? RUSH_UNIT) }), t("Name a ground unit with --unit (Zergling, Dragoon, Marine…); a flyer goes in a straight line, which the report gives as the air distance."), 2);
     throw new CliError(error, t("The runner is scm-sim's; a map StarCraft itself opens, with two start locations, and your own copy of the game are what it needs."));
   }
-  if (!start || !end) throw new CliError(`${t("The walks did not finish: the runner stopped without a result (exit {code}).", { code: exitCode })}${stderr.trim() ? `\n${stderr.trim().split("\n").slice(-6).join("\n")}` : ""}`);
+  if (!start || !end) throw new CliError(`${t("The walks did not finish: the runner stopped without a result (exit {code}).", { code: exitCode })}${stderr.trim() ? `\n${stderr.trim().split("\n").slice(-6).join("\n")}` : ""}`, noResultHint(engine.dir));
   return { engine: { build: engine.build, dir: engine.dir, fetched: engine.fetched }, game, start, end };
 }
 

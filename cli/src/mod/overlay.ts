@@ -15,8 +15,8 @@
  * `mod.json` with the mod's name and its hash (`sourceHash`, the play page's rule), which the runner takes as the
  * mod's: the folder lays the files differently from how the mod has them, so the runner could not work it out again.
  */
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { rmSync } from "node:fs";
+import { tempFolder } from "../lifecycle";
 import { join } from "node:path";
 import { decodeTblFile } from "../../../src/formats/dat/tblFile";
 import { gameName } from "../../../src/formats/mod/sources";
@@ -102,8 +102,8 @@ export function modOverlay(path: string, base: () => Promise<GameFiles | null>, 
       if (!dirs) {
         const { game, source } = await open();
         const lay = await gameLayer(source, game);
-        dirs = { game: null, mod: mkdtempSync(join(tmpdir(), "scmjs-mod-")) };
-        if (lay.length) { dirs.game = mkdtempSync(join(tmpdir(), "scmjs-game-")); await writeLoose(lay, dirs.game); }
+        dirs = { game: null, mod: tempFolder("scmjs-mod-") };
+        if (lay.length) { dirs.game = tempFolder("scmjs-game-"); await writeLoose(lay, dirs.game); }
         const members: { member: string; data: Uint8Array }[] = [];
         for (const f of source.files.values()) members.push({ member: f.name, data: await f.read() });
         await writeLoose(members, dirs.mod);

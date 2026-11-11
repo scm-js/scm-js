@@ -6,8 +6,8 @@
  */
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { readFile, rm, writeFile } from "node:fs/promises";
+import { tempFolder } from "./lifecycle";
 import { basename, join } from "node:path";
 import type { OpenedMap } from "../../src/editor/mapFile";
 import { readBriefing, readTriggers, sameTriggers } from "../../src/editor/triggers";
@@ -94,7 +94,7 @@ const same = (a: string, b: string) => a.replace(/\r\n/g, "\n").trimEnd() === b.
 export async function editInEditor(doc: OpenedMap, mapName: string, kind: EditKind, o: EditOptions = {}): Promise<EditOutcome> {
   const editor = editorCommand(o.editor);
   const text = kind === "triggers" ? exportTriggers(doc, null, !!o.briefing).text! : exportStrings(doc).text;
-  const dir = o.dir ?? (await mkdtemp(join(tmpdir(), "scmjs-edit-")));
+  const dir = o.dir ?? tempFolder("scmjs-edit-", { untilStopped: true });
   const stem = basename(mapName).replace(/\.(scm|scx|chk)$/i, "") || "map";
   const file = join(dir, `${stem}.${kind === "triggers" && o.briefing ? "briefing" : kind}.txt`);
   const cleanUp = () => (o.dir ? rm(file, { force: true }) : rm(dir, { recursive: true, force: true }));

@@ -240,7 +240,7 @@ describe("the command, through a stand-in 1.16.1 copy", () => {
     const refused = (o: Parameters<typeof diffPicture>[2]) => diffPicture(x, y, o, ascii).then(() => null, (e: CliError) => [e.exitCode, e.message]);
     expect(await refused({ out: "d.png", scale: "3" })).toEqual([2, '--scale takes 1, 2, 4, 8, 16, 32, not "3"']);
     expect(await refused({ out: "d.png", width: "80" })).toEqual([2, expect.stringMatching(/--width is the terminal/)]);
-    expect(await refused({ starcraft: tmp() })).toEqual([1, expect.stringMatching(/is not a copy of StarCraft/)]);
+    expect(await refused({ starcraft: tmp() })).toEqual([2, expect.stringMatching(/is not a copy of StarCraft/)]);
   });
 
   it("the terminal: the change picture titled a → b with its legend; three side by side when there is room", async () => {

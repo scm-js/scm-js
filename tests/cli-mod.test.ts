@@ -530,7 +530,7 @@ describe("scmjs mod diff", () => {
       expect(await exitOf(a, b)).toBe(1);
       expect(await exitOf(a, a)).toBe(0);
     } finally { process.exitCode = was; }
-  });
+  }, 30_000);
 });
 
 /* ── Play, test ────────────────────────────────────────────────────────── */

@@ -206,12 +206,16 @@ walkable from the game's tilesets, and `map generate` lays its ground with them.
 itself. They need two things on your computer:
 
 - Your copy of StarCraft, Remastered or 1.16.1. It is found in the usual places; otherwise
-  name its folder with `--starcraft <folder>` or the `SCMJS_STARCRAFT` setting. Nothing of
-  the game is fetched or carried by the command.
+  name its folder with `--starcraft <folder>` or the `SCMJS_STARCRAFT` setting. A
+  `SCMJS_STARCRAFT` that names no copy of the game is said, with the copy used instead.
+  Nothing of the game is fetched or carried by the command.
 - The game engine, for the commands that run the game. It is the engine of
-  [scmjs.dev/play](https://scmjs.dev/play/), about 25 MB, fetched the first time a command
-  needs it and kept in your cache folder (`~/.cache/scmjs` on Linux, the usual place on
-  other systems; `SCMJS_CACHE` moves it).
+  [scmjs.dev/play](https://scmjs.dev/play/), about 25 MB to download (105 MB once on
+  disk), fetched the first time a command needs it and kept in your cache folder
+  (`~/.cache/scmjs` on Linux, the usual place on other systems; `SCMJS_CACHE` moves it).
+  The line that says so goes to standard error, so a `--json` command's output stays JSON.
+  When the play page has newer runners, the next command fetches them and removes the old
+  ones.
 
 None of these run on a build server such as GitHub's, which has no copy of the game.
 `map diff --picture` uses your copy when it finds one and draws the ground in plain greys
@@ -537,9 +541,11 @@ scmjs map preview ridge.scx --out ridge.png --scale 8
 scmjs map new - --tileset ice --players 4 | scmjs map preview - --out - > new.png
 ```
 
-`--json` describes the picture without drawing it: its form, size and scale, the tileset,
-the copy of the game it came from, and how many start locations, units, buildings, mineral
-fields and geysers are on it.
+`--json` describes the picture without drawing it in the terminal: the form the command
+would use there (the picture itself in kitty or iTerm2, colour blocks, or shades), its
+size and scale, the tileset, the copy of the game it came from, and how many start
+locations, units, buildings, mineral fields and geysers are on it. With `--out`, the PNG
+is written as asked and `--json` describes it.
 
 To see where things happened on the map in real games, where units died or where buildings
 went up, draw a [heatmap from replays](#where-things-happened-across-many-games).
@@ -1733,9 +1739,9 @@ game's files from your copy of StarCraft ([what they
 need](#commands-that-need-starcraft)). Nobody has to play: the game runs as fast as the
 computer can run it. Or the players of a recorded game play it: `--replay` gives the game
 the commands from a replay, so the game in a bug report can be traced and tested. A map in
-the original StarCraft 1.00 form is run as Brood War, as the editor would convert it. The
-Blizzard campaign maps are not something the engine runs yet. Each command exits with 2
-when the game could not start.
+the original StarCraft 1.00 form is run as Brood War, as the editor would convert it, and
+a campaign map saved as a file, such as Enslavers, runs as any other map. Each command
+exits with 2 when the game could not start, a wrong `--starcraft` folder included.
 
 ### Which triggers fire
 
@@ -1756,13 +1762,17 @@ held it and then let it go on `n` times.
 
 | Option | What it does |
 | --- | --- |
-| `--frames` | How long to run, at 24 frames a second. The default, 2,400, is 100 seconds of play; the game may end sooner if a trigger ends it |
-| `--seed` | Fixes the game's luck, so the same map and seed give the same run |
+| `--frames` | How long to run, at 24 frames a second, or a time such as `1:40`. The default, 2,400, is 100 seconds of play; the game may end sooner if a trigger ends it |
+| `--every` | Frames between the progress lines, 600 by default (a minute of play, 1,440, with `--replay`); `0` for none |
+| `--seed` | Fixes the game's luck, so the same map and seed give the same run. A replay's game has the replay's own seed, so `--seed` with `--replay` is refused |
 | `--all` | Lists every trigger, when the map has more than forty |
-| `--json` | The same, per trigger, as data |
+| `--json` | The same, per trigger, as data: each with its number as the text gives it, its text, and its players from 1 (`playerNumbers`; `players` counts from 0) |
 
 Nobody plays, so nothing a player would do happens. A trigger waiting for a unit to be
-brought somewhere will say so, which is the point.
+brought somewhere will say so, which is the point. When the map ends the game early, as a
+map that defeats an idle player does, the report says so:
+[`map test`](#testing-a-maps-triggers) plays a scenario with steps. The progress lines go
+to standard error, so the report alone can be sent to a file.
 
 ### What the triggers cost
 
@@ -1910,10 +1920,15 @@ The tests are read from `<map>.tests.json` beside the map (`ums.tests.json` for
 }
 ```
 
-A scenario has a `name`, and may have `frames`, `seed`, `setup`, `steps` and `expect`.
-`frames` is how long to play: a number of frames, 24 to a second at Fastest, or `"m:ss"`;
-2,400 unless the file or `--frames` says otherwise. `frames` and `seed` at the top of the
-file apply to every scenario that does not set its own.
+A scenario has a `name` and an `expect` list, and may have `frames`, `seed`, `setup` and
+`steps`. A scenario that expects nothing would pass whatever the game did, so it is
+refused, as are two scenarios of one name in a file. A key the tests do not know, at any
+level, is refused with where it is and the nearest key they do know
+(`"frams": did you mean "frames"?`), so a misspelt key never goes unnoticed. A key that
+starts with `//` is a comment and is left alone. `frames` is how long to play: a number of
+frames, 24 to a second at Fastest, or `"m:ss"`; 2,400 unless the file or `--frames` says
+otherwise. `frames` and `seed` at the top of the file apply to every scenario that does
+not set its own.
 
 A scenario may name a `replay` instead of `setup` and `steps`. The replay's commands drive
 the game, played on the map being tested, and the scenario plays to the replay's end
@@ -2003,8 +2018,10 @@ trigger numbers in the report are the map's own.
 
 Because these triggers are part of the copy, the replay holds them. A failed scenario's
 replay is kept in `<map>.tests/` beside the map (or where `--out` says) and plays back the
-scenario exactly as it ran. `scmjs replay open` opens it in the editor, where the test's
-own triggers show first and last among the map's.
+scenario exactly as it ran. It is named after the tests file and the scenario, as the
+clips are (`ums.tests.loses.rep`), and it is removed once the scenario passes.
+`scmjs replay open` opens it in the editor, where the test's own triggers show first and
+last among the map's.
 
 `--clips` also keeps a clip of each failed scenario, to see what went wrong without
 opening the replay: the eight seconds of its game up to the moment it ended, and two more,
@@ -2021,10 +2038,9 @@ plays a replay has no clip of its own, since its game is that replay.
 ```
 $ scmjs map test ums.scx --clips
 …
-✖ 2 of 3 scenarios failed (10.0 s)
-  ✔ ums.clips/ums.tests.the-carrier-flies-to-the-middle-which-is-not-a-marine.gif · 228 KB · 0:08 · 0:32–0:40 of the game
+✖ 1 of 3 scenarios failed (7.3 s)
   ✔ ums.clips/ums.tests.a-marine-brought-to-the-middle-raises-the-alarm.gif · 254 KB · 0:08 · 0:17–0:25 of the game
-  2 clips of the failed scenarios in ums.clips
+  1 clip of the failed scenario in ums.clips
 ```
 
 | Option | What it does |
@@ -2032,7 +2048,7 @@ $ scmjs map test ums.scx --clips
 | `--clips [folder]` | A GIF of the end of each failed scenario's game, in `<map>.clips/` or the folder named |
 | `--clips-format webm` | The clips as WebM files rather than GIFs |
 | `--seed` | The game's random seed for scenarios that do not set one; the same map, scenario and seed give the same game every time |
-| `--frames` | How long to play, for scenarios and files that do not say |
+| `--frames` | How long to play, for scenarios and files that do not say: frames, or a time such as `0:20` |
 | `--out` | Where the failed scenarios' replays go |
 | `-u`, `--update` | For scenarios that play a replay: the expectations that no longer hold are rewritten to what the game gives now |
 | `--json` | Every scenario with each expectation, whether it held and what the game had |
@@ -2088,7 +2104,7 @@ and keep the ones the test is for.
 | --- | --- |
 | `--name` | The scenario's name; the replay's file name by default. A scenario with that name is replaced |
 | `--tests` | The tests file to write into; `<map>.tests.json` beside the map by default, made if it is not there |
-| `--frames` | How much of the replay to play; all of it by default |
+| `--frames` | How much of the replay to play, in frames or as a time such as `5:00`; all of it by default |
 | `--json` | The scenario as written, with the game's end |
 
 From then on `scmjs map test` plays the replay against the map as it is now. After a
@@ -2115,11 +2131,13 @@ Replays are files or folders, sub-folders included. Only replays of this map cou
 same map, or one with the same name and size, as for
 [`map heatmap`](#where-things-happened-across-many-games). Only Use Map Settings games
 count too, since in the other game types the game runs its own melee triggers. Every
-replay left out is listed with the reason. Several games are played at once: half the
-processors, at most four, or `--parallel`.
+replay left out is listed with the reason, as for `map heatmap`: a file that cannot be
+read is left out and the rest are counted, and when nothing named can be read, the command
+says so and exits with 2. Several games are played at once: half the processors, at most
+four, or `--parallel`.
 
 ```
-$ scmjs map coverage fs.scx replays/ --force
+$ scmjs map coverage fs.scx replays/ --any-map
 fs.scx · 4 triggers · 6 replays to play, 4 at a time
 1/6 ▲ 1570.rep  25:24 · 6 players · 2 triggers fired · parted at 0:00, counted to there · 6.6 s
 2/6 ▲ 1571.rep  31:59 · 6 players · 2 triggers fired · parted at 0:00, counted to there · 7.3 s
@@ -2142,7 +2160,7 @@ fs.scx · 4 triggers · 6 replays to play, 4 at a time
       Command (condition 1) said no last, in 1603.rep at 34:08
 ```
 
-*`--force` took replays played on other maps, so five of the six games parted from this
+*`--any-map` took replays played on other maps, so five of the six games parted from this
 one early. Only the last game ran this map as it was played.*
 
 For each trigger the table gives the games it fired in, how often it fired in all of them,
@@ -2162,7 +2180,7 @@ scenarios. Whether a scenario passes does not matter here; that is `map test`'s 
 | `--strict` | Exits with 1 when a trigger a player owned never fired |
 | `--format` | `github`, `junit` or `sarif`: the triggers that never fired, for CI. Warnings, or errors with `--strict`, and a note for each game that parted |
 | `--all` | Lists every trigger, even ones no player in the games owned |
-| `--force` | Takes replays played on another map too. Expect those games to part early |
+| `--any-map` | Takes replays played on another map too: their players' commands are played on this map, so expect those games to part early (`--force` is the old name) |
 | `--parallel` | Games played at once |
 | `--json` | Every game, every trigger with its counts, its text and why it never fired |
 
@@ -2180,7 +2198,7 @@ StarCraft](#commands-that-need-starcraft) for the map's tileset, which says whic
 is walkable and at what height, but not the game engine.
 
 ```
-$ scmjs map analyze "(4)Crossing.scx" --picture crossing.png
+$ scmjs map analyze "(4)Crossing.scx" --out crossing.png
 ✔ (4)Crossing  128 × 128 · desert · 4 start locations · 10 bases · StarCraft: Remastered 1.23.10.13515 · 0.7 s
 
   Start                      Main            Natural                      Way out         Height
@@ -2255,9 +2273,9 @@ it on either side; a cliff, a mineral line against it, or a building is.
 | Chokes | A walk between two starts goes through a passage under 2 tiles wide, where a Dragoon or a Siege Tank barely gets through |
 | Height | A start has 15 points more or less raised ground round it than the starts' middle |
 
-**The picture.** `--picture` writes the map as [`map preview`](#a-picture-of-a-map) draws
-it, at `--scale` pixels a tile (4 by default), with the analysis over it. It has no words,
-so here is what it shows:
+**The picture.** `--out` (once `--picture`, which still works) writes the map as
+[`map preview`](#a-picture-of-a-map) draws it, at `--scale` pixels a tile (4 by default),
+with the analysis over it. It has no words, so here is what it shows:
 
 | Drawn | Means |
 | --- | --- |
@@ -2311,24 +2329,26 @@ at Fastest. The unit sets out five tiles from its start toward the middle of the
 stops at the edge of the town hall at the other start: a neutral Nexus stands on every
 start while the walks run, so the walk ends where a real rush ends, at the base. The two
 directions between a pair can differ by a second or so, because the way out of each base
-is not the same. The shortest and longest walks are compared with the straight line
-between the two starts, the distance a flyer goes. When the terminal is too narrow for
-both figures, the seconds and the pixels come as two tables.
+is not the same. The shortest and longest walks, by the pixels walked, are compared with
+the straight line between the two starts, the distance a flyer goes. When the terminal is
+too narrow for both figures, the seconds and the pixels come as two tables.
 
 A walk that does not arrive is a finding too. Two starts with no ground between them, on
 an island map or where the terrain walls one off, are reported as having no way; on a map
-where no two starts are joined, the report says so and lists the straight lines instead. A
-unit that stops short (at a wall of minerals or buildings the map places, say), gets
-stuck, or is still walking after seven minutes of game time is named with how far from the
-base it ended.
+where no two starts are joined, the report says so under a warning and lists the straight
+lines instead. On a map that places units of its own for player 1, the game walks those
+beside the unit asked for, and only the unit asked for is reported; where the game did not
+walk it at all, the pair is reported as not walked, with why. A unit that stops short (at
+a wall of minerals or buildings the map places, say), gets stuck, or is still walking
+after seven minutes of game time is named with how far from the base it ended.
 
 The walks run in one game with nobody else in it: about four seconds for a four-player map
 and fifteen for an eight-player map of 256 × 256. `--seed` changes the game's luck, such
 as a unit stepping round another; the default is the one the editor's Walkability plugin
 uses, so the two agree. `--json` gives every walk and the table as data. A building or a
-flyer is refused (exit 2), as is a map with fewer than two start locations.
-[`map analyze`](#a-maps-layout) gives the same distances in a second without the game,
-within a few percent, beside the map's naturals and narrow points.
+flyer is refused (exit 2), as is a map with fewer than two start locations, before the
+game starts. [`map analyze`](#a-maps-layout) gives the same distances in a second without
+the game, within a few percent, beside the map's naturals and narrow points.
 
 ### Is the map fair to every start
 
@@ -2562,7 +2582,9 @@ scmjs map heatmap fs.scx replays/*.rep --what kills --player 1 --until 10:00
 Only replays played on this map count. A replay carries the map the game loaded, so the
 replay counts when that is the same map as the file, or a map with the same name and size,
 such as an earlier version of it. The others are listed as left out, with the map they
-were played on, and `--force` takes them anyway.
+were played on, and `--any-map` takes them anyway: each replay's own game is played and
+laid over this map, and what happened off this map, in a replay of a bigger one, is said
+and not counted (`--force` is the old name).
 [`replay map`](#the-map-a-replay-was-played-on) gets you the map from one of the replays
 when you do not have the file.
 
@@ -2593,8 +2615,11 @@ pale yellow where the most did. Under the picture are the count, the busiest til
 units most counted. The terminal draws it as `map preview` does, and `--width` sets its
 columns.
 
-A replay the game cannot play is listed with the reason, and the others still count. The
-command then exits with 1. It needs [your copy of StarCraft and the
+A file that is not a replay, or that cannot be read (an empty file, a cut-off one), is
+listed as left out with the reason, and the others still count; when no file named could
+be read, or a folder holds no replays, the command says so and exits with 2. A replay the
+game cannot play is listed with the reason, and the others still count; the command then
+exits with 1. It needs [your copy of StarCraft and the
 engine](#commands-that-need-starcraft).
 
 ### A video or GIF of a replay

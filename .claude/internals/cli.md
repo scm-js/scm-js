@@ -1581,7 +1581,7 @@ already bundled for `lsp`, would carry it (DAP is not JSON-RPC, but the framing 
 ## Where things happened: `map heatmap` (`cli/src/heatmap.ts`, `heat.ts`) — 2026-11-07
 
 `scmjs map heatmap <map> <replays…|folders> [--what deaths|kills|buildings|paths] [--player n|name] [--until m:ss]
-[--out p.png|-] [--side-by-side] [--scale n] [--width cols] [--blocks] [--force] [--parallel n] [--starcraft] [--json]`.
+[--out p.png|-] [--side-by-side] [--scale n] [--width cols] [--blocks] [--any-map] [--parallel n] [--starcraft] [--json]`.
 A fork built both ends (scm-sim branch `heatmap`, scm-js `cli-map-heatmap`).
 
 - **The runner is the replay runner's `--events` mode, not a new bundle** (as rush is the map runner's): no
@@ -1985,7 +1985,7 @@ HTTPS with the workflow token (`src/Helpers.psm1`), so it cannot push past the P
 `checkver -Update` in its own steps instead. `packaging/README.md` "Each release" has it all.
 ## Many games and old maps: `map coverage`, `map check --baseline` (`coverage.ts`, `baseline.ts`) — 2026-11-07
 
-`scmjs map coverage <map> [replays…] [--tests] [--strict] [--format text|json|github|junit|sarif] [--all] [--force]
+`scmjs map coverage <map> [replays…] [--tests] [--strict] [--format text|json|github|junit|sarif] [--all] [--any-map]
 [--parallel n] [--starcraft]` and `scmjs map check … --baseline [file] | --write-baseline [file]`. One PR (branch
 `cli-coverage-baseline`); no scm-sim change — the map runner's `--play` + `--order` already said everything needed.
 Docs: `docs/cli.md` "A baseline for old maps" (under Checking a map) and "Which triggers fired across many games"
@@ -1993,7 +1993,7 @@ Docs: `docs/cli.md` "A baseline for old maps" (under Checking a map) and "Which 
 
 - **Coverage = `map trace --replay` per replay, added up.** `runCoverage`: `replayFiles(paths, deep = true)` (new
   `deep` parameter on heatmap's walker; heatmap itself still takes a folder's own files only), dedupe by sha256,
-  `matchReplay` against `mapIdentity` (same scenario, else same name + size; `--force` takes the rest) — heatmap's rule,
+  `matchReplay` against `mapIdentity` (same scenario, else same name + size; `--any-map`, once `--force`, takes the rest) — heatmap's rule,
   so a newer version of a map still takes the old replays — then **non-UMS replays are left out before anything runs**
   (`header.gameType !== 10`: in melee the game runs its own triggers; the trace would hold only row −1 copies, and
   39 of the 42 psistorm replays are melee/1v1/TvB). Each taken replay → `gameMap` (a 1.00 map converted per run, since
@@ -2348,7 +2348,7 @@ per-picture links (an artifact is one zip; `archive: false` uploads one file an 
 the clips for a replay-driven scenario could use its replay with the map's own scenario swapped in.
 ## A melee map's layout: `map analyze` (`cli/src/analyze.ts`, `walk.ts`) — 2026-11-08
 
-`scmjs map analyze <map> [--json] [--picture out.png|-] [--scale n] [--all] [--starcraft dir]`, branch
+`scmjs map analyze <map> [--json] [-o, --out out.png|-] [--scale n] [--all] [--starcraft dir]` (`--out` was `--picture`, still taken, hidden), branch
 `cli-map-analyze`. Starts, mains, naturals, every pair's ground and air distance, the narrowest points, terrain shares
 and verdicts, **without the engine**: the tileset from the copy (`openGameFiles` → `readTileset`, `readUnitsDat`,
 `readSpeedTables`) and pure TypeScript after that. Whole command 0.4–0.8 s (the copy's kascade open ~0.2–0.5 s of it);
@@ -2760,3 +2760,78 @@ JSON `file` as typed, progress to stderr). Tests: `tests/cli-audit-maps.test.ts`
   --json` raw name (fetch.ts): `map info --json` now gives `name` cleaned and `rawName` raw — fetch should match; the
   mpq.test "Wakka Wakka when its file list is gone" times out (5 s) under the full parallel run on this machine, as
   before the branch (3.2 s alone).
+
+## Audit fixes: the game commands, processes and temporary folders (2026-11-11)
+
+Branch `cli-audit-game`, from the 0.13.3 audit. What was wrong, what changed, and the traps.
+
+**Processes and folders end with the command (`cli/src/lifecycle.ts`).** Runners kept playing after scmjs died any way
+but a terminal Ctrl-C (`| head`'s EPIPE → `process.exit`, `kill -TERM` from a supervisor, `timeout`), and a ladder's
+`--seat` processes with them; temp folders stayed on every interrupt, and `scmjs-run-*` on every run. Now:
+- `spawnOwned(cmd, args, opts)` spawns with `detached: true` on POSIX, so the child leads its own process group; the
+  group is killed (`process.kill(-pid)`), which takes the match runner's seats and Chromium's renderers. When a leader
+  exits, its group gets SIGKILL at once (a seat left by a match that ended badly). Every runner goes through it
+  (`engine.ts#startRunner`), and the browser (`browser.ts`). Not the text editor (interactive, on the terminal) nor
+  `open.ts` (meant to outlive us) nor `spawnSync` calls (ffmpeg, git: they block the loop; a signal waits for them).
+- `tempFolder(prefix, { untilStopped? })` = `mkdtempSync` + removal at exit; `removeFolder` now; `madeFolder` for a
+  `--out` folder the run created (balance), removed only on a signal; `atExit(undo)` for terminal state (watch's
+  cursor-show, one line in `watch.ts`, registered only when stdout is a TTY). `untilStopped` is for folders kept on
+  purpose: texteditor's (a failed import keeps the text).
+- Armed lazily (first registration). `process.on("exit")` runs `finish`: undo hooks, SIGTERM to every live group,
+  a 150 ms `Atomics.wait`, SIGKILL, then `rmSync` with retries. Synchronous, so it also runs for `process.exit` from the
+  EPIPE handler in `main.ts` and for an uncaught exception.
+- SIGINT/SIGTERM/SIGHUP: answered **only when ours is the sole listener** (`process.listenerCount(sig) > 1` → leave it):
+  the text editor adds an ignore-SIGINT while the editor runs, `plugin dev` its own stop. Then `finish(true)`, raw mode
+  off if stdin was raw (a default-disposition death skips Node's tty reset), "▲ Stopped." on stderr when a child was
+  alive, listeners removed and the signal raised again so a shell sees a signal death (130/143/129);
+  `process.exit(128+n)` if it did not take.
+- SIGKILL of scmjs cannot be answered: the children then run on (detached groups do not get the terminal's signal).
+- Tests: `tests/cli-lifecycle.test.ts` bundles `tests/support/lifecycleDriver.ts` with rolldown (the package's own
+  dependency through vite) and signals it — the only way to test signal handling without the engine. Trap: kill only
+  pids the test recorded; a failing run of it once left `node -e setInterval` grandchildren behind before `afterAll`
+  learned to kill what it saw.
+- The suites' own temp folders: `vitest.config.ts` `globalSetup: tests/support/tmpdir.ts` points TMPDIR/TMP/TEMP at
+  one `scmjs-tests-*` folder for the run (workers and the processes they start inherit it) and removes it at the end.
+  No test file had to change. (`node-compile-cache/` in TMPDIR is Node's, not ours.)
+
+**The engine (`engine.ts`).**
+- E1: the runners decide "am I main" with `import.meta.url === pathToFileURL(process.argv[1])`; Node gives the module
+  its real path, so a cache reached through a symlink made the runner do nothing and exit 0. `startRunner` passes
+  `realpathSync(runner)`. "Stopped without a result" now carries `noResultHint(dir)` (doctor, then remove the folder).
+- E2: `findGameCopy` throws exit 2 for a named folder that is no copy and for no copy at all (diff --picture,
+  preview, analyze, generate and the replay commands follow, since they share it — their tests were moved to 2).
+  A `SCMJS_STARCRAFT` naming no copy is said once on stderr with the copy used. coverage/heatmap check `--starcraft`
+  before printing anything.
+- E3: `ensureEngine` ignores its third argument (kept for the callers' signatures) and writes the fetch line to stderr
+  itself. Measured 2026-11-11: 24.3 MB over the wire (the bucket gzips; `fetch` asks for it), 105 MB on disk.
+- E4: after fetching, runners the deploy's `current.json` no longer names are removed from the build's folder
+  (`pruneRunners`; only names matching `RUNNERS[*].file`, never `.part` files — a concurrent fetch writes those).
+  Old *build* folders are not pruned (105 MB each): a game of another scmjs may be using one; left as a proposal.
+- `endReason`/`endDetail`: the runner's end `reason` names addresses ("its reason word 0x6D11F0 …"); anything with
+  `0x…`, "frame loop", "word" or "over" becomes "the game ended", the raw text under `detail` with `SCMJS_DEBUG`.
+  trace uses it; `replay watch` (watch.ts) should too.
+
+**map test.** B1: `map test` declares `--json/--frames/--starcraft/--engine`, and commander gives an option both
+declare to the parent wherever it is typed, so `record` never saw them. `typedOptions(cmd, local, keys)` (main.ts)
+reads the parent's value when its source is `cli`/`env` (not `default`: the parent's 2,400 frames must not leak in).
+B2: `onlyKnown` refuses unknown keys at file/scenario/entry/expectation level with the nearest key (Levenshtein ≤
+max(2, len/3)); `//`-prefixed keys are comments; a scenario with no `expect` and duplicate names (case-folded) are
+refused in `readTests` — not in `planScenario`, which tests and `recordTest` call with partial scenarios. Failed
+replays are `<tests stem>.<slug>.rep` (as clips), and a passing scenario's old one is removed.
+
+**map rush.** B3: the runner's `walkUnits` walks *every* unit of the local player (sorted with the asked type first),
+so on a map with pre-placed units for P1 it reports a walk per unit per pair — Carriers "arriving" by air, pre-placed
+SCVs — and sometimes no walk of the placed unit at all (ums.scx: Carrier 72, Interceptors 73, CC 106, no SCV). The CLI
+takes, per pair, the walk of the asked type that set out nearest the from-start; none → `unwalked` (with `instead`
+when other units were walked). The runner fix belongs in scm-sim (`src/exact/mapRush.ts`/`walkUnits`: walk only the
+units `pathingScenario` placed). Progress lines are buffered per pair for the same reason. Shortest/Longest are by
+pixels; seconds round once (`secondsOf`). < 2 starts is refused in main before the game.
+
+**heatmap/coverage.** `heatPoints(…, { bounds })` drops points off the map into `outside` (B4). `unreadable`/`noReplays`
+(heatmap.ts) word missing/unreadable files and the empty case (B5): all unreadable or none found → exit 2; some → left
+out, exit 0. `--force` → `--any-map` (hidden old name). File names as typed. `playingLine` draws an updating "playing
+…" line on a TTY stderr. Coverage still plays every replay on every run: its per-replay result could be cached as
+heatmap's is (key: map scenario hash + replay hash + engine build + `--order`), not done.
+
+**Messages.** No "the runner is scm-sim's" in the game commands; runner-version errors read "The game engine at {dir}
+is from before …". Progress for trace/cost/rush/coverage/heatmap/balance goes to stderr (`note` in main.ts).

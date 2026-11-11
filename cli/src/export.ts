@@ -12,9 +12,9 @@
 import { spawnSync } from "node:child_process";
 import { createInterface } from "node:readline";
 import { randomBytes } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { tmpdir } from "node:os";
+import { tempFolder } from "./lifecycle";
 import { basename, dirname, extname, join, relative, resolve } from "node:path";
 import { gunzipSync } from "node:zlib";
 import { FRAME_MS, type Replay, type ReplayPlayer } from "@scm-js/replay";
@@ -367,7 +367,7 @@ export async function gameMoments(input: Input, from: number, to: number, o: { p
   const runner = runnerFor(engine, "replay");
   const copy = findGameCopy(o.starcraft);
   let file = resolve(input.path), work: string | null = null;
-  if (!existsSync(file)) { work = mkdtempSync(join(tmpdir(), "scmjs-export-")); file = join(work, "replay.rep"); writeFileSync(file, input.bytes); }
+  if (!existsSync(file)) { work = tempFolder("scmjs-export-"); file = join(work, "replay.rep"); writeFileSync(file, input.bytes); }
   try {
     const child = startRunner(runner, [file, "--engine", engine.dir, "--starcraft", copy.folder, "--every", String(SAMPLE_EVERY), "--from", String(Math.max(0, from)), "--to", String(to)]);
     let said = "";
@@ -547,7 +547,7 @@ export async function exportReplay(input: Input, rep: Replay, o: ExportOptions, 
   else if (!got) throw new CliError(t("The play page finished without a clip."));
   else if (plan.format === "webm") writeFileSync(plan.out, got);
   else {
-    const work = mkdtempSync(join(tmpdir(), "scmjs-export-"));
+    const work = tempFolder("scmjs-export-");
     try {
       const webm = join(work, "clip.webm");
       writeFileSync(webm, got);

@@ -119,7 +119,7 @@ export function modInfo(source: ModSource, hash: SourceHash | null = null): ModI
 const carriedPath = (p: ModSource["plugins"][number]) => (p.member ? `${p.layer}: ${p.member}` : p.name);
 
 /** A size as `size` gives it, and past a thousand megabytes in gigabytes. */
-export const bigSize = (bytes: number) => (bytes >= 1024 ** 3 ? `${(bytes / 1024 ** 3).toFixed(1)} GB` : size(bytes));
+export const bigSize = size;
 
 /** Carried files by name, each by its path where another has the same name. */
 function carriedList(list: ModInfo["plugins"]): string {

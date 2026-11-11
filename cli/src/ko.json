@@ -955,7 +955,7 @@
   "Name them with --maps: --maps \"(2)Boxer.scm\" \"(4)Lost Temple.scm\".": "--maps로 지정하세요: --maps \"(2)Boxer.scm\" \"(4)Lost Temple.scm\".",
   "Nothing to play: no pairing has a bot in it": "플레이할 것이 없습니다. 봇이 들어간 대진이 없습니다",
   "{n, plural, one {# replay} other {# replays}} in {folder}": "리플레이 {n, plural, other {#개}}: {folder}",
-  "A BWAPI bot for scm-sim's play page": "scm-sim 플레이 페이지용 BWAPI 봇",
+  "A BWAPI bot for the play page": "플레이 페이지용 BWAPI 봇",
   "Key": "키",
   "Memory": "메모리",
   "Built by": "빌드 도구",

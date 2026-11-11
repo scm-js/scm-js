@@ -141,7 +141,7 @@ async function botInfo(input: Input) {
   const h = JSON.parse(new TextDecoder().decode(input.bytes.subarray(12, 12 + n))) as Record<string, unknown>;
   const data = { file: { name: input.name, bytes: input.bytes.length }, key: h.key, name: h.name, source: h.source, commit: h.commit, memoryMB: Number(h.memoryPages) / 16, toolchain: h.toolchain, license: String(h.license ?? "").split("\n").find((l) => l.trim())?.trim() ?? "" };
   return { data, lines: [
-    pc.bold(String(data.name)), pc.dim(t("A BWAPI bot for scm-sim's play page")), "",
+    pc.bold(String(data.name)), pc.dim(t("A BWAPI bot for the play page")), "",
     ...rows([[t("Key"), String(data.key)], [t("Source"), data.source ? `${data.source}${data.commit ? pc.dim(` @ ${String(data.commit).slice(0, 7)}`) : ""}` : null], [t("Licence"), data.license || null], [t("Memory"), `${data.memoryMB} MB`], [t("Built by"), String(data.toolchain)], [t("File"), `${input.name}${dot}${size(input.bytes.length)}`]]),
   ] };
 }

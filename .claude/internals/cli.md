@@ -325,7 +325,7 @@ the standing (Elo, games, won/lost/undecided, average length, the bot's ms a fra
 
 ## Replays in the terminal (`cli/src/watch.ts`, `engine.ts`) — 2026-11-06
 
-`scmjs replay watch <rep> [--speed x] [--from m:ss] [--size WxH] [--every n] [--json] [--starcraft] [--engine]`: the
+`scmjs replay watch <rep> [--speed x] [--from m:ss] [--cells WxH (was --size)] [--every n] [--json] [--starcraft] [--engine]`: the
 first of the "things people can see" slice (the user: "replay watch first"), the demo that gets screenshotted.
 
 - **The engine's half is scm-sim's `src/exact/runReplay.ts`** (PR jeany55/scm-sim, branch `replay-runner`), modelled on
@@ -1509,8 +1509,8 @@ already bundled for `lsp`, would carry it (DAP is not JSON-RPC, but the framing 
 
 ## A replay as a clip: `replay export` (`cli/src/export.ts`, `browser.ts`, `camera.ts`, `gif.ts`) — 2026-11-07
 
-`scmjs replay export <rep> [--out x.webm|.mp4|.gif] [--from --to m:ss] [--follow <player>|--at x,y|--all] [--speed]
-[--size WxH] [--fps] [--browser] [--starcraft] [--json]`, hidden `--play <url>` (SCMJS_PLAY_URL). Needs scm-sim's
+`scmjs replay export <rep> [--out x.webm|.mp4|.gif] [--from --to m:ss] [--follow <player>|--at x,y|--whole-map (was --all)] [--speed]
+[--resolution WxH (was --size)] [--fps] [--browser] [--starcraft] [--json]`, hidden `--play <url>` (SCMJS_PLAY_URL). Needs scm-sim's
 `replay-export` branch deployed (the page's `scmjs.view.record`, `?files=`); an older page answers ready without
 `record` and the command says so.
 
@@ -2500,3 +2500,85 @@ the runner's race string; a numeric one maps to a declared letter — but `map h
 so no table reaches it today. `mod` side: `mods.md` "Races a mod adds". Tests: `tests/cli-races.test.ts` (made replays
 with race 69; the real BattleGuard replay when `SCMJS_COSMONARCHY` names the release folder — either the folder itself or
 a root holding `release/` — and the replay is in `~/.cache/scmjs-cosmonarchy/replays/` or `SCMJS_COSMONARCHY_REPLAY`).
+
+## Audit fixes: replays, mods and bots (2026-11-11)
+
+Branch `cli-audit-mods`, one of four from the 0.13.3 end-to-end audit (brief ids B1–B13, "Replays", "consistency").
+
+**Mod folders (`mod/target.ts`, new).** `modTarget(dir, {force, source})` is the one rule for the folders `mod unpack`
+and `mod new` write: not there → made (parents too); empty → taken; holds a `mod.json` `readManifest` accepts → refused
+(exit 2) unless `force`, which removes every top-level entry **except dot names** (`.git` survives; the guide says so);
+anything else non-empty, a file, or a file in the path → refused even with `force`. The source inside the target is
+refused (`within`), since a forced clear would delete it before a folder source is read (folder sources are read
+lazily). Before: an unpack over an unpack `rm`'d only the known folders, so edits were lost silently and stray files
+under them too (B5). MCP `mod_unpack`/`mod_new` call the same functions without `force`: they now refuse an earlier
+unpack — the MCP descriptions (shell agent's) still say otherwise.
+
+**What is not a mod (`mod/source.ts`).** `openModSource` refuses (exit 2) a source that holds nothing of the game's
+(`holdsNothing`: no files, plugins, FireGraft files or archives), named by what it is (`otherKind`: a replay by
+`detectFormat`, a bot by `SCMBOT1\n`, a map = `.chk` or an MPQ with `staredit\scenario.chk` — `kindOf` in files.ts calls
+every MPQ a map, so it cannot be used), an empty folder, an `.exe` with no archive. A **mod folder is exempt**: `mod new`'s
+empty folder is a mod. `folderManifest` separates a `mod.json` that is not JSON (now an error, with the path) from one
+that is JSON without `scmjs` (a game-files folder naming itself: still read as a folder) — `readManifest` (core) returns
+null for both, which is why `check`/`info` used to fall back silently (B3). `readModFolder` says "No folder" / "is a
+file". `mod test` checks the pair first (`checkModAndMap`), since `mapTestAction` would read the mod as a map.
+
+**`--out` (B4).** `mod pack|build -o -`: the MPQ through `packMod(..., { stdout })`; **without a `stdout` stream `-` is
+refused**, so the MCP server (whose stdout is the protocol) cannot be made to write into it. `checkPackOut` refuses
+`-o` with `--folder`, `--folder -`, `--json` with `-o -`, and a non-`.mpq` name. `replay map` refuses a non-map
+extension (`checkMapOut`) and makes the folder. Paths in JSON are as typed now: `mod unpack|new` `dir`, `mod pack`
+`path`, `mod header` `files`, `replay map` `file`, `replay export` `file`, `ladder.json` `out` (`LadderOutcome.typed`).
+`mod info|check` entries have both `file` and `path`; `replay info` entries gained `path`.
+
+**`bot run` (B6, B7, B8).** `botRunValues` (botrun.ts) reads every value through `values.ts` before anything starts;
+`checkBotGame` reads both files first (swapped, replay-as-map, bot folder → names `out/<key>.scmbot`, unreadable map,
+**zlib/bzip2 scenario** → refused: the engine is 1.16.1's code, Storm has no zlib and calls `LoadLibraryA`, which the
+engine has no stand-in for — that was the "LoadLibraryA from 0x1501E69D" on `tests/maps/ums.scx`, the only committed map
+compressed with zlib), and the start-location count for a melee game. `gameKind`: with a mod and no `--ums/--melee`,
+ask `--melee` on a melee-looking map (`looksLikeMapSettings`, the runner's own test copied) when the mod carries no
+plugins as files. The runner's `useMapSettings` counts a FireGraft project with **0 edits** as code (`withCode =
+plugins.length > 0 || !!firegraft`), which seated the bot alone and "won at frame 48"; scm-sim should count plugins (or a
+project with edits). A start line with no non-bot player → `alone` + a warning. The bot's player is called "oracle" by
+the engine: text lines get the bot's name (the engine should name the player). Loss → `▲`. `runnerwords.ts` (new, so
+`ladder.ts` can use it without an import cycle through values.ts) holds `plainRunnerError` (drops brackets and `: `-parts
+holding `0x…`, "stack words", `x.dll!`, "no stand-in for"; rewrites "the scmbot toolchain (scmbot build)" to `scmjs bot
+update, then scmjs bot build`; `SCMJS_DEBUG` keeps the raw text) and `plainReason` for a replay's end. The hint "The
+runner is scm-sim's…" is gone everywhere.
+
+**Plugin-only mod on Remastered (B13).** The runner's `readsStartupData(names)` is `!names.length || …`: a mod with **no
+game files** reloads the startup data. `overlay.ts#readsStartupData` lacked the empty case, so no game layer was laid
+and the reload stopped at `unit\zerg\avenger.grp`. Mirrored now. Then EUDEnableR's plugins fail to load (no stand-ins
+for `kernel32.dll!CreateRemoteThread`, `msvcrt.dll!_strcmpi`) — scm-sim's; the game plays on without them.
+
+**A mod's replays (B9).** The ladder's runner writes replays without `SCMJ`; `tagModReplay` appends
+`ModOverlay.tag()` (`modTag`: dataSet = `hash`, or `withoutPlugins` when the mod carries plugins and none ran;
+plugins = carried-as-file plugins minus those the runner said failed — the runner names a plugin by its own display
+name, so a failure is matched by file name where it can be; firegraft = the `.fgp` when `start.code.firegraft`;
+engine `{ lifter: "shipped", build }`; `madeBy: "scmjs <version>"`), as the play page's `replayTagOf` does. A file the
+tag cannot go in (the tests' stand-in runner writes "REPLAY n") is left alone. **Not done: `map test --mod` / `mod
+test`** (maptest.ts is not this area's): after the runner writes `rep`, the same
+`writeFile(rep, await appendModTag(bytes, await overlay.tag({ code: null, build: engine.build })))`. `bot run` saves no
+replay. `refuseModReplay` and a wrong `--mod` are exit 2 now.
+
+**`replay watch`.** The default is a line at each minute of the clock: the runner is asked `--every 12` (half a second,
+so no minute is stepped over: 24 frames is 1.008 s and would skip a second now and then) and the first frame whose
+`clock` reads the next whole minute is printed. 1,440 drifted (1:00, 2:01, 3:01 …). `--every 0` asks the runner past
+the replay's end. `watchValues` reads every option first; `--from` past the end refused. The start line's map name is
+the replay's `header.mapName` (the runner gives the file's). The end's `reason` goes through `plainReason`.
+**Measured**: 1548.rep (21:47) piped, 18.7 s either way. `--size` → `--cells`, export's `--size` → `--resolution`,
+`--all` → `--whole-map`, `mod build --force` → `--ignore-errors`: old spellings are hidden options with the same effect.
+
+**Smaller.** `mod info`: `bigSize` (GB past 1,024 MB; `ui.ts#size` has no GB step), a plugin named twice shown by path,
+`slowLine` on stderr after 1.5 s. `mod new --tables` = `gameSource` + `unpackMod` (needs a copy of the game). `bot
+ladder`: `--races` takes words with commas, `x:bogus` after an existing file says "not a race", `ladderValues`,
+`clearLadderFolder` (refuses an earlier ladder's folder unless `--force`, which removes top-level `*.rep` and
+`ladder.json` and keeps `bwapi-data`), `parseEntrants(..., command)` for `map balance`'s wording. `mod diff a b` exits 1
+when they differ. A mod folder's text error is printed `<folder>/<file>:<line>`. `bot build` checks scmbot.json's
+licence file before Docker; Docker missing or 125–127 from `docker run` → exit 2. `mod play --json` sends the address to
+stderr; `--start` needs `--bot`; `BROWSER=none` gets its own line. `loadReplayInput` failures are exit 2 (files.ts).
+
+**Left / elsewhere.** A Ctrl-C'd ladder still leaves its folder (made before the first game; the runner writes into it).
+`bot run --ums --opponents …`: the opponents do nothing there and are not said. The runner's failed-plugin lines in
+`codeWords` (engine.ts) still name `kernel32.dll!…`. `replay info`'s `Game oracle hosted by …` is the engine's game name
+in the file. The core's "expected an entry header (Name(id):) or a field line" for a bad value is `src/formats/dat`'s.
+

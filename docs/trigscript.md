@@ -381,7 +381,7 @@ language](trigscript-language.md) guide covers each part in full. In short:
 - **Text and sound**: texts with values, lines of JSX, and sounds the script makes
   ([Text](trigscript-language.md#text), [Sounds and imported
   files](trigscript-language.md#sounds-and-imported-files)).
-- **Libraries**: nine modules that come with TrigScript, such as `trigscript/ui` for menus
+- **Libraries**: ten modules that come with TrigScript, such as `trigscript/ui` for menus
   and `trigscript/cutscene` for scenes, and libraries other plugins provide ([TrigScript
   library](trigscript-library.md)).
 
@@ -1321,8 +1321,8 @@ it.
 | `unitsAt(location, filter?)`, `unitsOf(player, filter?)`, `allUnits(filter?)` | The units a `for…of` runs over. [Units](trigscript-language.md#units) |
 | `first(filter?)`, `nearest(type, location, filter?)`, `randomUnit(filter?)` | One unit, or `null`. |
 | `u.hp`, `u.shields`, `u.energy`, `u.kills`, `u.cooldown`, `u.buildTime`, `u.stim` …, `u.invincible` | Read and written. `u.hp = 0` kills. [A unit's fields](trigscript-language.md#a-units-fields) |
-| `u.maxHp`, `u.owner`, `u.type`, `u.x`, `u.y`, `u.speed`, `u.burrowed`, `u.cloaked`, `u.underAttack`, `u.inTransport` | Read only. |
-| `u.order(kind, location)`, `u.give(player)`, `u.kill()`, `u.remove()`, `u.damage(n)`, `u.heal(n)`, `u.locate(location)` | What a unit can be told. `damage` and `heal` also take `{ percent }`. |
+| `u.maxHp`, `u.owner`, `u.type`, `u.x`, `u.y`, `u.speed`, `u.burrowed`, `u.cloaked`, `u.underAttack`, `u.inTransport`, `u.orderTarget`, `u.orderTargetX`, `u.orderTargetY` | Read only. |
+| `u.order(kind, location)`, `u.gather(target)`, `u.give(player)`, `u.kill()`, `u.remove()`, `u.damage(n)`, `u.heal(n)`, `u.locate(location)` | What a unit can be told. `damage` and `heal` also take `{ percent }`. |
 | `on.created`, `on.died`, `on.killed`, `on.morphed`, `on.order` | A function run each time something happens to a unit. [Events](trigscript-language.md#events) |
 | `stats(unitType)`, `stats(weapon)`, `stats(upgrade)`, `stats(tech)`, `stats(player)` | The game's tables. [The game's tables](trigscript-language.md#the-games-tables-and-memory) |
 | `memory.game.frame`, `memory.map.width`, `memory.vision.countdown` | Other values of the game. |

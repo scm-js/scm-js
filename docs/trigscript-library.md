@@ -1,8 +1,9 @@
 # The TrigScript library
 
-TrigScript comes with nine modules written for programs: motion and maths, chance, timers,
+TrigScript comes with ten modules written for programs: motion and maths, chance, timers,
 events of your own, menus and dialogs in the text area, cutscenes, pictures drawn in the
-fog of war, pixel screens on the minimap, and music. A script imports what it needs:
+fog of war, pixel screens on the minimap, music, and workers that go to work on their own.
+A script imports what it needs:
 
 ```ts
 import { chance, range } from "trigscript/random";
@@ -34,6 +35,7 @@ language](trigscript-language.md) guide.
 | [`trigscript/fog`](#fog) | The fog of war as a picture: discs, rectangles, pictures, columns, videos |
 | [`trigscript/screen`](#screen) | A grid of pixels shown on the map and the minimap as units |
 | [`trigscript/music`](#music) | Instruments, patterns and songs, played note by note or mixed when the script is built |
+| [`trigscript/workers`](#workers) | New workers rallied to minerals or gas start gathering as they come out |
 
 Other plugins can provide libraries of their own; see [Libraries from other
 plugins](#libraries-from-other-plugins).
@@ -672,6 +674,44 @@ script plays reach the map, mixed into the sounds it makes.
 | `render(song, options?)` | A song or a performance mixed into one sound when the script is built. Options: `reverb`, `master`, `limit`, `loudness`, `parts`. |
 | `play(song)`, `loop(song)` | Play a song note by note, once or again and again. |
 | `stems(song, options)`, `new Band()`, `conduct(stems, band)` | Music that follows the game: `band.go`, `queue`, `mute`, `unmute`, `sting`, `stop`. |
+
+## Workers
+
+`trigscript/workers` puts new workers to work. A worker rallied to a mineral field
+normally walks to it and stands there; with this module it starts mining as soon as it
+comes out.
+
+```ts
+import { buildAutoMiningProgram } from "trigscript/workers";
+
+buildAutoMiningProgram();   // at the top of the script: on for the whole game
+```
+
+For every human player, a newly trained SCV or Probe, or a Drone hatched from a Larva,
+looks at where its producer's rally point is:
+
+- On a mineral field, it mines that field.
+- On a finished Refinery, Extractor or Assimilator of its own player, it gathers gas from
+  it.
+- Anywhere else, it walks to the rally point as it always has: the ground, a bare geyser,
+  a gas building still being made, or another player's.
+
+It acts once, as the worker comes out, so an order the player gives afterward stands.
+Computer players' workers and units made by Create Unit are left alone. A field or a gas
+building that is already busy is the game's to sort out, as it is when the player
+right-clicks it.
+
+**Where the call goes.** `buildAutoMiningProgram()` makes a program, and programs are made
+when the map is built, so the call goes at the top of a script, outside `program()`.
+Inside `program()` or a listener, the script does not build. Once is enough: a second
+call, in the same file or another, adds nothing.
+
+The order it gives is `u.gather(target)`, which a program of your own can give too ([What
+a unit can be told](trigscript-language.md#what-a-unit-can-be-told)).
+
+| Name | What it does |
+| --- | --- |
+| `buildAutoMiningProgram()` | Turn auto-mining on for the whole game. At the top of a script only. |
 
 ## Libraries from other plugins
 

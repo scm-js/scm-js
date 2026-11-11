@@ -94,13 +94,15 @@ export interface WriteArchiveOptions {
   encrypt?: boolean;
   /** Write a (listfile) naming the members (default on). */
   listfile?: boolean;
+  /** Carry a member read from a form the writer cannot make (an ADPCM sound) as stored while unchanged (default on). */
+  carryStored?: boolean;
 }
 
 /** The archive around a scenario's bytes as given — `readArchive` the other way; the editor's sector rule (zlib likes big sectors). */
 export function writeArchiveBytes(chk: Uint8Array, options: WriteArchiveOptions = {}): Promise<Uint8Array> {
   const compression = options.compression ?? "none";
   return saveMap(chk, {
-    extras: options.extras, stored: options.stored ?? null, compress: compression, encrypt: options.encrypt ?? false, listfile: options.listfile ?? true,
+    extras: options.extras, stored: options.stored ?? null, compress: compression, encrypt: options.encrypt ?? false, listfile: options.listfile ?? true, carryStored: options.carryStored,
     sectorSize: requiredSectorSize(options.stored, compression === "zlib" ? 0x10000 : STAREDIT_SECTOR_SIZE),
   });
 }

@@ -20,7 +20,7 @@ import { stringUsages } from "../../src/editor/strings";
 import { triggerReferences } from "../../src/editor/triggerRefs";
 import { buildChk, DEFAULT_SAVE_OPTIONS, planSave } from "../../src/editor/save";
 import { pruneScenarioStrings } from "./edit";
-import { packStored } from "./relocate";
+import { packStored } from "../../src/formats/mpq/stored";
 import { audioType } from "./sounds";
 import { t } from "./i18n";
 import { CliError, dot, mark, num, pc, size, table } from "./ui";
@@ -193,7 +193,7 @@ export async function optimizeMap(bytes: Uint8Array, file: string, o: OptimizeOp
     const set = new Set<string>();
     const a = loaded?.archive;
     if (a && archive.extras.size) {
-      const probe = (await loadMap(await writeArchiveBytes(archive.chk, { extras: archive.extras, compression, encrypt, listfile: false }))).archive!;
+      const probe = (await loadMap(await writeArchiveBytes(archive.chk, { extras: archive.extras, compression, encrypt, listfile: false, carryStored: false }))).archive!;
       for (const name of archive.extras.keys()) {
         const was = memberInfo(a, name)?.storedSize, now = memberInfo(probe, name)?.storedSize;
         // (A member with no stored bytes is not carried by the writer at all: it is written afresh.)
@@ -229,10 +229,10 @@ export async function optimizeMap(bytes: Uint8Array, file: string, o: OptimizeOp
     const asStored = rewriteAll ? new Set<string>() : await asStoredFor(compression);
     const extras = new Map([...all].filter(([n]) => !asStored.has(n)));
     const stored = rawFor(kept.filter((n) => asStored.has(n)));
-    if (stored === archive.stored || !listfile) return writeArchiveBytes(chk, { extras, stored, compression, encrypt, listfile });
+    if (stored === archive.stored || !listfile) return writeArchiveBytes(chk, { extras, stored, compression, encrypt, listfile, carryStored: false });
     // Members carried as stored are not in the file list the writer makes, so the list is written here, naming them too.
     extras.set("(listfile)", new TextEncoder().encode([SCENARIO_PATH, ...kept].join("\r\n")));
-    return writeArchiveBytes(chk, { extras, stored, compression, encrypt, listfile: false });
+    return writeArchiveBytes(chk, { extras, stored, compression, encrypt, listfile: false, carryStored: false });
   };
   /** The smaller of the archive with the members carried as stored and with every member written afresh. */
   const writeBest = async (compression: ArchiveCompression): Promise<{ bytes: Uint8Array; asStored: string[] }> => {

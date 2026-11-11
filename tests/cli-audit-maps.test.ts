@@ -6,10 +6,13 @@
  * folder.
  */
 import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { Archive, Creator } from "mopaq";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { looksLikeScenario, openMapBytes, readArchive } from "../src/editor/mapFile";
+import { looksLikeScenario, openMapBytes, readArchive, writeMapBytes } from "../src/editor/mapFile";
+import { SCENARIO_PATH } from "../src/formats/mpq/scm";
+import { storedFormOf, storedInOtherForm } from "../src/formats/mpq/stored";
 import { program } from "../cli/src/main";
 import { CliError, visible } from "../cli/src/ui";
 import { testMap } from "./support/maps";
@@ -80,4 +83,91 @@ describe("S1: bytes that are not a map", () => {
     expect(r.err).toMatch(/not a map the editor reads/);
     expect(existsSync(join(dir, "x.scx"))).toBe(false);
   });
+});
+
+/**
+ * ums.scx with its sound stored as StarEdit stores one: ADPCM sectors (mopaq writes only PKWARE and zlib, so the
+ * sectors are made here — silence, each sample "the same as the last"). 8,192 bytes of PCM in 4,116 stored.
+ */
+async function adpcmMap(): Promise<{ bytes: Uint8Array; stored: number; pcm: Uint8Array }> {
+  const chk = (await readArchive(new Uint8Array(readFileSync(testMap("ums.scx"))))).chk;
+  const WAV = "staredit\\wav\\tone.wav";
+  const pcm = new Uint8Array(8192);
+  const first = new Creator({ sectorSize: 4096 });
+  first.addFile(SCENARIO_PATH, chk, { compress: "pkware" });
+  first.addFile(WAV, pcm, { compress: false });
+  const a = await Archive.openAsync(await first.writeAsync());
+  const plain = a.members().find((m) => m.slot === a.slotOf(WAV))!;
+  // A sector: the method (0x40, ADPCM mono), a byte the decoder skips, the shift, the first sample, then 2,047 times
+  // "the same sample again" (0x80).
+  const sector = new Uint8Array([0x40, 0, 0, 0, 0, ...new Array(2047).fill(0x80)]);
+  const data = new Uint8Array(12 + sector.length * 2);
+  new DataView(data.buffer).setUint32(0, 12, true);
+  new DataView(data.buffer).setUint32(4, 12 + sector.length, true);
+  new DataView(data.buffer).setUint32(8, 12 + sector.length * 2, true);
+  data.set(sector, 12); data.set(sector, 12 + sector.length);
+  const second = new Creator({ sectorSize: 4096, hashTable: a.hashEntries(), listfile: false });
+  second.addStored({ ...plain, block: { ...plain.block, compressedSize: data.length, flags: 0x80000000 | 0x200 }, data });
+  second.addFile(SCENARIO_PATH, chk, { compress: "pkware" });
+  second.addFile("(listfile)", new TextEncoder().encode([SCENARIO_PATH, WAV].join("\r\n")), { compress: "pkware" });
+  return { bytes: await second.writeAsync(), stored: data.length, pcm };
+}
+const WAV = "staredit\\wav\\tone.wav";
+const storedSize = async (bytes: Uint8Array) => (await Archive.openAsync(bytes)).fileInfo(WAV)!.compressedSize;
+
+describe("S2: a sound StarEdit stored with ADPCM", () => {
+  it("is read as PCM, known to be in a form the writer cannot make, and written back as it was stored while unchanged", async () => {
+    const { bytes, stored, pcm } = await adpcmMap();
+    const doc = await openMapBytes(bytes, "a.scx");
+    expect(doc.extras.get(WAV)).toEqual(pcm);
+    expect(storedFormOf(doc.extras.get(WAV)!)?.name).toBe(WAV);
+    const a = await Archive.openAsync(bytes);
+    expect(storedInOtherForm(a.members().find((m) => m.slot === a.slotOf(WAV))!, WAV)).toBe(true);
+    // What the editor's Save and every command that writes a map run.
+    const out = await writeMapBytes(doc.scenario, { format: "scx", extras: doc.extras, stored: doc.stored, options: { compression: "pkware", encrypt: true } });
+    expect(await storedSize(out)).toBe(stored);
+    const again = await openMapBytes(out, "a.scx");
+    expect(again.extras.get(WAV)).toEqual(pcm);
+    expect((await Archive.openAsync(out)).files()).toContain(WAV);
+    // A sound given new bytes is written afresh.
+    doc.extras.set(WAV, new Uint8Array(8192).fill(1));
+    expect(await storedSize(await writeMapBytes(doc.scenario, { format: "scx", extras: doc.extras, stored: doc.stored, options: { compression: "pkware" } }))).not.toBe(stored);
+    // And one changed in place too.
+    const inPlace = await openMapBytes(bytes, "a.scx");
+    inPlace.extras.get(WAV)![100] = 7;
+    expect(storedFormOf(inPlace.extras.get(WAV)!)).toBeNull();
+  });
+
+  it("stays as it was through map set, and through unpack and pack while its file is unchanged", async () => {
+    const dir = tmp();
+    const { bytes, stored } = await adpcmMap();
+    writeFileSync(join(dir, "a.scx"), bytes);
+    expect((await scmjs("map", "set", join(dir, "a.scx"), "--name", "B", "--out", join(dir, "b.scx"))).code).toBe(0);
+    expect(await storedSize(new Uint8Array(readFileSync(join(dir, "b.scx"))))).toBe(stored);
+    expect((await scmjs("map", "unpack", join(dir, "a.scx"), "--out", join(dir, "a"))).code).toBe(0);
+    expect(JSON.parse(readFileSync(join(dir, "a", "archive.json"), "utf8")).version).toBe(3);
+    const packed = await scmjs("map", "pack", join(dir, "a"), "--out", join(dir, "c.scx"), "--json");
+    expect(packed.code).toBe(0);
+    expect(JSON.parse(packed.out)).toMatchObject({ keptAsStored: 1, changedSounds: 0 });
+    expect(await storedSize(new Uint8Array(readFileSync(join(dir, "c.scx"))))).toBe(stored);
+    // Edited: written afresh, and said.
+    writeFileSync(join(dir, "a", "staredit", "wav", "tone.wav"), new Uint8Array(8192).fill(3));
+    const edited = await scmjs("map", "pack", join(dir, "a"), "--out", join(dir, "d.scx"));
+    expect(edited.code).toBe(0);
+    expect(edited.out + edited.err).toMatch(/1 sound was changed since the unpack and goes in as plain PCM/);
+    expect(await storedSize(new Uint8Array(readFileSync(join(dir, "d.scx"))))).not.toBe(stored);
+  });
+});
+
+const WAKKA = join("fixtures", "maps", "(2)Wakka Wakka.scm");
+describe.skipIf(!existsSync(WAKKA))("S2 on a StarEdit map (fixtures)", () => {
+  it("writes Wakka Wakka smaller than it was, every member the same once read", async () => {
+    const bytes = new Uint8Array(readFileSync(WAKKA));
+    const doc = await openMapBytes(bytes, "w.scm");
+    const out = await writeMapBytes(doc.scenario, { format: "scm", extras: doc.extras, stored: doc.stored, options: { compression: "pkware", encrypt: true } });
+    expect(out.length).toBeLessThan(bytes.length);
+    const again = await openMapBytes(out, "w.scm");
+    expect([...again.extras.keys()].sort()).toEqual([...doc.extras.keys()].sort());
+    for (const [name, data] of doc.extras) expect(again.extras.get(name), name).toEqual(data);
+  }, 30_000);
 });

@@ -1,5 +1,6 @@
 import { Archive, Creator, MpqError, type CompressionMethod, type HashEntry, type StoredMember } from "mopaq";
 import { t } from "../../i18n";
+import { keepStoredForm, packStored, storedFormOf, storedInOtherForm } from "./stored";
 
 /** Where StarCraft keeps the scenario inside the archive. */
 export const SCENARIO_PATH = "staredit\\scenario.chk";
@@ -134,6 +135,11 @@ export interface SaveOptions {
   sectorSize?: number;
   /** Write a (listfile) naming the members (default on). The game never reads it. */
   listfile?: boolean;
+  /**
+   * Carry a member whose bytes were read from a form the writer cannot make (`keepStoredForm`: StarEdit's ADPCM
+   * sounds) as it was stored, while the bytes are unchanged (default on). Off writes every member afresh.
+   */
+  carryStored?: boolean;
 }
 
 /** The sector size Blizzard's own maps carry. */
@@ -151,16 +157,42 @@ export async function saveMap(chk: Uint8Array, options: SaveOptions = {}): Promi
   const encrypt = options.encrypt ?? false;
   const members = options.stored?.members.filter(hasBytes) ?? [];
   const stored = options.stored && members.length > 0 ? options.stored : null;
+  const extras = [...(options.extras ?? [])].filter(([name]) => normalize(name) !== normalize(SCENARIO_PATH));
+  // A member read from a form the writer cannot make (StarEdit's ADPCM sounds) and handed back unchanged goes in as it
+  // was stored, as long as it fits the archive being written: the same sector size, a slot in the same hash table.
+  let hashTable: readonly HashEntry[] | null = stored?.hashTable ?? null;
+  let sectorSize = stored ? stored.sectorSize : options.sectorSize ?? STAREDIT_SECTOR_SIZE;
+  const carried: { member: StoredMember; name: string }[] = [];
+  const carriedNames = new Set<string>();
+  if (options.carryStored !== false) {
+    for (const [name, data] of extras) {
+      const form = storedFormOf(data);
+      if (!form || normalize(form.name) !== normalize(name)) continue;
+      // Laid over the source's hash table, the archive keeps its size: one too small for every file is not taken.
+      if (!hashTable && form.hashTable.length > extras.length + (options.editorMembers?.size ?? 0) + 2) { hashTable = form.hashTable; sectorSize = form.member.sectorSize; }
+      if (form.hashTable !== hashTable || form.member.sectorSize !== sectorSize) continue;
+      carried.push({ member: form.member, name: form.name });
+      carriedNames.add(name);
+    }
+  }
+  const listfile = options.listfile ?? true;
   const creator = new Creator({
-    sectorSize: stored ? stored.sectorSize : options.sectorSize ?? STAREDIT_SECTOR_SIZE,
-    listfile: options.listfile ?? true,
+    sectorSize,
+    // With members carried, the list is written here: the writer's own names only the files it encodes.
+    listfile: listfile && carried.length === 0,
     listfileCompress: method || "zlib",
-    ...(stored ? { hashTable: stored.hashTable } : {}),
+    ...(hashTable ? { hashTable } : {}),
   });
+  if (listfile && carried.length) {
+    const names = [SCENARIO_PATH, ...extras.map(([name]) => name), ...[...(options.editorMembers ?? [])].map(([name]) => name)];
+    creator.addFile("(listfile)", new TextEncoder().encode(names.join("\r\n")), { compress: method || "zlib", encrypt: true, adjustKey: true });
+  }
   for (const m of members) creator.addStored(m);
+  // Moved up to the archive's start round the members with no name, so they do not pin the archive's old length.
+  for (const m of packStored(carried, members)) creator.addStored(m);
   creator.addFile(SCENARIO_PATH, chk, { compress: method, encrypt });
-  for (const [name, data] of options.extras ?? []) {
-    if (normalize(name) === normalize(SCENARIO_PATH)) continue;
+  for (const [name, data] of extras) {
+    if (carriedNames.has(name)) continue;
     // StarEdit's own extras are encrypted with the offset-adjusted key; any reader takes both.
     creator.addFile(name, data, { compress: method, encrypt, adjustKey: encrypt });
   }
@@ -220,13 +252,19 @@ export async function readMembers(archive: Archive, files: string[] | null, hint
     return true;
   });
   const keepStored = new Set<number>();
+  const all = archive.members();
+  const hashTable = archive.hashEntries();
   const read = async (list: string[]) => {
     for (const name of list) {
       const slot = archive.slotOf(name);
       if (slot === null || taken.has(slot)) continue; // a listed name the archive lacks, or one already read under another spelling
       taken.add(slot);
       try {
-        extras.set(name, await archive.readFileAsync(name));
+        const bytes = await archive.readFileAsync(name);
+        extras.set(name, bytes);
+        // A sound StarEdit stored with ADPCM: remembered, so a save that does not change it can keep it as it was.
+        const member = all.find((m) => m.slot === slot);
+        if (member && hasBytes(member) && storedInOtherForm(member, name)) keepStoredForm(bytes, { name, member, hashTable });
       } catch (err) {
         unreadable.push(name);
         keepStored.add(slot);
@@ -238,8 +276,8 @@ export async function readMembers(archive: Archive, files: string[] | null, hint
   // Names that only what was read can give (a manifest listing its files): one more pass.
   if (more) await read([...more(extras)].filter((name) => { const key = normalize(name); if (seen.has(key)) return false; seen.add(key); return true; }));
 
-  const members = archive.members().filter((m) => hasBytes(m) && (!taken.has(m.slot) || keepStored.has(m.slot)));
-  const stored: StoredMembers | null = members.length === 0 ? null : { hashTable: archive.hashEntries(), sectorSize: archive.sectorSize, members, unreadable };
+  const members = all.filter((m) => hasBytes(m) && (!taken.has(m.slot) || keepStored.has(m.slot)));
+  const stored: StoredMembers | null = members.length === 0 ? null : { hashTable, sectorSize: archive.sectorSize, members, unreadable };
   return { extras, stored };
 }
 

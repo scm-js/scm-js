@@ -1031,6 +1031,7 @@
   " (the scenario from text)": " (텍스트에서 만든 시나리오)",
   "{n, plural, one {# file} other {# files}} added: {list}": "파일 {n, plural, other {#개}} 추가: {list}",
   ", encrypted": ", 암호화",
+  "{n, plural, one {# sound was} other {# sounds were}} changed since the unpack and {n, plural, one {goes} other {go}} in as plain PCM, larger than StarEdit's compression; map optimize cannot make {n, plural, one {it} other {them}} smaller again": "풀어 낸 뒤 바뀐 사운드 {n, plural, other {#개}}는 일반 PCM으로 들어가 StarEdit의 압축보다 커지며, map optimize로도 다시 작게 만들 수 없습니다",
   "a map's sounds, listed or written out as files": "맵의 사운드 목록, 또는 파일로 내보내기",
   "\nThe sounds are the WAV table's entries (the Sound Editor's list) and any other file in the archive that is audio.\nThey come out as the files that went in: a WAV plays as it is (the archive's own sound compression is undone on the\nway), an Ogg is written as it is. A name in the table that the map does not carry is listed, not an error: a path\nunder sound\\ is one of the game's own sounds.": "\n사운드는 WAV 표의 항목(사운드 편집기의 목록)과 아카이브에서 오디오인 그 밖의\n파일입니다. 들어간 파일 그대로 나옵니다: WAV는 그대로 재생되고(아카이브 자체의\n사운드 압축은 풀어서), Ogg는 그대로 씁니다. 표에 있지만 맵에 없는 이름은 오류가\n아니라 목록에 나옵니다: sound\\ 아래 경로는 게임 자체의 사운드입니다.",
   "each sound: its slot, length, format, size and what plays it": "사운드마다 슬롯, 길이, 형식, 크기, 재생하는 것",

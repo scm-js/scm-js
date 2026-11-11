@@ -15,6 +15,7 @@
 // ── Files ──
 export { openMapBytes, writeMapBytes, type OpenedMap, type WriteOptions, readArchive, type ArchiveContents, writeArchiveBytes, type WriteArchiveOptions } from "../../src/editor/mapFile";
 export { loadMap, readMembers, readExtras, looksLikeMpq, memberInfo, MapLoadError, SCENARIO_PATH, type LoadedMap, type MemberInfo, type StoredMembers, type ArchiveMembers, type ArchiveCompression } from "../../src/formats/mpq/scm";
+export { packStored, relocate, fileKey, storedInOtherForm, keepStoredForm, storedFormOf, type StoredForm } from "../../src/formats/mpq/stored";
 export { type MapFormat, type SaveOptions, DEFAULT_SAVE_OPTIONS, SAVE_PRESETS, formatOf, defaultSaveOptions, planSave, buildChk, keptExtras, buildMapFile, type SavePlan, type PlannedSection, type PlannedExtra, type SectionFate, extraKind, type ExtraKind, formatBytes } from "../../src/editor/save";
 export { type BuiltBy, type BuildManifest, readBuildManifest, restoreBuiltMap, type Restored, packBuiltMap, type PackInput, BUILD_SOURCE_MEMBER, BUILD_MANIFEST_MEMBER } from "../../src/editor/mapBuild";
 

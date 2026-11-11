@@ -660,7 +660,8 @@ file is opened as a map before it is written.`, { manifest: MANIFEST_FILE }))
       if (o.compression && !["none", "pkware", "zlib"].includes(o.compression)) throw new CliError(t("--compression takes none, pkware or zlib, not \"{value}\"", { value: o.compression }), null, 2);
       const r = await packMap(dir, { out: o.out ?? null, compression: o.compression as "none" | "pkware" | "zlib" | undefined });
       if (o.json) { print(JSON.stringify(r, null, 2)); return; }
-      print(`${mark.ok} ${pc.bold(relative(process.cwd(), r.path) || r.path)}: ${t("{n, plural, one {# member} other {# members}}", { n: r.members + 1 })}${r.fromText ? pc.dim(t(" (the scenario from text)")) : ""}${r.stored ? pc.dim(t(" ({n} without a name)", { n: r.stored })) : ""}${r.added.length ? `${dot}${t("{n, plural, one {# file} other {# files}} added: {list}", { n: r.added.length, list: r.added.join(", ") })}` : ""}${dot}${r.compression}${r.encrypted ? t(", encrypted") : ""}${dot}${size(r.bytes)}`);
+      print(`${mark.ok} ${pc.bold(relative(process.cwd(), r.path) || r.path)}: ${t("{n, plural, one {# member} other {# members}}", { n: r.members + 1 })}${r.fromText ? pc.dim(t(" (the scenario from text)")) : ""}${r.stored ? pc.dim(t(" ({n} without a name)", { n: r.stored })) : ""}${r.added.length ? `${dot}${t("{n, plural, one {# file} other {# files}} added: {list}", { n: r.added.length, list: r.added.join(", ") })}` : ""}${dot}${r.compression}${r.encrypted ? t(", encrypted") : ""}${dot}${size(r.bytes)}`,
+        r.changedSounds ? `${mark.warn} ${t("{n, plural, one {# sound was} other {# sounds were}} changed since the unpack and {n, plural, one {goes} other {go}} in as plain PCM, larger than StarEdit's compression; map optimize cannot make {n, plural, one {it} other {them}} smaller again", { n: r.changedSounds })}` : null);
     });
 
   const sounds = map.command("sounds").description(t("a map's sounds, listed or written out as files"))

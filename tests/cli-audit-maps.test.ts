@@ -5,7 +5,7 @@
  * Everything runs on the committed maps in tests/maps (and, where present, the fixtures); writes go to a temporary
  * folder.
  */
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { Archive, Creator } from "mopaq";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -16,6 +16,8 @@ import { storedFormOf, storedInOtherForm } from "../src/formats/mpq/stored";
 import { program } from "../cli/src/main";
 import { CliError, visible } from "../cli/src/ui";
 import { testMap } from "./support/maps";
+import { editInEditor } from "../cli/src/texteditor";
+import { exportTriggers, importStrings, importTriggers, trgKind, writeBack } from "../cli/src/exchange";
 
 const tmp = () => mkdtempSync(join(tmpdir(), "scmjs-audit-maps-"));
 
@@ -170,4 +172,62 @@ describe.skipIf(!existsSync(WAKKA))("S2 on a StarEdit map (fixtures)", () => {
     expect([...again.extras.keys()].sort()).toEqual([...doc.extras.keys()].sort());
     for (const [name, data] of doc.extras) expect(again.extras.get(name), name).toEqual(data);
   }, 30_000);
+});
+
+/** A copy of a committed map in a folder of its own. */
+function copyOf(name: string): { dir: string; path: string } {
+  const dir = tmp();
+  copyFileSync(testMap(name), join(dir, name));
+  return { dir, path: join(dir, name) };
+}
+
+describe("S3: an import with nothing in it", () => {
+  it("is refused, exit 2, unless --allow-empty says it is meant", async () => {
+    const { dir, path } = copyOf("ums.scx");
+    const before = readFileSync(path);
+    writeFileSync(join(dir, "empty.txt"), "");
+    const r = await scmjs("map", "triggers", "import", path, join(dir, "empty.txt"));
+    expect(r.code).toBe(2);
+    expect(r.err).toMatch(/empty\.txt holds no triggers/);
+    expect(readFileSync(path)).toEqual(before);
+    const s = await scmjs("map", "strings", "import", path, join(dir, "empty.txt"));
+    expect(s.code).toBe(2);
+    expect(s.err).toMatch(/holds no strings/);
+    const ok = await scmjs("map", "triggers", "import", path, join(dir, "empty.txt"), "--allow-empty", "--json");
+    expect(ok.code).toBe(0);
+    expect(JSON.parse(ok.out)).toMatchObject({ before: 3, after: 0, read: 0, dryRun: false });
+  });
+
+  it("refuses a .trg of the other kind, and a string given twice", async () => {
+    const doc = await openMapBytes(new Uint8Array(readFileSync(testMap("ums.scx"))), "ums.scx");
+    const briefing = exportTriggers(doc, "b.trg", true).bytes!;
+    const triggers = exportTriggers(doc, "t.trg").bytes!;
+    expect(() => importTriggers(doc, "b.trg", briefing)).toThrow(/holds a mission briefing's triggers/);
+    expect(() => importTriggers(doc, "t.trg", triggers, { briefing: true })).toThrow(/holds triggers, not a mission briefing's/);
+    expect(importTriggers(doc, "b.trg", briefing, { briefing: true }).read).toBe(1);
+    expect(trgKind([])).toBeNull();
+    expect(() => importStrings(doc, "s.txt", "1\ta\n1\tb\n")).toThrow(/string 1 is on two lines/);
+  });
+});
+
+describe("S4: an edit whose map cannot be written", () => {
+  it.skipIf(process.platform === "win32" || process.getuid?.() === 0)("keeps the text and says how to bring it in", async () => {
+    const { dir, path } = copyOf("ums.scx");
+    chmodSync(path, 0o444);
+    const script = join(dir, "editor.mjs");
+    writeFileSync(script, `import { appendFileSync } from "node:fs"; appendFileSync(process.argv[2], 'Trigger("Player 1"){\\nConditions:\\n\\tAlways();\\n\\nActions:\\n\\tDefeat();\\n}\\n');`);
+    const doc = await openMapBytes(new Uint8Array(readFileSync(path)), "ums.scx");
+    const e = await editInEditor(doc, path, "triggers", { dir, editor: `"${process.execPath}" "${script}"`, write: async () => { await writeBack(doc, path, null); } }).catch((x: unknown) => x as CliError);
+    expect(e).toBeInstanceOf(CliError);
+    expect((e as CliError).message).toMatch(/could not be written: no permission/);
+    const kept = /kept in (\S+\.txt)/.exec((e as CliError).hint ?? "")![1];
+    expect(readFileSync(kept, "utf8")).toContain("Defeat();");
+    expect((e as CliError).hint).toContain("scmjs map triggers import");
+  });
+
+  it("refuses an empty --editor", async () => {
+    const r = await scmjs("map", "triggers", "edit", testMap("ums.scx"), "--editor", "");
+    expect(r.code).toBe(2);
+    expect(r.err).toMatch(/--editor needs a command/);
+  });
 });

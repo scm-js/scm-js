@@ -3,7 +3,7 @@
  * thing (`map`, `replay`, `plugin`, `bot`), the editor's own code underneath (docs/cli.md, .claude/internals/cli.md).
  */
 import { existsSync } from "node:fs";
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { basename, relative } from "node:path";
 import { Command, Help, Option } from "commander";
 import { aboutReport, printAbout, VERSION } from "./about";
@@ -28,11 +28,11 @@ import { diffPicture } from "./diffpicture";
 import { CLIP_KINDS, clipsDir, clipsSummary, makeClips, type ClipKind, type ClipRun } from "./clips";
 import { dumpMap, printDump } from "./dump";
 import { ANCHORS, parseAnchor, pruneStrings, resizeMap, setHeader, VERSIONS, ENCODINGS } from "./edit";
-import { exportStrings, exportTriggers, importStrings, importTriggers, writeBack, writeOutput } from "./exchange";
+import { exportStrings, exportTriggers, importStrings, importTriggers, writeBack, writeOutput, type Written } from "./exchange";
 import { looksLikeMpq } from "../../src/formats/mpq/scm";
 import { formatOf } from "../../src/editor/save";
 import { COMPRESSIONS, optimizeJson, optimizeMap, printOptimize, type Compression } from "./optimize";
-import { expectKind, loadMapInput, loadReplayInput, readInput, STDIO, toStdout, type Input } from "./files";
+import { expectKind, loadMapInput, loadReplayInput, readInput, readTextArg, STDIO, toStdout, writeFileMade, type Input } from "./files";
 import { findInMap, KINDS, parseKinds, printHits } from "./find";
 import { DEFAULT_LIMIT, fetchJson, fetchMap, mapIdFrom, MAX_LIMIT, parseLimit, printFetched, printSearch, searchJson, searchMaps } from "./fetch";
 import { baselineLine, baselineWritten, issueLine, mapReport, printIssues, printMapInfo, type MapReport } from "./map";
@@ -418,7 +418,7 @@ trigger whose text does. Prints what matched and where. Exits 1 when nothing mat
   /** `--out` for text: the file, or stdout when there is none (or `-`). */
   async function emit(text: string, out: string | undefined, said: string): Promise<void> {
     if (!out || out === STDIO) { process.stdout.write(text); return; }
-    await writeFile(out, text);
+    await writeFileMade(out, text);
     print(`${mark.ok} ${said} ${pc.dim("→")} ${pc.cyan(out)}`);
   }
 
@@ -433,20 +433,32 @@ trigger whose text does. Prints what matched and where. Exits 1 when nothing mat
    * `map triggers edit` / `map strings edit`: the text in the editor, imported when it closes, the map written back as
    * `import` writes it. Standard input cannot be edited: the editor needs the terminal.
    */
-  async function editCommand(kind: EditKind, file: string, o: { editor?: string; out?: string; briefing?: boolean }): Promise<void> {
+  async function editCommand(kind: EditKind, file: string, o: { editor?: string; out?: string; briefing?: boolean; json?: boolean }): Promise<void> {
     if (file === STDIO) throw new CliError(t("map {kind} edit needs a map file, not standard input", { kind }), t("The editor takes the terminal; name the file, or use export and import in a pipe."), 2);
     if (o.out === STDIO) throw new CliError(t("--out - is for a pipe; edit writes a file"), null, 2);
+    if (o.editor !== undefined && !o.editor.trim()) throw new CliError(t("--editor needs a command"), t("Such as: --editor \"code --wait\", --editor nano."), 2);
+    // vi with no terminal waits for keys that never come: with nothing named, a pipe or a script is refused instead.
+    const named = [o.editor, process.env.VISUAL, process.env.EDITOR].some((v) => v && v.trim());
+    if (!named && process.platform !== "win32" && !(process.stdin.isTTY && process.stdout.isTTY)) throw new CliError(t("map {kind} edit opens vi, which needs a terminal, and this has none", { kind }), t("Name an editor with --editor or EDITOR, or use map {kind} export and import in a script.", { kind }), 2);
     const { input, doc } = await openForEdit(file);
+    let w: Written | null = null;
     const r: EditOutcome = await editInEditor(doc, input.path, kind, {
       editor: o.editor, briefing: o.briefing,
       onWait: (path) => { if (process.stderr.isTTY) process.stderr.write(pc.dim(`${t("Waiting for your editor to close {path}…", { path })}\n`)); },
+      write: async () => { w = await writeBack(doc, input.path, o.out ?? null); },
     });
-    if (!r.changed) { print(`${mark.info} ${pc.bold(input.name)}: ${t("nothing changed")}${o.out ? t("; nothing written") : ""}`); return; }
-    const w = await writeBack(doc, input.path, o.out ?? null);
+    // --out names a file the next step reads: it is written, changed or not.
+    if (!r.changed && o.out) w = await writeBack(doc, input.path, o.out);
+    const written = w as Written | null;
+    if (o.json) {
+      print(JSON.stringify({ file: input.path, changed: r.changed, ...(r.changed ? (r.kind === "triggers" ? { triggers: r.triggers } : { strings: r.strings }) : {}), written }, null, 2));
+      return;
+    }
+    if (!r.changed) { print(`${mark.info} ${pc.bold(input.name)}: ${t("nothing changed")}${written ? `${dot}${t("written to {out}", { out: outName(written) })}` : ""}`); return; }
     const what = r.kind === "triggers"
       ? `${triggerCount(r.triggers.before, o.briefing)} ${pc.dim("→")} ${triggerCount(r.triggers.after, o.briefing)}`
       : t("{n, plural, one {# string} other {# strings}} replaced, {added} added", { n: r.strings.replaced, added: r.strings.added });
-    print(`${mark.ok} ${pc.bold(input.name)}: ${what}${dot}${t("written to {out}", { out: outName(w) })}${dot}${size(w.bytes)}`);
+    print(`${mark.ok} ${pc.bold(input.name)}: ${what}${dot}${t("written to {out}", { out: outName(written!) })}${dot}${size(written!.bytes)}`);
   }
 
   map.command("set").description(t("the map's name, description, revision or text encoding")).argument("<map>").addOption(json)
@@ -501,22 +513,28 @@ them. Text in a file beside the map can be diffed and edited, and imported back.
     .action(async (file: string, o: { out?: string; briefing?: boolean }) => {
       const { doc } = await openForEdit(file);
       const r = exportTriggers(doc, o.out ?? null, !!o.briefing);
-      if (r.bytes) { await writeFile(o.out!, r.bytes); print(`${mark.ok} ${triggerCount(r.count)} ${pc.dim("→")} ${pc.cyan(o.out!)}`); }
-      else await emit(r.text!, o.out, triggerCount(r.count));
+      if (r.bytes) { await writeFileMade(o.out!, r.bytes); print(`${mark.ok} ${triggerCount(r.count, o.briefing)} ${pc.dim("→")} ${pc.cyan(o.out!)}`); }
+      else await emit(r.text!, o.out, triggerCount(r.count, o.briefing));
     });
-  triggers.command("import").description(t("replace the map's triggers with a text or .trg file's")).argument("<map>").argument("<file>", t("the triggers: text, or .trg"))
+  triggers.command("import").description(t("replace the map's triggers with a text or .trg file's")).argument("<map>", t("the map to change; - reads it from standard input")).argument("<file>", t("the triggers: text, or .trg; - reads text from standard input")).addOption(json)
     .option("-o, --out <map>", t("write the result here instead of over the map; - for standard output"))
     .option("--append", t("add the file's triggers after the map's own instead of replacing them"))
     .option("--briefing", t("the mission briefing's triggers instead"))
-    .action(async (file: string, from: string, o: { out?: string; append?: boolean; briefing?: boolean }) => {
+    .option("--allow-empty", t("take a file with no triggers in it, which leaves the map with none"))
+    .option("--dry-run", t("say what would change and write nothing"))
+    .action(async (file: string, from: string, o: { json?: boolean; out?: string; append?: boolean; briefing?: boolean; allowEmpty?: boolean; dryRun?: boolean }) => {
+      if (file === STDIO && from === STDIO) throw new CliError(t("The map and the triggers cannot both come from standard input"), t("Name one of them as a file."), 2);
+      const bytes = await readTextArg(from);
       const { input, doc } = await openForEdit(file);
       const piped = piping(input, o);
-      const r = importTriggers(doc, from, new Uint8Array(await readFile(from)), { briefing: !!o.briefing, append: !!o.append });
-      const w = await writeBack(doc, input.path, o.out ?? null);
-      say(piped, `${mark.ok} ${pc.bold(input.name)}: ${triggerCount(r.before)} ${pc.dim("→")} ${triggerCount(r.after)}${o.append ? pc.dim(t(" ({n} added)", { n: r.read })) : ""}${dot}${t("written to {out}", { out: outName(w) })}${dot}${size(w.bytes)}`);
+      const r = importTriggers(doc, from === STDIO ? "stdin.txt" : from, bytes, { briefing: !!o.briefing, append: !!o.append, allowEmpty: !!o.allowEmpty });
+      const w = o.dryRun ? null : await writeBack(doc, input.path, o.out ?? null);
+      if (o.json) { print(JSON.stringify({ file: input.path, briefing: !!o.briefing, ...r, added: o.append ? r.read : undefined, dryRun: !!o.dryRun, written: w }, null, 2)); return; }
+      const counts = `${triggerCount(r.before, o.briefing)} ${pc.dim("→")} ${triggerCount(r.after, o.briefing)}${o.append ? pc.dim(t(" ({n} added)", { n: r.read })) : ""}`;
+      say(piped, `${o.dryRun ? mark.info : mark.ok} ${pc.bold(input.name)}: ${counts}${w ? `${dot}${t("written to {out}", { out: outName(w) })}${dot}${size(w.bytes)}` : pc.dim(` ${t("(--dry-run: nothing written)")}`)}`);
     });
   const editorOption = () => new Option("--editor <command>", t("the editor to open, such as \"code --wait\"; VISUAL or EDITOR otherwise, else vi (Notepad on Windows)"));
-  triggers.command("edit").description(t("the triggers as text in your editor, imported when you close it")).argument("<map>")
+  triggers.command("edit").description(t("the triggers as text in your editor, imported when you close it")).argument("<map>").addOption(json)
     .addOption(editorOption())
     .option("-o, --out <map>", t("write the result here instead of over the map"))
     .option("--briefing", t("the mission briefing's triggers instead"))
@@ -525,7 +543,7 @@ Writes the text export to a file of its own, opens it in your editor and waits f
 changes, the text is imported as triggers import reads it and the map is written; unchanged, nothing is written.
 Text that does not read is kept, and the error says where, so the edit is not lost. A graphical editor has to wait
 for its window to close: code --wait, subl -w, gedit -s.`))
-    .action((file: string, o: { editor?: string; out?: string; briefing?: boolean }) => editCommand("triggers", file, o));
+    .action((file: string, o: { editor?: string; out?: string; briefing?: boolean; json?: boolean }) => editCommand("triggers", file, o));
 
   const strings = map.command("strings").description(t("a map's strings as a text file, and back"))
     .addHelpText("after", t(`
@@ -538,22 +556,26 @@ strings in place and adds any past the end; nothing is renumbered, since trigger
       const r = exportStrings(doc);
       await emit(r.text, o.out, t("{n, plural, one {# string} other {# strings}}", { n: r.count }));
     });
-  strings.command("import").description(t("set the map's strings from such a file")).argument("<map>").argument("<file>")
+  strings.command("import").description(t("set the map's strings from such a file")).argument("<map>", t("the map to change; - reads it from standard input")).argument("<file>", t("the strings file; - reads it from standard input")).addOption(json)
     .option("-o, --out <map>", t("write the result here instead of over the map; - for standard output"))
-    .action(async (file: string, from: string, o: { out?: string }) => {
+    .option("--dry-run", t("say what would change and write nothing"))
+    .action(async (file: string, from: string, o: { json?: boolean; out?: string; dryRun?: boolean }) => {
+      if (file === STDIO && from === STDIO) throw new CliError(t("The map and the strings cannot both come from standard input"), t("Name one of them as a file."), 2);
+      const text = new TextDecoder().decode(await readTextArg(from));
       const { input, doc } = await openForEdit(file);
       const piped = piping(input, o);
-      const r = importStrings(doc, from, await readFile(from, "utf8"));
-      const w = await writeBack(doc, input.path, o.out ?? null);
-      say(piped, `${mark.ok} ${pc.bold(input.name)}: ${t("{n, plural, one {# string} other {# strings}} replaced, {added} added, {unchanged} unchanged", { n: r.replaced, added: r.added, unchanged: r.unchanged })}${dot}${t("written to {out}", { out: outName(w) })}${dot}${size(w.bytes)}`);
+      const r = importStrings(doc, from === STDIO ? "stdin.txt" : from, text);
+      const w = o.dryRun ? null : await writeBack(doc, input.path, o.out ?? null);
+      if (o.json) { print(JSON.stringify({ file: input.path, ...r, dryRun: !!o.dryRun, written: w }, null, 2)); return; }
+      say(piped, `${o.dryRun ? mark.info : mark.ok} ${pc.bold(input.name)}: ${t("{n, plural, one {# string} other {# strings}} replaced, {added} added, {unchanged} unchanged", { n: r.replaced, added: r.added, unchanged: r.unchanged })}${w ? `${dot}${t("written to {out}", { out: outName(w) })}${dot}${size(w.bytes)}` : pc.dim(` ${t("(--dry-run: nothing written)")}`)}`);
     });
-  strings.command("edit").description(t("the strings in your editor, imported when you close it")).argument("<map>")
+  strings.command("edit").description(t("the strings in your editor, imported when you close it")).argument("<map>").addOption(json)
     .addOption(editorOption())
     .option("-o, --out <map>", t("write the result here instead of over the map"))
     .addHelpText("after", t(`
 As strings import: a line changed sets that string, a line past the end adds one, and a line taken out leaves the
 string as it was (strings prune drops the unused ones).`))
-    .action((file: string, o: { editor?: string; out?: string }) => editCommand("strings", file, o));
+    .action((file: string, o: { editor?: string; out?: string; json?: boolean }) => editCommand("strings", file, o));
 
   strings.command("prune").description(t("drop the strings nothing in the map refers to")).argument("<map>").addOption(json)
     .option("--dry-run", t("list them and write nothing"))

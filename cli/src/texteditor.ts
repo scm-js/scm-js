@@ -11,6 +11,7 @@ import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import type { OpenedMap } from "../../src/editor/mapFile";
 import { readBriefing, readTriggers, sameTriggers } from "../../src/editor/triggers";
+import { parseStringTable } from "../../src/editor/exchange";
 import { exportStrings, exportTriggers, importStrings, importTriggers, type StringImportResult, type TriggerImport } from "./exchange";
 import { t } from "./i18n";
 import { CliError } from "./ui";
@@ -75,6 +76,11 @@ export interface EditOptions {
   dir?: string;
   /** Called with the file's path before the editor starts (the command says it waits). */
   onWait?: (file: string) => void;
+  /**
+   * Writes the map once the text has been imported and changed it. The file is removed only after this succeeds; when
+   * it fails, the text is kept and the error says where, with the import command that brings it in.
+   */
+  write?: () => Promise<void>;
 }
 
 /** Line ends and trailing space aside: what an editor adds on save (a final newline, CRLF) is no change. */
@@ -106,19 +112,34 @@ export async function editInEditor(doc: OpenedMap, mapName: string, kind: EditKi
   const after = await readFile(file, "utf8");
   if (same(after, text)) { await cleanUp(); return { kind, changed: false, file }; }
   const importAgain = `scmjs map ${kind} import ${JSON.stringify(mapName)} ${JSON.stringify(file)}${o.briefing ? " --briefing" : ""}`;
+  let outcome: EditOutcome;
   try {
     if (kind === "triggers") {
       const before = o.briefing ? readBriefing(doc.scenario) : readTriggers(doc.scenario);
-      const triggers = importTriggers(doc, basename(file), new TextEncoder().encode(after), { briefing: !!o.briefing });
+      // Emptied in the editor is meant: the person took every trigger out themselves.
+      const triggers = importTriggers(doc, basename(file), new TextEncoder().encode(after), { briefing: !!o.briefing, allowEmpty: true });
       const now = o.briefing ? readBriefing(doc.scenario) : readTriggers(doc.scenario);
-      await cleanUp();
-      return sameTriggers(before, now) ? { kind, changed: false, file } : { kind, changed: true, file, triggers };
+      outcome = sameTriggers(before, now) ? { kind, changed: false, file } : { kind, changed: true, file, triggers };
+    } else if (!parseStringTable(after).entries.length && !parseStringTable(after).errors.length) {
+      // Every line taken out: a line taken out leaves its string as it was, so nothing changes.
+      outcome = { kind, changed: false, file };
+    } else {
+      const strings = importStrings(doc, basename(file), after);
+      outcome = strings.replaced + strings.added === 0 ? { kind, changed: false, file } : { kind, changed: true, file, strings };
     }
-    const strings = importStrings(doc, basename(file), after);
-    await cleanUp();
-    return strings.replaced + strings.added === 0 ? { kind, changed: false, file } : { kind, changed: true, file, strings };
   } catch (e) {
     if (!(e instanceof CliError)) throw e;
     throw new CliError(e.message, `${kept} ${t("Fix it there, then: {command}", { command: importAgain })}${e.hint ? `\n  ${e.hint}` : ""}`);
   }
+  // The map written before the text goes: a map that cannot be written keeps the edit.
+  if (outcome.changed && o.write) {
+    try {
+      await o.write();
+    } catch (e) {
+      if (!(e instanceof CliError)) throw e;
+      throw new CliError(e.message, `${t("Your text is kept in {file}. Once the map can be written: {command}", { file, command: importAgain })}${e.hint ? `\n  ${e.hint}` : ""}`, e.exitCode);
+    }
+  }
+  await cleanUp();
+  return outcome;
 }

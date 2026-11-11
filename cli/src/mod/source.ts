@@ -16,6 +16,7 @@ import { normalizeRaces, type DataSetRace } from "../../../src/formats/mod/races
 import type { GameFiles } from "../gamefiles";
 import { t } from "../i18n";
 import { CliError, num } from "../ui";
+import { detectFormat } from "@scm-js/replay";
 
 export interface SourceFile {
   /** The name as the source spells it (`arr\units.datex`, `unit/Terran/marine.grp` made `unit\Terran\marine.grp`). */
@@ -96,22 +97,63 @@ async function walk(dir: string, prefix = ""): Promise<Piece[]> {
   return out;
 }
 
+/** What a mod is, for a hint after a refusal. */
+const nameAMod = () => t("Name a mod: a folder, an .mpq, a mod's .exe, a .zip, or a folder scmjs mod unpack wrote.");
+
+/**
+ * A file that is some other kind of thing scmjs reads, said as that kind with the command that reads it; null when it
+ * is none of them. A map is a `.chk`, or an archive holding a scenario (a `.scx` or `.scm`, whatever its name).
+ */
+function otherKind(path: string, bytes: Uint8Array): CliError | null {
+  if (detectFormat(bytes)) return new CliError(t("{path} is a replay, not a mod.", { path }), t("scmjs replay info reads a replay."), 2);
+  if (bytes.length >= 8 && String.fromCharCode(...bytes.subarray(0, 8)) === "SCMBOT1\n") return new CliError(t("{path} is a bot, not a mod.", { path }), t("scmjs bot run plays a bot."), 2);
+  let map = /\.chk$/i.test(path) && !isMpq(bytes);
+  if (!map && isMpq(bytes)) { try { map = !!Archive.open(bytes).fileInfo("staredit\\scenario.chk"); } catch { map = false; } }
+  if (map) return new CliError(t("{path} is a map, not a mod.", { path }), t("scmjs map info reads a map."), 2);
+  return null;
+}
+
+/** Nothing of the game's in it: no file at one of the game's paths, no archive laid, no plugin or FireGraft file. */
+const holdsNothing = (s: ModSource) => !s.files.size && !s.plugins.length && !s.firegraft.length && !s.exes.length;
+
 /** Opens what the person named. A mod folder is packed in memory by `pack` (handed in, to keep the modules apart). */
 export async function openModSource(path: string, packed: (dir: string, manifest: ModManifest) => Promise<ModSource>): Promise<ModSource> {
   let s;
-  try { s = await stat(path); } catch { throw new CliError(t("No file or folder {path}", { path }), t("Name a mod: a folder, an .mpq, a mod's .exe, a .zip, or a folder scmjs mod unpack wrote."), 2); }
+  try { s = await stat(path); } catch { throw new CliError(t("No file or folder {path}", { path }), nameAMod(), 2); }
   const name = basename(resolve(path)).replace(/\.(mpq|exe|zip)$/i, "");
   if (s.isDirectory()) {
-    const manifestPath = join(path, MOD_MANIFEST);
-    let manifest: ModManifest | null = null;
-    try { manifest = readManifest(await readFile(manifestPath, "utf8")); } catch (e) { if (e instanceof Error && !("code" in e)) throw new CliError(e.message, null, 2); }
+    const manifest = await folderManifest(path);
     if (manifest) return packed(path, manifest);
-    return fromPieces(path, "folder", name, await walk(path));
+    const pieces = await walk(path);
+    if (!pieces.length) throw new CliError(t("{path} is an empty folder: there is no mod in it.", { path }), nameAMod(), 2);
+    const source = await fromPieces(path, "folder", name, pieces);
+    if (holdsNothing(source)) throw new CliError(t("{path} holds none of the game's files: it is not a mod.", { path }), nameAMod(), 2);
+    return source;
   }
   const bytes = new Uint8Array(await readFile(path));
   const kind: SourceKind = isZip(bytes) ? "zip" : isMpq(bytes) ? "archive" : bytes[0] === 0x4d && bytes[1] === 0x5a ? "exe" : "archive";
-  if (kind === "archive" && !isMpq(bytes)) throw new CliError(t("{path} is not a mod: not an MPQ, a self-executing exe or a zip.", { path }), null, 2);
-  return fromPieces(path, kind, name, [{ path: basename(path), size: bytes.length, read: async () => bytes }]);
+  if (kind === "archive" && !isMpq(bytes)) throw otherKind(path, bytes) ?? new CliError(t("{path} is not a mod: not an MPQ, a self-executing exe or a zip.", { path }), null, 2);
+  const source = await fromPieces(path, kind, name, [{ path: basename(path), size: bytes.length, read: async () => bytes }]);
+  if (holdsNothing(source)) {
+    if (kind === "exe") throw new CliError(t("{path} has no archive in it: it is not a self-executing mod (MPQDraft's or FireGraft's).", { path }), nameAMod(), 2);
+    throw otherKind(path, bytes) ?? new CliError(t("{path} holds none of the game's files: it is not a mod.", { path }), nameAMod(), 2);
+  }
+  return source;
+}
+
+/**
+ * The manifest of a mod folder, or null when the folder has no `mod.json` or one scmjs did not write (a folder of the
+ * game's files may carry one declaring its name and races). A `mod.json` that is not JSON at all is said, with where,
+ * rather than the folder read as if it had none.
+ */
+export async function folderManifest(dir: string): Promise<ModManifest | null> {
+  const file = join(dir, MOD_MANIFEST);
+  let text: string;
+  try { text = await readFile(file, "utf8"); } catch { return null; }
+  try { JSON.parse(text); } catch (e) {
+    throw new CliError(t("{file} is not valid JSON: {why}", { file, why: (e as Error).message }), t("Mend it in a text editor, or unpack the mod again into a new folder."), 2);
+  }
+  try { return readManifest(text); } catch (e) { throw new CliError((e as Error).message, null, 2); }
 }
 
 /** The game's own data files as a source (what the proofs unpack): every name given that the copy has. */

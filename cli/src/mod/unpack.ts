@@ -3,10 +3,10 @@
  * layout). Each member is written as text or a PNG sheet only when that packs back to the same bytes; anything else is
  * kept as bytes under `files/`, and `mod.json` says which and why. Plugins and FireGraft files are copied as they are.
  */
-import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import {
-  DEFAULT_PALETTE, emptyManifest, MOD_FOLDERS, MOD_MANIFEST, readManifest, recordRendered, renderAiScripts, renderMember, tidyManifest, folderPath,
+  DEFAULT_PALETTE, emptyManifest, MOD_FOLDERS, MOD_MANIFEST, recordRendered, renderAiScripts, renderMember, tidyManifest, folderPath,
   type ModManifest, type Rendered,
 } from "../../../src/formats/mod/folder";
 import { gameName } from "../../../src/formats/mod/sources";
@@ -16,6 +16,7 @@ import type { GameFiles } from "../gamefiles";
 import { inEnglish, t } from "../i18n";
 import { CliError } from "../ui";
 import { gameCopyFolders, gameCopyWords, reader, type ModSource } from "./source";
+import { modTarget } from "./target";
 
 export interface UnpackReport {
   dir: string;
@@ -44,23 +45,15 @@ export interface UnpackOptions {
   palette?: string;
   /** Called after each member, for a progress line. */
   progress?: (done: number, total: number) => void;
+  /** Replace a mod folder that is there (one an earlier unpack or mod new wrote). */
+  force?: boolean;
 }
 
-/** Every known folder of a mod folder, which an unpack over an earlier one replaces. */
-const KNOWN = Object.values(MOD_FOLDERS);
-
 export async function unpackMod(source: ModSource, dir: string, o: UnpackOptions = {}): Promise<UnpackReport> {
-  const out = resolve(dir);
-  if (resolve(source.path) === out) throw new CliError(t("The folder to write is the mod itself."), t("Name another folder."), 2);
-  // Over an earlier unpack, its folders are replaced (what a person added beside them stays); anything else must be empty.
-  let existing: string[] = [];
-  try { existing = await readdir(out); } catch { /* a new folder */ }
-  let earlier: ModManifest | null = null;
-  if (existing.length) {
-    try { earlier = readManifest(await readFile(join(out, MOD_MANIFEST), "utf8")); } catch { earlier = null; }
-    if (!earlier) throw new CliError(t("{folder} is there and is not an unpacked mod.", { folder: dir }), t("Name a new folder, or an empty one."), 2);
-    for (const f of KNOWN) await rm(join(out, f), { recursive: true, force: true });
-  }
+  if (resolve(source.path) === resolve(dir)) throw new CliError(t("The folder to write is the mod itself."), t("Name another folder."), 2);
+  // A new or empty folder; one an earlier unpack wrote only with --force, and then replaced whole (its edits are the
+  // person's: never written over in silence, and nothing stale left beside the new files).
+  const { out, earlier } = await modTarget(dir, { force: o.force, source: source.path });
 
   const read = reader(source);
   const base = o.base ?? null;
@@ -159,7 +152,7 @@ export async function unpackMod(source: ModSource, dir: string, o: UnpackOptions
   tidyManifest(manifest);
   await writeFile(join(out, MOD_MANIFEST), `${JSON.stringify(manifest, null, 2)}\n`);
   return {
-    dir: out, source: source.path, name: manifest.name, members: written, forms,
+    dir, source: source.path, name: manifest.name, members: written, forms,
     kept: manifest.kept.map((k) => ({ why: k.why, count: k.files.length, files: k.files })),
     plugins: manifest.plugins.length, firegraft: manifest.firegraft.length, bytes, notes: manifest.notes,
     names: manifest.names, palette: palette ? paletteName : null, left: source.left, manifest,

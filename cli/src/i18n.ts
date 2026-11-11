@@ -64,6 +64,18 @@ export function chooseLocale(args: readonly string[], env: Record<string, string
   return localeOf(system) ?? "en";
 }
 
+/**
+ * `SCMJS_LANG` when it names a language this does not speak and decides (no `--lang` given): the command speaks
+ * English then, and says so once (`--lang xx` is refused by the option itself).
+ */
+export function unknownLanguage(args: readonly string[], env: Record<string, string | undefined> = process.env): string | null {
+  for (const a of args) {
+    if (a === "--") break;
+    if (a === "--lang" || a.startsWith("--lang=")) return null;
+  }
+  return env.SCMJS_LANG && !localeOf(env.SCMJS_LANG) ? env.SCMJS_LANG : null;
+}
+
 function systemLanguage(): string | undefined {
   try { return Intl.DateTimeFormat().resolvedOptions().locale; } catch { return undefined; }
 }

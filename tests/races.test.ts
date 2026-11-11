@@ -139,9 +139,10 @@ describe("mod.json's races", () => {
     expect(await sourceHash(undeclared)).toMatchObject({ hash: declaredHash.hash, withoutPlugins: declaredHash.withoutPlugins });
     expect(declaredHash.hash).toBe(hash.hash);
 
-    // A new release unpacked over the folder keeps the races declared there.
+    // A new release unpacked over the folder (--force: it is a mod folder already) keeps the races declared there.
     writeFileSync(join(unpacked, "mod.json"), JSON.stringify({ ...manifest, races: [ADDED[1]] }, null, 2));
-    await unpackMod(before, unpacked, { base: null, palette: "jungle" });
+    await expect(unpackMod(before, unpacked, { base: null, palette: "jungle" })).rejects.toThrow(/mod folder already/);
+    await unpackMod(before, unpacked, { base: null, palette: "jungle", force: true });
     expect(JSON.parse(readFileSync(join(unpacked, "mod.json"), "utf8")).races).toEqual([ADDED[1]]);
   });
 });

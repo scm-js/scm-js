@@ -72,9 +72,12 @@ export interface InitMap {
   players: number;
   /** Whether it keeps a TrigScript script; null when this build cannot tell. */
   script: boolean | null;
+  /** It fails the check the workflow runs (Check Map's errors or warnings, as `--strict`). */
+  fails: boolean;
 }
 
-export type FileState = "written" | "replaced" | "added" | "kept";
+/** What became of a file; with `--print` the first three are what would (`would-write`, `would-replace`, `would-add`). */
+export type FileState = "written" | "replaced" | "added" | "kept" | "would-write" | "would-replace" | "would-add";
 
 export interface InitFile {
   /** Where, from the folder (the workflow is at the repository's top, which may be above it). */
@@ -143,10 +146,13 @@ function shellPath(p: string): string {
 
 /**
  * The maps' paths: one glob per extension the folder has, from the repository's top. Quoted for a shell (the README's
- * commands), or as they are (`quote: false`, the action's `maps` input, one a line, which no shell reads).
+ * commands), or as they are (`quote: false`, the action's `maps` input, one a line, which no shell reads). `all`: the
+ * three extensions whatever the folder has now (the workflow's, so a .chk added later is checked too; the action
+ * minds a glob that matches nothing only when none match), and any other spelling of them the folder has (`.SCX`).
  */
-export function mapGlobs(prefix: string, files: readonly string[], quote = true): string[] {
-  const exts = [...new Set(files.map((f) => f.slice(f.lastIndexOf(".") + 1)))].sort();
+export function mapGlobs(prefix: string, files: readonly string[], quote = true, all = false): string[] {
+  const found = files.map((f) => f.slice(f.lastIndexOf(".") + 1));
+  const exts = [...new Set(all ? ["chk", "scm", "scx", ...found] : found)].sort();
   const folder = prefix ? (prefix.endsWith("/") ? prefix : `${prefix}/`) : "";
   const dir = quote && folder ? shellPath(folder) : folder;
   return (exts.length ? exts : ["scx"]).map((e) => `${dir}*.${e}`);
@@ -202,6 +208,35 @@ export function workflowText(o: { version: string; globs: string[]; scripted: st
     "      # - run: scmjs map test <map> --format github --clips",
     "",
   ].join("\n");
+}
+
+/**
+ * The globs of a workflow this command wrote, read back: the `maps:` input of the action's step, one line or a block.
+ * Null when the file is not in the shape this command writes (someone's own, or one edited past recognising).
+ */
+export function workflowGlobs(text: string): string[] | null {
+  if (!text.includes("Written by scmjs init")) return null;
+  const lines = text.split("\n");
+  const at = lines.findIndex((l) => /^ {10}maps: /.test(l));
+  if (at < 0) return null;
+  const value = lines[at].slice("          maps: ".length).trim();
+  if (value !== "|") return [value.startsWith("\"") ? (JSON.parse(value) as string) : value];
+  const globs: string[] = [];
+  for (let i = at + 1; i < lines.length && /^ {12}\S/.test(lines[i]); i++) globs.push(lines[i].trim());
+  return globs;
+}
+
+/** The workflow with `globs` added to its `maps:` (as a block), or null when its shape is not recognised. */
+export function withGlobs(text: string, globs: readonly string[]): string | null {
+  const have = workflowGlobs(text);
+  if (!have) return null;
+  const lines = text.split("\n");
+  const at = lines.findIndex((l) => /^ {10}maps: /.test(l));
+  let end = at + 1;
+  if (lines[at].trim() === "maps: |") while (end < lines.length && /^ {12}\S/.test(lines[end])) end++;
+  const all = [...have, ...globs.filter((g) => !have.includes(g))];
+  lines.splice(at, end - at, "          maps: |", ...all.map((g) => `            ${g}`));
+  return lines.join("\n");
 }
 
 /** Text for a Markdown table cell: one line, no colour bytes, `|` escaped. */
@@ -303,7 +338,7 @@ async function readMaps(dir: string): Promise<{ maps: InitMap[]; skipped: InitRe
       const input = await readInput(join(dir, file));
       const doc = await loadMapInput(input);
       const r = mapReport(input, doc);
-      maps.push({ file, name: r.name, width: r.width, height: r.height, tileset: r.tileset, players: r.usedSlots.length, script: await hasScript(doc.extras) });
+      maps.push({ file, name: r.name, width: r.width, height: r.height, tileset: r.tileset, players: r.usedSlots.length, script: await hasScript(doc.extras), fails: r.issues.some((i) => i.level === "error" || i.level === "warn") });
     } catch (e) {
       if (!(e instanceof CliError)) throw e;
       skipped.push({ file, error: e.message });
@@ -338,8 +373,15 @@ export async function initFolder(folder: string, o: InitOptions = {}): Promise<I
   const { maps, skipped } = await readMaps(dir);
   const top = repository ?? dir;
   const prefix = relative(top, dir).split(sep).join("/");
+  // A folder whose maps are all in folders below it is not the one to set up: the README would list none, and the
+  // workflow would check nothing. Said, and nothing written, unless --force.
+  if (!maps.length && !o.force) {
+    const below = mapFolders(dir).map((d) => relative(process.cwd(), d) || ".");
+    if (below.length) throw new CliError(t("{folder} has no maps of its own: they are in {folders}", { folder: showFolder(dir), folders: below.slice(0, 5).join(", ") + (below.length > 5 ? ", …" : "") }), t("scmjs init {folder} sets that folder up (--force sets this one up anyway).", { folder: /^[\w./@+-]+$/.test(below[0]) ? below[0] : `"${below[0]}"` }), 2);
+  }
   const show = (p: string) => relative(dir, p).split(sep).join("/");
   const files: InitFile[] = [];
+  const would = (state: "written" | "replaced" | "added"): FileState => (o.print ? (state === "written" ? "would-write" : state === "replaced" ? "would-replace" : "would-add") : state);
 
   // The line files: the lines they lack, at the end, under a comment.
   for (const [name, want, comment, attributes] of [[".gitattributes", ATTRIBUTE_LINES, ATTRIBUTE_COMMENT, true], [".gitignore", IGNORE_LINES, IGNORE_COMMENT, false]] as const) {
@@ -350,21 +392,42 @@ export async function initFolder(folder: string, o: InitOptions = {}): Promise<I
     if (!lack.length) { files.push({ path: show(path), state: "kept", detail: t("has the lines already"), content: want.join("\n") + "\n" }); continue; }
     const content = appendLines(text ?? "", lack, comment);
     if (!o.print) writeFileSync(path, content);
-    files.push({ path: show(path), state: text === null ? "written" : "added", detail: text === null ? what : t("{n, plural, one {a line} other {# lines}} added: {lines}", { n: lack.length, lines: lack.join(", ") }), content: text === null ? content : lack.join("\n") + "\n" });
+    files.push({ path: show(path), state: would(text === null ? "written" : "added"), detail: text === null ? what : t("{n, plural, one {a line} other {# lines}} added: {lines}", { n: lack.length, lines: lack.join(", ") }), content: text === null ? content : lack.join("\n") + "\n" });
   }
 
   // The whole files: written when absent, or with --force.
   const scripted = maps.filter((m) => m.script).map((m) => (prefix ? `${prefix}/${m.file}` : m.file));
+  const globs = mapGlobs(prefix, maps.map((m) => m.file), false, true);
+  const workflow = join(top, WORKFLOW_PATH);
+  // A workflow this command wrote for another folder: this folder's globs are added to it, which is safe in a file of
+  // its own shape; one it cannot read is left, and the lines to add are said.
+  let covered = true;
+  if (existsSync(workflow) && !o.force) {
+    const text = readFileSync(workflow, "utf8");
+    const have = workflowGlobs(text);
+    const lack = globs.filter((g) => !have?.includes(g));
+    if (lack.length) {
+      const updated = have ? withGlobs(text, lack) : null;
+      if (updated) {
+        if (!o.print) writeFileSync(workflow, updated);
+        files.push({ path: show(workflow), state: would("added"), detail: t("{n, plural, one {a glob} other {# globs}} added to its maps: {globs}", { n: lack.length, globs: lack.join(", ") }), content: lack.join("\n") + "\n" });
+      } else {
+        covered = false;
+        files.push({ path: show(workflow), state: "kept", detail: t("there already, and it does not check {folder}/ (--force replaces it)", { folder: prefix || "." }), content: lack.join("\n") + "\n" });
+        notes.push(t("{file} is not one this command wrote, so it was left as it is: add {globs} to the maps it checks.", { file: WORKFLOW_PATH, globs: lack.join(", ") }));
+      }
+    }
+  }
   const whole: [string, string, string][] = [
-    [join(top, WORKFLOW_PATH), workflowText({ version: VERSION, globs: mapGlobs(prefix, maps.map((m) => m.file), false), scripted }),
+    [workflow, workflowText({ version: VERSION, globs, scripted }),
       `${t("checks {n, plural, =0 {the maps} one {the map} other {the # maps}} on push and pull request", { n: maps.length })}${scripted.length ? t(", builds {n, plural, one {# script} other {# scripts}}", { n: scripted.length }) : ""}; scmjs ${VERSION}`],
     [join(dir, "README.md"), readmeText(basename(dir), maps), maps.length ? t("lists {n, plural, one {the map} other {the # maps}}, and the commands", { n: maps.length }) : t("the commands")],
   ];
   for (const [path, content, detail] of whole) {
     const there = existsSync(path);
-    if (there && !o.force) { files.push({ path: show(path), state: "kept", detail: t("there already (--force replaces it)"), content }); continue; }
+    if (there && !o.force) { if (!files.some((f) => f.path === show(path))) files.push({ path: show(path), state: "kept", detail: t("there already (--force replaces it)"), content }); continue; }
     if (!o.print) { mkdirSync(dirname(path), { recursive: true }); writeFileSync(path, content); }
-    files.push({ path: show(path), state: there ? "replaced" : "written", detail, content });
+    files.push({ path: show(path), state: would(there ? "replaced" : "written"), detail, content });
   }
 
   // The git settings, in the repository.
@@ -382,8 +445,14 @@ export async function initFolder(folder: string, o: InitOptions = {}): Promise<I
   });
   if (!repository) notes.push(t("Not in a git repository, so the git settings were not made: run scmjs init again after git init (or now with --git), or set them by hand (scmjs init --print)."));
   else if (settings.some((s) => s.state !== "kept") && !onPath("scmjs")) notes.push(t("git diff runs scmjs map dump and git merge runs scmjs map merge, and scmjs is not on PATH here: npm install -g @scm-js/cli."));
-  if (repository && prefix) notes.push(t("The workflow is at the repository's top, where GitHub reads it, and checks {folder}/ from there.", { folder: prefix }));
-  if (!maps.length) notes.push(t("No maps in the folder yet: the workflow checks *.scx, and fails until there is one."));
+  if (repository && prefix && covered) notes.push(t("The workflow is at the repository's top, where GitHub reads it, and checks {folder}/ from there.", { folder: prefix }));
+  if (!maps.length) notes.push(t("No maps in the folder yet: the workflow fails until there is one."));
+  // The workflow is strict: maps that fail it now would fail every push until they are fixed or known.
+  const failing = maps.filter((m) => m.fails).map((m) => m.file);
+  if (failing.length) {
+    const from = mapGlobs(prefix, maps.map((m) => m.file)).join(" ");
+    notes.push(t("{n, plural, one {# map fails} other {# maps fail}} the check the workflow runs (errors or warnings): {maps}. To start from where the maps are, from the repository's top: scmjs map check {globs} --write-baseline, then commit .scmjs-baseline.json, which the workflow reads; only new findings fail it then.", { n: failing.length, maps: failing.slice(0, 5).join(", ") + (failing.length > 5 ? ", …" : ""), globs: from }));
+  }
   if (maps.some((m) => m.script === null)) notes.push(t("This build of scmjs has no TrigScript compiler, so maps with a script were not looked for."));
 
   return { folder: dir, repository, created, printed: !!o.print, maps, skipped, files, git: settings, notes };
@@ -393,26 +462,41 @@ export async function initFolder(folder: string, o: InitOptions = {}): Promise<I
 export function printRecipe(r: InitResult): string {
   const out: string[] = [];
   for (const f of r.files) {
-    out.push(`# ${f.path}${f.state === "added" ? " (the lines it lacks, at the end)" : f.state === "kept" ? " (there already)" : ""}`, f.content.replace(/\n$/, ""), "");
+    out.push(`# ${f.path}${f.state === "added" || f.state === "would-add" ? " (the lines it lacks)" : f.state === "kept" ? " (there already)" : ""}`, f.content.replace(/\n$/, ""), "");
   }
   out.push("# git, once in each clone", ...GIT_SETTINGS.map(configLine), "");
   return out.join("\n");
 }
 
-const STATE_WORD: Record<FileState, string> = { written: msg("written"), replaced: msg("replaced"), added: msg("lines added"), kept: msg("left alone") };
+const STATE_WORD: Record<FileState, string> = { written: msg("written"), replaced: msg("replaced"), added: msg("lines added"), kept: msg("left alone"), "would-write": msg("would be written"), "would-replace": msg("would be replaced"), "would-add": msg("lines would be added") };
 
-/** What was written and what was left alone, one line each, then the notes. */
-/** A folder as the person would type it: from here when that is shorter, else the whole path. */
+/** A folder as the person would type it: from here when that is shorter, else the whole path; one above here by its name. */
 function showFolder(p: string): string {
   const rel = relative(process.cwd(), p);
-  return rel === "" ? basename(p) : rel.length < p.length ? rel : p;
+  return rel === "" || /^\.\.([\\/]\.\.)*$/.test(rel) ? basename(p) : rel.length < p.length ? rel : p;
 }
+
+/** The folders below `dir` that hold maps, a few levels down (not .git or node_modules). */
+function mapFolders(dir: string, depth = 3): string[] {
+  const out: string[] = [];
+  const walk = (d: string, left: number) => {
+    let entries;
+    try { entries = readdirSync(d, { withFileTypes: true }); } catch { return; }
+    if (d !== dir && entries.some((e) => e.isFile() && MAP_FILE.test(e.name))) out.push(d);
+    if (left > 0) for (const e of entries) if (e.isDirectory() && !e.name.startsWith(".") && e.name !== "node_modules") walk(join(d, e.name), left - 1);
+  };
+  walk(dir, depth);
+  return out.sort();
+}
+
+/** What was written and what was left alone, one line each, then the notes. */
 
 export function printInit(r: InitResult): string[] {
   const show = showFolder;
   const scripts = r.maps.filter((m) => m.script).length;
   const where = r.created ? t("a new git repository") : r.repository === r.folder ? t("a git repository") : r.repository ? t("in the git repository {folder}", { folder: show(r.repository) }) : t("not in a git repository");
-  const rowsOut: string[][] = r.files.map((f) => f.state === "kept"
+  const done = (s: FileState) => s !== "kept";
+  const rowsOut: string[][] = r.files.map((f) => !done(f.state)
     ? [pc.dim(`· ${f.path}`), pc.dim(`${translate(STATE_WORD[f.state])}: ${f.detail}`)]
     : [`${mark.ok} ${f.path}`, f.state === "added" ? f.detail : `${translate(STATE_WORD[f.state])}: ${f.detail}`]);
   // One row per group of settings (`diff.scmjs`, `merge.scmjs`) and state, with the keys' last parts.

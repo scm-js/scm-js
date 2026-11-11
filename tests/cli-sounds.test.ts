@@ -47,7 +47,7 @@ async function soundMap(): Promise<Input> {
 describe("scmjs map sounds", () => {
   it("lists the committed map's sound with its length, format and the trigger that plays it", async () => {
     const { report } = await readSounds(asInput("ums.scx", new Uint8Array(readFileSync(testMap("ums.scx")))));
-    expect(report.sounds).toEqual([{ name: "staredit\\wav\\tone.wav", slot: 0, state: "present", type: "wav", bytes: 11069, seconds: 1, format: "11025 Hz · 8-bit · mono", usedBy: ["Trigger 1: Play WAV"], stock: false }]);
+    expect(report.sounds).toEqual([{ name: "staredit\\wav\\tone.wav", slot: 0, number: 1, state: "present", type: "wav", bytes: 11069, seconds: 1, format: "11025 Hz · 8-bit · mono", usedBy: ["Trigger 1: Play WAV"], stock: false }]);
     const lines = printSounds(report).map(visible);
     expect(lines[0]).toBe("ums.scx · 1 sound, 11 KB");
     expect(lines[1]).toMatch(/^ {4}1 {2}staredit\\wav\\tone\.wav {2}1\.0 s · 11025 Hz · 8-bit · mono · 11 KB {2}Trigger 1: Play WAV$/);

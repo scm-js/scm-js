@@ -2557,6 +2557,8 @@
   "Briefing {n}": "브리핑 {n}",
   "Trigger {n}": "트리거 {n}",
   "{c} conditions · {a} actions": "조건 {c}개 · 액션 {a}개",
+  "The archive's {path} holds no section a map has": "아카이브의 {path}에 맵의 섹션이 하나도 없습니다",
+  "Neither an MPQ archive nor a scenario (no section a map has)": "MPQ 아카이브도 시나리오도 아닙니다 (맵의 섹션이 하나도 없음)",
   "This file was built by {labels}, and its scenario has been changed since by something else, so it is open as the file has it — generated triggers and all. The map from before the build is still inside, as {member}.": "이 파일은 {labels}(으)로 빌드된 뒤 다른 프로그램에서 시나리오가 바뀌었습니다. 그래서 생성된 트리거까지 포함해 파일에 있는 그대로 열었습니다. 빌드 전의 맵은 {member}(으)로 파일 안에 남아 있습니다.",
   "{n, plural, one {# archive member has no name the editor knows{list}; it is} other {# archive members have no name the editor knows{list}; they are}} kept in a saved copy exactly as stored.": "에디터가 이름을 모르는{list} 아카이브 멤버 {n, plural, other {#개}}는 저장한 사본에 저장된 그대로 유지됩니다.",
   " (the archive has no file list)": " (아카이브에 파일 목록이 없음)",

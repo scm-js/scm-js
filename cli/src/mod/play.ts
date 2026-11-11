@@ -214,7 +214,9 @@ export async function playOnPage(set: PlaySet, o: PlayOptions = {}): Promise<Pla
   const page = `http://127.0.0.1:${(server.address() as { port: number }).port}/${token}`;
   o.onAddress?.(page);
   openBrowser(page);
-  say(`${mark.info} ${t("Opening the play page with {name} in your browser", { name: pc.bold(set.name) })}${pc.dim(`\n  ${t("If nothing opens, go to {page}", { page })}`)}`);
+  // (BROWSER=none opens nothing: the address is the line, for the person or a script to open)
+  if (process.env.BROWSER === "none") say(`${mark.info} ${t("Open {page} in a browser to play {name} on the play page", { page, name: pc.bold(set.name) })}`);
+  else say(`${mark.info} ${t("Opening the play page with {name} in your browser", { name: pc.bold(set.name) })}${pc.dim(`\n  ${t("If nothing opens, go to {page}", { page })}`)}`);
   const timer = setTimeout(() => done(), o.timeout ?? 300_000);
   await finished;
   clearTimeout(timer);

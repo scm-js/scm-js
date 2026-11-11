@@ -3,21 +3,22 @@
  * thing (`map`, `replay`, `plugin`, `bot`), the editor's own code underneath (docs/cli.md, .claude/internals/cli.md).
  */
 import { existsSync } from "node:fs";
-import { readFile, writeFile } from "node:fs/promises";
-import { basename, relative } from "node:path";
-import { Command, Help, Option } from "commander";
+import { readFile } from "node:fs/promises";
+import { basename, extname, relative } from "node:path";
+import { Argument, Command, CommanderError, Help, Option, type HelpContext } from "commander";
 import { aboutReport, printAbout, VERSION } from "./about";
 import { listMembers, MANIFEST_FILE, packMap, unpackMap } from "./archive";
 import { rootHelp } from "./banner";
 import { BOT_GUIDE, runBot, updateBot } from "./bot";
-import { runBotGame } from "./botrun";
+import { botRunValues, gameKind, ladderValues, looksLikeMapSettings, runBotGame } from "./botrun";
 import { ladderJson, parseEntrants, parseRaces, printLadder, runLadder } from "./ladder";
-import { costReport, gameMap, printCost, printTrace, removeGameMap, replayRun, runMapInGame, traceReport } from "./trace";
+import { START_LOCATION, unitName } from "../../src/data/units";
+import { costJson, gameMap, printCost, printTrace, removeGameMap, replayRun, runMapInGame, traceJson } from "./trace";
 import { printRush, runRush, rushJson, unitByName } from "./rush";
-import { balanceJson, printBalance, runBalance } from "./balance";
+import { balanceJson, printBalance, runBalance, startPlaces } from "./balance";
 import { buildMap, hasScript, loadTypeScript, printBuild } from "./build";
 import { completionScript, SHELLS, type Shell } from "./completion";
-import { LAYOUTS, nameFromFile, NEW_VERSIONS, parseSize, parseTileset, writeNewMap, type NewMapVersion } from "./create";
+import { LAYOUTS, MAP_EXTENSIONS, nameFromFile, parseSize, parseTileset, writeNewMap } from "./create";
 import { doctorJson, doctorReport, printDoctor } from "./doctor";
 import { initFolder, printInit, printRecipe } from "./init";
 import { diffMaps, printDiff, revisionInput } from "./diff";
@@ -27,31 +28,32 @@ import { asMap, printMerge, runMerge, stagedInputs, type Side } from "./merge";
 import { diffPicture } from "./diffpicture";
 import { CLIP_KINDS, clipsDir, clipsSummary, makeClips, type ClipKind, type ClipRun } from "./clips";
 import { dumpMap, printDump } from "./dump";
-import { ANCHORS, parseAnchor, pruneStrings, resizeMap, setHeader, VERSIONS, ENCODINGS } from "./edit";
-import { exportStrings, exportTriggers, importStrings, importTriggers, writeBack, writeOutput } from "./exchange";
+import { ANCHORS, mapText, parseAnchor, parseRevision, plainAsciiText, pruneStrings, resizeMap, setHeader, VERSIONS, ENCODINGS } from "./edit";
+import { exportStrings, exportTriggers, importStrings, importTriggers, writeBack, writeOutput, type Written } from "./exchange";
 import { looksLikeMpq } from "../../src/formats/mpq/scm";
+import { plainText } from "../../src/editor/textColors";
 import { formatOf } from "../../src/editor/save";
 import { COMPRESSIONS, optimizeJson, optimizeMap, printOptimize, type Compression } from "./optimize";
-import { expectKind, loadMapInput, loadReplayInput, readInput, STDIO, toStdout, type Input } from "./files";
-import { findInMap, KINDS, parseKinds, printHits } from "./find";
+import { expectKind, loadMapInput, loadReplayInput, readInput, readTextArg, STDIO, toStdout, writeFileMade, type Input } from "./files";
+import { findInMap, hitJson, KINDS, parseKinds, printHits } from "./find";
 import { DEFAULT_LIMIT, fetchJson, fetchMap, mapIdFrom, MAX_LIMIT, parseLimit, printFetched, printSearch, searchJson, searchMaps } from "./fetch";
 import { baselineLine, baselineWritten, issueLine, mapReport, printIssues, printMapInfo, type MapReport } from "./map";
 import { baselineEntries, BASELINE_FILE, mapKey, matchBaseline, readBaseline, writeBaseline, type BaselineEntry } from "./baseline";
 import type { Issue } from "../../src/editor/validate";
-import { serveStdio } from "./mcp";
+import { createMcpServer, serveStdio } from "./mcp";
 import { serveLsp } from "./lsp";
 import { openInScmjs, playInLobby } from "./open";
 import { checkPlugin, devPlugin, newPlugin, printPluginCheck, type PluginCheck } from "./plugin";
 import { printReplayInfo, replayReport } from "./replay";
 import { buildOrders, checkPlayedMod, refuseModReplay, replayNamer, type ReplayNameOptions } from "./replaymod";
 import { SCMSCX, scmscx } from "./scmscx";
-import { mapFileFor, writeReplayMap } from "./replaymap";
+import { checkMapOut, mapFileFor, writeReplayMap } from "./replaymap";
 import { printReplayShare, shareReplay } from "./replayshare";
-import { exportReplay, exportSummary, type ExportOptions } from "./export";
-import { parseClock, watchReplay, watchSummary } from "./watch";
-import { FORMATS, githubAnnotations, githubCoverageAnnotations, githubTestAnnotations, junitCoverageXml, junitTestXml, junitXml, sarifCoverageJson, sarifJson, sarifTestJson, type CheckReport, type Format, type TestReport } from "./report";
+import { exportReplay, exportSummary, parseSize as parseClipSize, type ExportOptions } from "./export";
+import { watchReplay, watchSummary, watchValues } from "./watch";
+import { FORMATS, githubAnnotations, githubCoverageAnnotations, githubTestAnnotations, junitCoverageXml, junitTestXml, junitXml, sarifCoverageJson, sarifJson, sarifTestJson, type CheckReport, type Format, type TestReport, type Unread } from "./report";
 import { coverageForm, coverageJson, coverageScenario, printCoverage, runCoverage } from "./coverage";
-import { defaultOut, defaultTests, readMapForTests, readTests, recordLines, recordTest, runTests, testHeader, testJson, testSummary, updateTests, type PlannedScenario } from "./maptest";
+import { defaultOut, defaultTests, readMapForTests, readTests, recordLines, recordTest, runTests, testHeader, testJson, testSummary, updateSkipped, updateTests, type PlannedScenario } from "./maptest";
 import { printRun, runOnMap } from "./run";
 import { previewMap, PNG_SCALES } from "./preview";
 import { analyzeMap } from "./analyze";
@@ -59,26 +61,27 @@ import { heatmapMap, type HeatmapOptions as HeatmapFlags } from "./heatmap";
 import { printGenerated, runGenerate, type GenerateFlags } from "./generatecmd";
 import { GEN_PLAYERS, GEN_STYLES, GEN_SYMMETRIES } from "./generate";
 import { accountReport, login, logout, PROVIDERS, printAccount, serverLabel } from "./account";
-import { printShare, shareMap } from "./share";
+import { KEEP, printShare, shareMap } from "./share";
 import { qrFor } from "./qr";
 import { exportSounds, printSounds, readSounds } from "./sounds";
 import { editInEditor, type EditKind, type EditOutcome } from "./texteditor";
 import { checkModSource, printModCheck } from "./mod/check";
 import { diffModSources, printModDiff } from "./mod/diff";
 import { modInfo, printModInfo } from "./mod/info";
-import { newMod } from "./mod/new";
-import { gameFilesOrNull, openMod } from "./mod/open";
+import { newMod, parseTables } from "./mod/new";
+import { checkModAndMap, gameFilesOrNull, openMod, slowLine } from "./mod/open";
 import { sourceHash } from "./mod/hash";
 import { writeModHeader } from "./mod/header";
 import { modOverlay } from "./mod/overlay";
 import { modWords } from "./engine";
-import { MOD_COMPRESSIONS, packMod, readModFolder, type ModCompression } from "./mod/pack";
+import { checkPackOut, MOD_COMPRESSIONS, packMod, readModFolder, type ModCompression } from "./mod/pack";
 import { pageRace, playBotOf, playOnPage, playSet } from "./mod/play";
 import { unpackMod } from "./mod/unpack";
 import { shownPath } from "./mod/source";
-import { chooseLocale, inEnglish, locale, setLocale, t, translate } from "./i18n";
+import { chooseLocale, inEnglish, locale, msg, setLocale, t, translate, unknownLanguage } from "./i18n";
 import { commanderError, helpExtras, helpTitle } from "./commanderText";
 import { CliError, columns, dot, gameText, mark, num, padColumns, pc, print, rows, size, table, visible } from "./ui";
+import { parseFrames, parseWhole } from "./values";
 
 /** The widest a command's term in the overview may be, so its description stays beside it (banner.ts fits 80 columns). */
 const TERM_WIDTH = 28;
@@ -98,8 +101,9 @@ async function eachFile(paths: string[], asJson: boolean, fn: (input: Input) => 
       if (!silent && !asJson && lines.length) { if (printed) print(...(rule ? ["", pc.dim("─".repeat(Math.min(process.stdout.columns || 60, 60))), ""] : [""])); print(...lines); printed = true; }
     } catch (e) {
       if (!(e instanceof CliError)) throw e;
+      // Said on standard error in every form, so a file left out of the JSON or a CI report is never left out silently.
       if (asJson) results.push({ file: path, error: e.message });
-      else { if (printed) print(""); fail(e); printed = true; }
+      fail(e);
       process.exitCode = Math.max(Number(process.exitCode ?? 0), e.exitCode);
     }
   }
@@ -115,7 +119,9 @@ async function mapInfo(input: Input) {
   expectKind(input, "map");
   const doc = await loadMapInput(input);
   const data: MapReport = { ...mapReport(input, doc), script: await hasScript(doc.extras) };
-  return { data, lines: printMapInfo(data) };
+  // JSON: the name as text (colour codes and line breaks out, as the text shows it), the bytes as the map holds them
+  // under rawName.
+  return { data: { ...data, name: plainText(data.name).replace(/\s+/g, " ").trim(), rawName: data.name }, lines: printMapInfo(data) };
 }
 async function replayInfo(input: Input, o: ReplayNameOptions = {}) {
   expectKind(input, "replay");
@@ -136,14 +142,64 @@ async function botInfo(input: Input) {
   const h = JSON.parse(new TextDecoder().decode(input.bytes.subarray(12, 12 + n))) as Record<string, unknown>;
   const data = { file: { name: input.name, bytes: input.bytes.length }, key: h.key, name: h.name, source: h.source, commit: h.commit, memoryMB: Number(h.memoryPages) / 16, toolchain: h.toolchain, license: String(h.license ?? "").split("\n").find((l) => l.trim())?.trim() ?? "" };
   return { data, lines: [
-    pc.bold(String(data.name)), pc.dim(t("A BWAPI bot for scm-sim's play page")), "",
+    pc.bold(String(data.name)), pc.dim(t("A BWAPI bot for the play page")), "",
     ...rows([[t("Key"), String(data.key)], [t("Source"), data.source ? `${data.source}${data.commit ? pc.dim(` @ ${String(data.commit).slice(0, 7)}`) : ""}` : null], [t("Licence"), data.license || null], [t("Memory"), `${data.memoryMB} MB`], [t("Built by"), String(data.toolchain)], [t("File"), `${input.name}${dot}${size(input.bytes.length)}`]]),
   ] };
 }
 
-// Output piped into something that stops reading (`| head`): stop quietly, as other commands do, not with a stack.
+// Output piped into something that stops reading (`| head`): stop quietly with 0, as other commands do, not with a stack.
 for (const stream of [process.stdout, process.stderr]) {
-  stream.on("error", (e: NodeJS.ErrnoException) => { if (e.code === "EPIPE") process.exit(process.exitCode ?? 0); else throw e; });
+  stream.on("error", (e: NodeJS.ErrnoException) => { if (e.code === "EPIPE") process.exit(0); else throw e; });
+}
+
+/**
+ * commander's Command with scmjs's rules: every mistake in the command line itself (an unknown option or command, a
+ * missing argument, a value not among the choices) exits 2, as the commands' own checks of their values do; asking
+ * for nothing (`scmjs map`, `scmjs --lang ko`) is a request for the help, on standard output with 0 — commander puts
+ * it on standard error and exits 1; and a mistyped command is compared with the hidden commands too (`about`, `lsp`).
+ */
+class ScmjsCommand extends Command {
+  override createCommand(name?: string): Command { return new ScmjsCommand(name); }
+  override error(message: string, options?: { code?: string; exitCode?: number }): never {
+    return super.error(message, { ...options, exitCode: 2 });
+  }
+  override help(context?: HelpContext): never;
+  override help(cb?: (str: string) => string): never;
+  override help(context?: HelpContext | ((str: string) => string)): never {
+    return typeof context === "function" ? super.help(context) : super.help(context?.error ? undefined : context);
+  }
+  /** Called by commander for a word that is none of this command's. */
+  unknownCommand(): never { return this.unknownName(this.args[0]); }
+  unknownName(name: string): never {
+    const near = similarNames(name, this.commands.map((c) => c.name()));
+    return this.error(`error: unknown command '${name}'${near.length ? `\n(Did you mean ${near.length > 1 ? `one of ${near.join(", ")}` : near[0]}?)` : ""}`, { code: "commander.unknownCommand" });
+  }
+}
+
+/** The names closest to a mistyped one (two edits at most, as commander's own suggestion), best first. */
+export function similarNames(word: string, names: string[]): string[] {
+  const distance = (a: string, b: string) => {
+    const d = Array.from({ length: a.length + 1 }, (_, i) => Array.from({ length: b.length + 1 }, (_, j) => (i === 0 ? j : j === 0 ? i : 0)));
+    for (let i = 1; i <= a.length; i++) {
+      for (let j = 1; j <= b.length; j++) {
+        const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+        d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + cost);
+        if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1);
+      }
+    }
+    return d[a.length][b.length];
+  };
+  let best = 3;
+  const found: string[] = [];
+  for (const name of new Set(names)) {
+    if (name.length <= 1) continue;
+    const n = distance(word, name);
+    // A short word two edits away from a short name is any word: keep what is nearer than half the name.
+    if (n > 2 || (name.length - n) / name.length <= 0.4) continue;
+    if (n < best) { best = n; found.length = 0; }
+    if (n === best) found.push(name);
+  }
+  return found.sort();
 }
 
 /**
@@ -152,9 +208,12 @@ for (const stream of [process.stdout, process.stderr]) {
  */
 export function buildProgram(): Command {
   const json = new Option("--json", t("print JSON instead of text, for scripts"));
-  const program = new Command("scmjs")
+  const program = new ScmjsCommand("scmjs")
     .description(t("StarCraft: Brood War maps, replays, plugins and bots from the command line"))
     .version(VERSION, "-v, --version", t("print the version"))
+    // The program's options stop at the command, so `map check x.scx -v` is not the version (finishProgram gives
+    // every command --lang and --no-color, which work in any place).
+    .enablePositionalOptions()
     .helpOption("-h, --help", t("show help for a command"))
     .addOption(new Option("--no-color", t("plain text, no colour (also NO_COLOR=1)")))
     // Read from the arguments before the program is built (chooseLocale); here so commander takes it anywhere.
@@ -175,9 +234,13 @@ export function buildProgram(): Command {
       styleOptionText: (s) => pc.green(s),
       // A noun lists what it does (`map info|check|open`), so the overview shows every command at once — up to a
       // width that keeps the descriptions beside them (`map info|check|open|diff|…`); the noun's own help has the rest.
+      // A noun's commands in the order of its groups (finishProgram), the groups in the order of their first command.
+      visibleCommands: (cmd) => Help.prototype.visibleCommands.call(new Help(), cmd).map((c, i) => [c, i] as const).sort(([a, i], [b, j]) => (GROUP_RANK.get(a) ?? 0) - (GROUP_RANK.get(b) ?? 0) || i - j).map(([c]) => c),
+      groupItems<T extends Command | Option>(unsorted: T[], visible: T[], groupOf: (item: T) => string) { return Help.prototype.groupItems.call(this, unsorted[0] instanceof Command ? visible : unsorted, visible, groupOf as (item: Command | Option) => string) as Map<string, T[]>; },
       subcommandTerm: (cmd) => {
-        const subs = cmd.commands.map((c) => c.name()).filter((n) => n !== "help");
-        if (!subs.length) return new Help().subcommandTerm(cmd).replace(" [options]", "");
+        const subs = cmd.commands.filter((c) => !(c as unknown as { _hidden?: boolean })._hidden).map((c) => c.name());
+        // A command that runs as well as having commands of its own (`map test <map>`, `map test record`) shows its usage.
+        if (!subs.length || (cmd as unknown as { _actionHandler?: unknown })._actionHandler) return new Help().subcommandTerm(cmd).replace(" [options]", "");
         let term = cmd.name();
         // A noun's own help (`scmjs map --help`) has two columns more, so `triggers export|import|edit` is there whole.
         const width = cmd.parent?.parent ? TERM_WIDTH + 2 : TERM_WIDTH;
@@ -193,11 +256,8 @@ export function buildProgram(): Command {
       formatHelp: (cmd, helper) => (cmd.parent ? Help.prototype.formatHelp.call(helper, cmd, helper) : rootHelp(cmd, helper, VERSION)),
     });
 
-  // `scmjs help map` works, but the row is not in the overview: `-h, --help` is on the same screen, and the 23 lines
-  // (a 24-row terminal keeps the globe on screen) go to the commands.
-  const helpCommand = program.createCommand("help").argument("[command]").description(t("show help for a command"));
-  (helpCommand as unknown as { _hidden: boolean })._hidden = true;
-  program.addHelpCommand(helpCommand);
+  // `scmjs help map diff` is a command of its own, made by finishProgram for every noun.
+  program.helpCommand(false);
 
   program.command("info").description(t("what a map, replay or bot file holds")).helpGroup(t("Maps and replays:")).argument("<files...>", t("maps (.scm .scx .chk), replays (.rep) or bots (.scmbot)")).addOption(json)
     .action(async (files: string[], o: { json?: boolean }) => void await eachFile(files, !!o.json, async (input) => {
@@ -209,12 +269,13 @@ export function buildProgram(): Command {
   map.command("info").description(t("a map's size, players, units, triggers and its check")).argument("<maps...>").addOption(json)
     .option("--table", t("one row per map, for a folder of them"))
     .action(async (files: string[], o: { json?: boolean; table?: boolean }) => {
-      if (!o.table || o.json) { await eachFile(files, !!o.json, mapInfo); return; }
-      const reports = (await eachFile(files, true, mapInfo, true, true)).filter((r): r is MapReport => !!r && !("error" in (r as object)));
+      if (o.table && o.json) throw new CliError(t("--table and --json are two forms of the same report: take one"), null, 2);
+      if (!o.table) { await eachFile(files, !!o.json, mapInfo); return; }
+      const reports = (await eachFile(files, true, mapInfo, true, true)).filter((r): r is MapReport & { rawName: string } => !!r && !("error" in (r as object))).map((r) => ({ ...r, name: r.rawName }));
       if (!reports.length) return;
       print(...table([
         [t("File"), t("Name"), t("Size"), t("Tileset"), t("Version"), t("Players"), t("Units"), t("Triggers"), t("Check")].map((h) => pc.dim(h)),
-        ...reports.map((r) => [r.file.name, gameText(r.name) || pc.italic(t("Untitled")), `${r.width} × ${r.height}`, r.tileset, r.version, String(r.usedSlots.length), num(r.statistics.units.total), num(r.statistics.triggers.count), issueLine(r.issues)]),
+        ...reports.map((r) => [r.file.name, gameText(r.name) || pc.italic(t("Untitled")), `${r.width} × ${r.height}`, translate(r.tileset), translate(r.version), String(r.usedSlots.length), num(r.statistics.units.total), num(r.statistics.triggers.count), issueLine(r.issues)]),
       ], 0));
     });
   map.command("check").description(t("Check Map, as the editor's: errors, then warnings"))
@@ -235,6 +296,7 @@ A map with many old findings can still be held to that: --write-baseline keeps t
   scmjs map check maps/*.scx --baseline --strict --format github`, { file: BASELINE_FILE }))
     .action(async (files: string[], o: { json?: boolean; all?: boolean; strict?: boolean; format: string; baseline?: string | true; writeBaseline?: string | true }) => {
       if (!(FORMATS as readonly string[]).includes(o.format)) throw new CliError(t("--format takes {formats}, not \"{value}\"", { formats: FORMATS.join(", "), value: o.format }), null, 2);
+      if (o.json && o.format !== "text" && o.format !== "json") throw new CliError(t("--json is --format json: it cannot be --format {format} too", { format: o.format }), t("Leave one of them off."), 2);
       const format: Format = o.json ? "json" : (o.format as Format);
       const machine = format !== "text" && format !== "json";
       // An optional value takes the next word, so `--baseline a.scx b.scx` would read a.scx as the baseline: a map is a map.
@@ -273,18 +335,22 @@ A map with many old findings can still be held to that: --write-baseline keeps t
         const written = Object.values(now).reduce((n, l) => n + l.length, 0);
         if (format === "text") print("", `${mark.ok} ${t("{findings, plural, one {# finding} other {# findings}} of {maps, plural, one {# map} other {# maps}} written to {file}", { findings: written, maps: Object.keys(now).length, file: pc.cyan(baselineFile) })}${dot}${pc.dim(t("a check with --baseline fails only on others"))}`);
       }
+      const unread = (reports as unknown[]).filter((r): r is Unread => !!r && typeof r === "object" && "error" in r);
       if (machine) {
         const ok = reports.filter((r): r is CheckReport => !!r && !("error" in r));
-        if (format === "github") print(...githubAnnotations(ok));
-        else process.stdout.write(format === "junit" ? junitXml(ok) : sarifJson(ok, VERSION));
+        if (format === "github") print(...githubAnnotations(ok, unread));
+        else process.stdout.write(format === "junit" ? junitXml(ok, unread) : sarifJson(ok, VERSION, unread));
         return;
       }
       if (format === "text" && writing === undefined && files.length > 1) {
         const ok = reports.filter((r): r is CheckReport => !!r && !("error" in r));
+        if (!ok.length) return;
         const bad = ok.filter((r) => r.failed).length;
         const b = known ? ok.reduce((n, r) => { const x = (r as CheckReport & { baseline?: { suppressed: number; fixed: number } }).baseline; return { suppressed: n.suppressed + (x?.suppressed ?? 0), fixed: n.fixed + (x?.fixed ?? 0) }; }, { suppressed: 0, fixed: 0 }) : null;
         const known_ = b && (b.suppressed || b.fixed) ? pc.dim(`${dot}${t("{n, plural, one {# known finding} other {# known findings}} left out", { n: b.suppressed })}${b.fixed ? t(", {n} fixed since the baseline", { n: num(b.fixed) }) : ""}`) : "";
-        print("", (bad ? `${mark.error} ${t("{bad, plural, one {# map} other {# maps}} of {total} failed the check", { bad, total: files.length })}` : `${mark.ok} ${t("{n, plural, one {# map} other {# maps}} checked, none failed", { n: files.length })}`) + known_);
+        // Counted over the maps that were read; the ones that could not be are said apart.
+        const notRead = files.length > ok.length ? `${dot}${pc.yellow(t("{n, plural, one {# file} other {# files}} not read", { n: files.length - ok.length }))}` : "";
+        print("", (bad ? `${mark.error} ${t("{bad, plural, one {# map} other {# maps}} of {total} failed the check", { bad, total: ok.length })}` : `${mark.ok} ${t("{n, plural, one {# map} other {# maps}} checked, none failed", { n: ok.length })}`) + known_ + notRead);
       }
     });
   map.command("open").description(t("open a map in the scmJS app, or the editor in your browser")).argument("<map>")
@@ -292,33 +358,40 @@ A map with many old findings can still be held to that: --write-baseline keeps t
     .addOption(new Option("--editor <url>", t("the editor's address (SCMJS_EDITOR_URL)")).hideHelp())
     .action(async (file: string, o: { browser?: boolean; editor?: string }) => { const input = await readInput(file); expectKind(input, "map"); await openInScmjs(input, o); });
 
-  map.command("new").description(t("a new map: flat ground, start locations laid out, the file written")).argument("<map>", t("the file to write: .scx, .scm or .chk")).addOption(json)
+  map.command("new").description(t("a new map: flat ground, start locations laid out, the file written")).argument("<map>", t("the file to write: .scx, .scm or .chk (.scx added to a name without one); - for standard output")).addOption(json)
     .option("--size <WxH>", t("width and height, each 64, 96, 128, 192 or 256"), "128x128")
     .option("--tileset <name>", t("badlands, platform, install, ashworld, jungle, desert, ice or twilight"), "badlands")
     .option("--name <text>", t("the map's name; the file's by default"))
     .option("--description <text>", t("the map's description"), "")
     .option("--players <n>", t("start locations for players 1 to n, as Auto-place lays them; the other slots closed"), "0")
-    .option("--layout <how>", t("{layouts}: how the start locations are laid out", { layouts: LAYOUTS.join(t(" or ")) }), "ring")
+    .option("--layout <how>", t("{layouts}: how the start locations are laid out (ring by default; needs --players)", { layouts: LAYOUTS.join(t(" or ")) }))
     // Not --version: that is the program's own flag, and commander answers it wherever it appears.
-    .option("--revision <which>", t("{versions}: the file's revision", { versions: NEW_VERSIONS.join(t(" or ")) }), "broodwar")
+    .option("--revision <which>", t("the file's revision: {versions}", { versions: VERSIONS.join(", ") }), "broodwar")
     .option("--force", t("overwrite a file that is there"))
     .addHelpText("after", t(`
 The map File ▸ New makes: flat ground, eight open slots (or n, with --players) and nothing else. Without the game's
 graphics the ground is written by its ids, as the editor does without game data, and opens as it should. The same
 arguments give the same file. Exits 2 when the file is there (--force overwrites it) or an option is not one.`))
-    .action(async (file: string, o: { json?: boolean; size: string; tileset: string; name?: string; description: string; players: string; layout: string; revision: string; force?: boolean }) => {
+    .action(async (given: string, o: { json?: boolean; size: string; tileset: string; name?: string; description: string; players: string; layout?: string; revision: string; force?: boolean }) => {
       const { width, height } = parseSize(o.size);
       const tileset = parseTileset(o.tileset);
-      if (!(NEW_VERSIONS as readonly string[]).includes(o.revision)) throw new CliError(t("--revision takes {values}, not \"{value}\"", { values: NEW_VERSIONS.join(t(" or ")), value: o.revision }), null, 2);
-      if (!(LAYOUTS as readonly string[]).includes(o.layout)) throw new CliError(t("--layout takes {values}, not \"{value}\"", { values: LAYOUTS.join(t(" or ")), value: o.layout }), null, 2);
+      const revision = parseRevision(o.revision);
+      const layout = o.layout?.toLowerCase() ?? "ring";
+      if (!(LAYOUTS as readonly string[]).includes(layout)) throw new CliError(t("--layout takes {values}, not \"{value}\"", { values: LAYOUTS.join(t(" or ")), value: String(o.layout) }), null, 2);
       const players = Number(o.players);
-      if (!Number.isInteger(players) || players < 0 || players > 8) throw new CliError(t("--players takes 0 to 8, not \"{value}\"", { value: o.players }), null, 2);
-      const piped = file === STDIO;
+      if (!/^\s*\d+\s*$/.test(o.players) || !Number.isInteger(players) || players < 0 || players > 8) throw new CliError(t("--players takes 0 to 8, not \"{value}\"", { value: o.players }), null, 2);
+      if (o.layout !== undefined && !players) throw new CliError(t("--layout lays out start locations, and there are none without --players"), t("Add --players <n>."), 2);
+      const piped = given === STDIO;
+      // A map's extension, or none (then the revision's); anything else is refused rather than written under it.
+      const ext = extname(given);
+      if (!piped && ext && !/^\.(scm|scx|chk)$/i.test(ext)) throw new CliError(t("{file} is not a map's name: a map is .scx, .scm or .chk", { file: given }), null, 2);
+      const file = piped || ext ? given : `${given}.${MAP_EXTENSIONS[revision]}`;
       if (piped && o.json) throw new CliError(t("--json and the map both want standard output"), t("Name a file to write, or leave --json off."), 2);
       if (!piped && existsSync(file) && !o.force) throw new CliError(t("{file} is there already", { file }), t("--force overwrites it."), 2);
-      const r = await writeNewMap(file, { width, height, tileset, name: o.name ?? (piped ? "Untitled Scenario" : nameFromFile(file)), description: o.description, version: o.revision as NewMapVersion, players, layout: o.layout as (typeof LAYOUTS)[number] });
-      if (o.json) { print(JSON.stringify(r, null, 2)); return; }
-      say(piped, `${mark.ok} ${pc.bold(piped ? t("standard output") : relative(process.cwd(), r.path) || r.path)}: ${r.width} × ${r.height}${dot}${translate(r.tileset)}${dot}${translate(r.version)}${r.starts ? `${dot}${t("{n, plural, one {# start location} other {# start locations}}", { n: r.starts })}` : ""}${dot}${size(r.bytes)}`);
+      const r = await writeNewMap(file, { width, height, tileset, name: o.name !== undefined ? mapText(o.name) : piped ? "Untitled Scenario" : nameFromFile(file), description: mapText(o.description), version: revision, players, layout: layout as (typeof LAYOUTS)[number] });
+      if (o.json) { print(JSON.stringify({ file, ...r }, null, 2)); return; }
+      say(piped, `${mark.ok} ${pc.bold(piped ? t("standard output") : relative(process.cwd(), r.path) || r.path)}: ${r.width} × ${r.height}${dot}${translate(r.tileset)}${dot}${translate(r.version)}${r.starts ? `${dot}${t("{n, plural, one {# start location} other {# start locations}}", { n: r.starts })}` : ""}${dot}${size(r.bytes)}`,
+        r.starts ? null : pc.dim(`  ${t("No start locations yet, so Check Map finds an error for each open slot; --players <n> lays them out for n players and closes the other slots.")}`));
     });
 
   map.command("generate").description(t("a symmetric melee map from a seed, laid with your copy of the game's tileset")).argument("<map>", t("the file to write: .scx, .scm or .chk")).addOption(json)
@@ -348,8 +421,10 @@ thrown away and the next one tried. Exits 1 when none passes, 2 when an option i
       if (piped && o.json) throw new CliError(t("--json and the map both want standard output"), t("Name a file to write, or leave --json off."), 2);
       if (piped && o.rush) throw new CliError(t("--rush walks the map in the game, which needs it in a file"), t("Name a file to write."), 2);
       if (!piped && existsSync(file) && !o.force) throw new CliError(t("{file} is there already", { file }), t("--force overwrites it."), 2);
-      const name = o.name ?? (piped ? "Generated" : nameFromFile(file));
+      const name = o.name !== undefined ? mapText(o.name) : piped ? "Generated" : nameFromFile(file);
       const { report } = await runGenerate(file, o, name);
+      // Four and eight players have one layout whatever --symmetry asks: said, so the option is not taken in silence.
+      if (o.symmetry !== undefined && (report.players === 4 || report.players === 8)) process.stderr.write(`${mark.info} ${t("--symmetry {asked}: four and eight players are always mirrored both ways, since no tileset has the ramp a quarter turn would need", { asked: o.symmetry })}\n`);
       const near = relative(process.cwd(), report.path);
       if (!o.json) say(piped, ...printGenerated(report, piped ? t("standard output") : near && !near.startsWith("..") ? near : report.path));
       if (!o.rush) { if (o.json) print(JSON.stringify(report, null, 2)); return; }
@@ -369,27 +444,29 @@ this text (git diff, git log -p, git show), once in the repository:
   printf '*.scx diff=scmjs\\n*.scm diff=scmjs\\n*.chk diff=scmjs\\n' >> .gitattributes`))
     .action(async (file: string, o: { json?: boolean }) => {
       const { input, doc } = await openForEdit(file);
-      const d = dumpMap(doc, input.name);
+      const d = dumpMap(doc, input.path);
       if (o.json) print(JSON.stringify(d, null, 2));
       else process.stdout.write(printDump(d, doc.scenario));
     });
 
-  map.command("find").description(t("search units, locations, strings and triggers across maps")).argument("<text>", t("what to look for; a number matches an id, slot or index too")).argument("<maps...>").addOption(json)
-    .option("--in <kinds>", t("which of {kinds} to search, with commas between; all by default", { kinds: KINDS.join(", ") }))
+  map.command("find").description(t("search units, locations, strings and triggers across maps")).argument("<text>", t("what to look for; a number matches an id, slot or index too")).argument("<maps...>", t("the maps to search (.scm .scx .chk); - reads one from standard input")).addOption(json)
+    .option("--in <kinds>", t("which of {kinds} to search, with commas between (or --in again); all by default", { kinds: KINDS.join(", ") }), (v: string, prev?: string) => (prev ? `${prev},${v}` : v))
     .option("--case", t("match case"))
     .addHelpText("after", t(`
 Edit ▸ Find over any number of maps: a unit, location, sprite or doodad whose name holds the text, a string or a
 trigger whose text does. Prints what matched and where. Exits 1 when nothing matched in any map, like grep.`))
     .action(async (text: string, files: string[], o: { json?: boolean; in?: string; case?: boolean }) => {
       const kinds = parseKinds(o.in);
-      let found = 0;
+      let found = 0, read = 0;
       await eachFile(files, !!o.json, async (input) => {
         expectKind(input, "map");
         const hits = findInMap(await loadMapInput(input), input.name, text, kinds, !!o.case);
         found += hits.length;
-        return { data: { file: input.name, matches: hits.length, hits: hits.map(({ file: _f, ...h }) => h) }, lines: hits.length ? [`${pc.bold(input.name)}  ${pc.dim(t("{n, plural, one {# match} other {# matches}}", { n: hits.length }))}`, ...printHits(hits)] : [] };
+        read++;
+        return { data: { file: input.path, matches: hits.length, hits: hits.map(hitJson) }, lines: hits.length ? [`${pc.bold(input.name)}  ${pc.dim(t("{n, plural, one {# match} other {# matches}}", { n: hits.length }))}`, ...printHits(hits)] : [] };
       }, false);
-      if (!found) { if (!o.json) print(pc.dim(t("Nothing in {n, plural, one {# map} other {# maps}} matches \"{text}\"", { n: files.length, text }))); process.exitCode = Math.max(Number(process.exitCode ?? 0), 1); }
+      // Counted over the maps read: one that could not be was said on its own line.
+      if (!found) { if (!o.json && read) print(pc.dim(t("Nothing in {n, plural, one {# map} other {# maps}} matches \"{text}\"", { n: read, text }))); process.exitCode = Math.max(Number(process.exitCode ?? 0), 1); }
     });
 
   /** A map read for a command that changes it: the input and the parsed document, or a CliError. */
@@ -418,7 +495,7 @@ trigger whose text does. Prints what matched and where. Exits 1 when nothing mat
   /** `--out` for text: the file, or stdout when there is none (or `-`). */
   async function emit(text: string, out: string | undefined, said: string): Promise<void> {
     if (!out || out === STDIO) { process.stdout.write(text); return; }
-    await writeFile(out, text);
+    await writeFileMade(out, text);
     print(`${mark.ok} ${said} ${pc.dim("→")} ${pc.cyan(out)}`);
   }
 
@@ -433,20 +510,32 @@ trigger whose text does. Prints what matched and where. Exits 1 when nothing mat
    * `map triggers edit` / `map strings edit`: the text in the editor, imported when it closes, the map written back as
    * `import` writes it. Standard input cannot be edited: the editor needs the terminal.
    */
-  async function editCommand(kind: EditKind, file: string, o: { editor?: string; out?: string; briefing?: boolean }): Promise<void> {
+  async function editCommand(kind: EditKind, file: string, o: { editor?: string; out?: string; briefing?: boolean; json?: boolean }): Promise<void> {
     if (file === STDIO) throw new CliError(t("map {kind} edit needs a map file, not standard input", { kind }), t("The editor takes the terminal; name the file, or use export and import in a pipe."), 2);
     if (o.out === STDIO) throw new CliError(t("--out - is for a pipe; edit writes a file"), null, 2);
+    if (o.editor !== undefined && !o.editor.trim()) throw new CliError(t("--editor needs a command"), t("Such as: --editor \"code --wait\", --editor nano."), 2);
+    // vi with no terminal waits for keys that never come: with nothing named, a pipe or a script is refused instead.
+    const named = [o.editor, process.env.VISUAL, process.env.EDITOR].some((v) => v && v.trim());
+    if (!named && process.platform !== "win32" && !(process.stdin.isTTY && process.stdout.isTTY)) throw new CliError(t("map {kind} edit opens vi, which needs a terminal, and this has none", { kind }), t("Name an editor with --editor or EDITOR, or use map {kind} export and import in a script.", { kind }), 2);
     const { input, doc } = await openForEdit(file);
+    let w: Written | null = null;
     const r: EditOutcome = await editInEditor(doc, input.path, kind, {
       editor: o.editor, briefing: o.briefing,
       onWait: (path) => { if (process.stderr.isTTY) process.stderr.write(pc.dim(`${t("Waiting for your editor to close {path}…", { path })}\n`)); },
+      write: async () => { w = await writeBack(doc, input.path, o.out ?? null); },
     });
-    if (!r.changed) { print(`${mark.info} ${pc.bold(input.name)}: ${t("nothing changed")}${o.out ? t("; nothing written") : ""}`); return; }
-    const w = await writeBack(doc, input.path, o.out ?? null);
+    // --out names a file the next step reads: it is written, changed or not.
+    if (!r.changed && o.out) w = await writeBack(doc, input.path, o.out);
+    const written = w as Written | null;
+    if (o.json) {
+      print(JSON.stringify({ file: input.path, changed: r.changed, ...(r.changed ? (r.kind === "triggers" ? { triggers: r.triggers } : { strings: r.strings }) : {}), written }, null, 2));
+      return;
+    }
+    if (!r.changed) { print(`${mark.info} ${pc.bold(input.name)}: ${t("nothing changed")}${written ? `${dot}${t("written to {out}", { out: outName(written) })}` : ""}`); return; }
     const what = r.kind === "triggers"
       ? `${triggerCount(r.triggers.before, o.briefing)} ${pc.dim("→")} ${triggerCount(r.triggers.after, o.briefing)}`
       : t("{n, plural, one {# string} other {# strings}} replaced, {added} added", { n: r.strings.replaced, added: r.strings.added });
-    print(`${mark.ok} ${pc.bold(input.name)}: ${what}${dot}${t("written to {out}", { out: outName(w) })}${dot}${size(w.bytes)}`);
+    print(`${mark.ok} ${pc.bold(input.name)}: ${what}${dot}${t("written to {out}", { out: outName(written!) })}${dot}${size(written!.bytes)}`);
   }
 
   map.command("set").description(t("the map's name, description, revision or text encoding")).argument("<map>").addOption(json)
@@ -454,41 +543,59 @@ trigger whose text does. Prints what matched and where. Exits 1 when nothing mat
     .option("--description <text>", t("the map's description"))
     .option("--revision <which>", t("the file's revision: {versions}", { versions: VERSIONS.join(", ") }))
     .option("--encoding <id>", t("the text encoding: {encodings}", { encodings: ENCODINGS.join(", ") }))
-    .option("--out <map>", t("write the result here instead of over the map; - for standard output"))
+    .option("-o, --out <map>", t("write the result here instead of over the map; - for standard output"))
+    .option("--dry-run", t("say what would change and write nothing"))
     .addHelpText("after", t(`
 Scenario ▸ Map Properties from the terminal: what is given is set, the rest is left. Nothing is written when nothing
 changed. A revision change does what the editor's does (the string table's form, the colour section the revision
 needs); the encoding is how the map's text is written for 1.16.1, where Remastered reads UTF-8.`))
-    .action(async (file: string, o: { json?: boolean; name?: string; description?: string; revision?: string; encoding?: string; out?: string }) => {
+    .action(async (file: string, o: { json?: boolean; name?: string; description?: string; revision?: string; encoding?: string; out?: string; dryRun?: boolean }) => {
       if (o.name === undefined && o.description === undefined && o.revision === undefined && o.encoding === undefined) throw new CliError(t("Nothing to set"), t("--name, --description, --revision or --encoding, any of them."), 2);
       const { input, doc } = await openForEdit(file);
       const piped = piping(input, o);
+      // Plain ASCII is the same in every encoding, and a map does not record the one it was written in: said, not set.
+      const asciiOnly = o.encoding !== undefined && plainAsciiText(doc.scenario);
       const changes = setHeader(doc, { name: o.name, description: o.description, version: o.revision, encoding: o.encoding });
       // A pipe always gets the map, changed or not, so the next step has one.
-      const w = changes.length || o.out || piped ? await writeBack(doc, input.path, o.out ?? null) : null;
-      if (o.json) { print(JSON.stringify({ file: input.name, changes, written: w }, null, 2)); return; }
-      if (!changes.length) { say(piped, `${mark.ok} ${pc.bold(input.name)}: ${t("nothing changed")}${w ? `${dot}${t("written to {out}", { out: outName(w) })}` : ""}`); return; }
-      say(piped, `${mark.ok} ${pc.bold(input.name)}: ${changes.map((c) => `${translate(c.field)} ${pc.red(c.from || pc.dim(t("(none)")))} ${pc.dim("→")} ${pc.green(c.to || pc.dim(t("(none)")))}`).join(dot)}${dot}${t("written to {out}", { out: outName(w!) })}${dot}${size(w!.bytes)}`);
+      const w = !o.dryRun && (changes.length || o.out || piped) ? await writeBack(doc, input.path, o.out ?? null) : null;
+      if (o.json) { print(JSON.stringify({ file: input.path, changes, ...(asciiOnly ? { encoding: "plain ASCII text, the same in every encoding" } : {}), dryRun: !!o.dryRun, written: w }, null, 2)); return; }
+      const note = asciiOnly ? `${mark.info} ${t("The map's text is plain ASCII, the same in every encoding, so the encoding has nothing to change")}` : null;
+      const where = w ? `${dot}${t("written to {out}", { out: outName(w) })}${dot}${size(w.bytes)}` : o.dryRun && changes.length ? pc.dim(` ${t("(--dry-run: nothing written)")}`) : "";
+      if (!changes.length) { say(piped, note, `${mark.ok} ${pc.bold(input.name)}: ${t("nothing changed")}${where}`); return; }
+      say(piped, note, `${o.dryRun ? mark.info : mark.ok} ${pc.bold(input.name)}: ${changes.map((c) => `${translate(c.field)} ${pc.red(c.from || pc.dim(t("(none)")))} ${pc.dim("→")} ${pc.green(c.to || pc.dim(t("(none)")))}`).join(dot)}${where}`);
     });
 
   map.command("resize").description(t("Scenario ▸ Resize: the map to another size, anchored")).argument("<map>").addOption(json)
     .requiredOption("--size <WxH>", t("the new width and height, each 64, 96, 128, 192 or 256"))
     .option("--anchor <where>", t("{anchors}: which part of the map stays", { anchors: Object.keys(ANCHORS).filter((k) => k !== "centre").join(", ") }), "center")
     .option("--no-clamp", t("leave locations that hang past the new edge where the shift put them"))
-    .option("--out <map>", t("write the result here instead of over the map; - for standard output"))
+    .option("--all", t("list everything dropped; by default a long list is cut at 20"))
+    .option("-o, --out <map>", t("write the result here instead of over the map; - for standard output"))
+    .option("--dry-run", t("say what would change and write nothing"))
     .addHelpText("after", t(`
 The map is moved under the anchor; what falls outside is dropped (units, sprites, doodads) or pulled inside
 (locations, unless --no-clamp), and new ground is the tileset's base terrain. Says what was dropped.`))
-    .action(async (file: string, o: { json?: boolean; size: string; anchor: string; clamp: boolean; out?: string }) => {
+    .action(async (file: string, o: { json?: boolean; size: string; anchor: string; clamp: boolean; all?: boolean; out?: string; dryRun?: boolean }) => {
       const { width, height } = parseSize(o.size);
       const anchor = parseAnchor(o.anchor);
       const { input, doc } = await openForEdit(file);
       const piped = piping(input, o);
       const r = resizeMap(doc, { width, height, anchor, clampLocations: o.clamp });
-      const w = await writeBack(doc, input.path, o.out ?? null);
-      if (o.json) { print(JSON.stringify({ file: input.name, ...r, written: w }, null, 2)); return; }
+      const w = o.dryRun ? null : await writeBack(doc, input.path, o.out ?? null);
+      if (o.json) { print(JSON.stringify({ file: input.path, ...r, dryRun: !!o.dryRun, written: w }, null, 2)); return; }
       const dropped = [r.unitsDropped && t("{n, plural, one {# unit} other {# units}}", { n: r.unitsDropped }), r.spritesDropped && t("{n, plural, one {# sprite} other {# sprites}}", { n: r.spritesDropped }), r.doodadsDropped && t("{n, plural, one {# doodad} other {# doodads}}", { n: r.doodadsDropped })].filter(Boolean).join(", ");
-      say(piped, `${mark.ok} ${pc.bold(input.name)}: ${r.from.width} × ${r.from.height} ${pc.dim("→")} ${r.to.width} × ${r.to.height}${dropped ? `${dot}${pc.yellow(t("{list} dropped", { list: dropped }))}` : ""}${r.locationsClamped ? `${dot}${t("{n, plural, one {# location} other {# locations}} pulled inside", { n: r.locationsClamped })}` : ""}${dot}${t("written to {out}", { out: outName(w) })}${dot}${size(w.bytes)}`);
+      const where = w ? `${dot}${t("written to {out}", { out: outName(w) })}${dot}${size(w.bytes)}` : pc.dim(` ${t("(--dry-run: nothing written)")}`);
+      // Start locations are always named; the rest of the list is cut at 20 unless --all.
+      const starts = r.dropped.filter((d) => d.kind === "unit" && d.name === unitName(START_LOCATION));
+      const limit = o.all ? Infinity : 20;
+      const thing = (d: { kind: string; name: string; owner: number; x: number; y: number }) => `  ${pc.dim(d.kind === "unit" ? t("unit") : d.kind === "sprite" ? t("sprite") : t("doodad"))}  ${d.name}  ${pc.dim(`${d.owner === 11 ? t("Neutral") : t("Player {n}", { n: d.owner + 1 })} · ${d.x},${d.y}`)}`;
+      const rest = r.dropped.filter((d) => !starts.includes(d));
+      say(piped, `${o.dryRun ? mark.info : mark.ok} ${pc.bold(input.name)}: ${r.from.width} × ${r.from.height} ${pc.dim("→")} ${r.to.width} × ${r.to.height}${dropped ? `${dot}${pc.yellow(t("{list} dropped", { list: dropped }))}` : ""}${r.locationsClamped ? `${dot}${t("{n, plural, one {# location} other {# locations}} pulled inside", { n: r.locationsClamped })}` : ""}${where}`,
+        ...starts.map((d) => `${mark.warn} ${t("The start location of {player} is dropped", { player: t("Player {n}", { n: d.owner + 1 }) })} ${pc.dim(`(${d.x},${d.y})`)}`),
+        ...rest.slice(0, limit).map(thing),
+        ...(rest.length > limit ? [pc.dim(`  ${t("… and {n} more (--all lists them)", { n: num(rest.length - limit) })}`)] : []),
+        r.collapsed.length ? `${mark.warn} ${t("Pulled inside with no width or height left: {list}", { list: r.collapsed.join(", ") })}` : null,
+        r.outside.length ? `${mark.warn} ${t("Left past the map's edge (--no-clamp): {list}", { list: r.outside.join(", ") })}` : null);
     });
 
   const triggers = map.command("triggers").description(t("a map's triggers as a text or .trg file, and back"))
@@ -496,69 +603,79 @@ The map is moved under the anchor; what falls outside is dropped (units, sprites
 The text form is the trigger window's (docs.scmjs.dev/triggers); a .trg holds the raw records, as SCMDraft trades
 them. Text in a file beside the map can be diffed and edited, and imported back.`));
   triggers.command("export").description(t("the triggers as text (to stdout), or as .trg with --out x.trg")).argument("<map>")
-    .option("--out <file>", t("write to this file instead of stdout; .trg writes the raw records"))
+    .option("-o, --out <file>", t("write to this file instead of stdout; .trg writes the raw records"))
     .option("--briefing", t("the mission briefing's triggers instead"))
     .action(async (file: string, o: { out?: string; briefing?: boolean }) => {
       const { doc } = await openForEdit(file);
       const r = exportTriggers(doc, o.out ?? null, !!o.briefing);
-      if (r.bytes) { await writeFile(o.out!, r.bytes); print(`${mark.ok} ${triggerCount(r.count)} ${pc.dim("→")} ${pc.cyan(o.out!)}`); }
-      else await emit(r.text!, o.out, triggerCount(r.count));
+      if (r.bytes) { await writeFileMade(o.out!, r.bytes); print(`${mark.ok} ${triggerCount(r.count, o.briefing)} ${pc.dim("→")} ${pc.cyan(o.out!)}`); }
+      else await emit(r.text!, o.out, triggerCount(r.count, o.briefing));
     });
-  triggers.command("import").description(t("replace the map's triggers with a text or .trg file's")).argument("<map>").argument("<file>", t("the triggers: text, or .trg"))
-    .option("--out <map>", t("write the result here instead of over the map; - for standard output"))
+  triggers.command("import").description(t("replace the map's triggers with a text or .trg file's")).argument("<map>", t("the map to change; - reads it from standard input")).argument("<file>", t("the triggers: text, or .trg; - reads text from standard input")).addOption(json)
+    .option("-o, --out <map>", t("write the result here instead of over the map; - for standard output"))
     .option("--append", t("add the file's triggers after the map's own instead of replacing them"))
     .option("--briefing", t("the mission briefing's triggers instead"))
-    .action(async (file: string, from: string, o: { out?: string; append?: boolean; briefing?: boolean }) => {
+    .option("--allow-empty", t("take a file with no triggers in it, which leaves the map with none"))
+    .option("--dry-run", t("say what would change and write nothing"))
+    .action(async (file: string, from: string, o: { json?: boolean; out?: string; append?: boolean; briefing?: boolean; allowEmpty?: boolean; dryRun?: boolean }) => {
+      if (file === STDIO && from === STDIO) throw new CliError(t("The map and the triggers cannot both come from standard input"), t("Name one of them as a file."), 2);
+      const bytes = await readTextArg(from);
       const { input, doc } = await openForEdit(file);
       const piped = piping(input, o);
-      const r = importTriggers(doc, from, new Uint8Array(await readFile(from)), { briefing: !!o.briefing, append: !!o.append });
-      const w = await writeBack(doc, input.path, o.out ?? null);
-      say(piped, `${mark.ok} ${pc.bold(input.name)}: ${triggerCount(r.before)} ${pc.dim("→")} ${triggerCount(r.after)}${o.append ? pc.dim(t(" ({n} added)", { n: r.read })) : ""}${dot}${t("written to {out}", { out: outName(w) })}${dot}${size(w.bytes)}`);
+      const r = importTriggers(doc, from === STDIO ? "stdin.txt" : from, bytes, { briefing: !!o.briefing, append: !!o.append, allowEmpty: !!o.allowEmpty });
+      const w = o.dryRun ? null : await writeBack(doc, input.path, o.out ?? null);
+      if (o.json) { print(JSON.stringify({ file: input.path, briefing: !!o.briefing, ...r, added: o.append ? r.read : undefined, dryRun: !!o.dryRun, written: w }, null, 2)); return; }
+      const counts = `${triggerCount(r.before, o.briefing)} ${pc.dim("→")} ${triggerCount(r.after, o.briefing)}${o.append ? pc.dim(t(" ({n} added)", { n: r.read })) : ""}`;
+      say(piped, `${o.dryRun ? mark.info : mark.ok} ${pc.bold(input.name)}: ${counts}${w ? `${dot}${t("written to {out}", { out: outName(w) })}${dot}${size(w.bytes)}` : pc.dim(` ${t("(--dry-run: nothing written)")}`)}`);
     });
   const editorOption = () => new Option("--editor <command>", t("the editor to open, such as \"code --wait\"; VISUAL or EDITOR otherwise, else vi (Notepad on Windows)"));
-  triggers.command("edit").description(t("the triggers as text in your editor, imported when you close it")).argument("<map>")
+  triggers.command("edit").description(t("the triggers as text in your editor, imported when you close it")).argument("<map>").addOption(json)
     .addOption(editorOption())
-    .option("--out <map>", t("write the result here instead of over the map"))
+    .option("-o, --out <map>", t("write the result here instead of over the map"))
     .option("--briefing", t("the mission briefing's triggers instead"))
     .addHelpText("after", t(`
 Writes the text export to a file of its own, opens it in your editor and waits for the editor to close. Saved with
 changes, the text is imported as triggers import reads it and the map is written; unchanged, nothing is written.
 Text that does not read is kept, and the error says where, so the edit is not lost. A graphical editor has to wait
 for its window to close: code --wait, subl -w, gedit -s.`))
-    .action((file: string, o: { editor?: string; out?: string; briefing?: boolean }) => editCommand("triggers", file, o));
+    .action((file: string, o: { editor?: string; out?: string; briefing?: boolean; json?: boolean }) => editCommand("triggers", file, o));
 
   const strings = map.command("strings").description(t("a map's strings as a text file, and back"))
     .addHelpText("after", t(`
 One line per string: its number, a tab, its text. Colour codes are written <XX>. Importing sets the numbered
 strings in place and adds any past the end; nothing is renumbered, since triggers and locations hold the numbers.`));
   strings.command("export").description(t("the strings as <number><TAB><text> lines (to stdout)")).argument("<map>")
-    .option("--out <file>", t("write to this file instead of stdout"))
+    .option("-o, --out <file>", t("write to this file instead of stdout"))
     .action(async (file: string, o: { out?: string }) => {
       const { doc } = await openForEdit(file);
       const r = exportStrings(doc);
       await emit(r.text, o.out, t("{n, plural, one {# string} other {# strings}}", { n: r.count }));
     });
-  strings.command("import").description(t("set the map's strings from such a file")).argument("<map>").argument("<file>")
-    .option("--out <map>", t("write the result here instead of over the map; - for standard output"))
-    .action(async (file: string, from: string, o: { out?: string }) => {
+  strings.command("import").description(t("set the map's strings from such a file")).argument("<map>", t("the map to change; - reads it from standard input")).argument("<file>", t("the strings file; - reads it from standard input")).addOption(json)
+    .option("-o, --out <map>", t("write the result here instead of over the map; - for standard output"))
+    .option("--dry-run", t("say what would change and write nothing"))
+    .action(async (file: string, from: string, o: { json?: boolean; out?: string; dryRun?: boolean }) => {
+      if (file === STDIO && from === STDIO) throw new CliError(t("The map and the strings cannot both come from standard input"), t("Name one of them as a file."), 2);
+      const text = new TextDecoder().decode(await readTextArg(from));
       const { input, doc } = await openForEdit(file);
       const piped = piping(input, o);
-      const r = importStrings(doc, from, await readFile(from, "utf8"));
-      const w = await writeBack(doc, input.path, o.out ?? null);
-      say(piped, `${mark.ok} ${pc.bold(input.name)}: ${t("{n, plural, one {# string} other {# strings}} replaced, {added} added, {unchanged} unchanged", { n: r.replaced, added: r.added, unchanged: r.unchanged })}${dot}${t("written to {out}", { out: outName(w) })}${dot}${size(w.bytes)}`);
+      const r = importStrings(doc, from === STDIO ? "stdin.txt" : from, text);
+      const w = o.dryRun ? null : await writeBack(doc, input.path, o.out ?? null);
+      if (o.json) { print(JSON.stringify({ file: input.path, ...r, dryRun: !!o.dryRun, written: w }, null, 2)); return; }
+      say(piped, `${o.dryRun ? mark.info : mark.ok} ${pc.bold(input.name)}: ${t("{n, plural, one {# string} other {# strings}} replaced, {added} added, {unchanged} unchanged", { n: r.replaced, added: r.added, unchanged: r.unchanged })}${w ? `${dot}${t("written to {out}", { out: outName(w) })}${dot}${size(w.bytes)}` : pc.dim(` ${t("(--dry-run: nothing written)")}`)}`);
     });
-  strings.command("edit").description(t("the strings in your editor, imported when you close it")).argument("<map>")
+  strings.command("edit").description(t("the strings in your editor, imported when you close it")).argument("<map>").addOption(json)
     .addOption(editorOption())
-    .option("--out <map>", t("write the result here instead of over the map"))
+    .option("-o, --out <map>", t("write the result here instead of over the map"))
     .addHelpText("after", t(`
 As strings import: a line changed sets that string, a line past the end adds one, and a line taken out leaves the
 string as it was (strings prune drops the unused ones).`))
-    .action((file: string, o: { editor?: string; out?: string }) => editCommand("strings", file, o));
+    .action((file: string, o: { editor?: string; out?: string; json?: boolean }) => editCommand("strings", file, o));
 
   strings.command("prune").description(t("drop the strings nothing in the map refers to")).argument("<map>").addOption(json)
     .option("--dry-run", t("list them and write nothing"))
     .option("--all", t("list every string dropped; by default a long list is cut at 20"))
-    .option("--out <map>", t("write the result here instead of over the map; - for standard output"))
+    .option("-o, --out <map>", t("write the result here instead of over the map; - for standard output"))
     .addHelpText("after", t(`
 The editor's Delete Unused: a string no trigger, location, name, force, sound or setting refers to is blanked. Nothing
 is renumbered, so what the triggers hold stays right; blank slots at the end of the table are dropped.`))
@@ -566,9 +683,10 @@ is renumbered, so what the triggers hold stays right; blank slots at the end of 
       const { input, doc } = await openForEdit(file);
       const piped = piping(input, o);
       const removed = pruneStrings(doc, { dryRun: !!o.dryRun });
-      const w = (removed.length || piped) && !o.dryRun ? await writeBack(doc, input.path, o.out ?? null) : null;
-      if (o.json) { print(JSON.stringify({ file: input.name, removed, dryRun: !!o.dryRun, written: w }, null, 2)); return; }
-      if (!removed.length) { say(piped, `${mark.ok} ${pc.bold(input.name)}: ${t("every string is referred to")}`); return; }
+      // --out or a pipe always gets the map: the next step reads it.
+      const w = (removed.length || piped || o.out) && !o.dryRun ? await writeBack(doc, input.path, o.out ?? null) : null;
+      if (o.json) { print(JSON.stringify({ file: input.path, removed, dryRun: !!o.dryRun, written: w }, null, 2)); return; }
+      if (!removed.length) { say(piped, `${mark.ok} ${pc.bold(input.name)}: ${t("every string is referred to")}${w ? `${dot}${t("written to {out}", { out: outName(w) })}` : ""}`); return; }
       const limit = o.all ? Infinity : 20;
       const show = (s: string) => { const p = s.replace(/\s+/g, " "); return p.length > 70 ? `${p.slice(0, 67)}…` : p; };
       say(piped, `${o.dryRun ? mark.info : mark.ok} ${pc.bold(input.name)}: ${o.dryRun ? t("{n, plural, one {# unused string} other {# unused strings}} would be dropped", { n: removed.length }) : t("{n, plural, one {# unused string} other {# unused strings}} dropped", { n: removed.length })}${w ? `${dot}${t("written to {out}", { out: outName(w) })}${dot}${size(w.bytes)}` : ""}`,
@@ -580,9 +698,9 @@ is renumbered, so what the triggers hold stays right; blank slots at the end of 
     .option("--dry-run", t("say what would go and what each step saves; write nothing"))
     .option("--strip-editor", t("also drop the sections only editors read (ISOM, TILE, DD2, the sound list, switch names…)"))
     .option("--compression <method>", t("pkware (every version of the game) or zlib (Remastered only); default pkware, or the smaller for a zlib map"))
-    .option("--keep <members...>", t("archive members to keep though nothing names them; a name ending in \\ keeps a folder"))
+    .option("--keep <member>", t("an archive member to keep though nothing names it, once per member; a name ending in \\ keeps a folder"), (v: string, list: string[] = []) => [...list, v])
     .option("--all", t("list everything removed; by default a long list is cut at 20"))
-    .option("--out <map>", t("write the result here instead of over the map; - for standard output"))
+    .option("-o, --out <map>", t("write the result here instead of over the map; - for standard output"))
     .addHelpText("after", t(`
 In order: sounds no trigger or briefing plays and the sound list does not name, the sound list's entries for files
 the map lacks, any other archive member nothing names, the strings nothing refers to, and every member compressed
@@ -597,20 +715,24 @@ switch names. Keep the original to go on editing.
   scmjs map optimize "My Map.scx" --dry-run
   scmjs map optimize "My Map.scx" --out "My Map (small).scx" --strip-editor`))
     .action(async (file: string, o: { json?: boolean; dryRun?: boolean; stripEditor?: boolean; compression?: string; keep?: string[]; all?: boolean; out?: string }) => {
-      if (o.compression !== undefined && !(COMPRESSIONS as readonly string[]).includes(o.compression)) throw new CliError(t("--compression takes {values}, not \"{value}\"", { values: COMPRESSIONS.join(t(" or ")), value: o.compression }), null, 2);
+      const compression = o.compression?.toLowerCase();
+      if (compression !== undefined && !(COMPRESSIONS as readonly string[]).includes(compression)) throw new CliError(t("--compression takes {values}, not \"{value}\"", { values: COMPRESSIONS.join(t(" or ")), value: o.compression! }), null, 2);
       const input = await readInput(file);
       expectKind(input, "map");
       const piped = piping(input, o);
       const bare = !looksLikeMpq(input.bytes);
       if (o.out && o.out !== STDIO && (formatOf(o.out) === "chk") !== bare) throw new CliError(t("map optimize writes the map in its own form: {how}", { how: bare ? t("a bare scenario stays a .chk") : t("an archive stays a .scx or .scm") }), t("Name an output of the same kind, or convert with the editor first."), 2);
-      const r = await optimizeMap(input.bytes, input.name, { stripEditor: !!o.stripEditor, compression: o.compression as Compression | undefined, keep: o.keep });
-      const w = !o.dryRun && r.after < r.before ? await writeOutput(r.bytes, o.out ?? input.path) : null;
-      if (o.json) { print(JSON.stringify(optimizeJson(r, { dryRun: !!o.dryRun, written: w }), null, 2)); return; }
-      say(piped, ...printOptimize(r, { dryRun: !!o.dryRun, written: w ? outName(w) : null, all: !!o.all }));
+      const r = await optimizeMap(input.bytes, input.name, { stripEditor: !!o.stripEditor, compression: compression as Compression | undefined, keep: o.keep });
+      // Smaller is written; a compression asked for is written even when larger (it is what the file is for). A map
+      // that cannot be made smaller still goes where --out or a pipe wants one, as it was: the next step reads it.
+      const result = r.after < r.before || (compression !== undefined && !bare) ? r.bytes : null;
+      const w = o.dryRun ? null : result ? await writeOutput(result, o.out ?? input.path) : o.out || piped ? await writeOutput(input.bytes, o.out ?? STDIO) : null;
+      if (o.json) { print(JSON.stringify(optimizeJson(r, { file: input.path, dryRun: !!o.dryRun, written: w, changed: !!result }), null, 2)); return; }
+      say(piped, ...printOptimize(r, { dryRun: !!o.dryRun, written: w ? outName(w) : null, all: !!o.all, asked: result !== null && r.after >= r.before, copied: !!w && !result }));
     });
 
   map.command("unpack").description(t("a map's archive as a folder: the scenario, its sounds, scripts and other files")).argument("<map>").addOption(json)
-    .option("--out <folder>", t("the folder to write; by default one named after the map, beside it"))
+    .option("-o, --out <folder>", t("the folder to write; by default one named after the map, beside it"))
     .option("--list", t("list the archive's members and write nothing"))
     .option("--text", t("the scenario as a folder of text files (scenario/), for git, instead of staredit/scenario.chk"))
     .addHelpText("after", t(`
@@ -622,45 +744,55 @@ With --text the scenario is written as text instead: scenario/map.json (size, ti
 terrain.txt, units.tsv, locations.tsv, strings.txt, triggers.txt and the rest, and the sections the editor does
 not model as bytes under scenario/sections/. Edit the text and scmjs map pack builds the map from it; an
 untouched folder packs back into the same scenario, byte for byte. The scenario/ folder is replaced each time.`, { manifest: MANIFEST_FILE }))
-    .action(async (file: string, o: { json?: boolean; out?: string; list?: boolean; text?: boolean }) => {
+    .option("--force", t("replace an unpack of another map, or files changed or added since the unpack"))
+    .action(async (file: string, o: { json?: boolean; out?: string; list?: boolean; text?: boolean; force?: boolean }) => {
+      if (o.out === STDIO) throw new CliError(t("map unpack writes a folder, so --out - cannot be standard output"), t("Name a folder, or use --list to see the members."), 2);
+      if (o.list && o.text) throw new CliError(t("--list writes nothing, so --text has nothing to do"), t("Leave one of them off."), 2);
       const input = await readInput(file);
       expectKind(input, "map");
       if (o.list) {
         const r = await listMembers(input.bytes);
-        if (o.json) { print(JSON.stringify({ file: input.name, ...r }, null, 2)); return; }
+        if (o.json) { print(JSON.stringify({ file: input.path, ...r }, null, 2)); return; }
         const width = Math.max(...r.members.map((m) => m.name.length));
         print(`${pc.bold(input.name)}${dot}${t("{n, plural, one {# member} other {# members}}", { n: r.members.length })}${r.listfile ? "" : dot + pc.yellow(t("no file list"))}`, ...r.members.map((m) => `  ${(m.kind === "stored" ? pc.dim(m.name) : m.name).padEnd(width + (m.kind === "stored" ? 9 : 0))}  ${pc.dim(size(m.bytes).padStart(8))}`), ...r.problems.map((p) => `${mark.warn} ${p}`));
         return;
       }
       const base = input.path === STDIO ? "stdin" : input.path;
       const dir = o.out ?? base.replace(/\.(scm|scx|chk)$/i, "") + (/\.(scm|scx|chk)$/i.test(base) ? "" : "-unpacked");
-      const r = await unpackMap(input.bytes, input.name, dir, { text: !!o.text });
-      if (o.json) { print(JSON.stringify({ file: input.name, dir: r.dir, files: r.files, bytes: r.bytes, stored: r.stored, manifest: r.manifest, text: r.text }, null, 2)); return; }
+      const r = await unpackMap(input.bytes, input.name, dir, { text: !!o.text, force: !!o.force });
+      if (o.json) { print(JSON.stringify({ file: input.path, dir, files: r.files, bytes: r.bytes, stored: r.stored, manifest: r.manifest, text: r.text }, null, 2)); return; }
       const text = r.text;
       const sections = (names: string[]) => names.map((n) => n.trim()).join(" ");
-      // "Kept as bytes" lines up with "Scenario as text" above it; "Bytes kept beside" is the longer one and stands out.
-      const asText = t("Scenario as text");
+      // The three labels line up, whatever the language: padded to the widest.
+      const labels = [t("Scenario as text"), t("Bytes kept beside"), t("Kept as bytes")];
+      const width = Math.max(...labels.map(columns));
+      const label = (i: number) => pc.dim(padColumns(labels[i], width));
       print(`${mark.ok} ${pc.bold(input.name)}: ${t("{n, plural, one {# file} other {# files}}", { n: r.files })}${r.stored ? pc.dim(t(" ({n} without a name)", { n: r.stored })) : ""}${dot}${size(r.bytes)}${dot}${pc.dim("→")} ${pc.cyan(relative(process.cwd(), r.dir) || ".")}`,
         ...(text ? [
-          `  ${pc.dim(asText)}  ${t("{n, plural, one {# section} other {# sections}}", { n: text.text.length + text.layout.length + text.records.length })}${dot}${t("{size} in {n, plural, one {# file} other {# files}}", { size: size(text.size), n: text.files })}`,
-          ...(text.layout.length || text.records.length ? [`  ${pc.dim(t("Bytes kept beside"))}  ${sections([...text.layout, ...text.records])} ${pc.dim(t("(used while their text is unchanged)"))}`] : []),
-          ...(text.bytes.length ? [`  ${pc.dim(padColumns(t("Kept as bytes"), columns(asText)))}  ${text.bytes.map((b) => `${b.name.trim()}${pc.dim(` (${b.why})`)}`).join(", ")}`] : []),
+          `  ${label(0)}  ${t("{n, plural, one {# section} other {# sections}}", { n: text.text.length + text.layout.length + text.records.length })}${dot}${t("{size} in {n, plural, one {# file} other {# files}}", { size: size(text.size), n: text.files })}`,
+          ...(text.layout.length || text.records.length ? [`  ${label(1)}  ${sections([...text.layout, ...text.records])} ${pc.dim(t("(used while their text is unchanged)"))}`] : []),
+          ...(text.bytes.length ? [`  ${label(2)}  ${text.bytes.map((b) => `${b.name.trim()}${pc.dim(` (${b.why})`)}`).join(", ")}`] : []),
         ] : []),
         ...r.manifest.problems.map((p) => `${mark.warn} ${p}`));
     });
   map.command("pack").description(t("the folder scmjs map unpack wrote, back into a map file")).argument("<folder>").addOption(json)
-    .option("--out <map>", t("the file to write; by default the name {manifest} records, beside the folder", { manifest: MANIFEST_FILE }))
+    .option("-o, --out <map>", t("the file to write; by default the name {manifest} records, beside the folder; - for standard output", { manifest: MANIFEST_FILE }))
     .option("--compression <method>", t("none, pkware or zlib for every member, instead of how the map was stored"))
+    .option("--dry-run", t("build the map and check it opens, and write nothing"))
     .addHelpText("after", t(`
 Every file in the folder goes in: the ones {manifest} names at their archive paths, and any added since at the
 path they have in the folder. The archive is compressed and encrypted as the map was, and written without a file list
 when the map had none. A folder map unpack --text wrote has its scenario built from the text in scenario/. The packed
 file is opened as a map before it is written.`, { manifest: MANIFEST_FILE }))
-    .action(async (dir: string, o: { json?: boolean; out?: string; compression?: string }) => {
-      if (o.compression && !["none", "pkware", "zlib"].includes(o.compression)) throw new CliError(t("--compression takes none, pkware or zlib, not \"{value}\"", { value: o.compression }), null, 2);
-      const r = await packMap(dir, { out: o.out ?? null, compression: o.compression as "none" | "pkware" | "zlib" | undefined });
+    .action(async (dir: string, o: { json?: boolean; out?: string; compression?: string; dryRun?: boolean }) => {
+      if (o.compression && !["none", "pkware", "zlib"].includes(o.compression.toLowerCase())) throw new CliError(t("--compression takes none, pkware or zlib, not \"{value}\"", { value: o.compression }), null, 2);
+      const piped = o.out === STDIO && !o.dryRun;
+      if (piped && o.json) throw new CliError(t("--json and the map both want standard output"), t("Write the map to a file with --out, or leave --json off."), 2);
+      const r = await packMap(dir, { out: o.out ?? null, compression: o.compression?.toLowerCase() as "none" | "pkware" | "zlib" | undefined, dryRun: !!o.dryRun });
       if (o.json) { print(JSON.stringify(r, null, 2)); return; }
-      print(`${mark.ok} ${pc.bold(relative(process.cwd(), r.path) || r.path)}: ${t("{n, plural, one {# member} other {# members}}", { n: r.members + 1 })}${r.fromText ? pc.dim(t(" (the scenario from text)")) : ""}${r.stored ? pc.dim(t(" ({n} without a name)", { n: r.stored })) : ""}${r.added.length ? `${dot}${t("{n, plural, one {# file} other {# files}} added: {list}", { n: r.added.length, list: r.added.join(", ") })}` : ""}${dot}${r.compression}${r.encrypted ? t(", encrypted") : ""}${dot}${size(r.bytes)}`);
+      const where = r.path === STDIO ? t("standard output") : relative(process.cwd(), r.path) || r.path;
+      say(piped, `${o.dryRun ? mark.info : mark.ok} ${pc.bold(where)}: ${t("the scenario and {n, plural, one {# member} other {# members}}", { n: r.members })}${r.fromText ? pc.dim(t(" (the scenario from text)")) : ""}${r.stored ? pc.dim(t(" ({n} without a name)", { n: r.stored })) : ""}${r.added.length ? `${dot}${t("{n, plural, one {# file} other {# files}} added: {list}", { n: r.added.length, list: r.added.join(", ") })}` : ""}${dot}${r.compression}${r.encrypted ? t(", encrypted") : ""}${dot}${size(r.bytes)}${o.dryRun ? pc.dim(` ${t("(--dry-run: nothing written)")}`) : ""}`,
+        r.changedSounds ? `${mark.warn} ${t("{n, plural, one {# sound was} other {# sounds were}} changed since the unpack and {n, plural, one {goes} other {go}} in as plain PCM, larger than StarEdit's compression; map optimize cannot make {n, plural, one {it} other {them}} smaller again", { n: r.changedSounds })}` : null);
     });
 
   const sounds = map.command("sounds").description(t("a map's sounds, listed or written out as files"))
@@ -677,8 +809,9 @@ under sound\\ is one of the game's own sounds.`));
       print(...(o.json ? [JSON.stringify(report, null, 2)] : printSounds(report)));
     });
   sounds.command("export").description(t("the sounds as .wav and .ogg files in a folder")).argument("<map>").addOption(json)
-    .option("--out <folder>", t("the folder to write; by default one named after the map with -sounds, beside it"))
+    .option("-o, --out <folder>", t("the folder to write; by default one named after the map with -sounds, beside it"))
     .action(async (file: string, o: { json?: boolean; out?: string }) => {
+      if (o.out === STDIO) throw new CliError(t("map sounds export writes a folder, so --out - cannot be standard output"), t("Name a folder; map sounds lists them."), 2);
       const input = await readInput(file);
       expectKind(input, "map");
       const base = input.path === STDIO ? "stdin" : input.path.replace(/\.(scm|scx|chk)$/i, "");
@@ -690,7 +823,7 @@ under sound\\ is one of the game's own sounds.`));
     });
 
   map.command("build").description(t("apply the map's TrigScript script and build its programs, as Save does")).argument("<map>").addOption(json)
-    .option("--out <map>", t("write the built map here instead of over the map; - for standard output"))
+    .option("-o, --out <map>", t("write the built map here instead of over the map; - for standard output"))
     .option("--check", t("compile (and test, with --test) and write nothing"))
     .option("--test", t("run the script's tests first; a failing test refuses the build"))
     .addHelpText("after", t(`
@@ -703,15 +836,15 @@ compile, a test fails or the build is refused; nothing is written then.`))
       const piped = !o.check && piping(input, o);
       const typescript = await loadTypeScript();
       const r = await buildMap(doc, input.path, typescript, { check: !!o.check, test: !!o.test, out: o.out ?? null });
-      if (o.json) print(JSON.stringify({ file: input.name, ...r }, null, 2));
+      if (o.json) print(JSON.stringify({ file: input.path, ...r }, null, 2));
       else say(piped, ...printBuild(input.name, r));
       if (!r.ok) process.exitCode = 1;
     });
 
-  map.command("run").description(t("run a plugin, or a script written like one, over a map with the plugin API")).argument("<plugin>", t("a folder with plugin.json, a plugin.ts/.js file, github:owner/repo or a URL")).argument("<map>").addOption(json)
+  map.command("run").description(t("run a plugin, or a script written like one, over a map with the plugin API")).argument("<plugin>", t("a folder with plugin.json, a plugin.ts/.js file, github:owner/repo or a URL")).argument("<map>", t("the map to run it over; - reads it from standard input")).addOption(json)
     .option("--command <id>", t("after it starts, run this command of its (the id it registered)"))
     .option("--arg <value...>", t("arguments for --command"))
-    .option("--out <map>", t("write the changed map here instead of over the map; - for standard output"))
+    .option("-o, --out <map>", t("write the changed map here instead of over the map; - for standard output"))
     .option("--dry-run", t("say what would change, as map diff does, and write nothing"))
     .addHelpText("after", t(`
 The plugin gets the editor's plugin API (docs.scmjs.dev/plugins) with the map open and no editor around it: what it
@@ -719,22 +852,22 @@ would show — its status line, toasts, log — is printed here, and dialogs sho
 activate(api), like a plugin's entry; a .ts needs TypeScript installed. The map is written back only when the
 plugin changed it. Exits 1 when the plugin does not load or throws.`))
     .action(async (target: string, file: string, o: { json?: boolean; command?: string; arg?: string[]; out?: string; dryRun?: boolean }) => {
+      if (o.arg && !o.command) throw new CliError(t("--arg is for --command"), t("Name the command the arguments are for: --command <id> --arg <value>."), 2);
       const { input, doc } = await openForEdit(file);
       const piped = piping(input, o);
       const r = await runOnMap(doc, input.path, input.bytes, target, { command: o.command, args: o.arg, out: o.out ?? null, dryRun: !!o.dryRun, live: o.json ? undefined : (line) => say(piped, line) });
-      if (o.json) print(JSON.stringify({ file: input.name, ...r }, null, 2));
+      if (o.json) print(JSON.stringify({ file: input.path, ...r }, null, 2));
       else say(piped, ...printRun(input.name, r, { dryRun: !!o.dryRun }));
     });
 
-  /** `--frames`, `--every`, `--seed`: whole numbers, or exit 2. */
-  function whole(value: string, name: string, least = 0): number {
-    const n = Number(value);
-    if (!Number.isInteger(n) || n < least) throw new CliError(least ? t("--{name} takes a whole number of {least} or more, not \"{value}\"", { name, least, value }) : t("--{name} takes a whole number, not \"{value}\"", { name, value }), null, 2);
-    return n;
-  }
+  /** Progress and notes while a game command works: standard error, so standard output holds the report alone. */
+  const note = (line: string) => { process.stderr.write(`${line}\n`); };
+
+  /** `--every`, `--seed`, `--games`: whole numbers, or exit 2 (values.ts reads them for every command alike). */
+  const whole = parseWhole;
   const gameOptions = (cmd: Command) => cmd
-    .option("--frames <n>", t("frames to run (24 a second); the game may end sooner"), "2400")
-    .option("--every <n>", t("frames between progress lines; 0 for none"), "600")
+    .option("--frames <n>", t("frames to run (24 a second), or a time as m:ss; the game may end sooner"), "2400")
+    .option("--every <n>", t("frames between progress lines; 0 for none (with --replay, a minute of play: 1,440)"), "600")
     .option("--seed <n>", t("the game's seed; the same seed and map give the same run"), "1")
     .option("--all", t("list every trigger; by default a long list is cut"))
     .option("--starcraft <folder>", t("your installation of StarCraft (SCMJS_STARCRAFT); found in the usual places otherwise"))
@@ -755,12 +888,15 @@ plugin changed it. Exits 1 when the plugin does not load or throws.`))
    */
   async function gameRun(file: string | undefined, o: GameOptions & ReplayOptions, cmd: Command) {
     if (o.order && !o.replay) throw new CliError(t("--order lists the firings of a replay's game: use it with --replay."), null, 2);
+    if (o.replay && cmd.getOptionValueSource("seed") === "cli") throw new CliError(t("--seed does nothing with --replay: the game plays with the replay's own seed."), null, 2);
+    // The values first: nothing is opened for a run that cannot start.
+    const frames = cmd.getOptionValueSource("frames") === "default" && o.replay ? undefined : parseFrames(o.frames);
     if (!o.replay) {
       if (!file) throw new CliError(t("Name a map, or a replay with --replay."), null, 2);
       const { input, doc } = await openForEdit(file);
       const game = await gameMap(doc, input.path, input.name);
-      if (game.converted && !o.json) print(pc.dim(t("{name} is in the StarCraft 1.00 form, which the engine does not run: a copy converted to Brood War is run instead", { name: input.name })));
-      return { name: input.name, scenario: doc.scenario, map: game.path as string | null, replay: undefined, frames: whole(o.frames, "frames", 1), extra: {} };
+      if (game.converted && !o.json) note(pc.dim(t("{name} is in the StarCraft 1.00 form, which the engine does not run: a copy converted to Brood War is run instead", { name: input.name })));
+      return { name: file, scenario: doc.scenario, map: game.path as string | null, replay: undefined, frames, extra: {} };
     }
     const replayInput = await readInput(o.replay);
     expectKind(replayInput, "replay");
@@ -770,11 +906,10 @@ plugin changed it. Exits 1 when the plugin does not load or throws.`))
     const named = file ? await openForEdit(file) : null;
     const run = await replayRun(rep, named && { doc: named.doc, path: named.input.path, name: named.input.name, bytes: named.input.bytes });
     if (!o.json) {
-      if (run.converted) print(pc.dim(t("{name} is in the StarCraft 1.00 form, which the engine does not run: a copy converted to Brood War is played instead", { name: named ? named.input.name : t("The map in {file}", { file: replayInput.name }) })));
-      if (named && run.differs) print(`${mark.warn} ${t("{name} differs from the map in the replay {how}. A changed map can make the replay go out of step: when a unit a player clicked is not there, the game plays on with commands meant for another game. The trace says if that happens.", { name: named.input.name, how: pc.dim(`(${run.differs})`) })}`);
+      if (run.converted) note(pc.dim(t("{name} is in the StarCraft 1.00 form, which the engine does not run: a copy converted to Brood War is played instead", { name: named ? named.input.name : t("The map in {file}", { file: replayInput.name }) })));
+      if (named && run.differs) note(`${mark.warn} ${t("{name} differs from the map in the replay {how}. A changed map can make the replay go out of step: when a unit a player clicked is not there, the game plays on with commands meant for another game. The trace says if that happens.", { name: named.input.name, how: pc.dim(`(${run.differs})`) })}`);
     }
-    const frames = cmd.getOptionValueSource("frames") === "default" ? undefined : whole(o.frames, "frames", 1);
-    return { name: replayInput.name, scenario: run.scenario, map: run.map, replay: replayInput.path, frames, extra: { replayFile: replayInput.name, map: named?.input.name ?? null, differs: run.differs } };
+    return { name: o.replay, scenario: run.scenario, map: run.map, replay: replayInput.path, frames, extra: { replayFile: replayInput.name, map: named?.input.name ?? null, differs: run.differs } };
   }
 
   /** `--every`: a replay's game is long, so left at its default a progress line comes a minute of play apart (1,440 frames at 24 a second). */
@@ -798,10 +933,11 @@ to test a fixed map against the game in a bug report.
   scmjs map trace --replay report.rep --order
   scmjs map trace fixed.scx --replay report.rep`))
     .action(async (file: string | undefined, o: GameOptions & ReplayOptions, cmd: Command) => {
+      const every = everyOf(o, cmd), seed = whole(o.seed, "seed");
       const g = await gameRun(file, o, cmd);
       const overlay = overlayOf(o);
-      const r = await runMapInGame(g.map, "trace", { mod: overlay ?? undefined, frames: g.frames, every: everyOf(o, cmd), seed: whole(o.seed, "seed"), starcraft: o.starcraft, engine: o.engine, replay: g.replay, order: o.order, live: o.json ? undefined : (line) => print(line) }).finally(() => overlay?.remove());
-      if (o.json) print(JSON.stringify({ ...traceReport(g.name, g.scenario, r), ...g.extra, engine: r.engine, game: r.game, copies: r.end.trace, ms: r.end.ms }, null, 2));
+      const r = await runMapInGame(g.map, "trace", { mod: overlay ?? undefined, frames: g.frames, every, seed, starcraft: o.starcraft, engine: o.engine, replay: g.replay, order: o.order, live: o.json ? undefined : note }).finally(() => overlay?.remove());
+      if (o.json) print(JSON.stringify({ ...traceJson(g.name, g.scenario, r), ...g.extra }, null, 2));
       else print("", ...printTrace(g.name, g.scenario, r, { all: !!o.all }));
     });
 
@@ -814,14 +950,15 @@ on average where the triggers ran and at the most, against what a frame can carr
 With --replay, the cost of the replay's game, as map trace --replay plays it.`))
     .action(async (file: string | undefined, o: GameOptions & ReplayOptions & { weigh?: string }, cmd: Command) => {
       if (o.order) throw new CliError(t("--order is map trace's: map cost lists the costliest triggers."), null, 2);
+      const every = everyOf(o, cmd), seed = whole(o.seed, "seed");
       const g = await gameRun(file, o, cmd);
       const overlay = overlayOf(o);
-      const r = await runMapInGame(g.map, "cost", { mod: overlay ?? undefined, frames: g.frames, every: everyOf(o, cmd), seed: whole(o.seed, "seed"), starcraft: o.starcraft, engine: o.engine, weigh: o.weigh, replay: g.replay, live: o.json ? undefined : (line) => print(line) }).finally(() => overlay?.remove());
-      if (o.json) print(JSON.stringify({ ...costReport(g.name, r), ...g.extra, engine: r.engine, game: r.game, series: r.end.cost, ms: r.end.ms }, null, 2));
+      const r = await runMapInGame(g.map, "cost", { mod: overlay ?? undefined, frames: g.frames, every, seed, starcraft: o.starcraft, engine: o.engine, weigh: o.weigh, replay: g.replay, live: o.json ? undefined : note }).finally(() => overlay?.remove());
+      if (o.json) print(JSON.stringify({ ...costJson(g.name, r, g.scenario), ...g.extra }, null, 2));
       else print("", ...printCost(g.name, g.scenario, r, { all: !!o.all }));
     });
 
-  map.command("rush").description(t("the ground distance between the start locations, walked by the game's own pathing")).argument("<map>").addOption(json)
+  map.command("rush").description(t("the ground distance between the start locations, walked by the game's own pathing")).argument("<map>", t("the map")).addOption(json)
     .option("--unit <name>", t("the unit walked: Zergling, Dragoon, a units.dat id…"), "SCV")
     .option("--seed <n>", t("the game's seed; the same seed and map give the same walks"), "12345")
     .option("--starcraft <folder>", t("your installation of StarCraft (SCMJS_STARCRAFT); found in the usual places otherwise"))
@@ -835,16 +972,21 @@ between two starts is an island map). The engine and your copy of StarCraft are 
 Exits 2 when the game could not start.`))
     .action(async (file: string, o: { json?: boolean; unit: string; seed: string; limit: string; starcraft?: string; engine?: string }) => {
       const unit = unitByName(o.unit);
+      const seed = whole(o.seed, "seed"), limit = whole(o.limit, "limit", 1);
       const { input, doc } = await openForEdit(file);
+      // Said before the game starts, as map analyze and map balance say it.
+      const starts = startPlaces(doc).length;
+      if (starts < 2) throw new CliError(starts ? t("{file} has one start location: a rush is walked between two or more.", { file: input.name }) : t("{file} has no start locations: a rush is walked between two or more.", { file: input.name }), t("A melee map places a Start Location for each player."), 2);
       const game = await gameMap(doc, input.path, input.name);
-      if (game.converted && !o.json) print(pc.dim(t("{name} is in the StarCraft 1.00 form, which the engine does not run: a copy converted to Brood War is run instead", { name: input.name })));
-      const r = await runRush(game.path, { unit, seed: whole(o.seed, "seed"), limit: whole(o.limit, "limit", 1), starcraft: o.starcraft, engine: o.engine, live: o.json ? undefined : (line) => print(line) });
-      if (o.json) print(JSON.stringify(rushJson(input.name, r), null, 2));
-      else print("", ...printRush(input.name, r));
+      if (game.converted && !o.json) note(pc.dim(t("{name} is in the StarCraft 1.00 form, which the engine does not run: a copy converted to Brood War is run instead", { name: input.name })));
+      const r = await runRush(game.path, { unit, seed, limit, starcraft: o.starcraft, engine: o.engine, live: o.json ? undefined : note });
+      if (o.json) print(JSON.stringify(rushJson(file, r), null, 2));
+      else print("", ...printRush(file, r));
     });
 
-  map.command("analyze").description(t("a melee map's layout: starts, mains, naturals, walks, chokes and ground, without running the game")).argument("<map>").addOption(json)
-    .option("--picture <file.png>", t("also draw the map with the walks, chokes and naturals on it; - for standard output"))
+  map.command("analyze").description(t("a melee map's layout: starts, mains, naturals, walks, chokes and ground, without running the game")).argument("<map>", t("the map")).addOption(json)
+    .option("-o, --out <picture.png>", t("also draw the map with the walks, chokes and naturals on it; - for standard output"))
+    .addOption(new Option("--picture <file.png>", t("the old name of --out")).hideHelp())
     .option("--scale <n>", t("the picture's pixels a tile: {scales} (4 by default)", { scales: PNG_SCALES.join(", ") }))
     .option("--all", t("every pair of starts and every base, not only the shortest and longest"))
     .option("--starcraft <folder>", t("your installation of StarCraft (SCMJS_STARCRAFT); found in the usual places otherwise"))
@@ -856,24 +998,26 @@ narrowest point on each walk and on each main's way to its natural, how much of 
 high ground, then a few verdicts. Nothing runs in the game, so it takes about a second; map rush has the game walk.
 Exits 2 for a map with fewer than two start locations.`) + `
   scmjs map analyze "(4)Crossing.scx"
-  scmjs map analyze "(4)Crossing.scx" --picture crossing.png`)
-    .action(async (file: string, o: { json?: boolean; picture?: string; scale?: string; all?: boolean; starcraft?: string }) => {
+  scmjs map analyze "(4)Crossing.scx" --out crossing.png`)
+    .action(async (file: string, o: { json?: boolean; out?: string; picture?: string; scale?: string; all?: boolean; starcraft?: string }) => {
+      if (o.out !== undefined && o.picture !== undefined) throw new CliError(t("--out and --picture name the same picture: give one."), null, 2);
+      o.picture = o.out ?? o.picture;
       const piped = o.picture === STDIO;
-      if (piped && o.json) throw new CliError(t("--json and the picture both want standard output"), t("Write the PNG to a file with --picture, or leave --json off."), 2);
+      if (piped && o.json) throw new CliError(t("--json and the picture both want standard output"), t("Write the PNG to a file with --out, or leave --json off."), 2);
       const { input, doc } = await openForEdit(file);
       const { report, lines } = await analyzeMap(input, doc, o);
       if (o.json) print(JSON.stringify(report, null, 2));
       else say(piped, ...lines);
     });
 
-  map.command("balance").description(t("is the map fair to every start? games played over and over, a row a start location")).argument("<map>").addOption(json)
+  map.command("balance").description(t("is the map fair to every start? games played over and over, a row a start location")).argument("<map>", t("the map")).addOption(json)
     .requiredOption("--bots <files>", t("one bot (it plays the game's computer) or two, comma separated; a race after a colon: mybot.scmbot:p"))
-    .option("--races <letters>", t("the races a side plays when it has none of its own: z, t, p and r (random)"), "r")
+    .option("--races <races>", t("the races a side plays when it has none of its own: letters of z, t, p and r (random) run together, or words with commas"), "r")
     .option("--games <n>", t("rounds: every pairing once a seed, seeds 1 to n"), "8")
     .option("--seeds <list>", t("the seeds to play, comma separated, in place of --games"))
     .option("--frames <n>", t("stop a game nobody has won after this many frames (24 a second)"), "30000")
     .option("--parallel <n>", t("games at once (default: up to 4, as this computer's cores and memory allow)"))
-    .option("--out <folder>", t("keep every game's replay here (by default they are deleted)"))
+    .option("-o, --out <folder>", t("keep every game's replay here (by default they are deleted)"))
     .option("--no-rush", t("leave out the walks between the starts (map rush)"))
     .option("--timeout <seconds>", t("how long a bot may think over one frame before it counts as hung"), "60")
     .option("--starcraft <folder>", t("your installation of StarCraft (SCMJS_STARCRAFT); found in the usual places otherwise"))
@@ -888,14 +1032,15 @@ as for scmjs bot ladder. Exits 1 when a game could not be played, 2 when the map
 
   scmjs map balance "(4)My Map.scx" --bots out/mybot.scmbot:p --races p --games 12 --parallel 4
   scmjs map balance "(4)My Map.scx" --bots mybot.scmbot,mybot.scmbot --games 6`))
-    .action(async (file: string, o: { json?: boolean; bots: string; races: string; games: string; seeds?: string; frames: string; parallel?: string; out?: string; rush: boolean; timeout: string; starcraft?: string; engine?: string }) => {
+    .action(async (file: string, o: { json?: boolean; bots: string; races: string; games: string; seeds?: string; frames: string; parallel?: string; out?: string; rush: boolean; timeout: string; starcraft?: string; engine?: string }, cmd: Command) => {
+      if (o.seeds && cmd.getOptionValueSource("games") === "cli") throw new CliError(t("--games and --seeds both say which games to play: give one."), null, 2);
       const races = parseRaces(o.races);
       const games = whole(o.games, "games", 1);
       const seeds = o.seeds ? o.seeds.split(",").map((x) => x.trim()).filter(Boolean).map((x) => whole(x, "seeds")) : Array.from({ length: games }, (_, k) => k + 1);
       const bots = o.bots.split(",").map((b) => b.trim()).filter(Boolean);
       const { input, doc } = await openForEdit(file);
       if (input.path === STDIO) throw new CliError(t("map balance plays the map from a file, not standard input."), null, 2);
-      const say = (l: string) => (o.json ? process.stderr.write(l + "\n") : print(l));
+      const say = note;
       // A map in the original 1.00 form is played as Brood War (as bot ladder does), so that its replays play back;
       // the rush's walks get a copy of their own, which map rush deletes when it ends.
       const play = await gameMap(doc, input.path, input.name);
@@ -903,8 +1048,8 @@ as for scmjs bot ladder. Exits 1 when a game could not be played, 2 when the map
       if (play.converted) say(pc.dim(t("{name} is an original StarCraft map: it is played converted to Brood War.", { name: input.name })));
       let r;
       try {
-        r = await runBalance(input.name, input.path, doc, {
-          bots, races, seeds, frames: whole(o.frames, "frames", 1), parallel: o.parallel === undefined ? undefined : whole(o.parallel, "parallel", 1), timeout: whole(o.timeout, "timeout", 1),
+        r = await runBalance(file, input.path, doc, {
+          bots, races, seeds, frames: parseFrames(o.frames), parallel: o.parallel === undefined ? undefined : whole(o.parallel, "parallel", 1), timeout: whole(o.timeout, "timeout", 1),
           out: o.out, rush: o.rush, starcraft: o.starcraft, engine: o.engine, play: play.path, rushPlay: rushPlay?.path, live: say,
         });
       } finally { removeGameMap(play.path); if (rushPlay) removeGameMap(rushPlay.path); }
@@ -914,12 +1059,15 @@ as for scmjs bot ladder. Exits 1 when a game could not be played, 2 when the map
     });
 
   /** `map test` (and `mod test`, which names the mod first): the map's scenarios played in the game, with `--mod` laid over it. */
-  async function mapTestAction(file: string, testFiles: string[], o: { json?: boolean; format: string; out?: string; frames: string; seed: string; update?: boolean; clips?: string | true; clipsFormat?: ClipKind; starcraft?: string; engine?: string; mod?: string }) {
+  async function mapTestAction(file: string, testFiles: string[], o: { json?: boolean; format: string; out?: string; frames: string; seed: string; update?: boolean; clips?: string | true; clipsFormat?: ClipKind; starcraft?: string; engine?: string; mod?: string }, cmd?: Command) {
     // An optional value takes the next word, so `--clips ums.tests.json` would read the tests file as the folder.
     if (typeof o.clips === "string" && /\.json$/i.test(o.clips)) { testFiles.push(o.clips); o.clips = true; }
     if (!(FORMATS as readonly string[]).includes(o.format)) throw new CliError(t("--format takes {formats}, not \"{value}\"", { formats: FORMATS.join(", "), value: o.format }), null, 2);
+    // Options that cannot go together, or need another, are refused rather than one of them quietly dropped.
+    if (o.json && cmd?.getOptionValueSource("format") === "cli" && o.format !== "json") throw new CliError(t("--json and --format {format} both say what standard output holds: give one.", { format: o.format }), null, 2);
+    if (o.clips === undefined && cmd?.getOptionValueSource("clipsFormat") === "cli") throw new CliError(t("--clips-format says what the clips are: use it with --clips."), null, 2);
     const format: Format = o.json ? "json" : (o.format as Format);
-    const defaults = { frames: whole(o.frames, "frames", 1), seed: whole(o.seed, "seed") };
+    const defaults = { frames: parseFrames(o.frames), seed: whole(o.seed, "seed") };
     const input = await readInput(file);
     expectKind(input, "map");
     if (input.path === STDIO && !testFiles.length) throw new CliError(t("A map read from standard input has no tests beside it: name the tests file."), null, 2);
@@ -939,6 +1087,7 @@ as for scmjs bot ladder. Exits 1 when a game could not be played, 2 when the map
       live: text ? (line) => print(line) : undefined, onStart: text ? (start) => { print(testHeader(input.name, scenarios[0].rows, scenarios, start)); if (start?.mod) print(modWords(start.mod)); } : undefined,
     }).finally(() => overlay?.remove());
     const written = o.update ? updateTests(run.scenarios) : [];
+    if (o.update) { const left = updateSkipped(scenarios); if (left) process.stderr.write(`${mark.info} ${left}\n`); }
     if (text) for (const w of written) print(`${pc.cyan("✎")} ${t("{n, plural, one {# expectation} other {# expectations}} written into {file}", { n: w.expectations, file: relative(process.cwd(), w.file) || w.file })}`);
     if (run.scenarios.some((s) => !s.ok)) process.exitCode = Math.max(Number(process.exitCode ?? 0), 1);
     if (text) print("", testSummary(run));
@@ -946,6 +1095,7 @@ as for scmjs bot ladder. Exits 1 when a game could not be played, 2 when the map
     let clips: ClipRun | null = null;
     if (o.clips !== undefined && run.scenarios.some((s) => !s.ok)) {
       const engine = o.engine ?? "";
+      if (text) note(pc.dim(t("Drawing the clips of {n, plural, one {the failed scenario} other {the # failed scenarios}}…", { n: run.scenarios.filter((s) => !s.ok).length })));
       clips = await makeClips(run.scenarios, {
         dir: clipsDir(input.path, input.name, o.clips), kind: o.clipsFormat ?? "gif", starcraft: o.starcraft, play: /^https?:/.test(engine) ? engine : undefined,
         live: text ? (line) => print(line) : undefined,
@@ -954,16 +1104,18 @@ as for scmjs bot ladder. Exits 1 when a game could not be played, 2 when the map
       else if (clips.missing) process.stderr.write(`${clips.missing}\n`);
     }
     const clipOf = (s: (typeof run.scenarios)[number]) => clips?.clips.find((c) => c.scenario === s.name && c.tests === s.file)?.file ?? null;
-    const report: TestReport = { map: input.path, name: input.name, cases: run.scenarios.map((s) => ({ name: s.name, file: s.file, line: s.line, ok: s.ok, ms: s.ms, failures: s.results.filter((x) => !x.ok), replay: s.replay, clip: clipOf(s) })) };
-    if (format === "json") print(JSON.stringify({ ...testJson(input.name, run), ...(clips ? { clips: clips.clips, clipsMissing: clips.missing } : {}) }, null, 2));
+    // What the game said in a failed scenario (a unit it could not place) is often why: carried with its last failure.
+    const failuresOf = (s: (typeof run.scenarios)[number]) => s.results.filter((x) => !x.ok).map((x, i, all) => (i === all.length - 1 && s.notices.length ? { ...x, actual: [x.actual, ...s.notices.map((n) => t("the game said: {text}", { text: n }))].join("\n") } : x));
+    const report: TestReport = { map: input.path, name: input.name, cases: run.scenarios.map((s) => ({ name: s.name, file: s.file, line: s.line, ok: s.ok, ms: s.ms, failures: failuresOf(s), replay: s.replay, clip: clipOf(s) })) };
+    if (format === "json") print(JSON.stringify({ ...testJson(input.path === STDIO ? input.name : input.path, run), ...(clips ? { clips: clips.clips.map((c) => ({ ...c, file: c.file && (relative(process.cwd(), c.file) || c.file) })), clipsMissing: clips.missing } : {}) }, null, 2));
     else if (format === "github") print(...githubTestAnnotations([report]));
     else if (format === "junit") process.stdout.write(junitTestXml([report]));
     else if (format === "sarif") process.stdout.write(sarifTestJson([report], VERSION));
   }
 
-  const test = map.command("test").description(t("runs the map's tests in the game: each scenario set up, played and checked, a replay of each that failed")).argument("<map>").argument("[tests...]", t("tests files (JSON); <map>.tests.json beside the map by default")).addOption(json)
+  const test = map.command("test").description(t("runs the map's tests in the game: each scenario set up, played and checked, a replay of each that failed")).argument("<map>", t("the map")).argument("[tests...]", t("tests files (JSON); <map>.tests.json beside the map by default")).addOption(json)
     .option("--format <kind>", t("{formats}: github is workflow annotations, junit and sarif the files CI tools read", { formats: FORMATS.join(", ") }), "text")
-    .option("--out <folder>", t("where the replays of failing scenarios go (<map>.tests/ beside the map)"))
+    .option("-o, --out <folder>", t("where the replays of failing scenarios go (<map>.tests/ beside the map)"))
     .option("--frames <n>", t("frames a scenario runs when it does not say (24 a second)"), "2400")
     .option("--seed <n>", t("the game's seed when a scenario does not say; the same seed and map give the same game"), "1")
     .option("-u, --update", t("a scenario driven by a replay: write what the game gives now into the expectations that no longer hold"))
@@ -984,7 +1136,7 @@ The engine and your copy of StarCraft are needed, as for scmjs map trace. docs.s
     .option("--mod <mod>", t("lay a mod over the game: a mod folder, an .mpq, a mod's .exe or .zip, or a folder of its files"))
     .action(mapTestAction);
 
-  test.command("record").description(t("a scenario from a replay: the game played on the map, its end written as expectations to trim")).argument("<map>").argument("<replay>").addOption(json)
+  test.command("record").description(t("a scenario from a replay: the game played on the map, its end written as expectations to trim")).argument("<map>", t("the map")).argument("<replay>", t("the replay to play on it")).addOption(json)
     .option("--name <name>", t("the scenario's name (the replay's file name by default); a scenario of that name is written anew"))
     .option("--tests <file>", t("the tests file to write into (<map>.tests.json beside the map)"))
     .option("--frames <n>", t("frames to play (the replay's length by default)"))
@@ -996,7 +1148,9 @@ the game ended with — how often each trigger fired, the switches, the lines sh
 minerals, gas and deaths. Delete the expectations you do not care about; scmjs map test runs the scenario against
 the map as it is then, and scmjs map test -u writes in what has changed.`) + `
   scmjs map test record bunker.scx bug-report.rep --name "bunker fills at 7:30"`)
-    .action(async (file: string, replayFile: string, o: { json?: boolean; name?: string; tests?: string; frames?: string; starcraft?: string; engine?: string }) => {
+    .action(async (file: string, replayFile: string, local: { json?: boolean; name?: string; tests?: string; frames?: string; starcraft?: string; engine?: string }, cmd: Command) => {
+      // map test declares --json, --frames, --starcraft and --engine too, and takes them wherever they are typed.
+      const o = typedOptions(cmd, local, ["json", "frames", "starcraft", "engine"]);
       const input = await readInput(file);
       expectKind(input, "map");
       const replayInput = await readInput(replayFile);
@@ -1007,15 +1161,17 @@ the map as it is then, and scmjs map test -u writes in what has changed.`) + `
       const players = rep.players.filter((p) => p.type === 1 || p.type === 2).map((p) => ({ slot: p.index, name: p.name, computer: p.type === 1 }));
       const map = await readMapForTests(input.bytes);
       const r = await recordTest(input.name, map, { path: replayInput.path, frames: rep.header.frames, players }, o.tests ?? defaultTests(input.path), {
-        name: o.name ?? basename(replayInput.name).replace(/\.rep$/i, ""), frames: o.frames === undefined ? undefined : whole(o.frames, "frames", 1),
-        out: defaultOut(input.path), starcraft: o.starcraft, engine: o.engine, live: o.json ? undefined : (line) => print(line),
+        name: o.name ?? basename(replayInput.name).replace(/\.rep$/i, ""), frames: o.frames === undefined ? undefined : parseFrames(o.frames),
+        out: defaultOut(input.path), starcraft: o.starcraft, engine: o.engine, live: o.json ? undefined : note,
       });
-      if (o.json) print(JSON.stringify(r, null, 2));
-      else print(...recordLines(r));
+      // The map as it was typed, for the hint's command and the JSON (the runner had its name).
+      const typed = { ...r, map: file };
+      if (o.json) print(JSON.stringify(typed, null, 2));
+      else print(...recordLines(typed));
     });
 
-  map.command("preview").description(t("a picture of the map in the terminal, or as a PNG, with your copy of the game's graphics")).argument("<map>").addOption(json)
-    .option("--out <picture.png>", t("write a PNG instead; - for standard output"))
+  map.command("preview").description(t("a picture of the map in the terminal, or as a PNG, with your copy of the game's graphics")).argument("<map>", t("the map")).addOption(json)
+    .option("-o, --out <picture.png>", t("write a PNG instead; - for standard output"))
     .option("--scale <n>", t("pixels a tile: {scales} in a PNG (4 by default); in the terminal a pixel is half a character", { scales: PNG_SCALES.join(", ") }))
     .option("--width <columns>", t("the terminal picture's width in characters (as wide as the terminal by default)"))
     .option("--no-units", t("the terrain alone: no units, resources or start locations"))
@@ -1037,16 +1193,17 @@ character is two pixels, in 24-bit colour where the terminal says it has it, els
       else say(piped, ...lines);
     });
 
-  map.command("heatmap").description(t("where units died, buildings went up or armies walked in many replays, as heat over the map")).argument("<map>").argument("<replays...>", t("replays (.rep), or folders of them")).addOption(json)
+  map.command("heatmap").description(t("where units died, buildings went up or armies walked in many replays, as heat over the map")).argument("<map>", t("the map")).argument("<replays...>", t("replays (.rep), or folders of them")).addOption(json)
     .option("--what <kind>", t("deaths, kills, buildings or paths (where armies walked)"), "deaths")
     .option("--player <n|name>", t("one player's: their number (1-8) or their name as the replays have it; for kills, the killer"))
-    .option("--until <m:ss>", t("only what happened by this time in each game"))
-    .option("--out <picture.png>", t("write a PNG instead; - for standard output"))
+    .option("--until <m:ss>", t("only what happened by this time in each game: m:ss, or a number of seconds"))
+    .option("-o, --out <picture.png>", t("write a PNG instead; - for standard output"))
     .option("--side-by-side", t("the map as map preview draws it beside the heat"))
     .option("--scale <n>", t("pixels a tile: {scales} in a PNG (4 by default)", { scales: PNG_SCALES.join(", ") }))
     .option("--width <columns>", t("the terminal picture's width in characters"))
     .option("--blocks", t("colour blocks, even in kitty or iTerm2"))
-    .option("--force", t("take replays played on another map too"))
+    .option("--any-map", t("take replays played on another map too: their own games, laid over this map"))
+    .addOption(new Option("--force", t("the old name of --any-map")).hideHelp())
     .option("--parallel <n>", t("replays played at once (half the processors, at most 4, by default)"))
     .option("--starcraft <folder>", t("your installation of StarCraft (SCMJS_STARCRAFT); found in the usual places otherwise"))
     .addOption(new Option("--engine <where>", t("the play page's address, or a folder holding the engine (SCMJS_PLAY_URL)")).hideHelp())
@@ -1056,22 +1213,24 @@ map count: the same map, or one with the same name and size; the others are list
 is kept in scmjs's cache, so a second run with more replays plays only the new ones. Needs your copy of StarCraft.`) + `
   scmjs map heatmap "Fighting Spirit.scx" replays/
   scmjs map heatmap fs.scx replays/*.rep --what kills --player 1 --until 10:00 --out kills.png`)
-    .action(async (file: string, replays: string[], o: HeatmapFlags) => {
+    .action(async (file: string, replays: string[], o: HeatmapFlags & { anyMap?: boolean }) => {
+      o.force = !!(o.force || o.anyMap);
       const piped = o.out === STDIO;
       if (piped && o.json) throw new CliError(t("--json and the picture both want standard output"), t("Write the PNG to a file with --out, or leave --json off."), 2);
       const { input, doc } = await openForEdit(file);
-      const live = (line: string) => (o.json || piped ? process.stderr.write(line + "\n") : print(line));
+      const live = note;
       const { report, lines } = await heatmapMap(input, doc, replays, o, { live });
       if (o.json) print(JSON.stringify(report, null, 2));
       else say(piped, "", ...lines);
     });
 
-  map.command("coverage").description(t("which of the map's triggers fired in a folder of replays, how often, and which never did")).argument("<map>").argument("[replays...]", t("replays (.rep) or folders of them; a tests file (.json) counts its scenarios")).addOption(json)
+  map.command("coverage").description(t("which of the map's triggers fired in a folder of replays, how often, and which never did")).argument("<map>", t("the map")).argument("[replays...]", t("replays (.rep) or folders of them; a tests file (.json) counts its scenarios")).addOption(json)
     .option("--tests", t("count the games of the map's tests (<map>.tests.json beside it) too"))
     .option("--strict", t("exit 1 when a trigger a player in the games owned never fired"))
     .option("--format <kind>", t("{formats}: github is workflow annotations, junit and sarif the files CI tools read", { formats: FORMATS.join(", ") }), "text")
     .option("--all", t("list every trigger, those no player in the games owned too"))
-    .option("--force", t("take replays played on another map too"))
+    .option("--any-map", t("take replays played on another map too: their players' commands, played on this map"))
+    .addOption(new Option("--force", t("the old name of --any-map")).hideHelp())
     .option("--parallel <n>", t("games played at once (half the processors, at most 4, by default)"))
     .option("--starcraft <folder>", t("your installation of StarCraft (SCMJS_STARCRAFT); found in the usual places otherwise"))
     .addOption(new Option("--engine <where>", t("the play page's address, or a folder holding the engine (SCMJS_PLAY_URL)")).hideHelp())
@@ -1083,11 +1242,13 @@ whose players' commands parted from the map counts what fired before that, and i
 StarCraft. Exits 1 with --strict when a trigger never fired, 2 when no replay could be counted.`) + `
   scmjs map coverage td.scx replays/
   scmjs map coverage td.scx replays/ --tests --strict --format github`)
-    .action(async (file: string, sources: string[], o: { json?: boolean; tests?: boolean; strict?: boolean; format: string; all?: boolean; force?: boolean; parallel?: string; starcraft?: string; engine?: string }) => {
+    .action(async (file: string, sources: string[], o: { json?: boolean; tests?: boolean; strict?: boolean; format: string; all?: boolean; force?: boolean; anyMap?: boolean; parallel?: string; starcraft?: string; engine?: string }) => {
+      o.force = !!(o.force || o.anyMap);
       if (!(FORMATS as readonly string[]).includes(o.format)) throw new CliError(t("--format takes {formats}, not \"{value}\"", { formats: FORMATS.join(", "), value: o.format }), null, 2);
+      if (o.json && o.format !== "text" && o.format !== "json") throw new CliError(t("--json is --format json: it cannot be --format {format} too", { format: o.format }), t("Leave one of them off."), 2);
       const format: Format = o.json ? "json" : (o.format as Format);
       const { input, doc } = await openForEdit(file);
-      const live = (line: string) => (format === "text" ? print(line) : process.stderr.write(visible(line) + "\n"));
+      const live = (line: string) => note(format === "text" ? line : visible(line));
       const r = await runCoverage(input, doc, sources, o, live);
       const scn = await coverageScenario(input);
       if (o.strict && r.never) process.exitCode = Math.max(Number(process.exitCode ?? 0), 1);
@@ -1109,16 +1270,17 @@ their own StarCraft files and no account. Waits up to five minutes for the page.
     .action(async (file: string, o: { json?: boolean; play?: string; qr?: boolean }) => {
       const input = await readInput(file);
       expectKind(input, "map");
-      const r = await playInLobby(input, { play: o.play, qr: o.qr, live: o.json ? undefined : (line) => print(line) });
+      // With --json, standard output is the JSON alone: the hand-over's words go to standard error.
+      const r = await playInLobby(input, { play: o.play, qr: o.qr, live: o.json ? undefined : (line) => print(line), say: o.json ? (...lines) => { for (const l of lines) process.stderr.write(`${l}\n`); } : undefined });
       if (o.json) { print(JSON.stringify({ file: input.name, ...r }, null, 2)); return; }
       if (!r.link) throw new CliError(r.error ?? t("The page opened no lobby"), t("Invite Players on the play page opens one by hand."));
     });
 
-  map.command("diff").description(t("what changed between two maps, or since a git revision")).argument("<a>").argument("[b]", t("the other map; none with --rev")).addOption(json)
+  map.command("diff").description(t("what changed between two maps, or since a git revision")).argument("<a>", t("a map; with --rev, the map whose earlier version it is compared with")).argument("[b]", t("the other map; none with --rev")).addOption(json)
     .option("--all", t("list every item; by default a long list is cut at 20"))
     .option("--rev <revision>", t("compare the map as git has it at this revision (HEAD, HEAD~1, a branch, a tag) with the file as it is"))
     .option("--picture", t("draw the maps with the changes marked, with your copy of the game's graphics (as map preview)"))
-    .option("--out <picture.png>", t("with --picture: write a PNG instead; - for standard output"))
+    .option("-o, --out <picture.png>", t("with --picture: write a PNG instead; - for standard output"))
     .option("--side-by-side", t("with --picture: the first map, the changes and the second map in one picture"))
     .option("--scale <n>", t("with --picture: pixels a tile, {scales} in a PNG (4 by default)", { scales: PNG_SCALES.join(", ") }))
     .option("--width <columns>", t("with --picture: the terminal picture's width in characters"))
@@ -1168,7 +1330,7 @@ the map, as map diff would say it between the commit's version and its parent's.
     .option("--units", t("the units, a row for each kind and owner"))
     .option("--settings", t("the name, size, players, forces, terrain, unit and tech settings, and the archive's files"))
     .option("--trigger <n>", t("one trigger, by its number in the list, with its whole text"))
-    .option("--location <name>", t("one location, by name or number"))
+    .option("--location <name>", t("one location, by name or by its number as triggers count them (from 1)"))
     .option("--string <n>", t("one string, by number"))
     .option("--rev <revision>", t("the map as this revision has it (the file as it is by default), or a range A..B"))
     .addHelpText("after", "\n" + t(`Like git blame, a row per thing in the map instead of per line: the commit, author and date
@@ -1199,7 +1361,7 @@ the file is read as it is, and what is not committed yet says so.`) + `
         const rows = b.kinds[kind]!;
         const want = one[0] === "location" ? o.location! : String(trigger ?? str);
         const at = one[0] === "location"
-          ? rows.findIndex((r) => r.label.toLowerCase() === want.toLowerCase() || r.text.startsWith(`#${want} `))
+          ? rows.findIndex((r) => r.label.toLowerCase() === want.toLowerCase() || `#${r.number}` === want || String(r.number) === want)
           : rows.findIndex((r) => r.label === want);
         if (at < 0) {
           const what = one[0] === "trigger" ? t("trigger") : one[0] === "location" ? t("location") : t("string");
@@ -1213,8 +1375,8 @@ the file is read as it is, and what is not committed yet says so.`) + `
       print(...(o.json ? [JSON.stringify(b, null, 2)] : printBlame(b)));
     });
 
-  map.command("merge").description(t("merge two versions of a map with their common ancestor, as git's merge driver")).argument("<base>", t("the common ancestor; with no other map, the map git stopped on")).argument("[ours]").argument("[theirs]").addOption(json)
-    .option("--out <map>", t("write the merged map here instead of over <ours>; - for standard output"))
+  map.command("merge").description(t("merge two versions of a map with their common ancestor, as git's merge driver")).argument("<base>", t("the common ancestor; with no other map, the map git stopped on")).argument("[ours]", t("your version, written over with the result unless --out")).argument("[theirs]", t("the version merged into yours")).addOption(json)
+    .option("-o, --out <map>", t("write the merged map here instead of over <ours>; - for standard output"))
     .option("--ours", t("settle each conflict with ours's version"))
     .option("--theirs", t("settle each conflict with theirs's version"))
     .option("--name <path>", t("the map's name in what is said (git gives it as %P)"))
@@ -1244,7 +1406,7 @@ them. scmjs init sets it up as git's merge driver:`) + `
     .option("--limit <n>", t("how many of the best matches to list, 1 to {max}", { max: MAX_LIMIT }), String(DEFAULT_LIMIT))
     .option("--id <id>", t("download this map: its id from the list, or its address on the site"))
     .option("--first", t("download the best match for the words"))
-    .option("--out <path>", t("the file to write, or a folder to write it in (the site's file name); - for standard output"))
+    .option("-o, --out <path>", t("the file to write, or a folder to write it in (the site's file name); - for standard output"))
     .option("--force", t("overwrite a file that is there"))
     .option("--open", t("open the map in scmJS once it is downloaded, as scmjs map open does"))
     .addHelpText("after", "\n" + t(`The maps come from scmscx.com ({site}), where people have shared StarCraft maps for years; they are their
@@ -1287,7 +1449,7 @@ answer (within 10 seconds), 2 when the file is there already (--force overwrites
     .option("--name <name>", t("the map's name on your account and in the link; the scenario's name by default"))
     .option("--note <text>", t("a note for this revision, as My Maps shows it"))
     .option("--edit", t("a link to edit the map together (Account ▸ Share this Map…), not a copy"))
-    .option("--keep <how long>", t("with --edit: keep it open day, week, month or forever after its last edit; by default it is open until everyone leaves"))
+    .addOption(new Option("--keep <how long>", t("with --edit: keep it open this long after its last edit; by default it is open until everyone leaves")).choices(Object.keys(KEEP)))
     .option("--new", t("store it as a new map even when your account has one with this file name"))
     .option("--no-picture", t("upload no picture for the link's card"))
     .option("--starcraft <folder>", t("your installation of StarCraft, for the picture (SCMJS_STARCRAFT); found in the usual places otherwise"))
@@ -1317,7 +1479,7 @@ replay shows ids, never the game's names for them.`) + `
   scmjs replay info game.rep --builds --mod "My Mod"`)
     .action(async (files: string[], o: { json?: boolean } & ReplayNameOptions) => void await eachFile(files, !!o.json, (input) => replayInfo(input, o)));
   replay.command("map").description(t("the map the replay was played on, written out as a map file")).argument("<replay>").addOption(json)
-    .option("--out <map>", t("the file to write (.scx, .scm or .chk); the replay's name with .scx by default; - for standard output"))
+    .option("-o, --out <map>", t("the file to write (.scx, .scm or .chk); the replay's name with .scx by default; - for standard output"))
     .option("--force", t("overwrite a file that is there"))
     .addHelpText("after", "\n" + t(`A replay carries the map the game loaded, so the map is there whole whether or not you still have the file. It is
 written as the game had it: a bare .chk, or an archive like a new map's. Opens in the editor like any map.`) + `
@@ -1327,11 +1489,12 @@ written as the game had it: a bare .chk, or an archive like a new map's. Opens i
       const input = await readInput(file);
       expectKind(input, "replay");
       const out = o.out ?? mapFileFor(input.path === STDIO ? "stdin.rep" : input.path);
+      checkMapOut(out);
       const piped = out === STDIO;
       if (piped && o.json) throw new CliError(t("--json and the map both want standard output"), t("Write the map to a file with --out, or leave --json off."), 2);
       if (!piped && existsSync(out) && !o.force) throw new CliError(t("{file} is there already", { file: out }), t("--force overwrites it, --out names another file."), 2);
       const r = await writeReplayMap(await loadReplayInput(input), out);
-      if (o.json) { print(JSON.stringify({ file: input.name, ...r }, null, 2)); return; }
+      if (o.json) { print(JSON.stringify({ file: input.path, ...r }, null, 2)); return; }
       say(piped, `${mark.ok} ${pc.bold(gameText(r.name) || pc.italic(t("Untitled")))}: ${r.width} × ${r.height}${dot}${t("from {file}", { file: input.name })}${dot}${t("written to {file}", { file: outName(r.written) })}${dot}${size(r.written.bytes)}`);
     });
   replay.command("share").description(t("a link to the replay on scmjs.dev, which anyone opens to watch it in the editor")).argument("<replay>", t("the replay, or - for standard input")).addOption(json)
@@ -1354,40 +1517,39 @@ card shows the map's picture when your copy of the game is here to draw it.`) + 
     .addOption(new Option("--editor <url>", t("the editor's address (SCMJS_EDITOR_URL)")).hideHelp())
     .action(async (file: string, o: { browser?: boolean; editor?: string }) => { const input = await readInput(file); expectKind(input, "replay"); await openInScmjs(input, o); });
   replay.command("watch").description(t("play a replay in the terminal: the minimap, each player's figures, the chat")).argument("<replay>").addOption(json)
-    .option("--speed <x>", t("how fast, against the game's Fastest (24 frames a second)"), "8")
+    .option("--speed <x>", t("how fast, against the game's Fastest (24 frames a second); in a terminal"), "8")
     .option("--from <m:ss>", t("start the game here"))
-    .option("--size <WxH>", t("the picture's size in characters; as much of the terminal as the map fills by default"))
-    .option("--every <frames>", t("frames between lines when the output is not a terminal"), "1440")
+    .option("--cells <WxH>", t("the picture's size in characters, in a terminal; as much of it as the map fills by default"))
+    .addOption(new Option("--size <WxH>").hideHelp())
+    .option("--every <frames>", t("into a pipe or a file: frames between lines, 0 for none; a line a minute of the game's clock by default"))
     .option("--starcraft <folder>", t("your installation of StarCraft (SCMJS_STARCRAFT); found in the usual places otherwise"))
     .addOption(new Option("--engine <where>", t("the play page's address, or a folder holding the engine (SCMJS_PLAY_URL)")).hideHelp())
-    .addHelpText("after", "\n" + t(`The game is the play page's engine, fetched once (about 25 MB) and kept; the game's own files come from your copy of
-StarCraft, Remastered or 1.16.1. The replay plays as the game plays it, drawn as a minimap: a dot a unit in its
-player's colour, buildings as blocks, resources dim. Keys: space pauses, + and - change the speed, q stops. Into a
-pipe or a file it prints a line per minute of game instead (--every), or JSON lines with --json.`))
-    .action(async (file: string, o: { json?: boolean; speed: string; from?: string; size?: string; every: string; starcraft?: string; engine?: string }) => {
+    .addHelpText("after", "\n" + t(`The game is the play page's engine, fetched once and kept; the game's own files come from your copy of StarCraft,
+Remastered or 1.16.1. The replay plays as the game plays it, drawn as a minimap: a dot a unit in its player's colour,
+buildings as blocks, resources dim. Keys: space pauses, + and - change the speed, q stops. Into a pipe or a file it
+prints a line at each minute of the game's clock instead (1:00, 2:00, …; --every for another step), every player's
+figures on it, or JSON lines with --json; it then goes as fast as the game plays, and --speed and --cells, which are
+for a terminal, do nothing.`))
+    .action(async (file: string, o: { json?: boolean; speed: string; from?: string; cells?: string; size?: string; every?: string; starcraft?: string; engine?: string }) => {
       const input = await readInput(file);
       expectKind(input, "replay");
       const replay = await loadReplayInput(input);
       refuseModReplay(replay, input.name, "replay watch");
-      const speed = Number(o.speed);
-      if (!(speed > 0 && speed <= 64)) throw new CliError(t("--speed takes a number from 0.25 to 64, not \"{value}\"", { value: o.speed }), null, 2);
-      const every = Number(o.every);
-      if (!Number.isInteger(every) || every < 1) throw new CliError(t("--every takes a number of frames, not \"{value}\"", { value: o.every }), null, 2);
-      let size: { cols: number; rows: number } | undefined;
-      if (o.size) { const m = /^(\d+)x(\d+)$/i.exec(o.size); if (!m || Number(m[1]) < 8 || Number(m[2]) < 4) throw new CliError(t("--size takes WxH in characters, 8x4 or more, not \"{value}\"", { value: o.size }), null, 2); size = { cols: Number(m[1]), rows: Number(m[2]) }; }
-      const r = await watchReplay(input, replay, { speed, from: o.from ? parseClock(o.from) : undefined, size, every, json: !!o.json, starcraft: o.starcraft, engine: o.engine });
+      const r = await watchReplay(input, replay, { ...watchValues(replay, o), json: !!o.json, starcraft: o.starcraft, engine: o.engine });
       if (!o.json) print(watchSummary(input, r));
     });
 
   replay.command("export").description(t("the replay as a video or GIF with the game's own pictures, for sharing")).argument("<replay>").addOption(json)
-    .option("--out <file>", t("the clip: .webm, .mp4 or .gif (the replay's name with .webm beside it by default)"))
+    .option("-o, --out <file>", t("the clip: .webm, .mp4 or .gif (the replay's name with .webm beside it by default)"))
     .option("--from <m:ss>", t("where the clip starts in the game (its start by default)"))
     .option("--to <m:ss>", t("where it ends (the game's end by default)"))
     .option("--follow <player>", t("keep the camera on a player's play: a name, or a number as replay info lists them (the first person by default)"))
     .option("--at <x,y>", t("hold the camera on this tile"))
-    .option("--all", t("show the whole map, scaled to fit"))
+    .option("--whole-map", t("show the whole map, scaled to fit"))
+    .addOption(new Option("--all").hideHelp())
     .option("--speed <x>", t("game speed against Fastest (1 is the game's own pace)"), "1")
-    .option("--size <WxH>", t("the clip's size in pixels (1280x720; a GIF 640x360)"))
+    .option("--resolution <WxH>", t("the clip's size in pixels, each side even (1280x720; a GIF 640x360)"))
+    .addOption(new Option("--size <WxH>").hideHelp())
     .option("--fps <n>", t("pictures a second (24; a GIF 12)"))
     .option("--starcraft <folder>", t("your installation of StarCraft (SCMJS_STARCRAFT); found in the usual places otherwise"))
     .option("--browser <path>", t("the browser to draw with (SCMJS_BROWSER); Chrome, Chromium or Edge, found in the usual places otherwise"))
@@ -1398,18 +1560,21 @@ so the clip plays at the speed asked whatever the computer's pace. A .webm or a 
 made from the .webm with ffmpeg, when it is installed. The camera follows where the player's army is and fights.`) + `
   scmjs replay export game.rep --from 4:30 --to 5:00
   scmjs replay export game.rep --out fight.mp4 --follow 2 --from 12:10 --to 12:40
-  scmjs replay export game.rep --out game.gif --all --speed 16`)
+  scmjs replay export game.rep --out game.gif --whole-map --speed 16`)
     .action(async (file: string, o: ExportOptions & { json?: boolean }) => {
       const input = await readInput(file);
       expectKind(input, "replay");
       const replay = await loadReplayInput(input);
       refuseModReplay(replay, input.name, "replay export");
-      const tty = !!process.stderr.isTTY && !o.json;
+      // (an odd side is made even, which a video needs: said, as the clip is not the size asked)
+      const asked = o.resolution ?? o.size;
+      if (asked) { const s = parseClipSize(asked); if (s.rounded) process.stderr.write(`${mark.warn} ${t("--resolution {asked} is made {width}x{height}: a video's sides are even.", { asked, width: s.width, height: s.height })}\n`); }
+      const tty = !!process.stderr.isTTY;
       let shown = 0;
+      // (progress is standard error in every mode, --json too: a line in place in a terminal, else one every ten seconds or so)
       const r = await exportReplay(input, replay, o, (line, done) => {
         if (tty) process.stderr.write(`\r\x1b[2K${line}${done ? "\n" : ""}`);
-        // (Into a file or a pipe, a line every ten seconds or so, not a line a picture.)
-        else if (!o.json && (done || Date.now() - shown > 10_000)) { shown = Date.now(); process.stderr.write(`${visible(line)}\n`); }
+        else if (done || Date.now() - shown > 10_000) { shown = Date.now(); process.stderr.write(`${visible(line)}\n`); }
       });
       if (tty) process.stderr.write("\r\x1b[2K");
       if (o.json) print(JSON.stringify(r, null, 2));
@@ -1430,7 +1595,7 @@ made from the .webm with ffmpeg, when it is installed. The camera follows where 
         if (!asJson) { if (i) print(""); print(...lines); }
       } catch (e) {
         if (!(e instanceof CliError)) throw e;
-        if (asJson) results.push({ file: path, error: e.message }); else fail(e);
+        if (asJson) results.push({ file: path, path, error: e.message }); else fail(e);
         process.exitCode = Math.max(Number(process.exitCode ?? 0), e.exitCode);
       }
     }
@@ -1466,7 +1631,11 @@ play page. docs.scmjs.dev/mods has the folder's form.`));
     .addOption(starcraftOption())
     .action(async (paths: string[], o: { json?: boolean; starcraft?: string }) => {
       const base = await gameFilesOrNull(o.starcraft);
-      await eachMod(paths, !!o.json, async (path) => { const source = await openMod(path, base); const r = modInfo(source, await sourceHash(source)); return { data: r, lines: printModInfo(r) }; });
+      await eachMod(paths, !!o.json, async (path) => {
+        // (a mod of hundreds of megabytes takes seconds to read and hash: said on standard error after a moment)
+        const done = slowLine(pc.dim(t("Reading {mod} and working out its hash…", { mod: path })));
+        try { const source = await openMod(path, base); const r = modInfo(source, await sourceHash(source)); return { data: { file: path, ...r }, lines: printModInfo(r) }; } finally { done(); }
+      });
     });
 
   modCmd.command("unpack").description(t("a mod as a folder of text and pictures, to edit and keep in git")).argument("<mod>", t("a folder, an .mpq, a mod's .exe or a .zip")).argument("<folder>", t("the folder to write")).addOption(json)
@@ -1476,11 +1645,13 @@ play page. docs.scmjs.dev/mods has the folder's form.`));
 sheet, only when that text or picture packs back into the same bytes; anything else is kept as it is under files/,
 and mod.json says which and why. Sounds, maps and every other file are copied as they are, plugins and FireGraft
 files too (never run). The names beside the tables and in the AI script come from the mod's own string tables, else
-your copy of the game's. Unpacking over an earlier unpack replaces its folders.`))
-    .action(async (path: string, dir: string, o: { json?: boolean; palette: string; starcraft?: string }) => {
+your copy of the game's. A folder an earlier unpack wrote is refused, since your edits are there: --force replaces
+it whole (its dot files, such as .git, are kept).`))
+    .option("--force", t("replace a mod folder that is there"))
+    .action(async (path: string, dir: string, o: { json?: boolean; palette: string; starcraft?: string; force?: boolean }) => {
       const base = await gameFilesOrNull(o.starcraft);
       const source = await openMod(path, base);
-      const r = await unpackMod(source, dir, { base, palette: o.palette });
+      const r = await unpackMod(source, dir, { base, palette: o.palette, force: o.force });
       if (o.json) { print(JSON.stringify(r, null, 2)); return; }
       const text = formsText(r.forms, ["table", "strings", "iscript", "ai", "overlay", "graft"]);
       const kept = r.kept.reduce((n, k) => n + k.count, 0);
@@ -1498,7 +1669,7 @@ your copy of the game's. Unpacking over an earlier unpack replaces its folders.`
     });
 
   modCmd.command("pack").description(t("the folder back into an MPQ the launchers load, or a loose folder")).argument("<folder>", t("a folder mod unpack or mod new wrote")).addOption(json)
-    .option("-o, --out <file>", t("the MPQ to write (<folder>.mpq beside the folder by default)"))
+    .option("-o, --out <file>", t("the MPQ to write (<folder>.mpq beside the folder by default); - for standard output"))
     .option("--folder <out>", t("write the files loose in the game's paths instead (for samase, or the play page)"))
     .option("--compression <method>", t("{methods} for every file", { methods: MOD_COMPRESSIONS.join(", ") }), "zlib")
     .addOption(starcraftOption())
@@ -1508,20 +1679,21 @@ PNG that is no longer in its palette's colours is brought to the nearest, and a 
 with ffmpeg. MPQDraft makes a self-executing mod from the MPQ; Chaoslauncher and FireGraft load it as it is.`))
     .action(async (dir: string, o: { json?: boolean; out?: string; folder?: string; compression: string; starcraft?: string }) => {
       if (!(MOD_COMPRESSIONS as readonly string[]).includes(o.compression)) throw new CliError(t("--compression takes {methods}, not \"{value}\"", { methods: MOD_COMPRESSIONS.join(", "), value: o.compression }), null, 2);
+      checkPackOut(o);
       const r = await packModFolder(dir, { out: o.out, folder: o.folder, compression: o.compression as ModCompression, starcraft: o.starcraft });
       if (o.json) { print(JSON.stringify(r, null, 2)); return; }
-      print(...printPacked(r));
+      say(r.path === STDIO, ...printPacked(r));
     });
 
-  /** Opens a folder mod unpack or mod new wrote, and packs it. */
+  /** Opens a folder mod unpack or mod new wrote, and packs it (`--out -`: the MPQ to standard output). */
   async function packModFolder(dir: string, o: { out?: string; folder?: string; compression: ModCompression; starcraft?: string }) {
     const manifest = await readModFolder(dir);
-    return packMod(dir, manifest, { out: o.out, folder: o.folder, compression: o.compression, base: await gameFilesOrNull(o.starcraft) });
+    return packMod(dir, manifest, { out: o.out, folder: o.folder, compression: o.compression, base: await gameFilesOrNull(o.starcraft), stdout: process.stdout });
   }
 
   function printPacked(r: Awaited<ReturnType<typeof packMod>>): string[] {
     return [
-      `${mark.ok} ${pc.bold(shownPath(r.path))}: ${t("{n, plural, one {# file} other {# files}}", { n: r.members })}${r.compression ? `${dot}${r.compression}` : `${dot}${t("loose")}`}${dot}${size(r.bytes)}`,
+      `${mark.ok} ${pc.bold(r.path === STDIO ? t("standard output") : shownPath(r.path))}: ${t("{n, plural, one {# file} other {# files}}", { n: r.members })}${r.compression ? `${dot}${r.compression}` : `${dot}${t("loose")}`}${dot}${size(r.bytes)}`,
       ...r.converted.map((c) => `  ${pc.dim(t("{file} converted to a WAV", { file: c }))}`),
       ...r.quantised.map((q) => `${mark.warn} ${t("{file}: {pixels, plural, one {# pixel} other {# pixels}} in {colours, plural, one {# colour} other {# colours}} not in the palette, brought to the nearest", { file: q.file, pixels: q.pixels, colours: q.colours })}`),
       ...(r.left.length ? [pc.dim(`  ${t("Left out (not in a mod's folders): {list}", { list: `${r.left.slice(0, 6).join(", ")}${r.left.length > 6 ? " …" : ""}` })}`)] : []),
@@ -1541,46 +1713,56 @@ Exits 1 when there is an error.`))
       await eachMod(paths, !!o.json, async (path) => {
         const r = await checkModSource(await openMod(path, base), base);
         if (r.failed) process.exitCode = Math.max(Number(process.exitCode ?? 0), 1);
-        return { data: r, lines: printModCheck(r, { all: !!o.all }) };
+        return { data: { file: path, ...r }, lines: printModCheck(r, { all: !!o.all }) };
       });
     });
 
-  modCmd.command("diff").description(t("what changed between two mods, or what one changes in the game, as a changelog")).argument("<a>").argument("[b]", t("the other mod; with none, the game against <a>")).addOption(json)
+  modCmd.command("diff").description(t("what changed between two mods, or what one changes in the game, as a changelog")).argument("<a>", t("a mod: a folder, an .mpq, a mod's .exe, a .zip, or a folder mod unpack wrote")).argument("[b]", t("the other mod; with none, the game against <a>")).addOption(json)
     .option("--all", t("list every change; by default each kind is cut at 30"))
     .addOption(starcraftOption())
+    .addHelpText("after", "\n" + t("With two mods, exits 1 when they differ and 0 when they are the same, as map diff does; with one, 0 (what it changes in the game is the answer, not a difference found)."))
     .action(async (a: string, b: string | undefined, o: { json?: boolean; all?: boolean; starcraft?: string }) => {
       const base = await gameFilesOrNull(o.starcraft);
       const r = await diffModSources(await openMod(a, base), b ? await openMod(b, base) : null, base);
       print(...(o.json ? [JSON.stringify(r, null, 2)] : printModDiff(r, { all: !!o.all })));
+      if (b && !r.same) process.exitCode = Math.max(Number(process.exitCode ?? 0), 1);
     });
 
   modCmd.command("new").description(t("an empty mod folder: mod.json and a README")).argument("<folder>").addOption(json)
     .option("--name <name>", t("the mod's name (the folder's by default)"))
-    .action(async (dir: string, o: { json?: boolean; name?: string }) => {
-      const r = await newMod(dir, o.name);
+    .option("--tables <names>", t("start from the game's own tables, as text from your copy of the game: units,weapons,… or all"))
+    .option("--force", t("replace a mod folder that is there"))
+    .addOption(starcraftOption())
+    .action(async (dir: string, o: { json?: boolean; name?: string; tables?: string; force?: boolean; starcraft?: string }) => {
+      const tables = o.tables === undefined ? undefined : parseTables(o.tables);
+      const r = await newMod(dir, o.name, { force: o.force, tables, base: tables ? await gameFilesOrNull(o.starcraft) : null });
       if (o.json) { print(JSON.stringify(r, null, 2)); return; }
-      print(`${mark.ok} ${t("{name}: {files} in {folder}", { name: pc.bold(r.name), files: r.files.join(", "), folder: pc.cyan(relative(process.cwd(), r.dir) || ".") })}`, pc.dim(`  ${t("Put the game's files you change under files/ at their paths, or start from a mod: scmjs mod unpack <mod> {folder}", { folder: dir })}`));
+      print(`${mark.ok} ${t("{name}: {files} in {folder}", { name: pc.bold(r.name), files: r.files.join(", "), folder: pc.cyan(relative(process.cwd(), r.dir) || ".") })}`, pc.dim(`  ${tables ? t("Edit the tables' text, then scmjs mod pack {folder}; more of the game's files go under files/ at their paths.", { folder: dir }) : t("Put the game's files you change under files/ at their paths, start from the game's tables with --tables units,weapons, or from a mod: scmjs mod unpack <mod> {folder}", { folder: dir })}`));
     });
 
   modCmd.command("build").description(t("check the folder, then pack it; a check error stops it")).argument("<folder>").addOption(json)
-    .option("-o, --out <file>", t("the MPQ to write (<folder>.mpq beside the folder by default)"))
+    .option("-o, --out <file>", t("the MPQ to write (<folder>.mpq beside the folder by default); - for standard output"))
     .option("--folder <out>", t("write the files loose in the game's paths instead"))
     .option("--compression <method>", t("{methods} for every file", { methods: MOD_COMPRESSIONS.join(", ") }), "zlib")
-    .option("--force", t("pack even when the check finds errors"))
+    .option("--ignore-errors", t("pack even when the check finds errors"))
+    .addOption(new Option("--force").hideHelp())
     .addOption(starcraftOption())
-    .action(async (dir: string, o: { json?: boolean; out?: string; folder?: string; compression: string; force?: boolean; starcraft?: string }) => {
+    .action(async (dir: string, o: { json?: boolean; out?: string; folder?: string; compression: string; ignoreErrors?: boolean; force?: boolean; starcraft?: string }) => {
       if (!(MOD_COMPRESSIONS as readonly string[]).includes(o.compression)) throw new CliError(t("--compression takes {methods}, not \"{value}\"", { methods: MOD_COMPRESSIONS.join(", "), value: o.compression }), null, 2);
+      checkPackOut(o);
+      const piped = o.out === STDIO;
       const base = await gameFilesOrNull(o.starcraft);
       await readModFolder(dir);
       const check = await checkModSource(await openMod(dir, base), base);
-      if (check.failed && !o.force) {
-        if (o.json) print(JSON.stringify({ check, packed: null }, null, 2)); else print(...printModCheck(check), "", `${mark.error} ${t("Not packed: the check found {n, plural, one {# error} other {# errors}}", { n: check.errors })} ${pc.dim(t("(--force packs anyway)"))}`);
+      // (--force is the old spelling of --ignore-errors, kept for scripts.)
+      if (check.failed && !o.ignoreErrors && !o.force) {
+        if (o.json) print(JSON.stringify({ check, packed: null }, null, 2)); else say(piped, ...printModCheck(check), "", `${mark.error} ${t("Not packed: the check found {n, plural, one {# error} other {# errors}}", { n: check.errors })} ${pc.dim(t("(--ignore-errors packs anyway)"))}`);
         process.exitCode = 1;
         return;
       }
       const packed = await packModFolder(dir, { out: o.out, folder: o.folder, compression: o.compression as ModCompression, starcraft: o.starcraft });
       if (o.json) { print(JSON.stringify({ check, packed }, null, 2)); return; }
-      print(...printModCheck(check), ...printPacked(packed));
+      say(piped, ...printModCheck(check), ...printPacked(packed));
     });
 
   modCmd.command("play").description(t("play the mod on the play page in your browser")).argument("<mod>", t("a folder, an .mpq, a mod's .exe, a .zip, or a folder mod unpack wrote")).addOption(json)
@@ -1597,10 +1779,12 @@ FireGraft project is opened with ?lift=live, where they run. Waits up to five mi
 (scmjs mod header --bot), plays vanilla data, or was made for another; press Start Game, or give --start. A mod with
 plugins plays the map with its own settings, as the runners do. A bot of the play page needs a scmjs.dev account (the
 page asks you to sign in); your own .scmbot file does not, and the page keeps it as Options → Add a bot from a file…
-does.`))
+does.`) + "\n\n" + t(`BROWSER=none opens no browser: the command prints the page's address and waits for it to be opened. With --json the
+address goes to standard error, and the result to standard output once the page has taken the mod.`))
     .action(async (path: string, o: { json?: boolean; map?: string; bot?: string; race?: string; start?: boolean; starcraft?: string; play?: string }) => {
       if (o.bot && !o.map) throw new CliError(t("--bot needs --map: the bot plays on a map."), null, 2);
       if (o.race && !o.bot) throw new CliError(t("--race is the bot's: use it with --bot."), null, 2);
+      if (o.start && !o.bot) throw new CliError(t("--start is for a game with a bot: use it with --bot (a map alone always starts at once)."), null, 2);
       const bot = o.bot ? playBotOf(o.bot) : null;
       const base = await gameFilesOrNull(o.starcraft);
       const source = await openMod(path, base);
@@ -1610,7 +1794,8 @@ does.`))
       const map = o.map ? await readInput(o.map) : null;
       if (map) expectKind(map, "map");
       if (!o.json) print(`${pc.bold(set.name)}: ${t("{n, plural, one {# file} other {# files}} to hand over", { n: set.total.files })}${set.plugins + set.firegraft ? pc.dim(` ${t("(and {n, plural, one {# plugin or FireGraft file} other {# plugins and FireGraft files}})", { n: set.plugins + set.firegraft })}`) : ""}${dot}${size(set.total.bytes)}${dot}${pc.dim(t("hash {hash}", { hash: set.hash }))}`);
-      const r = await playOnPage(set, { map: map && { name: map.name, bytes: map.bytes }, bot, botRace, start: o.start, play: o.play, live: o.json ? undefined : (line) => print(line) });
+      // (with --json, standard output is the JSON alone: the address and the page's words go to standard error)
+      const r = await playOnPage(set, { map: map && { name: map.name, bytes: map.bytes }, bot, botRace, start: o.start, play: o.play, live: o.json ? (line) => process.stderr.write(`${line}\n`) : (line) => print(line) });
       if (o.json) { print(JSON.stringify({ name: set.name, hash: set.hash, withoutPlugins: set.withoutPlugins, files: set.files.map((f) => ({ path: f.path, bytes: f.bytes.length })), ...r }, null, 2)); }
       else if (r.error) throw new CliError(t("The play page said: {error}", { error: r.error }), null, 1);
       else print(`${mark.ok} ${r.shown ? (r.bot ? t("On the play page's setup screen: press Start Game") : t("On the play page's setup screen")) : t("Playing on the play page")}`, ...(r.bot ? rows([[t("Bot"), r.bot]]) : []));
@@ -1618,13 +1803,13 @@ does.`))
     });
 
   modCmd.command("header").description(t("the mod's units, weapons, upgrades and techs by name, for a bot made for it (C++ and JSON)")).argument("<mod>", t("a folder, an .mpq, a mod's .exe, a .zip, or a folder mod unpack wrote")).addOption(json)
-    .option("--out <folder>", t("where the files go (the working folder by default)"))
+    .option("-o, --out <folder>", t("where the files go (the working folder by default)"))
     .option("--namespace <name>", t("the C++ namespace, and the files' name (the mod's name made an identifier by default)"))
     .option("--bot", t("--out is a bot's folder: its scmbot.json gains the mod, which the bot file then carries"))
     .addOption(starcraftOption())
     .addHelpText("after", "\n" + t(`Writes <Mod>.h, C++ for a BWAPI bot built with scmbot (Cosmonarchy_BW::UnitTypes::Terran_Mason is a
 BWAPI::UnitType, Ids::Units::Terran_Mason the number), and <Mod>.ids.json, the same for other languages. Every name
-in the mod's tables is there, as the editor shows it. Both carry the mod's name and hash; with --bot, scmbot build
+in the mod's tables is there, as the editor shows it. Both carry the mod's name and hash; with --bot, scmjs bot build
 writes them into the .scmbot file, and the runners say whether the game is the mod the bot was made for.`))
     .action(async (path: string, o: { json?: boolean; out?: string; namespace?: string; bot?: boolean; starcraft?: string }) => {
       const base = await gameFilesOrNull(o.starcraft);
@@ -1639,9 +1824,9 @@ writes them into the .scmbot file, and the runners say whether the game is the m
         ]));
     });
 
-  modCmd.command("test").description(t("map test with the mod laid over the game")).argument("<mod>").argument("<map>").argument("[tests...]", t("tests files (JSON); <map>.tests.json beside the map by default")).addOption(json)
+  modCmd.command("test").description(t("map test with the mod laid over the game")).argument("<mod>", t("a mod: a folder, an .mpq, a mod's .exe, a .zip, or a folder mod unpack wrote")).argument("<map>", t("the map whose tests run")).argument("[tests...]", t("tests files (JSON); <map>.tests.json beside the map by default")).addOption(json)
     .option("--format <kind>", `${FORMATS.join(", ")}`, "text")
-    .option("--out <folder>", t("where the replays of failing scenarios go (<map>.tests/ beside the map)"))
+    .option("-o, --out <folder>", t("where the replays of failing scenarios go (<map>.tests/ beside the map)"))
     .option("--frames <n>", t("frames a scenario runs when it does not say (24 a second)"), "2400")
     .option("--seed <n>", t("the game's seed when a scenario does not say"), "1")
     .option("-u, --update", t("a scenario driven by a replay: write what the game gives now into the expectations that no longer hold"))
@@ -1649,13 +1834,18 @@ writes them into the .scmbot file, and the runners say whether the game is the m
     .addOption(new Option("--engine <where>", t("the play page's address, or a folder holding the engine (SCMJS_PLAY_URL)")).hideHelp())
     .addHelpText("after", "\n" + t(`The same as scmjs map test <map> --mod <mod>: each scenario played in the game with the mod's files over the game's.
 Needs a game engine whose runners take a mod.`))
-    .action(async (path: string, file: string, tests: string[], o: Parameters<typeof mapTestAction>[2]) => mapTestAction(file, tests, { ...o, mod: path }));
+    .action(async (path: string, file: string, tests: string[], o: Parameters<typeof mapTestAction>[2]) => { await checkModAndMap(path, file); await mapTestAction(file, tests, { ...o, mod: path }); });
 
   const plugin = program.command("plugin").description(t("start, check and run a plugin for the editor")).helpGroup(t("Plugins and bots:"));
   plugin.command("new").description(t("a plugin to start from, in a new folder")).argument("[name]", t("the plugin's name, such as \"Base Check\""))
-    .option("--dir <folder>", t("the folder to write it in (default plugin-<id>)"))
-    .action((name: string | undefined, o: { dir?: string }) => {
-      const made = newPlugin({ name, dir: o.dir });
+    .option("-o, --out <folder>", t("the folder to write it in (default plugin-<id>)"))
+    .addOption(new Option("--dir <folder>", t("the folder to write it in (default plugin-<id>)")).hideHelp())
+    .option("--id <id>", t("the plugin's id: lowercase letters, digits and dashes (made from the name by default)"))
+    .action((name: string | undefined, o: { out?: string; dir?: string; id?: string }) => {
+      if (o.out !== undefined && o.dir !== undefined) throw new CliError(t("--out and --dir are the same option: give one"), null, 2);
+      const folder = o.out ?? o.dir;
+      if (folder === STDIO) throw new CliError(t("A plugin is a folder of files: --out - (standard output) cannot take it"), t("Name a folder, or leave --out off for plugin-<id>."), 2);
+      const made = newPlugin({ name, dir: folder, id: o.id });
       const rel = relative(process.cwd(), made.dir) || ".";
       print(`${mark.ok} ${t("{name} written in {folder}", { name: pc.bold(name ?? rel), folder: pc.cyan(rel) })}${dot}${t("{n, plural, one {# file} other {# files}}", { n: made.files.length })}`, "",
         pc.dim(`  ${t("Next:")}`), `    cd ${rel.includes(" ") ? JSON.stringify(rel) : rel}`, "    npm install", `    npm start            ${pc.dim(t("the editor with your plugin, reloaded each time you save"))}`, "",
@@ -1698,7 +1888,7 @@ ${pc.dim(t("Guide: {url}", { url: BOT_GUIDE }))}`);
     .action(async () => { await runBot(["build"]); });
   bot.command("update").description(t("the newest toolchain, the one the play page expects"))
     .action(async () => { await updateBot(); });
-  bot.command("run").description(t("play the bot against the game's computers on a map, with no page")).argument("<bot>", t("a .scmbot file")).argument("<map>").addOption(json)
+  bot.command("run").description(t("play the bot against the game's computers on a map, with no page")).argument("<bot>", t("a .scmbot file")).argument("<map>", t("a map StarCraft itself opens: a .scm or .scx")).addOption(json)
     .option("--race <race>", t("the bot's race: zerg, terran, protoss or random"), "random")
     .option("--opponents <races>", t("the game's computers, a race each (zerg,terran)"), "zerg")
     .option("--seed <n>", t("the game's seed; the same seed, bot and map give the same game"))
@@ -1717,27 +1907,31 @@ won. Exits 1 when the bot printed errors, 2 when the game could not start.`) + "
 the command stops and says which version it needs.`))
     .action(async (botFile: string, map: string, o: { json?: boolean; race: string; opponents: string; seed?: string; frames: string; every: string; data?: string; mod?: string; ums?: boolean; melee?: boolean; starcraft?: string; engine?: string }) => {
       if (o.ums && o.melee) throw new CliError(t("--ums and --melee: one kind of game"), null, 2);
+      // (every value read before the engine or the game is touched)
+      const { race, opponents, seed, frames, every } = await botRunValues(o);
       const overlay = o.mod ? modOverlay(o.mod, () => gameFilesOrNull(o.starcraft), { code: true }) : null;
       let r;
       try {
         r = await runBotGame(botFile, map, {
-          race: o.race, opponents: o.opponents.split(",").map((s) => s.trim()).filter(Boolean), seed: o.seed === undefined ? undefined : Number(o.seed), frames: Number(o.frames), every: Number(o.every),
+          race, opponents, seed, frames, every,
           data: o.data, starcraft: o.starcraft, engine: o.engine, live: o.json ? undefined : (line) => print(line),
           mod: overlay, game: o.ums ? "ums" : o.melee ? "melee" : undefined,
         });
       } finally { overlay?.remove(); }
-      if (o.json) print(JSON.stringify({ bot: botFile, map, ...r }, null, 2));
+      // (the mod as mod test's JSON has it, at the top: its name and hash, from what the game ran)
+      if (o.json) print(JSON.stringify({ bot: botFile, map, ...(o.mod ? { mod: r.start?.code ? { name: r.start.code.name, hash: r.start.code.hash } : null } : {}), ...r }, null, 2));
       if (r.exitCode) process.exitCode = r.exitCode;
     });
 
   bot.command("ladder").description(t("a round robin of bots and the game's computer over maps: a table, Elo and every replay"))
     .argument("<bots...>", t("bots (.scmbot files) and computer; a race after a colon: mybot.scmbot:p, computer:t")).addOption(json)
     .requiredOption("--maps <maps...>", t("the maps to play on"))
-    .option("--races <letters>", t("the races a side plays when it has none of its own: z, t, p and r (random)"), "r")
+    .option("--races <races>", t("the races a side plays when it has none of its own: letters of z, t, p and r (random) run together, or words with commas"), "r")
     .option("--games <n>", t("games of each pairing on each map, in each race, a seed each (1, 2, 3, …)"), "1")
     .option("--seeds <list>", t("the seeds to play, comma separated, in place of --games"))
     .option("--frames <n>", t("stop a game nobody has won after this many frames (24 a second)"), "50000")
-    .option("--out <folder>", t("where the replays and ladder.json go (default: ladder-<date>-<time> here)"))
+    .option("-o, --out <folder>", t("where the replays and ladder.json go (default: ladder-<date>-<time> here)"))
+    .option("--force", t("take out the replays and ladder.json of an earlier ladder in --out first"))
     .option("--data <folder>", t("where each bot keeps its files between games (default: the ladder's folder)"))
     .option("--parallel <n>", t("games played at once"), "1")
     .option("--timeout <seconds>", t("how long a bot may think over one frame before it counts as hung (the first frame: 5 minutes at least)"), "60")
@@ -1755,28 +1949,30 @@ ladder's folder for scmjs replay watch. Exits 1 when a game could not be played 
   scmjs bot ladder a.scmbot b.scmbot c.scmbot --maps maps/*.scx --frames 30000
   scmjs bot ladder cosmo.scmbot:t other.scmbot:t --maps "(4)Exodus 1.0.scx" --mod "Cosmonarchy BW"` + "\n\n" + t(`--mod needs a play page whose engine runs a mod's code ("mods": 2 in its engine/current.json); with an older one
 the command stops and says which version it needs.`))
-    .action(async (specs: string[], o: { json?: boolean; maps: string[]; races: string; games: string; seeds?: string; frames: string; out?: string; data?: string; parallel: string; timeout: string; mod?: string; ums?: boolean; melee?: boolean; starcraft?: string; engine?: string }) => {
+    .action(async (specs: string[], o: { json?: boolean; maps: string[]; races: string; games: string; seeds?: string; frames: string; out?: string; force?: boolean; data?: string; parallel: string; timeout: string; mod?: string; ums?: boolean; melee?: boolean; starcraft?: string; engine?: string }) => {
       if (o.ums && o.melee) throw new CliError(t("--ums and --melee: one kind of game"), null, 2);
       const races = parseRaces(o.races);
-      const count = (v: string, name: string, least = 1) => { const n = Number(v); if (!Number.isInteger(n) || n < least) throw new CliError(t("--{flag} {value} is not a whole number of {least} or more", { flag: name, value: v, least }), null, 2); return n; };
-      const games = count(o.games, "games");
-      const seeds = o.seeds ? o.seeds.split(",").map((x) => x.trim()).filter(Boolean).map((x) => count(x, "seeds", 0)) : Array.from({ length: games }, (_, k) => k + 1);
+      const { seeds, frames, parallel, timeout } = ladderValues(o);
       const entrants = parseEntrants(specs, races);
       const say = (l: string) => (o.json ? process.stderr.write(l + "\n") : print(l));
       // A map in the original 1.00 form is played as Brood War (as map trace does), so that its replays play back.
       const play = new Map<string, string>();
+      const overlay = o.mod ? modOverlay(o.mod, () => gameFilesOrNull(o.starcraft), { code: true }) : null;
+      // (a melee map under a mod with no plugins is played as melee: botrun.ts gameKind)
+      const gameOf = new Map<string, "melee" | "ums">();
       for (const m of o.maps) {
         const { input, doc } = await openForEdit(m);
         const game = await gameMap(doc, input.path, input.name);
         if (game.path !== m) play.set(m, game.path);
         if (game.converted) say(pc.dim(t("{name} is an original StarCraft map: it is played converted to Brood War.", { name: input.name })));
+        const kind = o.ums || o.melee ? undefined : await gameKind(looksLikeMapSettings(doc.scenario), overlay);
+        if (kind) gameOf.set(m, kind);
       }
       let r;
-      const overlay = o.mod ? modOverlay(o.mod, () => gameFilesOrNull(o.starcraft), { code: true }) : null;
       try {
         r = await runLadder(entrants, {
-          maps: o.maps, play, races, seeds, frames: count(o.frames, "frames"), out: o.out, data: o.data, parallel: count(o.parallel, "parallel"), timeout: count(o.timeout, "timeout"),
-          starcraft: o.starcraft, engine: o.engine, live: say, mod: overlay, game: o.ums ? "ums" : o.melee ? "melee" : undefined,
+          maps: o.maps, play, races, seeds, frames, out: o.out, force: o.force, data: o.data, parallel, timeout,
+          starcraft: o.starcraft, engine: o.engine, live: say, mod: overlay, game: o.ums ? "ums" : o.melee ? "melee" : undefined, gameOf,
         });
       } finally { for (const p of play.values()) removeGameMap(p); overlay?.remove(); }
       if (o.json) print(JSON.stringify(ladderJson(r), null, 2));
@@ -1795,7 +1991,7 @@ the command stops and says which version it needs.`))
     if (!r.was) { print(`${mark.info} ${t("Not signed in")}`); return; }
     print(`${mark.ok} ${r.was.name ? t("Signed out of {server} ({name})", { server: serverLabel(r.was.server), name: r.was.name }) : t("Signed out of {server}", { server: serverLabel(r.was.server) })}`, r.told ? null : pc.dim(`  ${t("The server could not be reached to end the session there; {file} is deleted.", { file: r.file })}`));
   };
-  const providerOption = () => new Option("--provider <name>", t("the sign-in to use: {list}", { list: PROVIDERS.join(", ") })).default("discord");
+  const providerOption = () => new Option("--provider <name>", t("the sign-in to use")).choices(PROVIDERS).default("discord");
   const account = program.command("account").description(t("sign in to scmjs.dev, see your account, sign out")).helpGroup(t("This tool:"))
     .addHelpText("after", "\n" + t(`The sign-in opens Discord in your browser, as the editor's does (--provider google or battlenet for the others). The
 session is kept in your configuration folder (~/.config/scmjs/session.json; SCMJS_SESSION names another file), and
@@ -1811,7 +2007,7 @@ scmjs logout ends it. scmjs login and scmjs logout are the same as account login
   program.command("login", { hidden: true }).description(t("sign in to scmjs.dev in your browser (scmjs account login)")).addOption(providerOption()).action(signIn);
   program.command("logout", { hidden: true }).description(t("sign out of scmjs.dev (scmjs account logout)")).action(signOut);
 
-  program.command("completion", { hidden: true }).description(t("a completion script for your shell")).argument("<shell>", SHELLS.join("|"))
+  program.command("completion", { hidden: true }).description(t("a completion script for your shell")).addArgument(new Argument("<shell>", t("the shell")).choices(SHELLS))
     .addHelpText("after", `
   eval "$(scmjs completion bash)"                        # ${t("in ~/.bashrc")}
   scmjs completion zsh > ~/.zsh/completions/_scmjs       # ${t("a folder on $fpath")}
@@ -1828,14 +2024,18 @@ scmjs logout ends it. scmjs login and scmjs logout are the same as account login
     .option("--git", t("git init the folder when it is in no git repository (never done without it)"))
     .option("--force", t("replace a README.md or workflow that is there, and set a git setting that holds another value"))
     .addHelpText("after", "\n" + t(`Writes what is not there yet:
-  .gitattributes              *.scx, *.scm and *.chk read through scmjs map dump by git diff
-  .gitignore                  *.bak, the copy the desktop app's Save keeps
+  .gitattributes              *.scx, *.scm and *.chk read through scmjs map dump by git diff, and merged through
+                              scmjs map merge by git merge
+  .gitignore                  *.bak, the copy the desktop app's Save keeps, and *.tests/ and *.clips/, what a failed
+                              map test leaves beside the map
   .github/workflows/maps.yml  map check on every push and pull request (and map build --check for maps with a
-                              TrigScript script), with this version of scmjs pinned
+                              TrigScript script), with this version of scmjs pinned; a folder set up after another
+                              is added to the maps it checks
   README.md                   the maps, and the commands to check, dump and diff them
-and, in the git repository, git config diff.scmjs.textconv, .xfuncname and .cachetextconv, which are per clone.
-.gitattributes and .gitignore get only the lines they lack; nothing else that is there is changed without --force.
-Exits 2 when there is no such folder.`))
+and, in the git repository, git config diff.scmjs.textconv, .xfuncname and .cachetextconv, and merge.scmjs.name and
+.driver, which are per clone. .gitattributes and .gitignore get only the lines they lack; nothing else that is there
+is changed without --force. Says which maps fail the check now. Exits 2 when there is no such folder, or when its maps
+are all in folders below it (--force sets it up anyway).`))
     .action(async (folder: string, o: { json?: boolean; print?: boolean; git?: boolean; force?: boolean }) => {
       const r = await initFolder(folder, { print: !!o.print, git: !!o.git, force: !!o.force });
       if (o.json) print(JSON.stringify({ ...r, files: r.files.map(({ content, ...f }) => (o.print ? { ...f, content } : f)) }, null, 2));
@@ -1856,19 +2056,19 @@ a newer scmjs; then the commands this computer can run now. Nothing is changed. 
     });
 
   program.command("mcp").description(t("these commands as an MCP server, for AI tools")).helpGroup(t("This tool:"))
-    .addHelpText("after", "\n" + t(`Speaks the Model Context Protocol on standard input and output, so an AI tool that runs on this computer (Claude
-Code, Cursor, VS Code, …) can read, check, search, compare and change maps with the same code these commands use:
-map_info, map_check, map_dump, map_find, map_diff, map_triggers_export|import, map_strings_export|import|prune,
-map_set, map_resize, map_new, map_build, map_run, map_preview (the picture itself), map_analyze, map_trace, map_cost,
-replay_info, replay_map, mod_info, mod_check, mod_diff, mod_unpack, mod_pack, mod_new and doctor. map_preview,
-map_analyze, map_trace and map_cost need a copy of StarCraft here, as the commands do; doctor says whether there is
-one. Paths are files on this
-computer, relative to the folder the tool started it in. Claude Code, in your maps folder:`) + `
+    .option("--allow-outside", t("let the tools read and write files outside this folder"))
+    // The tools' names from the server itself, so the list is never short of one; made only when the help is shown.
+    .addHelpText("after", () => "\n" + t(`Speaks the Model Context Protocol on standard input and output, so an AI tool that runs on this computer (Claude
+Code, Cursor, VS Code, …) can read, check, search, compare and change maps with the same code these commands use.
+Each tool is a command, with its options as arguments by the same names:`) + "\n" + wrapWords(createMcpServer().tools.join(", "), 116, "  ") + "\n" + t(`The tools that run the game or draw it (map_preview, map_analyze, map_trace, map_cost, map_coverage, map_balance) need a
+copy of StarCraft here, as the commands do; doctor says whether there is one. Paths are files in the folder the tool
+started the server in, and a path outside it is refused unless the server was started with --allow-outside.
+Claude Code, in your maps folder:`) + `
   claude mcp add scmjs -- npx -y @scm-js/cli mcp
 ${t("Anything else takes the same thing as JSON:")}
   { "mcpServers": { "scmjs": { "command": "npx", "args": ["-y", "@scm-js/cli", "mcp"] } } }`)
     // English whatever the language: the tools' descriptions and results are read by the model, not shown.
-    .action(async () => { setLocale("en"); await serveStdio(); });
+    .action(async (o: { allowOutside?: boolean }) => { setLocale("en"); await serveStdio({ allowOutside: !!o.allowOutside }); });
 
   // Hidden from the overview, which holds 23 lines (banner.ts): an editor starts it, and docs/cli.md says how.
   program.command("lsp", { hidden: true }).description(t("a TrigScript language server, for text editors")).helpGroup(t("This tool:"))
@@ -1880,7 +2080,12 @@ units and switches, and goes to a definition in the standard library or a librar
 folder of a map scmjs map unpack wrote; the map's names come from the scenario beside it. docs.scmjs.dev/cli has
 the setup for each editor. Needs TypeScript, as map build does.`))
     // English whatever the language, as the TrigScript compiler's diagnostics it carries are.
-    .action(async (o: { map?: string }) => { setLocale("en"); await serveLsp({ map: o.map }); });
+    .action(async (o: { map?: string }) => {
+      // Typed at a terminal, it would wait for an editor's messages and say nothing.
+      if (process.stdin.isTTY) throw new CliError(t("scmjs lsp is a language server: a text editor starts it and speaks to it on standard input and output"), t("scmjs help lsp says how; docs.scmjs.dev/cli has the setup for each editor."), 2);
+      setLocale("en");
+      await serveLsp({ map: o.map });
+    });
 
   // Hidden from the overview, which holds 23 lines (banner.ts): the mod noun took its line.
   program.command("about", { hidden: true }).description(t("this version, any newer one, and links")).helpGroup(t("This tool:")).addOption(json)
@@ -1888,7 +2093,87 @@ the setup for each editor. Needs TypeScript, as map build does.`))
       const r = await aboutReport();
       print(...(o.json ? [JSON.stringify(r, null, 2)] : printAbout(r)));
     });
+  finishProgram(program);
   return program;
+}
+
+/**
+ * A noun's commands in groups, by task as the guide's chapters have them. One table for the whole noun, so a command
+ * keeps its own block; `tests/cli.test.ts` fails on a `map` command in no group.
+ */
+export const COMMAND_GROUPS: Record<string, [heading: string, names: string[]][]> = {
+  map: [
+    [msg("Looking inside a map:"), ["info", "check", "dump", "find", "preview", "sounds", "analyze"]],
+    [msg("Making a map:"), ["new", "generate", "fetch"]],
+    [msg("Changing a map:"), ["set", "resize", "triggers", "strings", "optimize", "unpack", "pack", "build", "run"]],
+    [msg("Maps in git:"), ["diff", "log", "blame", "merge"]],
+    [msg("Running a map in the game:"), ["trace", "cost", "test", "coverage", "rush", "balance", "heatmap"]],
+    [msg("Sharing:"), ["open", "play", "share"]],
+  ],
+  mod: [
+    [msg("Looking inside a mod:"), ["info", "check", "diff"]],
+    [msg("Making a mod:"), ["new", "unpack", "pack", "build"]],
+    [msg("In the game:"), ["play", "test", "header"]],
+  ],
+};
+/** Where a command stands in its noun's help, by COMMAND_GROUPS. */
+const GROUP_RANK = new WeakMap<Command, number>();
+
+/** `text` broken at spaces into lines of at most `width` columns, each after `indent`. */
+function wrapWords(text: string, width: number, indent = ""): string {
+  const lines: string[] = [];
+  let line = "";
+  for (const word of text.split(" ")) {
+    if (line && columns(indent + line + " " + word) > width) { lines.push(indent + line); line = word; } else line = line ? `${line} ${word}` : word;
+  }
+  if (line) lines.push(indent + line);
+  return lines.join("\n");
+}
+
+/** The words that run a command: `scmjs map info`. */
+const commandPath = (cmd: Command): string => (cmd.parent ? `${commandPath(cmd.parent)} ${cmd.name()}` : cmd.name());
+
+/**
+ * What every command gets once they are all defined: the global options in any place (the program's stop at the
+ * command), the hint after a mistake naming that command's own help, `help` under every noun, and the groups.
+ */
+function finishProgram(program: Command): void {
+  const all = (c: Command): Command[] => [c, ...c.commands.flatMap(all)];
+  for (const [noun, groups] of Object.entries(COMMAND_GROUPS)) {
+    const cmd = program.commands.find((c) => c.name() === noun);
+    if (!cmd) continue;
+    let rank = 0;
+    for (const [heading, names] of groups) {
+      for (const name of names) {
+        const sub = cmd.commands.find((c) => c.name() === name);
+        if (sub) { sub.helpGroup(translate(heading)); GROUP_RANK.set(sub, ++rank); }
+      }
+    }
+  }
+  for (const cmd of all(program)) {
+    if (cmd !== program) {
+      // Read from the arguments before the program is built (chooseLocale, picocolors); here so commander takes them.
+      cmd.addOption(new Option("--no-color").hideHelp());
+      cmd.addOption(new Option("--lang <code>").choices(["en", "ko"]).hideHelp());
+      const runs = !!(cmd as unknown as { _actionHandler?: unknown })._actionHandler;
+      cmd.showHelpAfterError(pc.dim(cmd.commands.length && !runs ? t("({command} --help lists its commands)", { command: commandPath(cmd) }) : t("({command} --help lists its options)", { command: commandPath(cmd) })));
+    }
+    // `help` under every noun: `scmjs help map diff`, `scmjs map help diff`, the help of the command named.
+    if (cmd.commands.length && !(cmd as unknown as { _actionHandler?: unknown })._actionHandler) {
+      cmd.helpCommand(false);
+      const help = cmd.command("help", { hidden: true }).description(t("show help for a command")).argument("[command...]")
+        .action((path: string[]) => {
+          let at = cmd as ScmjsCommand;
+          for (const word of path) {
+            const next = at.commands.find((c) => c.name() === word && c.name() !== "help");
+            if (!next) at.unknownName(word);
+            at = next as ScmjsCommand;
+          }
+          at.help();
+        });
+      help.helpOption(false).addOption(new Option("--no-color").hideHelp()).addOption(new Option("--lang <code>").choices(["en", "ko"]).hideHelp());
+    }
+  }
 }
 
 // The language is fixed before the program is built, from the arguments and the environment (cli/src/i18n.ts). Tests
@@ -1896,14 +2181,62 @@ the setup for each editor. Needs TypeScript, as map build does.`))
 if (!process.env.VITEST) setLocale(chooseLocale(process.argv.slice(2)));
 export const program = buildProgram();
 
-/** Runs the command line on `process.argv`. Not a top-level await: the single executable's bundle is CommonJS. */
-async function run() {
+/** The file-system errors that are an ordinary mistake (a name, a folder, a permission), not a fault to report. */
+const FILE_ERRORS = new Set(["ENOENT", "EISDIR", "ENOTDIR", "EACCES", "EPERM", "EEXIST", "ENOSPC", "EROFS", "EMFILE", "ENFILE"]);
+
+/**
+ * A file-system error no command caught, said as one line naming the path and what is wrong with it: exit 2 (the
+ * work could not start), 1 for a disk that filled during a write. Null for anything else.
+ */
+export function fileProblem(e: unknown): CliError | null {
+  const errno = (x: unknown) => (x && typeof x === "object" && typeof (x as NodeJS.ErrnoException).code === "string" && FILE_ERRORS.has((x as NodeJS.ErrnoException).code!) ? (x as NodeJS.ErrnoException) : null);
+  const err = errno(e) ?? errno((e as { cause?: unknown } | null)?.cause);
+  if (!err) return null;
+  const at = err.path ? relative(process.cwd(), err.path) : "";
+  const path = !at || at.startsWith("..") || /^[a-z]:/i.test(at) ? (err.path ?? "") : at;
+  switch (err.code) {
+    case "ENOENT": return new CliError(path ? t("No such file or folder: {path}", { path }) : t("A file or folder is not there"), null, 2);
+    case "EISDIR": return new CliError(path ? t("{path} is a folder, not a file", { path }) : t("A folder was given where a file is wanted"), null, 2);
+    case "ENOTDIR": return new CliError(path ? t("{path} is not a folder: a part of it is a file", { path }) : t("A file was given where a folder is wanted"), null, 2);
+    case "EACCES": case "EPERM": return new CliError(path ? t("{path} cannot be used: permission denied", { path }) : t("Permission denied"), null, 2);
+    case "EEXIST": return new CliError(path ? t("{path} is there already", { path }) : t("A file is there already"), null, 2);
+    case "EROFS": return new CliError(path ? t("{path} is on a disk that cannot be written", { path }) : t("The disk cannot be written"), null, 2);
+    case "ENOSPC": return new CliError(path ? t("The disk is full: {path} was not written whole", { path }) : t("The disk is full"), null, 1);
+    default: return new CliError(t("Too many files are open at once"), t("Close some programs, or raise the limit (ulimit -n), and try again."), 2);
+  }
+}
+
+/**
+ * A subcommand's options with those its parent declares too: commander gives an option both declare to the parent,
+ * wherever it is typed (`map test record … --json` sets `map test`'s), so what was typed there (not a default) is
+ * read from the parent.
+ */
+export function typedOptions<T extends object>(cmd: Command, local: T, keys: readonly (keyof T & string)[]): T {
+  const o = { ...local };
+  const parent = cmd.parent;
+  if (!parent) return o;
+  for (const key of keys) {
+    if (o[key] === undefined && ["cli", "env"].includes(parent.getOptionValueSource(key) ?? "")) (o as Record<string, unknown>)[key] = parent.opts()[key];
+  }
+  return o;
+}
+
+/** Runs the command line on its arguments. Not a top-level await: the single executable's bundle is CommonJS. */
+export async function run(args: string[] = process.argv.slice(2), prog: Command = program): Promise<void> {
+  const language = unknownLanguage(args);
+  if (language) process.stderr.write(`${mark.warn} ${t("SCMJS_LANG={value} is not a language this speaks (en, ko): English it is", { value: language })}\n`);
   try {
     // `scmjs` on its own is a request for the overview, not a mistake.
-    if (process.argv.length <= 2) program.outputHelp();
-    else await program.parseAsync();
+    if (!args.length) prog.outputHelp();
+    else await prog.parseAsync(args, { from: "user" });
   } catch (e) {
-    if (e instanceof CliError) { fail(e); process.exitCode = e.exitCode; }
+    const known = e instanceof CliError ? e : fileProblem(e);
+    if (known) {
+      fail(known);
+      if (process.env.SCMJS_DEBUG && !(e instanceof CliError) && e instanceof Error) process.stderr.write(pc.dim(`${e.stack}\n`));
+      process.exitCode = known.exitCode;
+    } else if ((e as NodeJS.ErrnoException | null)?.code === "EPIPE") process.exitCode = 0;
+    else if (e instanceof CommanderError) process.exitCode = e.exitCode;
     else { process.stderr.write(`${mark.error} ${pc.red(t("Something went wrong"))}: ${e instanceof Error ? e.stack ?? e.message : e}\n${pc.dim(`  ${t("Please report it: {url}", { url: "https://github.com/scm-js/scm-js/issues" })}`)}\n`); process.exitCode = 1; }
   }
 }

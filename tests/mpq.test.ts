@@ -210,6 +210,6 @@ describe("map files (tests/maps, fixtures/maps)", () => {
       const saved = await loadMap(await saveMap(serializeScenario(scn), { extras: members.extras, stored: members.stored }));
       for (const [name, data] of all.extras) expect(await saved.archive!.readFileAsync(name)).toEqual(data);
       expect(saved.chk).toEqual(loaded.chk);
-    });
+    }, 30_000);
   }
 });

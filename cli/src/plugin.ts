@@ -202,19 +202,26 @@ SOFTWARE.
   };
 }
 
-/** `scmjs plugin new [name]`: a folder `plugin-<id>` (or `--dir`) with a plugin to start from. */
-export function newPlugin(o: { name?: string; dir?: string }): { dir: string; files: string[] } {
+/** An id as the editor keeps it: lowercase letters, digits and dashes (the plugin API's `pluginIdOf`). */
+export const editorId = (id: string) => id.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "plugin";
+
+/** `scmjs plugin new [name]`: a folder `plugin-<id>` (or `--out`) with a plugin to start from. */
+export function newPlugin(o: { name?: string; dir?: string; id?: string }): { dir: string; files: string[]; id: string } {
   const name = (o.name?.trim() || (o.dir ? nameFromFolder(resolve(o.dir)) : "")).slice(0, 64);
-  if (!name) throw new CliError(t("Name the plugin"), t("scmjs plugin new \"Base Check\"  (or --dir <folder>)"), 2);
-  const id = pluginId(name);
+  if (!name) throw new CliError(t("Name the plugin"), t("scmjs plugin new \"Base Check\"  (or --out <folder>)"), 2);
+  if (o.id !== undefined && editorId(o.id) !== o.id) throw new CliError(t("--id {id} is not an id: lowercase letters, digits and dashes", { id: o.id }), t("Such as --id {id}", { id: editorId(o.id) }), 2);
+  // A name in Hangul (or anything without a letter a to z) makes no id: the folder and the storage keys need one.
+  const made = name.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  if (!o.id && !made) throw new CliError(t("\"{name}\" makes no id: an id is lowercase letters, digits and dashes", { name }), t("Give one: scmjs plugin new \"{name}\" --id my-plugin", { name }), 2);
+  const id = o.id ?? pluginId(name);
   const dir = resolve(o.dir ?? `plugin-${id}`);
-  if (existsSync(dir) && readdirSync(dir).filter((f) => f !== ".git").length > 0) throw new CliError(t("{dir} is not empty", { dir: relative(process.cwd(), dir) || "." }), t("Give an empty or new folder with --dir."), 2);
+  if (existsSync(dir) && readdirSync(dir).filter((f) => f !== ".git").length > 0) throw new CliError(t("{dir} is not empty", { dir: relative(process.cwd(), dir) || "." }), t("Give an empty or new folder with --out."), 2);
   const files = pluginFiles({ name, id, author: gitUser(), year: new Date().getFullYear() });
   for (const [path, text] of Object.entries(files)) {
     mkdirSync(dirname(join(dir, path)), { recursive: true });
     writeFileSync(join(dir, path), text);
   }
-  return { dir, files: Object.keys(files) };
+  return { dir, files: Object.keys(files), id };
 }
 
 /* ── check ─────────────────────────────────────────────── */
@@ -265,7 +272,10 @@ export function checkPlugin(dirArg = "."): PluginCheck {
   try { raw = JSON.parse(readFileSync(file, "utf8")); } catch (e) { add("error", t("plugin.json is not valid JSON: {message}", { message: (e as Error).message })); return out; }
   let m;
   try { m = validateManifest(raw, "plugin.json"); } catch (e) { add("error", (e as Error).message); return out; }
-  out.name = m.name; out.id = m.id ?? pluginId(m.name); out.version = m.version ?? null;
+  out.name = m.name; out.id = m.id ? editorId(m.id) : pluginId(m.name); out.version = m.version ?? null;
+  // The editor keeps the id it makes of what is written: storage keys and commands go under that one.
+  if (m.id && editorId(m.id) !== m.id) add("warn", t("The id \"{id}\" is kept by the editor as \"{as}\"", { id: m.id, as: editorId(m.id) }), t("Write it so in plugin.json: lowercase letters, digits and dashes."));
+  if (m.version && !/^\d+\.\d+\.\d+(?:-[\w.]+)?$/.test(m.version)) add("info", t("The version \"{version}\" is not three numbers (1.2.0)", { version: m.version }), t("Updates are found by release tags v1.2.0, compared with this version."));
 
   if (m.api === undefined) add("warn", t("plugin.json names no \"api\""), t("Add \"api\": {version}, so an older editor says it is too old instead of failing.", { version: PLUGIN_API_VERSION }));
   else if (m.api > PLUGIN_API_VERSION) add("error", t("It needs plugin API {api}; the editor provides {version}", { api: m.api, version: PLUGIN_API_VERSION }));
@@ -388,8 +398,11 @@ export async function devPlugin(o: { dir?: string; port: number; open: boolean; 
   else for (const line of printPluginCheck(first, false).slice(1)) print(line);
   const url = devEditorUrl(o.editor ?? process.env.SCMJS_EDITOR_URL ?? EDITOR_URL, served);
   print(`${mark.info} ${t("Serving it at {url}", { url: pc.cyan(served) })}${builds ? dot + t("built with npm run build") : ""}`);
-  if (o.open && process.env.BROWSER !== "none") { openBrowser(url); print(`${mark.info} ${t("Opening the editor. The first time, it asks you to add the plugin.")}`); }
-  print(pc.dim(`  ${t("If nothing opens, go to {url}", { url })}`), pc.dim(`  ${t("Watching for changes. Ctrl+C stops.")}`));
+  if (o.open && process.env.BROWSER !== "none") {
+    openBrowser(url);
+    print(`${mark.info} ${t("Opening the editor. The first time, it asks you to add the plugin.")}`, pc.dim(`  ${t("If nothing opens, go to {url}", { url })}`));
+  } else print(`${mark.info} ${t("Open {url} in your browser. The first time, the editor asks you to add the plugin.", { url: pc.cyan(url) })}`);
+  print(pc.dim(`  ${t("Watching for changes. Ctrl+C stops.")}`));
 
   let timer: ReturnType<typeof setTimeout> | null = null, changed = new Set<string>(), running = false;
   // What the build writes is not a change to build again: the bundle, and the folder it is in when only it is there.
@@ -401,7 +414,11 @@ export async function devPlugin(o: { dir?: string; port: number; open: boolean; 
     const files = [...changed]; changed = new Set();
     const err = await build();
     const at = new Date().toTimeString().slice(0, 8);
-    if (err) { print(`${mark.error} ${pc.dim(at)} ${t("The build failed")}`, pc.dim(err.split("\n").slice(0, 12).map((l) => `  ${l}`).join("\n"))); send("failed", { text: err.split("\n").slice(0, 3).join("\n") }); }
+    // The editor would not load what is there now (plugin.json broken, an entry gone): said, and nothing reloaded.
+    let wrong: { message: string } | null | undefined = null;
+    if (!err) { try { wrong = checkPlugin(dir).issues.find((i) => i.level === "error"); } catch (e) { wrong = { message: e instanceof Error ? e.message : String(e) }; } }
+    if (wrong) { print(`${mark.error} ${pc.dim(at)} ${wrong.message}`); send("failed", { text: wrong.message }); }
+    else if (err) { print(`${mark.error} ${pc.dim(at)} ${t("The build failed")}`, pc.dim(err.split("\n").slice(0, 12).map((l) => `  ${l}`).join("\n"))); send("failed", { text: err.split("\n").slice(0, 3).join("\n") }); }
     else { send("reload", { files }); print(`${mark.ok} ${pc.dim(at)} ${files.length > 3 ? t("{files} and {n} more", { files: files.slice(0, 3).join(", "), n: files.length - 3 }) : files.join(", ")}${clients.size ? t("; reloaded in the editor") : pc.dim(t("; no editor connected"))}`); }
     running = false;
   };

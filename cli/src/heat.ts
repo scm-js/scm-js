@@ -93,6 +93,8 @@ export interface HeatFilter {
   player?: number | string;
   /** Frames: only what happened by then. */
   until?: number;
+  /** The map's size in tiles: a point off it (a replay of a bigger map) is not counted, only told (`outside`). */
+  bounds?: { width: number; height: number };
 }
 
 /** The game's player number (0–7) a `--player` means in one game, or null when the game has no such player. */
@@ -109,13 +111,21 @@ export interface HeatPoints {
   units: Map<number, number>;
   /** Per game: how many points it gave, and whether the player was in it. */
   games: { count: number; player: boolean }[];
+  /** Points that fell off the map (`bounds`), not counted anywhere else. */
+  outside: number;
 }
 
 /** The events of every game that the filter takes, as points on the map. */
 export function heatPoints(games: GameEvents[], f: HeatFilter): HeatPoints {
   const points: number[] = [], units = new Map<number, number>(), per: HeatPoints["games"] = [];
   const until = f.until ?? Infinity;
-  const add = (unit: number | null, x: number, y: number) => { points.push(x, y); if (unit !== null) units.set(unit, (units.get(unit) ?? 0) + 1); };
+  let outside = 0;
+  const off = (x: number, y: number) => !!f.bounds && (x < 0 || y < 0 || x >= f.bounds.width * MEGATILE_PX || y >= f.bounds.height * MEGATILE_PX);
+  const add = (unit: number | null, x: number, y: number) => {
+    if (off(x, y)) { outside++; return; }
+    points.push(x, y);
+    if (unit !== null) units.set(unit, (units.get(unit) ?? 0) + 1);
+  };
   for (const g of games) {
     const owner = f.player === undefined ? null : ownerIn(g, f.player);
     if (f.player !== undefined && owner === null) { per.push({ count: 0, player: false }); continue; }
@@ -148,7 +158,7 @@ export function heatPoints(games: GameEvents[], f: HeatFilter): HeatPoints {
     }
     per.push({ count: (points.length - before) / 2, player: true });
   }
-  return { points, units, games: per };
+  return { points, units, games: per, outside };
 }
 
 /** Points counted per tile, the busiest first: `[x, y, n]` in tiles, ties in reading order. Points off the map are left out. */

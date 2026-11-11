@@ -6,7 +6,7 @@ import { mkdirSync, mkdtempSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { doctorJson, engineCheck, mcpCheck, MCP_ADD, readiness, readyLines, runnersIn, shortPath, type Check } from "../cli/src/doctor";
+import { browserCheck, browserStarts, doctorJson, engineCheck, mcpCheck, MCP_ADD, readiness, readyLines, runnersIn, shortPath, type Check } from "../cli/src/doctor";
 import type { RunnerKind } from "../cli/src/engine";
 import { columns, visible } from "../cli/src/ui";
 
@@ -81,7 +81,7 @@ describe("scmjs doctor: what is ready", () => {
       engine(["bot", "replay"]),
     ])).toEqual({
       "map info|check|…": "ok", "replay info|open": "ok", mcp: "ok", "map build": "ok", "map preview|generate|analyze": "ok", "bot new|build": "Docker",
-      "bot run": "ok", "replay watch": "ok", "replay export": "Browser", "map trace|cost": "engine runner", "bot ladder": "engine runner", "map balance": "engine runner",
+      "bot run": "ok", "replay watch": "ok", "replay export": "Browser", "map test --clips": "engine runner", "map trace|cost": "engine runner", "bot ladder": "engine runner", "map balance": "engine runner",
     });
   });
 
@@ -89,13 +89,13 @@ describe("scmjs doctor: what is ready", () => {
     const r = by([{ what: "StarCraft", state: "warn", detail: "not found" }, engine([], null)]);
     expect([r["bot run"], r["map trace|cost"], r["bot ladder"], r["map preview|generate|analyze"], r["map build"]]).toEqual(["StarCraft", "StarCraft", "StarCraft", "StarCraft", "ok"]);
     expect(by([engine([], null)])["map trace|cost"]).toBe("ok");
-    expect(Object.values(by([{ what: "Node", state: "bad", detail: "" }]))).toEqual(Array(12).fill("Node"));
+    expect(Object.values(by([{ what: "Node", state: "bad", detail: "" }]))).toEqual(Array(13).fill("Node"));
   });
 
   it("lists only what is not ready, with the one thing it lacks, in 80 columns; the JSON has every group", () => {
     const checks: Check[] = [{ what: "Docker", state: "warn", detail: "not found" }, { what: "TypeScript", state: "warn", detail: "not found" }, engine(["bot"])];
     const lines = readyLines(readiness(checks), checks).map(visible);
-    expect(lines).toEqual(["  Not ready", "  ✖ map build       TypeScript not found", "  ✖ bot new|build   Docker not found", "  ✖ replay watch    no runner for it in the fetched engine", "  ✖ map trace|cost  no runner for it in the fetched engine", "  ✖ bot ladder      no runner for it in the fetched engine", "  ✖ map balance     no runner for it in the fetched engine"]);
+    expect(lines).toEqual(["  Not ready", "  ✖ map build         TypeScript not found", "  ✖ bot new|build     Docker not found", "  ✖ replay watch      no runner for it in the fetched engine", "  ✖ map test --clips  no runner for it in the fetched engine", "  ✖ map trace|cost    no runner for it in the fetched engine", "  ✖ bot ladder        no runner for it in the fetched engine", "  ✖ map balance       no runner for it in the fetched engine"]);
     for (const l of lines) expect(columns(l), l).toBeLessThanOrEqual(80);
     expect(readyLines(readiness([engine(["bot", "replay", "map", "match"])])).map(visible)).toEqual(["  ✔ Every command is ready on this computer."]);
     expect(shortPath("/home/me/.cache/scmjs", 30, "/home/me")).toBe("~/.cache/scmjs");
@@ -125,5 +125,32 @@ describe("scmjs doctor: Claude Code", () => {
     expect([visible(other.detail), other.fix]).toEqual(["registered with Claude Code · 2 other folders", MCP_ADD]);
     const none = mcpCheck(config({ mcpServers: { other: { command: "npx", args: ["-y", "some-server"] }, half: { command: "scmjs", args: ["info"] } }, projects: { "/maps": null } }), "/maps");
     expect([none.state, none.detail, none.fix]).toEqual(["ok", "not registered", MCP_ADD]);
+  });
+});
+
+describe("scmjs doctor: a browser that is there but does not start", () => {
+  it("is said, with what it said, and blocks the clips alone", () => {
+    const c = browserCheck("/opt/chrome", () => "error while loading shared libraries: libnspr4.so: cannot open shared object file");
+    expect(c.state).toBe("warn");
+    expect(visible(c.detail)).toBe("does not start · /opt/chrome");
+    expect(c.note).toContain("libnspr4.so");
+    const r = Object.fromEntries(readiness([c]).map((g) => [g.commands, g.ok]));
+    expect(r["replay export"]).toBe(false);
+    expect(r["map test --clips"]).toBe(false);
+    expect(r["map info|check|…"]).toBe(true);
+    expect(browserCheck("/opt/chrome", () => null).state).toBe("ok");
+  });
+
+  it("asks the browser its version, and reads what it said when it could not start", () => {
+    if (process.platform === "win32") return;
+    const run = ((_: string, args: string[]) => ({ status: 127, stdout: "", stderr: `/opt/chrome: error while loading shared libraries: libnspr4.so\n`, args })) as unknown as typeof import("node:child_process").spawnSync;
+    expect(browserStarts("/opt/chrome", run)).toBe("error while loading shared libraries: libnspr4.so");
+    const fine = (() => ({ status: 0, stdout: "Chromium 140\n", stderr: "" })) as unknown as typeof import("node:child_process").spawnSync;
+    expect(browserStarts("/opt/chrome", fine)).toBeNull();
+  });
+
+  it("names Claude Code's row and a thing not there as the text does, in the JSON", () => {
+    const j = doctorJson({ checks: [{ what: "MCP", state: "ok", detail: "not registered" }, { what: "Desktop app", state: "ok", detail: "\x1b[2mnot installed\x1b[0m" }, { what: "Docker", state: "ok", detail: "29.1" }], blocked: false });
+    expect(j.checks.map((c) => [c.what, c.state])).toEqual([["Claude Code", "absent"], ["Desktop app", "absent"], ["Docker", "ok"]]);
   });
 });

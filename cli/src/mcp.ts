@@ -10,7 +10,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { RequestHandlerExtra } from "@modelcontextprotocol/sdk/shared/protocol.js";
 import type { CallToolResult, ServerNotification, ServerRequest } from "@modelcontextprotocol/sdk/types.js";
 import { existsSync } from "node:fs";
-import { relative } from "node:path";
+import { isAbsolute, relative, resolve } from "node:path";
 import { z } from "zod";
 import { VERSION } from "./about";
 import { buildMap, loadTypeScript, printBuild } from "./build";
@@ -29,14 +29,14 @@ import { baselineLine, issueLine, mapReport, printIssues, printMapInfo } from ".
 import { mapKey, matchBaseline, readBaseline } from "./baseline";
 import { coverageJson, coverageScenario, printCoverage, runCoverage } from "./coverage";
 import { printReplayInfo, replayReport } from "./replay";
-import { buildOrders, replayNamer } from "./replaymod";
+import { buildOrders, checkPlayedMod, replayNamer } from "./replaymod";
 import { mapFileFor, writeReplayMap } from "./replaymap";
 import { openGameFiles } from "./gamefiles";
 import { analyzeLayout, layoutLines, layoutPicture, layoutReport, loadLayoutFiles } from "./analyze";
 import { encodePng } from "./png";
 import { DEFAULT_PNG_SCALE, loadGraphics, previewPng, tilesetOf } from "./preview";
 import { printRun, runOnMap } from "./run";
-import { costJson, gameMap, printCost, printTrace, removeGameMap, runMapInGame, traceJson, type MapRunOptions } from "./trace";
+import { costJson, gameMap, printCost, printTrace, removeGameMap, replayRun, runMapInGame, traceJson, type MapRunOptions } from "./trace";
 import { checkModSource, printModCheck } from "./mod/check";
 import { diffModSources, printModDiff } from "./mod/diff";
 import { modInfo, printModInfo } from "./mod/info";
@@ -48,7 +48,7 @@ import { unpackMod } from "./mod/unpack";
 import { writeModHeader } from "./mod/header";
 import { modOverlay } from "./mod/overlay";
 import { pageRace, playBotOf, playOnPage, playSet } from "./mod/play";
-import { CliError, pc, visible } from "./ui";
+import { CliError, plural, visible } from "./ui";
 
 /** Where a tool's words go while the server runs: standard error, since standard output is the protocol. */
 export const STDERR = (line: string) => process.stderr.write(`${line}\n`);
@@ -63,8 +63,30 @@ function ok(lines: string[] | string, data?: unknown): CallToolResult {
 }
 /** Failures are results the model can read, not protocol errors: the command's message and its hint. */
 function failed(e: unknown): CallToolResult {
-  const text = e instanceof CliError ? `${e.message}${e.hint ? `\n${e.hint}` : ""}` : e instanceof Error ? e.message : String(e);
+  // A hint about quoting a name is for a shell; the model passes the name as it is.
+  const hint = e instanceof CliError ? e.hint?.replace(/;? ?put quotes round a name with spaces or brackets\./, ".") : null;
+  const text = e instanceof CliError ? `${e.message}${hint ? `\n${hint}` : ""}` : e instanceof Error ? e.message : String(e);
   return { isError: true, content: [{ type: "text", text }] };
+}
+
+/**
+ * The SDK's words for arguments that do not fit, said as the model reads them: "Input validation error: Invalid
+ * arguments for tool map_info: Invalid input: expected string, received undefined at path" is "map_info: `path` is
+ * missing (a string)". What it does not know stays as the SDK said it.
+ */
+export function argumentError(text: string): string {
+  const m = /^(?:MCP error -?\d+: )?Input validation error: Invalid arguments for tool (\S+): ([^]*)$/.exec(text);
+  if (!m) return text;
+  const lines = m[2].split("\n").map((l) => l.replace(/^Invalid input: /, "")
+    .replace(/^expected (\w+), received undefined at (\S+)$/, (_, kind: string, at: string) => `\`${at}\` is missing (${/^[aeiou]/.test(kind) ? "an" : "a"} ${kind})`)
+    .replace(/^expected (\w+), received (\w+) at (\S+)$/, (_, kind: string, got: string, at: string) => `\`${at}\` takes ${/^[aeiou]/.test(kind) ? "an" : "a"} ${kind}, not ${/^[aeiou]/.test(got) ? "an" : "a"} ${got}`));
+  return `${m[1]}: ${lines.join("\n")}`;
+}
+
+/** The words for arguments a tool does not take, with the ones it does: a misspelt `dry_run` must not write a map. */
+export function unknownArguments(name: string, keys: readonly string[], takes: readonly string[]): string {
+  const list = (ks: readonly string[]) => ks.map((k) => `\`${k}\``).join(", ");
+  return `${list(keys)} ${keys.length === 1 ? "is not an argument" : "are not arguments"} of ${name}: it takes ${takes.length ? list(takes) : "none"}`;
 }
 /** JSON as `--json` prints it: typed arrays and maps become plain values. */
 const toJson = (v: unknown) => JSON.parse(JSON.stringify(v, (_, x) => (x instanceof Uint8Array ? [...x] : x instanceof Map ? Object.fromEntries(x) : x)));
@@ -86,12 +108,36 @@ function noPipe(...paths: (string | undefined)[]): void {
   if (paths.includes("-")) throw new CliError("`-` (standard input or output) is not a file here: the server speaks the protocol on it.", "Name a file on this computer.", 2);
 }
 
+/** The arguments that name a file or folder on this computer (`starcraft`, the game's own folder, is not confined). */
+const PATH_ARGS = ["path", "out", "a", "b", "paths", "replays", "baseline", "mod", "map", "bot", "folder", "replay", "plugin"] as const;
+
+/**
+ * A path a tool was given that is outside `root`, the folder the server was started in: the server an AI drives keeps
+ * to that folder unless started with --allow-outside. `bot` may be a play page bot's key and `plugin` a github: or
+ * URL source; neither is a path then.
+ */
+export function outsideRoot(args: Record<string, unknown>, root: string): string | null {
+  for (const key of PATH_ARGS) {
+    const v = args[key];
+    for (const p of Array.isArray(v) ? v : [v]) {
+      if (typeof p !== "string" || p === "" || p === "-") continue;
+      if (key === "plugin" && /^(github:|https?:)/i.test(p)) continue;
+      if (key === "bot" && !/[\\/.]/.test(p)) continue;
+      const r = relative(root, resolve(root, p));
+      if (r.startsWith("..") || isAbsolute(r)) return p;
+    }
+  }
+  return null;
+}
+
 type Extra = RequestHandlerExtra<ServerRequest, ServerNotification>;
 /** Runs `fn` as a tool: its lines become the result, a CliError the error text. */
-const tool = <T>(fn: (args: T, extra: Extra) => Promise<CallToolResult>) => async (args: T, extra: Extra): Promise<CallToolResult> => {
+const tool = <T>(fn: (args: T, extra: Extra) => Promise<CallToolResult>, root: string | null = null) => async (args: T, extra: Extra): Promise<CallToolResult> => {
   try {
     const a = args as { path?: string; out?: string; a?: string; b?: string; paths?: string[] };
     noPipe(a.path, a.out, a.a, a.b, ...(a.paths ?? []));
+    const outside = root === null ? null : outsideRoot(args as Record<string, unknown>, root);
+    if (outside !== null) throw new CliError(`${outside} is outside the folder the server was started in (${root})`, "The tools read and write files in that folder only; the person can start the server with scmjs mcp --allow-outside to lift that.", 2);
     return await fn(args, extra);
   } catch (e) { return failed(e); }
 };
@@ -111,7 +157,11 @@ const WIDTH = 140;
  * Where the game tools' engine and weigher come from when not from the play page and beside the command: for tests,
  * which hand the server a staged folder and a stand-in. A person sets `SCMJS_PLAY_URL` in the client's settings instead.
  */
-export interface McpOptions { engine?: string; weigh?: string }
+export interface McpOptions {
+  engine?: string; weigh?: string;
+  /** Keep the tools' paths inside this folder (the command passes its working directory unless --allow-outside). */
+  root?: string;
+}
 
 /** What the client is told once, with the tool list: how the tools fit together. */
 export const INSTRUCTIONS = `scmJS: StarCraft: Brood War maps on this computer. Paths are files here, relative to the working directory. Start with map_info or map_dump to see what a map holds; map_check is Check Map (errors and warnings, as the editor's). Triggers and strings travel as text: map_triggers_export gives the trigger window's text form (https://docs.scmjs.dev/triggers/), which map_triggers_import takes back; strings are "<number><TAB><text>" lines. Tools that change a map write over it unless given "out"; they never renumber strings. Map text is never translated. map_preview shows the map as a picture, map_analyze reads a melee map's layout (starts, naturals, walks between starts, chokes) in a second, map_trace and map_cost run it in the game itself, and map_coverage counts which triggers fired over many replays; these need a copy of StarCraft on this computer, and doctor says whether one is there and what to install if not. replay_map writes the map a replay was played on. map_optimize makes a map smaller without changing what the game plays (a dry run unless told to write); map_balance plays games on a melee map with the person's own bots to see whether its start locations are fair, which takes minutes. Mods: mod_info says what a mod is, mod_unpack writes it as a folder of text and PNG sheets the person or you can edit, mod_check lints it, mod_diff reads two as a changelog (or one against the game), mod_pack makes the MPQ back, mod_new starts an empty one, mod_header writes a mod's ids by name for a bot made for it, and mod_play hands a mod (with a map and a bot) to the play page in the person's browser. map_trace and map_cost take a mod too.`;
@@ -123,7 +173,17 @@ export const INSTRUCTIONS = `scmJS: StarCraft: Brood War maps on this computer. 
 export function createMcpServer(options: McpOptions = {}): { server: McpServer; tools: string[] } {
   const server = new McpServer({ name: "scmjs", version: VERSION }, { instructions: INSTRUCTIONS });
   const tools: string[] = [];
-  const reg: typeof server.registerTool = (name, config, cb) => { tools.push(name); return server.registerTool(name, config, cb); };
+  const root = options.root ? resolve(options.root) : null;
+  // Every tool's arguments are checked strictly: one it does not take is an error naming those it does, never ignored.
+  const reg = ((name: string, config: { inputSchema?: z.ZodRawShape }, cb: (args: never, extra: Extra) => Promise<CallToolResult>) => {
+    tools.push(name);
+    const shape = config.inputSchema ?? {};
+    const inputSchema = z.strictObject(shape, { error: (issue) => (issue.code === "unrecognized_keys" ? unknownArguments(name, issue.keys, Object.keys(shape)) : undefined) });
+    return server.registerTool(name, { ...config, inputSchema } as never, ((args: never, extra: Extra) => (root === null ? cb(args, extra) : tool(cb, root)(args, extra))) as never);
+  }) as unknown as typeof server.registerTool;
+  // The SDK's own words for an argument that does not fit (a missing `path`), in plain terms.
+  const toolError = (server as unknown as { createToolError: (text: string) => CallToolResult }).createToolError.bind(server);
+  (server as unknown as { createToolError: (text: string) => CallToolResult }).createToolError = (text) => toolError(argumentError(text));
 
   reg("map_info", {
     title: "What a map holds",
@@ -167,10 +227,11 @@ export function createMcpServer(options: McpOptions = {}): { server: McpServer; 
   reg("map_find", {
     title: "Find in maps",
     description: `Edit ▸ Find over one or more maps: units, locations, sprites and doodads whose name holds the text, strings and triggers whose text does; a number matches an id, slot or index too. \`kinds\` narrows it to any of ${KINDS.join(", ")}.`,
-    inputSchema: { text: z.string().describe("what to look for"), paths: z.array(path).min(1), kinds: z.array(z.string()).optional(), matchCase: z.boolean().optional() },
+    inputSchema: { text: z.string().describe("what to look for"), paths: z.array(path).min(1), kinds: z.array(z.string()).optional(), in: z.array(z.string()).optional().describe("the command's --in: the same as kinds"), matchCase: z.boolean().optional(), case: z.boolean().optional().describe("the command's --case: the same as matchCase") },
     annotations: { readOnlyHint: true },
-  }, tool(async ({ text, paths, kinds, matchCase }) => {
-    const which = parseKinds(kinds?.join(","));
+  }, tool(async ({ text, paths, kinds, in: within, matchCase, case: caseToo }) => {
+    const which = parseKinds((kinds ?? within)?.join(","));
+    matchCase ??= caseToo;
     const lines: string[] = [], data: unknown[] = [];
     for (const file of paths) {
       const { input, doc } = await openMap(file);
@@ -256,9 +317,11 @@ export function createMcpServer(options: McpOptions = {}): { server: McpServer; 
   reg("map_optimize", {
     title: "Make a map smaller",
     description: "The map made smaller without changing what the game plays (scmjs map optimize): sounds nothing plays or lists, the sound list's entries for files the map lacks, other archive members nothing names, strings nothing refers to, then every member compressed again (PKWARE, which every version of the game opens, unless `compression` says zlib, which only Remastered opens). With `stripEditor` also the sections only editors read (ISOM, TILE, DD2, the sound list, switch names): the map plays the same but is harder to edit. TrigScript, Magenta and build files, the game's own members and sounds stored with ADPCM are kept; a built map keeps its scenario, an EUD map its strings. A dry run unless `write` is true: the steps, the bytes each saves and every removal.",
-    inputSchema: { path, write: z.boolean().optional().describe("write the result (over the map, or to out); a dry run otherwise"), stripEditor: z.boolean().optional(), compression: z.enum(["pkware", "zlib"]).optional(), keep: z.array(z.string()).optional().describe("archive members to keep though nothing names them; a name ending in \\ keeps a folder"), out },
+    inputSchema: { path, write: z.boolean().optional().describe("write the result (over the map, or to out); a dry run otherwise"), dryRun: z.boolean().optional().describe("the command's --dry-run: true is the dry run (the default here), false writes"), stripEditor: z.boolean().optional(), compression: z.enum(["pkware", "zlib"]).optional(), keep: z.array(z.string()).optional().describe("archive members to keep though nothing names them; a name ending in \\ keeps a folder"), out },
     annotations: { destructiveHint: true },
-  }, tool(async ({ path: file, write, stripEditor, compression, keep, out: to }) => {
+  }, tool(async ({ path: file, write: writeIt, dryRun, stripEditor, compression, keep, out: to }) => {
+    if (writeIt !== undefined && dryRun !== undefined && writeIt === dryRun) throw new CliError("write and dryRun say opposite things: give one of them", null, 2);
+    const write = writeIt ?? (dryRun === undefined ? false : !dryRun);
     const input = await readInput(file);
     expectKind(input, "map");
     const r = await optimizeMap(input.bytes, input.name, { stripEditor, compression, keep });
@@ -322,18 +385,22 @@ export function createMcpServer(options: McpOptions = {}): { server: McpServer; 
   reg("map_run", {
     title: "Run a plugin over the map",
     description: "Run an editor plugin, or a script written like one (a file exporting activate(api)), over the map with the plugin API and no editor: a folder with plugin.json, a plugin.ts/.js file, github:owner/repo or a URL. `command` runs one of its commands after it starts. `dryRun` says what would change and writes nothing. The plugin runs with this computer's privileges.",
-    inputSchema: { plugin: z.string(), path, command: z.string().optional(), args: z.array(z.string()).optional(), out, dryRun: z.boolean().optional() },
+    inputSchema: { plugin: z.string(), path, command: z.string().optional(), args: z.array(z.string()).optional(), arg: z.array(z.string()).optional().describe("the command's --arg: the same as args"), out, dryRun: z.boolean().optional() },
     annotations: { destructiveHint: true, openWorldHint: true },
-  }, tool(async ({ plugin, path: file, command, args, out: to, dryRun }) => {
+  }, tool(async ({ plugin, path: file, command, args, arg, out: to, dryRun }) => {
+    if ((args ?? arg) && !command) throw new CliError("args are for `command`: name the command they go to", null, 2);
     const { input, doc } = await openMap(file);
-    const r = await runOnMap(doc, input.path, input.bytes, plugin, { command, args, out: to ?? null, dryRun: !!dryRun });
+    const r = await runOnMap(doc, input.path, input.bytes, plugin, { command, args: args ?? arg, out: to ?? null, dryRun: !!dryRun });
     return ok(printRun(input.name, r, { events: true, dryRun: !!dryRun }), { file: input.name, ...r });
   }));
 
   /** The game tools' arguments: the map, how long, the seed, the copy of the game. */
   const game = (most: number) => ({
-    path,
-    frames: z.number().int().min(1).max(most).optional().describe(`frames to run, 24 a second: ${FRAMES.toLocaleString("en")} (100 seconds of play) by default, at most ${most.toLocaleString("en")}; the game may end sooner`),
+    path: path.optional().describe("the map file: .scm, .scx or .chk; with `replay`, played in place of the replay's own (leave it out for the replay's own map)"),
+    frames: z.number().int().min(1).max(most).optional().describe(`frames to run, 24 a second: ${FRAMES.toLocaleString("en")} (100 seconds of play) by default, at most ${most.toLocaleString("en")}; the game may end sooner. With \`replay\`, to the replay's end (within the cap) by default`),
+    every: z.number().int().min(1).optional().describe("frames between progress notifications, 600 by default (the command's --every)"),
+    replay: z.string().optional().describe("play a replay's game instead (the command's --replay): its players' commands, on its own map or on `path`"),
+    order: z.boolean().optional().describe("with `replay`, list every firing in the order the game ran it"),
     seed: z.number().int().min(0).optional().describe("the game's seed, 1 by default; the same seed and map give the same run"),
     starcraft: z.string().optional().describe("the folder of the person's StarCraft installation, when doctor did not find one in the usual places"),
     all: z.boolean().optional().describe("list every trigger; a long list is cut otherwise (the data has them all)"),
@@ -343,15 +410,32 @@ export function createMcpServer(options: McpOptions = {}): { server: McpServer; 
    * Runs the map in the game for one of the two taps: the copy the game is handed, the runner's live lines to standard
    * error (standard output is the protocol), its progress as the client's progress notifications when it asked for them.
    */
-  const play = async (what: "trace" | "cost", a: { path: string; frames?: number; seed?: number; starcraft?: string; mod?: string }, extra: Extra) => {
-    noPipe(a.mod);
-    const { input, doc } = await openMap(a.path);
-    const target = await gameMap(doc, input.path, input.name);
+  const play = async (what: "trace" | "cost", a: { path?: string; frames?: number; every?: number; seed?: number; starcraft?: string; mod?: string; replay?: string; order?: boolean }, extra: Extra) => {
+    noPipe(a.mod, a.replay);
+    if (a.order && !a.replay) throw new CliError("`order` lists the firings of a replay's game: give `replay` too", null, 2);
+    if (!a.path && !a.replay) throw new CliError("Give `path`, the map, or `replay`", null, 2);
+    const named = a.path ? await openMap(a.path) : null;
+    let input: Input, doc: Awaited<ReturnType<typeof loadMapInput>> | null = named?.doc ?? null, scenario, target: { path: string | null; converted: boolean }, note: string[] = [];
+    if (a.replay) {
+      const replayInput = await readInput(a.replay);
+      expectKind(replayInput, "replay");
+      const rep = await loadReplayInput(replayInput);
+      await checkPlayedMod(rep, replayInput.name, a.mod, a.starcraft, (line) => note.push(visible(line)));
+      const run = await replayRun(rep, named && { doc: named.doc, path: named.input.path, name: named.input.name, bytes: named.input.bytes });
+      input = replayInput;
+      scenario = run.scenario;
+      target = { path: run.map, converted: run.converted };
+      if (named && run.differs) note.push(`${named.input.name} differs from the map in the replay (${run.differs}): a changed map can make the replay go out of step, and the trace says if that happens`);
+    } else {
+      input = named!.input;
+      scenario = named!.doc.scenario;
+      target = await gameMap(named!.doc, input.path, input.name);
+    }
     const overlay = a.mod ? modOverlay(a.mod, () => gameFilesOrNull(a.starcraft)) : null;
-    const frames = a.frames ?? FRAMES;
+    const frames = a.frames ?? (a.replay ? MAX_FRAMES[what] : FRAMES);
     const token = extra._meta?.progressToken;
     const o: MapRunOptions = {
-      frames, every: 600, seed: a.seed ?? 1, starcraft: a.starcraft, engine: options.engine, weigh: options.weigh,
+      frames, every: a.every ?? 600, seed: a.seed ?? 1, starcraft: a.starcraft, engine: options.engine, weigh: options.weigh, replay: a.replay ? input.path : undefined, order: a.order,
       live: (line) => STDERR(visible(line)),
       onProgress: token === undefined ? undefined : (l) => void extra.sendNotification({ method: "notifications/progress", params: { progressToken: token, progress: l.frame, total: frames, message: `frame ${l.frame} of ${frames}` } }).catch(() => {}),
       // The client cancelling the request stops the game, rather than leaving the runner to play on unheard.
@@ -359,8 +443,8 @@ export function createMcpServer(options: McpOptions = {}): { server: McpServer; 
       mod: overlay ?? undefined,
     };
     const r = await runMapInGame(target.path, what, o).finally(() => overlay?.remove());
-    const note = target.converted ? [pc.dim(`${input.name} is in the StarCraft 1.00 form, which the engine does not run: a copy converted to Brood War was run instead`)] : [];
-    return { input, doc, r, note };
+    if (target.converted) note = [`${named ? named.input.name : `The map in ${input.name}`} is in the StarCraft 1.00 form, which the engine does not run: a copy converted to Brood War was run instead`, ...note];
+    return { input, doc, scenario, r, note };
   };
   const needs = "Needs a copy of StarCraft (Remastered or 1.16.1) on this computer and the game engine, which is fetched from the play page the first time (about 25 MB to download) into the cache; doctor says whether both are there. Takes a few seconds for the default run.";
 
@@ -370,8 +454,8 @@ export function createMcpServer(options: McpOptions = {}): { server: McpServer; 
     inputSchema: game(MAX_FRAMES.trace),
     annotations: { readOnlyHint: true },
   }, tool(async (a, extra) => {
-    const { input, doc, r, note } = await play("trace", a, extra);
-    return ok([...note, ...printTrace(input.name, doc.scenario, r, { all: !!a.all, width: WIDTH })], traceJson(input.name, doc.scenario, r));
+    const { input, scenario, r, note } = await play("trace", a, extra);
+    return ok([...note, ...printTrace(input.name, scenario, r, { all: !!a.all, width: WIDTH })], traceJson(input.name, scenario, r));
   }));
 
   reg("map_cost", {
@@ -380,23 +464,25 @@ export function createMcpServer(options: McpOptions = {}): { server: McpServer; 
     inputSchema: game(MAX_FRAMES.cost),
     annotations: { readOnlyHint: true },
   }, tool(async (a, extra) => {
-    const { input, doc, r, note } = await play("cost", a, extra);
-    return ok([...note, ...printCost(input.name, doc.scenario, r, { all: !!a.all, width: WIDTH })], costJson(input.name, r));
+    const { input, scenario, r, note } = await play("cost", a, extra);
+    return ok([...note, ...printCost(input.name, scenario, r, { all: !!a.all, width: WIDTH })], costJson(input.name, r));
   }));
 
   reg("map_coverage", {
     title: "Which triggers fired in many games",
-    description: `Play each replay's game on the map in the game itself, as map_trace plays a replay, and count every trigger's firings over all of them (scmjs map coverage): for each trigger the games it fired in, how often in all and when first, then the triggers a player owned that never fired in any game, each with the condition that said no last. Replays are files or folders (sub-folders too); only Use Map Settings games of this map count (the same map, or one with the same name and size; \`force\` takes others). \`tests\` counts the map's tests (map.tests.json beside it) as games too. A game whose commands parted from the map counts only what fired before that, and the result says so. ${needs.replace(" Takes a few seconds for the default run.", "")} A replay takes about as many seconds as it has minutes of play, a few at once.`,
+    description: `Play each replay's game on the map in the game itself, as map_trace plays a replay, and count every trigger's firings over all of them (scmjs map coverage): for each trigger the games it fired in, how often in all and when first, then the triggers a player owned that never fired in any game, each with the condition that said no last. Replays are files or folders (sub-folders too); only Use Map Settings games of this map count (the same map, or one with the same name and size; \`anyMap\` takes others). \`tests\` counts the map's tests (map.tests.json beside it) as games too. A game whose commands parted from the map counts only what fired before that, and the result says so. ${needs.replace(" Takes a few seconds for the default run.", "")} A replay takes about as many seconds as it has minutes of play, a few at once.`,
     inputSchema: {
       path,
       replays: z.array(z.string()).describe("replay files (.rep) or folders of them; a tests file (.json) counts its scenarios"),
       tests: z.boolean().optional().describe("count the games of the map's tests (<map>.tests.json beside it) too"),
-      force: z.boolean().optional().describe("take replays played on another map too"),
+      anyMap: z.boolean().optional().describe("take replays played on another map too (the command's --any-map)"),
+      force: z.boolean().optional().describe("the same as anyMap, its older name"),
       starcraft: z.string().optional().describe("the folder of the person's StarCraft installation, when doctor did not find one in the usual places"),
       all: z.boolean().optional().describe("list every trigger, those no player in the games owned too"),
     },
     annotations: { readOnlyHint: true },
-  }, tool(async ({ path: file, replays, tests, force, starcraft, all }, extra) => {
+  }, tool(async ({ path: file, replays, tests, anyMap, force: forceToo, starcraft, all }, extra) => {
+    const force = anyMap ?? forceToo;
     noPipe(...replays);
     const { input, doc } = await openMap(file);
     const r = await runCoverage(input, doc, replays, { tests, force, starcraft, engine: options.engine, signal: extra.signal }, (line) => STDERR(visible(line)));
@@ -472,10 +558,12 @@ export function createMcpServer(options: McpOptions = {}): { server: McpServer; 
       path,
       scale: z.number().int().min(1).max(8).optional().describe("pixels a tile: 1, 2, 4 or 8 (4 by default)"),
       marks: z.boolean().optional().describe("units, resources and start locations over the terrain (the default); false for the terrain alone"),
+      units: z.boolean().optional().describe("the command's --no-units as units: false; the same as marks"),
       starcraft: z.string().optional().describe("the folder of the person's StarCraft installation, when doctor did not find one in the usual places"),
     },
     annotations: { readOnlyHint: true },
-  }, tool(async ({ path: file, scale, marks, starcraft }) => {
+  }, tool(async ({ path: file, scale, marks: drawMarks, units, starcraft }) => {
+    const marks = drawMarks ?? units;
     const s = scale ?? DEFAULT_PNG_SCALE;
     if (![1, 2, 4, 8].includes(s)) throw new CliError(`scale takes 1, 2, 4 or 8, not ${s}`, null, 2);
     const { input, doc } = await openMap(file);
@@ -484,7 +572,7 @@ export function createMcpServer(options: McpOptions = {}): { server: McpServer; 
     const graphics = await loadGraphics(doc.scenario, files);
     const drawn = previewPng(doc, graphics, { scale: s, marks: marks !== false });
     const facts = { file: input.name, name: mapReport(input, doc).name, size: { width: doc.scenario.width, height: doc.scenario.height }, tileset: tilesetOf(doc.scenario), picture: { width: drawn.picture.width, height: drawn.picture.height, scale: s, bytes: drawn.png.length }, drawn: drawn.counts, ms: Math.round(performance.now() - t0) };
-    const text = `${input.name}: ${facts.size.width} × ${facts.size.height}, ${facts.tileset}, drawn at ${s} px a tile (${facts.picture.width} × ${facts.picture.height}); ${facts.drawn.starts} start locations, ${facts.drawn.units} units, ${facts.drawn.buildings} buildings, ${facts.drawn.minerals} mineral fields, ${facts.drawn.geysers} geysers`;
+    const text = `${input.name}: ${facts.size.width} × ${facts.size.height}, ${facts.tileset}, drawn at ${s} px a tile (${facts.picture.width} × ${facts.picture.height}); ${plural(facts.drawn.starts, "start location")}, ${plural(facts.drawn.units, "unit")}, ${plural(facts.drawn.buildings, "building")}, ${plural(facts.drawn.minerals, "mineral field")}, ${plural(facts.drawn.geysers, "geyser")}`;
     return { content: [{ type: "image", data: Buffer.from(drawn.png).toString("base64"), mimeType: "image/png" }, { type: "text", text }], structuredContent: facts };
   }));
 
@@ -571,11 +659,11 @@ export function createMcpServer(options: McpOptions = {}): { server: McpServer; 
   reg("mod_unpack", {
     title: "A mod as a folder of text",
     description: "Write a mod as a folder of text and pictures (scmjs mod unpack): tables as PyDAT text in tables/, string tables in strings/, iscript in iscript/, the AI scripts in ai/aiscript.txt, overlays in overlays/, .graft files in grafts/, GRPs as PNG sheets in graphics/, sounds in sounds/, everything else under files/, and mod.json. A text or picture is kept only when it packs back into the same bytes; mod.json says which files were kept as bytes and why. Edit the texts, then mod_pack. Refuses a folder that is there and is not an earlier unpack.",
-    inputSchema: { path: modPath, out: z.string().describe("the folder to write"), palette: z.string().optional().describe("the tileset whose palette the GRPs are drawn with (jungle by default)"), starcraft },
+    inputSchema: { path: modPath, out: z.string().describe("the folder to write"), palette: z.string().optional().describe("the tileset whose palette the GRPs are drawn with (jungle by default)"), force: z.boolean().optional().describe("replace a mod folder that is there already, edits and all (refused otherwise); its dot files, such as .git, are kept"), starcraft },
     annotations: { destructiveHint: true },
-  }, tool(async ({ path: file, out: dir, palette, starcraft: sc }) => {
+  }, tool(async ({ path: file, out: dir, palette, force, starcraft: sc }) => {
     const base = await gameFilesOrNull(sc);
-    const r = await unpackMod(await openMod(file, base), dir, { base, palette });
+    const r = await unpackMod(await openMod(file, base), dir, { base, palette, force: !!force });
     const lines = [`${r.name}: ${r.members} files → ${shown(r.dir)}`, ...Object.entries(r.forms).map(([k, n]) => `  ${k}: ${n}`), ...r.kept.map((k) => `  kept as bytes, ${k.count}: ${k.why}`), ...r.notes];
     const { manifest: _m, ...data } = r;
     return ok(lines, data);
@@ -662,26 +750,45 @@ export function createMcpServer(options: McpOptions = {}): { server: McpServer; 
 
   reg("mod_new", {
     title: "A new mod folder",
-    description: "Start an empty mod folder (scmjs mod new): mod.json and a README. Put the game's files the mod changes under files/ at their paths, or the texts under tables/, strings/ and the rest, then mod_pack. Refuses a folder that is there and not empty.",
-    inputSchema: { path: z.string().describe("the folder to make"), name: z.string().optional().describe("the mod's name (the folder's by default)") },
+    description: "Start an empty mod folder (scmjs mod new): mod.json and a README. Put the game's files the mod changes under files/ at their paths, or the texts under tables/, strings/ and the rest, then mod_pack. Refuses a folder that is there and not empty; a mod folder that is there is replaced only with `force`.",
+    inputSchema: { path: z.string().describe("the folder to make"), name: z.string().optional().describe("the mod's name (the folder's by default)"), force: z.boolean().optional().describe("replace a mod folder that is there already, edits and all") },
     annotations: { destructiveHint: true },
-  }, tool(async ({ path: dir, name }) => {
-    const r = await newMod(dir, name);
+  }, tool(async ({ path: dir, name, force }) => {
+    const r = await newMod(dir, name, { force: !!force });
     return ok([`${r.name}: ${r.files.join(", ")} in ${shown(r.dir)}`], r);
   }));
 
   return { server, tools };
 }
 
-/** The server over standard input and output, for `scmjs mcp`; returns when the client closes the pipe. */
-export async function serveStdio(): Promise<void> {
+/**
+ * The answer JSON-RPC gives a line that is not a message: -32700 for one that is not JSON, -32600 for JSON that is
+ * not a request. The SDK's transport only reports it to the server, which answers nothing; the client then waits.
+ */
+export function unreadableLine(error: unknown): { jsonrpc: "2.0"; id: null; error: { code: number; message: string } } | null {
+  if (error instanceof SyntaxError) return { jsonrpc: "2.0", id: null, error: { code: -32700, message: `Parse error: ${error.message}` } };
+  if (error && typeof error === "object" && "issues" in error) return { jsonrpc: "2.0", id: null, error: { code: -32600, message: "Invalid Request: not a JSON-RPC 2.0 message" } };
+  return null;
+}
+
+/**
+ * The server over standard input and output, for `scmjs mcp`; returns when the client closes the pipe. Its tools keep
+ * to the folder it was started in unless `allowOutside`.
+ */
+export async function serveStdio({ allowOutside = false }: { allowOutside?: boolean } = {}): Promise<void> {
   const { StdioServerTransport } = await import("@modelcontextprotocol/sdk/server/stdio.js");
   // Standard output is the protocol from here on: anything the editor's code or a plugin would print goes to stderr.
   for (const k of ["log", "info", "debug", "warn", "error"] as const) console[k] = (...a: unknown[]) => STDERR(a.map(String).join(" "));
-  const { server, tools } = createMcpServer();
+  const { server, tools } = createMcpServer({ root: allowOutside ? undefined : process.cwd() });
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  STDERR(`scmjs ${VERSION}: MCP server on stdio, ${tools.length} tools, working directory ${process.cwd()}`);
+  const told = transport.onerror;
+  transport.onerror = (error) => {
+    const answer = unreadableLine(error);
+    if (answer) void transport.send(answer as never);
+    told?.(error);
+  };
+  STDERR(`scmjs ${VERSION}: MCP server on stdio, ${tools.length} tools, working directory ${process.cwd()}${allowOutside ? " (paths anywhere)" : " (paths inside it)"}`);
   // The transport reads stdin but does not close on its end, so the client going away is watched here: the server is
   // closed and the command returns (else Node would exit on an unsettled await with code 13).
   await new Promise<void>((resolve) => { process.stdin.once("end", resolve); server.server.onclose = resolve; });

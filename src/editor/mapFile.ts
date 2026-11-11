@@ -6,8 +6,10 @@
  * map it was built from, and the warnings the editor would show. `writeMapBytes` is the
  * reverse. The pickers, handles and downloads around them are `services/mapIo.ts`.
  */
+import { parseChk } from "../formats/chk/reader";
 import { parseScenario, type Scenario } from "../formats/chk/scenario";
-import { loadMap, readMembers, requiredSectorSize, saveMap, STAREDIT_SECTOR_SIZE, type ArchiveCompression, type MemberInfo, type StoredMembers } from "../formats/mpq/scm";
+import { SECTION_SPECS } from "../formats/chk/sections/registry";
+import { loadMap, MapLoadError, readMembers, requiredSectorSize, saveMap, SCENARIO_PATH, STAREDIT_SECTOR_SIZE, type ArchiveCompression, type MemberInfo, type StoredMembers } from "../formats/mpq/scm";
 import { referencedMembers } from "./sounds";
 import { buildMapFile, DEFAULT_SAVE_OPTIONS, MANIFEST_MEMBER, scriptMembersFromManifest, type MapFormat, type SaveOptions } from "./save";
 import { BUILD_MANIFEST_MEMBER, BUILD_SOURCE_MEMBER, readBuildManifest, restoreBuiltMap, type BuiltBy } from "./mapBuild";
@@ -50,6 +52,11 @@ export interface ArchiveContents {
  */
 export async function readArchive(bytes: Uint8Array): Promise<ArchiveContents> {
   const loaded = await loadMap(bytes);
+  if (!looksLikeScenario(loaded.chk)) {
+    throw new MapLoadError(loaded.archive
+      ? t("The archive's {path} holds no section a map has", { path: SCENARIO_PATH })
+      : t("Neither an MPQ archive nor a scenario (no section a map has)"));
+  }
   const problems: string[] = [];
   let members = { extras: new Map<string, Uint8Array>(), stored: null as StoredMembers | null };
   if (loaded.archive) {
@@ -68,6 +75,16 @@ export async function readArchive(bytes: Uint8Array): Promise<ArchiveContents> {
   return { chk: loaded.chk, ...members, origin: loaded.scenarioInfo, files: loaded.files, problems };
 }
 
+/**
+ * Whether bytes are a scenario at all: at least one whole section (its length fits in the file) of a name the game
+ * reads. Every map the game plays has several — protected ones too, since the game reads the sections the same way
+ * from the start — while a text file, an empty file or random bytes have none: their first length runs past the end.
+ * Without this, any bytes opened as a blank 64 × 64 map, and a Save wrote a map over them.
+ */
+export function looksLikeScenario(chk: Uint8Array): boolean {
+  return parseChk(chk).sections.some((s) => !s.truncated && SECTION_SPECS.has(s.name));
+}
+
 export interface WriteArchiveOptions {
   extras?: Map<string, Uint8Array>;
   /** Members carried as stored; the archive then keeps their sector size. */
@@ -77,13 +94,15 @@ export interface WriteArchiveOptions {
   encrypt?: boolean;
   /** Write a (listfile) naming the members (default on). */
   listfile?: boolean;
+  /** Carry a member read from a form the writer cannot make (an ADPCM sound) as stored while unchanged (default on). */
+  carryStored?: boolean;
 }
 
 /** The archive around a scenario's bytes as given — `readArchive` the other way; the editor's sector rule (zlib likes big sectors). */
 export function writeArchiveBytes(chk: Uint8Array, options: WriteArchiveOptions = {}): Promise<Uint8Array> {
   const compression = options.compression ?? "none";
   return saveMap(chk, {
-    extras: options.extras, stored: options.stored ?? null, compress: compression, encrypt: options.encrypt ?? false, listfile: options.listfile ?? true,
+    extras: options.extras, stored: options.stored ?? null, compress: compression, encrypt: options.encrypt ?? false, listfile: options.listfile ?? true, carryStored: options.carryStored,
     sectorSize: requiredSectorSize(options.stored, compression === "zlib" ? 0x10000 : STAREDIT_SECTOR_SIZE),
   });
 }

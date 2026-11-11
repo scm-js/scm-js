@@ -22,7 +22,7 @@ import { parseScenario, scenarioName, type Scenario } from "../../src/formats/ch
 import { MEGATILE_PX } from "../../src/formats/tileset/decode";
 import { unitName } from "../../src/data/units";
 import { GAP_COLOR, GEYSER_LANDMARK, START_LANDMARK } from "./diffpicture";
-import { cacheRoot, ensureEngine, findGameCopy, runnerFor, startRunner } from "./engine";
+import { cacheRoot, ensureEngine, findGameCopy, noResultHint, runnerFor, startRunner } from "./engine";
 import { writeOutput, type Written } from "./exchange";
 import { loadReplayInput, readInput, STDIO, type Input } from "./files";
 import { modReplayReason } from "./replaymod";
@@ -35,6 +35,7 @@ import { asciiShades, halfBlocks, inlineImage, sgr, type Depth } from "./paint";
 import { encodePng } from "./png";
 import { DEFAULT_PNG_SCALE, drawMarks, loadGraphics, mapPicture, placeMarks, PNG_SCALES, resizePicture, terminalInfo, terminalWidth, terrainPicture, tilesetOf, type GameGraphics, type Mark, type Picture, type TerminalInfo } from "./preview";
 import { clock, parseClock } from "./watch";
+import { parseWhole } from "./values";
 import { t, translate } from "./i18n";
 import { CliError, dot, gameText, mark, num, pc, size } from "./ui";
 import type { DataSetRace } from "../../src/formats/mod/races";
@@ -58,6 +59,40 @@ export function replayFiles(paths: readonly string[], deep = false): string[] {
     else out.push(p);
   }
   return out;
+}
+
+/** Why a file was left out when it could not be read as a replay at all, in a few words after its name. */
+export function unreadable(path: string, e: CliError): string {
+  if (path !== STDIO && !existsSync(path)) return t("no such file");
+  // ("x.rep is not a replay this can read: …": the name is said once, before.)
+  const name = basename(path);
+  const why = e.message.startsWith(name) ? e.message.slice(name.length).replace(/^[^:]*:\s*/, "") : e.message;
+  return t("not a replay this can read: {why}", { why });
+}
+
+/**
+ * The closing words when no replay is left to take: none were named (an empty folder), none could be read, or —
+ * the one the command words itself, `onMap` — none was played on this map. All exit 2: nothing was played.
+ */
+export function noReplays(typed: readonly string[], files: readonly string[], unread: number, onMap: () => CliError): CliError {
+  if (!files.length) return new CliError(t("No replays in {list}.", { list: typed.join(", ") }), t("Name replay files (.rep), or folders that hold them."), 2);
+  if (unread === files.length) return new CliError(files.length === 1 ? t("{file} could not be read as a replay.", { file: files[0] }) : t("None of the {n, plural, one {# file} other {# files}} could be read as a replay.", { n: files.length }), null, 2);
+  return onMap();
+}
+
+/**
+ * On a terminal, a line under the progress saying which games are being played now, rewritten as they start and
+ * end (the first game takes a while to finish); nothing when standard error is not a terminal. `say` prints a progress
+ * line over it and draws it again below.
+ */
+export function playingLine(say: (line: string) => void, stream: NodeJS.WriteStream = process.stderr) {
+  const on = !!stream.isTTY, now: string[] = [];
+  const draw = () => { if (on) stream.write(`\r\x1b[K${now.length ? pc.dim(t("playing {list}…", { list: now.join(", ") })) : ""}`); };
+  return {
+    start(file: string) { now.push(basename(file)); draw(); },
+    end(file: string) { const k = now.indexOf(basename(file)); if (k >= 0) now.splice(k, 1); draw(); },
+    say(line: string) { if (on && now.length) stream.write("\r\x1b[K"); say(line); draw(); },
+  };
 }
 
 export const sha256 = (bytes: Uint8Array): string => createHash("sha256").update(bytes).digest("hex");
@@ -129,7 +164,7 @@ export async function playForEvents(runner: string, engineDir: string, starcraft
   const code = await exited;
   if (older) throw new OlderRunner();
   if (error) throw new CliError(error);
-  if (!ev || !ended) throw new CliError(`${t("the runner stopped without a result (exit {code})", { code })}${stderr.trim() ? `: ${stderr.trim().split("\n").at(-1)}` : ""}`);
+  if (!ev || !ended) throw new CliError(`${t("the game stopped without a result (exit {code})", { code })}${stderr.trim() ? `: ${stderr.trim().split("\n").at(-1)}` : ""}`, noResultHint(engineDir));
   return ev;
 }
 
@@ -178,6 +213,8 @@ export interface HeatmapReport {
   /** Replays not counted: another map, or one the game could not play. */
   skipped: { file: string; reason: string }[];
   total: number;
+  /** What happened off this map, in a replay of a bigger one (--any-map): not in `total`, `tiles`, `units` or a replay's `count`. */
+  outside: number;
   /** Per tile with anything, the busiest first: `[x, y, n]` in tiles. */
   tiles: [number, number, number][];
   /** By unit type, the most first (deaths, kills, buildings). */
@@ -317,11 +354,14 @@ export async function heatmapMap(
   if (o.width !== undefined && o.scale !== undefined) throw new CliError(t("--width or --scale, not both"), null, 2);
   const scale = positive(o.scale, "scale", png ? (n) => (PNG_SCALES as readonly number[]).includes(n) : (n) => n > 0 && n <= 32, png ? PNG_SCALES.join(", ") : t("a number of pixels a tile, above 0 and up to 32"));
   const width = positive(o.width, "width", (n) => Number.isInteger(n) && n >= 8, t("a number of columns, 8 or more"));
-  const parallel = positive(o.parallel, "parallel", (n) => Number.isInteger(n) && n >= 1, t("a whole number of replays, 1 or more")) ?? defaultParallel();
+  const parallel = o.parallel === undefined ? defaultParallel() : parseWhole(o.parallel, "parallel", 1);
   const player = parsePlayer(o.player);
-  let until: number | undefined;
-  try { until = o.until === undefined ? undefined : parseClock(o.until); } catch { throw new CliError(t("--until takes m:ss (or h:mm:ss), not \"{value}\"", { value: String(o.until) }), null, 2); }
+  // A time on the game's clock, m:ss or h:mm:ss, or a bare number of seconds; 8:75 is a slip, said as one.
+  if (o.until !== undefined && !/^\s*\d+(:\d+){0,2}\s*$/.test(o.until)) throw new CliError(t("--until takes a time as m:ss (or h:mm:ss) or a number of seconds, not \"{value}\"", { value: o.until }), null, 2);
+  const until = o.until === undefined ? undefined : parseClock(o.until, "--until");
   if (!replayPaths.length) throw new CliError(t("Name the replays to take: files, or folders of them."), null, 2);
+  // A wrong --starcraft is said before anything is read or printed.
+  if (o.starcraft) findGameCopy(o.starcraft);
 
   // The replays, read and matched to the map.
   const mine = await mapIdentity(input.bytes, scn);
@@ -329,11 +369,13 @@ export async function heatmapMap(
   const skipped: HeatmapReport["skipped"] = [];
   const taken: { file: string; path: string; hash: string; match: MatchKind }[] = [];
   const hashes = new Set<string>();
+  let unread = 0;
   for (const path of files) {
-    const name = basename(path);
+    // The path as it was typed (a folder's replays under the folder as typed).
+    const name = path;
     try {
       const rin = await readInput(path);
-      if (rin.kind !== "replay") { skipped.push({ file: name, reason: t("not a replay") }); continue; }
+      if (rin.kind !== "replay") { unread++; skipped.push({ file: name, reason: t("not a replay") }); continue; }
       const hash = sha256(rin.bytes);
       if (hashes.has(hash)) { skipped.push({ file: name, reason: t("the same replay as one before it") }); continue; }
       hashes.add(hash);
@@ -345,14 +387,14 @@ export async function heatmapMap(
       taken.push({ file: name, path, hash, match: m.match });
     } catch (e) {
       if (!(e instanceof CliError)) throw e;
-      skipped.push({ file: name, reason: e.message.startsWith("No file ") ? t("no such file") : e.message });
+      unread++;
+      skipped.push({ file: name, reason: unreadable(path, e) });
     }
   }
   const mapName = gameText(scenarioName(scn) ?? "") || input.name;
   for (const line of skippedLines(skipped)) live(line);
   if (!taken.length) {
-    const what = files.length === 1 ? t("{file} was not played on {map}.", { file: basename(files[0]), map: mapName }) : t("None of the {n, plural, one {# replay} other {# replays}} was played on {map}.", { n: files.length, map: mapName });
-    throw new CliError(what, t("A replay counts when its map is this one, or has the same name and size; --force takes them anyway."), 2);
+    throw noReplays(replayPaths, files, unread, () => new CliError(files.length === 1 ? t("{file} was not played on {map}.", { file: files[0], map: mapName }) : t("None of the {n, plural, one {# replay} other {# replays}} was played on {map}.", { n: files.length, map: mapName }), t("A replay counts when its map is this one, or has the same name and size; --any-map takes them anyway."), 2));
   }
 
   // The cache first; the rest played, a few at once.
@@ -369,11 +411,12 @@ export async function heatmapMap(
   let engineInfo: HeatmapReport["engine"];
   const errors = new Map<number, string>();
   let done = 0;
+  const now = playingLine(live);
   const say = (k: number) => {
     done++;
     const ev = events[k];
-    const count = ev ? heatPoints([ev], { what, player, until }).games[0].count : 0;
-    live(replayLine(done, taken.length, taken[k].file, ev, { cached: cached[k], error: errors.get(k), what, count }));
+    const count = ev ? heatPoints([ev], { what, player, until, bounds: scn }).games[0].count : 0;
+    now.say(replayLine(done, taken.length, taken[k].file, ev, { cached: cached[k], error: errors.get(k), what, count }));
   };
   for (let k = 0; k < taken.length; k++) if (cached[k]) say(k);
   const t1 = performance.now();
@@ -386,6 +429,7 @@ export async function heatmapMap(
     const worker = async () => {
       while (next < toPlay.length && !older) {
         const k = toPlay[next++];
+        now.start(taken[k].file);
         try {
           const ev = await playForEvents(runner, engine.dir, game.folder, taken[k].path, o.node);
           events[k] = ev;
@@ -394,20 +438,21 @@ export async function heatmapMap(
           if (e instanceof OlderRunner) { older = true; return; }
           errors.set(k, e instanceof Error ? e.message : String(e));
         }
+        now.end(taken[k].file);
         say(k);
       }
     };
     await Promise.all(Array.from({ length: at }, worker));
-    if (older) throw new CliError(t("The engine at {dir} has a replay runner from before map heatmap.", { dir: engine.dir }), t("A play page deployed since has one; the next run fetches it (or name a newer one with --engine)."));
+    if (older) throw new CliError(t("The game engine at {dir} is from before map heatmap.", { dir: engine.dir }), t("A play page deployed since has one; the next run fetches it (or name a newer one with --engine)."));
   }
   const t2 = performance.now();
   for (const [k, reason] of errors) skipped.push({ file: taken[k].file, reason: t("the game could not play it: {reason}", { reason }) });
   if (errors.size) process.exitCode = Math.max(Number(process.exitCode ?? 0), 1);
   const played = taken.map((r, k) => ({ r, ev: events[k], k })).filter((x): x is { r: (typeof taken)[number]; ev: GameEvents; k: number } => x.ev !== null);
-  if (!played.length) throw new CliError(t("The game played none of the {n, plural, one {# replay} other {# replays}}.", { n: taken.length }), t("The replay runner is scm-sim's; your own copy of StarCraft and replays the game itself plays are what it needs."));
+  if (!played.length) throw new CliError(t("The game played none of the {n, plural, one {# replay} other {# replays}}.", { n: taken.length }), t("Your own copy of StarCraft and replays the game itself plays are what it needs."));
 
   // What is counted, where.
-  const chosen = heatPoints(played.map((p) => p.ev), { what, player, until });
+  const chosen = heatPoints(played.map((p) => p.ev), { what, player, until, bounds: scn });
   if (player !== undefined && !chosen.games.some((g) => g.player)) throw new CliError(typeof player === "number" ? t("No replay has a player {n}.", { n: player }) : t("No replay has a player called \"{name}\".", { name: player }), t("--player takes a player's number (1–8, as the map's slots) or a name as the replays have it."), 2);
   const tiles = tileCounts(chosen.points, scn.width, scn.height);
   const total = tiles.reduce((n, t) => n + t[2], 0);
@@ -418,9 +463,9 @@ export async function heatmapMap(
   const report: HeatmapReport = {
     file: input.path, name: mapName, size: { width: scn.width, height: scn.height }, what,
     ...(player !== undefined ? { player: String(player) } : {}), ...(o.until !== undefined ? { until: clock(until!) } : {}),
-    replays, skipped, total, tiles, ...(units ? { units } : {}), ...(engineInfo ? { engine: engineInfo } : {}), ms: { replays: Math.round(t2 - t1), draw: 0, total: 0 },
+    replays, skipped, total, outside: chosen.outside, tiles, ...(units ? { units } : {}), ...(engineInfo ? { engine: engineInfo } : {}), ms: { replays: Math.round(t2 - t1), draw: 0, total: 0 },
   };
-  const said = { counted: counted(what, total), who: player === undefined ? "" : typeof player === "number" ? t("player {n}", { n: player }) : player, time: until === undefined ? "" : clock(until), n: played.length };
+  const said = { counted: counted(what, total), who: player === undefined ? "" : typeof player === "number" ? t("player {n}", { n: player }) : player, time: until === undefined ? "" : clock(until), n: player === undefined ? played.length : chosen.games.filter((g) => g.player).length };
   const words = player === undefined
     ? (until === undefined ? t("{counted} in {n, plural, one {# replay} other {# replays}}", said) : t("{counted} by {time} in {n, plural, one {# replay} other {# replays}}", said))
     : (until === undefined ? t("{counted} ({who}) in {n, plural, one {# replay} other {# replays}}", said) : t("{counted} ({who}) by {time} in {n, plural, one {# replay} other {# replays}}", said));
@@ -432,7 +477,8 @@ export async function heatmapMap(
   const gameFiles: GameFiles = await openGameFiles(o.starcraft);
   const graphics = await loadGraphics(scn, gameFiles);
   const field = heatField(chosen.points, scn.width, scn.height, SPREAD[what]);
-  const caption = [words, busiest(tiles), mostUnits(units)].filter(Boolean).join(dot);
+  const off = chosen.outside ? pc.yellow(t("{n} more off this map, not counted", { n: num(chosen.outside) })) : "";
+  const caption = [words, off, busiest(tiles), mostUnits(units)].filter(Boolean).join(dot);
 
   if (png) {
     const s = scale ?? DEFAULT_PNG_SCALE;

@@ -9,9 +9,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
-  eloRatings, expected, gameLine, headToHead, ladderFolder, ladderJson, ladderLines, parseEntrants, parseRaces, raceLetter, replayName, runLadder, schedule, standings,
+  clearLadderFolder, eloRatings, expected, gameLine, headToHead, ladderFolder, ladderJson, ladderLines, parseEntrants, parseRaces, raceLetter, replayName, runLadder, schedule, standings,
   type Entrant, type GameResult, type MatchEnd, type ScheduledGame,
 } from "../cli/src/ladder";
+import { ladderValues } from "../cli/src/botrun";
 import { CliError, visible } from "../cli/src/ui";
 
 const tmp = () => mkdtempSync(join(tmpdir(), "scmjs-ladder-"));
@@ -50,6 +51,10 @@ describe("scmjs bot ladder: who plays", () => {
     expect(raceLetter("Protoss")).toBe("p");
     expect(raceLetter("x")).toBeNull();
     expect(() => parseRaces("tx")).toThrow(/"x" is not a race/);
+    // Words too, with commas, any case; one word alone.
+    expect(parseRaces("terran,Zerg")).toEqual(["t", "z"]);
+    expect(parseRaces("terran")).toEqual(["t"]);
+    expect(() => parseRaces("terran,bogus")).toThrow(/"bogus" is not a race/);
   });
 
   it("names bots by their files' headers, a race after a colon, and the computer once a race", () => {
@@ -76,6 +81,36 @@ describe("scmjs bot ladder: who plays", () => {
     expect(() => parseEntrants([botFile(dir, "c.scmbot", "c", "C")], ["r"])).toThrow(/two sides at least/);
     expect(() => parseEntrants(["computer"], ["t", "z"])).toThrow(/needs a bot/);
     try { parseEntrants(["computer:t"], ["r"]); } catch (e) { expect((e as CliError).exitCode).toBe(2); }
+    // A colon after a bot that is there: the part after it is a race mistyped.
+    const c = botFile(dir, "d.scmbot", "d", "D");
+    expect(() => parseEntrants([`${c}:x`, "computer"], ["r"])).toThrow(/d\.scmbot:x: "x" is not a race/);
+    // Another command names itself.
+    expect(() => parseEntrants(["computer"], ["t", "z"], undefined, "map balance")).toThrow(/^map balance needs a bot/);
+  });
+
+  it("refuses an --out an earlier ladder wrote unless --force, which takes its replays out", () => {
+    const dir = tmp();
+    const out = join(dir, "L");
+    clearLadderFolder(out, "L", false);
+    mkdirSync(out);
+    clearLadderFolder(out, "L", false);
+    writeFileSync(join(out, "old.rep"), "x"); writeFileSync(join(out, "ladder.json"), "{}");
+    mkdirSync(join(out, "bwapi-data")); writeFileSync(join(out, "bwapi-data", "learned.txt"), "y");
+    const e = (() => { try { clearLadderFolder(out, "L", false); } catch (x) { return x as CliError; } })();
+    expect(e?.message).toMatch(/--out L holds an earlier ladder/);
+    expect(e?.exitCode).toBe(2);
+    clearLadderFolder(out, "L", true);
+    expect(readdirSync(out)).toEqual(["bwapi-data"]);
+    const other = join(dir, "other"); mkdirSync(other); writeFileSync(join(other, "notes.txt"), "z");
+    expect(() => clearLadderFolder(other, "other", true)).toThrow(/is not a ladder's folder/);
+  });
+
+  it("reads its numbers as every command does", () => {
+    expect(ladderValues({ games: "2", frames: "1:00", parallel: "1", timeout: "60" })).toEqual({ seeds: [1, 2], frames: 1429, parallel: 1, timeout: 60 });
+    expect(ladderValues({ games: "1", seeds: "5, 7", frames: "100", parallel: "2", timeout: "5" }).seeds).toEqual([5, 7]);
+    for (const bad of [{ games: "0" }, { frames: "abc" }, { parallel: "x" }, { seeds: "a" }]) {
+      expect(() => ladderValues({ games: "1", frames: "100", parallel: "1", timeout: "60", ...bad }), JSON.stringify(bad)).toThrow(/takes/);
+    }
   });
 });
 

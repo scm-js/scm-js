@@ -76,7 +76,7 @@ export const modWords = (tag: ModTag) => `${tag.dataSet.name || t("a mod")}${vis
  */
 export function refuseModReplay(rep: Replay, file: string, command: string): void {
   if (!rep.mod) return;
-  throw new CliError(t("{file} was played with {mod}, and {command} cannot play a mod's replay yet: with the game's own files it would play another game.", { file, mod: modWords(rep.mod), command }), rep.mod.dataSet.url ? t("The mod's makers: {url}", { url: rep.mod.dataSet.url }) : null);
+  throw new CliError(t("{file} was played with {mod}, and {command} cannot play a mod's replay yet: with the game's own files it would play another game.", { file, mod: modWords(rep.mod), command }), rep.mod.dataSet.url ? t("The mod's makers: {url}", { url: rep.mod.dataSet.url }) : null, 2);
 }
 
 const opened = new Map<string, Promise<{ source: ModSource; base: GameFiles | null; hashes: ModHashes }>>();
@@ -92,7 +92,7 @@ export const modReplayReason = (rep: Replay): string | null => (rep.mod ? t("pla
 export async function checkPlayedMod(rep: Replay, file: string, mod: string | undefined, starcraft: string | undefined, warn: (line: string) => void): Promise<void> {
   if (!rep.mod) return;
   if (!mod) throw new CliError(t("{file} was played with {mod}: name the mod's folder with --mod, or the game would play another game.", { file, mod: modWords(rep.mod) }), rep.mod.dataSet.url ? t("The mod's makers: {url}", { url: rep.mod.dataSet.url }) : null, 2);
-  if (!rep.mod.noplugins && rep.mod.plugins.length) throw new CliError(t("{file} was played with the plugins of {mod}, which the engine here does not run: it would play another game.", { file, mod: modWords(rep.mod) }), null, 1);
+  if (!rep.mod.noplugins && rep.mod.plugins.length) throw new CliError(t("{file} was played with the plugins of {mod}, which the engine here does not run: it would play another game.", { file, mod: modWords(rep.mod) }), null, 2);
   await checkReplayMod(rep, file, mod, starcraft, warn);
 }
 
@@ -118,7 +118,7 @@ export async function checkReplayMod(rep: Replay, file: string, path: string, st
   if (isTaggedMod(tag.dataSet.hash, hashes)) return { source, base, hash: tag.dataSet.hash };
   throw new CliError(
     t("{mod} is not the mod {file} was played with: its data set is {hash}, the replay's is {wanted} ({name}).", { mod: source.name, file, hash, wanted: tag.dataSet.hash, name: tag.dataSet.name }),
-    tag.dataSet.url ? t("The mod's makers: {url}", { url: tag.dataSet.url }) : null, 1);
+    tag.dataSet.url ? t("The mod's makers: {url}", { url: tag.dataSet.url }) : null, 2);
 }
 
 /** `replay info`'s options for names: `--mod`, `--builds`, `--starcraft`. */
@@ -197,7 +197,8 @@ export async function replayNamer(rep: Replay, file: string, o: { mod?: string; 
     return name ? translate(name) : bare(kind, id);
   };
   const from: NamesFrom = { kind: "game", name: null, hash: null };
-  const base = o.costs ? await gameFilesOrNull(o.starcraft).catch(() => null) : null;
+  // (a copy named with --starcraft that is not one is said, as everywhere; one looked for in the usual places may be absent)
+  const base = !o.costs ? null : o.starcraft ? await gameFilesOrNull(o.starcraft) : await gameFilesOrNull(undefined).catch(() => null);
   if (base) {
     const data = await loadModData(async () => null, (n) => base.read(n), {});
     // The game's names as the editor has them (in every language it speaks), the copy's costs.

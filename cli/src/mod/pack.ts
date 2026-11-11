@@ -9,9 +9,10 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync, readFileSync } from "node:fs";
 import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import type { Writable } from "node:stream";
+import { dirname, extname, join, resolve } from "node:path";
 import { Creator } from "mopaq";
-import { DEFAULT_PALETTE, MOD_MANIFEST, ModFolderError, packFile, readManifest, type ModManifest, type PackContext } from "../../../src/formats/mod/folder";
+import { DEFAULT_PALETTE, MOD_MANIFEST, ModFolderError, packFile, type ModManifest, type PackContext } from "../../../src/formats/mod/folder";
 import { gameName, isSystemFile } from "../../../src/formats/mod/sources";
 import { isModCode } from "../../../src/formats/mod/hash";
 import { loadModData } from "../../../src/formats/mod/data";
@@ -20,7 +21,8 @@ import type { NamedPalette, QuantiseReport } from "../../../src/formats/dat/grpP
 import type { GameFiles } from "../gamefiles";
 import { t } from "../i18n";
 import { CliError } from "../ui";
-import { emptySource, type ModSource } from "./source";
+import { STDIO } from "../files";
+import { emptySource, folderManifest, type ModSource } from "./source";
 
 export type ModCompression = "zlib" | "pkware" | "none";
 export const MOD_COMPRESSIONS: readonly ModCompression[] = ["zlib", "pkware", "none"];
@@ -192,6 +194,19 @@ export interface PackModOptions extends PackFolderOptions {
   /** A loose folder to write instead of an MPQ. */
   folder?: string | null;
   compression?: ModCompression;
+  /** Where `out` `-` writes the MPQ (standard output); without it `-` is refused. */
+  stdout?: Writable;
+}
+
+/**
+ * `--out` and `--folder` as `mod pack` and `mod build` take them, checked before anything is read: one or the other,
+ * `-` (standard output) for the MPQ alone, and an MPQ's name ending in `.mpq`.
+ */
+export function checkPackOut(o: { out?: string | null; folder?: string | null; json?: boolean }): void {
+  if (o.out && o.folder) throw new CliError(t("--out and --folder: the MPQ or the loose folder, not both."), null, 2);
+  if (o.folder === STDIO) throw new CliError(t("--folder writes a folder, which cannot go to standard output."), t("Name a folder, or give --out - for the MPQ."), 2);
+  if (o.out === STDIO && o.json) throw new CliError(t("--json and the MPQ both want standard output"), t("Write the MPQ to a file with --out, or leave --json off."), 2);
+  if (o.out && o.out !== STDIO && extname(o.out).toLowerCase() !== ".mpq") throw new CliError(extname(o.out) ? t("--out names a {ext} file; the mod is written as an .mpq", { ext: extname(o.out) }) : t("--out names a file with no extension; the mod is written as an .mpq"), null, 2);
 }
 
 /** `mod pack`: the folder read and written as an MPQ or a loose folder. */
@@ -202,13 +217,21 @@ export async function packMod(dir: string, manifest: ModManifest, o: PackModOpti
     const out = resolve(o.folder);
     if (out === resolve(dir) || out.startsWith(resolve(dir) + "/")) throw new CliError(t("The loose folder would be written inside the mod folder."), t("Name a folder elsewhere with --folder."), 2);
     const bytes = await writeLoose(packed.members, out);
-    return { path: out, form: "folder", members: packed.members.length, bytes, compression: null, left: packed.left, quantised, converted: packed.converted };
+    return { path: o.folder, form: "folder", members: packed.members.length, bytes, compression: null, left: packed.left, quantised, converted: packed.converted };
   }
   const compression = o.compression ?? "zlib";
-  const out = resolve(o.out ?? `${resolve(dir).replace(/[\\/]+$/, "")}.mpq`);
   const bytes = await writeMpq(packed.members, compression);
-  await mkdir(dirname(out), { recursive: true });
-  await writeFile(out, bytes);
+  if (o.out === STDIO) {
+    const stdout = o.stdout;
+    if (!stdout) throw new CliError(t("The MPQ cannot go to standard output here."), t("Name a file for it."), 2);
+    await new Promise<void>((done, fail) => stdout.write(bytes, (e) => (e ? fail(e) : done())));
+    return { path: STDIO, form: "mpq", members: packed.members.length, bytes: bytes.length, compression, left: packed.left, quantised, converted: packed.converted };
+  }
+  const out = o.out ?? `${dir.replace(/[\\/]+$/, "")}.mpq`;
+  try {
+    await mkdir(dirname(resolve(out)), { recursive: true });
+    await writeFile(out, bytes);
+  } catch (e) { throw new CliError(t("{path} could not be written ({code})", { path: out, code: String((e as NodeJS.ErrnoException).code ?? e) }), null, 2); }
   return { path: out, form: "mpq", members: packed.members.length, bytes: bytes.length, compression, left: packed.left, quantised, converted: packed.converted };
 }
 
@@ -219,10 +242,15 @@ export async function isFolder(path: string): Promise<boolean> {
 
 /** The manifest of a folder mod unpack or mod new wrote, or a CliError saying what the folder is not. */
 export async function readModFolder(dir: string): Promise<ModManifest> {
-  let text: string;
-  try { text = await readFile(join(dir, MOD_MANIFEST), "utf8"); } catch { throw new CliError(t("{folder} has no {file}: it is not a mod folder.", { folder: dir, file: MOD_MANIFEST }), t("scmjs mod unpack <mod> <folder> makes one from a mod, scmjs mod new <folder> an empty one."), 2); }
-  let manifest: ModManifest | null;
-  try { manifest = readManifest(text); } catch (e) { throw new CliError((e as Error).message, null, 2); }
+  let s;
+  try { s = await stat(dir); } catch { throw new CliError(t("No folder {folder}", { folder: dir }), t("scmjs mod unpack <mod> <folder> makes one from a mod, scmjs mod new <folder> an empty one."), 2); }
+  if (!s.isDirectory()) throw new CliError(t("{folder} is a file, not a mod folder.", { folder: dir }), t("scmjs mod pack takes the folder scmjs mod unpack or scmjs mod new wrote."), 2);
+  if (!(await isFile(join(dir, MOD_MANIFEST)))) throw new CliError(t("{folder} has no {file}: it is not a mod folder.", { folder: dir, file: MOD_MANIFEST }), t("scmjs mod unpack <mod> <folder> makes one from a mod, scmjs mod new <folder> an empty one."), 2);
+  const manifest = await folderManifest(dir);
   if (!manifest) throw new CliError(t("{file} is not one scmjs wrote (it has no \"scmjs\" version).", { file: join(dir, MOD_MANIFEST) }), null, 2);
   return manifest;
+}
+
+async function isFile(path: string): Promise<boolean> {
+  try { return (await stat(path)).isFile(); } catch { return false; }
 }

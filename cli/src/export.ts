@@ -80,7 +80,7 @@ export function clipFormat(out: string): ClipFormat {
   if (ext === ".webm") return "webm";
   if (ext === ".mp4" || ext === ".m4v") return "mp4";
   if (ext === ".gif") return "gif";
-  throw new CliError(ext ? t("--out names a {ext} file; a clip is .webm, .mp4 or .gif", { ext }) : t("--out names a nameless file; a clip is .webm, .mp4 or .gif"), null, 2);
+  throw new CliError(ext ? t("--out names a {ext} file; a clip is .webm, .mp4 or .gif", { ext }) : t("--out names a file with no extension; a clip is .webm, .mp4 or .gif"), null, 2);
 }
 
 /** `WxH`, each even (video encoders work in pairs of pixels). */

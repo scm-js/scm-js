@@ -45,7 +45,7 @@ import { checkPlugin, devPlugin, newPlugin, printPluginCheck, type PluginCheck }
 import { printReplayInfo, replayReport } from "./replay";
 import { buildOrders, checkPlayedMod, refuseModReplay, replayNamer, type ReplayNameOptions } from "./replaymod";
 import { SCMSCX, scmscx } from "./scmscx";
-import { mapFileFor, writeReplayMap } from "./replaymap";
+import { checkMapOut, mapFileFor, writeReplayMap } from "./replaymap";
 import { printReplayShare, shareReplay } from "./replayshare";
 import { exportReplay, exportSummary, type ExportOptions } from "./export";
 import { parseClock, watchReplay, watchSummary } from "./watch";
@@ -67,12 +67,12 @@ import { checkModSource, printModCheck } from "./mod/check";
 import { diffModSources, printModDiff } from "./mod/diff";
 import { modInfo, printModInfo } from "./mod/info";
 import { newMod } from "./mod/new";
-import { gameFilesOrNull, openMod } from "./mod/open";
+import { checkModAndMap, gameFilesOrNull, openMod } from "./mod/open";
 import { sourceHash } from "./mod/hash";
 import { writeModHeader } from "./mod/header";
 import { modOverlay } from "./mod/overlay";
 import { modWords } from "./engine";
-import { MOD_COMPRESSIONS, packMod, readModFolder, type ModCompression } from "./mod/pack";
+import { checkPackOut, MOD_COMPRESSIONS, packMod, readModFolder, type ModCompression } from "./mod/pack";
 import { pageRace, playBotOf, playOnPage, playSet } from "./mod/play";
 import { unpackMod } from "./mod/unpack";
 import { shownPath } from "./mod/source";
@@ -1327,6 +1327,7 @@ written as the game had it: a bare .chk, or an archive like a new map's. Opens i
       const input = await readInput(file);
       expectKind(input, "replay");
       const out = o.out ?? mapFileFor(input.path === STDIO ? "stdin.rep" : input.path);
+      checkMapOut(out);
       const piped = out === STDIO;
       if (piped && o.json) throw new CliError(t("--json and the map both want standard output"), t("Write the map to a file with --out, or leave --json off."), 2);
       if (!piped && existsSync(out) && !o.force) throw new CliError(t("{file} is there already", { file: out }), t("--force overwrites it, --out names another file."), 2);
@@ -1500,7 +1501,7 @@ it whole (its dot files, such as .git, are kept).`))
     });
 
   modCmd.command("pack").description(t("the folder back into an MPQ the launchers load, or a loose folder")).argument("<folder>", t("a folder mod unpack or mod new wrote")).addOption(json)
-    .option("-o, --out <file>", t("the MPQ to write (<folder>.mpq beside the folder by default)"))
+    .option("-o, --out <file>", t("the MPQ to write (<folder>.mpq beside the folder by default); - for standard output"))
     .option("--folder <out>", t("write the files loose in the game's paths instead (for samase, or the play page)"))
     .option("--compression <method>", t("{methods} for every file", { methods: MOD_COMPRESSIONS.join(", ") }), "zlib")
     .addOption(starcraftOption())
@@ -1510,20 +1511,21 @@ PNG that is no longer in its palette's colours is brought to the nearest, and a 
 with ffmpeg. MPQDraft makes a self-executing mod from the MPQ; Chaoslauncher and FireGraft load it as it is.`))
     .action(async (dir: string, o: { json?: boolean; out?: string; folder?: string; compression: string; starcraft?: string }) => {
       if (!(MOD_COMPRESSIONS as readonly string[]).includes(o.compression)) throw new CliError(t("--compression takes {methods}, not \"{value}\"", { methods: MOD_COMPRESSIONS.join(", "), value: o.compression }), null, 2);
+      checkPackOut(o);
       const r = await packModFolder(dir, { out: o.out, folder: o.folder, compression: o.compression as ModCompression, starcraft: o.starcraft });
       if (o.json) { print(JSON.stringify(r, null, 2)); return; }
-      print(...printPacked(r));
+      say(r.path === STDIO, ...printPacked(r));
     });
 
-  /** Opens a folder mod unpack or mod new wrote, and packs it. */
+  /** Opens a folder mod unpack or mod new wrote, and packs it (`--out -`: the MPQ to standard output). */
   async function packModFolder(dir: string, o: { out?: string; folder?: string; compression: ModCompression; starcraft?: string }) {
     const manifest = await readModFolder(dir);
-    return packMod(dir, manifest, { out: o.out, folder: o.folder, compression: o.compression, base: await gameFilesOrNull(o.starcraft) });
+    return packMod(dir, manifest, { out: o.out, folder: o.folder, compression: o.compression, base: await gameFilesOrNull(o.starcraft), stdout: process.stdout });
   }
 
   function printPacked(r: Awaited<ReturnType<typeof packMod>>): string[] {
     return [
-      `${mark.ok} ${pc.bold(shownPath(r.path))}: ${t("{n, plural, one {# file} other {# files}}", { n: r.members })}${r.compression ? `${dot}${r.compression}` : `${dot}${t("loose")}`}${dot}${size(r.bytes)}`,
+      `${mark.ok} ${pc.bold(r.path === STDIO ? t("standard output") : shownPath(r.path))}: ${t("{n, plural, one {# file} other {# files}}", { n: r.members })}${r.compression ? `${dot}${r.compression}` : `${dot}${t("loose")}`}${dot}${size(r.bytes)}`,
       ...r.converted.map((c) => `  ${pc.dim(t("{file} converted to a WAV", { file: c }))}`),
       ...r.quantised.map((q) => `${mark.warn} ${t("{file}: {pixels, plural, one {# pixel} other {# pixels}} in {colours, plural, one {# colour} other {# colours}} not in the palette, brought to the nearest", { file: q.file, pixels: q.pixels, colours: q.colours })}`),
       ...(r.left.length ? [pc.dim(`  ${t("Left out (not in a mod's folders): {list}", { list: `${r.left.slice(0, 6).join(", ")}${r.left.length > 6 ? " …" : ""}` })}`)] : []),
@@ -1566,24 +1568,28 @@ Exits 1 when there is an error.`))
     });
 
   modCmd.command("build").description(t("check the folder, then pack it; a check error stops it")).argument("<folder>").addOption(json)
-    .option("-o, --out <file>", t("the MPQ to write (<folder>.mpq beside the folder by default)"))
+    .option("-o, --out <file>", t("the MPQ to write (<folder>.mpq beside the folder by default); - for standard output"))
     .option("--folder <out>", t("write the files loose in the game's paths instead"))
     .option("--compression <method>", t("{methods} for every file", { methods: MOD_COMPRESSIONS.join(", ") }), "zlib")
-    .option("--force", t("pack even when the check finds errors"))
+    .option("--ignore-errors", t("pack even when the check finds errors"))
+    .addOption(new Option("--force").hideHelp())
     .addOption(starcraftOption())
-    .action(async (dir: string, o: { json?: boolean; out?: string; folder?: string; compression: string; force?: boolean; starcraft?: string }) => {
+    .action(async (dir: string, o: { json?: boolean; out?: string; folder?: string; compression: string; ignoreErrors?: boolean; force?: boolean; starcraft?: string }) => {
       if (!(MOD_COMPRESSIONS as readonly string[]).includes(o.compression)) throw new CliError(t("--compression takes {methods}, not \"{value}\"", { methods: MOD_COMPRESSIONS.join(", "), value: o.compression }), null, 2);
+      checkPackOut(o);
+      const piped = o.out === STDIO;
       const base = await gameFilesOrNull(o.starcraft);
       await readModFolder(dir);
       const check = await checkModSource(await openMod(dir, base), base);
-      if (check.failed && !o.force) {
-        if (o.json) print(JSON.stringify({ check, packed: null }, null, 2)); else print(...printModCheck(check), "", `${mark.error} ${t("Not packed: the check found {n, plural, one {# error} other {# errors}}", { n: check.errors })} ${pc.dim(t("(--force packs anyway)"))}`);
+      // (--force is the old spelling of --ignore-errors, kept for scripts.)
+      if (check.failed && !o.ignoreErrors && !o.force) {
+        if (o.json) print(JSON.stringify({ check, packed: null }, null, 2)); else say(piped, ...printModCheck(check), "", `${mark.error} ${t("Not packed: the check found {n, plural, one {# error} other {# errors}}", { n: check.errors })} ${pc.dim(t("(--ignore-errors packs anyway)"))}`);
         process.exitCode = 1;
         return;
       }
       const packed = await packModFolder(dir, { out: o.out, folder: o.folder, compression: o.compression as ModCompression, starcraft: o.starcraft });
       if (o.json) { print(JSON.stringify({ check, packed }, null, 2)); return; }
-      print(...printModCheck(check), ...printPacked(packed));
+      say(piped, ...printModCheck(check), ...printPacked(packed));
     });
 
   modCmd.command("play").description(t("play the mod on the play page in your browser")).argument("<mod>", t("a folder, an .mpq, a mod's .exe, a .zip, or a folder mod unpack wrote")).addOption(json)
@@ -1652,7 +1658,7 @@ writes them into the .scmbot file, and the runners say whether the game is the m
     .addOption(new Option("--engine <where>", t("the play page's address, or a folder holding the engine (SCMJS_PLAY_URL)")).hideHelp())
     .addHelpText("after", "\n" + t(`The same as scmjs map test <map> --mod <mod>: each scenario played in the game with the mod's files over the game's.
 Needs a game engine whose runners take a mod.`))
-    .action(async (path: string, file: string, tests: string[], o: Parameters<typeof mapTestAction>[2]) => mapTestAction(file, tests, { ...o, mod: path }));
+    .action(async (path: string, file: string, tests: string[], o: Parameters<typeof mapTestAction>[2]) => { await checkModAndMap(path, file); await mapTestAction(file, tests, { ...o, mod: path }); });
 
   const plugin = program.command("plugin").description(t("start, check and run a plugin for the editor")).helpGroup(t("Plugins and bots:"));
   plugin.command("new").description(t("a plugin to start from, in a new folder")).argument("[name]", t("the plugin's name, such as \"Base Check\""))

@@ -26,10 +26,10 @@ import { archiveFiles, storageFiles, type GameFiles } from "../cli/src/gamefiles
 import { codeWords, fitWords, MOD_CODE, modArgs, MOD_OVERLAY, type Engine } from "../cli/src/engine";
 import { sourceHash } from "../cli/src/mod/hash";
 import { modInfo, printModInfo } from "../cli/src/mod/info";
-import { gameFilesOrNull, openMod } from "../cli/src/mod/open";
+import { checkModAndMap, gameFilesOrNull, openMod } from "../cli/src/mod/open";
 import { gameSource } from "../cli/src/mod/source";
 import { unpackMod } from "../cli/src/mod/unpack";
-import { packFolder, packMod, readModFolder, writeMpq } from "../cli/src/mod/pack";
+import { checkPackOut, packFolder, packMod, readModFolder, writeMpq } from "../cli/src/mod/pack";
 import { checkModSource } from "../cli/src/mod/check";
 import { diffModSources, printModDiff } from "../cli/src/mod/diff";
 import { newMod } from "../cli/src/mod/new";
@@ -38,6 +38,8 @@ import { runInNewContext } from "node:vm";
 import { gameLayer, modOverlay } from "../cli/src/mod/overlay";
 import { runMapInGame } from "../cli/src/trace";
 import { CliError, visible } from "../cli/src/ui";
+import { TEST_MAPS_DIR } from "./support/maps";
+import { PassThrough } from "node:stream";
 import { cosmonarchyPath, gameFile, gameImagePaths, haveCosmonarchy, haveGameArchives } from "./support/modFiles";
 
 const root = mkdtempSync(join(tmpdir(), "scmjs-mod-"));
@@ -207,6 +209,104 @@ describe("scmjs mod info: what a mod ships as", () => {
     // A zip's members read whether stored or deflated.
     const read = readZip(readFileSync(z));
     expect(await read[0].read()).toEqual(mod.get([...mod.keys()][0]));
+  });
+});
+
+/** What `fn` threw, for its message and exit code. */
+const thrown = async (fn: () => Promise<unknown>): Promise<CliError> => {
+  try { await fn(); } catch (e) { return e as CliError; }
+  throw new Error("nothing was thrown");
+};
+
+describe("scmjs mod: what is not a mod", () => {
+  it("says what a thing is that holds none of the game's files, in one line (exit 2)", async () => {
+    const empty = tmp("emptydir"); mkdirSync(empty);
+    const notes = tmp("notes"); mkdirSync(notes); writeFileSync(join(notes, "README.txt"), "hello");
+    const exe = join(root, "Not A Mod.exe"); writeFileSync(exe, program());
+    const replay = join(root, "a.rep"); writeFileSync(replay, concat(new Uint8Array(12), latin("seRS"), new Uint8Array(64)));
+    const cases: [string, RegExp, RegExp][] = [
+      [empty, /is an empty folder: there is no mod in it/, /Name a mod/],
+      [notes, /holds none of the game's files: it is not a mod/, /Name a mod/],
+      [exe, /has no archive in it: it is not a self-executing mod/, /Name a mod/],
+      [join(TEST_MAPS_DIR, "melee.scx"), /melee\.scx is a map, not a mod/, /scmjs map info/],
+      [join(root, "nope"), /No file or folder/, /Name a mod/],
+    ];
+    for (const [path, said, hint] of cases) {
+      const e = await thrown(() => openMod(path, null));
+      expect(e, path).toBeInstanceOf(CliError);
+      expect(e.message, path).toMatch(said);
+      expect(e.hint ?? "", path).toMatch(hint);
+      expect(e.exitCode, path).toBe(2);
+    }
+    // A replay, said as one when its first bytes are a replay's.
+    const r = await thrown(() => openMod(replay, null));
+    expect(r.exitCode).toBe(2);
+    expect(r.message).toMatch(/a\.rep is a replay, not a mod/);
+    expect(r.hint).toMatch(/scmjs replay info/);
+    // Unpacking one writes nothing: no folder, no mod.json.
+    const into = tmp("up");
+    await expect(openMod(empty, null).then((s) => unpackMod(s, into))).rejects.toThrow(/empty folder/);
+    expect(existsSync(into)).toBe(false);
+  });
+
+  it("says a mod.json that is not JSON, and a folder that is not there, in every command", async () => {
+    const mpq = join(root, "for-bad.mpq"); writeFileSync(mpq, await writeMpq(members(madeMod()), "zlib"));
+    const dir = tmp("bad4");
+    await unpackMod(await openMod(mpq, null), dir);
+    writeFileSync(join(dir, "mod.json"), "{ not json\n");
+    for (const read of [() => openMod(dir, null), () => readModFolder(dir)]) {
+      const e = await thrown(read);
+      expect(e).toBeInstanceOf(CliError);
+      expect(e.message).toMatch(/mod\.json is not valid JSON/);
+      expect(e.message).toContain(join(dir, "mod.json"));
+      expect(e.exitCode).toBe(2);
+    }
+    expect((await thrown(() => readModFolder(join(root, "nope")))).message).toMatch(/^No folder .*nope$/);
+    expect((await thrown(() => readModFolder(mpq))).message).toMatch(/is a file, not a mod folder/);
+    // A mod.json that is JSON and not scmjs's (a folder of the game's files naming itself) is read as before.
+    const own = tmp("named"); writeFolder(own, madeMod()); writeFileSync(join(own, "mod.json"), JSON.stringify({ name: "Named" }));
+    expect((await openMod(own, null)).name).toBe("Named");
+    await expect(readModFolder(own)).rejects.toThrow(/is not one scmjs wrote/);
+  });
+
+  it("says a mod and a map given the wrong way round", async () => {
+    const mpq = join(root, "swapped.mpq"); writeFileSync(mpq, await writeMpq(members(madeMod()), "zlib"));
+    const map = join(TEST_MAPS_DIR, "ums.scx");
+    await expect(checkModAndMap(mpq, map)).resolves.toBeUndefined();
+    const e = await thrown(() => checkModAndMap(map, mpq));
+    expect(e.message).toMatch(/swapped\.mpq is a mod, not a map: the mod comes first/);
+    expect(e.hint).toBe("scmjs mod test <mod> <map>");
+    expect(e.exitCode).toBe(2);
+    expect((await thrown(() => checkModAndMap(mpq, root))).message).toMatch(/is a folder, not a map/);
+  });
+
+  it("packs to standard output with --out -, and refuses what cannot be written so", async () => {
+    const mpq = join(root, "piped.mpq"); writeFileSync(mpq, await writeMpq(members(madeMod()), "zlib"));
+    const dir = tmp("piped");
+    await unpackMod(await openMod(mpq, null), dir);
+    const out = new PassThrough(); const chunks: Buffer[] = [];
+    out.on("data", (c: Buffer) => chunks.push(c));
+    const r = await packMod(dir, await readModFolder(dir), { out: "-", stdout: out });
+    expect(r.path).toBe("-");
+    expect(Buffer.concat(chunks).length).toBe(r.bytes);
+    expect(Archive.open(new Uint8Array(Buffer.concat(chunks))).files()!.length).toBe(madeMod().size);
+    expect(existsSync(join(process.cwd(), "-"))).toBe(false);
+    // Without a stream to write to (the MCP server's standard output is its protocol), - is refused.
+    await expect(packMod(dir, await readModFolder(dir), { out: "-" })).rejects.toThrow(/cannot go to standard output/);
+    // A missing folder is made.
+    const deep = join(root, "not", "there", "x.mpq");
+    expect((await packMod(dir, await readModFolder(dir), { out: deep })).path).toBe(deep);
+    expect(existsSync(deep)).toBe(true);
+    const refused = (o: Parameters<typeof checkPackOut>[0]) => { try { checkPackOut(o); return null; } catch (e) { return e as CliError; } };
+    expect(refused({ out: "-" })).toBeNull();
+    expect(refused({ out: "a.MPQ" })).toBeNull();
+    expect(refused({ folder: "loose" })).toBeNull();
+    for (const [o, said] of [[{ out: "-", json: true }, /--json and the MPQ/], [{ out: "y.mpq", folder: "x" }, /not both/], [{ folder: "-" }, /cannot go to standard output/], [{ out: "rp.json" }, /\.json file; the mod is written as an \.mpq/], [{ out: "noext" }, /no extension/]] as const) {
+      const e = refused(o);
+      expect(e, JSON.stringify(o)).toBeInstanceOf(CliError);
+      expect(e!.message).toMatch(said);
+      expect(e!.exitCode).toBe(2);
+    }
   });
 });
 

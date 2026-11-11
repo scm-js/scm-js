@@ -152,7 +152,7 @@ export async function unpackMod(source: ModSource, dir: string, o: UnpackOptions
   tidyManifest(manifest);
   await writeFile(join(out, MOD_MANIFEST), `${JSON.stringify(manifest, null, 2)}\n`);
   return {
-    dir: out, source: source.path, name: manifest.name, members: written, forms,
+    dir, source: source.path, name: manifest.name, members: written, forms,
     kept: manifest.kept.map((k) => ({ why: k.why, count: k.files.length, files: k.files })),
     plugins: manifest.plugins.length, firegraft: manifest.firegraft.length, bytes, notes: manifest.notes,
     names: manifest.names, palette: palette ? paletteName : null, left: source.left, manifest,

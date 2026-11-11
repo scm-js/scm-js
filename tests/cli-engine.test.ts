@@ -7,8 +7,9 @@ import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSy
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it, vi } from "vitest";
-import { ensureEngine } from "../cli/src/engine";
-import { stagedEngine } from "./support/mapRunner";
+import { ensureEngine, findGameCopy } from "../cli/src/engine";
+import { CliError } from "../cli/src/ui";
+import { classicCopy, stagedEngine } from "./support/mapRunner";
 
 const made: string[] = [];
 const tmp = () => { const d = mkdtempSync(join(tmpdir(), "scmjs-engine-test-")); made.push(d); return d; };
@@ -47,5 +48,27 @@ describe("scmjs: the engine's cache", () => {
     const quiet = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
     try { await ensureEngine(url, cache); } finally { quiet.mockRestore(); }
     expect(readdirSync(build).sort()).toEqual(["base-s1.bin", "core.js", "game.js", "interface.bin", "map-beef0001.cjs", "run-feedface.cjs"]);
+  });
+});
+
+describe("scmjs: the copy of the game", () => {
+  it("refuses a folder that is no copy with exit 2, and says when SCMJS_STARCRAFT names none", () => {
+    const refused = (f: () => unknown) => { try { f(); } catch (e) { return e as CliError; } throw new Error("not refused"); };
+    expect(refused(() => findGameCopy(tmp()))).toMatchObject({ exitCode: 2, message: expect.stringMatching(/is not a copy of StarCraft/) });
+    const copy = classicCopy(tmp());
+    const before = process.env.SCMJS_STARCRAFT;
+    const err = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    try {
+      process.env.SCMJS_STARCRAFT = join(tmp(), "nowhere");
+      // The usual places may hold a copy on this computer, or not: either way the setting is not taken in silence.
+      let found: string | null = null;
+      try { found = findGameCopy(undefined).folder; } catch (e) { expect(e).toMatchObject({ exitCode: 2, message: expect.stringMatching(/SCMJS_STARCRAFT names .*nowhere, which is not a copy of StarCraft/) }); }
+      if (found) expect(String(err.mock.calls[0]?.[0])).toMatch(/SCMJS_STARCRAFT names .*nowhere, which is not a copy of StarCraft; playing with the one in /);
+      process.env.SCMJS_STARCRAFT = copy;
+      expect(findGameCopy(undefined)).toEqual({ folder: copy, kind: "classic" });
+    } finally {
+      err.mockRestore();
+      if (before === undefined) delete process.env.SCMJS_STARCRAFT; else process.env.SCMJS_STARCRAFT = before;
+    }
   });
 });

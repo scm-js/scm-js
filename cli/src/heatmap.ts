@@ -322,6 +322,8 @@ export async function heatmapMap(
   let until: number | undefined;
   try { until = o.until === undefined ? undefined : parseClock(o.until); } catch { throw new CliError(t("--until takes m:ss (or h:mm:ss), not \"{value}\"", { value: String(o.until) }), null, 2); }
   if (!replayPaths.length) throw new CliError(t("Name the replays to take: files, or folders of them."), null, 2);
+  // A wrong --starcraft is said before anything is read or printed.
+  if (o.starcraft) findGameCopy(o.starcraft);
 
   // The replays, read and matched to the map.
   const mine = await mapIdentity(input.bytes, scn);

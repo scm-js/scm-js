@@ -184,6 +184,8 @@ export async function runCoverage(input: Input, doc: OpenedMap, sources: readonl
   }
   const replayPaths = sources.filter((s) => !/\.json$/i.test(s));
   if (!replayPaths.length && !testFiles.length) throw new CliError(t("Name the replays to count: files, or folders of them (and --tests for the map's tests)."), null, 2);
+  // The copy of the game first: a wrong --starcraft is said before anything is read or printed.
+  const game = findGameCopy(o.starcraft);
   const scn = await gameScenario(input.bytes, input.name);
   const rows = readTriggers(scn).length;
 
@@ -233,7 +235,6 @@ export async function runCoverage(input: Input, doc: OpenedMap, sources: readonl
   const replays = t("{n, plural, one {# replay} other {# replays}}", { n: taken.length }), tests = t("{n, plural, one {# test scenario} other {# test scenarios}}", { n: scenarios.length });
   const toPlay = taken.length && scenarios.length ? t("{replays} and {tests} to play", { replays, tests }) : t("{what} to play", { what: taken.length ? replays : tests });
   live(`${pc.bold(input.name)}${dot}${t("{n, plural, one {# trigger} other {# triggers}}", { n: rows })}${dot}${toPlay}${taken.length > 1 && parallel > 1 ? t(", {n} at a time", { n: Math.min(parallel, taken.length) }) : ""}`);
-  const game = findGameCopy(o.starcraft);
   const engine: Engine = await ensureEngine(o.engine, undefined, live);
   let done = 0;
 

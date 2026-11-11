@@ -277,18 +277,30 @@ export function usualGameFolders(env = process.env): string[] {
   return [...new Set(out)];
 }
 
-/** The copy of the game to play with: the one named, else the first usual folder that holds one. */
+/** Said once a run: SCMJS_STARCRAFT names a folder that holds no copy of the game. */
+let saidSetting = false;
+
+/**
+ * The copy of the game to play with: the one named, else the first usual folder that holds one. None is a mistake the
+ * person fixes before anything plays (exit 2), as is a `SCMJS_STARCRAFT` that names no copy, which is said on standard
+ * error with the copy used instead.
+ */
 export function findGameCopy(named: string | undefined): { folder: string; kind: "remastered" | "classic" } {
   if (named) {
     const kind = gameCopyKind(resolve(named));
-    if (!kind) throw new CliError(t("{folder} is not a copy of StarCraft.", { folder: named }), t("A Remastered installation (with .build.info) or a 1.16.1 one (StarDat.mpq and BrooDat.mpq)."));
+    if (!kind) throw new CliError(t("{folder} is not a copy of StarCraft.", { folder: named }), t("A Remastered installation (with .build.info) or a 1.16.1 one (StarDat.mpq and BrooDat.mpq)."), 2);
     return { folder: resolve(named), kind };
   }
+  const setting = process.env.SCMJS_STARCRAFT;
+  const settingBad = !!setting && !gameCopyKind(resolve(setting));
   for (const folder of usualGameFolders()) {
     const kind = gameCopyKind(folder);
-    if (kind) return { folder, kind };
+    if (!kind) continue;
+    if (settingBad && !saidSetting) { saidSetting = true; process.stderr.write(`${mark.warn} ${t("SCMJS_STARCRAFT names {setting}, which is not a copy of StarCraft; playing with the one in {folder}.", { setting: setting!, folder })}\n`); }
+    return { folder, kind };
   }
-  throw new CliError(t("No copy of StarCraft was found on this computer."), t("The game plays with your own installation's files: name its folder with --starcraft (or SCMJS_STARCRAFT)."));
+  if (settingBad) throw new CliError(t("SCMJS_STARCRAFT names {setting}, which is not a copy of StarCraft, and there is none in the usual places.", { setting: setting! }), t("A Remastered installation (with .build.info) or a 1.16.1 one (StarDat.mpq and BrooDat.mpq)."), 2);
+  throw new CliError(t("No copy of StarCraft was found on this computer."), t("The game plays with your own installation's files: name its folder with --starcraft (or SCMJS_STARCRAFT)."), 2);
 }
 
 /**

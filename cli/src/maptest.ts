@@ -375,7 +375,7 @@ function expectationOf(e: Raw, names: Names, counts: RunnerCount[], where: strin
     const is = compareOf(e.is ?? true, `${where}.is`, true);
     counts.push({ player, unit, location });
     const said = { player: names.playerName(player), compare: compareWords(is), unit: names.unitName(unit) };
-    return { kind: "units", query: counts.length - 1, is, what: location ? t("{player} has {compare} {unit} in {location}", { ...said, location: names.locationName(location) }) : t("{player} has {compare} {unit}", said) };
+    return { kind: "units", query: counts.length - 1, is, what: location ? t("{unit} of {player} in {location}: {compare}", { ...said, location: names.locationName(location) }) : t("{unit} of {player}: {compare}", said) };
   }
   if ("text" in e) {
     if (typeof e.text !== "string" || !e.text) throw bad(`${where}.text`, t("takes the text to look for"));
@@ -728,6 +728,12 @@ export function testHeader(mapName: string, rows: number, scenarios: PlannedScen
 }
 
 /** The closing line: all passed, or how many failed. */
+/** `-u` takes only scenarios that play a replay: the ones it left alone, by name, when there are any. */
+export function updateSkipped(scenarios: readonly Pick<PlannedScenario, "name" | "replay">[]): string | null {
+  const steps = scenarios.filter((s) => !s.replay).map((s) => JSON.stringify(s.name));
+  return steps.length ? t("-u rewrites only scenarios that play a replay; left as they are: {names}", { names: steps.join(", ") }) : null;
+}
+
 export function testSummary(run: Pick<TestRun, "scenarios" | "ms">): string {
   const failed = run.scenarios.filter((s) => !s.ok).length, n = run.scenarios.length;
   const time = pc.dim(`(${seconds(run.ms)})`);
@@ -739,7 +745,8 @@ export function testSummary(run: Pick<TestRun, "scenarios" | "ms">): string {
 /** `map test --json`: every scenario with its results, and where the engine and the game came from. */
 export function testJson(mapFile: string, run: TestRun) {
   const failed = run.scenarios.filter((s) => !s.ok).length;
-  return { file: mapFile, passed: run.scenarios.length - failed, failed, scenarios: run.scenarios, engine: run.engine, game: run.game, ...(run.start?.mod ? { mod: run.start.mod } : {}), ms: run.ms };
+  // Whole milliseconds, a scenario's and the run's.
+  return { file: mapFile, passed: run.scenarios.length - failed, failed, scenarios: run.scenarios.map((s) => ({ ...s, ms: Math.round(s.ms) })), engine: run.engine, game: run.game, ...(run.start?.mod ? { mod: run.start.mod } : {}), ms: Math.round(run.ms) };
 }
 
 /** The map file's scenario as the game runs it (a built map's built one) and its other members, for the copies. */
@@ -890,7 +897,7 @@ export async function recordTest(mapName: string, map: { chk: Uint8Array } & Pic
   if (at < 0) list.push(scenario); else list[at] = scenario;
   writeFileSync(testsFile, `${formatTests(doc)}\n`);
   const r = run.scenarios[0];
-  return { file: testsFile, map: mapName, name: o.name, replaced: at >= 0, frames, frame: r.frame, parted: r.parted, expect: kept, engine: run.engine, game: run.game, ms: run.ms };
+  return { file: testsFile, map: mapName, name: o.name, replaced: at >= 0, frames, frame: r.frame, parted: r.parted, expect: kept, engine: run.engine, game: run.game, ms: Math.round(run.ms) };
 }
 
 /** How many expectations of a kind `map test record` wrote, in words. */

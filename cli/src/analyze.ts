@@ -671,12 +671,12 @@ export function layoutReport(input: Pick<Input, "path" | "name">, scn: Scenario,
 
 /**
  * `scmjs map analyze`: the copy of the game opened, the map's ground read and analysed, the report's lines, and the
- * picture written when `--picture` names a file (`-` for standard output, the words then on standard error).
+ * picture written when `--out` names a file (`-` for standard output, the words then on standard error).
  */
 export async function analyzeMap(input: Input, map: OpenedMap, o: AnalyzeOptions, stdout: Writable = process.stdout): Promise<{ report: AnalyzeReport; lines: string[] }> {
   const t0 = performance.now();
   const scn = map.scenario;
-  if (o.scale !== undefined && o.picture === undefined) throw new CliError(t("--scale is the picture's: give --picture a file to write too"), null, 2);
+  if (o.scale !== undefined && o.picture === undefined) throw new CliError(t("--scale is the picture's: give --out a file to write too"), null, 2);
   const scale = o.scale === undefined ? DEFAULT_PNG_SCALE : Number(o.scale);
   if (!(PNG_SCALES as readonly number[]).includes(scale)) throw new CliError(t("--scale takes {scales}, not \"{value}\"", { scales: PNG_SCALES.join(", "), value: String(o.scale) }), null, 2);
   const count = startPlaces(map).length;

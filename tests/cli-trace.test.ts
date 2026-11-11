@@ -151,7 +151,7 @@ describe("scmjs map trace | cost: the runner", () => {
     const scn = await ums();
     const lines = plain(printCost("ums.scx", scn, r, { width: 120 }));
     expect(lines[0]).toMatch(/^✔ ums\.scx: triggers cost 0\.024 ms a frame on average where they ran \(10 of 308 frames\), 0\.024 ms at the most \(frame 2: 6 records, 3 triggers\)$/);
-    expect(lines[1]).toMatch(/smooth to about 15 ms of triggers a frame, slows past 37 ms/);
+    expect(lines[1]).toMatch(/smooth to about 15 ms of triggers a frame, slows past 36\.6 ms/);
     expect(lines[2]).toMatch(/^ {2}20 of the records ran in no trigger of the map — a program's own \(TrigScript, eudplib\), 0\.010 ms in all$/);
     expect(rep.ungrouped).toEqual({ records: 20, ms: 0.01 });
     expect(lines[4]).toBe("  Costliest triggers, a frame they ran in");

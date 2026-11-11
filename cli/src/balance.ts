@@ -332,8 +332,9 @@ export function mirrorOnce(games: readonly ScheduledGame[], entrants: readonly E
 }
 
 /** The line a game gets as it ends. */
-export function balanceLine(g: BalanceGame, entrants: readonly Entrant[], starts: readonly StartPlace[], total: number): string {
-  const at = pc.dim(`${String(g.game.index).padStart(String(total).length)}/${total}`);
+export function balanceLine(g: BalanceGame, entrants: readonly Entrant[], starts: readonly StartPlace[], total: number, done = g.game.index): string {
+  // How many are done of all, as games finish in any order a few at once (as map heatmap and map coverage count).
+  const at = pc.dim(`${String(done).padStart(String(total).length)}/${total}`);
   const r = g.result;
   const side = (k: number) => {
     const st = g.starts[k];
@@ -378,7 +379,7 @@ export async function runBalance(file: string, mapPath: string, doc: OpenedMap, 
   if (keep && !existsSync(out)) madeFolder(out);
   mkdirSync(out, { recursive: true });
   const data = join(out, "bwapi-data");
-  say(`${pc.bold(t("{n, plural, one {# game} other {# games}}", { n: games.length }))}${dot}${entrants.map((e) => e.label).join(" vs ")}${dot}${t("{n, plural, one {# start location} other {# start locations}}", { n: starts.length })}${dot}${engine.build}${o.parallel && o.parallel > 1 ? `${dot}${t("{n} at once", { n: o.parallel })}` : ""}`);
+  say(`${pc.bold(t("{n, plural, one {# game} other {# games}}", { n: games.length }))}${dot}${entrants.map((e) => e.label).join(" vs ")}${dot}${t("{n, plural, one {# start location} other {# start locations}}", { n: starts.length })}${dot}${engine.build}${Math.min(o.parallel ?? defaultParallel(), games.length) > 1 ? `${dot}${t("{n} at once", { n: Math.min(o.parallel ?? defaultParallel(), games.length) })}` : ""}`);
 
   const done: BalanceGame[] = [];
   const parallel = Math.max(1, Math.min(o.parallel ?? defaultParallel(), games.length));
@@ -395,7 +396,7 @@ export async function runBalance(file: string, mapPath: string, doc: OpenedMap, 
         }
         const b = readGame(g, result, ev, starts, unread);
         done.push(b);
-        say(balanceLine(b, entrants, starts, games.length));
+        say(balanceLine(b, entrants, starts, games.length, done.length));
       }
     };
     await Promise.all(Array.from({ length: parallel }, worker));
@@ -405,7 +406,7 @@ export async function runBalance(file: string, mapPath: string, doc: OpenedMap, 
   done.sort((a, b) => a.game.index - b.game.index);
   return {
     report: balanceReport(file, doc, starts, entrants, done, rush),
-    engine: { build: engine.build, dir: engine.dir, fetched: engine.fetched }, game, out: keep ? out : null, ms: performance.now() - t0, rushError,
+    engine: { build: engine.build, dir: engine.dir, fetched: engine.fetched }, game, out: keep ? out : null, ms: Math.round(performance.now() - t0), rushError,
   };
 }
 
@@ -446,10 +447,13 @@ the other side. Rush: the average walk to the other starts (map rush). t: tiles 
 }
 
 /** `--json`: the report, the games without their runner lines, where the engine and the game came from. */
+const RACE_WORD: Record<string, string> = { z: "zerg", t: "terran", p: "protoss", r: "random" };
+
 export function balanceJson(r: BalanceOutcome) {
   const rep = r.report;
   return {
-    file: rep.file, map: rep.map, sides: rep.sides,
+    // A side's race as the games' sides give it (the word), its letter beside.
+    file: rep.file, map: rep.map, sides: rep.sides.map((s) => ({ ...s, race: s.race ? RACE_WORD[s.race] ?? s.race : null, raceLetter: s.race })),
     starts: rep.starts,
     pairs: rep.pairs.map((p) => ({ a: rep.starts[p.a].player, b: rep.starts[p.b].player, games: p.games })),
     verdict: { ...rep.verdict, start: rep.verdict.start === null ? null : rep.starts[rep.verdict.start].player },

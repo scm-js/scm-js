@@ -232,7 +232,7 @@ export function rushReport(file: string, r: RushOutcome): RushReport {
 
 /** `map rush --json`: the report, with where the engine and the game came from and the run's times. */
 export function rushJson(file: string, r: RushOutcome) {
-  return { ...rushReport(file, r), seed: r.start.seed, engine: r.engine, game: r.game, ms: r.end.ms };
+  return { ...rushReport(file, r), seed: r.start.seed, engine: r.engine, game: r.game, ms: Object.fromEntries(Object.entries(r.end.ms).map(([k, v]) => [k, Math.round(v)])) as RushEndLine["ms"] };
 }
 
 const seconds = (s: number) => `${s.toFixed(1)} s`;

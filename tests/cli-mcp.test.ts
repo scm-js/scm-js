@@ -212,7 +212,7 @@ describe("scmjs mcp: map_check with a baseline, map_coverage", () => {
       expect(r.isError).toBeFalsy();
       expect(stdout).not.toHaveBeenCalled();
       expect(stderr.mock.calls.map((c) => String(c[0]))).toEqual(expect.arrayContaining([expect.stringMatching(/^ums\.scx · 3 triggers · 2 replays to play/)]));
-      expect(text(r).split("\n")[0]).toBe("▲ ums.scx: 2 of 3 triggers fired in 2 games; 1 never fired");
+      expect(text(r).split("\n")[0]).toMatch(/^▲ (.*\/)?ums\.scx: 2 of 3 triggers fired in 2 games; 1 never fired$/);
       expect(text(r)).toMatch(/1 game parted from the map: parted\.rep at 0:21/);
       const data = r.structuredContent as { games: { name: string }[]; rows: { number: number; fired: number; why?: string }[] };
       expect(data.games).toHaveLength(2);

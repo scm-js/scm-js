@@ -29,7 +29,7 @@ import { assetFile, INSTALL } from "./runtime";
 import { diffMaps, summarizeDiff } from "./diff";
 import { GAME_TYPES } from "./replay";
 import { t, translate } from "./i18n";
-import { CliError, columns, dot, duration, mark, num, pc, table } from "./ui";
+import { CliError, columns, dot, duration, mark, num, pc, table, visible } from "./ui";
 
 /* ── The runner's lines (scm-sim's src/exact/runMap.ts) ──────── */
 
@@ -216,7 +216,7 @@ async function runMap(map: string | null, what: "trace" | "cost", o: MapRunOptio
         start = l; o.live?.(wordStart(l));
         if (l.mod) o.live?.(modWords(l.mod));
       }
-      else if (l.kind === "progress") { progress.push(l); o.onProgress?.(l); o.live?.(`  ${pc.dim(`${start?.mode === "replay" ? `${gameClock(l.frame).padStart(5)}  ` : ""}${t("frame {frame}  {n, plural, one {# pass} other {# passes}} of the triggers", { frame: String(l.frame).padStart(6), n: l.passes })}`)}`); }
+      else if (l.kind === "progress") { progress.push(l); o.onProgress?.(l); o.live?.(`  ${pc.dim(`${start?.mode === "replay" ? `${gameClock(l.frame).padStart(5)}  ` : ""}${t("frame {frame}  {n, plural, one {# pass} other {# passes}} of the triggers", { frame: num(l.frame).padStart(7), n: l.passes })}`)}`); }
       else if (l.kind === "end") end = l;
       else if (l.kind === "error") error = l.message;
     }
@@ -333,9 +333,18 @@ export function traceReport(file: string, scn: Scenario, r: MapRunOutcome): Trac
   return { file, rows: summarizeRows(r.end.trace ?? [], rows), passes: r.end.passes, frame: r.end.frame, ended: r.end.ended, reason: endReason(r.end.reason), ...endDetail(r.end.reason), ...(replay ? { replay } : {}), ...(r.start?.mod ? { mod: r.start.mod } : {}) };
 }
 
-/** `map trace --json`: the report, with where the engine and the game came from, every copy's line and the run's times. */
+/** A run's times in whole milliseconds, each key kept. */
+export const wholeMs = <T extends object>(o: T): T => Object.fromEntries(Object.entries(o).map(([k, v]) => [k, typeof v === "number" ? Math.round(v) : v])) as T;
+/** Milliseconds as the text gives them: five places under a thousandth, three under a tenth, else two. */
+export const msAsSaid = (x: number) => Number(x > 0 && x < 0.001 ? x.toFixed(5) : x > 0 && x < 0.1 ? x.toFixed(3) : x.toFixed(2));
+
+/**
+ * `map trace --json`: the report, each trigger with its number as the text gives it (from 1), its text and its players
+ * from 1 (`players` stays 0-based), where the engine and the game came from, every copy's line and the run's times.
+ */
 export function traceJson(file: string, scn: Scenario, r: MapRunOutcome) {
-  return { ...traceReport(file, scn, r), engine: r.engine, game: r.game, copies: r.end.trace, ms: r.end.ms };
+  const rep = traceReport(file, scn, r);
+  return { ...rep, rows: rep.rows.map((s) => ({ number: s.row + 1, ...s, playerNumbers: s.players.map((p) => p + 1), text: visible(rowText(scn, s.row, 160)) })), engine: r.engine, game: r.game, copies: r.end.trace, ms: wholeMs(r.end.ms) };
 }
 
 /** Why a row never fired, in words. */
@@ -382,7 +391,9 @@ export function printTrace(file: string, scn: Scenario, r: MapRunOutcome, { all 
   if (listed.length > shown.length) out.push(pc.dim(`  ${t("… and {n} more (--all lists them)", { n: num(listed.length - shown.length) })}`));
   if (never.length) {
     out.push("", pc.dim(`  ${t("Never fired ({n} of {total})", { n: never.length, total: listed.length })}`));
-    for (const s of never.slice(0, all ? Infinity : 20)) out.push(`  ${pc.yellow("▸")} ${pc.dim(`#${s.row + 1}`)}  ${rowText(scn, s.row, Math.max(30, width - 10))}`, `      ${pc.dim(neverWhy(s))}`);
+    // The numbers padded to the widest, so the triggers' text lines up past #9.
+    const listedNever = never.slice(0, all ? Infinity : 20), wide = Math.max(...listedNever.map((s) => String(s.row + 1).length));
+    for (const s of listedNever) out.push(`  ${pc.yellow("▸")} ${pc.dim(`#${String(s.row + 1).padEnd(wide)}`)}  ${rowText(scn, s.row, Math.max(30, width - 10 - wide))}`, `      ${pc.dim(neverWhy(s))}`);
     if (never.length > 20 && !all) out.push(pc.dim(`  ${t("… and {n} more (--all lists them)", { n: num(never.length - 20) })}`));
   }
   if (replay?.order) out.push("", ...orderLines(scn, replay, { all, width }));
@@ -468,18 +479,19 @@ export function costReport(file: string, r: MapRunOutcome): CostReport {
   if (!c) throw new CliError(t("The game counted no cost."));
   const ran = c.ns.map((n, i) => [n, i] as const).filter(([n]) => n > 0);
   const peak = ran.reduce((best, x) => (x[0] > best[0] ? x : best), [0, -1] as readonly [number, number]);
-  const rows = c.rows.map((x) => ({ row: x.row, msAFrame: x.ns / 1e6 / Math.max(1, x.frames), frames: x.frames, records: x.conditions + x.actions, triggers: x.triggers, peakMs: x.peakNs / 1e6 })).sort((a, b) => b.msAFrame - a.msAFrame || b.records - a.records);
+  const rows = c.rows.map((x) => ({ row: x.row, msAFrame: msAsSaid(x.ns / 1e6 / Math.max(1, x.frames)), frames: x.frames, records: x.conditions + x.actions, triggers: x.triggers, peakMs: msAsSaid(x.peakNs / 1e6) })).sort((a, b) => b.msAFrame - a.msAFrame || b.records - a.records);
   return {
     file, frames: c.ns.length, ranIn: ran.length,
-    averageMs: ran.length ? ran.reduce((n, [x]) => n + x, 0) / 1e6 / ran.length : 0,
-    peakMs: peak[0] / 1e6, peakFrame: peak[1] >= 0 ? peak[1] + c.from : -1, peakRecords: peak[1] >= 0 ? c.records[peak[1]] : 0, peakTriggers: peak[1] >= 0 ? c.triggers[peak[1]] : 0,
-    limits: c.limits, ungrouped: { records: c.ungroupedRecords.reduce((n, x) => n + x, 0), ms: c.ungroupedNs.reduce((n, x) => n + x, 0) / 1e6 }, rows,
+    averageMs: msAsSaid(ran.length ? ran.reduce((n, [x]) => n + x, 0) / 1e6 / ran.length : 0),
+    peakMs: msAsSaid(peak[0] / 1e6), peakFrame: peak[1] >= 0 ? peak[1] + c.from : -1, peakRecords: peak[1] >= 0 ? c.records[peak[1]] : 0, peakTriggers: peak[1] >= 0 ? c.triggers[peak[1]] : 0,
+    limits: c.limits, ungrouped: { records: c.ungroupedRecords.reduce((n, x) => n + x, 0), ms: msAsSaid(c.ungroupedNs.reduce((n, x) => n + x, 0) / 1e6) }, rows,
   };
 }
 
-/** `map cost --json`: the report, with where the engine and the game came from, the frame-by-frame series and the run's times. */
-export function costJson(file: string, r: MapRunOutcome) {
-  return { ...costReport(file, r), ...(r.start?.mod ? { mod: r.start.mod } : {}), engine: r.engine, game: r.game, series: r.end.cost, ms: r.end.ms };
+/** `map cost --json`: the report (each trigger with its number from 1 and its text), where the engine and the game came from, the frame-by-frame series and the run's times. */
+export function costJson(file: string, r: MapRunOutcome, scn?: Scenario) {
+  const rep = costReport(file, r);
+  return { ...rep, rows: rep.rows.map((x) => ({ number: x.row + 1, ...x, ...(scn ? { text: visible(rowText(scn, x.row, 160)) } : {}) })), ...(r.start?.mod ? { mod: r.start.mod } : {}), engine: r.engine, game: r.game, series: r.end.cost, ms: wholeMs(r.end.ms) };
 }
 
 /** Milliseconds, with the digits a small number needs (a trigger of three records is a hundredth of a microsecond). */
@@ -496,7 +508,7 @@ export function printCost(file: string, scn: Scenario, r: MapRunOutcome, { all =
       peakAt: pc.dim(t("(frame {frame}: {records, plural, one {# record} other {# records}}, {triggers, plural, one {# trigger} other {# triggers}})", { frame: num(rep.peakFrame), records: rep.peakRecords, triggers: rep.peakTriggers })),
     })}`,
   ];
-  if (rep.limits) out.push(`  ${pc.dim(t("Remastered on a fast computer: smooth to about {smooth} ms of triggers a frame, slows past {most} ms", { smooth: rep.limits.smoothMs, most: rep.limits.mostMs.toFixed(0) }))}`);
+  if (rep.limits) out.push(`  ${pc.dim(t("Remastered on a fast computer: smooth to about {smooth} ms of triggers a frame, slows past {most} ms", { smooth: rep.limits.smoothMs, most: rep.limits.mostMs }))}`);
   if (rep.ungrouped.records) out.push(`  ${pc.dim(t("{n} of the records ran in no trigger of the map — a program's own (TrigScript, eudplib), {ms} in all", { n: num(rep.ungrouped.records), ms: ms(rep.ungrouped.ms) }))}`);
   const shown = rep.rows.slice(0, all ? Infinity : 12);
   if (shown.length) {

@@ -35,6 +35,7 @@ import { asciiShades, halfBlocks, inlineImage, sgr, type Depth } from "./paint";
 import { encodePng } from "./png";
 import { DEFAULT_PNG_SCALE, drawMarks, loadGraphics, mapPicture, placeMarks, PNG_SCALES, resizePicture, terminalInfo, terminalWidth, terrainPicture, tilesetOf, type GameGraphics, type Mark, type Picture, type TerminalInfo } from "./preview";
 import { clock, parseClock } from "./watch";
+import { parseWhole } from "./values";
 import { t, translate } from "./i18n";
 import { CliError, dot, gameText, mark, num, pc, size } from "./ui";
 import type { DataSetRace } from "../../src/formats/mod/races";
@@ -77,6 +78,21 @@ export function noReplays(typed: readonly string[], files: readonly string[], un
   if (!files.length) return new CliError(t("No replays in {list}.", { list: typed.join(", ") }), t("Name replay files (.rep), or folders that hold them."), 2);
   if (unread === files.length) return new CliError(files.length === 1 ? t("{file} could not be read as a replay.", { file: files[0] }) : t("None of the {n, plural, one {# file} other {# files}} could be read as a replay.", { n: files.length }), null, 2);
   return onMap();
+}
+
+/**
+ * On a terminal, a line under the progress saying which games are being played now, rewritten as they start and
+ * end (the first game takes a while to finish); nothing when standard error is not a terminal. `say` prints a progress
+ * line over it and draws it again below.
+ */
+export function playingLine(say: (line: string) => void, stream: NodeJS.WriteStream = process.stderr) {
+  const on = !!stream.isTTY, now: string[] = [];
+  const draw = () => { if (on) stream.write(`\r\x1b[K${now.length ? pc.dim(t("playing {list}…", { list: now.join(", ") })) : ""}`); };
+  return {
+    start(file: string) { now.push(basename(file)); draw(); },
+    end(file: string) { const k = now.indexOf(basename(file)); if (k >= 0) now.splice(k, 1); draw(); },
+    say(line: string) { if (on && now.length) stream.write("\r\x1b[K"); say(line); draw(); },
+  };
 }
 
 export const sha256 = (bytes: Uint8Array): string => createHash("sha256").update(bytes).digest("hex");
@@ -338,10 +354,11 @@ export async function heatmapMap(
   if (o.width !== undefined && o.scale !== undefined) throw new CliError(t("--width or --scale, not both"), null, 2);
   const scale = positive(o.scale, "scale", png ? (n) => (PNG_SCALES as readonly number[]).includes(n) : (n) => n > 0 && n <= 32, png ? PNG_SCALES.join(", ") : t("a number of pixels a tile, above 0 and up to 32"));
   const width = positive(o.width, "width", (n) => Number.isInteger(n) && n >= 8, t("a number of columns, 8 or more"));
-  const parallel = positive(o.parallel, "parallel", (n) => Number.isInteger(n) && n >= 1, t("a whole number of replays, 1 or more")) ?? defaultParallel();
+  const parallel = o.parallel === undefined ? defaultParallel() : parseWhole(o.parallel, "parallel", 1);
   const player = parsePlayer(o.player);
-  let until: number | undefined;
-  try { until = o.until === undefined ? undefined : parseClock(o.until); } catch { throw new CliError(t("--until takes m:ss (or h:mm:ss), not \"{value}\"", { value: String(o.until) }), null, 2); }
+  // A time on the game's clock, m:ss or h:mm:ss, or a bare number of seconds; 8:75 is a slip, said as one.
+  if (o.until !== undefined && !/^\s*\d+(:\d+){0,2}\s*$/.test(o.until)) throw new CliError(t("--until takes a time as m:ss (or h:mm:ss) or a number of seconds, not \"{value}\"", { value: o.until }), null, 2);
+  const until = o.until === undefined ? undefined : parseClock(o.until, "--until");
   if (!replayPaths.length) throw new CliError(t("Name the replays to take: files, or folders of them."), null, 2);
   // A wrong --starcraft is said before anything is read or printed.
   if (o.starcraft) findGameCopy(o.starcraft);
@@ -394,11 +411,12 @@ export async function heatmapMap(
   let engineInfo: HeatmapReport["engine"];
   const errors = new Map<number, string>();
   let done = 0;
+  const now = playingLine(live);
   const say = (k: number) => {
     done++;
     const ev = events[k];
     const count = ev ? heatPoints([ev], { what, player, until, bounds: scn }).games[0].count : 0;
-    live(replayLine(done, taken.length, taken[k].file, ev, { cached: cached[k], error: errors.get(k), what, count }));
+    now.say(replayLine(done, taken.length, taken[k].file, ev, { cached: cached[k], error: errors.get(k), what, count }));
   };
   for (let k = 0; k < taken.length; k++) if (cached[k]) say(k);
   const t1 = performance.now();
@@ -411,6 +429,7 @@ export async function heatmapMap(
     const worker = async () => {
       while (next < toPlay.length && !older) {
         const k = toPlay[next++];
+        now.start(taken[k].file);
         try {
           const ev = await playForEvents(runner, engine.dir, game.folder, taken[k].path, o.node);
           events[k] = ev;
@@ -419,6 +438,7 @@ export async function heatmapMap(
           if (e instanceof OlderRunner) { older = true; return; }
           errors.set(k, e instanceof Error ? e.message : String(e));
         }
+        now.end(taken[k].file);
         say(k);
       }
     };
@@ -445,7 +465,7 @@ export async function heatmapMap(
     ...(player !== undefined ? { player: String(player) } : {}), ...(o.until !== undefined ? { until: clock(until!) } : {}),
     replays, skipped, total, outside: chosen.outside, tiles, ...(units ? { units } : {}), ...(engineInfo ? { engine: engineInfo } : {}), ms: { replays: Math.round(t2 - t1), draw: 0, total: 0 },
   };
-  const said = { counted: counted(what, total), who: player === undefined ? "" : typeof player === "number" ? t("player {n}", { n: player }) : player, time: until === undefined ? "" : clock(until), n: played.length };
+  const said = { counted: counted(what, total), who: player === undefined ? "" : typeof player === "number" ? t("player {n}", { n: player }) : player, time: until === undefined ? "" : clock(until), n: player === undefined ? played.length : chosen.games.filter((g) => g.player).length };
   const words = player === undefined
     ? (until === undefined ? t("{counted} in {n, plural, one {# replay} other {# replays}}", said) : t("{counted} by {time} in {n, plural, one {# replay} other {# replays}}", said))
     : (until === undefined ? t("{counted} ({who}) in {n, plural, one {# replay} other {# replays}}", said) : t("{counted} ({who}) by {time} in {n, plural, one {# replay} other {# replays}}", said));

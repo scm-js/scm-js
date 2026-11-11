@@ -211,7 +211,9 @@ describe("scmjs map balance over stand-in runners", () => {
     const r = await runBalance("three.scx", map, threeStarts(), { bots: [botFile(dir, "alpha"), botFile(dir, "beta")], seeds: [1, 2, 3, 4, 5, 6], parallel: 3, rush: false, engine: stagedEngine(), starcraft: classicCopy(), out, live: (l) => lines.push(visible(l)) });
     expect(lines[0]).toMatch(/^12 games · ALPHA vs BETA · 3 start locations · abcdef123456 · 3 at once$/);
     expect(lines.filter((l) => /beat/.test(l))).toHaveLength(12);
-    expect(lines.find((l) => /^ ?1\/12/.test(l))).toMatch(/ALPHA P \(start 2, 2 o'clock\) beat BETA P \(start 3, 6 o'clock\) · 4:12 · first contact 1:03 · seed 1$/);
+    // Counted as they finish (a few at once, any order): 1/12 to 12/12, one each.
+    expect(lines.filter((l) => /beat/.test(l)).map((l) => /^ ?(\d+)\/12/.exec(l)?.[1])).toEqual(Array.from({ length: 12 }, (_, k) => String(k + 1)));
+    expect(lines).toContainEqual(expect.stringMatching(/ALPHA P \(start 2, 2 o'clock\) beat BETA P \(start 3, 6 o'clock\) · 4:12 · first contact 1:03 · seed 1$/));
     const rep = r.report;
     // Between starts 2 and 3 the runner's seed deals slot 0 start 2, and slot 0 is the first in the lobby, who wins.
     expect(rep.starts.map((s) => [s.player, s.games, s.won, s.lost])).toEqual([[1, 8, 8, 0], [2, 8, 4, 4], [3, 8, 0, 8]]);

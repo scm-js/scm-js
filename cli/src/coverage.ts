@@ -21,12 +21,13 @@ import { ensureEngine, findGameCopy, type Engine } from "./engine";
 import { loadReplayInput, readInput, STDIO, type Input } from "./files";
 import { modReplayReason } from "./replaymod";
 import { matchReplay, type MatchKind } from "./heat";
-import { defaultParallel, mapIdentity, noReplays, replayFiles, replayMapIdentity, sha256, skippedLines, unreadable } from "./heatmap";
+import { defaultParallel, mapIdentity, noReplays, playingLine, replayFiles, replayMapIdentity, sha256, skippedLines, unreadable } from "./heatmap";
 import { defaultTests, readTests, runTests, type PlannedScenario } from "./maptest";
 import { GAME_TYPES } from "./replay";
 import { gameClock, gameMap, rowText, runMapInGame, type CopyLine } from "./trace";
 import type { CoverageForm } from "./report";
 import { t, translate } from "./i18n";
+import { parseWhole } from "./values";
 import { CliError, columns, dot, mark, num, pc, table, visible } from "./ui";
 
 const USE_MAP_SETTINGS = 10;
@@ -91,7 +92,10 @@ export interface CoverageReport {
   /** Replays not counted, and why: another map, not Use Map Settings, the same replay twice, one the game could not play. */
   skipped: { file: string; reason: string }[];
   rows: CoverageRow[];
-  engine?: { build: string; fetched: number };
+  engine?: { build: string; dir: string; fetched: number };
+  /** The copy of the game played with. */
+  game?: { folder: string; kind: "remastered" | "classic" };
+  /** Whole milliseconds. */
   ms: number;
 }
 
@@ -175,8 +179,7 @@ export function gameLine(k: number, total: number, g: CoverageGame | null, file:
  */
 export async function runCoverage(input: Input, doc: OpenedMap, sources: readonly string[], o: CoverageOptions = {}, live: (line: string) => void = () => {}): Promise<CoverageReport> {
   const t0 = performance.now();
-  const parallel = o.parallel === undefined ? defaultParallel() : Number(o.parallel);
-  if (!Number.isInteger(parallel) || parallel < 1) throw new CliError(t("--parallel takes a whole number of games, 1 or more, not \"{value}\"", { value: String(o.parallel) }), null, 2);
+  const parallel = o.parallel === undefined ? defaultParallel() : parseWhole(o.parallel, "parallel", 1);
   const testFiles = sources.filter((s) => /\.json$/i.test(s));
   if (o.tests) {
     if (input.path === STDIO) throw new CliError(t("A map read from standard input has no tests beside it: name the tests file."), null, 2);
@@ -242,12 +245,14 @@ export async function runCoverage(input: Input, doc: OpenedMap, sources: readonl
 
   // The replays, a few at once: one game a process, as map trace --replay plays one.
   const errors = new Map<number, string>();
+  const now = playingLine(live);
   if (taken.length) {
     let next = 0, older: CliError | null = null;
     const results: (typeof games[number] | null)[] = taken.map(() => null);
     const worker = async () => {
       while (next < taken.length && !older) {
         const k = next++, r = taken[k];
+        now.start(r.file);
         try {
           if (o.signal?.aborted) throw new CliError(t("The run was cancelled."));
           const target = await gameMap(doc, input.path, input.name);
@@ -256,12 +261,14 @@ export async function runCoverage(input: Input, doc: OpenedMap, sources: readonl
           const folded = gameRows(run.end.trace ?? [], rows, parted, run.end.order ?? null);
           const g: CoverageGame = { kind: "replay", file: r.file, name: basename(r.path), match: r.match, frames: run.end.frame, players: run.start?.replay?.players.map((p) => p.name) ?? r.players, parted, fired: folded.filter((s) => s.fired).length, ms: run.end.ms.total };
           results[k] = { game: g, rows: folded };
-          live(gameLine(++done, total, g, r.file));
+          now.end(r.file);
+          now.say(gameLine(++done, total, g, r.file));
         } catch (e) {
           if (e instanceof CliError && /from before/.test(e.message)) { older = e; return; }
           if (o.signal?.aborted) throw e;
           errors.set(k, e instanceof Error ? e.message.split("\n")[0] : String(e));
-          live(gameLine(++done, total, null, r.file, errors.get(k)));
+          now.end(r.file);
+          now.say(gameLine(++done, total, null, r.file, errors.get(k)));
         }
       }
     };
@@ -295,8 +302,9 @@ export async function runCoverage(input: Input, doc: OpenedMap, sources: readonl
   const owned = all.filter((c) => c.players.length);
   const fired = owned.filter((c) => c.fired).length;
   return {
-    file: input.name, name: plainText(scenarioName(scn) ?? "").trim(), triggers: rows, owned: owned.length, fired, never: owned.length - fired,
-    games: games.map((g) => g.game), skipped, rows: all, engine: { build: engine.build, fetched: engine.fetched }, ms: performance.now() - t0,
+    // The map as it was typed (its name, read from standard input).
+    file: input.path === STDIO ? input.name : input.path, name: plainText(scenarioName(scn) ?? "").trim(), triggers: rows, owned: owned.length, fired, never: owned.length - fired,
+    games: games.map((g) => g.game), skipped, rows: all, engine: { build: engine.build, dir: engine.dir, fetched: engine.fetched }, game, ms: Math.round(performance.now() - t0),
   };
 }
 
@@ -340,7 +348,9 @@ export function printCoverage(r: CoverageReport, scn: Scenario, { all = false, s
   const never = r.rows.filter((c) => c.players.length && !c.fired);
   if (never.length) {
     out.push("", pc.dim(`  ${t("Never fired ({n} of {total})", { n: num(never.length), total: num(r.owned) })}`));
-    for (const c of never.slice(0, all ? Infinity : 20)) out.push(`  ${pc.yellow("▸")} ${pc.dim(`#${c.row + 1}`)}  ${rowText(scn, c.row, Math.max(30, width - 10))}`, `      ${pc.dim(neverWhy(c))}`);
+    // The numbers padded to the widest, so the triggers' text lines up past #9.
+    const listedNever = never.slice(0, all ? Infinity : 20), wide = Math.max(...listedNever.map((c) => String(c.row + 1).length));
+    for (const c of listedNever) out.push(`  ${pc.yellow("▸")} ${pc.dim(`#${String(c.row + 1).padEnd(wide)}`)}  ${rowText(scn, c.row, Math.max(30, width - 10 - wide))}`, `      ${pc.dim(neverWhy(c))}`);
     if (never.length > 20 && !all) out.push(pc.dim(`  ${t("… and {n} more (--all lists them)", { n: num(never.length - 20) })}`));
   }
   return out;

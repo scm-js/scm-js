@@ -94,7 +94,7 @@ describe("scmjs map test: a scenario planned against the map", () => {
       counts: [{ player: 0, unit: 1, location: 1 }, { player: 17, unit: 230, location: 0 }],
     });
     expect(p.expect.map((x) => x.what)).toEqual([
-      'trigger #1 "Opening" fired', "trigger #2 fired at least 2 times", "Player 1 has at least 2 Terran Ghost in Base", "All Players has at least 1 Men", 'switch "Alarm raised" is clear',
+      'trigger #1 "Opening" fired', "trigger #2 fired at least 2 times", "Terran Ghost of Player 1 in Base: at least 2", "Men of All Players: at least 1", 'switch "Alarm raised" is clear',
     ]);
     // The map itself is untouched: the copy is the scenario's own.
     expect((await planScenario((await ums()).chk, { name: "none" }, "f", 0, DEFAULTS)).scenario.triggers).toHaveLength(3);
@@ -351,6 +351,23 @@ describe("scmjs map test record: its options", () => {
     // Not typed: map test's own default (2,400 frames) is not taken for the recording's.
     await program.parseAsync(["map", "test", "record", "a.scx", "b.rep"], { from: "user" });
     expect(seen.frames).toBeUndefined();
+  });
+});
+
+describe("scmjs map test, trace and balance: options that cannot go together", () => {
+  it("refuses them before anything is read or played (exit 2)", async () => {
+    const refused = async (args: string[]) => {
+      const program = buildProgram();
+      program.exitOverride();
+      try { await program.parseAsync(args, { from: "user" }); } catch (e) { return [(e as CliError).exitCode, (e as Error).message]; }
+      return null;
+    };
+    expect(await refused(["map", "test", "nowhere.scx", "--json", "--format", "junit"])).toEqual([2, "--json and --format junit both say what standard output holds: give one."]);
+    expect(await refused(["map", "test", "nowhere.scx", "--clips-format", "webm"])).toEqual([2, "--clips-format says what the clips are: use it with --clips."]);
+    expect(await refused(["map", "test", "nowhere.scx", "--frames", "soon"])).toEqual([2, '--frames takes a number of frames or a time (m:ss), not "soon"']);
+    expect(await refused(["map", "trace", "--replay", "nowhere.rep", "--seed", "3"])).toEqual([2, "--seed does nothing with --replay: the game plays with the replay's own seed."]);
+    expect(await refused(["map", "trace", "nowhere.scx", "--every", "often"])).toEqual([2, '--every takes a whole number, not "often"']);
+    expect(await refused(["map", "balance", "nowhere.scx", "--bots", "a.scmbot", "--games", "3", "--seeds", "1,2"])).toEqual([2, "--games and --seeds both say which games to play: give one."]);
   });
 });
 

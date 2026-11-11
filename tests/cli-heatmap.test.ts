@@ -325,7 +325,8 @@ describe("scmjs map heatmap", () => {
     process.exitCode = 0;
     expect(await fail(heatmapMap(input, map, [], o, { term }))).toEqual([2, expect.stringMatching(/Name the replays/)]);
     expect(await fail(heatmapMap(input, map, [reps], { ...o, what: "units" }, { term }))).toEqual([2, '--what takes deaths, kills, buildings, paths, not "units"']);
-    expect(await fail(heatmapMap(input, map, [reps], { ...o, until: "soon" }, { term }))).toEqual([2, '--until takes m:ss (or h:mm:ss), not "soon"']);
+    expect(await fail(heatmapMap(input, map, [reps], { ...o, until: "soon" }, { term }))).toEqual([2, '--until takes a time as m:ss (or h:mm:ss) or a number of seconds, not "soon"']);
+    expect(await fail(heatmapMap(input, map, [reps], { ...o, until: "8:75" }, { term }))).toEqual([2, expect.stringMatching(/^--until: "8:75" is not a time/)]);
     expect(await fail(heatmapMap(input, map, [reps], { ...o, out: "x.png", scale: "3" }, { term }))).toEqual([2, '--scale takes 1, 2, 4, 8, 16, 32, not "3"']);
     expect(await fail(heatmapMap(input, map, [join(reps, "4.rep")], { ...o, force: true, player: "Nobody" }, { term }))).toEqual([2, 'No replay has a player called "Nobody".']);
   });

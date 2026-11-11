@@ -104,7 +104,7 @@ describe("map coverage: the run", () => {
 
     const scn = await coverageScenario(input);
     const lines = plain(printCoverage(r, scn, { width: 120 }));
-    expect(lines[0]).toBe("▲ ums.scx: 2 of 3 triggers fired in 3 games; 1 never fired");
+    expect(lines[0]).toMatch(/^▲ (.*\/)?ums\.scx: 2 of 3 triggers fired in 3 games; 1 never fired$/);
     expect(lines[1]).toBe("▲ 1 game parted from the map: parted.rep at 0:21. What fired after that is not counted: the players' commands were meant for another game.");
     expect(lines[3]).toMatch(/^ {2}# {2}Games {2}Fired {2}First {2}Players {2}Trigger$/);
     expect(lines[4]).toMatch(/^ {2}1 +3\/3 +81 +0:00 +P1 +Always\(\) → Display Text Message/);

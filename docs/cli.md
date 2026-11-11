@@ -2302,10 +2302,10 @@ UAlbertaBot vs Garm Brood  PvZ
 Melee on (2)Jungle Duel
 
   Length       5:02 · 7,180 frames · Fastest
-  Played       1969-12-31 17:00
   Map          (2)Jungle Duel · 128 × 128 · Jungle World
   Game         oracle hosted by UAlbertaBot
   Recorded by  Brood War · 1.16 or earlier
+  Mod          none
   File         ualbertabot-vs-computer-z_jungle-duel_PvZ_seed1.rep · 179 KB
 
   Players
@@ -2314,8 +2314,12 @@ Melee on (2)Jungle Duel
 ```
 
 That replay is from a [bot ladder](#a-ladder-for-bots), whose replays carry the game's
-seed where a real game has its start time, so the date is the first of January 1970 (or
-the last day of 1969, west of Greenwich).
+seed where a real game has its start time, so there is no `Played` line; a replay with
+chat has a `Chat` line saying how many lines were said. A team game is headed by its
+sides, `A & B vs C & D`, with the matchup after it (`TZvPZ`).
+
+With `--json` each replay is an object with `path`, the file as you typed it; a file that
+could not be read is `{ "file": <path>, "error": <why> }` in the same list.
 
 The `Mod` line says which mod the game was played with, for a replay scmJS saved from a
 game of a mod: the mod's name, the hash of its data set, its makers' link, and a `Plugins`
@@ -2353,13 +2357,16 @@ A mod's replay names its units by the mod, so `--builds` on one shows ids (`unit
 `--mod` names the mod: a folder, an `.mpq`, a mod's `.exe` or a `.zip`, as `scmjs mod`
 reads them. The names and costs then come from the mod's tables. The mod is checked first:
 [its hash](mods.md#the-mods-hash), with its plugins or without them, must be the one the
-replay names, or the command stops and says both. A replay tagged before the hash had
-lines for the plugins and the FireGraft project is matched by the hash of the game files
-alone, or of those that differ from your copy of the game. One tagged before 9 November
-2026, when the hash still had lines for the files an operating system leaves in folders
-(`desktop.ini`, `Thumbs.db`), is matched by [the hash the mod had
+replay names, or the command stops and says both (exit 2). A replay tagged before the hash
+had lines for the plugins and the FireGraft project is matched by the hash of the game
+files alone, or of those that differ from your copy of the game. One tagged before 9
+November 2026, when the hash still had lines for the files an operating system leaves in
+folders (`desktop.ini`, `Thumbs.db`), is matched by [the hash the mod had
 then](mods.md#the-mods-hash), when the mod you name holds such files. With a replay that
-names no mod, `--mod` warns that the names may not be the game's and uses them.
+names no mod, `--mod` warns that the names may not be the game's and uses them; the
+`Names` line then says only where they are from, since nothing in the replay says whether
+it is the same data set. A `--starcraft` folder that is not a copy of the game is said
+rather than the costs left out.
 
 ```sh
 scmjs replay info game.rep --builds --mod "Cosmonarchy BW"
@@ -2370,9 +2377,11 @@ scmjs replay info game.rep --builds --mod "Cosmonarchy BW"
 `scmjs replay map game.rep` writes out the map the replay was played on. A replay carries
 the whole scenario the game loaded, so the map is there whether or not you still have the
 file. It goes beside the replay with the replay's name and `.scx`, or to `--out`, as a
-bare `.chk` or as an archive like a new map's, and opens in the editor like any map. Only
-the scenario is in a replay, not the map's sounds or other files, so Check Map may say a
-sound is missing. `--out -` writes it to a pipe:
+bare `.chk` or as an archive like a new map's, and opens in the editor like any map.
+`--out` takes a name ending in `.scx`, `.scm` or `.chk` and makes its folder when it is
+not there; a file that is there is refused unless `--force`. Only the scenario is in a
+replay, not the map's sounds or other files, so Check Map may say a sound is missing.
+`--out -` writes it to a pipe:
 
 ```sh
 scmjs replay map game.rep --out - | scmjs map info -
@@ -2400,15 +2409,17 @@ picture on screen.
 
 | Option | What it does |
 | --- | --- |
-| `--speed 4` | Plays at four times the game's Fastest; the default is 8. The engine plays a ten-minute game in a few seconds, so any speed holds |
-| `--from 6:30` | Starts there |
-| `--size 80x30` | The picture's size in characters; by default it fills as much of the terminal as the map's shape allows |
-| `--every` | The frames between lines when the output is not a terminal |
-| `--json` | A line of JSON per frame with every unit's place, for a script or a plot |
+| `--speed 4` | Plays at four times the game's Fastest; the default is 8. The engine plays a ten-minute game in a few seconds, so any speed holds. In a terminal only |
+| `--from 6:30` | Starts there. A time past the replay's end is refused |
+| `--cells 80x30` | The picture's size in characters; by default it fills as much of the terminal as the map's shape allows. In a terminal only (`--size` is its old name) |
+| `--every 300` | Into a pipe or a file: the frames between lines, `0` for none. By default a line at each minute of the game's clock |
+| `--json` | Into a pipe or a file, JSON lines: the start, a line at each minute (or each `--every` frames) with every player's figures and every unit's place, and the end, for a script or a plot |
 
-Into a pipe or a file there is no picture: a line per player every minute of game, with
-the chat between them. The players' names, colours, chat and APM come from the replay
-file, read as `replay info` reads it; the figures and the picture come from the game.
+Into a pipe or a file there is no picture: a line at each minute of the game's clock,
+1:00, 2:00 and on, holding every player's figures, with the chat between them. It then
+goes as fast as the game plays, so `--speed` and `--cells` do nothing there. The players'
+names, colours, chat and APM come from the replay file, read as `replay info` reads it;
+the figures and the picture come from the game.
 
 A player who leaves shows as `left at 10:05` on their line from then on, instead of the
 zeros the game keeps for them. When the replay has played to its end, the last line says
@@ -2480,14 +2491,14 @@ StarCraft.
 ```sh
 scmjs replay export game.rep --from 14:00 --to 14:30           # game.webm beside the replay
 scmjs replay export game.rep --out fight.mp4 --follow 2 --from 20:30 --to 20:58
-scmjs replay export game.rep --out game.gif --all --speed 16 --to 6:00
+scmjs replay export game.rep --out game.gif --whole-map --speed 16 --to 6:00
 ```
 
 The game is stepped picture by picture rather than played and filmed, so the clip plays at
 the speed you ask whatever your computer's pace, with no picture dropped. A 720p clip
 takes about as long to make as it lasts, less for a quiet part of the game and more for a
-big fight. Before that, the game has to run on to `--from`, which takes about twenty
-seconds to reach twenty minutes into a game.
+big fight. Before that, the game has to run on to `--from`, which takes about two seconds
+for each minute of the game, some forty seconds to reach twenty minutes in.
 
 | Option | What it does |
 | --- | --- |
@@ -2495,12 +2506,12 @@ seconds to reach twenty minutes into a game.
 | `--from 4:30`, `--to 5:00` | Where the clip starts and ends in the game; the whole game by default |
 | `--follow <player>` | The camera stays on that player's play. Name them, give the start of the name, or a number as `replay info` lists the players. The first person in the replay by default |
 | `--at 64,40` | The camera holds on this tile |
-| `--all` | The whole map, scaled to fit |
+| `--whole-map` | The whole map, scaled to fit (`--all` is its old name) |
 | `--speed 4` | Four times the game's Fastest. The default is 1, the game's own pace |
-| `--size 1920x1080` | The clip's size in pixels: 1280x720 by default, 640x360 for a GIF |
+| `--resolution 1920x1080` | The clip's size in pixels: 1280x720 by default, 640x360 for a GIF. Each side is even; an odd one is made the next even one, and the command says so (`--size` is its old name) |
 | `--fps 30` | Pictures per second, 24 by default and 12 for a GIF. A GIF counts in hundredths of a second, so 12 becomes 12.5 |
 | `--browser <path>` | The browser to draw with, or the `SCMJS_BROWSER` setting. Otherwise one is found in the usual places |
-| `--json` | The file, its size and the time each part took, as JSON |
+| `--json` | The file as you named it, its size and the time each part took, as JSON. Progress still goes to standard error |
 
 Following a player, the camera goes where their army is, and to the biggest fight the army
 is in. To know that, the engine runs the game through first and reports every unit, as it
@@ -2515,7 +2526,9 @@ command says so and makes nothing. The GIF is made from the pictures as drawn, e
 palette of its own, which keeps the game's colours exact. A GIF of a camera that moves is
 large, so keep it short: eight seconds of a fight at 640x360 is about 12 MB. A 30-second
 720p `.webm` is about 8 to 10 MB. Progress is shown as it goes, and the file's name and
-size are printed at the end.
+size are printed at the end. A browser that stops before the clip is made is said with
+what to try: `scmjs doctor` says whether one is found and starts, and `--browser` names
+another.
 
 The pictures are the classic game's, whichever copy you have. Remastered's own pictures
 are not drawn yet, and there is no sound. Besides your copy of StarCraft, the command
@@ -2558,7 +2571,15 @@ FireGraft's patcher, read and never run) or a `.zip`. A copy of the game inside 
 folder, a folder that holds `StarDat.mpq`, is not the mod: its own archives and everything
 under its `Maps` folder are left out, and the command says so ([which
 files](mods.md#what-a-mod-is)). `--json` prints the same as data, the files left out as
-`gameCopy`.
+`gameCopy`; each mod has `file` and `path`, the path as you typed it, and a plugin of the
+same name as another is told apart by where it is. Reading a large mod (an `.exe` or a
+`.zip` of hundreds of megabytes) takes several seconds, and a line on standard error says
+it is reading.
+
+Something that holds none of the game's files is not a mod, and is said for what it is,
+with exit 2: a map (`scmjs map info` reads it), a replay (`scmjs replay info`), an empty
+folder, an `.exe` with no archive in it. A `mod.json` that is not JSON is said, with the
+file, rather than the folder read as if it had none.
 
 ### A mod as a folder of text
 
@@ -2574,8 +2595,21 @@ file is written as text or a picture only when that packs back into the same byt
 anything else stays as it is under `files/`, and `mod.json` says which and why. `mod pack`
 puts the folder back into an MPQ (`--compression zlib`, `pkware` or `none`), or with
 `--folder <out>` into loose files in the game's paths. The same folder gives the same MPQ
-every time. `scmjs mod new
-<folder>` starts an empty one.
+every time. `-o -` writes the MPQ to standard output (the command's words go to standard
+error); `-o` names a file ending in `.mpq`, and its folder is made when it is not there.
+`-o` and `--folder` cannot be given together.
+
+`mod unpack` into a folder that is there and empty is fine. Into a folder an earlier
+unpack (or `mod new`) wrote, it stops: your edits are there. `--force` replaces that
+folder whole, nothing of it kept but its dot files and folders (`.git`); a folder holding
+anything else is refused either way. `--palette badlands` draws the sheets in another
+tileset's palette.
+
+`scmjs mod new <folder>` starts an empty one. `--tables units,weapons` (or `all`) starts
+it with the game's own tables as text, read from your copy of StarCraft, written as
+`mod unpack` writes a mod's: edit them and pack. A mistake in a folder's text is said with
+the file's path from where you ran the command and its line,
+`mymod/tables/units.txt:26: …`.
 
 ### Checking and comparing mods
 
@@ -2594,7 +2628,9 @@ with no file, units with one name). It exits 1 on an error. When the mod's files
 races of its own and its `mod.json` names none, it says so in one line, which is a hint
 and fails nothing ([Races a mod adds](mods.md#races-a-mod-adds)). `mod diff` reads as a
 changelog, "Terran Marine: ground weapon damage 6 → 7", against your copy of the game when
-given one mod. `mod build` checks, then packs, and stops on an error unless `--force`.
+given one mod. With two mods it exits 1 when they differ and 0 when they are the same, as
+`map diff` does; with one, it exits 0. `mod build` checks, then packs, and stops on an
+error unless `--ignore-errors` (`--force` is its old name and still works).
 
 These commands read your copy of StarCraft when they find one, as the [commands that need
 StarCraft](#commands-that-need-starcraft) do, for the game's own files under the mod; they
@@ -2623,7 +2659,8 @@ is the bot's race where the map leaves it open: zerg, terran, protoss or random,
 the mod's `mod.json` names, by its name or its number. The map is on the page's setup
 screen with the bot in the row beside yours, which says whether the bot was [made for the
 mod](#a-bot-made-for-a-mod), plays vanilla data, or was made for another; you press Start
-Game. `--start` starts the game at once instead. A mod with plugins plays the map with its
+Game. `--start` starts the game at once instead, and is refused without `--bot`, as
+`--race` is (a map alone always starts at once). A mod with plugins plays the map with its
 own settings, as the engine's runners play it. The play page's own bots need a scmjs.dev
 account: the page asks you to sign in, and the command prints that it is waiting. The
 command prints what the page said and the bot's row:
@@ -2682,10 +2719,13 @@ with that hash can skip storing it again. The editor records the same hash for a
 made from the same files (see [Game data](game-data.md#a-map-remembers-its-data-set)). The
 page answers with `scmjs.play.started`, `scmjs.play.shown` or `scmjs.taken`, which end the
 wait, or `scmjs.play.error` with a `message`, which the command prints before it exits 1;
-`scmjs.waiting` and `scmjs.play.waiting` messages are printed as they come. With a bot,
-`shown` and `started` carry `bot`, the bot's row as the setup screen words it, and a bot
-the page has not got, or a map with no place for it, is an error in words. The command
-waits five minutes.
+`scmjs.waiting` and `scmjs.play.waiting` messages are printed as they come. With `--json`
+the address and those messages go to standard error and the result alone to standard
+output. With `BROWSER=none` the command opens no browser: it prints
+`Open http://127.0.0.1:…/… in a browser to play My Mod on the play page` and waits for
+that address to be opened, by you or a script. With a bot, `shown` and `started` carry
+`bot`, the bot's row as the setup screen words it, and a bot the page has not got, or a
+map with no place for it, is an error in words. The command waits five minutes.
 
 ### A mod in the game engine
 
@@ -2756,13 +2796,13 @@ hash and on what day; run the command again rather than edit it.
 
 With `--bot`, `--out` must be a bot's folder (one with `scmbot.json`): the two files go
 there and `scmbot.json` gains `"mod": { "name", "hash" }` (and `"link"` when the mod's
-`mod.json` has one), the rest of it as it was. The next `scmbot build` writes the mod into
-the `.scmbot` file, and `bot run` and `bot ladder` say whether the game's mod is the one
-the bot was made for ([a bot on a mod](#a-bot-on-a-mod)). A small bot written this way for
-Cosmonarchy, which mines, builds Stockades and attacks with Mavericks, is in the scmbot
-repository's `examples/cosmonarchy` folder. On Cosmonarchy BW the header names 621 units,
-330 weapons, 67 upgrades and 54 technologies. `--starcraft` names the copy of the game
-whose tables are read for any the mod has not got.
+`mod.json` has one), the rest of it as it was. The next `scmjs bot build` writes the mod
+into the `.scmbot` file, and `bot run` and `bot ladder` say whether the game's mod is the
+one the bot was made for ([a bot on a mod](#a-bot-on-a-mod)). A small bot written this way
+for Cosmonarchy, which mines, builds Stockades and attacks with Mavericks, is in the
+scmbot repository's `examples/cosmonarchy` folder. On Cosmonarchy BW the header names 621
+units, 330 weapons, 67 upgrades and 54 technologies. `--starcraft` names the copy of the
+game whose tables are read for any the mod has not got.
 
 ## Sharing from the terminal
 
@@ -2919,6 +2959,9 @@ builds supply. A bot for a mod is written against the mod's own names, which
 `scmjs mod header --bot` puts in its folder ([a bot made for a
 mod](#a-bot-made-for-a-mod)). A build needs a licence file for the bot (`LICENSE`, with
 any licence you choose), since it goes into every build and is shown with the bot.
+`bot new` names `LICENSE` in `scmbot.json` and leaves the file to you; `bot build` says
+when it is missing before Docker starts. When Docker is not installed or not running, or
+the toolchain's image cannot be fetched or started, the command exits with 2.
 
 `scmjs bot update` fetches the newest toolchain, the one the play page expects. The
 toolchain's guide, with what it does for code written for Visual Studio and the fields of
@@ -2934,8 +2977,8 @@ engine](#commands-that-need-starcraft).
 ```
 UAlbertaBot on (2)Jungle Duel.scx 128 × 128, jungle · bot zerg vs computer zerg · seed 1794078640 · Remastered files
   Loaded the AI Module: bot
-  oracle: BWAPI 4.4.0.0 RELEASE is now live using "bot".
-  oracle: Enabled Flag UserInput
+  UAlbertaBot: BWAPI 4.4.0.0 RELEASE is now live using "bot".
+  UAlbertaBot: Enabled Flag UserInput
   frame   2000  P1 bot Z 152/0 4/9  |  P2 computer Z 252/0 9/9
   frame   4000  P1 bot Z 88/0 9/9  |  P2 computer Z 56/0 0/17
 ✔ the bot won at frame 5194 · 39 KB of orders · 0.21 ms a frame game, 0.32 bot · 4.5 s
@@ -2943,18 +2986,25 @@ UAlbertaBot on (2)Jungle Duel.scx 128 × 128, jungle · bot zerg vs computer zer
 
 | Option | What it does |
 | --- | --- |
-| `--race` | The bot's race |
-| `--opponents zerg,terran` | The computers' races, one computer each |
+| `--race` | The bot's race: `zerg`, `terran`, `protoss` or `random`, or its first letter, in any case |
+| `--opponents zerg,terran` | The computers' races, one computer each (`z,t` alike). More than the map's start locations leave room for is refused |
 | `--seed` | Fixes the game: the same seed, bot and map give the same game |
-| `--frames` | Stops a game nobody has won, at 24 frames a second: 50,000 is about 35 minutes of play |
+| `--frames` | Stops a game nobody has won, at 24 frames a second: 50,000 is about 35 minutes of play. A time, `20:00`, works too |
 | `--every` | The frames between progress lines; 0 for none |
 | `--data folder` | Keeps the files the bot writes between games (its `bwapi-data/write`), as the play page does |
 | `--mod` | Plays a mod, its plugins and FireGraft project with it ([a bot on a mod](#a-bot-on-a-mod)) |
 | `--ums`, `--melee` | The map with its own settings, or a melee game; by default the map's own settings when it looks made for them, or when the mod has plugins |
-| `--json` | Everything as data |
+| `--json` | Everything as data, the mod's name and hash at the top under `mod` |
 
-The bot's own text is printed as it comes. The command exits with 1 when the bot printed
-errors, and with 2 when the game could not start.
+The bot's own text is printed as it comes. A loss is a result, not a failure: the command
+exits with 0 whoever won, with 1 when the bot printed errors, and with 2 when the game
+could not start. Every value, the bot file and the map are looked at before anything
+starts: a map and a bot the wrong way round, a replay where the map goes and the bot's
+folder where its file goes are said for what they are, and a map compressed with zlib,
+which only StarCraft: Remastered opens, is refused (the game here plays as 1.16.1;
+`scmjs map optimize --compression pkware` writes a copy it opens). When the game itself
+refuses something, its words are said without the game's insides, and `SCMJS_DEBUG=1`
+shows them whole.
 
 #### A bot on a mod
 
@@ -2966,9 +3016,13 @@ scmjs bot run out/cosmonarchy-example.scmbot "(4)Exodus 1.0.scx" --mod "Cosmonar
 or the release folder as its makers ship it. The mod's files are laid over the game's, and
 its code runs beside the bot: the plugins it carries as files and the FireGraft project
 its patcher holds, loaded before the game starts, as the play page loads them. The map is
-played with its own settings, as a mod's maps are meant to be; `--melee` plays a melee
-game instead. The first lines say what the game read of the mod, the mod's name and
-[hash](mods.md#the-mods-hash), the plugins loaded, and how the bot fits the mod:
+played with its own settings, as a mod's maps are meant to be, when the mod has plugins or
+the map looks made for its own settings; a melee map under a mod with no plugins (one
+whose only code is a FireGraft project, say) is played as melee. `--melee` and `--ums`
+choose either way. A game that starts with nobody against the bot, the map's own settings
+seating no other player, says so and names `--melee`. The first lines say what the game
+read of the mod, the mod's name and [hash](mods.md#the-mods-hash), the plugins loaded, and
+how the bot fits the mod:
 
 ```
 Cosmonarchy Example on (4)Exodus 1.0.scx 128 × 128, desert · computer terran vs … · seed 7 · 1.16.1 files
@@ -2976,7 +3030,7 @@ Cosmonarchy Example on (4)Exodus 1.0.scx 128 × 128, desert · computer terran v
   mod: Cosmonarchy BW · ac3f86533e4b5a31 · 4 plugins loaded · FireGraft project Cosmonarchy BW.fgp (7 edits) · the map's own settings
   ✔ made for Cosmonarchy BW
   …
-✖ the bot lost at frame 11308 · 80 KB of orders · 12.26 ms a frame game, 0.52 bot · 150.9 s
+▲ the bot lost at frame 11308 · 80 KB of orders · 12.26 ms a frame game, 0.52 bot · 150.9 s
 ```
 
 "Made for" means the `.scmbot` file names the mod by the same hash ([a bot made for a
@@ -2986,7 +3040,10 @@ made for another mod, or for another version of this one, plays all the same, wi
 warning that names both. The game's own computer players are the mod's AI. A mod with
 plugins needs a game of 2 GB and the bot's room above it, which the engine makes; a bot
 built before bots could sit beside a mod's plugins is refused with the sentence that says
-to build it again.
+to build it again: `scmjs bot update`, then `scmjs bot build` in the bot's folder, since
+an older toolchain builds the same bot again. A mod that is only plugins has the game read
+its startup data again, and on a Remastered copy the game's pictures are laid under it for
+that, as for any mod that changes them.
 
 ### A ladder for bots
 
@@ -2998,14 +3055,15 @@ the game's computer, and the maps:
 scmjs bot ladder out/mybot.scmbot:p ../rival/out/rival.scmbot computer --maps "(2)Jungle Duel.scx" "(4)Crossing.scx" --races tzp
 ```
 
-A race after a colon is the race that side always plays: `mybot.scmbot:p`, `computer:t`. A
-side without one plays each race of `--races` in turn (`z`, `t`, `p`, and `r` for random,
-which the game draws from the seed); `computer` alone is then one computer for each of
-those races. Two bots play each other twice on each map, once each as the lobby's first
-player, and a bot plays each computer once. `--games 3` plays each of those games three
-times, with the seeds 1, 2 and 3, or `--seeds 4,9` names the seeds. The same seed, bots
-and map give the same game, so a ladder run again after you change your bot shows what the
-change did.
+A race after a colon is the race that side always plays: `mybot.scmbot:p`,
+`computer:terran`; a part after the colon that is no race is said as such. A side without
+one plays each race of `--races` in turn (`z`, `t`, `p`, and `r` for random, which the
+game draws from the seed, run together as `tzp` or as words with commas,
+`terran,zerg,protoss`); `computer` alone is then one computer for each of those races. Two
+bots play each other twice on each map, once each as the lobby's first player, and a bot
+plays each computer once. `--games 3` plays each of those games three times, with the
+seeds 1, 2 and 3, or `--seeds 4,9` names the seeds. The same seed, bots and map give the
+same game, so a ladder run again after you change your bot shows what the change did.
 
 A line comes as each game ends, then the standing:
 
@@ -3027,7 +3085,9 @@ itself translated code, so it is slower here than in the real game. With three s
 more, a head-to-head table follows, with each row's wins and losses against each column.
 
 Everything goes in a folder of its own, `ladder-<date>-<time>` where you ran the command,
-or the folder `--out` names:
+or the folder `--out` names. A folder an earlier ladder wrote is refused, so that its
+replays and `ladder.json` do not mix with the new run's; `--force` takes them out first
+and keeps the bots' files. A folder holding anything else is refused either way:
 
 - a replay of each game, named by the two sides in lobby order, the map, the races and the
   seed (`mybot-vs-computer-t_jungle-duel_PvT_seed1.rep`), so a loss opens with
@@ -3040,8 +3100,10 @@ or the folder `--out` names:
 `--mod` plays every game of the ladder on a mod, with its plugins, as
 [`bot run`](#a-bot-on-a-mod) does: the lines before the first result name the mod and say,
 for each bot, whether it was made for the mod, plays vanilla data or was made for another;
-`ladder.json` has the same under each game's `mod`. Two bots on a map with its own
-settings take its first two slots open to a person.
+`ladder.json` has the same under each game's `mod`, and each game's replay says which mod
+it was played with, as one saved on the play page does, so that `replay info` names the
+mod and `replay watch` refuses to play it with the game's own files. Two bots on a map
+with its own settings take its first two slots open to a person.
 
 ### How ladder games are played
 
@@ -3333,7 +3395,7 @@ the same functions are the [`@scm-js/core` library](core.md); the command is bui
 | Code | Means |
 | --- | --- |
 | 0 | All went well |
-| 1 | A map failed its check, two maps differed, a merge had conflicts it was not told how to settle, nothing matched a search, a build did not go through, a map test or a bot failed, a trigger never fired in `map coverage --strict`, a replay could not be played, or something went wrong |
+| 1 | A map failed its check, two maps or two mods differed, a merge had conflicts it was not told how to settle, nothing matched a search, a build did not go through, a map test or a bot failed, a trigger never fired in `map coverage --strict`, a replay could not be played, or something went wrong |
 | 2 | The command could not start its work: an unknown command or option, a missing argument, a value it does not take, a file or folder that is missing or the wrong kind, a file that could not be written, you need to sign in first, or the game could not start |
 
 A mistake in the command line says what was wrong and which help lists the options, such
@@ -3406,8 +3468,8 @@ gives its options.
 | --- | --- |
 | [`scmjs replay info <replays…>`](#what-a-replay-holds) | Who played, on which map, for how long and at what APM, the mod it was played with; `--builds` what each player ordered, `--mod` names from the mod |
 | [`scmjs replay map <replay>`](#the-map-a-replay-was-played-on) | The map the replay was played on, as a map file |
-| [`scmjs replay watch <replay>`](#watching-a-replay-in-the-terminal) | Plays the replay in the terminal |
-| [`scmjs replay export <replay>`](#a-video-or-gif-of-a-replay) | A video or GIF of the replay with the game's own pictures |
+| [`scmjs replay watch <replay>`](#watching-a-replay-in-the-terminal) | Plays the replay in the terminal; `--cells` the picture's size, `--every` a pipe's lines |
+| [`scmjs replay export <replay>`](#a-video-or-gif-of-a-replay) | A video or GIF of the replay with the game's own pictures; `--resolution` its size, `--whole-map` the camera |
 | [`scmjs replay open <replay>`](#opening-a-replay-in-scmjs) | Opens the replay in scmJS's replay viewer |
 | [`scmjs replay share <replay>`](#a-link-to-a-replay) | A link that opens the replay in the editor |
 
@@ -3416,12 +3478,12 @@ gives its options.
 | Command | What it does |
 | --- | --- |
 | [`scmjs mod info <mods…>`](#what-a-mod-holds) | What a mod is: files by kind, tables and their layouts, plugins and FireGraft files, the game it is for, its hash |
-| [`scmjs mod unpack <mod> <folder>`](#a-mod-as-a-folder-of-text) | The mod as a folder of text and PNG sheets; what would not come back the same is kept as bytes |
-| [`scmjs mod pack <folder>`](#a-mod-as-a-folder-of-text) | The folder back into an MPQ, or `--folder` loose files in the game's paths |
-| [`scmjs mod new <folder>`](#a-mod-as-a-folder-of-text) | An empty mod folder: `mod.json` and a README |
+| [`scmjs mod unpack <mod> <folder>`](#a-mod-as-a-folder-of-text) | The mod as a folder of text and PNG sheets; what would not come back the same is kept as bytes; `--palette` the tileset the sheets are drawn in, `--force` replaces a mod folder that is there |
+| [`scmjs mod pack <folder>`](#a-mod-as-a-folder-of-text) | The folder back into an MPQ (`-o -` to standard output), or `--folder` loose files in the game's paths |
+| [`scmjs mod new <folder>`](#a-mod-as-a-folder-of-text) | An empty mod folder: `mod.json` and a README; `--tables` starts it with the game's own tables as text |
 | [`scmjs mod check <mods…>`](#checking-and-comparing-mods) | Mistakes across the tables: references, pictures, scripts, sounds, buttons, requirements |
-| [`scmjs mod diff <a> [b]`](#checking-and-comparing-mods) | A changelog between two mods, or what one changes in the game |
-| [`scmjs mod build <folder>`](#checking-and-comparing-mods) | Check, then pack; stops on an error unless `--force` |
+| [`scmjs mod diff <a> [b]`](#checking-and-comparing-mods) | A changelog between two mods (exit 1 when they differ), or what one changes in the game |
+| [`scmjs mod build <folder>`](#checking-and-comparing-mods) | Check, then pack; stops on an error unless `--ignore-errors` |
 | [`scmjs mod play <mod>`](#playing-a-mod-on-the-play-page) | Every file of the mod handed to the play page with its hash; `--map` starts a map with it, `--bot` puts a bot on the other side |
 | [`scmjs mod test <mod> <map> [tests…]`](#a-mod-in-the-game-engine) | `map test` with the mod laid over the game; `map test`, `trace` and `cost` take `--mod` |
 | [`scmjs mod header <mod>`](#a-bot-made-for-a-mod) | The mod's units, weapons, upgrades and techs by name for a bot made for it: a C++ header and JSON; `--bot` writes the mod into the bot's `scmbot.json` |
@@ -3436,7 +3498,7 @@ gives its options.
 | [`scmjs bot new`, `init`, `build`](#building-a-bot) | A BWAPI bot built into a `.scmbot` file for the play page |
 | [`scmjs bot update`](#building-a-bot) | The newest bot toolchain |
 | [`scmjs bot run <bot> <map>`](#playing-a-bot) | Plays the bot against the game's computers |
-| [`scmjs bot ladder <bots…> --maps <maps…>`](#a-ladder-for-bots) | Bots and computers against each other on every map: Elo, head-to-head, replays |
+| [`scmjs bot ladder <bots…> --maps <maps…>`](#a-ladder-for-bots) | Bots and computers against each other on every map: Elo, head-to-head, replays; `--force` clears an earlier ladder's folder |
 
 ### Your account and setup
 

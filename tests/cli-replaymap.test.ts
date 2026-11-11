@@ -3,13 +3,14 @@
  * `.chk`, or standard output — and opening again as the map it was. The replay here is a stub: `chk` is all the
  * writer reads.
  */
-import { mkdtempSync, readFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PassThrough } from "node:stream";
 import type { Replay } from "@scm-js/replay";
 import { describe, expect, it } from "vitest";
-import { mapFileFor, writeReplayMap } from "../cli/src/replaymap";
+import { checkMapOut, mapFileFor, writeReplayMap } from "../cli/src/replaymap";
+import { CliError } from "../cli/src/ui";
 import { openMapBytes } from "../src/editor/mapFile";
 import { scenarioName, serializeScenario } from "../src/formats/chk/scenario";
 import { TEST_MAPS_DIR } from "./support/maps";
@@ -49,5 +50,18 @@ describe("scmjs replay map", () => {
     const r = await writeReplayMap(rep, "-", out);
     expect(r.written.path).toBe("-");
     expect(Buffer.concat(chunks).length).toBe(r.written.bytes);
+  });
+
+  it("takes a map's extension or standard output for --out, and makes a folder that is not there", async () => {
+    for (const ok of ["-", "a.scx", "b.SCM", "c.chk"]) expect(() => checkMapOut(ok), ok).not.toThrow();
+    for (const [bad, said] of [["out1.txt", /\.txt file; a map is \.scx, \.scm or \.chk/], ["noext", /no extension/]] as const) {
+      const e = (() => { try { checkMapOut(bad); } catch (x) { return x; } })();
+      expect(e, bad).toBeInstanceOf(CliError);
+      expect((e as CliError).message).toMatch(said);
+      expect((e as CliError).exitCode).toBe(2);
+    }
+    const out = join(dir, "not", "there", "x.scx");
+    await writeReplayMap(await replay(), out);
+    expect(existsSync(out)).toBe(true);
   });
 });

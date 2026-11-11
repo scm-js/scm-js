@@ -7,11 +7,14 @@
  * head-to-head. Every game's replay is saved under the ladder's folder, named by its pairing, map, races and seed.
  */
 import { createInterface } from "node:readline";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { readFile, writeFile } from "node:fs/promises";
+import { appendModTag } from "@scm-js/replay";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { basename, extname, join, relative, resolve } from "node:path";
 import { codeWords, ensureEngine, findGameCopy, fitWords, MOD_CODE, modArgs, modWords, runnerFor, startRunner, type BotFitReport, type Engine, type RunnerCodeReport, type RunnerModReport } from "./engine";
 import type { ModOverlay } from "./mod/overlay";
 import { t } from "./i18n";
+import { plainRunnerError } from "./runnerwords";
 import { CliError, dot, duration, mark, num, pc, print, table } from "./ui";
 
 /** A frame of the game on Fastest, as the clock counts it. */
@@ -35,12 +38,13 @@ export function raceLetter(s: string): RaceLetter | null {
   return null;
 }
 
-/** `--races tpz`: the letters, each once, in the order given. */
+/** `--races tpz` or `--races terran,zerg`: letters run together, or words (or letters) with commas; each once, in order. */
 export function parseRaces(s: string): RaceLetter[] {
   const out: RaceLetter[] = [];
-  for (const ch of s.replace(/[\s,]/g, "")) {
-    const r = raceLetter(ch);
-    if (!r) throw new CliError(t("--races {races}: \"{letter}\" is not a race", { races: s, letter: ch }), t("Letters of z, t, p and r (random): --races tpz."), 2);
+  const parts = s.includes(",") ? s.split(",").map((x) => x.trim()).filter(Boolean) : raceLetter(s) ? [s.trim()] : [...s.replace(/\s/g, "")];
+  for (const part of parts) {
+    const r = raceLetter(part);
+    if (!r) throw new CliError(t("--races {races}: \"{letter}\" is not a race", { races: s, letter: part }), t("Letters of z, t, p and r (random) run together, or words with commas: --races tpz, --races terran,zerg."), 2);
     if (!out.includes(r)) out.push(r);
   }
   if (!out.length) throw new CliError(t("--races names no race"), t("Letters of z, t, p and r (random): --races tpz."), 2);
@@ -73,7 +77,7 @@ export function readBotHeader(bytes: Uint8Array): { key: string; name: string; c
  * computer, once for each of `races`), `computer:t`. A race after the last colon only when it is one (a Windows path
  * has a colon of its own). `read` gives a file's bytes (the tests hand their own).
  */
-export function parseEntrants(specs: readonly string[], races: readonly RaceLetter[], read: (file: string) => Uint8Array = (f) => new Uint8Array(readFileSync(f))): Entrant[] {
+export function parseEntrants(specs: readonly string[], races: readonly RaceLetter[], read: (file: string) => Uint8Array = (f) => new Uint8Array(readFileSync(f)), command = "bot ladder"): Entrant[] {
   const out: Entrant[] = [];
   const add = (e: Entrant) => {
     let key = e.key, k = 2;
@@ -89,6 +93,8 @@ export function parseEntrants(specs: readonly string[], races: readonly RaceLett
       for (const r of suffix ? [suffix] : races) add({ key: `computer-${r}`, label: r === "r" ? "Random computer" : `${RACE_WORD[r][0].toUpperCase()}${RACE_WORD[r].slice(1)} computer`, kind: "computer", race: r });
       continue;
     }
+    // (bot.scmbot:x, where bot.scmbot is there: the x is a race mistyped, not part of the file's name)
+    if (!existsSync(name) && colon > 0 && existsSync(spec.slice(0, colon))) throw new CliError(t("{spec}: \"{race}\" is not a race", { spec, race: spec.slice(colon + 1) }), t("A race after the colon: z, t, p or r, or the word (mybot.scmbot:protoss)."), 2);
     if (!existsSync(name)) throw new CliError(t("No file {name}", { name }), t("A bot is a .scmbot file (scmjs bot build writes out/<key>.scmbot), or computer for the game's own."), 2);
     let header: ReturnType<typeof readBotHeader>;
     try { header = readBotHeader(read(name)); }
@@ -96,7 +102,7 @@ export function parseEntrants(specs: readonly string[], races: readonly RaceLett
     add({ key: slug(header.key) || "bot", label: header.name, kind: "bot", file: resolve(name), race: suffix });
   }
   if (out.length < 2) throw new CliError(t("A ladder needs two sides at least"), t("Name two bots, or a bot and computer: scmjs bot ladder mybot.scmbot computer --maps (2)Boxer.scm"), 2);
-  if (!out.some((e) => e.kind === "bot")) throw new CliError(t("A ladder needs a bot: the game's computers alone do not play one"), null, 2);
+  if (!out.some((e) => e.kind === "bot")) throw new CliError(command === "bot ladder" ? t("A ladder needs a bot: the game's computers alone do not play one") : t("{command} needs a bot: the game's computers alone do not play one", { command }), null, 2);
   return out;
 }
 
@@ -350,10 +356,16 @@ export interface LadderOptions {
   mod?: ModOverlay | null;
   /** The kind of game (`--ums`, `--melee`); the runner's rule without. */
   game?: "melee" | "ums";
+  /** Without `game`: the kind of game a map is played as when the command has decided it (`botrun.ts`'s `gameKind`). */
+  gameOf?: ReadonlyMap<string, "melee" | "ums">;
+  /** `--out` names a folder an earlier ladder wrote: clear its replays and ladder.json (the bots' files are kept). */
+  force?: boolean;
 }
 
 export interface LadderOutcome {
   out: string;
+  /** The folder as typed (`--out`), or as the default is named from here: what the JSON says. */
+  typed?: string;
   engine: { build: string; dir: string; fetched: number };
   game: { folder: string; kind: "remastered" | "classic" };
   entrants: Entrant[];
@@ -394,7 +406,7 @@ export async function playGame(runner: string, engine: Engine, copy: string, ent
     try { l = JSON.parse(raw) as MatchLine; } catch { continue; }
     if (l.kind === "start") start = l;
     else if (l.kind === "end") end = l;
-    else if (l.kind === "error") error = l.message;
+    else if (l.kind === "error") error = plainRunnerError(l.message);
     else if (l.kind === "text") o.text?.(entrants[g.sides[l.side]]?.label ?? "?", l.text);
   }
   const code = await exit;
@@ -402,6 +414,34 @@ export async function playGame(runner: string, engine: Engine, copy: string, ent
   if (!end && !error) error = `the runner stopped without a result (exit ${code})${stderr.trim() ? `: ${stderr.trim().split("\n").slice(-3).join(" | ")}` : ""}`;
   const winner = end && end.winner !== null ? g.sides[end.winner] ?? null : null;
   return { game: g, end, error: end ? null : error, winner, replay: end?.replay ? replay : null, start };
+}
+
+/**
+ * Writes the mod's `SCMJ` tag into a replay the runner saved of a game of the mod (`ModOverlay.tag`): what the play
+ * page's Save Replay writes. A file that is not a replay the tag can go in is left as it is; false then.
+ */
+export async function tagModReplay(path: string, mod: ModOverlay, code: RunnerCodeReport | null, build: string): Promise<boolean> {
+  if (!mod.tag || !existsSync(path)) return false;
+  try {
+    await writeFile(path, await appendModTag(new Uint8Array(await readFile(path)), await mod.tag({ code, build })));
+    return true;
+  } catch { return false; }
+}
+
+/**
+ * `--out` before a ladder: a folder that is not there, or empty, is taken; one an earlier ladder wrote (its ladder.json,
+ * replays, bots' files) is refused unless `force`, which takes out its replays and ladder.json — nothing of the
+ * earlier run is mixed into this one's — and keeps the bots' files (`bwapi-data`, what they learned). Any other folder
+ * is refused: a ladder does not write into one.
+ */
+export function clearLadderFolder(out: string, shown: string, force: boolean): void {
+  let entries: string[];
+  try { if (!statSync(out).isDirectory()) throw new CliError(t("--out {folder} is a file, not a folder.", { folder: shown }), null, 2); entries = readdirSync(out); } catch (e) { if (e instanceof CliError) throw e; return; }
+  if (!entries.length) return;
+  const earlier = entries.filter((f) => f === "ladder.json" || /\.rep$/i.test(f));
+  if (!earlier.length && !entries.includes("bwapi-data")) throw new CliError(t("--out {folder} is there and is not a ladder's folder.", { folder: shown }), t("Name a new folder, or an empty one."), 2);
+  if (!force) throw new CliError(t("--out {folder} holds an earlier ladder: its replays and ladder.json would mix with this one's.", { folder: shown }), t("--force takes them out first (the bots' files are kept); name a new folder to keep both."), 2);
+  for (const f of earlier) rmSync(join(out, f), { force: true });
 }
 
 /** The ladder: every game scheduled, played one at a time (or `parallel` at once), then the standing. */
@@ -418,6 +458,7 @@ export async function runLadder(entrants: Entrant[], o: LadderOptions): Promise<
   const engine = await ensureEngine(o.engine, undefined, say);
   const runner = runnerFor(engine, "match");
   const out = resolve(o.out ?? ladderFolder(process.cwd(), o.now ?? new Date()));
+  clearLadderFolder(out, o.out ?? out, !!o.force);
   mkdirSync(out, { recursive: true });
   const data = resolve(o.data ?? join(out, "bwapi-data"));
   // (a mod with its code in every game; the engine asked first, so that an older one is said before the mod is written out)
@@ -432,7 +473,11 @@ export async function runLadder(entrants: Entrant[], o: LadderOptions): Promise<
   const worker = async () => {
     while (next < games.length) {
       const g = games[next++];
-      const r = await playGame(runner, engine, game.folder, entrants, g, { out, data, frames: o.frames, timeout: o.timeout, node: o.node, text: o.text, play: o.play, extra });
+      const kind = o.game ? undefined : o.gameOf?.get(g.map);
+      const r = await playGame(runner, engine, game.folder, entrants, g, { out, data, frames: o.frames, timeout: o.timeout, node: o.node, text: o.text, play: o.play, extra: kind ? [...extra, `--${kind}`] : extra });
+      // (a mod's game: its replay says which mod, as the play page's Save Replay writes it, so that replay info names
+      // it and replay watch refuses to play it with the game's own files)
+      if (o.mod && r.replay) await tagModReplay(r.replay, o.mod, r.start?.code ?? null, engine.build);
       results.push(r);
       // The mod, once: what the first game read of it, its code, and how each bot fits it.
       if (!told && r.start && (r.start.code || r.start.mod)) { told = true; for (const line of modLines(r.start, entrants, g, o.mod)) say(line); }
@@ -442,7 +487,7 @@ export async function runLadder(entrants: Entrant[], o: LadderOptions): Promise<
   await Promise.all(Array.from({ length: parallel }, worker));
   results.sort((a, b) => a.game.index - b.game.index);
   const outcome: LadderOutcome = {
-    out, engine: { build: engine.build, dir: engine.dir, fetched: engine.fetched }, game, entrants, results,
+    out, typed: o.out ?? (relative(process.cwd(), out) || "."), engine: { build: engine.build, dir: engine.dir, fetched: engine.fetched }, game, entrants, results,
     standings: standings(entrants, results), headToHead: headToHead(entrants.length, results), ms: performance.now() - t0,
   };
   writeFileSync(join(out, "ladder.json"), JSON.stringify(ladderJson(outcome), null, 2) + "\n");
@@ -462,7 +507,7 @@ function modLines(start: Extract<MatchLine, { kind: "start" }>, entrants: readon
 /** The ladder as data: `--json`, and `ladder.json` beside the replays. */
 export function ladderJson(r: LadderOutcome) {
   return {
-    out: r.out, engine: r.engine, game: r.game, ms: Math.round(r.ms),
+    out: r.typed ?? r.out, engine: r.engine, game: r.game, ms: Math.round(r.ms),
     entrants: r.entrants.map((e) => ({ key: e.key, label: e.label, kind: e.kind, file: e.file ?? null, race: e.race ? RACE_WORD[e.race] : null })),
     standings: r.standings.map((s) => ({ ...s, elo: Math.round(s.elo * 10) / 10, entrant: r.entrants[s.entrant].key })),
     headToHead: Object.fromEntries(r.entrants.map((e, i) => [e.key, Object.fromEntries(r.entrants.flatMap((f, j) => { const c = r.headToHead[i][j]; return c ? [[f.key, { won: c[0], lost: c[1], undecided: c[2] }]] : []; }))])),

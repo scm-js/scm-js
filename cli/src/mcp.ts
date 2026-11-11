@@ -659,11 +659,11 @@ export function createMcpServer(options: McpOptions = {}): { server: McpServer; 
   reg("mod_unpack", {
     title: "A mod as a folder of text",
     description: "Write a mod as a folder of text and pictures (scmjs mod unpack): tables as PyDAT text in tables/, string tables in strings/, iscript in iscript/, the AI scripts in ai/aiscript.txt, overlays in overlays/, .graft files in grafts/, GRPs as PNG sheets in graphics/, sounds in sounds/, everything else under files/, and mod.json. A text or picture is kept only when it packs back into the same bytes; mod.json says which files were kept as bytes and why. Edit the texts, then mod_pack. Refuses a folder that is there and is not an earlier unpack.",
-    inputSchema: { path: modPath, out: z.string().describe("the folder to write"), palette: z.string().optional().describe("the tileset whose palette the GRPs are drawn with (jungle by default)"), starcraft },
+    inputSchema: { path: modPath, out: z.string().describe("the folder to write"), palette: z.string().optional().describe("the tileset whose palette the GRPs are drawn with (jungle by default)"), force: z.boolean().optional().describe("replace a mod folder that is there already, edits and all (refused otherwise); its dot files, such as .git, are kept"), starcraft },
     annotations: { destructiveHint: true },
-  }, tool(async ({ path: file, out: dir, palette, starcraft: sc }) => {
+  }, tool(async ({ path: file, out: dir, palette, force, starcraft: sc }) => {
     const base = await gameFilesOrNull(sc);
-    const r = await unpackMod(await openMod(file, base), dir, { base, palette });
+    const r = await unpackMod(await openMod(file, base), dir, { base, palette, force: !!force });
     const lines = [`${r.name}: ${r.members} files → ${shown(r.dir)}`, ...Object.entries(r.forms).map(([k, n]) => `  ${k}: ${n}`), ...r.kept.map((k) => `  kept as bytes, ${k.count}: ${k.why}`), ...r.notes];
     const { manifest: _m, ...data } = r;
     return ok(lines, data);
@@ -750,11 +750,11 @@ export function createMcpServer(options: McpOptions = {}): { server: McpServer; 
 
   reg("mod_new", {
     title: "A new mod folder",
-    description: "Start an empty mod folder (scmjs mod new): mod.json and a README. Put the game's files the mod changes under files/ at their paths, or the texts under tables/, strings/ and the rest, then mod_pack. Refuses a folder that is there and not empty.",
-    inputSchema: { path: z.string().describe("the folder to make"), name: z.string().optional().describe("the mod's name (the folder's by default)") },
+    description: "Start an empty mod folder (scmjs mod new): mod.json and a README. Put the game's files the mod changes under files/ at their paths, or the texts under tables/, strings/ and the rest, then mod_pack. Refuses a folder that is there and not empty; a mod folder that is there is replaced only with `force`.",
+    inputSchema: { path: z.string().describe("the folder to make"), name: z.string().optional().describe("the mod's name (the folder's by default)"), force: z.boolean().optional().describe("replace a mod folder that is there already, edits and all") },
     annotations: { destructiveHint: true },
-  }, tool(async ({ path: dir, name }) => {
-    const r = await newMod(dir, name);
+  }, tool(async ({ path: dir, name, force }) => {
+    const r = await newMod(dir, name, { force: !!force });
     return ok([`${r.name}: ${r.files.join(", ")} in ${shown(r.dir)}`], r);
   }));
 

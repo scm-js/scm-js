@@ -104,7 +104,7 @@ async function adpcmMap(): Promise<{ bytes: Uint8Array; stored: number; pcm: Uin
   const plain = a.members().find((m) => m.slot === a.slotOf(WAV))!;
   // A sector: the method (0x40, ADPCM mono), a byte the decoder skips, the shift, the first sample, then 2,047 times
   // "the same sample again" (0x80).
-  const sector = new Uint8Array([0x40, 0, 0, 0, 0, ...new Array(2047).fill(0x80)]);
+  const sector = new Uint8Array([0x40, 0, 0, 0, 0, ...Array.from({ length: 2047 }, () => 0x80)]);
   const data = new Uint8Array(12 + sector.length * 2);
   new DataView(data.buffer).setUint32(0, 12, true);
   new DataView(data.buffer).setUint32(4, 12 + sector.length, true);

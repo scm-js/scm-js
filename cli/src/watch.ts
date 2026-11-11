@@ -274,6 +274,8 @@ export class Tally {
 export function parseClock(spec: string, option = "--from"): number {
   const parts = spec.trim().split(":");
   if (!parts.length || parts.length > 3 || parts.some((p) => !/^\d+$/.test(p))) throw new CliError(t("{option} takes m:ss (or h:mm:ss), not \"{spec}\"", { option, spec }), null, 2);
+  // 1:75 is a slip, not 2:15: past the first part, a part is two digits' worth of a minute or an hour.
+  if (parts.slice(1).some((p) => Number(p) > 59)) throw new CliError(t("{option}: \"{spec}\" is not a time: its seconds and minutes run from 00 to 59", { option, spec }), null, 2);
   const seconds = parts.reduce((n, p) => n * 60 + Number(p), 0);
   return Math.round((seconds * 1000) / FRAME_MS);
 }

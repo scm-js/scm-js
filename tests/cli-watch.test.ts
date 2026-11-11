@@ -129,6 +129,8 @@ describe("scmjs replay watch: the picture", () => {
     expect(parseClock("0:05")).toBe(119);
     expect(parseClock("1:00:00")).toBe(85714);
     expect(() => parseClock("abc")).toThrow(CliError);
+    expect(() => parseClock("1:75")).toThrow(CliError);
+    expect(parseClock("90")).toBe(2143);
   });
 });
 

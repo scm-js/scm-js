@@ -48,7 +48,7 @@ import { unpackMod } from "./mod/unpack";
 import { writeModHeader } from "./mod/header";
 import { modOverlay } from "./mod/overlay";
 import { pageRace, playBotOf, playOnPage, playSet } from "./mod/play";
-import { CliError, visible } from "./ui";
+import { CliError, plural, visible } from "./ui";
 
 /** Where a tool's words go while the server runs: standard error, since standard output is the protocol. */
 export const STDERR = (line: string) => process.stderr.write(`${line}\n`);
@@ -572,7 +572,7 @@ export function createMcpServer(options: McpOptions = {}): { server: McpServer; 
     const graphics = await loadGraphics(doc.scenario, files);
     const drawn = previewPng(doc, graphics, { scale: s, marks: marks !== false });
     const facts = { file: input.name, name: mapReport(input, doc).name, size: { width: doc.scenario.width, height: doc.scenario.height }, tileset: tilesetOf(doc.scenario), picture: { width: drawn.picture.width, height: drawn.picture.height, scale: s, bytes: drawn.png.length }, drawn: drawn.counts, ms: Math.round(performance.now() - t0) };
-    const text = `${input.name}: ${facts.size.width} × ${facts.size.height}, ${facts.tileset}, drawn at ${s} px a tile (${facts.picture.width} × ${facts.picture.height}); ${facts.drawn.starts} start locations, ${facts.drawn.units} units, ${facts.drawn.buildings} buildings, ${facts.drawn.minerals} mineral fields, ${facts.drawn.geysers} geysers`;
+    const text = `${input.name}: ${facts.size.width} × ${facts.size.height}, ${facts.tileset}, drawn at ${s} px a tile (${facts.picture.width} × ${facts.picture.height}); ${plural(facts.drawn.starts, "start location")}, ${plural(facts.drawn.units, "unit")}, ${plural(facts.drawn.buildings, "building")}, ${plural(facts.drawn.minerals, "mineral field")}, ${plural(facts.drawn.geysers, "geyser")}`;
     return { content: [{ type: "image", data: Buffer.from(drawn.png).toString("base64"), mimeType: "image/png" }, { type: "text", text }], structuredContent: facts };
   }));
 

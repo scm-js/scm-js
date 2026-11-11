@@ -210,7 +210,7 @@ describe("the change picture", () => {
     expect(lines).toHaveLength(32);
     expect(lines[0][0]).toBe("x");
     expect(lines[10][40]).toBe("R");
-    expect(diffLegend(cp.diff.counts, "none", true, true)).toBe("A +0 units  R −1 units  x ~1 tiles  # ~0 locations");
+    expect(diffLegend(cp.diff.counts, "none", true, true)).toBe("A +0 units  R −1 unit  x ~1 tile  # ~0 locations");
     expect(diffLegend(diffChanges(a, a).counts, "none", true, false)).toBe("nothing changed");
     // eslint-disable-next-line no-control-regex -- the colour codes
     expect(diffLegend(cp.diff.counts, "truecolor", true, false)).toMatch(/^\x1b\[38;2;46;230;90m■\x1b\[39m \+0 units/);
@@ -251,7 +251,7 @@ describe("the command, through a stand-in 1.16.1 copy", () => {
     const shown = await diffPicture(opened("a.scx", a), opened("b.scx", b), { starcraft }, ascii);
     expect(shown.report).toMatchObject({ layout: "changes", picture: { form: "ascii", columns: 79, rows: 40 }, counts: { tiles: 1, unitsAdded: 1 }, bounds: { tiles: { x: 3, y: 0, width: 1, height: 1 } } });
     expect(visible(shown.lines[0])).toMatch(/^a\.scx → b\.scx {2}64 × 64 · jungle · StarCraft 1\.16\.1/);
-    expect(visible(shown.lines.at(-1) ?? "")).toBe("A +1 units  R −0 units  x ~1 tiles  # ~0 locations");
+    expect(visible(shown.lines.at(-1) ?? "")).toBe("A +1 unit  R −0 units  x ~1 tile  # ~0 locations");
     expect(shown.lines.slice(1, -1).join("\n")).toContain("A");
 
     // Too narrow for three: the changes alone, and it says so.

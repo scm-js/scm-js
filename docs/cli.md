@@ -1071,10 +1071,20 @@ In a folder that is not in a git repository, the files are written and the git s
 are not. Run `scmjs init` again after `git init`, or add `--git` to have the command run
 `git init` first; it never runs it unasked.
 
+The workflow checks `.scx`, `.scm` and `.chk` files from the start, so a map of another
+kind added later is checked too. Run `scmjs init` on a second folder of the same
+repository and its maps are added to the workflow it wrote for the first; a workflow it
+did not write is left as it is, and the command says which lines to add to it. The
+workflow is strict, so a map that has errors or warnings now would fail every push: `init`
+names those maps and gives the `scmjs map check … --write-baseline` line that starts from
+where they are ([A baseline for old maps](#a-baseline-for-old-maps)).
+
 `--print` writes nothing and prints every file and the `git config` lines instead, to read
-first or paste by hand. `--json` lists the files and what became of each, with their text
-when given `--print` as well. The command exits with 2 when the folder does not exist.
-`scmjs help init` has its help.
+first or paste by hand. `--json` lists the files and what became of each (`would-write`
+and the like with `--print`), with their text when given `--print` as well. The command
+exits with 2 when the folder does not exist, and when the folder has no maps of its own
+but folders below it do: it names them, since `scmjs init maps` is likely what was meant,
+and `--force` sets the folder up anyway. `scmjs help init` has its help.
 
 ### Checking maps on GitHub
 
@@ -1156,9 +1166,12 @@ $ git diff
 The second line makes each hunk's heading the part of the map it is in, as
 `## Strings (20)` above. Earlier versions of this guide gave it as `"^## "`, which shows a
 bare `##`; `scmjs init` replaces that value. `git config diff.scmjs.cachetextconv true`
-keeps the text of each version, so a long `git log -p` does not read every map again. The
-`.gitattributes` lines are committed, so everyone who clones gets them; the `git config`
-lines are per clone, or for every repository on your computer with `--global`.
+keeps the text of each version, so a long `git log -p` does not read every map again. git
+keeps that text until the setting's command changes, not when scmjs does: if a newer scmjs
+writes `map dump` differently and `git diff` still shows the old form, clear the kept text
+with `git update-ref -d refs/notes/textconv/scmjs`. The `.gitattributes` lines are
+committed, so everyone who clones gets them; the `git config` lines are per clone, or for
+every repository on your computer with `--global`.
 
 ### A map as a folder of text
 
@@ -1246,7 +1259,9 @@ the map and writes each section as the editor would save it.
   write. A trigger names its text by what it says, so triggers.txt decides a trigger's
   text: changing a message there adds it to the string table (as `map triggers import`
   does), and the old one stays until `scmjs map strings prune`. To change a message in
-  place, change it in both files.
+  place, change it in both files. Triggers name locations by name too, so renaming a
+  location in `strings.txt` alone stops the pack with `Unknown location` at the trigger's
+  line: rename it in `triggers.txt` as well.
 - `map.json` names players' types, races and colours, and the forces' flags, by name;
   `nameString` and the like are numbers in the string table.
 
@@ -1272,7 +1287,8 @@ map after changing the script.
 the name, size, tileset and version; each player's type, race, colour and force; units and
 locations added or removed; triggers and briefing triggers added or removed, one line
 each; strings added, removed or changed; the archive's other files; and which sections of
-the scenario differ at all.
+the scenario differ at all. A location is shown by the number triggers give it, from 1,
+and a string by its number.
 
 ```
 old.scx → new.scx
@@ -1292,17 +1308,25 @@ Sections
   ~ TRIG  7.0 KB → 7.0 KB
 ```
 
-A trigger that changed shows as the old one removed and the new one added. Long lists stop
-at twenty; `--all` lists everything. Like `diff`, the command exits with 1 when the maps
-differ and 0 when they are the same, so a script can ask whether a step changed anything.
+A trigger that changed shows as the old one removed and the new one added; the same
+triggers in another order show as `Triggers reordered`, since the game runs them in order.
+Long lists stop at twenty; `--all` lists everything. Like `diff`, the command exits with 1
+when the maps differ and 0 when they are the same, so a script can ask whether a step
+changed anything.
 
 `--rev` compares a map with the version git has at a revision, so one command says what a
 commit changed in a map, or what is not committed yet:
 
 ```sh
 scmjs map diff --rev HEAD~1 maps/ridge.scx     # what the last commit changed
-scmjs map diff --rev main maps/ridge.scx       # what this branch changed
+scmjs map diff --rev main... maps/ridge.scx    # what this branch changed
 ```
+
+`main...`, with git's three dots, is the commit this branch and `main` last had in common,
+so the second line shows what the branch changed and nothing `main` did since.
+`--rev main` compares with `main` as it is now, which shows `main`'s later changes too, as
+if this branch had undone them. `--rev` takes one revision: a range such as `HEAD~3..HEAD`
+is refused, since `map log` and `map blame` are the commands for a range.
 
 The older version is read with `git show`, so this works wherever `git diff` does. A file
 that is not in a repository, or not at that revision, is refused with git's own message.
@@ -1399,10 +1423,11 @@ commit that saved the file again without changing the map says so. For the detai
 commit, `git show <commit>` shows its changes as text, once the map's text form is set up
 as [Reading maps in git diff](#reading-maps-in-git-diff) describes.
 
-`-n 5` shows the newest five commits. `--rev` takes what `map diff --rev` takes, and a
-range as well. `--rev main..HEAD` lists what this branch did to the map. A merge is
-compared with its first parent, so the entry shows what the merge brought in. `--json`
-gives each commit's hash, parents, author, date, subject and the list of changes.
+`-n 5` (or `--max-count 5`) shows the newest five commits. `--rev` takes a revision, as
+`map diff --rev` does, and a range as well. `--rev main..HEAD` lists what this branch did
+to the map. The commits come in the order `git log` lists them. A merge is compared with
+its first parent, so the entry shows what the merge brought in. `--json` gives each
+commit's hash, parents, author, date, subject and the list of changes.
 
 ### Who last changed what
 
@@ -1432,10 +1457,10 @@ list and each file in the archive.
 ```
 $ scmjs map blame maps/ridge.scx --locations
 Locations (4) · maps/ridge.scx
-39277712 (Jeany 2026-11-01 Base     ) #0  192,1600–512,1856
-39277712 (Jeany 2026-11-01 Nest     ) #1  1536,192–1856,512
-dbf21a0c (Mina  2026-11-06 Ridge top) #2  896,896–1152,1152
-68033b5d (Mina  2026-11-04 Anywhere ) #63  0,0–3072,3072
+39277712 (Jeany 2026-11-01 Base     ) #1  192,1600–512,1856
+39277712 (Jeany 2026-11-01 Nest     ) #2  1536,192–1856,512
+dbf21a0c (Mina  2026-11-06 Ridge top) #3  896,896–1152,1152
+68033b5d (Mina  2026-11-04 Anywhere ) #64  0,0–3072,3072
 ```
 
 Things are matched between versions the way `map diff` matches them. Triggers and units
@@ -1445,8 +1470,9 @@ is a string, so editing what a trigger says changes the string, not the trigger,
 `--strings` shows who did that.
 
 `--trigger 4` shows one trigger with its whole text and the commit's subject.
-`--location "Ridge top"`, by name or by number, and `--string 16` do the same for a
-location and a string.
+`--location "Ridge top"`, by name or by the number triggers give it (`--location 3`), and
+`--string 16` do the same for a location and a string. `--triggers` asks for the triggers
+when another kind is given too.
 
 Without `--rev` the map is read as it is on disk. What differs from the last commit is
 marked as `git blame` marks it, with a hash of zeros:
@@ -1540,7 +1566,9 @@ Add --ours or --theirs to settle each with that side's version.
 `--ours` or `--theirs` settles every conflict with that side's version and writes the map;
 everything that did not conflict is still merged from both. The conflicts are listed
 again, marked with the side taken. To settle some one way and some the other, merge with
-one of them and change the rest in the editor afterwards.
+one of them and change the rest in the editor afterwards. In `--json`, `kind` is
+`conflicts` when conflicts were left unsettled and nothing was written, and `merged` when
+the map was merged.
 
 ### Merging in git
 
@@ -3228,9 +3256,10 @@ name = "typescript"
 language-servers = ["scmjs"]
 ```
 
-**Other editors** take the same three things: the command `scmjs lsp`, standard input and
-output, and the TypeScript file types. Zed starts language servers only from its
-extensions, and there is no TrigScript extension for it yet.
+**Other editors** take the same three things: the command `scmjs lsp` (`--stdio`, which
+some editors add, changes nothing), standard input and output, and the TypeScript file
+types. Zed starts language servers only from its extensions, and there is no TrigScript
+extension for it yet.
 
 What the server says about each check goes to standard error, which an editor shows as the
 server's log. It names the script and the map it found, and how long each check took,
@@ -3338,7 +3367,7 @@ gives its options.
 | [`scmjs map cost <map>`](#what-the-triggers-cost) | What the triggers cost Remastered each frame, and the costliest; `--replay` as for `map trace` |
 | [`scmjs map test <map> [tests…]`](#testing-a-maps-triggers) | Plays the map's test scenarios in the game, with a replay of each that fails and, with `--clips`, a GIF of its end; `-u` rewrites what a replay's scenario expects |
 | [`scmjs map test record <map> <rep>`](#a-test-from-a-replay) | A test scenario from a replay, its expectations taken from the end of the game |
-| [`scmjs map coverage <map> <replays…>`](#which-triggers-fired-across-many-games) | Plays many replays on the map: which triggers fired in how many games, and which never did |
+| [`scmjs map coverage <map> [replays…]`](#which-triggers-fired-across-many-games) | Plays many replays on the map: which triggers fired in how many games, and which never did |
 | [`scmjs map analyze <map>`](#a-maps-layout) | A melee map's layout in a second: starts, mains, naturals, the walks between starts, their narrowest points, the ground's shares and verdicts; `--picture` draws them |
 | [`scmjs map rush <map>`](#rush-distances) | The time to walk between the start locations, by the game's own pathing |
 | [`scmjs map balance <map> --bots <bots…>`](#is-the-map-fair-to-every-start) | Games played on the map with your bots, a row a start location: win rate, length, first contact, rush distance, resources, and a verdict |
@@ -3383,7 +3412,7 @@ gives its options.
 
 | Command | What it does |
 | --- | --- |
-| [`scmjs plugin new <name>`](#writing-a-plugin) | A plugin to start from |
+| [`scmjs plugin new [name]`](#writing-a-plugin) | A plugin to start from |
 | [`scmjs plugin dev`](#writing-a-plugin) | The editor with your plugin, reloaded each time you save |
 | [`scmjs plugin check`](#writing-a-plugin) | What the editor would make of the plugin |
 | [`scmjs bot new`, `init`, `build`](#building-a-bot) | A BWAPI bot built into a `.scmbot` file for the play page |

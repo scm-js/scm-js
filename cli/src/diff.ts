@@ -27,7 +27,11 @@ import { CliError, mark, num, padColumns, pc, size } from "./ui";
 export type Change = "added" | "removed" | "changed";
 
 export interface FieldChange { field: string; a: string; b: string }
-export interface Entry { change: Change; text: string; a?: string; b?: string }
+/**
+ * One item that changed. A location or string also has its `number` as triggers and the string table count them
+ * (from 1); a location its 0-based slot as `index` too, which `text` has kept since the first version.
+ */
+export interface Entry { change: Change; text: string; a?: string; b?: string; number?: number; index?: number }
 export interface SectionChange { name: string; change: Change; a: number; b: number }
 
 export interface MapDiff {
@@ -40,7 +44,10 @@ export interface MapDiff {
   units: Entry[];
   locations: Entry[];
   triggers: Entry[];
+  /** The same triggers, none added or removed, in another order (the game runs them in order). */
+  triggersReordered: boolean;
   briefing: Entry[];
+  briefingReordered: boolean;
   strings: Entry[];
   members: Entry[];
   sections: SectionChange[];
@@ -128,7 +135,7 @@ export function locationChanges(a: Scenario, b: Scenario): { index: number; chan
 
 function locations(a: Scenario, b: Scenario): Entry[] {
   return locationChanges(a, b).map(({ index: i, change }) =>
-    change === "changed" ? { change, text: `${i}`, a: locationText(a, i), b: locationText(b, i) } : { change, text: `${i}: ${locationText(change === "removed" ? a : b, i)}` });
+    change === "changed" ? { change, text: `${i}`, a: locationText(a, i), b: locationText(b, i), number: i + 1, index: i } : { change, text: `${i}: ${locationText(change === "removed" ? a : b, i)}`, number: i + 1, index: i });
 }
 
 function triggers(a: Scenario, b: Scenario, briefing: boolean): Entry[] {
@@ -141,6 +148,13 @@ function triggers(a: Scenario, b: Scenario, briefing: boolean): Entry[] {
   return multiset(list(a), list(b), fingerprintTrigger, text, a, b);
 }
 
+/** The same triggers in another order: nothing added or removed, and the order not the same. */
+function reordered(a: Scenario, b: Scenario, briefing: boolean): boolean {
+  const list = (s: Scenario) => (briefing ? readBriefing(s) : readTriggers(s)).map(fingerprintTrigger);
+  const x = list(a), y = list(b);
+  return x.length === y.length && x.some((k, i) => k !== y[i]) && [...x].sort().every((k, i) => k === [...y].sort()[i]);
+}
+
 function strings(a: Scenario, b: Scenario): Entry[] {
   const out: Entry[] = [];
   const n = Math.max(a.strings.strings.length, b.strings.strings.length);
@@ -150,9 +164,9 @@ function strings(a: Scenario, b: Scenario): Entry[] {
   for (let i = 1; i < n; i++) {
     const sa = at(a, i), sb = at(b, i);
     if (sa === sb) continue;
-    if (sa !== null && sb === null) out.push({ change: "removed", text: `${i}: ${show(sa)}` });
-    else if (sa === null && sb !== null) out.push({ change: "added", text: `${i}: ${show(sb)}` });
-    else out.push({ change: "changed", text: `${i}`, a: show(sa!), b: show(sb!) });
+    if (sa !== null && sb === null) out.push({ change: "removed", text: `${i}: ${show(sa)}`, number: i });
+    else if (sa === null && sb !== null) out.push({ change: "added", text: `${i}: ${show(sb)}`, number: i });
+    else out.push({ change: "changed", text: `${i}`, a: show(sa!), b: show(sb!), number: i });
   }
   return out;
 }
@@ -202,9 +216,11 @@ export function diffMaps(a: { name: string; doc: OpenedMap }, b: { name: string;
     header: header(sa, sb), players: players(sa, sb), forces: forces(sa, sb),
     units: multiset(sa.units, sb.units, unitKey, unitText, sa, sb),
     locations: locations(sa, sb),
-    triggers: triggers(sa, sb, false), briefing: triggers(sa, sb, true),
+    triggers: triggers(sa, sb, false), triggersReordered: false, briefing: triggers(sa, sb, true), briefingReordered: false,
     strings: strings(sa, sb), members: members(a.doc, b.doc), sections: sections(sa, sb),
   };
+  d.triggersReordered = !d.triggers.length && reordered(sa, sb, false);
+  d.briefingReordered = !d.briefing.length && reordered(sa, sb, true);
   d.same = [d.header, d.players, d.forces, d.units, d.locations, d.triggers, d.briefing, d.strings, d.members, d.sections].every((l) => l.length === 0);
   return d;
 }
@@ -224,13 +240,20 @@ export function printDiff(d: MapDiff, all = false): string[] {
   };
   const none = pc.dim(t("(none)"));
   const fields = (fs: FieldChange[]) => fs.map((f) => { const v = fieldValue(f.field); return `${sign.changed} ${padColumns(fieldLabel(f.field), 14)} ${pc.red(f.a ? v(f.a) : none)} ${pc.dim("→")} ${pc.green(f.b ? v(f.b) : none)}`; });
-  const entries = (es: Entry[]) => es.map((e) => (e.change === "changed" ? `${sign.changed} ${e.text}  ${pc.red(e.a ?? "")} ${pc.dim("→")} ${pc.green(e.b ?? "")}` : `${sign[e.change]} ${e.text}`));
+  // A numbered item (a location, as triggers number it; a string) is `N  what` in every row, changed or not.
+  const entries = (es: Entry[]) => es.map((e) => {
+    const label = e.number !== undefined ? String(e.number) : e.text;
+    const what = e.number !== undefined ? e.text.replace(/^\d+: /, "") : e.text;
+    if (e.change === "changed") return `${sign.changed} ${label}  ${pc.red(e.a ?? "")} ${pc.dim("→")} ${pc.green(e.b ?? "")}`;
+    return e.number !== undefined ? `${sign[e.change]} ${label}  ${what}` : `${sign[e.change]} ${e.text}`;
+  });
+  const order = (moved: boolean) => (moved ? [`${sign.changed} ${t("the same triggers in another order")}`] : []);
   group(t("Map"), fields(d.header));
   group(t("Players"), fields([...d.players, ...d.forces]));
   group(`${t("Units")} ${pc.dim(counts(d.units))}`, entries(d.units));
   group(`${t("Locations")} ${pc.dim(counts(d.locations))}`, entries(d.locations));
-  group(`${t("Triggers")} ${pc.dim(counts(d.triggers))}`, entries(d.triggers));
-  group(`${t("Briefing")} ${pc.dim(counts(d.briefing))}`, entries(d.briefing));
+  group(`${t("Triggers")} ${pc.dim(d.triggersReordered ? t("reordered") : counts(d.triggers))}`, [...entries(d.triggers), ...order(d.triggersReordered)]);
+  group(`${t("Briefing")} ${pc.dim(d.briefingReordered ? t("reordered") : counts(d.briefing))}`, [...entries(d.briefing), ...order(d.briefingReordered)]);
   group(`${t("Strings")} ${pc.dim(counts(d.strings))}`, entries(d.strings));
   group(t("Archive members"), entries(d.members));
   group(t("Sections"), d.sections.map((s) => `${sign[s.change]} ${s.name.padEnd(4)}  ${s.change === "changed" ? `${size(s.a)} ${pc.dim("→")} ${size(s.b)}` : size(s.change === "added" ? s.b : s.a)}`));
@@ -264,13 +287,26 @@ function counts(es: Entry[]): string {
  * does not have is refused with git's own words.
  */
 export function revisionInput(rev: string, file: string): Input {
-  const f = locate(file);
   if (!rev || rev.startsWith("-")) throw new CliError(rev ? t("{rev} is not a revision", { rev }) : t("An empty revision is not a revision"), t("A commit, branch or tag: HEAD~1, main, v1.0."), 2);
-  const shown = spawnSync("git", ["-C", f.root, "show", `${rev}:${f.path}`], { encoding: "buffer", maxBuffer: 512 * 1024 * 1024 });
+  // `A..B` names many commits, and git show reads it as nothing at all: the whole map would read as added.
+  const three = /^(.+?)\.\.\.(.*)$/.exec(rev);
+  if (!three && rev.includes("..")) throw new CliError(t("--rev takes one revision, not a range: {rev}", { rev }), t("--rev A compares A with the file as it is; --rev A... compares where this branch left A. map log and map blame take ranges."), 2);
+  const f = locate(file);
+  // `A...` (git's three dots): the commit this branch and A last had in common, so the diff is what the branch did.
+  const at = three ? mergeBase(f.root, three[1], three[2] || "HEAD", rev) : rev;
+  const shown = spawnSync("git", ["-C", f.root, "show", `${at}:${f.path}`], { encoding: "buffer", maxBuffer: 512 * 1024 * 1024 });
   if (shown.status !== 0) throw new CliError(t("git has no {path} at {rev}", { path: f.path, rev }), shown.stderr.toString().trim().split("\n")[0] || null, 2);
   const bytes = new Uint8Array(shown.stdout);
   const name = `${rev}:${basename(file)}`;
   return { path: name, name, bytes, kind: kindOf(file, bytes) };
+}
+
+/** The commit `a` and `b` last had in common (`git merge-base`), for `--rev A...`. */
+function mergeBase(root: string, a: string, b: string, rev: string): string {
+  if (a.startsWith("-") || b.startsWith("-")) throw new CliError(t("{rev} is not a revision", { rev }), null, 2);
+  const r = spawnSync("git", ["-C", root, "merge-base", a, b], { encoding: "utf8" });
+  if (r.status !== 0) throw new CliError(t("git found nothing {a} and {b} have in common", { a, b }), r.stderr.trim().split("\n")[0] || null, 2);
+  return r.stdout.trim();
 }
 
 /** The change in a few words: "3 units added, 1 string changed". */
@@ -287,6 +323,7 @@ export function summarizeDiff(d: MapDiff): string {
   list((n) => t("{n, plural, one {# unit} other {# units}}", { n }), d.units);
   list((n) => t("{n, plural, one {# location} other {# locations}}", { n }), d.locations);
   list((n) => t("{n, plural, one {# trigger} other {# triggers}}", { n }), d.triggers);
+  if (d.triggersReordered) parts.push(t("{what} reordered", { what: translate("triggers") }));
   list((n) => t("{n, plural, one {# briefing trigger} other {# briefing triggers}}", { n }), d.briefing);
   list((n) => t("{n, plural, one {# string} other {# strings}}", { n }), d.strings);
   list((n) => t("{n, plural, one {# file} other {# files}}", { n }), d.members);

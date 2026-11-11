@@ -41,7 +41,7 @@ describe("scmjs init", () => {
     expect(read(dir, ".gitignore").split("\n")).toContain("*.bak");
     const workflow = read(dir, WORKFLOW_PATH);
     // The scmjs action, pinned with the command to this version, over the folder's maps.
-    expect(workflow).toContain(`      - uses: scm-js/scm-js/action@v${VERSION}\n        with:\n          version: ${VERSION}\n          maps: |\n            *.scm\n            *.scx\n          strict: true\n          pictures: true\n`);
+    expect(workflow).toContain(`      - uses: scm-js/scm-js/action@v${VERSION}\n        with:\n          version: ${VERSION}\n          maps: |\n            *.chk\n            *.scm\n            *.scx\n          strict: true\n          pictures: true\n`);
     expect(workflow).toContain("  pull-requests: write");
     expect(workflow).toMatch(/^on:\n {2}push:\n {2}pull_request:$/m);
     const readme = read(dir, "README.md");
@@ -153,7 +153,7 @@ describe.skipIf(!hasGit)("scmjs init in a git repository", () => {
     const r = await initFolder(dir);
     expect(existsSync(join(root, WORKFLOW_PATH))).toBe(true);
     expect(existsSync(join(dir, ".github"))).toBe(false);
-    expect(read(root, WORKFLOW_PATH)).toContain("          maps: |\n            maps/*.scm\n            maps/*.scx\n");
+    expect(read(root, WORKFLOW_PATH)).toContain("          maps: |\n            maps/*.chk\n            maps/*.scm\n            maps/*.scx\n");
     expect(existsSync(join(dir, ".gitattributes")) && existsSync(join(dir, "README.md"))).toBe(true);
     expect(r.notes.some((n) => n.includes("repository's top"))).toBe(true);
   });

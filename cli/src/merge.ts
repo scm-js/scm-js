@@ -621,12 +621,18 @@ const triggerText = (t: TriggerRecord, scn: Scenario, briefing: boolean) => {
   return `${s.players}: ${s.conditions || "always"} → ${s.actions || "nothing"}`;
 };
 
-/** A line cut to `width` characters, the window placed so that character `at` (where the versions part) shows. */
-export function around(line: string, at: number, width = 100): string {
+/**
+ * A line cut to `width` characters, the window placed so that character `at` (where the versions part) shows. The
+ * first `keep` characters stay whatever is cut — a trigger's owners, before its `: ` — so a cut line still says whose.
+ */
+export function around(line: string, at: number, width = 100, keep = 0): string {
   if (line.length <= width) return line;
-  const start = Math.max(0, Math.min(at - Math.floor(width / 3), line.length - width + 1));
-  const end = start + width - (start > 0 ? 2 : 1);
-  return `${start > 0 ? "…" : ""}${line.slice(start, end)}${end < line.length ? "…" : ""}`;
+  const head = keep > 0 && keep < width / 2 ? line.slice(0, keep) : "";
+  const room = width - head.length;
+  const from = head.length;
+  const start = Math.max(from, Math.min(at - Math.floor(room / 3), line.length - room + 1));
+  const end = start + room - (start > from ? 2 : 1);
+  return `${head}${start > from ? "…" : ""}${line.slice(start, end)}${end < line.length ? "…" : ""}`;
 }
 
 function mergeTriggers(m: Merging, briefing: boolean) {
@@ -984,9 +990,9 @@ export interface MergeOutcome {
   theirs: string;
   /**
    * same: ours and theirs are the same file. ours / theirs: only that side changed the map, so it is taken whole, byte
-   * for byte. merged: part by part.
+   * for byte. merged: part by part. conflicts: part by part, with conflicts no rule settled, so nothing was written.
    */
-  kind: "same" | "ours" | "theirs" | "merged";
+  kind: "same" | "ours" | "theirs" | "merged" | "conflicts";
   conflicts: Conflict[];
   /** The side conflicts were settled with, when there were conflicts and a rule. */
   settled: Side | null;
@@ -1034,6 +1040,7 @@ export async function runMerge(inputs: { base: Input; ours: Input; theirs: Input
   outcome.changes = r.changes;
   outcome.renumbered = r.renumbered;
   if (r.conflicts.length && !o.prefer) {
+    outcome.kind = "conflicts";
     outcome.hint = o.staged || o.name
       ? t("scmjs map merge {name} --ours (or --theirs) settles each with that side's version; then git add {name}", { name: quote(name) })
       : t("Add --ours or --theirs to settle each with that side's version.");
@@ -1102,7 +1109,9 @@ export function printMerge(r: MergeOutcome): string[] {
       while (at < c.ours.length && c.ours[at] === c.theirs[at]) at++;
       const labels = { base: t("base"), ours: t("ours"), theirs: t("theirs") };
       const w = Math.max(6, ...Object.values(labels).map(columns));
-      const side = (label: string, v: string, colour: (s: string) => string, chosen: boolean) => v.split("\n").map((l, i) => `      ${i ? " ".repeat(w + 1) : `${padColumns(label, w)} `}${colour(around(l, at))}${chosen && i === 0 ? pc.dim(` ${t("(taken)")}`) : ""}`);
+      // A trigger's owners (`Player 1, Player 2: `) stay at the start of a cut line.
+      const owners = (l: string) => { const i = l.indexOf(": "); return i > 0 && i < 40 ? i + 2 : 0; };
+      const side = (label: string, v: string, colour: (s: string) => string, chosen: boolean) => v.split("\n").map((l, i) => `      ${i ? " ".repeat(w + 1) : `${padColumns(label, w)} `}${colour(around(l, at, 100, owners(l)))}${chosen && i === 0 ? pc.dim(` ${t("(taken)")}`) : ""}`);
       if (c.base !== null) lines.push(...side(labels.base, c.base, pc.dim, false));
       lines.push(...side(labels.ours, c.ours, pc.red, r.settled === "ours"), ...side(labels.theirs, c.theirs, pc.green, r.settled === "theirs"));
     }

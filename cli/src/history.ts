@@ -5,6 +5,7 @@
  * once. `map log` and `map blame` (maplog.ts, blame.ts) are built on it, and `map diff --rev` finds the file with it.
  */
 import { spawnSync } from "node:child_process";
+import { existsSync, statSync } from "node:fs";
 import { basename, dirname, resolve } from "node:path";
 import type { OpenedMap } from "../../src/editor/mapFile";
 import { kindOf, loadMapInput } from "./files";
@@ -21,6 +22,8 @@ const git = (args: string[], input?: string) => spawnSync("git", args, { maxBuff
  * symbolic link still gives the path git knows; works from any folder of the repository.
  */
 export function locate(file: string): GitFile {
+  // A folder has a history too, which git would list as the map's ("map removed" in each commit).
+  if (existsSync(file) && statSync(file).isDirectory()) throw new CliError(t("{file} is a folder, not a map", { file }), t("Name a map in it (.scm, .scx, .chk)."), 2);
   const dir = dirname(resolve(file));
   const r = git(["-C", dir, "rev-parse", "--show-toplevel", "--show-prefix"]);
   if (r.error) throw new CliError(t("git is not installed, or not on PATH"), t("A map's history is read through git."), 2);
@@ -51,13 +54,20 @@ function checkRevision(rev: string): void {
  */
 export function commitsTouching(f: GitFile, rev: string, o: { topo?: boolean; limit?: number } = {}): Commit[] {
   checkRevision(rev);
-  const args = ["-C", f.root, "log", "--parents", "--format=%x1e%H%x1f%P%x1f%an%x1f%ae%x1f%aI%x1f%s", ...(o.topo ? ["--topo-order"] : []), ...(o.limit ? ["-n", String(o.limit)] : []), rev, "--", f.path];
+  const args = ["-C", f.root, "log", "--parents", "--format=%x1e%H%x1f%P%x1f%an%x1f%ae%x1f%aI%x1f%s", ...(o.topo ? ["--topo-order", ...(o.limit ? ["-n", String(o.limit)] : [])] : []), rev, "--", f.path];
   const r = git(args);
   if (r.status !== 0) throw new CliError(t("git does not know the revision {rev}", { rev }), r.stderr.toString().trim().split("\n")[0] || null, 2);
-  return r.stdout.toString().split("\x1e").filter((s) => s.trim()).map((rec) => {
+  const commits = r.stdout.toString().split("\x1e").filter((s) => s.trim()).map((rec) => {
     const [hash, parents, author, email, date, subject] = rec.replace(/\n+$/, "").split("\x1f");
     return { hash, parents: parents ? parents.split(" ") : [], author, email, date, subject: subject ?? "" };
   });
+  if (o.topo) return commits;
+  // Parent rewriting makes git walk the whole history first and list it by commit date, so a commit dated before its
+  // parent (a rebase, a cherry-pick) came after it. The order is `git log -- <path>`'s own, asked for apart.
+  const order = git(["-C", f.root, "log", "--format=%H", ...(o.limit ? ["-n", String(o.limit)] : []), rev, "--", f.path]);
+  if (order.status !== 0) return o.limit ? commits.slice(0, o.limit) : commits;
+  const byHash = new Map(commits.map((c) => [c.hash, c]));
+  return order.stdout.toString().split("\n").map((h) => byHash.get(h.trim())).filter((c): c is Commit => !!c);
 }
 
 /** The blob id of each `<commit>:<path>`, or null where that commit has no such file. One git call for all of them. */

@@ -1222,7 +1222,7 @@ the map, as map diff would say it between the commit's version and its parent's.
     .option("--units", t("the units, a row for each kind and owner"))
     .option("--settings", t("the name, size, players, forces, terrain, unit and tech settings, and the archive's files"))
     .option("--trigger <n>", t("one trigger, by its number in the list, with its whole text"))
-    .option("--location <name>", t("one location, by name or number"))
+    .option("--location <name>", t("one location, by name or by its number as triggers count them (from 1)"))
     .option("--string <n>", t("one string, by number"))
     .option("--rev <revision>", t("the map as this revision has it (the file as it is by default), or a range A..B"))
     .addHelpText("after", "\n" + t(`Like git blame, a row per thing in the map instead of per line: the commit, author and date
@@ -1253,7 +1253,7 @@ the file is read as it is, and what is not committed yet says so.`) + `
         const rows = b.kinds[kind]!;
         const want = one[0] === "location" ? o.location! : String(trigger ?? str);
         const at = one[0] === "location"
-          ? rows.findIndex((r) => r.label.toLowerCase() === want.toLowerCase() || r.text.startsWith(`#${want} `))
+          ? rows.findIndex((r) => r.label.toLowerCase() === want.toLowerCase() || `#${r.number}` === want || String(r.number) === want)
           : rows.findIndex((r) => r.label === want);
         if (at < 0) {
           const what = one[0] === "trigger" ? t("trigger") : one[0] === "location" ? t("location") : t("string");
@@ -1882,14 +1882,18 @@ scmjs logout ends it. scmjs login and scmjs logout are the same as account login
     .option("--git", t("git init the folder when it is in no git repository (never done without it)"))
     .option("--force", t("replace a README.md or workflow that is there, and set a git setting that holds another value"))
     .addHelpText("after", "\n" + t(`Writes what is not there yet:
-  .gitattributes              *.scx, *.scm and *.chk read through scmjs map dump by git diff
-  .gitignore                  *.bak, the copy the desktop app's Save keeps
+  .gitattributes              *.scx, *.scm and *.chk read through scmjs map dump by git diff, and merged through
+                              scmjs map merge by git merge
+  .gitignore                  *.bak, the copy the desktop app's Save keeps, and *.tests/ and *.clips/, what a failed
+                              map test leaves beside the map
   .github/workflows/maps.yml  map check on every push and pull request (and map build --check for maps with a
-                              TrigScript script), with this version of scmjs pinned
+                              TrigScript script), with this version of scmjs pinned; a folder set up after another
+                              is added to the maps it checks
   README.md                   the maps, and the commands to check, dump and diff them
-and, in the git repository, git config diff.scmjs.textconv, .xfuncname and .cachetextconv, which are per clone.
-.gitattributes and .gitignore get only the lines they lack; nothing else that is there is changed without --force.
-Exits 2 when there is no such folder.`))
+and, in the git repository, git config diff.scmjs.textconv, .xfuncname and .cachetextconv, and merge.scmjs.name and
+.driver, which are per clone. .gitattributes and .gitignore get only the lines they lack; nothing else that is there
+is changed without --force. Says which maps fail the check now. Exits 2 when there is no such folder, or when its maps
+are all in folders below it (--force sets it up anyway).`))
     .action(async (folder: string, o: { json?: boolean; print?: boolean; git?: boolean; force?: boolean }) => {
       const r = await initFolder(folder, { print: !!o.print, git: !!o.git, force: !!o.force });
       if (o.json) print(JSON.stringify({ ...r, files: r.files.map(({ content, ...f }) => (o.print ? { ...f, content } : f)) }, null, 2));

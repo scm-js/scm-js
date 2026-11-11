@@ -105,7 +105,7 @@ describe("scmjs map diff", () => {
     applyUnitChanges(b.scenario, removeUnits(b.scenario, [b.scenario.units.length - 1]));
     const d = diffMaps({ name: "a", doc: a }, { name: "b", doc: b });
     expect(d.same).toBe(false);
-    expect(d.strings).toEqual([{ change: "changed", text: "3", a: "Force 1", b: "Renamed" }]);
+    expect(d.strings).toEqual([{ change: "changed", text: "3", a: "Force 1", b: "Renamed", number: 3 }]);
     expect(d.triggers).toHaveLength(1);
     expect(d.triggers[0].change).toBe("added");
     expect(d.units).toHaveLength(1);
@@ -298,7 +298,7 @@ describe.skipIf(!hasGit)("scmjs map diff --rev", () => {
     const then = revisionInput("HEAD", file);
     expect(then).toMatchObject({ name: "HEAD:ridge.scx", kind: "map" });
     const d = diffMaps({ name: then.name, doc: await openMapBytes(then.bytes, then.name) }, { name: "ridge.scx", doc: await openMapBytes(new Uint8Array(readFileSync(file)), "ridge.scx") });
-    expect(d.strings).toEqual([{ change: "changed", text: "3", a: "Force 1", b: "Renamed" }]);
+    expect(d.strings).toEqual([{ change: "changed", text: "3", a: "Force 1", b: "Renamed", number: 3 }]);
     expect(() => revisionInput("HEAD", join(dir, "nowhere.scx"))).toThrow(/has no nowhere\.scx/);
     const loose = join(tmp(), "loose.scx");
     writeFileSync(loose, readFileSync(testMap("ums.scx")));

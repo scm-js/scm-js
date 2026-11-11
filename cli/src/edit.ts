@@ -48,7 +48,7 @@ export function parseEncoding(value: string): TextEncoding {
 
 /** Whether every string of the map is plain ASCII, which every encoding writes the same: an encoding then changes nothing. */
 export function plainAsciiText(scn: Scenario): boolean {
-  return scn.strings.strings.every((s) => s === null || /^[\x00-\x7f]*$/.test(s));
+  return scn.strings.strings.every((s) => s === null || [...s].every((c) => c.charCodeAt(0) < 0x80));
 }
 
 /**

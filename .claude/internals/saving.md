@@ -15,6 +15,29 @@ is the file's own extension and *the way it was opened* (`mapOriginAtom`), else 
 Custom, shows the five strip ticks; the radio is read back from the ticks — none on, all on, else
 Custom — so a stored option set reopens on the right one). Nothing here mutates the scenario.
 
+**Members kept as stored while unchanged (2026-11-11, CLI audit S2).** StarEdit stores a WAV with ADPCM + Huffman
+sectors (first sector PKWARE); mopaq decodes them, and before this every save re-stored the PCM (Wakka Wakka 572 KB →
+1.5 MB, nothing could shrink it back). `src/formats/mpq/stored.ts`: `readMembers` reads each named member's sector
+method bytes (`storedMethods`, the MPQ cipher copied from mopaq for the sector table and first word) and, for one with a
+method the writer cannot make (not just zlib/PKWARE), `keepStoredForm(bytes, { name, member, methods, hashTable })` —
+a **WeakMap keyed by the decoded `Uint8Array`** plus an FNV fingerprint, so the form travels wherever the array goes
+(the document's extras, `buildOutgoing`, a recovery copy made this session) and is gone when the Sound Editor gives the
+member new bytes. `saveMap` carries such a member with `addStored` when its bytes are unchanged, its name the same, its
+sector size and hash table the archive's (taken from the first carried form when there are no nameless members; not
+when the table is too small for the files), never one with zlib/bzip2 sectors into a non-zlib archive; carried members
+are moved to the front round the nameless ones (`packStored`, re-keyed when the key is offset-adjusted), and the
+`(listfile)` is then written by hand (the writer's lists only `addFile` members), encrypted with an adjusted key as the
+writer's own. `carryStored: false` (optimize's own probes) writes everything afresh. Verified: every fixture map through
+the CLI's `map set` decodes member-for-member identical and is smaller than the original; Wakka, Race of Death and
+Fortress ran 200 frames in the game. A recovery copy restored in a later session has new arrays: those sounds are
+written as PCM then (not fixed).
+
+**Bytes with no scenario are refused (CLI audit S1).** `readArchive` (so `openMapBytes`, the editor's open, the CLI)
+throws `MapLoadError` when the chk has no complete section of a name in `SECTION_SPECS` (`looksLikeScenario`): a text
+file renamed `.scx`, 0 bytes, random bytes, an archive whose `staredit\scenario.chk` is garbage. Before, `parseScenario`
+of anything was a blank 64 × 64 map and a Save wrote an MPQ over the text file. `loadMap` itself still takes any bytes
+(the container tests and `chkOf` rely on that).
+
 The dialog (reworked 2026-09-21, the user found the two-column version confusing): file name, format
 and *What to keep* in front; **Archive** and **Sections** are `<details>` folds (`.save-more`) whose
 summaries carry the current state (compression · encrypted · n of m other files; kept sections ·

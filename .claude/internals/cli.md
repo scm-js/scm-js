@@ -399,7 +399,8 @@ slice proposed: four thin layers on existing library code, plus a git recipe.
   `map triggers import` could take the part back), strings as `formatStringTable`, members with size + sha1 prefix,
   sections as they would be written (`sectionBytes`, the same gather `diff.ts` uses — moved here, exported). Every
   part is printed even when empty (`(none)`) so two dumps line up. No colour ever (it is for files and git), first
-  line `# <file> — scmjs map dump 1` (`DUMP_FORMAT`, bump when the form changes incompatibly). **The git recipe**
+  line `# <file> — scmjs map dump 1` (`DUMP_FORMAT`, bump when the form changes incompatibly; **2 since the 2026-11-11
+  audit: `# scmjs map dump 2`, no file name** — see the last section). **The git recipe**
   (docs/cli.md "A map as text, and in git"): `diff.scmjs.textconv "scmjs map dump"`, `diff.scmjs.xfuncname "^## .*"`
   (hunk headers name the part; **0.9.0 shipped `"^## "`**, and git puts what the expression *matched* in the header,
   so it showed a bare `##` — found by `scmjs init`'s demo, 2026-11-07), `.gitattributes` `*.scx diff=scmjs`. Verified in a scratch repo: `git diff` and
@@ -2157,7 +2158,7 @@ Branch `cli-balance-optimize`, one PR; nothing in scm-sim changed (the runner fa
   its old offset** (the key is offset-adjusted), so the archive could not shrink past it (Fortress with
   `--strip-editor` saved 0 B). `relocate.ts` moves them: the MPQ cipher copied from mopaq's `crypto.ts` (MIT, not
   exported), sector table decrypted with key−1 and each sector with key+i under the old offset's key, encrypted under
-  the new; `packStored` lays them from offset 32 round the nameless members; `(attributes)`/`(signature)` found by
+  the new (now `src/formats/mpq/stored.ts`, shared with every save since the 2026-11-11 audit); `packStored` lays them from offset 32 round the nameless members; `(attributes)`/`(signature)` found by
   `slotOf` among the nameless move too. Single-unit and sector-CRC members (not in SC1 maps; mopaq reads neither) are
   left in place. With members carried, a `(listfile)` naming them is written by hand (`listfile: false` + an extra),
   since the writer lists only what it encoded; a protected map (no listfile) gets none. `writeBest` also tries
@@ -2500,3 +2501,74 @@ the runner's race string; a numeric one maps to a declared letter — but `map h
 so no table reaches it today. `mod` side: `mods.md` "Races a mod adds". Tests: `tests/cli-races.test.ts` (made replays
 with race 69; the real BattleGuard replay when `SCMJS_COSMONARCHY` names the release folder — either the folder itself or
 a root holding `release/` — and the replay is in `~/.cache/scmjs-cosmonarchy/replays/` or `SCMJS_COSMONARCHY_REPLAY`).
+
+## Audit fixes: maps (2026-11-11)
+
+Branch `cli-audit-maps`, one of four after an end-to-end audit of 0.13.3 (rules in the lead's brief: exit 2 for a
+command that cannot start, `--out` always written on success, never merge into a folder, `--force` = overwrite only,
+JSON `file` as typed, progress to stderr). Tests: `tests/cli-audit-maps.test.ts` (whole commands through
+`program.parseAsync`, stdout captured as bytes so a map on stdout can be reopened; `piped()` swaps `process.stdin`).
+
+- **S1 not-a-map**: `looksLikeScenario` in `readArchive` (saving.md). `MapReadError` and optimize's unreadable map are
+  exit 2 now, as is pack's "packed file is not a map".
+- **S2 ADPCM**: `src/formats/mpq/stored.ts` (relocate.ts moved there; core exports it). Every writer and the editor's
+  Save carry an unchanged ADPCM member as stored (saving.md). `map unpack` writes the stored form to `stored/NNN.bin`
+  with `members[].stored = { slot, hash, block, sectorSize, file, sha256 }` (sha256 of the decoded file), and the
+  manifest goes to **version 3** only when such a member exists (a pre-0.13.4 pack would have packed the `.bin` as a
+  member; it refuses a 3 instead). `pack` hands the stored form back through `keepStoredForm` while the WAV's sha256
+  matches, and says how many changed sounds went in as PCM. `optimize` passes `carryStored: false` to its own writes
+  (it measures both ways itself) and no longer carries a zlib member into a PKWARE map (it did: ums.scx's tone.wav —
+  1.16.1 could not have read it); the ADPCM note is said only of members with ADPCM sectors.
+- **S3**: `importTriggers` refuses a file with no triggers (exit 2) unless `allowEmpty` (`--allow-empty`); `trgKind`
+  tells a briefing `.trg` (condition 13, Mission Briefing) from triggers (another condition, or an action above 9) and a
+  mismatch is refused. `importStrings` refuses an empty file and a number on two lines. `triggers edit` passes
+  `allowEmpty` (emptying the editor is meant); `strings edit` with every line removed is "nothing changed". **MCP's
+  `map_import_triggers` with empty text is now an error** (mcp.ts untouched).
+- **S4**: `editInEditor` takes `write`, run before the temp file is removed; a failed write keeps the file and the hint
+  names the import command. main.ts refuses `--editor ""` and, with no editor named and no TTY on stdin/stdout, vi.
+- **Writes** (`files.ts`): `writeFileMade` makes the parent folder and `writeError` turns EISDIR/ENOTDIR/EEXIST/EACCES
+  into one line, exit 2 — used by `writeOutput`, `emit`, `.trg` export, baselines, sounds, unpack. `readTextArg` reads a
+  text argument or stdin for `-` (both imports).
+- **B2 `--out` always written**: optimize writes the input bytes as they were when it cannot make them smaller (to
+  `--out` or a pipe); prune, edit and `run` (also when piped) likewise. B3: an explicit `--compression` writes even when
+  larger; the list says "Would go" when nothing was removed from a written file.
+- **`--keep`** is `--keep <member>` repeatable (the variadic form ate the map argument); an unknown name is a warning.
+- **`map run`**: `sourceFor` refuses a missing path / non-plugin file / folder without plugin.json itself (exit 2;
+  only `github:`, `builtin:`, `http(s):` go to `parseSpec`); `nodeLoaderDeps.fetchText` drops `build` from a local
+  manifest whose build file is missing but whose entry is there (`sourceWhenNotBuilt`). While the plugin runs,
+  `console.*` goes to stderr (`consoleToStderr`, an Error as `name: message`) — the Repair traces were the game-data
+  loader's `console.warn(msg, err)`. **Waiting for un-awaited work** (`settle`): Repair's `check` command is `run: () =>
+  { void session.check(); }`; the run now waits until (a) no timer set during the run is pending (`trackTimers` wraps
+  `setTimeout`/`clearTimeout` for the run) and (b) `process.getActiveResourcesInfo()` has no kind above its count
+  before the plugin started (counted per kind: a CloseReq ending can hide a new Timeout in a plain total — first try
+  missed a 200 ms timer that way), 10 s at most. Repair shows its findings in a dialog, so still nothing is printed for
+  it; the guide's example now uses a script that names a switch. `headless.ts`: `api.document.save` resolves true,
+  `saveAs` false (they reached for the page's file APIs: "window is not defined"), `api.ui.toast("text")` takes a
+  string as the title. `--arg` without `--command` refused.
+- **B4**: a map whose strings are all ASCII is the same bytes in every encoding and the encoding is detected on open,
+  so `setHeader` makes no encoding change there (`plainAsciiText`) and main.ts says so. `parseRevision`/`parseEncoding`
+  take any case (CP949 → euc-kr); `map new` takes the five revisions (`NEW_VERSIONS` is all of `MAP_VERSIONS`).
+- **B8 `map dump` 2**: no file name in line 1 (git's textconv of a renamed file differed); sprites (`spriteLine`),
+  doodads, `changedSettings` (custom units/upgrades/techs with `useDefault` 0; availability/levels where the shared
+  column differs from a fresh table, a player's own values only where `playerUsesDefault` is 0 — StarEdit leaves
+  bytes in the other players' columns, which made 240 lines of noise on Crescent Moon; weapons when any unit is
+  custom, ~78 lines of dat values on campaign maps), `sha1` per section, strings with text only, locations numbered
+  from 1 with Anywhere counted apart. `init`, `map log`, `blame`, `unpack --text` do not parse the dump.
+- **B10**: `find` builds each trigger's `formatTrigger` text for triggers/briefing (the editor's Find reads only the
+  trigger's strings); `hitJson` adds `number`.
+- **`map unpack` never merges** (`clearEarlierUnpack`): the manifest has `files` (path → 16 hex of sha256) of what the
+  unpack wrote; a re-unpack removes the earlier unpack's files (then empty folders, never dot-folders), refuses another
+  map's unpack (by `fileName`), files changed or added since (unless `--force`), and a folder that is no unpack (even
+  with `--force`: `--out .` would otherwise clear the working directory). Manifests from before `files`: a listed file
+  is "changed" only when it differs from what this unpack writes there.
+- **Counting**: locations without Anywhere, strings with text (`stringsWithText` in `MapReport`; `statistics.strings.set`
+  counts "" slots) — `map info` and `map dump` agree. **`map log` (maplog.ts, not this branch) counts Anywhere** (Crescent
+  Moon "1 location"): it should count as `info` does.
+- **Shared code touched**: `eachFile` (main.ts, above the map block) prints a failed file's line on stderr in every
+  mode and no longer prints a blank stdout line before it; the `node:fs/promises` import line lost `writeFile`.
+  `tests/cli-mcp.test.ts`: the dump's first line. `report.ts` formats take `unread`.
+- **Not done / for others**: a Check Map rule for zero-size or off-map locations (editor's `validate.ts`); `map log
+  README.md` lists 153 commits each "could not be read" instead of refusing the file up front (maplog.ts); `map fetch
+  --json` raw name (fetch.ts): `map info --json` now gives `name` cleaned and `rawName` raw — fetch should match; the
+  mpq.test "Wakka Wakka when its file list is gone" times out (5 s) under the full parallel run on this machine, as
+  before the branch (3.2 s alone).

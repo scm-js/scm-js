@@ -111,8 +111,11 @@ the files you downloaded against it.
 ### The commands
 
 `scmjs` on its own, or `scmjs --help`, prints the overview above. Most commands sit under
-a noun: `map`, `replay`, `mod`, `plugin`, `bot` and `account`. `scmjs map --help` lists
-the map commands, and every command has its own `--help` with its options and examples.
+a noun: `map`, `replay`, `mod`, `plugin`, `bot` and `account`. `scmjs map` (or
+`scmjs map --help`) lists the map commands, grouped by task as this guide's chapters are,
+and every command has its own `--help` with its options and examples;
+`scmjs help map diff` is the same as `scmjs map diff --help`. The overview's last group
+names the commands it has no row for: `about`, `completion`, `login`, `logout` and `lsp`.
 The [command reference](#command-reference) lists them all on one page.
 
 A command that takes several files takes as many as you name, so a shell pattern works:
@@ -3373,7 +3376,7 @@ gives its options.
 | [`scmjs map unpack <map> --text`](#a-map-as-a-folder-of-text) | The scenario as text files to keep in git; `map pack` builds the map from them |
 | [`scmjs map build <map>`](#building-a-trigscript-map) | Builds the map's TrigScript script into it, as Save does |
 | [`scmjs map run <plugin> <map>`](#running-a-plugin-over-a-map) | Runs a plugin, or a script written like one, over the map |
-| [`scmjs map diff <a> <b>`](#comparing-two-maps) | What changed between two maps, or since a git revision with `--rev`; `--picture` shows where |
+| [`scmjs map diff <a> <b>`](#comparing-two-maps) | What changed between two maps, or since a git revision with `--rev` (`--rev main...` for what a branch changed); `--picture` shows where |
 | [`scmjs map log <map>`](#a-maps-history) | The commits that changed the map, each with what it changed in the map's terms |
 | [`scmjs map blame <map>`](#who-last-changed-what) | The commit, author and date that last changed each trigger, location, string, unit group or setting |
 | [`scmjs map merge <base> <ours> <theirs>`](#merging-two-versions-of-a-map) | Two versions of a map merged with their common ancestor, as git's merge driver |
@@ -3427,7 +3430,7 @@ gives its options.
 
 | Command | What it does |
 | --- | --- |
-| [`scmjs plugin new [name]`](#writing-a-plugin) | A plugin to start from |
+| [`scmjs plugin new [name]`](#writing-a-plugin) | A plugin to start from, in `plugin-<id>` or `--out`; `--id` when the name makes none |
 | [`scmjs plugin dev`](#writing-a-plugin) | The editor with your plugin, reloaded each time you save |
 | [`scmjs plugin check`](#writing-a-plugin) | What the editor would make of the plugin |
 | [`scmjs bot new`, `init`, `build`](#building-a-bot) | A BWAPI bot built into a `.scmbot` file for the play page |
@@ -3443,7 +3446,7 @@ gives its options.
 | [`scmjs account`](#signing-in) | Who you are signed in as, your storage, the maps you are sharing |
 | [`scmjs doctor`](#checking-your-setup) | What this computer has for each command, and what is missing |
 | [`scmjs about`](#updating) | This version, whether there is a newer one, and the links |
-| [`scmjs mcp`](#ai-tools) | The map commands as an MCP server for AI tools |
+| [`scmjs mcp`](#ai-tools) | The map commands as an MCP server for AI tools, kept to the folder it starts in unless `--allow-outside` |
 | [`scmjs lsp`](#trigscript-in-your-text-editor) | A TrigScript language server for your text editor: errors, completions, hovers, go to definition |
 | [`scmjs completion <shell>`](#shell-completion) | A completion script for bash, zsh or fish |
 

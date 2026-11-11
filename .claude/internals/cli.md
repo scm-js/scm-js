@@ -46,8 +46,8 @@ command's output changes, with `--play-url` at a staged scm-sim deploy when the 
   ✔ ✖ ▲ ℹ fall back to ASCII on the old Windows console. `rows()` aligns label/value pairs (`null` = blank line,
   one width for all groups); `table()` pads by visible width. `gameText` turns StarCraft's colour bytes into 24-bit
   colour only when `COLORTERM` says truecolor, else drops them; replays colour player names by the replay's colours.
-  `--json` everywhere: one object, or a list for several files. Exit codes: 1 failed check / error, 2 a missing or
-  wrong-kind file. A failing file in a list is reported on stderr and the rest go on.
+  `--json` everywhere: one object, or a list for several files. Exit codes: 1 failed check / error, 2 the command
+  could not start (a usage error, a missing or wrong-kind file; see "Audit fixes: the shell" at the end). A failing file in a list is reported on stderr and the rest go on.
 - **The overview's banner** (`cli/src/banner.ts`, 2026-11-06, the user's "the scmjs wireframe in ascii art"): only
   the root help (`scmjs`, `--help`, `help`) — `configureHelp({ formatHelp })` in main.ts sends `!cmd.parent` to
   `rootHelp` and everything else to `Help.prototype.formatHelp`, so `scmjs map --help` is commander's. `GLOBE` is
@@ -111,11 +111,9 @@ native/ — see scm-sim's docs/own-bots.md. Added 2026-11-06 with "Made by Jeany
   marks dirty — the first version compared `scn.chk.sections` and saw no change after an edit). Exit 1 when
   different, like diff(1); docs say so under exit codes. Lists cut at 20 unless `--all`.
 - `completion bash|zsh|fish` (**hidden** from the overview so the root help stays within 23 lines; documented, and
-  `scmjs help completion`): `commandTree(program)` walks commander (`cmd.options` minus hidden, `cmd.commands`
-  minus `_hidden`/help) and three generators write the scripts, so a new command is in them with no list. bash:
-  nested `case` on the typed path → `compgen -W`, else files; `bash -n` in the test. zsh: one function per command,
-  `_arguments -C` + `_describe`. fish: `__fish_seen_subcommand_from` chains; options as `-l`/`-s`. zsh/fish are not
-  syntax-checked here (neither shell is on this machine).
+  `scmjs help completion`): `commandTree(program)` walks commander and three generators write the scripts, so a new command is in them with
+  no list. (Rewritten 2026-11-11 — options that take a value, choices, hidden commands kept: "Audit fixes: the
+  shell" at the end.) zsh/fish are not run here (neither shell is on this machine).
 - **Overview term cap** (`main.ts` `TERM_WIDTH` 28): a noun with many verbs shows `map info|check|open|…` so the
   description column stays beside it and the banner's 80×23 holds; the noun's own help lists all. The test in
   cli.test.ts skips hidden commands and asserts the ellipsis.
@@ -450,8 +448,8 @@ slice proposed: four thin layers on existing library code, plus a git recipe.
     command was being added in parallel) — add its row with its needs; the StarCraft note already names it.
   - **MCP** (`mcpCheck(config = ~/.claude.json, cwd)`): `mcpServers` at the top (every folder) and
     `projects[cwd].mcpServers`, then any other project's; an entry counts when one of `[command, ...args]` matches
-    `@scm-js/cli|scmjs` and another is exactly `mcp` (npx, a global `scmjs`, `node …/scmjs.mjs`). Always `ok`; the
-    fix `claude mcp add scmjs -- npx -y @scm-js/cli mcp` (`MCP_ADD`) when not registered here; a missing or
+    `@scm-js/cli|scmjs` and another is exactly `mcp` (npx, a global `scmjs`, `node …/scmjs.mjs`). Always `ok` (doctor's JSON says `absent` for
+    "not added" since 2026-11-11); the fix `claude mcp add scmjs -- npx -y @scm-js/cli mcp` (`MCP_ADD`) when not registered here; a missing or
     unparsable file is a quiet dim "Claude Code not found". Nothing else in the file is read out. The project-scoped
     `.mcp.json` is not looked at.
   - `doctorReport`/`doctorJson`/`printDoctor` keep their names and shapes (the MCP server's `doctor` tool calls them);
@@ -687,8 +685,8 @@ The second DX slice (the user's "go for it" on the second suggestion round), sta
   the modules called never `print()` themselves (main.ts does the printing — the reason the split existed).
   `StdioServerTransport` does not close on stdin's end, so `serveStdio` waits on `process.stdin` `end` (or the
   server's `onclose`) and closes the server; without it Node exited with 13 "unsettled top-level await".
-- **Overview**: `mcp` took a line in "This tool:", so the `help [command]` row is hidden (`program.createCommand("help")`
-  + `_hidden`, `addHelpCommand`) — `scmjs help map` still works and `-h, --help` is on the same screen; 23 lines held.
+- **Overview**: `mcp` took a line in "This tool:", so the `help [command]` row is hidden (since 2026-11-11 a real
+  hidden `help [command...]` under every noun, made by `finishProgram`) — `scmjs help map` still works and `-h, --help` is on the same screen; 23 lines held.
 - `tests/cli-mcp.test.ts` (7): the SDK `Client` over `InMemoryTransport.createLinkedPair()` — tool list with
   descriptions, annotations and instructions; info/dump; check; triggers export → import `--append` to `out` → diff;
   strings by number + header in place; find + new; failures as text. A stdio smoke (initialize, tools/list, two
@@ -1282,7 +1280,7 @@ Phase one of "share links from files on disk". Server half: ai-server 0.36.0 (`P
 - **Overview**: `account show|login|logout` is a row under "This tool:" (one-line description); the `login` / `logout`
   shortcuts stay **hidden** (as `completion`), since the account row names them; `map share` is under `map …`. Found
   by: `map share` without a session says `scmjs login`, the doctor's row says it, `scmjs help account`, docs. Hidden
-  commands are not in the completion scripts either (`commandTree` skips `_hidden`). The rows for `init` and `account`
+  commands are in the completion scripts since 2026-11-11 (the guide documents them). The rows for `init` and `account`
   came from dropping the blank lines between the groups — see "The overview's rows".
 - **Doctor**: `scmjsDevCheck(file, server)` reads the file only — "signed in as Ann" + the file's path, or a dim `·
   not signed in` (`not signed in to scmjs.dev` for a session from another server) with `scmjs login` under it, state
@@ -2500,3 +2498,112 @@ the runner's race string; a numeric one maps to a declared letter — but `map h
 so no table reaches it today. `mod` side: `mods.md` "Races a mod adds". Tests: `tests/cli-races.test.ts` (made replays
 with race 69; the real BattleGuard replay when `SCMJS_COSMONARCHY` names the release folder — either the folder itself or
 a root holding `release/` — and the replay is in `~/.cache/scmjs-cosmonarchy/replays/` or `SCMJS_COSMONARCHY_REPLAY`).
+
+## Audit fixes: the shell, maps in git, developer commands (2026-11-11)
+
+Branch `cli-audit-shell`, one of four after the end-to-end audit of 0.13.3. The rules (exit codes, `--out`, JSON,
+words) are the round's, in docs/cli.md "Exit codes" and the other areas' sections.
+
+**The program (main.ts head and tail).**
+- `ScmjsCommand extends Command` (`createCommand` returns one, so every command is one): `error()` forces exit code 2
+  for everything commander raises (unknown option/command, missing argument, choices, excess arguments, a required
+  option, an argParser's `InvalidArgumentError` — all go through `error`); `help({ error: true })` — commander's answer
+  to a noun alone or a global option alone — prints to stdout and exits 0; `unknownCommand()` suggests among all
+  commands, hidden ones too (`similarNames`, commander's own `suggestSimilar` is not exported: Damerau–Levenshtein, ≤ 2
+  edits, similarity > 0.4). Help and `--version` stay 0 (commander's own exit codes for them).
+- **`-v` only before a command**: `enablePositionalOptions()` on the program (inherited by every command made after
+  it). Then `--lang`/`--no-color` after the command would be unknown options, so `finishProgram` gives every command
+  hidden copies (`hideHelp()`); their values land in each action's `o` as `lang`/`color` — checked that no action
+  passes `o` on to something reading a `color` or `lang` field (`watch.ts` has `color?`, but `replay watch` passes its
+  fields one by one). chooseLocale and picocolors read argv themselves, so commander only has to accept them.
+- **`finishProgram(program)`** after every command is defined (the only place that touches other areas' commands, by
+  walking them): the hidden options, `showHelpAfterError("(scmjs map info --help lists its options)")` per command
+  ("its commands" for a noun without an action), a hidden `help [command...]` under every command that has
+  subcommands and no action (program `helpCommand(false)`; the path is walked, an unknown word is `unknownName` →
+  exit 2), and `COMMAND_GROUPS` → `helpGroup()` + `GROUP_RANK`. **commander orders groups by the first appearance in
+  `cmd.commands` (creation order)**, so `configureHelp` overrides `visibleCommands` (stable sort by rank) and
+  `groupItems` (groups ordered by the sorted list) — `map.commands` itself is not reordered, so the overview term
+  `map info|check|open|…` and completion keep creation order. A `map` command in no group fails `tests/cli-program`.
+- `subcommandTerm` shows a command's own usage when it has an action as well as subcommands (`test <map> [tests...]`).
+- **`run(args, prog)`** is exported (tests run it in-process with `exitOverride` on every command). Its catch: a
+  `CliError`; else `fileProblem(e)` — ENOENT/EISDIR/ENOTDIR/EACCES/EPERM/EEXIST/EROFS/EMFILE/ENFILE (also on
+  `e.cause`) → one line with the path (relative when under cwd), exit 2, ENOSPC exit 1, stack under `SCMJS_DEBUG`;
+  EPIPE → 0; `CommanderError` → its code; anything else the old "Something went wrong" + stack. **Trap:**
+  `readFileSync(<folder>)` throws EISDIR with no `path` (the read is on a descriptor), hence the pathless wordings.
+  The stdout/stderr `error` listener now exits 0 on EPIPE (was the pending exit code).
+- `SCMJS_LANG=fr`: `unknownLanguage(args, env)` (i18n.ts) → one ▲ line on stderr; `--lang` given → silent.
+- Overview: the hidden root commands are named on the last group's heading line (`This tool:   also about,
+  completion, …`), dim, only when it fits 80 columns — no extra row, the 23 held (banner.ts).
+- **Completion** rewritten: `commandTree` keeps hidden commands (help only at the top), adds `--lang` (choices) and
+  `--help` to every node, and per option `value: none|file|word` (`PATHLIKE` on the `<name>` in the flags: file,
+  folder, map, path, png, replay…; an optional `[value]` counts as a flag so `--baseline a.scx` does not swallow the
+  map) and `choices` from `argChoices`; args from `registeredArguments` (choices, variadic). bash: lookup functions
+  (`_scmjs_children/options/value/args`) and a walk that skips an option's value, counts positionals, and offers
+  value choices → options on `-` → subcommands (+ files when the node runs) → the argument's choices or files →
+  options when nothing else. Tested by sourcing it in bash with COMP_WORDS (`tests/cli-completion.test.ts`). fish:
+  `__scmjs_path` walks `commandline -opc` the same way and every rule is `-n '__scmjs_at map check'`. zsh: `:value:(a
+  b)` / `:value:_files` / `:value: ` per option. **zsh and fish were not run** (neither installed). Choices given in
+  this area: `completion <shell>`, `account login --provider`, `map share --keep`. Options of other areas that list
+  values in prose and so complete nothing yet: `map check --format`, `map coverage --format`, `map test --format`,
+  `map optimize --compression`, `map pack --compression`, `map preview|diff --scale`, `map new --tileset|--layout|
+  --revision`, `map set --revision|--encoding`, `map resize --anchor`, `map generate --symmetry|--style`.
+- doctor: `browserStarts(path)` runs `<browser> --version` (5 s; not on Windows or a `.exe`, where it may open a
+  window) — found and not starting is `warn` "does not start", its first stderr line in the note, and blocks `replay
+  export` and the new READY row `map test --clips`. `doctorJson` names `MCP` as "Claude Code" and turns a fine-but-not-
+  there check (the dot) into `state: "absent"`; `Check.state` itself is unchanged (readiness reads it).
+
+**MCP (mcp.ts).** `reg` wraps every raw shape in `z.strictObject(shape, { error })` — the SDK 1.32 accepts a zod
+object as `inputSchema` and validates before the handler; an unknown key is `isError` "`dry_run` is not an argument of
+map_strings_prune: it takes `path`, `dryRun`, `out`", and `tools/list` now says `additionalProperties: false`. The
+SDK's own validation words are reworded through the instance's private `createToolError` (`argumentError`:
+"`path` is missing (a string)"). Aliases for the commands' spellings (`in`/`case`, `arg`, `units`, `dryRun` on
+`map_optimize`, `anyMap` on `map_coverage` beside `force`); `map_trace|cost` gained `every`, `replay`, `order`
+(`path` optional with `replay`; `replayRun` + `checkPlayedMod` as main.ts's `gameRun`). **Paths are confined** to
+the folder the server started in (`createMcpServer({ root })`, `serveStdio` passes cwd) unless `scmjs mcp
+--allow-outside`; `outsideRoot` checks `path, out, a, b, paths, replays, baseline, mod, map, bot, folder, replay,
+plugin` (`plugin` github:/URL and `bot` keys pass; `starcraft` is never confined). Resolution is lexical (`resolve`),
+not `realpath`: a symlink inside the folder can still lead out. Tests' `createMcpServer()` without `root` is
+unconfined, as before. A line on stdin that is not JSON gets `-32700` (`id: null`), JSON that is not JSON-RPC `-32600`
+— the SDK transport only calls `onerror` and answers nothing; `serveStdio` wraps the protocol's `onerror`. `mcp
+--help` lists the tools from `createMcpServer().tools`, made lazily in an `addHelpText` function. The quoting hint of
+a missing file is cut under MCP (`failed`).
+
+**Maps in git.**
+- `revisionInput`: a `..` range is refused (git show `A..B:path` prints nothing, exit 0 — a blank map); `A...[B]` is
+  `git merge-base A (B|HEAD)`. `map log` and `map blame` keep their own ranges (history.ts `checkRevision`).
+- **`map log` order**: `--parents` turns on parent rewriting, which makes git walk the whole history first and emit it
+  **by commit date** — a commit dated before its parent came after it (reproduced: root, c1 dated earlier, c2). The
+  plain `git log --format=%H [-n] <rev> -- <path>` order is now asked for apart and the `--parents` records are put
+  in it (`commitsTouching` without `topo`; `-n` moved to that call). Blame (`topo`) unchanged.
+- `MapDiff` gained `triggersReordered`/`briefingReordered` (multiset equal, order not), a "Triggers reordered" group;
+  `Entry.number` (strings; locations as triggers number them, from 1) and `Entry.index` (locations' slot, which `text`
+  keeps). The text rows are `N  what` for added/removed/changed alike. `BlameRow.number/index` for locations, their
+  text `#1` (was `#0`); `--location 3` / `#3` match the number from 1.
+- `locate()` refuses a folder (it had a history: every commit "map removed").
+- `map merge`: `kind: "conflicts"` when conflicts were left (was "merged"); `around(line, at, width, keep)` keeps a
+  trigger's owners (up to `: `) at the start of a cut line.
+- `init`: the workflow's globs are all three extensions (+ any other spelling found), since the action errors only
+  when no glob matches; an existing workflow it wrote (`Written by scmjs init` + a 10-space `maps:`) gets the new
+  folder's globs added (`workflowGlobs`/`withGlobs`), one it did not write is left and the lines to add are said, and
+  the "checks <folder>/ from there" note is said only when true. `InitMap.fails` (error or warning, as `strict`) →
+  a note naming them with the `--write-baseline` line to run from the top. `--print` states are
+  `would-write|would-replace|would-add`. A folder with no maps whose subfolders have some (`mapFolders`, 3 deep) is
+  refused (exit 2) unless `--force`. `showFolder` names a repository above cwd by its basename. **`cachetextconv`
+  is validated by git against the textconv command string only** (checked: a changed program with the same command
+  kept showing the old text until `git update-ref -d refs/notes/textconv/scmjs`), so a dump-form change needs that
+  line — in the guide; the setting is kept for speed.
+- Korean: `changed`/`removed` are 변경/삭제 (were 변경됨/제거됨, mixed with "이름 변경"); `-n` and `--trigger`'s
+  refusals use `{value|은}`.
+
+**Developer commands.** `map play` needs no `scmjs login` (the page signs in) — the guide's "sharing commands"
+sentence and doctor table were wrong, fixed there; `playInLobby({ say })` sends the hand-over's lines to stderr under
+`--json`, and with `BROWSER=none` says "Open <address> …" instead of "Opening …". `plugin new`: `-o, --out` (`--dir`
+hidden), `--id`; a name that slugs to nothing is refused rather than becoming `my-plugin`. `plugin check`: an `id`
+that is not already `pluginIdOf`'s slug is a warning naming the slug the editor keeps (`editorId`); a `version` not
+x.y.z an info (the loader refuses neither). `plugin dev` runs `checkPlugin` after each change and says the first
+error instead of "✔ … no editor connected"; `--no-open` says "Open <url>". `lsp`: on a TTY a CliError (exit 2); an
+end with no shutdown logs why on stderr.
+
+**Not done / for others**: `map dump` still 0-based locations (maps agent); "1 (1 conditions, 1 actions)" is
+`map.ts` (maps agent); `replay share <map>`'s hint `scmjs info` comes from `files.ts#expectKind` (maps agent's file;
+replay block is the mods agent's); the options above that need real `.choices()`.

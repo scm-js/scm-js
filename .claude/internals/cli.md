@@ -1977,13 +1977,22 @@ passed on Windows 11 through WSL), Homebrew formula (on_macos arm/intel, on_linu
 
 **Leftovers**: signing (Authenticode, Developer ID + notarization) — the hook is after the injection; Linux arm64
 and Windows arm64 executables (SEA needs a runner of each; GitHub has `ubuntu-24.04-arm` and `windows-11-arm`);
-`useSnapshot` (startup) not tried; winget updates by hand (`wingetcreate update … --submit`; automating it needs a
-token secret in scm-js). **Published (2026-11-08):** `scm-js/scoop-bucket` and `scm-js/homebrew-tap` exist and follow
+`useSnapshot` (startup) not tried. **Published (2026-11-08):** `scm-js/scoop-bucket` and `scm-js/homebrew-tap` exist and follow
 each release by themselves (bucket `excavator.yml`, tap `update.yml`, every 4 h); winget's first version is
 microsoft/winget-pkgs#475062. Both repos' main needs PRs, so their workflows push over SSH with a per-repo deploy
 key (`CI_BUILD_KEY`), the workflow token read-only. Trap: ScoopInstaller/GithubActions' Excavator sets the push URL to
 HTTPS with the workflow token (`src/Helpers.psm1`), so it cannot push past the PR rule — the bucket runs Scoop's
 `checkver -Update` in its own steps instead. `packaging/README.md` "Each release" has it all.
+**The release tells them (2026-11-11, the user's "without waiting 4 hours or so"):** `build.yml`'s `packages` job
+(stable only, `needs: release`) dispatches the tap's `update.yml -f version=` and the bucket's `excavator.yml` with
+`PACKAGES_PAT` (fine-grained, Actions: write on those two), and opens winget's pull request with `WINGET_PAT` (classic
+`public_repo`): the filled `packaging/winget` files as one commit through the git data API on `<token's user>/winget-pkgs`
+(synced first; no clone, the repository is gigabytes), branch `scm-js.scmjs-<version>`, `gh pr create`. Measured before:
+the "every 4 h" crons ran 8 to 10 h apart, and 0.13.3 (released 23:59) reached the tap at 07:12. Every step is a
+notice without its secret and a warning on failure, never a failed run; the crons stay as the net. The winget step
+stops while `manifests/s/scm-js/scmjs` is not in winget-pkgs (the first version, #475062, was still waiting for a
+moderator on 2026-11-11), so **its fork-and-PR half has not run for real yet**: only the manifest fill and the tree
+payload were tried, against 0.13.3. Read the first run's log.
 ## Many games and old maps: `map coverage`, `map check --baseline` (`coverage.ts`, `baseline.ts`) — 2026-11-07
 
 `scmjs map coverage <map> [replays…] [--tests] [--strict] [--format text|json|github|junit|sarif] [--all] [--force]

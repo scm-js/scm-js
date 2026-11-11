@@ -756,6 +756,7 @@ under sound\\ is one of the game's own sounds.`));
   sounds.command("export").description(t("the sounds as .wav and .ogg files in a folder")).argument("<map>").addOption(json)
     .option("-o, --out <folder>", t("the folder to write; by default one named after the map with -sounds, beside it"))
     .action(async (file: string, o: { json?: boolean; out?: string }) => {
+      if (o.out === STDIO) throw new CliError(t("map sounds export writes a folder, so --out - cannot be standard output"), t("Name a folder; map sounds lists them."), 2);
       const input = await readInput(file);
       expectKind(input, "map");
       const base = input.path === STDIO ? "stdin" : input.path.replace(/\.(scm|scx|chk)$/i, "");
@@ -780,7 +781,7 @@ compile, a test fails or the build is refused; nothing is written then.`))
       const piped = !o.check && piping(input, o);
       const typescript = await loadTypeScript();
       const r = await buildMap(doc, input.path, typescript, { check: !!o.check, test: !!o.test, out: o.out ?? null });
-      if (o.json) print(JSON.stringify({ file: input.name, ...r }, null, 2));
+      if (o.json) print(JSON.stringify({ file: input.path, ...r }, null, 2));
       else say(piped, ...printBuild(input.name, r));
       if (!r.ok) process.exitCode = 1;
     });

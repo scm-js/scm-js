@@ -466,3 +466,20 @@ describe("B10 and the smaller ones: map find, map info, map check", () => {
     expect(info).toMatchObject({ name: "Test Scenario", rawName: "Test Scenario", stringsWithText: expect.any(Number) });
   });
 });
+
+describe("map sounds", () => {
+  it("says a file in the folder's place in one line, numbers slots from 1 in JSON, and gives paths as typed", async () => {
+    const dir = tmp();
+    writeFileSync(join(dir, "afile"), "x");
+    const r = await scmjs("map", "sounds", "export", testMap("ums.scx"), "--out", join(dir, "afile"));
+    expect(r.code).toBe(2);
+    expect(r.err).toMatch(/afile is a file, not a folder/);
+    const list = JSON.parse((await scmjs("map", "sounds", testMap("ums.scx"), "--json")).out);
+    expect(list.file).toBe(testMap("ums.scx"));
+    expect(list.sounds[0]).toMatchObject({ slot: 0, number: 1 });
+    const out = join(dir, "s");
+    const ex = JSON.parse((await scmjs("map", "sounds", "export", testMap("ums.scx"), "--out", out, "--json")).out);
+    expect(ex.dir).toBe(out);
+    expect(ex.sounds[0].file).toBe(join(out, "tone.wav"));
+  });
+});

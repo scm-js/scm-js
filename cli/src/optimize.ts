@@ -134,7 +134,7 @@ const compressionWord = (c: ArchiveCompression | "other" | null) => (c === null 
  */
 export async function optimizeMap(bytes: Uint8Array, file: string, o: OptimizeOptions = {}): Promise<OptimizeResult> {
   let archive;
-  try { archive = await readArchive(bytes); } catch (e) { throw new CliError(t("{file} is not a map this can read: {message}", { file, message: String(e instanceof Error ? e.message : e) })); }
+  try { archive = await readArchive(bytes); } catch (e) { throw new CliError(t("{file} is not a map this can read: {message}", { file, message: String(e instanceof Error ? e.message : e) }), null, 2); }
   const bare = !archive.origin;
   const strip = !!o.stripEditor;
   const warnings: string[] = [];

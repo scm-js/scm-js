@@ -231,7 +231,7 @@ export async function packMap(dirArg: string, options: PackOptions = {}): Promis
   try {
     await openMapBytes(bytes, basename(path));
   } catch (e) {
-    throw new CliError(t("The packed file is not a map the editor reads: {message}", { message: String(e instanceof Error ? e.message : e) }), textFolder ? t("The text in {folder}/ has to make a scenario.", { folder: textFolder }) : t("{file} has to be a scenario.", { file: fileFor(SCENARIO_PATH) }));
+    throw new CliError(t("The packed file is not a map the editor reads: {message}", { message: String(e instanceof Error ? e.message : e) }), textFolder ? t("The text in {folder}/ has to make a scenario.", { folder: textFolder }) : t("{file} has to be a scenario.", { file: fileFor(SCENARIO_PATH) }), 2);
   }
   try {
     await writeFile(path, bytes);

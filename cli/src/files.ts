@@ -63,7 +63,7 @@ export function kindOf(name: string, bytes: Uint8Array): FileKind | null {
 /** A file that is not a map this can read; `reason` is why, without the file's name (the message has both). */
 export class MapReadError extends CliError {
   readonly reason: string;
-  constructor(name: string, reason: string) { super(t("{name} is not a map this can read: {reason}", { name, reason })); this.reason = reason; }
+  constructor(name: string, reason: string) { super(t("{name} is not a map this can read: {reason}", { name, reason }), null, 2); this.reason = reason; }
 }
 
 export async function loadMapInput(input: Input): Promise<OpenedMap> {

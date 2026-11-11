@@ -9,7 +9,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { gzipSync } from "node:zlib";
 import { afterAll, describe, expect, it } from "vitest";
-import { botRunValues, cacheRoot, checkBotGame, ensureEngine, findGameCopy, gameCopyKind, plainRunnerError, runBotGame, usualGameFolders, wordLine, type EndLine } from "../cli/src/botrun";
+import { botRunValues, cacheRoot, checkBotGame, gameKind, looksLikeMapSettings, ensureEngine, findGameCopy, gameCopyKind, plainRunnerError, runBotGame, usualGameFolders, wordLine, type EndLine } from "../cli/src/botrun";
 import { TEST_MAPS_DIR } from "./support/maps";
 import { CliError, visible } from "../cli/src/ui";
 
@@ -175,7 +175,7 @@ describe("scmjs bot run", () => {
     const dir = tmp();
     const bot = join(dir, "b.scmbot"); writeFileSync(bot, "SCMBOT1\n\0\0\0\0");
     const melee = join(TEST_MAPS_DIR, "melee.scx");
-    await expect(checkBotGame(bot, melee)).resolves.toEqual({ starts: 2 });
+    await expect(checkBotGame(bot, melee)).resolves.toEqual({ starts: 2, mapSettings: false });
     const rep = join(dir, "g.rep"); writeFileSync(rep, Buffer.concat([Buffer.alloc(12), Buffer.from("seRS"), Buffer.alloc(64)]));
     mkdirSync(join(dir, "mybot", "out"), { recursive: true });
     writeFileSync(join(dir, "mybot", "out", "mybot.scmbot"), "SCMBOT1\n");
@@ -196,7 +196,19 @@ describe("scmjs bot run", () => {
       expect(e.exitCode).toBe(2);
     }
     // A map's own settings (--ums) seat the players as the map does: not counted.
-    await expect(checkBotGame(bot, melee, { opponents: 2, game: "ums" })).resolves.toEqual({ starts: 2 });
+    await expect(checkBotGame(bot, melee, { opponents: 2, game: "ums" })).resolves.toMatchObject({ starts: 2 });
+  });
+
+  it("plays a melee map as melee under a mod with no plugins (a FireGraft project alone is no reason for the map's own settings)", async () => {
+    const overlay = (plugins: number) => ({ layers: async () => [], report: (m: never) => m, remove: () => {}, plugins: async () => plugins });
+    expect(await gameKind(false, overlay(0))).toBe("melee");
+    expect(await gameKind(false, overlay(2))).toBeUndefined();
+    expect(await gameKind(true, overlay(0))).toBeUndefined();
+    expect(await gameKind(false, null)).toBeUndefined();
+    const melee = { playerTypes: [6, 6, 0, 0, 0, 0, 0, 0], units: [{ owner: 0, unitId: 214 }, { owner: 11, unitId: 176 }] };
+    expect(looksLikeMapSettings(melee)).toBe(false);
+    expect(looksLikeMapSettings({ ...melee, playerTypes: [6, 5, 0, 0, 0, 0, 0, 0] })).toBe(true);
+    expect(looksLikeMapSettings({ ...melee, units: [...melee.units, { owner: 1, unitId: 0 }] })).toBe(true);
   });
 
   it("says the runner's error without the game's insides", () => {

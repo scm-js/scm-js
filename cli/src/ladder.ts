@@ -350,6 +350,8 @@ export interface LadderOptions {
   mod?: ModOverlay | null;
   /** The kind of game (`--ums`, `--melee`); the runner's rule without. */
   game?: "melee" | "ums";
+  /** Without `game`: the kind of game a map is played as when the command has decided it (`botrun.ts`'s `gameKind`). */
+  gameOf?: ReadonlyMap<string, "melee" | "ums">;
 }
 
 export interface LadderOutcome {
@@ -432,7 +434,8 @@ export async function runLadder(entrants: Entrant[], o: LadderOptions): Promise<
   const worker = async () => {
     while (next < games.length) {
       const g = games[next++];
-      const r = await playGame(runner, engine, game.folder, entrants, g, { out, data, frames: o.frames, timeout: o.timeout, node: o.node, text: o.text, play: o.play, extra });
+      const kind = o.game ? undefined : o.gameOf?.get(g.map);
+      const r = await playGame(runner, engine, game.folder, entrants, g, { out, data, frames: o.frames, timeout: o.timeout, node: o.node, text: o.text, play: o.play, extra: kind ? [...extra, `--${kind}`] : extra });
       results.push(r);
       // The mod, once: what the first game read of it, its code, and how each bot fits it.
       if (!told && r.start && (r.start.code || r.start.mod)) { told = true; for (const line of modLines(r.start, entrants, g, o.mod)) say(line); }

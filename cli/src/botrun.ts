@@ -16,6 +16,7 @@ import { Archive } from "mopaq";
 import { openMapBytes } from "../../src/editor/mapFile";
 import { looksLikeMpq } from "../../src/formats/mpq/scm";
 import { START_LOCATION } from "../../src/data/units";
+import { PlayerType } from "../../src/formats/chk/sections/players";
 import { kindOf } from "./files";
 import { parseFrames, parseRaceWord, parseWhole, type RaceWord } from "./values";
 import { codeWords, ensureEngine, findGameCopy, fitWords, MOD_CODE, modArgs, modWords, runnerFor, startRunner, type BotFitReport, type RunnerCodeReport, type RunnerModReport } from "./engine";
@@ -69,6 +70,28 @@ export interface BotRunOutcome {
   end: EndLine | null;
   /** The runner's exit code: 0 the game ran, 1 the bot printed errors, 2 it could not start. */
   exitCode: number;
+  /** The game seated nobody against the bot (the map's own settings): its outcome means nothing. */
+  alone?: boolean;
+}
+
+/**
+ * The kind of game to ask for when `--ums` and `--melee` are not given: a melee game on a melee map when the mod
+ * carries no plugins, and the runner's own rule otherwise (the map's own settings for a map that looks made for them,
+ * or a mod's plugins). The runner counts a FireGraft project as a reason for the map's own settings even with no edits
+ * in it, which on a melee map leaves the bot alone; the guide's rule is the plugins.
+ */
+export async function gameKind(mapSettings: boolean, mod: ModOverlay | null | undefined): Promise<"melee" | undefined> {
+  if (!mod || mapSettings || !mod.plugins) return undefined;
+  return (await mod.plugins()) ? undefined : "melee";
+}
+
+/**
+ * Whether a map looks made for its own settings, as the runners judge it: a computer's slot, or units of a player's
+ * other than start locations.
+ */
+export function looksLikeMapSettings(scn: { playerTypes: number[]; units: { owner: number; unitId: number }[] }): boolean {
+  for (let slot = 0; slot < 8; slot++) if (scn.playerTypes[slot] === PlayerType.Computer) return true;
+  return scn.units.some((u) => u.owner < 8 && u.unitId !== START_LOCATION);
 }
 
 const RACE_LETTER: Record<string, string> = { zerg: "Z", terran: "T", protoss: "P" };
@@ -99,7 +122,9 @@ export function wordLine(l: RunnerLine): string | null {
  * come and into the outcome. A runner that could not start throws a CliError with its own words.
  */
 export async function runBotGame(bot: string, map: string, o: BotRunOptions = {}): Promise<BotRunOutcome> {
-  await checkBotGame(bot, map, { opponents: o.opponents?.length, game: o.game, mod: !!o.mod });
+  const checked = await checkBotGame(bot, map, { opponents: o.opponents?.length, game: o.game, mod: !!o.mod });
+  const kind = o.game ?? await gameKind(checked.mapSettings, o.mod);
+  if (kind === "melee" && !o.game) await checkBotGame(bot, map, { opponents: o.opponents?.length, game: kind });
   const game = findGameCopy(o.starcraft);
   const engine = await ensureEngine(o.engine, undefined, o.live ?? (() => {}));
   const args = [resolve(map), resolve(bot), "--engine", engine.dir, "--starcraft", game.folder];
@@ -111,7 +136,7 @@ export async function runBotGame(bot: string, map: string, o: BotRunOptions = {}
   if (o.data) args.push("--data", resolve(o.data));
   // (the engine is asked first, so that an older one is said before the mod is written out)
   if (o.mod) { modArgs(engine, "?", MOD_CODE); args.push(...modArgs(engine, await o.mod.layers(), MOD_CODE)); }
-  if (o.game) args.push(`--${o.game}`);
+  if (kind) args.push(`--${kind}`);
   const outcome: BotRunOutcome = { engine: { build: engine.build, dir: engine.dir, fetched: engine.fetched }, game, start: null, texts: [], progress: [], end: null, exitCode: 0 };
   const child = startRunner(runnerFor(engine, "bot"), args, { node: o.node });
   let stderr = "";
@@ -121,7 +146,12 @@ export async function runBotGame(bot: string, map: string, o: BotRunOptions = {}
   for await (const raw of lines) {
     let l: RunnerLine;
     try { l = JSON.parse(raw) as RunnerLine; } catch { continue; }
-    if (l.kind === "start") { if (l.mod && o.mod) l.mod = o.mod.report(l.mod); outcome.start = l; }
+    if (l.kind === "start") {
+      if (l.mod && o.mod) l.mod = o.mod.report(l.mod);
+      outcome.start = l;
+      // (a game with the map's own settings may seat nobody against the bot: the game then ends at once, said)
+      if (!l.players.some((p) => p.kind !== "bot")) outcome.alone = true;
+    }
     else if (l.kind === "text") {
       // (the game names the bot's player "oracle", the engine's word: said as the bot's name)
       l.text = l.text.replace(/\boracle\b/g, outcome.start?.bot.name ?? t("bot"));
@@ -132,6 +162,10 @@ export async function runBotGame(bot: string, map: string, o: BotRunOptions = {}
     else if (l.kind === "error") error = l.message;
     const worded = wordLine(l);
     if (worded && l.kind !== "error") o.live?.(worded);
+    if (l.kind === "start" && outcome.alone) {
+      const warning = `${mark.warn} ${t("Nobody plays against the bot: the map's own settings seat no other player. --melee plays a melee game against --opponents.")}`;
+      if (o.live) o.live(warning); else process.stderr.write(`${warning}\n`);
+    }
   }
   outcome.exitCode = await new Promise<number>((done) => { child.on("error", () => done(2)); child.on("close", (c) => done(c ?? 2)); });
   // (2 from the runner: the game could not start; anything else, it started and did not go through.)
@@ -193,7 +227,7 @@ const MAP_ARCHIVE_SCENARIO = "staredit\\scenario.chk";
  * command when they are the other way round, a replay or a folder), the map one the game opens (StarCraft 1.16.1 reads
  * no zlib), and room on a melee map for the bot and its opponents. Exit 2 for each.
  */
-export async function checkBotGame(bot: string, map: string, o: { opponents?: number; game?: "melee" | "ums"; mod?: boolean } = {}): Promise<{ starts: number | null }> {
+export async function checkBotGame(bot: string, map: string, o: { opponents?: number; game?: "melee" | "ums"; mod?: boolean } = {}): Promise<{ starts: number; mapSettings: boolean }> {
   const usage = "scmjs bot run <bot> <map>";
   const read = async (path: string) => {
     let st;
@@ -233,7 +267,7 @@ export async function checkBotGame(bot: string, map: string, o: { opponents?: nu
   // (a melee game deals the map's start locations: one for the bot, one for each computer)
   const melee = o.game === "melee" || (!o.game && !o.mod);
   if (melee && o.opponents && starts && o.opponents + 1 > starts) throw new CliError(t("{file} has {n, plural, one {# start location} other {# start locations}}: the bot and {opponents, plural, one {# computer} other {# computers}} do not fit.", { file: map, n: starts, opponents: o.opponents }), t("Name fewer --opponents, or a map with more start locations."), 2);
-  return { starts };
+  return { starts, mapSettings: looksLikeMapSettings(doc.scenario) };
 }
 
 /** A path as a shell takes it. */

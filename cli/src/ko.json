@@ -321,6 +321,7 @@
   "{size} of orders": "명령 {size}",
   "{n, plural, one {# error} other {# errors}}": "오류 {n, plural, other {#개}}",
   "{game} ms a frame game, {bot} bot": "프레임당 게임 {game} ms, 봇 {bot}",
+  "Nobody plays against the bot: the map's own settings seat no other player. --melee plays a melee game against --opponents.": "봇과 겨룰 상대가 없습니다. 맵 자체 설정에 다른 플레이어 자리가 없습니다. --melee면 --opponents를 상대로 밀리 게임을 합니다.",
   "The game did not finish: it stopped without a result.": "게임이 끝나지 않았습니다. 결과 없이 멈췄습니다.",
   "--opponents names no race": "--opponents에 종족이 없습니다",
   "A race for each of the game's computers, with commas: --opponents zerg,terran.": "게임의 컴퓨터마다 종족 하나씩, 쉼표로 구분합니다: --opponents zerg,terran.",

@@ -35,6 +35,8 @@ export interface ModOverlay {
   report: (m: RunnerModReport) => RunnerModReport;
   /** Removes them. */
   remove: () => void;
+  /** How many plugins the mod carries as files: what the runners load beside a bot (one in its archive is not loaded). */
+  plugins?: () => Promise<number>;
 }
 
 /** What the game's reload of its startup data reads by name besides the pictures (scm-sim `src/exact/mods.ts`, `STARTUP_NAMES`). */
@@ -77,11 +79,13 @@ export async function gameLayer(source: ModSource, base: GameFiles | null): Prom
 export function modOverlay(path: string, base: () => Promise<GameFiles | null>, o: { code?: boolean } = {}): ModOverlay {
   let dirs: { game: string | null; mod: string } | null = null;
   let mine = new Set<string>(), under = 0;
+  let opened: Promise<{ game: GameFiles | null; source: ModSource }> | null = null;
+  const open = () => (opened ??= base().then(async (game) => ({ game, source: await openMod(path, game) })));
   return {
+    plugins: async () => (await open()).source.plugins.filter((p) => !p.member).length,
     layers: async () => {
       if (!dirs) {
-        const game = await base();
-        const source = await openMod(path, game);
+        const { game, source } = await open();
         const lay = await gameLayer(source, game);
         dirs = { game: null, mod: mkdtempSync(join(tmpdir(), "scmjs-mod-")) };
         if (lay.length) { dirs.game = mkdtempSync(join(tmpdir(), "scmjs-game-")); await writeLoose(lay, dirs.game); }

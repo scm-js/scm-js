@@ -10,7 +10,7 @@ import { aboutReport, printAbout, VERSION } from "./about";
 import { listMembers, MANIFEST_FILE, packMap, unpackMap } from "./archive";
 import { rootHelp } from "./banner";
 import { BOT_GUIDE, runBot, updateBot } from "./bot";
-import { botRunValues, runBotGame } from "./botrun";
+import { botRunValues, gameKind, looksLikeMapSettings, runBotGame } from "./botrun";
 import { ladderJson, parseEntrants, parseRaces, printLadder, runLadder } from "./ladder";
 import { costReport, gameMap, printCost, printTrace, removeGameMap, replayRun, runMapInGame, traceReport } from "./trace";
 import { printRush, runRush, rushJson, unitByName } from "./rush";
@@ -1776,18 +1776,22 @@ the command stops and says which version it needs.`))
       const say = (l: string) => (o.json ? process.stderr.write(l + "\n") : print(l));
       // A map in the original 1.00 form is played as Brood War (as map trace does), so that its replays play back.
       const play = new Map<string, string>();
+      const overlay = o.mod ? modOverlay(o.mod, () => gameFilesOrNull(o.starcraft), { code: true }) : null;
+      // (a melee map under a mod with no plugins is played as melee: botrun.ts gameKind)
+      const gameOf = new Map<string, "melee" | "ums">();
       for (const m of o.maps) {
         const { input, doc } = await openForEdit(m);
         const game = await gameMap(doc, input.path, input.name);
         if (game.path !== m) play.set(m, game.path);
         if (game.converted) say(pc.dim(t("{name} is an original StarCraft map: it is played converted to Brood War.", { name: input.name })));
+        const kind = o.ums || o.melee ? undefined : await gameKind(looksLikeMapSettings(doc.scenario), overlay);
+        if (kind) gameOf.set(m, kind);
       }
       let r;
-      const overlay = o.mod ? modOverlay(o.mod, () => gameFilesOrNull(o.starcraft), { code: true }) : null;
       try {
         r = await runLadder(entrants, {
           maps: o.maps, play, races, seeds, frames: count(o.frames, "frames"), out: o.out, data: o.data, parallel: count(o.parallel, "parallel"), timeout: count(o.timeout, "timeout"),
-          starcraft: o.starcraft, engine: o.engine, live: say, mod: overlay, game: o.ums ? "ums" : o.melee ? "melee" : undefined,
+          starcraft: o.starcraft, engine: o.engine, live: say, mod: overlay, game: o.ums ? "ums" : o.melee ? "melee" : undefined, gameOf,
         });
       } finally { for (const p of play.values()) removeGameMap(p); overlay?.remove(); }
       if (o.json) print(JSON.stringify(ladderJson(r), null, 2));

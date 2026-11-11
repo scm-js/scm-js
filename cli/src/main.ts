@@ -10,7 +10,7 @@ import { aboutReport, printAbout, VERSION } from "./about";
 import { listMembers, MANIFEST_FILE, packMap, unpackMap } from "./archive";
 import { rootHelp } from "./banner";
 import { BOT_GUIDE, runBot, updateBot } from "./bot";
-import { runBotGame } from "./botrun";
+import { botRunValues, runBotGame } from "./botrun";
 import { ladderJson, parseEntrants, parseRaces, printLadder, runLadder } from "./ladder";
 import { costReport, gameMap, printCost, printTrace, removeGameMap, replayRun, runMapInGame, traceReport } from "./trace";
 import { printRush, runRush, rushJson, unitByName } from "./rush";
@@ -1726,11 +1726,13 @@ won. Exits 1 when the bot printed errors, 2 when the game could not start.`) + "
 the command stops and says which version it needs.`))
     .action(async (botFile: string, map: string, o: { json?: boolean; race: string; opponents: string; seed?: string; frames: string; every: string; data?: string; mod?: string; ums?: boolean; melee?: boolean; starcraft?: string; engine?: string }) => {
       if (o.ums && o.melee) throw new CliError(t("--ums and --melee: one kind of game"), null, 2);
+      // (every value read before the engine or the game is touched)
+      const { race, opponents, seed, frames, every } = await botRunValues(o);
       const overlay = o.mod ? modOverlay(o.mod, () => gameFilesOrNull(o.starcraft), { code: true }) : null;
       let r;
       try {
         r = await runBotGame(botFile, map, {
-          race: o.race, opponents: o.opponents.split(",").map((s) => s.trim()).filter(Boolean), seed: o.seed === undefined ? undefined : Number(o.seed), frames: Number(o.frames), every: Number(o.every),
+          race, opponents, seed, frames, every,
           data: o.data, starcraft: o.starcraft, engine: o.engine, live: o.json ? undefined : (line) => print(line),
           mod: overlay, game: o.ums ? "ums" : o.melee ? "melee" : undefined,
         });

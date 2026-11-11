@@ -4,12 +4,13 @@
  * lines scm-sim's prints; the real one needs the lifted game and a copy of StarCraft, which CI has not got.
  */
 import { createServer } from "node:http";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { gzipSync } from "node:zlib";
 import { afterAll, describe, expect, it } from "vitest";
-import { cacheRoot, ensureEngine, findGameCopy, gameCopyKind, runBotGame, usualGameFolders, wordLine, type EndLine } from "../cli/src/botrun";
+import { botRunValues, cacheRoot, checkBotGame, ensureEngine, findGameCopy, gameCopyKind, plainRunnerError, runBotGame, usualGameFolders, wordLine, type EndLine } from "../cli/src/botrun";
+import { TEST_MAPS_DIR } from "./support/maps";
 import { CliError, visible } from "../cli/src/ui";
 
 const tmp = () => mkdtempSync(join(tmpdir(), "scmjs-botrun-"));
@@ -23,6 +24,7 @@ if (!require("node:fs").existsSync(flag("engine") + "/core.js")) { say({ kind: "
 const players = [{ slot: 0, kind: "computer", race: "zerg", minerals: 50, gas: 0, supplyUsed: 4, supplyAvailable: 9, outcome: null }, { slot: 1, kind: "bot", race: flag("race") ?? "protoss", minerals: 50, gas: 0, supplyUsed: 4, supplyAvailable: 9, outcome: null }];
 say({ kind: "start", bot: { name: "Fake", commit: "abc", memoryPages: 20480 }, map: { name: require("node:path").basename(args[0]), width: 96, height: 96, tileset: "platform" }, copy: "classic", seed: Number(flag("seed") ?? 1), players, ms: { load: 1, start: 2 } });
 say({ kind: "text", text: "The map is Boxer!" });
+say({ kind: "text", text: "oracle: gl hf" });
 const frames = Number(flag("frames") ?? 3000), every = Number(flag("every") ?? 1000);
 for (let f = every; f <= frames; f += every) say({ kind: "progress", frame: f, units: { visible: 70, hidden: 0 }, players, ms: { game: f / 4, bot: f / 20 } });
 const won = flag("seed") === "7";
@@ -115,12 +117,13 @@ describe("scmjs bot run", () => {
     const copy = classicCopy(tmp());
     const dir = tmp();
     writeFileSync(join(dir, "x.scmbot"), "SCMBOT1\n");
-    writeFileSync(join(dir, "m.scx"), "MPQ");
+    copyFileSync(join(TEST_MAPS_DIR, "melee.scx"), join(dir, "m.scx"));
     const lines: string[] = [];
     const r = await runBotGame(join(dir, "x.scmbot"), join(dir, "m.scx"), { engine: staged.dir, starcraft: copy, seed: 7, frames: 2000, every: 1000, race: "protoss", live: (l) => lines.push(visible(l)) });
     expect(r.game).toEqual({ folder: copy, kind: "classic" });
     expect(r.start?.map.name).toBe("m.scx");
-    expect(r.texts).toEqual(["The map is Boxer!"]);
+    // (the game's name for the bot's player is the engine's word: the bot's own name is said)
+    expect(r.texts).toEqual(["The map is Boxer!", "Fake: gl hf"]);
     expect(r.progress.map((p) => p.frame)).toEqual([1000, 2000]);
     expect(r.end).toMatchObject({ outcome: "victory", ended: true, frame: 2000 });
     expect(r.exitCode).toBe(0);
@@ -132,6 +135,8 @@ describe("scmjs bot run", () => {
     expect(lost.exitCode).toBe(1);
     expect(lost.end?.errors).toEqual(["boom"]);
     expect(visible(wordLine(lost.end as EndLine)!)).toMatch(/no outcome after 1,000 frames.*1 error/);
+    // A loss is a result, not an error: no error mark.
+    expect(visible(wordLine({ ...(lost.end as EndLine), outcome: "defeat", ended: true })!)).toMatch(/^▲ the bot lost at frame 1000/);
   });
 
   it("says what went wrong: no bot file, no copy, a runner that could not start", async () => {
@@ -139,7 +144,7 @@ describe("scmjs bot run", () => {
     const copy = classicCopy(tmp());
     const dir = tmp();
     writeFileSync(join(dir, "x.scmbot"), "SCMBOT1\n");
-    writeFileSync(join(dir, "m.scx"), "MPQ");
+    copyFileSync(join(TEST_MAPS_DIR, "melee.scx"), join(dir, "m.scx"));
     await expect(runBotGame(join(dir, "none.scmbot"), join(dir, "m.scx"), { engine: staged.dir, starcraft: copy })).rejects.toThrow(/No file .*none\.scmbot/);
     await expect(runBotGame(join(dir, "x.scmbot"), join(dir, "m.scx"), { engine: staged.dir, starcraft: tmp() })).rejects.toThrow(CliError);
     // An engine folder with no core.js: the stand-in runner answers with an error line, which becomes the message.
@@ -147,5 +152,61 @@ describe("scmjs bot run", () => {
     const { rmSync } = await import("node:fs");
     rmSync(join(broken.dir, broken.build, "core.js"));
     await expect(runBotGame(join(dir, "x.scmbot"), join(dir, "m.scx"), { engine: broken.dir, starcraft: copy })).rejects.toThrow(/no engine at/);
+  });
+
+  it("reads every value before anything starts, and refuses a bad one with exit 2", async () => {
+    const v = await botRunValues({ race: "t", opponents: "Zerg, p", seed: "7", frames: "1:00", every: "0" });
+    expect(v).toEqual({ race: "terran", opponents: ["zerg", "protoss"], seed: 7, frames: 1429, every: 0 });
+    const file = join(tmp(), "afile"); writeFileSync(file, "x");
+    const bad: [Partial<Parameters<typeof botRunValues>[0]>, RegExp][] = [
+      [{ frames: "abc" }, /--frames takes/], [{ frames: "0" }, /--frames takes/], [{ frames: "-5" }, /--frames takes/],
+      [{ seed: "abc" }, /--seed takes/], [{ every: "abc" }, /--every takes/], [{ race: "bogus" }, /--race: "bogus" is not a race/],
+      [{ opponents: "bogus" }, /--opponents: "bogus" is not a race/], [{ opponents: "" }, /--opponents names no race/], [{ data: file }, /is a file, not a folder/],
+    ];
+    for (const [o, said] of bad) {
+      const e = await botRunValues({ race: "random", opponents: "zerg", frames: "50000", every: "1000", ...o }).catch((x) => x);
+      expect(e, JSON.stringify(o)).toBeInstanceOf(CliError);
+      expect(e.message).toMatch(said);
+      expect(e.exitCode).toBe(2);
+    }
+  });
+
+  it("looks at the bot and the map before the game starts: each the right kind, the map one the game opens, with room", async () => {
+    const dir = tmp();
+    const bot = join(dir, "b.scmbot"); writeFileSync(bot, "SCMBOT1\n\0\0\0\0");
+    const melee = join(TEST_MAPS_DIR, "melee.scx");
+    await expect(checkBotGame(bot, melee)).resolves.toEqual({ starts: 2 });
+    const rep = join(dir, "g.rep"); writeFileSync(rep, Buffer.concat([Buffer.alloc(12), Buffer.from("seRS"), Buffer.alloc(64)]));
+    mkdirSync(join(dir, "mybot", "out"), { recursive: true });
+    writeFileSync(join(dir, "mybot", "out", "mybot.scmbot"), "SCMBOT1\n");
+    const cases: [string, string, object, RegExp, RegExp | null][] = [
+      [melee, bot, {}, /melee\.scx is a map, not a bot: the bot comes first/, /scmjs bot run <bot> <map>/],
+      [bot, rep, {}, /g\.rep is a replay, not a map/, /scmjs replay map/],
+      [join(dir, "mybot"), melee, {}, /mybot is a folder: its built bot is .*mybot\.scmbot/, /scmjs bot run .*mybot\.scmbot/],
+      [bot, dir, {}, /is a folder, not a map/, null],
+      [join(dir, "none.scmbot"), melee, {}, /No file/, null],
+      [bot, join(TEST_MAPS_DIR, "ums.scx"), {}, /compressed with zlib, which only StarCraft: Remastered opens/, /--compression pkware/],
+      [bot, melee, { opponents: 2 }, /has 2 start locations: the bot and 2 computers do not fit/, /fewer --opponents/],
+    ];
+    for (const [b, m, o, said, hint] of cases) {
+      const e = await checkBotGame(b, m, o).catch((x) => x);
+      expect(e, `${b} ${m}`).toBeInstanceOf(CliError);
+      expect(e.message).toMatch(said);
+      if (hint) expect(e.hint).toMatch(hint);
+      expect(e.exitCode).toBe(2);
+    }
+    // A map's own settings (--ums) seat the players as the map does: not counted.
+    await expect(checkBotGame(bot, melee, { opponents: 2, game: "ums" })).resolves.toEqual({ starts: 2 });
+  });
+
+  it("says the runner's error without the game's insides", () => {
+    delete process.env.SCMJS_DEBUG;
+    expect(plainRunnerError("the game did not take this map (it opens only a map StarCraft itself opens: a whole .scm or .scx): no stand-in for kernel32.dll!LoadLibraryA (called from 0x1501E69D; stack words 15052680 0 0 3002007c)"))
+      .toBe("the game did not take this map (it opens only a map StarCraft itself opens: a whole .scm or .scx)");
+    expect(plainRunnerError("the game stopped reading its startup data again: neither the mod nor the game has unit\\zerg\\avenger.grp; the game ended the process (the game's fatal error, from 0x4d29c5): unit\\zerg\\avenger.grp"))
+      .toBe("the game stopped reading its startup data again: neither the mod nor the game has unit\\zerg\\avenger.grp; the game ended the process: unit\\zerg\\avenger.grp");
+    expect(plainRunnerError("\"bogus\" is not a race: zerg, terran, protoss or random.")).toBe("\"bogus\" is not a race: zerg, terran, protoss or random.");
+    process.env.SCMJS_DEBUG = "1";
+    try { expect(plainRunnerError("x (from 0x4d29c5)")).toBe("x (from 0x4d29c5)"); } finally { delete process.env.SCMJS_DEBUG; }
   });
 });

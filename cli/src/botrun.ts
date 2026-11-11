@@ -9,8 +9,15 @@
  * for the mod (its `.scmbot`'s `mod`, from `scmjs mod header --bot`), plays vanilla data, or was made for another.
  */
 import { createInterface } from "node:readline";
-import { existsSync } from "node:fs";
-import { resolve } from "node:path";
+import { readdirSync } from "node:fs";
+import { readFile, stat } from "node:fs/promises";
+import { basename, join, resolve } from "node:path";
+import { Archive } from "mopaq";
+import { openMapBytes } from "../../src/editor/mapFile";
+import { looksLikeMpq } from "../../src/formats/mpq/scm";
+import { START_LOCATION } from "../../src/data/units";
+import { kindOf } from "./files";
+import { parseFrames, parseRaceWord, parseWhole, type RaceWord } from "./values";
 import { codeWords, ensureEngine, findGameCopy, fitWords, MOD_CODE, modArgs, modWords, runnerFor, startRunner, type BotFitReport, type RunnerCodeReport, type RunnerModReport } from "./engine";
 import type { ModOverlay } from "./mod/overlay";
 import { t, translate } from "./i18n";
@@ -79,7 +86,7 @@ export function wordLine(l: RunnerLine): string | null {
     case "text": return `  ${pc.dim(l.text)}`;
     case "progress": return `  ${pc.dim(`${t("frame")} ${String(l.frame).padStart(6)}`)}  ${l.players.map(side).join(pc.dim("  |  "))}`;
     case "end": {
-      const won = l.outcome === "victory" ? `${mark.ok} ${pc.bold(t("the bot won"))}` : l.outcome === "defeat" ? `${mark.error} ${pc.bold(t("the bot lost"))}` : l.outcome === "draw" ? `${mark.info} ${t("a draw")}` : `${mark.warn} ${t("no outcome after {n, plural, one {# frame} other {# frames}}", { n: l.frame })}`;
+      const won = l.outcome === "victory" ? `${mark.ok} ${pc.bold(t("the bot won"))}` : l.outcome === "defeat" ? `${mark.warn} ${pc.bold(t("the bot lost"))}` : l.outcome === "draw" ? `${mark.info} ${t("a draw")}` : `${mark.warn} ${t("no outcome after {n, plural, one {# frame} other {# frames}}", { n: l.frame })}`;
       const frames = Math.max(1, l.frame);
       return `${won}${l.ended ? ` ${t("at frame {frame}", { frame: l.frame })}` : ""}${dot}${t("{size} of orders", { size: size(l.commandBytes) })}${l.errors.length ? `${dot}${pc.red(t("{n, plural, one {# error} other {# errors}}", { n: l.errors.length }))}` : ""}${dot}${t("{game} ms a frame game, {bot} bot", { game: (l.ms.game / frames).toFixed(2), bot: (l.ms.bot / frames).toFixed(2) })}${dot}${(l.ms.total / 1000).toFixed(1)} s`;
     }
@@ -92,8 +99,7 @@ export function wordLine(l: RunnerLine): string | null {
  * come and into the outcome. A runner that could not start throws a CliError with its own words.
  */
 export async function runBotGame(bot: string, map: string, o: BotRunOptions = {}): Promise<BotRunOutcome> {
-  if (!existsSync(bot)) throw new CliError(t("No file {path}", { path: bot }), t("scmjs bot build writes out/<key>.scmbot in the bot's folder."), 2);
-  if (!existsSync(map)) throw new CliError(t("No file {path}", { path: map }), null, 2);
+  await checkBotGame(bot, map, { opponents: o.opponents?.length, game: o.game, mod: !!o.mod });
   const game = findGameCopy(o.starcraft);
   const engine = await ensureEngine(o.engine, undefined, o.live ?? (() => {}));
   const args = [resolve(map), resolve(bot), "--engine", engine.dir, "--starcraft", game.folder];
@@ -116,7 +122,11 @@ export async function runBotGame(bot: string, map: string, o: BotRunOptions = {}
     let l: RunnerLine;
     try { l = JSON.parse(raw) as RunnerLine; } catch { continue; }
     if (l.kind === "start") { if (l.mod && o.mod) l.mod = o.mod.report(l.mod); outcome.start = l; }
-    else if (l.kind === "text") outcome.texts.push(l.text);
+    else if (l.kind === "text") {
+      // (the game names the bot's player "oracle", the engine's word: said as the bot's name)
+      l.text = l.text.replace(/\boracle\b/g, outcome.start?.bot.name ?? t("bot"));
+      outcome.texts.push(l.text);
+    }
     else if (l.kind === "progress") outcome.progress.push(l);
     else if (l.kind === "end") outcome.end = l;
     else if (l.kind === "error") error = l.message;
@@ -124,10 +134,110 @@ export async function runBotGame(bot: string, map: string, o: BotRunOptions = {}
     if (worded && l.kind !== "error") o.live?.(worded);
   }
   outcome.exitCode = await new Promise<number>((done) => { child.on("error", () => done(2)); child.on("close", (c) => done(c ?? 2)); });
-  if (error) throw new CliError(error, t("The runner is scm-sim's; a map StarCraft itself opens, a .scmbot the toolchain built, and your own copy of the game are what it needs."));
-  if (!outcome.end) throw new CliError(`${t("The game did not finish: the runner stopped without a result (exit {code}).", { code: outcome.exitCode })}${stderr.trim() ? `\n${stderr.trim().split("\n").slice(-6).join("\n")}` : ""}`);
+  // (2 from the runner: the game could not start; anything else, it started and did not go through.)
+  const code = outcome.exitCode === 2 ? 2 : 1;
+  if (error) throw new CliError(plainRunnerError(error), RUNNER_HINT(), code);
+  if (!outcome.end) throw new CliError(`${t("The game did not finish: it stopped without a result.")}${debug() && stderr.trim() ? `\n${stderr.trim().split("\n").slice(-6).join("\n")}` : ""}`, RUNNER_HINT(), code);
   return outcome;
 }
+
+/**
+ * `bot run`'s options read as values (`values.ts`), each refused with exit 2 before anything starts: the races as the
+ * runner's words (`t` or `Terran` alike), a computer for each race named, whole numbers for the seed and progress lines
+ * (0: none), frames or a time for `--frames`, and `--data` a folder or nothing there yet.
+ */
+export async function botRunValues(o: { race: string; opponents: string; seed?: string; frames: string; every: string; data?: string }): Promise<{ race: RaceWord; opponents: RaceWord[]; seed: number | undefined; frames: number; every: number }> {
+  const race = parseRaceWord(o.race, "--race");
+  const opponents = o.opponents.split(",").map((x) => x.trim()).filter(Boolean).map((x) => parseRaceWord(x, "--opponents"));
+  if (!opponents.length) throw new CliError(t("--opponents names no race"), t("A race for each of the game's computers, with commas: --opponents zerg,terran."), 2);
+  const seed = o.seed === undefined ? undefined : parseWhole(o.seed, "seed");
+  const frames = parseFrames(o.frames, "frames");
+  const every = parseWhole(o.every, "every");
+  if (o.data) {
+    let st = null;
+    try { st = await stat(o.data); } catch { /* made by the runner */ }
+    if (st && !st.isDirectory()) throw new CliError(t("--data {path} is a file, not a folder.", { path: o.data }), t("--data names a folder the bot keeps its files in."), 2);
+  }
+  return { race, opponents, seed, frames, every };
+}
+
+/** What to do when the game would not play: the files it needs, and how to see the game's own words. */
+const RUNNER_HINT = () => t("The game needs a map StarCraft itself opens, a bot scmjs bot build wrote, and your own copy of the game (scmjs doctor checks it). SCMJS_DEBUG=1 shows the game's own words.");
+
+/** `SCMJS_DEBUG`: the runner's words as it said them, addresses and all. */
+const debug = () => !!process.env.SCMJS_DEBUG && process.env.SCMJS_DEBUG !== "0";
+
+/**
+ * A runner's error as a person reads it: the game's insides left out — an address (`from 0x4d29c5`), the stack words, the
+ * library function the game called that the engine has no stand-in for. What the game was doing stays. With
+ * `SCMJS_DEBUG` set, the words as the runner said them.
+ */
+export function plainRunnerError(message: string): string {
+  if (debug()) return message;
+  const inner = /0x[0-9a-f]{4,}|stack words|\b\w+\.dll!|no stand-in for/i;
+  // (a bracket that holds an address or the like goes whole: "(the game's fatal error, from 0x4d29c5)")
+  let text = message.replace(/\s*\([^()]*\)/g, (m) => (inner.test(m) ? "" : m));
+  // (then the first ": "-part that is the engine's own, and all after it)
+  const parts = text.split(": ");
+  const keep: string[] = [];
+  for (const part of parts) { if (inner.test(part)) break; keep.push(part); }
+  text = keep.join(": ").trim();
+  return text || t("the game stopped");
+}
+
+/** The scenario's member in a map's archive. */
+const MAP_ARCHIVE_SCENARIO = "staredit\\scenario.chk";
+
+/**
+ * The bot and the map, looked at before the game is fetched or started: each the kind of file it must be (said with the
+ * command when they are the other way round, a replay or a folder), the map one the game opens (StarCraft 1.16.1 reads
+ * no zlib), and room on a melee map for the bot and its opponents. Exit 2 for each.
+ */
+export async function checkBotGame(bot: string, map: string, o: { opponents?: number; game?: "melee" | "ums"; mod?: boolean } = {}): Promise<{ starts: number | null }> {
+  const usage = "scmjs bot run <bot> <map>";
+  const read = async (path: string) => {
+    let st;
+    try { st = await stat(path); } catch { return null; }
+    if (st.isDirectory()) return "folder" as const;
+    return new Uint8Array(await readFile(path));
+  };
+  const b = await read(bot);
+  if (b === null) throw new CliError(t("No file {path}", { path: bot }), t("scmjs bot build writes out/<key>.scmbot in the bot's folder."), 2);
+  if (b === "folder") {
+    const built = (() => { try { return readdirSync(join(bot, "out")).filter((f) => f.endsWith(".scmbot")).map((f) => join(bot, "out", f)); } catch { return []; } })();
+    throw new CliError(built.length === 1 ? t("{folder} is a folder: its built bot is {file}", { folder: bot, file: built[0] }) : t("{folder} is a folder, not a bot", { folder: bot }), built.length === 1 ? `scmjs bot run ${quoteArg(built[0])} ${quoteArg(map)}` : t("scmjs bot build writes out/<key>.scmbot in the bot's folder."), 2);
+  }
+  const bk = kindOf(bot, b);
+  if (bk !== "bot") {
+    const m = await read(map);
+    if (bk === "map" && m !== null && m !== "folder" && kindOf(map, m) === "bot") throw new CliError(t("{file} is a map, not a bot: the bot comes first.", { file: bot }), usage, 2);
+    throw new CliError(t("{file} is not a bot (.scmbot)", { file: bot }), t("scmjs bot build writes out/<key>.scmbot in the bot's folder."), 2);
+  }
+  const m = await read(map);
+  if (m === null) throw new CliError(t("No file {path}", { path: map }), null, 2);
+  if (m === "folder") throw new CliError(t("{folder} is a folder, not a map.", { folder: map }), usage, 2);
+  const mk = kindOf(map, m);
+  if (mk === "replay") throw new CliError(t("{file} is a replay, not a map.", { file: map }), t("scmjs replay map writes the map a replay was played on."), 2);
+  if (mk === "bot") throw new CliError(t("{file} is a bot, not a map.", { file: map }), usage, 2);
+  let doc;
+  try { doc = await openMapBytes(m, basename(map)); } catch (e) {
+    throw new CliError(t("{name} is not a map this can read: {reason}", { name: map, reason: e instanceof Error ? e.message : String(e) }), null, 2);
+  }
+  // (zlib is Remastered's: the game here is 1.16.1's code, whose archive reader has none)
+  if (looksLikeMpq(m)) {
+    let compression: unknown = null;
+    try { compression = Archive.open(m).fileInfo(MAP_ARCHIVE_SCENARIO)?.compression ?? null; } catch { compression = null; }
+    if (compression === "zlib" || compression === "bzip2") throw new CliError(t("{file} is compressed with {method}, which only StarCraft: Remastered opens; the game here plays as 1.16.1, which cannot.", { file: map, method: compression }), t("Save a copy with PKWARE compression for it: scmjs map optimize <map> --compression pkware --out <copy>"), 2);
+  }
+  const starts = doc.scenario.units.filter((u) => u.unitId === START_LOCATION && u.owner < 8).length;
+  // (a melee game deals the map's start locations: one for the bot, one for each computer)
+  const melee = o.game === "melee" || (!o.game && !o.mod);
+  if (melee && o.opponents && starts && o.opponents + 1 > starts) throw new CliError(t("{file} has {n, plural, one {# start location} other {# start locations}}: the bot and {opponents, plural, one {# computer} other {# computers}} do not fit.", { file: map, n: starts, opponents: o.opponents }), t("Name fewer --opponents, or a map with more start locations."), 2);
+  return { starts };
+}
+
+/** A path as a shell takes it. */
+const quoteArg = (p: string) => (/[\s"'()]/.test(p) ? JSON.stringify(p) : p);
 
 /** Prints the outcome's lines when they were not printed as they came. */
 export function printBotRun(r: BotRunOutcome): void {

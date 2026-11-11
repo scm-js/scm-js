@@ -39,6 +39,7 @@ function needDocker(): void {
   throw new CliError(
     installed ? t("Docker is installed but not running") : t("scmjs bot needs Docker"),
     installed ? t("Start Docker (Docker Desktop on Windows and macOS), then run this again.") : t("Install it from {url}, then run this again.", { url: "https://docs.docker.com/get-docker/" }),
+    2,
   );
 }
 
@@ -48,7 +49,10 @@ export async function runBot(args: string[], image = process.env.SCMBOT_IMAGE ||
   if (!hasImage(image)) print(pc.dim(t("Downloading the bot toolchain ({image}), once. It is a few GB.", { image })));
   const user = process.platform === "win32" || !process.getuid ? null : `${process.getuid()}:${process.getgid?.()}`;
   const child = spawn("docker", dockerArgs({ folder: process.cwd(), args, image, tty: !!process.stdout.isTTY && !!process.stdin.isTTY, user }), { stdio: "inherit" });
-  const code = await new Promise<number>((resolve) => { child.on("error", () => resolve(1)); child.on("close", (c) => resolve(c ?? 1)); });
+  const code = await new Promise<number>((resolve) => { child.on("error", () => resolve(125)); child.on("close", (c) => resolve(c ?? 1)); });
+  // (125 to 127 are Docker's own: the toolchain never started — the image could not be fetched, or run. That is a
+  // command that could not start its work, 2; the toolchain's own failures keep its code.)
+  if (code >= 125 && code <= 127) throw new CliError(t("The bot toolchain could not be started ({image})", { image }), t("Docker said why, above. scmjs bot update fetches the toolchain again."), 2);
   if (code) process.exitCode = code;
 }
 

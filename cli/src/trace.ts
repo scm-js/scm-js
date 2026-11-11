@@ -23,7 +23,7 @@ import { summarizeTrigger } from "../../src/formats/triggers/text";
 import { conditionDef } from "../../src/data/triggerDefs";
 import { createInterface } from "node:readline";
 import { FRAME_MS, type Replay } from "@scm-js/replay";
-import { cacheRoot, ensureEngine, findGameCopy, noResultHint, runnerFor, startRunner, type Engine, modArgs, modWords, type RunnerModReport } from "./engine";
+import { cacheRoot, endDetail, endReason, ensureEngine, findGameCopy, noResultHint, runnerFor, startRunner, type Engine, modArgs, modWords, type RunnerModReport } from "./engine";
 import { VERSION } from "./about";
 import { assetFile, INSTALL } from "./runtime";
 import { diffMaps, summarizeDiff } from "./diff";
@@ -330,7 +330,7 @@ export function replayReport(r: Pick<MapRunOutcome, "start" | "end">): ReplayRep
 export function traceReport(file: string, scn: Scenario, r: MapRunOutcome): TraceReport {
   const rows = readTriggers(scn).length;
   const replay = replayReport(r);
-  return { file, rows: summarizeRows(r.end.trace ?? [], rows), passes: r.end.passes, frame: r.end.frame, ended: r.end.ended, reason: r.end.reason, ...(replay ? { replay } : {}), ...(r.start?.mod ? { mod: r.start.mod } : {}) };
+  return { file, rows: summarizeRows(r.end.trace ?? [], rows), passes: r.end.passes, frame: r.end.frame, ended: r.end.ended, reason: endReason(r.end.reason), ...endDetail(r.end.reason), ...(replay ? { replay } : {}), ...(r.start?.mod ? { mod: r.start.mod } : {}) };
 }
 
 /** `map trace --json`: the report, with where the engine and the game came from, every copy's line and the run's times. */
@@ -343,12 +343,15 @@ function neverWhy(s: RowSummary): string {
   return !s.players.length ? t("no player in the game owns it") : s.lastFail ? t("{condition} (condition {slot}) said no last, at frame {frame}", { condition: conditionDef(s.lastFail.type)?.name ?? `condition ${s.lastFail.type}`, slot: s.lastFail.slot + 1, frame: num(s.lastFail.frame) }) : s.failed ? t("its conditions said no") : t("it was never asked");
 }
 
+/** "the game ended", with why when the game said more than that. */
+const endedWords = (reason: string | null) => (reason && reason !== t("the game ended") ? t("the game ended: {reason}", { reason }) : t("the game ended"));
+
 /** How a replay's run ended, in a few words: who won, the replay's end, or where it was stopped. */
 function endWords(rep: TraceReport): string {
   const r = rep.replay!;
   if (r.by === "victory") { const won = r.players.filter((p) => p.outcome === "victory").map((p) => p.name); return won.length ? t("{players} won", { players: won.join(", ") }) : t("a side won"); }
   if (r.by === "replay") return t("to the replay's end");
-  return rep.ended ? t("the game ended: {reason}", { reason: rep.reason ?? "over" }) : t("stopped there");
+  return rep.ended ? endedWords(rep.reason) : t("stopped there");
 }
 
 /** The trace's lines: the run in one, a table of the triggers, then the ones that never fired and why. With a replay, the firings in order after them when asked for. */
@@ -362,9 +365,12 @@ export function printTrace(file: string, scn: Scenario, r: MapRunOutcome, { all 
   const when = replay ? (f: number | null) => (f === null ? pc.dim("–") : gameClock(f)) : frame;
   const out = replay
     ? [`${mark.ok} ${pc.bold(file)}: ${t("{n, plural, one {# trigger} other {# triggers}}", { n: rep.rows.length })}${listed.length !== rep.rows.length ? pc.dim(` ${t("({n} owned by the players)", { n: num(listed.length) })}`) : ""}${dot}${t("{frames} frames", { frames: num(rep.frame) })} ${pc.dim(`(${gameClock(rep.frame)})`)}, ${endWords(rep)}${dot}${t("{n, plural, one {# pass} other {# passes}}", { n: rep.passes })}${dot}${pc.green(t("{n} fired", { n: fired }))}${never.length ? `${dot}${pc.yellow(t("{n} never", { n: never.length }))}` : ""}${dot}${(r.end.ms.total / 1000).toFixed(1)} s`]
-    : [`${mark.ok} ${pc.bold(file)}: ${t("{n, plural, one {# trigger} other {# triggers}}", { n: rep.rows.length })}${dot}${t("{frames} frames", { frames: num(rep.frame) })} ${pc.dim(t("({clock} of play)", { clock: clock(rep.frame) }))}${rep.ended ? pc.dim(t(", the game ended: {reason}", { reason: rep.reason ?? "over" })) : ""}${dot}${t("{n, plural, one {# pass} other {# passes}}", { n: rep.passes })}${dot}${pc.green(t("{n} fired", { n: fired }))}${never.length ? `${dot}${pc.yellow(t("{n} never", { n: never.length }))}` : ""}${dot}${(r.end.ms.total / 1000).toFixed(1)} s`];
+    : [`${mark.ok} ${pc.bold(file)}: ${t("{n, plural, one {# trigger} other {# triggers}}", { n: rep.rows.length })}${dot}${t("{frames} frames", { frames: num(rep.frame) })} ${pc.dim(t("({clock} of play)", { clock: clock(rep.frame) }))}${rep.ended ? pc.dim(`, ${endedWords(rep.reason)}`) : ""}${dot}${t("{n, plural, one {# pass} other {# passes}}", { n: rep.passes })}${dot}${pc.green(t("{n} fired", { n: fired }))}${never.length ? `${dot}${pc.yellow(t("{n} never", { n: never.length }))}` : ""}${dot}${(r.end.ms.total / 1000).toFixed(1)} s`];
   if (replay && replay.parted !== null) out.push(`${mark.warn} ${pc.yellow(t("The game parted from the replay at {clock} (frame {frame})", { clock: gameClock(replay.parted), frame: num(replay.parted) }))}${t(": the players' commands after it were meant for another game, so what fired after that is not what happened.")}`);
   if (replay && !replay.mapSettings) out.push(`${mark.info} ${pc.dim(t("The replay is a {type} game: the game ran its own triggers for it, not the map's.", { type: translate(replay.gameType) }))}`);
+  // With nobody playing, a game the map ends (a Victory or Defeat, nobody left) cuts the trace short: said, with where to go.
+  if (!replay && rep.ended) out.push(`${mark.info} ${pc.dim(t("map trace plays the map with nobody at the controls, so what the map does to an idle player ends the game here (a Defeat or Victory, or nobody left). map test plays a scenario with steps: units made, orders given, switches set."))}`);
+  if (!replay && !rep.rows.length) out.push(`${mark.info} ${pc.dim(t("The map has no triggers of its own: a melee game runs the game's melee rules, which are not traced."))}`);
   if (!listed.length) return out;
   const limit = all ? Infinity : 40;
   const shown = listed.slice(0, limit);

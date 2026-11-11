@@ -7,7 +7,7 @@ import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSy
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it, vi } from "vitest";
-import { ensureEngine, findGameCopy } from "../cli/src/engine";
+import { endDetail, endReason, ensureEngine, findGameCopy } from "../cli/src/engine";
 import { CliError } from "../cli/src/ui";
 import { classicCopy, stagedEngine } from "./support/mapRunner";
 
@@ -70,5 +70,22 @@ describe("scmjs: the copy of the game", () => {
       err.mockRestore();
       if (before === undefined) delete process.env.SCMJS_STARCRAFT; else process.env.SCMJS_STARCRAFT = before;
     }
+  });
+});
+
+describe("scmjs: why a game ended", () => {
+  it("says it in plain words, the runner's own kept for SCMJS_DEBUG", () => {
+    const raw = "the frame loop returned to its caller five times without a step (its reason word 0x6D11F0 reads 2, the replay-paused word 0x6D11B0 1): the game has ended or stands still";
+    expect(endReason(raw)).toBe("the game ended");
+    expect(endReason("over")).toBe("the game ended");
+    expect(endReason(null)).toBeNull();
+    expect(endReason("a Victory action ran")).toBe("a Victory action ran");
+    const before = process.env.SCMJS_DEBUG;
+    try {
+      delete process.env.SCMJS_DEBUG;
+      expect(endDetail(raw)).toEqual({});
+      process.env.SCMJS_DEBUG = "1";
+      expect(endDetail(raw)).toEqual({ detail: raw });
+    } finally { if (before === undefined) delete process.env.SCMJS_DEBUG; else process.env.SCMJS_DEBUG = before; }
   });
 });

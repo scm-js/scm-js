@@ -236,6 +236,19 @@ export function noResultHint(engineDir: string): string {
   return t("Run scmjs doctor to check your copy of the game and the engine. If it says both are ready, remove the engine's folder {dir}; the next command fetches it again.", { dir: engineDir });
 }
 
+/**
+ * Why a runner says a game ended, as a person reads it: the runner's own words name the engine's insides (a frame
+ * loop, a word at an address), so anything but plain words is "the game ended". Null stays null. The runner's words
+ * themselves are for a bug report: `SCMJS_DEBUG` keeps them beside (`endDetail`).
+ */
+export function endReason(reason: string | null): string | null {
+  if (reason === null) return null;
+  if (/0x[0-9a-f]{3,}|frame loop|word|^over$|stands still/i.test(reason)) return t("the game ended");
+  return reason;
+}
+/** The runner's own words for the end, under `detail`, when `SCMJS_DEBUG` asks for them. */
+export const endDetail = (reason: string | null): { detail?: string } => (process.env.SCMJS_DEBUG && reason ? { detail: reason } : {});
+
 /** The runners `current.json` names, by kind. */
 function runnersNamed(c: EngineCurrent): Engine["runners"] {
   const out: Engine["runners"] = {};

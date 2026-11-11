@@ -701,8 +701,8 @@ export async function analyzeMap(input: Input, map: OpenedMap, o: AnalyzeOptions
 
 const MARK: Record<VerdictLevel, string> = { ok: mark.ok, warn: mark.warn, info: mark.info };
 const t0f = (n: number) => num(Math.round(n));
-/** "9 fields + gas", "7 fields, no gas", "15 fields + 2 gas", "a geyser alone". */
-const resourcesText = (fields: number, geysers: number) => (!fields
+/** "9 fields + gas", "7 fields, no gas", "15 fields + 2 gas", "a geyser alone", "no resources". */
+export const resourcesText = (fields: number, geysers: number) => (!fields && !geysers ? t("no resources") : !fields
   ? t("{n, plural, one {a geyser alone} other {# geysers alone}}", { n: geysers })
   : geysers === 0 ? t("{n, plural, one {# field} other {# fields}}, no gas", { n: fields })
     : geysers === 1 ? t("{n, plural, one {# field} other {# fields}} + gas", { n: fields })

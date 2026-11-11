@@ -503,9 +503,11 @@ scmjs map preview ridge.scx --out ridge.png --scale 8
 scmjs map new - --tileset ice --players 4 | scmjs map preview - --out - > new.png
 ```
 
-`--json` describes the picture without drawing it: its form, size and scale, the tileset,
-the copy of the game it came from, and how many start locations, units, buildings, mineral
-fields and geysers are on it.
+`--json` describes the picture without drawing it in the terminal: the form the command
+would use there (the picture itself in kitty or iTerm2, colour blocks, or shades), its
+size and scale, the tileset, the copy of the game it came from, and how many start
+locations, units, buildings, mineral fields and geysers are on it. With `--out`, the PNG
+is written as asked and `--json` describes it.
 
 To see where things happened on the map in real games, where units died or where buildings
 went up, draw a [heatmap from replays](#where-things-happened-across-many-games).

@@ -1051,7 +1051,8 @@ character is two pixels, in 24-bit colour where the terminal says it has it, els
     .option("--scale <n>", t("pixels a tile: {scales} in a PNG (4 by default)", { scales: PNG_SCALES.join(", ") }))
     .option("--width <columns>", t("the terminal picture's width in characters"))
     .option("--blocks", t("colour blocks, even in kitty or iTerm2"))
-    .option("--force", t("take replays played on another map too"))
+    .option("--any-map", t("take replays played on another map too: their own games, laid over this map"))
+    .addOption(new Option("--force", t("the old name of --any-map")).hideHelp())
     .option("--parallel <n>", t("replays played at once (half the processors, at most 4, by default)"))
     .option("--starcraft <folder>", t("your installation of StarCraft (SCMJS_STARCRAFT); found in the usual places otherwise"))
     .addOption(new Option("--engine <where>", t("the play page's address, or a folder holding the engine (SCMJS_PLAY_URL)")).hideHelp())
@@ -1061,7 +1062,8 @@ map count: the same map, or one with the same name and size; the others are list
 is kept in scmjs's cache, so a second run with more replays plays only the new ones. Needs your copy of StarCraft.`) + `
   scmjs map heatmap "Fighting Spirit.scx" replays/
   scmjs map heatmap fs.scx replays/*.rep --what kills --player 1 --until 10:00 --out kills.png`)
-    .action(async (file: string, replays: string[], o: HeatmapFlags) => {
+    .action(async (file: string, replays: string[], o: HeatmapFlags & { anyMap?: boolean }) => {
+      o.force = !!(o.force || o.anyMap);
       const piped = o.out === STDIO;
       if (piped && o.json) throw new CliError(t("--json and the picture both want standard output"), t("Write the PNG to a file with --out, or leave --json off."), 2);
       const { input, doc } = await openForEdit(file);
@@ -1076,7 +1078,8 @@ is kept in scmjs's cache, so a second run with more replays plays only the new o
     .option("--strict", t("exit 1 when a trigger a player in the games owned never fired"))
     .option("--format <kind>", t("{formats}: github is workflow annotations, junit and sarif the files CI tools read", { formats: FORMATS.join(", ") }), "text")
     .option("--all", t("list every trigger, those no player in the games owned too"))
-    .option("--force", t("take replays played on another map too"))
+    .option("--any-map", t("take replays played on another map too: their players' commands, played on this map"))
+    .addOption(new Option("--force", t("the old name of --any-map")).hideHelp())
     .option("--parallel <n>", t("games played at once (half the processors, at most 4, by default)"))
     .option("--starcraft <folder>", t("your installation of StarCraft (SCMJS_STARCRAFT); found in the usual places otherwise"))
     .addOption(new Option("--engine <where>", t("the play page's address, or a folder holding the engine (SCMJS_PLAY_URL)")).hideHelp())
@@ -1088,7 +1091,8 @@ whose players' commands parted from the map counts what fired before that, and i
 StarCraft. Exits 1 with --strict when a trigger never fired, 2 when no replay could be counted.`) + `
   scmjs map coverage td.scx replays/
   scmjs map coverage td.scx replays/ --tests --strict --format github`)
-    .action(async (file: string, sources: string[], o: { json?: boolean; tests?: boolean; strict?: boolean; format: string; all?: boolean; force?: boolean; parallel?: string; starcraft?: string; engine?: string }) => {
+    .action(async (file: string, sources: string[], o: { json?: boolean; tests?: boolean; strict?: boolean; format: string; all?: boolean; force?: boolean; anyMap?: boolean; parallel?: string; starcraft?: string; engine?: string }) => {
+      o.force = !!(o.force || o.anyMap);
       if (!(FORMATS as readonly string[]).includes(o.format)) throw new CliError(t("--format takes {formats}, not \"{value}\"", { formats: FORMATS.join(", "), value: o.format }), null, 2);
       const format: Format = o.json ? "json" : (o.format as Format);
       const { input, doc } = await openForEdit(file);

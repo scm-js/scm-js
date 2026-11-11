@@ -158,7 +158,7 @@ describe("map coverage: the run", () => {
     const fail = (p: Promise<unknown>) => p.then(() => null, (e: CliError) => [e.exitCode, e.message]);
     const dir = await replays();
     expect(await fail(runCoverage(input, await doc(), [], { engine: staged.dir, starcraft: sc }))).toEqual([2, expect.stringMatching(/^Name the replays to count/)]);
-    expect(await fail(runCoverage(input, await doc(), [join(dir, "melee.rep")], { engine: staged.dir, starcraft: sc }))).toEqual([2, "melee.rep is not a Use Map Settings game on ums.scx."]);
+    expect(await fail(runCoverage(input, await doc(), [join(dir, "melee.rep")], { engine: staged.dir, starcraft: sc }))).toEqual([2, `${join(dir, "melee.rep")} is not a Use Map Settings game on ums.scx.`]);
     expect(await fail(runCoverage(input, await doc(), [join(dir, "a.rep")], { engine: staged.dir, starcraft: sc, parallel: "0" }))).toEqual([2, expect.stringMatching(/^--parallel takes a whole number/)]);
     // --tests with no tests file beside the map.
     const elsewhere: Input = { ...input, path: join(tmp(), "ums.scx") };

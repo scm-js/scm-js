@@ -1973,11 +1973,13 @@ Replays are files or folders, sub-folders included. Only replays of this map cou
 same map, or one with the same name and size, as for
 [`map heatmap`](#where-things-happened-across-many-games). Only Use Map Settings games
 count too, since in the other game types the game runs its own melee triggers. Every
-replay left out is listed with the reason. Several games are played at once: half the
-processors, at most four, or `--parallel`.
+replay left out is listed with the reason, as for `map heatmap`: a file that cannot be
+read is left out and the rest are counted, and when nothing named can be read, the command
+says so and exits with 2. Several games are played at once: half the processors, at most
+four, or `--parallel`.
 
 ```
-$ scmjs map coverage fs.scx replays/ --force
+$ scmjs map coverage fs.scx replays/ --any-map
 fs.scx · 4 triggers · 6 replays to play, 4 at a time
 1/6 ▲ 1570.rep  25:24 · 6 players · 2 triggers fired · parted at 0:00, counted to there · 6.6 s
 2/6 ▲ 1571.rep  31:59 · 6 players · 2 triggers fired · parted at 0:00, counted to there · 7.3 s
@@ -2000,7 +2002,7 @@ fs.scx · 4 triggers · 6 replays to play, 4 at a time
       Command (condition 1) said no last, in 1603.rep at 34:08
 ```
 
-*`--force` took replays played on other maps, so five of the six games parted from this
+*`--any-map` took replays played on other maps, so five of the six games parted from this
 one early. Only the last game ran this map as it was played.*
 
 For each trigger the table gives the games it fired in, how often it fired in all of them,
@@ -2020,7 +2022,7 @@ scenarios. Whether a scenario passes does not matter here; that is `map test`'s 
 | `--strict` | Exits with 1 when a trigger a player owned never fired |
 | `--format` | `github`, `junit` or `sarif`: the triggers that never fired, for CI. Warnings, or errors with `--strict`, and a note for each game that parted |
 | `--all` | Lists every trigger, even ones no player in the games owned |
-| `--force` | Takes replays played on another map too. Expect those games to part early |
+| `--any-map` | Takes replays played on another map too: their players' commands are played on this map, so expect those games to part early (`--force` is the old name) |
 | `--parallel` | Games played at once |
 | `--json` | Every game, every trigger with its counts, its text and why it never fired |
 
@@ -2411,7 +2413,9 @@ scmjs map heatmap fs.scx replays/*.rep --what kills --player 1 --until 10:00
 Only replays played on this map count. A replay carries the map the game loaded, so the
 replay counts when that is the same map as the file, or a map with the same name and size,
 such as an earlier version of it. The others are listed as left out, with the map they
-were played on, and `--force` takes them anyway.
+were played on, and `--any-map` takes them anyway: each replay's own game is played and
+laid over this map, and what happened off this map, in a replay of a bigger one, is said
+and not counted (`--force` is the old name).
 [`replay map`](#the-map-a-replay-was-played-on) gets you the map from one of the replays
 when you do not have the file.
 
@@ -2442,8 +2446,11 @@ pale yellow where the most did. Under the picture are the count, the busiest til
 units most counted. The terminal draws it as `map preview` does, and `--width` sets its
 columns.
 
-A replay the game cannot play is listed with the reason, and the others still count. The
-command then exits with 1. It needs [your copy of StarCraft and the
+A file that is not a replay, or that cannot be read (an empty file, a cut-off one), is
+listed as left out with the reason, and the others still count; when no file named could
+be read, or a folder holds no replays, the command says so and exits with 2. A replay the
+game cannot play is listed with the reason, and the others still count; the command then
+exits with 1. It needs [your copy of StarCraft and the
 engine](#commands-that-need-starcraft).
 
 ### A video or GIF of a replay

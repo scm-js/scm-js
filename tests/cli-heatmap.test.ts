@@ -6,7 +6,7 @@
  */
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { Creator } from "mopaq";
 import { chk, cmds, writeReplay } from "@scm-js/replay/write";
 import { describe, expect, it } from "vitest";
@@ -89,6 +89,16 @@ describe("the events a filter takes", () => {
     takeEvent(ev, { kind: "built", frame: 6, unit: 106, player: 0, x: 4, y: 5 });
     takeEvent(ev, { kind: "walk", frame: 24, units: [1, 2, 0, 2, 3, 4, 1, 1] });
     expect(ev).toMatchObject({ deaths: [5, 7, 1, 2, 3, -1], built: [6, 106, 0, 4, 5], walks: [24, 2, 1, 2, 0, 2, 3, 4, 1, 1] });
+  });
+});
+
+describe("what falls off the map", () => {
+  it("counts only what happened on the map, and says how much did not (a replay of a bigger map)", () => {
+    const g: GameEvents = { version: 1, map: { name: "big", width: 128, height: 128, tileset: "jungle" }, frames: 100, players: [{ slot: 0, name: "A", race: "terran" } as GameEvents["players"][number]], deaths: [10, 0, 0, 100, 100, -1, 20, 0, 0, 3000, 3000, -1, 30, 37, 0, 2100, 50, -1], built: [], walks: [], end: { frame: 100, ended: true, by: null, unmatched: 0, ms: 1 } };
+    const all = heatPoints([g], { what: "deaths" });
+    expect([all.points.length / 2, all.outside]).toEqual([3, 0]);
+    const on = heatPoints([g], { what: "deaths", bounds: { width: 64, height: 64 } });
+    expect([on.points.length / 2, on.outside, on.games[0].count, [...on.units]]).toEqual([1, 2, 1, [[0, 1]]]);
   });
 });
 
@@ -256,8 +266,10 @@ describe("scmjs map heatmap", () => {
     const lines: string[] = [];
     const o = { engine: s.dir, starcraft: s.copy, cache, out: join(s.dir, "heat.png"), parallel: "2" };
     const r = await heatmapMap(input, map, [reps], o, { term, live: (l) => lines.push(visible(l)) });
-    expect(r.report.replays.map((x) => [x.file, x.match, x.cached])).toEqual([["1.rep", "same", false], ["2.rep", "same", false], ["3.rep", "name", false]]);
-    expect(r.report.skipped).toEqual([
+    expect(r.report.replays.map((x) => [basename(x.file), x.match, x.cached])).toEqual([["1.rep", "same", false], ["2.rep", "same", false], ["3.rep", "name", false]]);
+    // Each file as it was typed: the folder named, and the file in it.
+    expect(r.report.replays[0].file).toBe(join(reps, "1.rep"));
+    expect(r.report.skipped.map((x) => ({ ...x, file: basename(x.file) }))).toEqual([
       { file: "4.rep", reason: "played on a map with no name (96 × 64), another size" },
       { file: "5.rep", reason: "the same replay as one before it" },
       { file: "notes.rep", reason: "not a replay" },
@@ -287,16 +299,29 @@ describe("scmjs map heatmap", () => {
     expect(visible(t.lines.at(-1)!)).toMatch(/^ {2}fewer █{12} more · 3 buildings placed in 3 replays/);
   });
 
+  it("says when no replay was named or none could be read, not that they were played elsewhere", async () => {
+    const { s, reps, input, map, cache } = await setup({ "notes.rep": "hello" });
+    const o = { engine: s.dir, starcraft: s.copy, cache };
+    const fail = (p: Promise<unknown>) => p.then(() => null, (e: CliError) => [e.exitCode, e.message]);
+    const empty = join(reps, "empty");
+    mkdirSync(empty);
+    expect(await fail(heatmapMap(input, map, [empty], o, { term }))).toEqual([2, `No replays in ${empty}.`]);
+    const lines: string[] = [];
+    expect(await fail(heatmapMap(input, map, [join(reps, "notes.rep"), join(reps, "gone.rep")], o, { term, live: (l) => lines.push(visible(l)) }))).toEqual([2, "None of the 2 files could be read as a replay."]);
+    expect(lines.join("\n")).toMatch(/gone\.rep left out: no such file/);
+    expect(await fail(heatmapMap(input, map, [join(reps, "gone.rep")], o, { term }))).toEqual([2, `${join(reps, "gone.rep")} could not be read as a replay.`]);
+  });
+
   it("takes another map's replays with --force, and refuses what it cannot use", async () => {
     const { s, reps, input, map, cache } = await setup({ "4.rep": rep(chk(96, 64, 4, 0)), "old.rep": rep(MAP), "broken.rep": rep(MAP) });
     const o = { engine: s.dir, starcraft: s.copy, cache };
     const fail = (p: Promise<unknown>) => p.then(() => null, (e: CliError) => [e.exitCode, e.message]);
-    expect(await fail(heatmapMap(input, map, [join(reps, "4.rep")], o, { term }))).toEqual([2, expect.stringMatching(/^4\.rep was not played on m\.chk/)]);
+    expect(await fail(heatmapMap(input, map, [join(reps, "4.rep")], o, { term }))).toEqual([2, expect.stringMatching(/4\.rep was not played on m\.chk/)]);
     const forced = await heatmapMap(input, map, [join(reps, "4.rep")], { ...o, force: true, json: true }, { term });
     expect(forced.report.replays[0].match).toBe("forced");
     expect(await fail(heatmapMap(input, map, [join(reps, "old.rep")], o, { term }))).toEqual([1, expect.stringMatching(/game engine at .* is from before map heatmap/)]);
     const broken = await heatmapMap(input, map, [join(reps, "broken.rep"), join(reps, "4.rep")], { ...o, force: true, json: true }, { term });
-    expect(broken.report.skipped).toEqual([{ file: "broken.rep", reason: "the game could not play it: the game refused it" }]);
+    expect(broken.report.skipped).toEqual([{ file: join(reps, "broken.rep"), reason: "the game could not play it: the game refused it" }]);
     process.exitCode = 0;
     expect(await fail(heatmapMap(input, map, [], o, { term }))).toEqual([2, expect.stringMatching(/Name the replays/)]);
     expect(await fail(heatmapMap(input, map, [reps], { ...o, what: "units" }, { term }))).toEqual([2, '--what takes deaths, kills, buildings, paths, not "units"']);

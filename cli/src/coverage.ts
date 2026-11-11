@@ -21,7 +21,7 @@ import { ensureEngine, findGameCopy, type Engine } from "./engine";
 import { loadReplayInput, readInput, STDIO, type Input } from "./files";
 import { modReplayReason } from "./replaymod";
 import { matchReplay, type MatchKind } from "./heat";
-import { defaultParallel, mapIdentity, replayFiles, replayMapIdentity, sha256, skippedLines } from "./heatmap";
+import { defaultParallel, mapIdentity, noReplays, replayFiles, replayMapIdentity, sha256, skippedLines, unreadable } from "./heatmap";
 import { defaultTests, readTests, runTests, type PlannedScenario } from "./maptest";
 import { GAME_TYPES } from "./replay";
 import { gameClock, gameMap, rowText, runMapInGame, type CopyLine } from "./trace";
@@ -195,11 +195,13 @@ export async function runCoverage(input: Input, doc: OpenedMap, sources: readonl
   const skipped: CoverageReport["skipped"] = [];
   const taken: { file: string; path: string; match: MatchKind; players: string[] }[] = [];
   const hashes = new Set<string>();
+  let unread = 0;
   for (const path of files) {
-    const name = relative(process.cwd(), path) || basename(path);
+    // The path as it was typed (a folder's replays under the folder as typed).
+    const name = path;
     try {
       const rin = await readInput(path);
-      if (rin.kind !== "replay") { skipped.push({ file: name, reason: t("not a replay") }); continue; }
+      if (rin.kind !== "replay") { unread++; skipped.push({ file: name, reason: t("not a replay") }); continue; }
       if (rin.path === STDIO) throw new CliError(t("a replay from standard input: the game reads a file"), null, 2);
       const hash = sha256(rin.bytes);
       if (hashes.has(hash)) { skipped.push({ file: name, reason: t("the same replay as one before it") }); continue; }
@@ -213,13 +215,13 @@ export async function runCoverage(input: Input, doc: OpenedMap, sources: readonl
       taken.push({ file: name, path, match: m.match, players: rep.players.filter((p) => p.type === 1 || p.type === 2).map((p) => p.name) });
     } catch (e) {
       if (!(e instanceof CliError)) throw e;
-      skipped.push({ file: name, reason: e.message.replace(/^No file .*/, t("no such file")) });
+      unread++;
+      skipped.push({ file: name, reason: unreadable(path, e) });
     }
   }
   for (const line of skippedLines(skipped)) live(line);
   if (!taken.length && !testFiles.length) {
-    const what = files.length === 1 ? t("{file} is not a Use Map Settings game on {map}.", { file: basename(files[0]), map: input.name }) : t("None of the {n, plural, one {# replay} other {# replays}} is a Use Map Settings game on {map}.", { n: files.length, map: input.name });
-    throw new CliError(what, t("A replay counts when its map is this one, or has the same name and size (--force takes others), and it was played as Use Map Settings."), 2);
+    throw noReplays(replayPaths, files, unread, () => new CliError(files.length === 1 ? t("{file} is not a Use Map Settings game on {map}.", { file: files[0], map: input.name }) : t("None of the {n, plural, one {# replay} other {# replays}} is a Use Map Settings game on {map}.", { n: files.length, map: input.name }), t("A replay counts when its map is this one, or has the same name and size (--any-map takes others), and it was played as Use Map Settings."), 2));
   }
 
   // The tests, read before anything is played: a mistake in the file is said at once.

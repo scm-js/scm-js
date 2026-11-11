@@ -358,7 +358,7 @@ export async function runBalance(file: string, mapPath: string, doc: OpenedMap, 
   if (!o.bots.length || o.bots.length > 2) throw new CliError(t("--bots names one bot (played against the computer) or two"), t("scmjs map balance map.scx --bots mybot.scmbot   (or --bots a.scmbot,b.scmbot)"), 2);
   const races = o.races ?? ["r"];
   // One bot plays the game's computer (once for each of --races); two bots play each other, both ways round.
-  const entrants = parseEntrants(o.bots.length === 1 ? [o.bots[0], "computer"] : o.bots, races);
+  const entrants = parseEntrants(o.bots.length === 1 ? [o.bots[0], "computer"] : o.bots, races, undefined, "map balance");
   const seeds = o.seeds ?? [1, 2, 3, 4, 5, 6, 7, 8];
   const played = o.play ?? mapPath;
   const games = mirrorOnce(schedule(entrants, [played], races, seeds), entrants);

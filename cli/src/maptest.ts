@@ -33,6 +33,8 @@ import { conditionDef } from "../../src/data/triggerDefs";
 import { plainText } from "../../src/editor/textColors";
 import { decodeText, type TextEncoding } from "../../src/formats/text/encoding";
 import { ensureEngine, findGameCopy, modArgs, noResultHint, runnerFor, startRunner, type RunnerModReport } from "./engine";
+import { tagModReplay } from "./ladder";
+import type { ModOverlay } from "./mod/overlay";
 import { unitByName } from "./rush";
 import { gameClock, summarizeRows, type CopyLine, type ReplayCheck, type ReplayPlayerLine } from "./trace";
 import { t } from "./i18n";
@@ -597,7 +599,7 @@ export interface TestRunOptions {
   /** No line a scenario as it ends (`recordTest` says what it recorded instead). */
   quiet?: boolean;
   /** A mod laid over the game: `folder` writes its files in the game's paths and says where (asked once the engine is known to take one). */
-  mod?: { layers: () => Promise<string[]>; report?: (m: RunnerModReport) => RunnerModReport };
+  mod?: { layers: () => Promise<string[]>; report?: (m: RunnerModReport) => RunnerModReport; tag?: ModOverlay["tag"] };
 }
 
 export interface TestRun {
@@ -657,6 +659,8 @@ export async function runTests(mapName: string, scenarios: PlannedScenario[], me
         taken.add(name);
         replay = join(o.out, `${name}.rep`);
         copyFileSync(rep, replay);
+        // A game of a mod says so in its replay, as the play page's Save Replay does: replay watch then asks for the mod.
+        if (o.mod?.tag) await tagModReplay(replay, o.mod as ModOverlay, null, engine.build);
       } else if (ok) {
         // A scenario that passes now has no failure to replay: the replay of when it failed goes.
         rmSync(join(o.out, `${stem}.rep`), { force: true });

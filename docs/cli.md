@@ -219,10 +219,10 @@ when it does not, so it runs there too.
 
 ### Updating
 
-`scmjs about` prints this version, whether a newer one is out and the line that installs
-it, how this copy was installed, the desktop app and Docker if they are installed, and the
-addresses of the editor, the docs and the source. Update the way you installed. With
-Homebrew:
+`scmjs -v` (or `scmjs --version`) prints the version alone, for a script. `scmjs about`
+prints this version, whether a newer one is out and the line that installs it, how this
+copy was installed, the desktop app and Docker if they are installed, and the addresses of
+the editor, the docs and the source. Update the way you installed. With Homebrew:
 
 ```sh
 brew upgrade scmjs
@@ -320,14 +320,25 @@ These commands read a map and change nothing.
 ### What a map holds
 
 `scmjs map info` (or `scmjs info`) prints a map's summary: its size, tileset and version,
-the players, units, resources, triggers and strings, and what Check Map makes of it.
+the players, units, resources, triggers and strings, and what Check Map makes of it. A map
+that keeps a TrigScript script has a Script line. Strings are counted as those with text
+in them, of the slots the table has; locations as those placed on the map, without
+Anywhere. `map dump` counts them the same way.
+
+A file with a map's extension that holds no scenario (a text file renamed, an empty or
+cut-off download) is not a map: every command says so and exits with 2, and none writes
+over it. The editor refuses it too.
+
+With `--json`, `name` is the map's name as text, its colour codes and line breaks taken
+out, as the summary shows it; `rawName` is the name as the map holds it, codes and all.
 
 ![map info on a test map: the summary, the players and the units placed most](images/cli-map-info.webp)
 
 *`scmjs map info ums.scx`. The name and description keep their colours in a terminal with
 full colour.*
 
-`--table` prints one row per map instead, for a folder of them:
+`--table` prints one row per map instead, for a folder of them (it cannot be had with
+`--json`):
 
 ```
 $ scmjs map info --table *.scx
@@ -351,7 +362,8 @@ warnings too.
 A few checks need the game's graphics or unit data, such as units placed where they cannot
 walk. The command does not run those. The editor does, once it has the game data.
 
-For CI, `--format` writes the findings in a form other tools read:
+For CI, `--format` writes the findings in a form other tools read (`--json` is
+`--format json`, and is refused beside another format):
 
 | Format | What it is |
 | --- | --- |
@@ -359,8 +371,11 @@ For CI, `--format` writes the findings in a form other tools read:
 | `junit` | JUnit XML, one test case per map, for any CI system that takes test results |
 | `sarif` | SARIF 2.1.0, for code scanning tools such as GitHub's `upload-sarif` action |
 
-The exit code is the same whatever the format. A step in a GitHub workflow that checks a
-pull request's maps:
+The exit code is the same whatever the format. A file that could not be read as a map is
+said on standard error in every format, and is in the report too: an `::error` annotation
+for `github`, a test case in error for `junit`, a notification of the run for `sarif`. The
+closing count, in text, counts the maps that were read and says how many files were not. A
+step in a GitHub workflow that checks a pull request's maps:
 
 ```yaml
 - run: npx @scm-js/cli map check maps/*.scx --strict --format github
@@ -396,9 +411,10 @@ wakka.scm  ▲ 1 new warning · 72 known
 findings of the triggers below the new one still match.*
 
 Without a file name both options use `.scmjs-baseline.json` in the current folder; give
-one to keep it elsewhere. The file is JSON, one list of findings for each map, keyed by
-the map's path from the file's folder, so one file serves a whole folder of maps. Commit
-it beside the maps.
+one to keep it elsewhere; a folder in its path that is not there yet is made. The file is
+JSON (version 1; a version this scmjs does not know is refused), one list of findings for
+each map, keyed by the map's path from the file's folder, so one file serves a whole
+folder of maps. Commit it beside the maps.
 
 A finding is matched by the part of the map it is in and its text, with the parts that
 move taken out. A trigger is known by its text, not by its number, so adding a trigger
@@ -422,14 +438,18 @@ With `--json`, each map has a `baseline` entry: the file, how many findings it l
 ### The whole map as text
 
 `scmjs map dump ridge.scx` prints everything in the map as text: the header, the players
-and forces, every unit and location, the triggers in the trigger window's text form, the
-strings, the archive's other files with their sizes and hashes, and the scenario's
-sections with their sizes. Nothing is cut. The same file always gives the same text, so
-you can search it with `grep`, keep it beside the map, or have git show a map's changes
-with it ([Reading maps in git diff](#reading-maps-in-git-diff)).
+and forces, every unit, sprite, doodad and location, the unit, upgrade and technology
+settings that differ from a new map's, the triggers in the trigger window's text form, the
+strings with text, the archive's other files with their sizes and hashes, and the
+scenario's sections with their sizes and hashes. Nothing is cut. The same file always
+gives the same text, and the file's name is not in it, so the same map under another name
+reads the same. You can search it with `grep`, keep it beside the map, or have git show a
+map's changes with it ([Reading maps in git diff](#reading-maps-in-git-diff)). Terrain is
+not written out tile by tile; an edit to it changes its section's hash, so it still shows
+as a changed line.
 
 ```
-# ridge.scx — scmjs map dump 1
+# scmjs map dump 2
 
 ## Map
   Name         Ridge
@@ -447,29 +467,39 @@ Conditions:
 …
 ```
 
-`--json` gives the same data as JSON, with the units and triggers as the records the
-editor holds.
+The settings part lists a unit, upgrade or technology the map customises with its values,
+an entry whose availability or levels differ for everyone or for one player, and, when the
+map customises any unit, the weapons' damage. A location is numbered as triggers number
+it, from 1. The first line carries the form's number (2 since 0.13.4); a later form that
+reads differently gets the next number.
+
+`--json` gives the same data as JSON, with the units, sprites, doodads and triggers as the
+records the editor holds.
 
 ### Searching maps
 
 `scmjs map find <text> <maps…>` is Edit ▸ Find over any number of maps. It finds units,
-locations, sprites and doodads whose name holds the text, and strings and triggers whose
-text does. A number also matches a unit id, a location's slot, a string's number or a
-trigger's number.
+locations, sprites and doodads whose name holds the text, strings whose text does, and
+triggers whose text, as [`map triggers export`](#triggers-and-strings-as-text) writes it,
+does: a condition's or an action's unit, location or player as well as its text. A number
+also matches a unit id, a location's slot, a string's number or a trigger's number.
 
 ```
 $ scmjs map find Marine maps/*.scx
-ums.scx  4 matches
+ums.scx  5 matches
   unit     Test Marine  Player 1 · 14, 50
   string   Test Marine  String #13
   string   Bring a Marine to the middle.  String #17
-  trigger  Trigger 1  Bring a Marine to the middle.
+  trigger  Trigger 1  Set Mission Objectives("Bring a Marine to the middle.");
+  trigger  Trigger 2  Bring("Player 1", "Terran Marine", "Middle", At least, 1);
 ```
 
 `--in strings,triggers` searches only those kinds: units, locations, sprites, doodads,
-strings, triggers and briefing. `--case` matches case. A map with no match prints nothing.
-Like `grep`, the command exits with 1 when nothing matched in any map, so a script can ask
-whether any map still says something.
+strings, triggers and briefing (`--in` given twice takes both). `--case` matches case. A
+map with no match prints nothing. With `--json`, a trigger, location or string hit has a
+`number` counted from 1, as the text shows it, beside its `index`. Like `grep`, the
+command exits with 1 when nothing matched in any map, so a script can ask whether any map
+still says something.
 
 ### A picture of a map
 
@@ -535,7 +565,7 @@ after it.
 A name in the WAV table that the map does not carry is listed and not written. That is not
 an error. A name under `sound\` is one of the game's own sounds, which plays from the
 game's files, and is listed as such. `--json` gives the list, and for `export` the file
-each sound went to.
+each sound went to, with `number` the slot as the list shows it, from 1.
 
 ### Maps from scmscx.com
 
@@ -619,16 +649,20 @@ $ scmjs map new maps/ridge.scx --size 96x64 --tileset jungle --players 2
 | --- | --- |
 | `--size` | Width and height, each 64, 96, 128, 192 or 256, as the New dialog offers them |
 | `--tileset` | badlands, platform, install, ashworld, jungle, desert, ice or twilight |
-| `--name`, `--description` | The map's name (the file's name without its extension by default) and description |
-| `--players 2` | Start locations for players 1 and 2, placed in a ring as Tools ▸ Auto-place does, with the other slots closed, so the map passes Check Map as it is. `--layout corners` puts them in the corners |
-| `--revision remastered` | A Remastered map |
+| `--name`, `--description` | The map's name (the file's name without its extension by default) and description, read as [`map set`](#name-description-and-revision) reads them: `<04>` is a colour code |
+| `--players 2` | Start locations for players 1 and 2, placed in a ring as Tools ▸ Auto-place does, with the other slots closed, so the map passes Check Map as it is. `--layout corners` puts them in the corners (it needs `--players`) |
+| `--revision remastered` | The file's revision, any of the five `map set` takes: original, hybrid, broodwar (the default), remastered, remasteredHybrid, in any case |
 | `--force` | Writes over a file that is already there; without it the command refuses |
 
-A name ending in `.chk` writes the bare scenario. Without the game's graphics the ground
-is written by its terrain ids, as the editor does when it has no game data; the map opens
-as it should and the editor fills in the tiles' looks when it saves. The same arguments
-always give the same file, byte for byte, so a map made in a build step is the same map
-every time.
+Without `--players` the map has no start locations, so Check Map finds an error for each
+open slot; the command says so under its line.
+
+A name ending in `.chk` writes the bare scenario, and a name with no extension gets the
+revision's (`.scx`, or `.scm` for the original and hybrid ones). A name with another
+extension is refused. Without the game's graphics the ground is written by its terrain
+ids, as the editor does when it has no game data; the map opens as it should and the
+editor fills in the tiles' looks when it saves. The same arguments always give the same
+file, byte for byte, so a map made in a build step is the same map every time.
 
 ### A melee map from a seed
 
@@ -677,12 +711,12 @@ the command says so and writes nothing.
 | --- | --- |
 | `--players` | 2, 3, 4, 6 or 8 (2 by default). Three players get the four-player layout with the fourth main and natural left without a start location, for anyone to take |
 | `--size` | 128 × 128 by default, 192 × 192 for eight players. Each side is 96, 128, 192 or 256, and at least 96 for two players, 128 for three to six and 192 for eight: the bases are a fixed size, so a small map runs out of room |
-| `--tileset` | jungle by default, or badlands, platform, ashworld, desert, ice or twilight. Installation is not offered, since none of its ground can be built on |
-| `--symmetry` | How the players' halves or quarters relate. `rotational` turns the map half round its centre; it is the default on a square map, and `mirror-x` on one that is not. `mirror-x` mirrors left to right, `mirror-y` top to bottom, and `diagonal` (two players on a square map) across the diagonal. Four and eight players are always mirrored both ways. Six players are three a side; `mirror-y` puts the sides at the top and bottom, which needs a map 192 wide or more |
+| `--tileset` | jungle by default, or badlands, platform, ashworld, desert, ice or twilight. Installation is not offered, since none of its ground can be built on, and a refused name lists these seven |
+| `--symmetry` | How the players' halves or quarters relate. `rotational` turns the map half round its centre; it is the default on a square map, and `mirror-x` on one that is not. `mirror-x` mirrors left to right, `mirror-y` top to bottom, and `diagonal` (two players on a square map) across the diagonal. Four and eight players are always mirrored both ways, and the command says so when `--symmetry` asks for something else. Six players are three a side; `mirror-y` puts the sides at the top and bottom, which needs a map 192 wide or more |
 | `--style` | `open` (the default) keeps the ways out of the naturals clear; `chokes` lays more and bigger mesas, two of them either side of each natural's way out |
 | `--seed` | The number the map is made from. The same seed and options with the same copy of the game give the same file, byte for byte. Without `--seed` the command picks one and prints it, so you can make a map you like again |
 | `--rush` | Also walks an SCV between the starts in the game itself, as [`map rush`](#rush-distances) does; this needs the game engine |
-| `--name` | The map's name, the file's name without its extension by default |
+| `--name` | The map's name, the file's name without its extension by default; `<04>` is a colour code, as in `map set` |
 | `--force` | Writes over a file that is already there |
 | `--json` | The summary as JSON |
 
@@ -733,7 +767,11 @@ map for each player, and start to start beside the straight line.
 
 Each command here writes the map back over itself, or to another file with
 `--out other.scx`, and keeps everything else in the file as it was: its sounds and other
-files, and the way the scenario was compressed, as Save does in the editor.
+files, and the way the scenario was compressed, as Save does in the editor. A sound
+StarEdit stored with the game's own sound compression stays stored that way while it is
+unchanged, so the file does not grow. A folder in the `--out` path that is not there yet
+is made. When the command succeeds, a file `--out` names is always written, changed or
+not, so the next step of a script finds it; `--out -` sends the map to standard output.
 
 ### Name, description and revision
 
@@ -747,14 +785,18 @@ scmjs map set ridge.scx --encoding euc-kr
 ```
 
 ```
-✔ ridge.scx: Name ridge → Ridge · written to ridge.scx · 3.0 KB
+$ scmjs map set ridge.scx --name "Ridge 2.1"
+✔ ridge.scx: Name Ridge → Ridge 2.1 · written to ridge.scx · 3.0 KB
 ```
 
 In a name or description, `<XX>` is one of the game's colour codes, as in the string
 files. `--revision` is one of original, hybrid, broodwar, remastered and remasteredHybrid,
 and does what the editor's revision change does. `--encoding` is how the map's text is
-stored for 1.16.1: utf-8, euc-kr, shift_jis, gbk, big5, windows-1251 or windows-1252.
-Remastered reads UTF-8.
+stored for 1.16.1: utf-8, euc-kr (CP949), shift_jis, gbk, big5, windows-1251 or
+windows-1252. Remastered reads UTF-8. Both take any case. Text that is plain ASCII is the
+same in every encoding, and a map does not record which one it was written in, so on such
+a map `--encoding` has nothing to change; the command says so and writes nothing.
+`--dry-run` says what would change and writes nothing.
 
 ### Resizing
 
@@ -766,9 +808,12 @@ Remastered reads UTF-8.
 
 `--anchor` says which part of the map stays where it is: center (the default), top-left,
 top, top-right, left, right, bottom-left, bottom or bottom-right. Units and other things
-that fall outside the new edge are dropped, and the command lists them. Locations that
-hang over the edge are pulled inside unless you pass `--no-clamp`. New ground is the
-tileset's base terrain.
+that fall outside the new edge are dropped, and the command lists them, twenty at most
+unless you pass `--all`; a start location that is dropped is always named, on a line of
+its own. Locations that hang over the edge are pulled inside unless you pass `--no-clamp`;
+the command names a location that came out of that with no width or height, or, with
+`--no-clamp`, one left past the edge. New ground is the tileset's base terrain.
+`--dry-run` says what would happen and writes nothing.
 
 ### Triggers and strings as text
 
@@ -790,7 +835,15 @@ briefing's triggers.
 `triggers import` replaces the map's triggers with the file's, or adds them after the
 map's own with `--append`. Text the map cannot resolve, such as a condition it does not
 know or a location it does not have, is refused with its line number, and nothing is
-written.
+written. A file with no triggers in it is refused too (exit 2), since importing it would
+take every trigger out of the map, as an export that failed and left an empty file would;
+`--allow-empty` imports it when that is what you mean. A `.trg` of a mission briefing is
+refused as triggers, and one of triggers with `--briefing`. `-` as the file reads the text
+from standard input, so one map's triggers can go straight into another:
+
+```sh
+scmjs map triggers export a.scx | scmjs map triggers import b.scx -
+```
 
 ```sh
 scmjs map strings export mymap.scx > strings.txt
@@ -801,7 +854,11 @@ The strings file has one string a line: the string's number, a tab, and its text
 game's colour codes written as `<XX>`. A `#` starts a comment. `strings import` sets each
 numbered string in place and adds any numbered past the end. Nothing is renumbered,
 because the map's triggers and locations refer to strings by number; a line you take out
-leaves that string as it is.
+leaves that string as it is. A file with no strings in it, or one that gives a number on
+two lines, is refused.
+
+Both imports take `-` for standard input, `--dry-run` to say what would change and write
+nothing, and `--json` for the result as JSON.
 
 ### Editing triggers or strings in your editor
 
@@ -819,19 +876,25 @@ map is left alone and the command says nothing changed.
 Text that cannot be read, such as a condition the map does not know or a strings line that
 is not a number and a tab, is not imported and the map is left alone. The error gives the
 line. The file you edited is kept with your changes in it, and the command prints its path
-and the `import` command that brings it in once you have fixed it.
+and the `import` command that brings it in once you have fixed it. The same happens when
+the map cannot be written, such as a read-only file: your text is kept, and the command
+says how to bring it in. Taking every trigger out in the editor takes them out of the map;
+taking every string line out changes nothing. `--json` gives the result as JSON.
 
 The editor is `--editor`, or else the `VISUAL` or `EDITOR` setting as git uses them, or
 else Notepad on Windows and vi elsewhere. An editor that opens a window has to be told to
 wait for it to close, or the command sees the file unchanged straight away: `code --wait`,
-`subl -w`, `gedit -s`. `triggers edit --briefing` edits the briefing's triggers.
+`subl -w`, `gedit -s`. `triggers edit --briefing` edits the briefing's triggers. An empty
+`--editor` is refused, and so is vi when the command has no terminal to give it (in a
+script or a pipe), rather than waiting for keys that never come.
 
 ### Removing unused strings
 
 `scmjs map strings prune ridge.scx` is the string editor's Delete Unused. A string that no
 trigger, location, name, force, sound or setting refers to is blanked, and the blank slots
 at the end of the table are dropped. Nothing is renumbered, so the triggers still point at
-the right strings. `--dry-run` lists what would go and writes nothing.
+the right strings. `--dry-run` lists what would go and writes nothing; with `--out`, the
+map is written there even when nothing went.
 
 ### Making a map smaller
 
@@ -867,7 +930,8 @@ In order, the steps are:
 - With `--strip-editor`, the sections only editors read (below).
 - Every file compressed again. PKWARE is the default, since every version of the game
   reads it. A map that was already in zlib, which only Remastered reads, gets the smaller
-  of the two. `--compression zlib` or `--compression pkware` chooses.
+  of the two. `--compression zlib` or `--compression pkware` chooses, and the map is then
+  written in it even when that comes out larger: that is what the file is for.
 
 Some files stay whatever refers to them. The game itself opens a few files by name:
 `(attributes)`, `(signature)` and the marks Blizzard's own maps and the ladder maps carry,
@@ -876,7 +940,9 @@ such as `blizzard_2.cnd`. TrigScript's, Magenta's and the editor's build files s
 sound StarEdit imported is stored with the game's own sound compression, which loses a
 little quality to be about four times smaller; the editor reads it but cannot write it,
 and writing it any other way would make the map larger, so such a file is kept exactly as
-it is stored. `--keep` names other files to keep: `--keep "notes\"` keeps a folder.
+it is stored. A file stored in zlib is not kept that way in a map written with PKWARE,
+since 1.16.1 could not read it. `--keep` names another file to keep, once per file:
+`--keep "notes\"` keeps a folder. A `--keep` name the map does not have is said.
 
 A map built from a TrigScript script keeps its scenario as it was built, so the editor
 still opens the map you were editing; only its stray files and its compression change. A
@@ -891,8 +957,9 @@ switch names. It is the Save dialog's *Smallest that plays* for these sections; 
 original to go on editing.
 
 The result is opened again as the editor opens a map before anything is written, and when
-the editor cannot write the map any smaller, nothing is written. `scmjs map diff` between
-the two shows only what went.
+the editor cannot write the map any smaller, nothing is written over it; `--out`, or
+standard output when the map came from a pipe, still gets the map, as it was, and the list
+is headed *Would go*. `scmjs map diff` between the two shows only what went.
 
 ### The archive as a folder
 
@@ -913,15 +980,31 @@ and the files a protected map keeps without a name, which go under `stored/` byt
 byte. `pack` writes the archive as `archive.json` says, so an unpacked and repacked map
 reads the same in the editor and the game.
 
+A sound StarEdit stored with the game's own sound compression comes out as a plain WAV,
+with its stored form kept under `stored/` beside it; `pack` puts back the stored form
+while the WAV is the one `unpack` wrote, so the map does not grow. A sound you changed
+goes in as plain PCM, which is larger, and `pack` says so; `map optimize` cannot make it
+smaller again. A folder with such sounds has `archive.json` version 3, which scmjs before
+0.13.4 refuses rather than packing wrongly.
+
 A file you add to the folder goes into the map at its path: a sound dropped into
 `staredit/wav/`, a script's file under `trigscript/`. `--compression none|pkware|zlib`
 changes how every file is stored, and `--out` names the folder or the file to write.
+`pack --out -` writes the map to standard output; `pack --dry-run` builds and checks it
+and writes nothing.
+
+`unpack` never mixes two maps in one folder. Unpacking a map again over its own earlier
+unpack replaces it, and a file the map no longer has is removed. A folder that holds
+another map's unpack, or files changed or added since the unpack, is refused unless you
+pass `--force`, so an edit is not thrown away without a word; a folder that holds other
+files altogether is refused even then. `--out -` is refused, since `unpack` writes a
+folder.
 
 Nothing is parsed or restored on the way: the folder is the file as it is. A map the
 editor built from a TrigScript script unpacks into its built scenario and the `scmjs/`
 files holding the source, and packs back into the same built map. The packed file is
 opened as a map before it is written, so a folder whose scenario is not a scenario is
-refused.
+refused (exit 2).
 
 With `--text`, the scenario itself is written as text files under `scenario/` instead of
 the one binary `staredit/scenario.chk`, so the map can be kept in git and read and merged
@@ -937,8 +1020,10 @@ from the terminal.
 
 ```
 $ scmjs map build maps/ridge.scx --test
-✔ ridge.scx: 12 triggers → #4–#15 · 2 programs (Remastered) · 7 tests passed · written to maps/ridge.scx · 48 KB
+✔ ridge.scx: 12 triggers → #4–#15 · 2 programs (Remastered) · 7 tests passed · written to maps/ridge.scx · 48 KB  TrigScript 4.4.0, TypeScript 6.0.3
 ```
+
+The line ends with the versions of TrigScript and TypeScript that built the map.
 
 The script is the one the map keeps, with the copies of libraries the map keeps. It is
 compiled against the map's names, settings and placed units, as the editor compiles it.
@@ -984,23 +1069,51 @@ export default (api) => {
 };
 ```
 
-```sh
-scmjs map run starts.mjs "(4)Crossing.scx"
-scmjs map run ../plugin-repair maps/ridge.scx --command repair --dry-run
+```
+$ scmjs map run starts.mjs "(4)Crossing.scx"
+ℹ Crossing: 4 start locations
+✔ (4)Crossing.scx: starts ran · the map is unchanged
+```
+
+A script that changes the map, run with `--dry-run` to see the change first:
+
+```js
+// gate.mjs
+export default (api) => {
+  api.document.update("Name switch 1", (tx) => tx.switches.setName(0, "Gate is open"));
+};
+```
+
+```
+$ scmjs map run gate.mjs ridge.scx --dry-run
+…
+✔ ridge.scx: gate ran · 1 setting changed, 1 string added · not written (--dry-run)
 ```
 
 What the plugin would show is printed as it happens: its status line, its toasts, and the
 warnings and errors in its log. Dialogs and panels register and show nothing, and a
-request for a file gets none. `--command <id>` runs one of the commands the plugin
-registered, with `--arg` values as its arguments; `--json` includes what the command
-returned.
+request for a file gets none. What the plugin writes to the console goes to standard
+error, an error as one line, so standard output holds only the command's own result.
+`--command <id>` runs one of the commands the plugin registered, with `--arg` values as
+its arguments (`--arg` without `--command` is refused); `--json` includes what the command
+returned. A command that starts its work and returns without waiting for it is waited for:
+the command line waits until the timers and file reads the plugin set off are done, ten
+seconds at most. A plugin that shows its findings only in a dialog, as Repair's Repair
+Map… does, shows nothing here.
+
+A folder whose `plugin.json` names a build that is not there yet (a plugin cloned and not
+built) is run from its source, as `scmjs plugin dev` serves it. A path that is not there,
+a file that is not a plugin and a folder without a `plugin.json` are each said in one line
+(exit 2).
 
 The map is written back only when the plugin changed it (`--out` writes it elsewhere, even
-unchanged), and the last line says what changed, in the terms of
-[`map diff`](#comparing-two-maps). `--dry-run` prints that comparison in full and writes
-nothing. Saving is the command's job: `api.document.save()` has no file picker to open
-here. A plugin written in TypeScript needs TypeScript installed, as `map build` does; a
-built plugin or a JavaScript script needs nothing more.
+unchanged, and a map read from `-` always goes on to standard output), and the last line
+says what changed, in the terms of [`map diff`](#comparing-two-maps). `--dry-run` prints
+that comparison in full and writes nothing. Saving is the command's job:
+`api.document.save()` writes nothing and resolves true, since the command writes the map
+at the end, and `api.document.saveAs()` resolves false, having no dialog to show. A plugin
+written in TypeScript needs TypeScript installed, as `map build` does; a built plugin or a
+JavaScript script needs nothing more.
 
 This is the editor's own plugin host, so a plugin's logic runs as it does in the editor.
 You can try a plugin from a terminal, or run it over many maps from a shell loop, before
@@ -1166,15 +1279,17 @@ $ git diff
    4	Force 2
 ```
 
-The second line makes each hunk's heading the part of the map it is in, as
-`## Strings (20)` above. Earlier versions of this guide gave it as `"^## "`, which shows a
-bare `##`; `scmjs init` replaces that value. `git config diff.scmjs.cachetextconv true`
-keeps the text of each version, so a long `git log -p` does not read every map again. git
-keeps that text until the setting's command changes, not when scmjs does: if a newer scmjs
-writes `map dump` differently and `git diff` still shows the old form, clear the kept text
-with `git update-ref -d refs/notes/textconv/scmjs`. The `.gitattributes` lines are
-committed, so everyone who clones gets them; the `git config` lines are per clone, or for
-every repository on your computer with `--global`.
+An edit the text does not spell out, such as painted terrain, shows as its section's line
+under `## Sections`, whose hash changed. The second line makes each hunk's heading the
+part of the map it is in, as `## Strings (20)` above. Earlier versions of this guide gave
+it as `"^## "`, which shows a bare `##`; `scmjs init` replaces that value.
+`git config diff.scmjs.cachetextconv true` keeps the text of each version, so a long
+`git log -p` does not read every map again. git keeps that text until the setting's
+command changes, not when scmjs does: if a newer scmjs writes `map dump` differently and
+`git diff` still shows the old form, clear the kept text with
+`git update-ref -d refs/notes/textconv/scmjs`. The `.gitattributes` lines are committed,
+so everyone who clones gets them; the `git config` lines are per clone, or for every
+repository on your computer with `--global`.
 
 ### A map as a folder of text
 
@@ -1226,7 +1341,9 @@ $ git diff -U1
 
 so two people who changed different units, triggers or strings merge with git's own line
 merge, and a pull request shows the change itself. A conflict is a conflict in the text
-file, settled there.
+file, settled there. Unpacking the map again over its folder is the normal step and needs
+no flag; if a text file in the folder was edited since the unpack, `unpack` says which and
+stops, so pack the folder first, or pass `--force` to replace the edit.
 
 **Nothing is lost.** Before writing the folder, `unpack` packs it again in memory and
 compares the result with the map, section by section; an untouched folder packs back into
@@ -3421,20 +3538,20 @@ gives its options.
 | --- | --- |
 | [`scmjs map info <maps…>`](#what-a-map-holds) | Size, tileset, players, units, triggers, strings and the check in one line; `--table` for a folder |
 | [`scmjs map check <maps…>`](#checking-a-map) | Check Map: errors, then warnings; `--format github`, `junit` or `sarif` for CI; `--baseline` fails only on new findings |
-| [`scmjs map dump <map>`](#the-whole-map-as-text) | The whole map as text, for `git diff` and `grep` |
-| [`scmjs map find <text> <maps…>`](#searching-maps) | Edit ▸ Find across maps: units, locations, strings, triggers |
+| [`scmjs map dump <map>`](#the-whole-map-as-text) | The whole map as text, for `git diff` and `grep`: units, sprites, doodads, changed settings, triggers, strings, a hash for each section |
+| [`scmjs map find <text> <maps…>`](#searching-maps) | Edit ▸ Find across maps: units, locations, strings, triggers by their whole text |
 | [`scmjs map preview <map>`](#a-picture-of-a-map) | A picture of the map, in the terminal or as a PNG with `--out` |
 | [`scmjs map sounds [list\|export] <map>`](#a-maps-sounds) | The sounds the map carries, listed or written out as WAV and Ogg files |
 | [`scmjs map fetch <words…>`](#maps-from-scmscxcom) | Searches scmscx.com, and downloads a map with `--id` or `--first` |
 | [`scmjs map open <map>`](#opening-a-map-in-scmjs) | Opens the map in scmJS |
 | [`scmjs map new <map>`](#a-blank-map) | A new map: flat ground, start locations placed |
 | [`scmjs map generate <map>`](#a-melee-map-from-a-seed) | A symmetric melee map from a seed, walked and checked before it is written |
-| [`scmjs map set <map>`](#name-description-and-revision) | The name, description, revision or text encoding |
-| [`scmjs map resize <map>`](#resizing) | Scenario ▸ Resize: another size, anchored |
-| [`scmjs map triggers export\|import\|edit`](#triggers-and-strings-as-text) | The triggers as a text or `.trg` file and back; `edit` opens them in your editor |
+| [`scmjs map set <map>`](#name-description-and-revision) | The name, description, revision or text encoding; `--dry-run` |
+| [`scmjs map resize <map>`](#resizing) | Scenario ▸ Resize: another size, anchored, with what it drops listed; `--dry-run` |
+| [`scmjs map triggers export\|import\|edit`](#triggers-and-strings-as-text) | The triggers as a text or `.trg` file and back (`-` for standard input, `--allow-empty`, `--dry-run`); `edit` opens them in your editor |
 | [`scmjs map strings export\|import\|edit\|prune`](#triggers-and-strings-as-text) | The strings as a text file and back; `prune` removes the unused ones |
 | [`scmjs map optimize <map>`](#making-a-map-smaller) | The map made smaller: unused sounds, files and strings out, compressed again; `--strip-editor` drops the editor-only sections too |
-| [`scmjs map unpack <map>`, `scmjs map pack <folder>`](#the-archive-as-a-folder) | The map's archive as a folder of files, and back |
+| [`scmjs map unpack <map>`, `scmjs map pack <folder>`](#the-archive-as-a-folder) | The map's archive as a folder of files, and back; `pack --out -`, `--dry-run` |
 | [`scmjs map unpack <map> --text`](#a-map-as-a-folder-of-text) | The scenario as text files to keep in git; `map pack` builds the map from them |
 | [`scmjs map build <map>`](#building-a-trigscript-map) | Builds the map's TrigScript script into it, as Save does |
 | [`scmjs map run <plugin> <map>`](#running-a-plugin-over-a-map) | Runs a plugin, or a script written like one, over the map |
@@ -3559,7 +3676,7 @@ from a clone with `npm run cli -- <command>`, or build it with `npm run build:cl
 | `cli/src/blame.ts` | `map blame`: the items of each kind, matched between versions as `map diff` matches them, and git blame's walk from the newest version back |
 | `cli/src/merge.ts` | The three-way merge: each part's rule, the ordered list merge for triggers, units matched without ids, the string table numbered again; git's three versions of a stopped file |
 | `cli/src/edit.ts` | The header set, the map resized and the unused strings dropped, over the open document |
-| `cli/src/optimize.ts`, `cli/src/relocate.ts` | `map optimize`: what refers to each member, the steps each measured as the file it leaves, the compression chosen; a member kept as stored moved to the archive's start, its key changed with its place |
+| `cli/src/optimize.ts` | `map optimize`: what refers to each member, the steps each measured as the file it leaves, the compression chosen |
 | `cli/src/report.ts` | Check Map's findings, a map test's failures and the triggers `map coverage` never saw fire, as GitHub annotations, JUnit XML and SARIF |
 | `cli/src/baseline.ts` | `map check --baseline`: a finding's identity (a trigger by its text, counts left out), the known findings matched one for one, the file read and written |
 | `cli/src/dump.ts` | The map as text: every part in file order, the triggers and strings in their text forms, members hashed, sections as they would be written |

@@ -6,7 +6,7 @@
  * other member that is audio by name or by its first bytes. A name in the table the archive does not hold is said,
  * not fatal: it may be one of the game's own sounds.
  */
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, stat, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { readArchive } from "../../src/editor/mapFile";
 import { parseScenario } from "../../src/formats/chk/scenario";
@@ -15,7 +15,7 @@ import { parseWavHeader, wavDuration, wavFormatLabel } from "../../src/formats/w
 import { fileFor } from "./archive";
 import type { Input } from "./files";
 import { t } from "./i18n";
-import { MapReadError } from "./files";
+import { MapReadError, writeError } from "./files";
 import { CliError, columns, dot, mark, num, padColumns, pc, size } from "./ui";
 
 export type SoundState = "present" | "missing" | "unreadable";
@@ -25,6 +25,8 @@ export interface SoundEntry {
   name: string;
   /** The WAV table's slot (0–511), or null for a member the table does not list. */
   slot: number | null;
+  /** The slot counted from 1, as the list shows it; null with `slot`. */
+  number: number | null;
   state: SoundState;
   /** `wav`, `ogg`, `mp3`, or null when the bytes are none of these. */
   type: "wav" | "ogg" | "mp3" | null;
@@ -39,7 +41,8 @@ export interface SoundEntry {
   stock: boolean;
 }
 
-export interface SoundsReport { file: string; sounds: SoundEntry[]; problems: string[] }
+/** `file` is the path as typed; `name` the map file's name, as the text says it. */
+export interface SoundsReport { file: string; name: string; sounds: SoundEntry[]; problems: string[] }
 
 const AUDIO_NAME = /\.(wav|ogg|mp3)$/i;
 const ascii = (b: Uint8Array, at: number, n: number) => String.fromCharCode(...b.subarray(at, at + n));
@@ -102,24 +105,24 @@ export async function readSounds(input: Input): Promise<{ report: SoundsReport; 
     listed.add(key(row.path));
     const stock = /^sound\\/i.test(row.path.replace(/\//g, "\\"));
     if (!row.member) {
-      sounds.push({ name: row.path, slot: row.slot, state: unreadable.has(key(row.path)) ? "unreadable" : "missing", type: null, bytes: 0, seconds: null, format: null, usedBy: row.usedBy, stock });
+      sounds.push({ name: row.path, slot: row.slot, number: row.slot + 1, state: unreadable.has(key(row.path)) ? "unreadable" : "missing", type: null, bytes: 0, seconds: null, format: null, usedBy: row.usedBy, stock });
       continue;
     }
     const bytes = archive.extras.get(row.member)!;
     data.set(row.member, bytes);
-    sounds.push({ name: row.member, slot: row.slot, state: "present", ...describe(bytes), bytes: bytes.length, usedBy: row.usedBy, stock });
+    sounds.push({ name: row.member, slot: row.slot, number: row.slot + 1, state: "present", ...describe(bytes), bytes: bytes.length, usedBy: row.usedBy, stock });
   }
   // Members the table does not list that are sounds by name or by their bytes.
   for (const [name, bytes] of [...archive.extras].sort(([a], [b]) => a.localeCompare(b))) {
     if (listed.has(key(name)) || (!AUDIO_NAME.test(name) && !audioType(bytes))) continue;
     data.set(name, bytes);
-    sounds.push({ name, slot: null, state: "present", ...describe(bytes), bytes: bytes.length, usedBy: [], stock: false });
+    sounds.push({ name, slot: null, number: null, state: "present", ...describe(bytes), bytes: bytes.length, usedBy: [], stock: false });
   }
-  return { report: { file: input.name, sounds, problems: archive.problems }, data };
+  return { report: { file: input.path, name: input.name, sounds, problems: archive.problems }, data };
 }
 
 export interface ExportedSound extends SoundEntry { file: string | null }
-export interface SoundsExport { file: string; dir: string | null; sounds: ExportedSound[]; written: number; bytes: number; problems: string[] }
+export interface SoundsExport { file: string; name: string; dir: string | null; sounds: ExportedSound[]; written: number; bytes: number; problems: string[] }
 
 /** The file name a member is written as: its base name made safe, with the extension its bytes call for. */
 export function soundFileName(member: string, type: SoundEntry["type"]): string {
@@ -131,6 +134,7 @@ export function soundFileName(member: string, type: SoundEntry["type"]): string 
 export async function exportSounds(input: Input, dir: string): Promise<SoundsExport> {
   const { report, data } = await readSounds(input);
   const out = resolve(dir);
+  try { if (!(await stat(out)).isDirectory()) throw new CliError(t("{folder} is a file, not a folder", { folder: dir }), t("Name a folder for the sounds."), 2); } catch (e) { if (e instanceof CliError) throw e; }
   const taken = new Set<string>();
   const sounds: ExportedSound[] = [];
   let written = 0, bytes = 0;
@@ -145,12 +149,13 @@ export async function exportSounds(input: Input, dir: string): Promise<SoundsExp
       if (!written) await mkdir(out, { recursive: true });
       await writeFile(path, member);
     } catch (e) {
-      throw new CliError(t("{path} could not be written ({code})", { path, code: String((e as NodeJS.ErrnoException).code ?? e) }));
+      throw writeError(join(dir, name), e);
     }
     written++; bytes += member.length;
-    sounds.push({ ...s, file: path });
+    // Paths as the folder was typed (the JSON says what the person named).
+    sounds.push({ ...s, file: join(dir, name) });
   }
-  return { file: input.name, dir: written ? out : null, sounds, written, bytes, problems: report.problems };
+  return { file: input.path, name: input.name, dir: written ? dir : null, sounds, written, bytes, problems: report.problems };
 }
 
 /** `0:03.4`-style, short sounds in tenths. */
@@ -166,7 +171,7 @@ function why(s: SoundEntry): string {
 export function printSounds(r: SoundsReport | SoundsExport, shown: (s: SoundEntry & { file?: string | null }) => string = (s) => s.name): string[] {
   const present = r.sounds.filter((s) => s.state === "present");
   const total = present.reduce((n, s) => n + s.bytes, 0);
-  const head = `${pc.bold(r.file)}${dot}${r.sounds.length ? `${t("{n, plural, one {# sound} other {# sounds}}", { n: present.length })}${present.length ? `, ${size(total)}` : ""}` : t("no sounds")}`;
+  const head = `${pc.bold(r.name)}${dot}${r.sounds.length ? `${t("{n, plural, one {# sound} other {# sounds}}", { n: present.length })}${present.length ? `, ${size(total)}` : ""}` : t("no sounds")}`;
   const width = Math.max(0, ...r.sounds.map((s) => columns(shown(s))));
   const lines = [head, ...r.sounds.map((s) => {
     const slot = pc.dim((s.slot === null ? "  -" : String(s.slot + 1).padStart(3)));

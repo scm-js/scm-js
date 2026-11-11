@@ -2,7 +2,8 @@
  * `-` as a map's path: standard input to read, standard output to write, so the commands chain in a pipe. The
  * readers and writers take their streams here; the built command was run by hand through a four-step pipe.
  */
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PassThrough, Readable } from "node:stream";
 import { describe, expect, it } from "vitest";
@@ -70,6 +71,13 @@ describe("scmjs: `-` for standard input and output", () => {
   it("writeOutput takes a stream for `-` and a path for a file", async () => {
     const bytes = new Uint8Array([1, 2, 3]);
     expect(await collect((out) => writeOutput(bytes, STDIO, out))).toEqual(bytes);
-    await expect(writeOutput(bytes, join(TEST_MAPS_DIR, "no-such-folder", "x.scx"))).rejects.toBeInstanceOf(CliError);
+    // A missing folder is made; a path through a file is said, exit 2.
+    const dir = mkdtempSync(join(tmpdir(), "scmjs-pipes-"));
+    await writeOutput(bytes, join(dir, "new-folder", "x.scx"));
+    expect(readFileSync(join(dir, "new-folder", "x.scx"))).toEqual(Buffer.from(bytes));
+    const e = await writeOutput(bytes, join(TEST_MAPS_DIR, "ums.scx", "x.scx")).catch((x: unknown) => x as CliError);
+    expect(e).toBeInstanceOf(CliError);
+    expect((e as CliError).message).toMatch(/a part of the path is a file/);
+    expect((e as CliError).exitCode).toBe(2);
   });
 });

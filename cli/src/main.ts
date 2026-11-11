@@ -3,8 +3,8 @@
  * thing (`map`, `replay`, `plugin`, `bot`), the editor's own code underneath (docs/cli.md, .claude/internals/cli.md).
  */
 import { existsSync } from "node:fs";
-import { readFile, writeFile } from "node:fs/promises";
-import { basename, relative } from "node:path";
+import { readFile } from "node:fs/promises";
+import { basename, extname, relative } from "node:path";
 import { Argument, Command, CommanderError, Help, Option, type HelpContext } from "commander";
 import { aboutReport, printAbout, VERSION } from "./about";
 import { listMembers, MANIFEST_FILE, packMap, unpackMap } from "./archive";
@@ -12,12 +12,13 @@ import { rootHelp } from "./banner";
 import { BOT_GUIDE, runBot, updateBot } from "./bot";
 import { botRunValues, gameKind, ladderValues, looksLikeMapSettings, runBotGame } from "./botrun";
 import { ladderJson, parseEntrants, parseRaces, printLadder, runLadder } from "./ladder";
+import { START_LOCATION, unitName } from "../../src/data/units";
 import { costReport, gameMap, printCost, printTrace, removeGameMap, replayRun, runMapInGame, traceReport } from "./trace";
 import { printRush, runRush, rushJson, unitByName } from "./rush";
 import { balanceJson, printBalance, runBalance } from "./balance";
 import { buildMap, hasScript, loadTypeScript, printBuild } from "./build";
 import { completionScript, SHELLS, type Shell } from "./completion";
-import { LAYOUTS, nameFromFile, NEW_VERSIONS, parseSize, parseTileset, writeNewMap, type NewMapVersion } from "./create";
+import { LAYOUTS, MAP_EXTENSIONS, nameFromFile, parseSize, parseTileset, writeNewMap } from "./create";
 import { doctorJson, doctorReport, printDoctor } from "./doctor";
 import { initFolder, printInit, printRecipe } from "./init";
 import { diffMaps, printDiff, revisionInput } from "./diff";
@@ -27,13 +28,14 @@ import { asMap, printMerge, runMerge, stagedInputs, type Side } from "./merge";
 import { diffPicture } from "./diffpicture";
 import { CLIP_KINDS, clipsDir, clipsSummary, makeClips, type ClipKind, type ClipRun } from "./clips";
 import { dumpMap, printDump } from "./dump";
-import { ANCHORS, parseAnchor, pruneStrings, resizeMap, setHeader, VERSIONS, ENCODINGS } from "./edit";
-import { exportStrings, exportTriggers, importStrings, importTriggers, writeBack, writeOutput } from "./exchange";
+import { ANCHORS, mapText, parseAnchor, parseRevision, plainAsciiText, pruneStrings, resizeMap, setHeader, VERSIONS, ENCODINGS } from "./edit";
+import { exportStrings, exportTriggers, importStrings, importTriggers, writeBack, writeOutput, type Written } from "./exchange";
 import { looksLikeMpq } from "../../src/formats/mpq/scm";
+import { plainText } from "../../src/editor/textColors";
 import { formatOf } from "../../src/editor/save";
 import { COMPRESSIONS, optimizeJson, optimizeMap, printOptimize, type Compression } from "./optimize";
-import { expectKind, loadMapInput, loadReplayInput, readInput, STDIO, toStdout, type Input } from "./files";
-import { findInMap, KINDS, parseKinds, printHits } from "./find";
+import { expectKind, loadMapInput, loadReplayInput, readInput, readTextArg, STDIO, toStdout, writeFileMade, type Input } from "./files";
+import { findInMap, hitJson, KINDS, parseKinds, printHits } from "./find";
 import { DEFAULT_LIMIT, fetchJson, fetchMap, mapIdFrom, MAX_LIMIT, parseLimit, printFetched, printSearch, searchJson, searchMaps } from "./fetch";
 import { baselineLine, baselineWritten, issueLine, mapReport, printIssues, printMapInfo, type MapReport } from "./map";
 import { baselineEntries, BASELINE_FILE, mapKey, matchBaseline, readBaseline, writeBaseline, type BaselineEntry } from "./baseline";
@@ -49,7 +51,7 @@ import { checkMapOut, mapFileFor, writeReplayMap } from "./replaymap";
 import { printReplayShare, shareReplay } from "./replayshare";
 import { exportReplay, exportSummary, parseSize as parseClipSize, type ExportOptions } from "./export";
 import { watchReplay, watchSummary, watchValues } from "./watch";
-import { FORMATS, githubAnnotations, githubCoverageAnnotations, githubTestAnnotations, junitCoverageXml, junitTestXml, junitXml, sarifCoverageJson, sarifJson, sarifTestJson, type CheckReport, type Format, type TestReport } from "./report";
+import { FORMATS, githubAnnotations, githubCoverageAnnotations, githubTestAnnotations, junitCoverageXml, junitTestXml, junitXml, sarifCoverageJson, sarifJson, sarifTestJson, type CheckReport, type Format, type TestReport, type Unread } from "./report";
 import { coverageForm, coverageJson, coverageScenario, printCoverage, runCoverage } from "./coverage";
 import { defaultOut, defaultTests, readMapForTests, readTests, recordLines, recordTest, runTests, testHeader, testJson, testSummary, updateTests, type PlannedScenario } from "./maptest";
 import { printRun, runOnMap } from "./run";
@@ -98,8 +100,9 @@ async function eachFile(paths: string[], asJson: boolean, fn: (input: Input) => 
       if (!silent && !asJson && lines.length) { if (printed) print(...(rule ? ["", pc.dim("─".repeat(Math.min(process.stdout.columns || 60, 60))), ""] : [""])); print(...lines); printed = true; }
     } catch (e) {
       if (!(e instanceof CliError)) throw e;
+      // Said on standard error in every form, so a file left out of the JSON or a CI report is never left out silently.
       if (asJson) results.push({ file: path, error: e.message });
-      else { if (printed) print(""); fail(e); printed = true; }
+      fail(e);
       process.exitCode = Math.max(Number(process.exitCode ?? 0), e.exitCode);
     }
   }
@@ -115,7 +118,9 @@ async function mapInfo(input: Input) {
   expectKind(input, "map");
   const doc = await loadMapInput(input);
   const data: MapReport = { ...mapReport(input, doc), script: await hasScript(doc.extras) };
-  return { data, lines: printMapInfo(data) };
+  // JSON: the name as text (colour codes and line breaks out, as the text shows it), the bytes as the map holds them
+  // under rawName.
+  return { data: { ...data, name: plainText(data.name).replace(/\s+/g, " ").trim(), rawName: data.name }, lines: printMapInfo(data) };
 }
 async function replayInfo(input: Input, o: ReplayNameOptions = {}) {
   expectKind(input, "replay");
@@ -263,12 +268,13 @@ export function buildProgram(): Command {
   map.command("info").description(t("a map's size, players, units, triggers and its check")).argument("<maps...>").addOption(json)
     .option("--table", t("one row per map, for a folder of them"))
     .action(async (files: string[], o: { json?: boolean; table?: boolean }) => {
-      if (!o.table || o.json) { await eachFile(files, !!o.json, mapInfo); return; }
-      const reports = (await eachFile(files, true, mapInfo, true, true)).filter((r): r is MapReport => !!r && !("error" in (r as object)));
+      if (o.table && o.json) throw new CliError(t("--table and --json are two forms of the same report: take one"), null, 2);
+      if (!o.table) { await eachFile(files, !!o.json, mapInfo); return; }
+      const reports = (await eachFile(files, true, mapInfo, true, true)).filter((r): r is MapReport & { rawName: string } => !!r && !("error" in (r as object))).map((r) => ({ ...r, name: r.rawName }));
       if (!reports.length) return;
       print(...table([
         [t("File"), t("Name"), t("Size"), t("Tileset"), t("Version"), t("Players"), t("Units"), t("Triggers"), t("Check")].map((h) => pc.dim(h)),
-        ...reports.map((r) => [r.file.name, gameText(r.name) || pc.italic(t("Untitled")), `${r.width} × ${r.height}`, r.tileset, r.version, String(r.usedSlots.length), num(r.statistics.units.total), num(r.statistics.triggers.count), issueLine(r.issues)]),
+        ...reports.map((r) => [r.file.name, gameText(r.name) || pc.italic(t("Untitled")), `${r.width} × ${r.height}`, translate(r.tileset), translate(r.version), String(r.usedSlots.length), num(r.statistics.units.total), num(r.statistics.triggers.count), issueLine(r.issues)]),
       ], 0));
     });
   map.command("check").description(t("Check Map, as the editor's: errors, then warnings"))
@@ -289,6 +295,7 @@ A map with many old findings can still be held to that: --write-baseline keeps t
   scmjs map check maps/*.scx --baseline --strict --format github`, { file: BASELINE_FILE }))
     .action(async (files: string[], o: { json?: boolean; all?: boolean; strict?: boolean; format: string; baseline?: string | true; writeBaseline?: string | true }) => {
       if (!(FORMATS as readonly string[]).includes(o.format)) throw new CliError(t("--format takes {formats}, not \"{value}\"", { formats: FORMATS.join(", "), value: o.format }), null, 2);
+      if (o.json && o.format !== "text" && o.format !== "json") throw new CliError(t("--json is --format json: it cannot be --format {format} too", { format: o.format }), t("Leave one of them off."), 2);
       const format: Format = o.json ? "json" : (o.format as Format);
       const machine = format !== "text" && format !== "json";
       // An optional value takes the next word, so `--baseline a.scx b.scx` would read a.scx as the baseline: a map is a map.
@@ -327,18 +334,22 @@ A map with many old findings can still be held to that: --write-baseline keeps t
         const written = Object.values(now).reduce((n, l) => n + l.length, 0);
         if (format === "text") print("", `${mark.ok} ${t("{findings, plural, one {# finding} other {# findings}} of {maps, plural, one {# map} other {# maps}} written to {file}", { findings: written, maps: Object.keys(now).length, file: pc.cyan(baselineFile) })}${dot}${pc.dim(t("a check with --baseline fails only on others"))}`);
       }
+      const unread = (reports as unknown[]).filter((r): r is Unread => !!r && typeof r === "object" && "error" in r);
       if (machine) {
         const ok = reports.filter((r): r is CheckReport => !!r && !("error" in r));
-        if (format === "github") print(...githubAnnotations(ok));
-        else process.stdout.write(format === "junit" ? junitXml(ok) : sarifJson(ok, VERSION));
+        if (format === "github") print(...githubAnnotations(ok, unread));
+        else process.stdout.write(format === "junit" ? junitXml(ok, unread) : sarifJson(ok, VERSION, unread));
         return;
       }
       if (format === "text" && writing === undefined && files.length > 1) {
         const ok = reports.filter((r): r is CheckReport => !!r && !("error" in r));
+        if (!ok.length) return;
         const bad = ok.filter((r) => r.failed).length;
         const b = known ? ok.reduce((n, r) => { const x = (r as CheckReport & { baseline?: { suppressed: number; fixed: number } }).baseline; return { suppressed: n.suppressed + (x?.suppressed ?? 0), fixed: n.fixed + (x?.fixed ?? 0) }; }, { suppressed: 0, fixed: 0 }) : null;
         const known_ = b && (b.suppressed || b.fixed) ? pc.dim(`${dot}${t("{n, plural, one {# known finding} other {# known findings}} left out", { n: b.suppressed })}${b.fixed ? t(", {n} fixed since the baseline", { n: num(b.fixed) }) : ""}`) : "";
-        print("", (bad ? `${mark.error} ${t("{bad, plural, one {# map} other {# maps}} of {total} failed the check", { bad, total: files.length })}` : `${mark.ok} ${t("{n, plural, one {# map} other {# maps}} checked, none failed", { n: files.length })}`) + known_);
+        // Counted over the maps that were read; the ones that could not be are said apart.
+        const notRead = files.length > ok.length ? `${dot}${pc.yellow(t("{n, plural, one {# file} other {# files}} not read", { n: files.length - ok.length }))}` : "";
+        print("", (bad ? `${mark.error} ${t("{bad, plural, one {# map} other {# maps}} of {total} failed the check", { bad, total: ok.length })}` : `${mark.ok} ${t("{n, plural, one {# map} other {# maps}} checked, none failed", { n: ok.length })}`) + known_ + notRead);
       }
     });
   map.command("open").description(t("open a map in the scmJS app, or the editor in your browser")).argument("<map>")
@@ -346,33 +357,40 @@ A map with many old findings can still be held to that: --write-baseline keeps t
     .addOption(new Option("--editor <url>", t("the editor's address (SCMJS_EDITOR_URL)")).hideHelp())
     .action(async (file: string, o: { browser?: boolean; editor?: string }) => { const input = await readInput(file); expectKind(input, "map"); await openInScmjs(input, o); });
 
-  map.command("new").description(t("a new map: flat ground, start locations laid out, the file written")).argument("<map>", t("the file to write: .scx, .scm or .chk")).addOption(json)
+  map.command("new").description(t("a new map: flat ground, start locations laid out, the file written")).argument("<map>", t("the file to write: .scx, .scm or .chk (.scx added to a name without one); - for standard output")).addOption(json)
     .option("--size <WxH>", t("width and height, each 64, 96, 128, 192 or 256"), "128x128")
     .option("--tileset <name>", t("badlands, platform, install, ashworld, jungle, desert, ice or twilight"), "badlands")
     .option("--name <text>", t("the map's name; the file's by default"))
     .option("--description <text>", t("the map's description"), "")
     .option("--players <n>", t("start locations for players 1 to n, as Auto-place lays them; the other slots closed"), "0")
-    .option("--layout <how>", t("{layouts}: how the start locations are laid out", { layouts: LAYOUTS.join(t(" or ")) }), "ring")
+    .option("--layout <how>", t("{layouts}: how the start locations are laid out (ring by default; needs --players)", { layouts: LAYOUTS.join(t(" or ")) }))
     // Not --version: that is the program's own flag, and commander answers it wherever it appears.
-    .option("--revision <which>", t("{versions}: the file's revision", { versions: NEW_VERSIONS.join(t(" or ")) }), "broodwar")
+    .option("--revision <which>", t("the file's revision: {versions}", { versions: VERSIONS.join(", ") }), "broodwar")
     .option("--force", t("overwrite a file that is there"))
     .addHelpText("after", t(`
 The map File ▸ New makes: flat ground, eight open slots (or n, with --players) and nothing else. Without the game's
 graphics the ground is written by its ids, as the editor does without game data, and opens as it should. The same
 arguments give the same file. Exits 2 when the file is there (--force overwrites it) or an option is not one.`))
-    .action(async (file: string, o: { json?: boolean; size: string; tileset: string; name?: string; description: string; players: string; layout: string; revision: string; force?: boolean }) => {
+    .action(async (given: string, o: { json?: boolean; size: string; tileset: string; name?: string; description: string; players: string; layout?: string; revision: string; force?: boolean }) => {
       const { width, height } = parseSize(o.size);
       const tileset = parseTileset(o.tileset);
-      if (!(NEW_VERSIONS as readonly string[]).includes(o.revision)) throw new CliError(t("--revision takes {values}, not \"{value}\"", { values: NEW_VERSIONS.join(t(" or ")), value: o.revision }), null, 2);
-      if (!(LAYOUTS as readonly string[]).includes(o.layout)) throw new CliError(t("--layout takes {values}, not \"{value}\"", { values: LAYOUTS.join(t(" or ")), value: o.layout }), null, 2);
+      const revision = parseRevision(o.revision);
+      const layout = o.layout?.toLowerCase() ?? "ring";
+      if (!(LAYOUTS as readonly string[]).includes(layout)) throw new CliError(t("--layout takes {values}, not \"{value}\"", { values: LAYOUTS.join(t(" or ")), value: String(o.layout) }), null, 2);
       const players = Number(o.players);
-      if (!Number.isInteger(players) || players < 0 || players > 8) throw new CliError(t("--players takes 0 to 8, not \"{value}\"", { value: o.players }), null, 2);
-      const piped = file === STDIO;
+      if (!/^\s*\d+\s*$/.test(o.players) || !Number.isInteger(players) || players < 0 || players > 8) throw new CliError(t("--players takes 0 to 8, not \"{value}\"", { value: o.players }), null, 2);
+      if (o.layout !== undefined && !players) throw new CliError(t("--layout lays out start locations, and there are none without --players"), t("Add --players <n>."), 2);
+      const piped = given === STDIO;
+      // A map's extension, or none (then the revision's); anything else is refused rather than written under it.
+      const ext = extname(given);
+      if (!piped && ext && !/^\.(scm|scx|chk)$/i.test(ext)) throw new CliError(t("{file} is not a map's name: a map is .scx, .scm or .chk", { file: given }), null, 2);
+      const file = piped || ext ? given : `${given}.${MAP_EXTENSIONS[revision]}`;
       if (piped && o.json) throw new CliError(t("--json and the map both want standard output"), t("Name a file to write, or leave --json off."), 2);
       if (!piped && existsSync(file) && !o.force) throw new CliError(t("{file} is there already", { file }), t("--force overwrites it."), 2);
-      const r = await writeNewMap(file, { width, height, tileset, name: o.name ?? (piped ? "Untitled Scenario" : nameFromFile(file)), description: o.description, version: o.revision as NewMapVersion, players, layout: o.layout as (typeof LAYOUTS)[number] });
-      if (o.json) { print(JSON.stringify(r, null, 2)); return; }
-      say(piped, `${mark.ok} ${pc.bold(piped ? t("standard output") : relative(process.cwd(), r.path) || r.path)}: ${r.width} × ${r.height}${dot}${translate(r.tileset)}${dot}${translate(r.version)}${r.starts ? `${dot}${t("{n, plural, one {# start location} other {# start locations}}", { n: r.starts })}` : ""}${dot}${size(r.bytes)}`);
+      const r = await writeNewMap(file, { width, height, tileset, name: o.name !== undefined ? mapText(o.name) : piped ? "Untitled Scenario" : nameFromFile(file), description: mapText(o.description), version: revision, players, layout: layout as (typeof LAYOUTS)[number] });
+      if (o.json) { print(JSON.stringify({ file, ...r }, null, 2)); return; }
+      say(piped, `${mark.ok} ${pc.bold(piped ? t("standard output") : relative(process.cwd(), r.path) || r.path)}: ${r.width} × ${r.height}${dot}${translate(r.tileset)}${dot}${translate(r.version)}${r.starts ? `${dot}${t("{n, plural, one {# start location} other {# start locations}}", { n: r.starts })}` : ""}${dot}${size(r.bytes)}`,
+        r.starts ? null : pc.dim(`  ${t("No start locations yet, so Check Map finds an error for each open slot; --players <n> lays them out for n players and closes the other slots.")}`));
     });
 
   map.command("generate").description(t("a symmetric melee map from a seed, laid with your copy of the game's tileset")).argument("<map>", t("the file to write: .scx, .scm or .chk")).addOption(json)
@@ -402,8 +420,10 @@ thrown away and the next one tried. Exits 1 when none passes, 2 when an option i
       if (piped && o.json) throw new CliError(t("--json and the map both want standard output"), t("Name a file to write, or leave --json off."), 2);
       if (piped && o.rush) throw new CliError(t("--rush walks the map in the game, which needs it in a file"), t("Name a file to write."), 2);
       if (!piped && existsSync(file) && !o.force) throw new CliError(t("{file} is there already", { file }), t("--force overwrites it."), 2);
-      const name = o.name ?? (piped ? "Generated" : nameFromFile(file));
+      const name = o.name !== undefined ? mapText(o.name) : piped ? "Generated" : nameFromFile(file);
       const { report } = await runGenerate(file, o, name);
+      // Four and eight players have one layout whatever --symmetry asks: said, so the option is not taken in silence.
+      if (o.symmetry !== undefined && (report.players === 4 || report.players === 8)) process.stderr.write(`${mark.info} ${t("--symmetry {asked}: four and eight players are always mirrored both ways, since no tileset has the ramp a quarter turn would need", { asked: o.symmetry })}\n`);
       const near = relative(process.cwd(), report.path);
       if (!o.json) say(piped, ...printGenerated(report, piped ? t("standard output") : near && !near.startsWith("..") ? near : report.path));
       if (!o.rush) { if (o.json) print(JSON.stringify(report, null, 2)); return; }
@@ -423,27 +443,29 @@ this text (git diff, git log -p, git show), once in the repository:
   printf '*.scx diff=scmjs\\n*.scm diff=scmjs\\n*.chk diff=scmjs\\n' >> .gitattributes`))
     .action(async (file: string, o: { json?: boolean }) => {
       const { input, doc } = await openForEdit(file);
-      const d = dumpMap(doc, input.name);
+      const d = dumpMap(doc, input.path);
       if (o.json) print(JSON.stringify(d, null, 2));
       else process.stdout.write(printDump(d, doc.scenario));
     });
 
-  map.command("find").description(t("search units, locations, strings and triggers across maps")).argument("<text>", t("what to look for; a number matches an id, slot or index too")).argument("<maps...>").addOption(json)
-    .option("--in <kinds>", t("which of {kinds} to search, with commas between; all by default", { kinds: KINDS.join(", ") }))
+  map.command("find").description(t("search units, locations, strings and triggers across maps")).argument("<text>", t("what to look for; a number matches an id, slot or index too")).argument("<maps...>", t("the maps to search (.scm .scx .chk); - reads one from standard input")).addOption(json)
+    .option("--in <kinds>", t("which of {kinds} to search, with commas between (or --in again); all by default", { kinds: KINDS.join(", ") }), (v: string, prev?: string) => (prev ? `${prev},${v}` : v))
     .option("--case", t("match case"))
     .addHelpText("after", t(`
 Edit ▸ Find over any number of maps: a unit, location, sprite or doodad whose name holds the text, a string or a
 trigger whose text does. Prints what matched and where. Exits 1 when nothing matched in any map, like grep.`))
     .action(async (text: string, files: string[], o: { json?: boolean; in?: string; case?: boolean }) => {
       const kinds = parseKinds(o.in);
-      let found = 0;
+      let found = 0, read = 0;
       await eachFile(files, !!o.json, async (input) => {
         expectKind(input, "map");
         const hits = findInMap(await loadMapInput(input), input.name, text, kinds, !!o.case);
         found += hits.length;
-        return { data: { file: input.name, matches: hits.length, hits: hits.map(({ file: _f, ...h }) => h) }, lines: hits.length ? [`${pc.bold(input.name)}  ${pc.dim(t("{n, plural, one {# match} other {# matches}}", { n: hits.length }))}`, ...printHits(hits)] : [] };
+        read++;
+        return { data: { file: input.path, matches: hits.length, hits: hits.map(hitJson) }, lines: hits.length ? [`${pc.bold(input.name)}  ${pc.dim(t("{n, plural, one {# match} other {# matches}}", { n: hits.length }))}`, ...printHits(hits)] : [] };
       }, false);
-      if (!found) { if (!o.json) print(pc.dim(t("Nothing in {n, plural, one {# map} other {# maps}} matches \"{text}\"", { n: files.length, text }))); process.exitCode = Math.max(Number(process.exitCode ?? 0), 1); }
+      // Counted over the maps read: one that could not be was said on its own line.
+      if (!found) { if (!o.json && read) print(pc.dim(t("Nothing in {n, plural, one {# map} other {# maps}} matches \"{text}\"", { n: read, text }))); process.exitCode = Math.max(Number(process.exitCode ?? 0), 1); }
     });
 
   /** A map read for a command that changes it: the input and the parsed document, or a CliError. */
@@ -472,7 +494,7 @@ trigger whose text does. Prints what matched and where. Exits 1 when nothing mat
   /** `--out` for text: the file, or stdout when there is none (or `-`). */
   async function emit(text: string, out: string | undefined, said: string): Promise<void> {
     if (!out || out === STDIO) { process.stdout.write(text); return; }
-    await writeFile(out, text);
+    await writeFileMade(out, text);
     print(`${mark.ok} ${said} ${pc.dim("→")} ${pc.cyan(out)}`);
   }
 
@@ -487,20 +509,32 @@ trigger whose text does. Prints what matched and where. Exits 1 when nothing mat
    * `map triggers edit` / `map strings edit`: the text in the editor, imported when it closes, the map written back as
    * `import` writes it. Standard input cannot be edited: the editor needs the terminal.
    */
-  async function editCommand(kind: EditKind, file: string, o: { editor?: string; out?: string; briefing?: boolean }): Promise<void> {
+  async function editCommand(kind: EditKind, file: string, o: { editor?: string; out?: string; briefing?: boolean; json?: boolean }): Promise<void> {
     if (file === STDIO) throw new CliError(t("map {kind} edit needs a map file, not standard input", { kind }), t("The editor takes the terminal; name the file, or use export and import in a pipe."), 2);
     if (o.out === STDIO) throw new CliError(t("--out - is for a pipe; edit writes a file"), null, 2);
+    if (o.editor !== undefined && !o.editor.trim()) throw new CliError(t("--editor needs a command"), t("Such as: --editor \"code --wait\", --editor nano."), 2);
+    // vi with no terminal waits for keys that never come: with nothing named, a pipe or a script is refused instead.
+    const named = [o.editor, process.env.VISUAL, process.env.EDITOR].some((v) => v && v.trim());
+    if (!named && process.platform !== "win32" && !(process.stdin.isTTY && process.stdout.isTTY)) throw new CliError(t("map {kind} edit opens vi, which needs a terminal, and this has none", { kind }), t("Name an editor with --editor or EDITOR, or use map {kind} export and import in a script.", { kind }), 2);
     const { input, doc } = await openForEdit(file);
+    let w: Written | null = null;
     const r: EditOutcome = await editInEditor(doc, input.path, kind, {
       editor: o.editor, briefing: o.briefing,
       onWait: (path) => { if (process.stderr.isTTY) process.stderr.write(pc.dim(`${t("Waiting for your editor to close {path}…", { path })}\n`)); },
+      write: async () => { w = await writeBack(doc, input.path, o.out ?? null); },
     });
-    if (!r.changed) { print(`${mark.info} ${pc.bold(input.name)}: ${t("nothing changed")}${o.out ? t("; nothing written") : ""}`); return; }
-    const w = await writeBack(doc, input.path, o.out ?? null);
+    // --out names a file the next step reads: it is written, changed or not.
+    if (!r.changed && o.out) w = await writeBack(doc, input.path, o.out);
+    const written = w as Written | null;
+    if (o.json) {
+      print(JSON.stringify({ file: input.path, changed: r.changed, ...(r.changed ? (r.kind === "triggers" ? { triggers: r.triggers } : { strings: r.strings }) : {}), written }, null, 2));
+      return;
+    }
+    if (!r.changed) { print(`${mark.info} ${pc.bold(input.name)}: ${t("nothing changed")}${written ? `${dot}${t("written to {out}", { out: outName(written) })}` : ""}`); return; }
     const what = r.kind === "triggers"
       ? `${triggerCount(r.triggers.before, o.briefing)} ${pc.dim("→")} ${triggerCount(r.triggers.after, o.briefing)}`
       : t("{n, plural, one {# string} other {# strings}} replaced, {added} added", { n: r.strings.replaced, added: r.strings.added });
-    print(`${mark.ok} ${pc.bold(input.name)}: ${what}${dot}${t("written to {out}", { out: outName(w) })}${dot}${size(w.bytes)}`);
+    print(`${mark.ok} ${pc.bold(input.name)}: ${what}${dot}${t("written to {out}", { out: outName(written!) })}${dot}${size(written!.bytes)}`);
   }
 
   map.command("set").description(t("the map's name, description, revision or text encoding")).argument("<map>").addOption(json)
@@ -509,40 +543,58 @@ trigger whose text does. Prints what matched and where. Exits 1 when nothing mat
     .option("--revision <which>", t("the file's revision: {versions}", { versions: VERSIONS.join(", ") }))
     .option("--encoding <id>", t("the text encoding: {encodings}", { encodings: ENCODINGS.join(", ") }))
     .option("-o, --out <map>", t("write the result here instead of over the map; - for standard output"))
+    .option("--dry-run", t("say what would change and write nothing"))
     .addHelpText("after", t(`
 Scenario ▸ Map Properties from the terminal: what is given is set, the rest is left. Nothing is written when nothing
 changed. A revision change does what the editor's does (the string table's form, the colour section the revision
 needs); the encoding is how the map's text is written for 1.16.1, where Remastered reads UTF-8.`))
-    .action(async (file: string, o: { json?: boolean; name?: string; description?: string; revision?: string; encoding?: string; out?: string }) => {
+    .action(async (file: string, o: { json?: boolean; name?: string; description?: string; revision?: string; encoding?: string; out?: string; dryRun?: boolean }) => {
       if (o.name === undefined && o.description === undefined && o.revision === undefined && o.encoding === undefined) throw new CliError(t("Nothing to set"), t("--name, --description, --revision or --encoding, any of them."), 2);
       const { input, doc } = await openForEdit(file);
       const piped = piping(input, o);
+      // Plain ASCII is the same in every encoding, and a map does not record the one it was written in: said, not set.
+      const asciiOnly = o.encoding !== undefined && plainAsciiText(doc.scenario);
       const changes = setHeader(doc, { name: o.name, description: o.description, version: o.revision, encoding: o.encoding });
       // A pipe always gets the map, changed or not, so the next step has one.
-      const w = changes.length || o.out || piped ? await writeBack(doc, input.path, o.out ?? null) : null;
-      if (o.json) { print(JSON.stringify({ file: input.name, changes, written: w }, null, 2)); return; }
-      if (!changes.length) { say(piped, `${mark.ok} ${pc.bold(input.name)}: ${t("nothing changed")}${w ? `${dot}${t("written to {out}", { out: outName(w) })}` : ""}`); return; }
-      say(piped, `${mark.ok} ${pc.bold(input.name)}: ${changes.map((c) => `${translate(c.field)} ${pc.red(c.from || pc.dim(t("(none)")))} ${pc.dim("→")} ${pc.green(c.to || pc.dim(t("(none)")))}`).join(dot)}${dot}${t("written to {out}", { out: outName(w!) })}${dot}${size(w!.bytes)}`);
+      const w = !o.dryRun && (changes.length || o.out || piped) ? await writeBack(doc, input.path, o.out ?? null) : null;
+      if (o.json) { print(JSON.stringify({ file: input.path, changes, ...(asciiOnly ? { encoding: "plain ASCII text, the same in every encoding" } : {}), dryRun: !!o.dryRun, written: w }, null, 2)); return; }
+      const note = asciiOnly ? `${mark.info} ${t("The map's text is plain ASCII, the same in every encoding, so the encoding has nothing to change")}` : null;
+      const where = w ? `${dot}${t("written to {out}", { out: outName(w) })}${dot}${size(w.bytes)}` : o.dryRun && changes.length ? pc.dim(` ${t("(--dry-run: nothing written)")}`) : "";
+      if (!changes.length) { say(piped, note, `${mark.ok} ${pc.bold(input.name)}: ${t("nothing changed")}${where}`); return; }
+      say(piped, note, `${o.dryRun ? mark.info : mark.ok} ${pc.bold(input.name)}: ${changes.map((c) => `${translate(c.field)} ${pc.red(c.from || pc.dim(t("(none)")))} ${pc.dim("→")} ${pc.green(c.to || pc.dim(t("(none)")))}`).join(dot)}${where}`);
     });
 
   map.command("resize").description(t("Scenario ▸ Resize: the map to another size, anchored")).argument("<map>").addOption(json)
     .requiredOption("--size <WxH>", t("the new width and height, each 64, 96, 128, 192 or 256"))
     .option("--anchor <where>", t("{anchors}: which part of the map stays", { anchors: Object.keys(ANCHORS).filter((k) => k !== "centre").join(", ") }), "center")
     .option("--no-clamp", t("leave locations that hang past the new edge where the shift put them"))
+    .option("--all", t("list everything dropped; by default a long list is cut at 20"))
     .option("-o, --out <map>", t("write the result here instead of over the map; - for standard output"))
+    .option("--dry-run", t("say what would change and write nothing"))
     .addHelpText("after", t(`
 The map is moved under the anchor; what falls outside is dropped (units, sprites, doodads) or pulled inside
 (locations, unless --no-clamp), and new ground is the tileset's base terrain. Says what was dropped.`))
-    .action(async (file: string, o: { json?: boolean; size: string; anchor: string; clamp: boolean; out?: string }) => {
+    .action(async (file: string, o: { json?: boolean; size: string; anchor: string; clamp: boolean; all?: boolean; out?: string; dryRun?: boolean }) => {
       const { width, height } = parseSize(o.size);
       const anchor = parseAnchor(o.anchor);
       const { input, doc } = await openForEdit(file);
       const piped = piping(input, o);
       const r = resizeMap(doc, { width, height, anchor, clampLocations: o.clamp });
-      const w = await writeBack(doc, input.path, o.out ?? null);
-      if (o.json) { print(JSON.stringify({ file: input.name, ...r, written: w }, null, 2)); return; }
+      const w = o.dryRun ? null : await writeBack(doc, input.path, o.out ?? null);
+      if (o.json) { print(JSON.stringify({ file: input.path, ...r, dryRun: !!o.dryRun, written: w }, null, 2)); return; }
       const dropped = [r.unitsDropped && t("{n, plural, one {# unit} other {# units}}", { n: r.unitsDropped }), r.spritesDropped && t("{n, plural, one {# sprite} other {# sprites}}", { n: r.spritesDropped }), r.doodadsDropped && t("{n, plural, one {# doodad} other {# doodads}}", { n: r.doodadsDropped })].filter(Boolean).join(", ");
-      say(piped, `${mark.ok} ${pc.bold(input.name)}: ${r.from.width} × ${r.from.height} ${pc.dim("→")} ${r.to.width} × ${r.to.height}${dropped ? `${dot}${pc.yellow(t("{list} dropped", { list: dropped }))}` : ""}${r.locationsClamped ? `${dot}${t("{n, plural, one {# location} other {# locations}} pulled inside", { n: r.locationsClamped })}` : ""}${dot}${t("written to {out}", { out: outName(w) })}${dot}${size(w.bytes)}`);
+      const where = w ? `${dot}${t("written to {out}", { out: outName(w) })}${dot}${size(w.bytes)}` : pc.dim(` ${t("(--dry-run: nothing written)")}`);
+      // Start locations are always named; the rest of the list is cut at 20 unless --all.
+      const starts = r.dropped.filter((d) => d.kind === "unit" && d.name === unitName(START_LOCATION));
+      const limit = o.all ? Infinity : 20;
+      const thing = (d: { kind: string; name: string; owner: number; x: number; y: number }) => `  ${pc.dim(d.kind === "unit" ? t("unit") : d.kind === "sprite" ? t("sprite") : t("doodad"))}  ${d.name}  ${pc.dim(`${d.owner === 11 ? t("Neutral") : t("Player {n}", { n: d.owner + 1 })} · ${d.x},${d.y}`)}`;
+      const rest = r.dropped.filter((d) => !starts.includes(d));
+      say(piped, `${o.dryRun ? mark.info : mark.ok} ${pc.bold(input.name)}: ${r.from.width} × ${r.from.height} ${pc.dim("→")} ${r.to.width} × ${r.to.height}${dropped ? `${dot}${pc.yellow(t("{list} dropped", { list: dropped }))}` : ""}${r.locationsClamped ? `${dot}${t("{n, plural, one {# location} other {# locations}} pulled inside", { n: r.locationsClamped })}` : ""}${where}`,
+        ...starts.map((d) => `${mark.warn} ${t("The start location of {player} is dropped", { player: t("Player {n}", { n: d.owner + 1 }) })} ${pc.dim(`(${d.x},${d.y})`)}`),
+        ...rest.slice(0, limit).map(thing),
+        ...(rest.length > limit ? [pc.dim(`  ${t("… and {n} more (--all lists them)", { n: num(rest.length - limit) })}`)] : []),
+        r.collapsed.length ? `${mark.warn} ${t("Pulled inside with no width or height left: {list}", { list: r.collapsed.join(", ") })}` : null,
+        r.outside.length ? `${mark.warn} ${t("Left past the map's edge (--no-clamp): {list}", { list: r.outside.join(", ") })}` : null);
     });
 
   const triggers = map.command("triggers").description(t("a map's triggers as a text or .trg file, and back"))
@@ -555,22 +607,28 @@ them. Text in a file beside the map can be diffed and edited, and imported back.
     .action(async (file: string, o: { out?: string; briefing?: boolean }) => {
       const { doc } = await openForEdit(file);
       const r = exportTriggers(doc, o.out ?? null, !!o.briefing);
-      if (r.bytes) { await writeFile(o.out!, r.bytes); print(`${mark.ok} ${triggerCount(r.count)} ${pc.dim("→")} ${pc.cyan(o.out!)}`); }
-      else await emit(r.text!, o.out, triggerCount(r.count));
+      if (r.bytes) { await writeFileMade(o.out!, r.bytes); print(`${mark.ok} ${triggerCount(r.count, o.briefing)} ${pc.dim("→")} ${pc.cyan(o.out!)}`); }
+      else await emit(r.text!, o.out, triggerCount(r.count, o.briefing));
     });
-  triggers.command("import").description(t("replace the map's triggers with a text or .trg file's")).argument("<map>").argument("<file>", t("the triggers: text, or .trg"))
+  triggers.command("import").description(t("replace the map's triggers with a text or .trg file's")).argument("<map>", t("the map to change; - reads it from standard input")).argument("<file>", t("the triggers: text, or .trg; - reads text from standard input")).addOption(json)
     .option("-o, --out <map>", t("write the result here instead of over the map; - for standard output"))
     .option("--append", t("add the file's triggers after the map's own instead of replacing them"))
     .option("--briefing", t("the mission briefing's triggers instead"))
-    .action(async (file: string, from: string, o: { out?: string; append?: boolean; briefing?: boolean }) => {
+    .option("--allow-empty", t("take a file with no triggers in it, which leaves the map with none"))
+    .option("--dry-run", t("say what would change and write nothing"))
+    .action(async (file: string, from: string, o: { json?: boolean; out?: string; append?: boolean; briefing?: boolean; allowEmpty?: boolean; dryRun?: boolean }) => {
+      if (file === STDIO && from === STDIO) throw new CliError(t("The map and the triggers cannot both come from standard input"), t("Name one of them as a file."), 2);
+      const bytes = await readTextArg(from);
       const { input, doc } = await openForEdit(file);
       const piped = piping(input, o);
-      const r = importTriggers(doc, from, new Uint8Array(await readFile(from)), { briefing: !!o.briefing, append: !!o.append });
-      const w = await writeBack(doc, input.path, o.out ?? null);
-      say(piped, `${mark.ok} ${pc.bold(input.name)}: ${triggerCount(r.before)} ${pc.dim("→")} ${triggerCount(r.after)}${o.append ? pc.dim(t(" ({n} added)", { n: r.read })) : ""}${dot}${t("written to {out}", { out: outName(w) })}${dot}${size(w.bytes)}`);
+      const r = importTriggers(doc, from === STDIO ? "stdin.txt" : from, bytes, { briefing: !!o.briefing, append: !!o.append, allowEmpty: !!o.allowEmpty });
+      const w = o.dryRun ? null : await writeBack(doc, input.path, o.out ?? null);
+      if (o.json) { print(JSON.stringify({ file: input.path, briefing: !!o.briefing, ...r, added: o.append ? r.read : undefined, dryRun: !!o.dryRun, written: w }, null, 2)); return; }
+      const counts = `${triggerCount(r.before, o.briefing)} ${pc.dim("→")} ${triggerCount(r.after, o.briefing)}${o.append ? pc.dim(t(" ({n} added)", { n: r.read })) : ""}`;
+      say(piped, `${o.dryRun ? mark.info : mark.ok} ${pc.bold(input.name)}: ${counts}${w ? `${dot}${t("written to {out}", { out: outName(w) })}${dot}${size(w.bytes)}` : pc.dim(` ${t("(--dry-run: nothing written)")}`)}`);
     });
   const editorOption = () => new Option("--editor <command>", t("the editor to open, such as \"code --wait\"; VISUAL or EDITOR otherwise, else vi (Notepad on Windows)"));
-  triggers.command("edit").description(t("the triggers as text in your editor, imported when you close it")).argument("<map>")
+  triggers.command("edit").description(t("the triggers as text in your editor, imported when you close it")).argument("<map>").addOption(json)
     .addOption(editorOption())
     .option("-o, --out <map>", t("write the result here instead of over the map"))
     .option("--briefing", t("the mission briefing's triggers instead"))
@@ -579,7 +637,7 @@ Writes the text export to a file of its own, opens it in your editor and waits f
 changes, the text is imported as triggers import reads it and the map is written; unchanged, nothing is written.
 Text that does not read is kept, and the error says where, so the edit is not lost. A graphical editor has to wait
 for its window to close: code --wait, subl -w, gedit -s.`))
-    .action((file: string, o: { editor?: string; out?: string; briefing?: boolean }) => editCommand("triggers", file, o));
+    .action((file: string, o: { editor?: string; out?: string; briefing?: boolean; json?: boolean }) => editCommand("triggers", file, o));
 
   const strings = map.command("strings").description(t("a map's strings as a text file, and back"))
     .addHelpText("after", t(`
@@ -592,22 +650,26 @@ strings in place and adds any past the end; nothing is renumbered, since trigger
       const r = exportStrings(doc);
       await emit(r.text, o.out, t("{n, plural, one {# string} other {# strings}}", { n: r.count }));
     });
-  strings.command("import").description(t("set the map's strings from such a file")).argument("<map>").argument("<file>")
+  strings.command("import").description(t("set the map's strings from such a file")).argument("<map>", t("the map to change; - reads it from standard input")).argument("<file>", t("the strings file; - reads it from standard input")).addOption(json)
     .option("-o, --out <map>", t("write the result here instead of over the map; - for standard output"))
-    .action(async (file: string, from: string, o: { out?: string }) => {
+    .option("--dry-run", t("say what would change and write nothing"))
+    .action(async (file: string, from: string, o: { json?: boolean; out?: string; dryRun?: boolean }) => {
+      if (file === STDIO && from === STDIO) throw new CliError(t("The map and the strings cannot both come from standard input"), t("Name one of them as a file."), 2);
+      const text = new TextDecoder().decode(await readTextArg(from));
       const { input, doc } = await openForEdit(file);
       const piped = piping(input, o);
-      const r = importStrings(doc, from, await readFile(from, "utf8"));
-      const w = await writeBack(doc, input.path, o.out ?? null);
-      say(piped, `${mark.ok} ${pc.bold(input.name)}: ${t("{n, plural, one {# string} other {# strings}} replaced, {added} added, {unchanged} unchanged", { n: r.replaced, added: r.added, unchanged: r.unchanged })}${dot}${t("written to {out}", { out: outName(w) })}${dot}${size(w.bytes)}`);
+      const r = importStrings(doc, from === STDIO ? "stdin.txt" : from, text);
+      const w = o.dryRun ? null : await writeBack(doc, input.path, o.out ?? null);
+      if (o.json) { print(JSON.stringify({ file: input.path, ...r, dryRun: !!o.dryRun, written: w }, null, 2)); return; }
+      say(piped, `${o.dryRun ? mark.info : mark.ok} ${pc.bold(input.name)}: ${t("{n, plural, one {# string} other {# strings}} replaced, {added} added, {unchanged} unchanged", { n: r.replaced, added: r.added, unchanged: r.unchanged })}${w ? `${dot}${t("written to {out}", { out: outName(w) })}${dot}${size(w.bytes)}` : pc.dim(` ${t("(--dry-run: nothing written)")}`)}`);
     });
-  strings.command("edit").description(t("the strings in your editor, imported when you close it")).argument("<map>")
+  strings.command("edit").description(t("the strings in your editor, imported when you close it")).argument("<map>").addOption(json)
     .addOption(editorOption())
     .option("-o, --out <map>", t("write the result here instead of over the map"))
     .addHelpText("after", t(`
 As strings import: a line changed sets that string, a line past the end adds one, and a line taken out leaves the
 string as it was (strings prune drops the unused ones).`))
-    .action((file: string, o: { editor?: string; out?: string }) => editCommand("strings", file, o));
+    .action((file: string, o: { editor?: string; out?: string; json?: boolean }) => editCommand("strings", file, o));
 
   strings.command("prune").description(t("drop the strings nothing in the map refers to")).argument("<map>").addOption(json)
     .option("--dry-run", t("list them and write nothing"))
@@ -620,9 +682,10 @@ is renumbered, so what the triggers hold stays right; blank slots at the end of 
       const { input, doc } = await openForEdit(file);
       const piped = piping(input, o);
       const removed = pruneStrings(doc, { dryRun: !!o.dryRun });
-      const w = (removed.length || piped) && !o.dryRun ? await writeBack(doc, input.path, o.out ?? null) : null;
-      if (o.json) { print(JSON.stringify({ file: input.name, removed, dryRun: !!o.dryRun, written: w }, null, 2)); return; }
-      if (!removed.length) { say(piped, `${mark.ok} ${pc.bold(input.name)}: ${t("every string is referred to")}`); return; }
+      // --out or a pipe always gets the map: the next step reads it.
+      const w = (removed.length || piped || o.out) && !o.dryRun ? await writeBack(doc, input.path, o.out ?? null) : null;
+      if (o.json) { print(JSON.stringify({ file: input.path, removed, dryRun: !!o.dryRun, written: w }, null, 2)); return; }
+      if (!removed.length) { say(piped, `${mark.ok} ${pc.bold(input.name)}: ${t("every string is referred to")}${w ? `${dot}${t("written to {out}", { out: outName(w) })}` : ""}`); return; }
       const limit = o.all ? Infinity : 20;
       const show = (s: string) => { const p = s.replace(/\s+/g, " "); return p.length > 70 ? `${p.slice(0, 67)}…` : p; };
       say(piped, `${o.dryRun ? mark.info : mark.ok} ${pc.bold(input.name)}: ${o.dryRun ? t("{n, plural, one {# unused string} other {# unused strings}} would be dropped", { n: removed.length }) : t("{n, plural, one {# unused string} other {# unused strings}} dropped", { n: removed.length })}${w ? `${dot}${t("written to {out}", { out: outName(w) })}${dot}${size(w.bytes)}` : ""}`,
@@ -634,7 +697,7 @@ is renumbered, so what the triggers hold stays right; blank slots at the end of 
     .option("--dry-run", t("say what would go and what each step saves; write nothing"))
     .option("--strip-editor", t("also drop the sections only editors read (ISOM, TILE, DD2, the sound list, switch names…)"))
     .option("--compression <method>", t("pkware (every version of the game) or zlib (Remastered only); default pkware, or the smaller for a zlib map"))
-    .option("--keep <members...>", t("archive members to keep though nothing names them; a name ending in \\ keeps a folder"))
+    .option("--keep <member>", t("an archive member to keep though nothing names it, once per member; a name ending in \\ keeps a folder"), (v: string, list: string[] = []) => [...list, v])
     .option("--all", t("list everything removed; by default a long list is cut at 20"))
     .option("-o, --out <map>", t("write the result here instead of over the map; - for standard output"))
     .addHelpText("after", t(`
@@ -651,16 +714,20 @@ switch names. Keep the original to go on editing.
   scmjs map optimize "My Map.scx" --dry-run
   scmjs map optimize "My Map.scx" --out "My Map (small).scx" --strip-editor`))
     .action(async (file: string, o: { json?: boolean; dryRun?: boolean; stripEditor?: boolean; compression?: string; keep?: string[]; all?: boolean; out?: string }) => {
-      if (o.compression !== undefined && !(COMPRESSIONS as readonly string[]).includes(o.compression)) throw new CliError(t("--compression takes {values}, not \"{value}\"", { values: COMPRESSIONS.join(t(" or ")), value: o.compression }), null, 2);
+      const compression = o.compression?.toLowerCase();
+      if (compression !== undefined && !(COMPRESSIONS as readonly string[]).includes(compression)) throw new CliError(t("--compression takes {values}, not \"{value}\"", { values: COMPRESSIONS.join(t(" or ")), value: o.compression! }), null, 2);
       const input = await readInput(file);
       expectKind(input, "map");
       const piped = piping(input, o);
       const bare = !looksLikeMpq(input.bytes);
       if (o.out && o.out !== STDIO && (formatOf(o.out) === "chk") !== bare) throw new CliError(t("map optimize writes the map in its own form: {how}", { how: bare ? t("a bare scenario stays a .chk") : t("an archive stays a .scx or .scm") }), t("Name an output of the same kind, or convert with the editor first."), 2);
-      const r = await optimizeMap(input.bytes, input.name, { stripEditor: !!o.stripEditor, compression: o.compression as Compression | undefined, keep: o.keep });
-      const w = !o.dryRun && r.after < r.before ? await writeOutput(r.bytes, o.out ?? input.path) : null;
-      if (o.json) { print(JSON.stringify(optimizeJson(r, { dryRun: !!o.dryRun, written: w }), null, 2)); return; }
-      say(piped, ...printOptimize(r, { dryRun: !!o.dryRun, written: w ? outName(w) : null, all: !!o.all }));
+      const r = await optimizeMap(input.bytes, input.name, { stripEditor: !!o.stripEditor, compression: compression as Compression | undefined, keep: o.keep });
+      // Smaller is written; a compression asked for is written even when larger (it is what the file is for). A map
+      // that cannot be made smaller still goes where --out or a pipe wants one, as it was: the next step reads it.
+      const result = r.after < r.before || (compression !== undefined && !bare) ? r.bytes : null;
+      const w = o.dryRun ? null : result ? await writeOutput(result, o.out ?? input.path) : o.out || piped ? await writeOutput(input.bytes, o.out ?? STDIO) : null;
+      if (o.json) { print(JSON.stringify(optimizeJson(r, { file: input.path, dryRun: !!o.dryRun, written: w, changed: !!result }), null, 2)); return; }
+      say(piped, ...printOptimize(r, { dryRun: !!o.dryRun, written: w ? outName(w) : null, all: !!o.all, asked: result !== null && r.after >= r.before, copied: !!w && !result }));
     });
 
   map.command("unpack").description(t("a map's archive as a folder: the scenario, its sounds, scripts and other files")).argument("<map>").addOption(json)
@@ -676,45 +743,55 @@ With --text the scenario is written as text instead: scenario/map.json (size, ti
 terrain.txt, units.tsv, locations.tsv, strings.txt, triggers.txt and the rest, and the sections the editor does
 not model as bytes under scenario/sections/. Edit the text and scmjs map pack builds the map from it; an
 untouched folder packs back into the same scenario, byte for byte. The scenario/ folder is replaced each time.`, { manifest: MANIFEST_FILE }))
-    .action(async (file: string, o: { json?: boolean; out?: string; list?: boolean; text?: boolean }) => {
+    .option("--force", t("replace an unpack of another map, or files changed or added since the unpack"))
+    .action(async (file: string, o: { json?: boolean; out?: string; list?: boolean; text?: boolean; force?: boolean }) => {
+      if (o.out === STDIO) throw new CliError(t("map unpack writes a folder, so --out - cannot be standard output"), t("Name a folder, or use --list to see the members."), 2);
+      if (o.list && o.text) throw new CliError(t("--list writes nothing, so --text has nothing to do"), t("Leave one of them off."), 2);
       const input = await readInput(file);
       expectKind(input, "map");
       if (o.list) {
         const r = await listMembers(input.bytes);
-        if (o.json) { print(JSON.stringify({ file: input.name, ...r }, null, 2)); return; }
+        if (o.json) { print(JSON.stringify({ file: input.path, ...r }, null, 2)); return; }
         const width = Math.max(...r.members.map((m) => m.name.length));
         print(`${pc.bold(input.name)}${dot}${t("{n, plural, one {# member} other {# members}}", { n: r.members.length })}${r.listfile ? "" : dot + pc.yellow(t("no file list"))}`, ...r.members.map((m) => `  ${(m.kind === "stored" ? pc.dim(m.name) : m.name).padEnd(width + (m.kind === "stored" ? 9 : 0))}  ${pc.dim(size(m.bytes).padStart(8))}`), ...r.problems.map((p) => `${mark.warn} ${p}`));
         return;
       }
       const base = input.path === STDIO ? "stdin" : input.path;
       const dir = o.out ?? base.replace(/\.(scm|scx|chk)$/i, "") + (/\.(scm|scx|chk)$/i.test(base) ? "" : "-unpacked");
-      const r = await unpackMap(input.bytes, input.name, dir, { text: !!o.text });
-      if (o.json) { print(JSON.stringify({ file: input.name, dir: r.dir, files: r.files, bytes: r.bytes, stored: r.stored, manifest: r.manifest, text: r.text }, null, 2)); return; }
+      const r = await unpackMap(input.bytes, input.name, dir, { text: !!o.text, force: !!o.force });
+      if (o.json) { print(JSON.stringify({ file: input.path, dir, files: r.files, bytes: r.bytes, stored: r.stored, manifest: r.manifest, text: r.text }, null, 2)); return; }
       const text = r.text;
       const sections = (names: string[]) => names.map((n) => n.trim()).join(" ");
-      // "Kept as bytes" lines up with "Scenario as text" above it; "Bytes kept beside" is the longer one and stands out.
-      const asText = t("Scenario as text");
+      // The three labels line up, whatever the language: padded to the widest.
+      const labels = [t("Scenario as text"), t("Bytes kept beside"), t("Kept as bytes")];
+      const width = Math.max(...labels.map(columns));
+      const label = (i: number) => pc.dim(padColumns(labels[i], width));
       print(`${mark.ok} ${pc.bold(input.name)}: ${t("{n, plural, one {# file} other {# files}}", { n: r.files })}${r.stored ? pc.dim(t(" ({n} without a name)", { n: r.stored })) : ""}${dot}${size(r.bytes)}${dot}${pc.dim("→")} ${pc.cyan(relative(process.cwd(), r.dir) || ".")}`,
         ...(text ? [
-          `  ${pc.dim(asText)}  ${t("{n, plural, one {# section} other {# sections}}", { n: text.text.length + text.layout.length + text.records.length })}${dot}${t("{size} in {n, plural, one {# file} other {# files}}", { size: size(text.size), n: text.files })}`,
-          ...(text.layout.length || text.records.length ? [`  ${pc.dim(t("Bytes kept beside"))}  ${sections([...text.layout, ...text.records])} ${pc.dim(t("(used while their text is unchanged)"))}`] : []),
-          ...(text.bytes.length ? [`  ${pc.dim(padColumns(t("Kept as bytes"), columns(asText)))}  ${text.bytes.map((b) => `${b.name.trim()}${pc.dim(` (${b.why})`)}`).join(", ")}`] : []),
+          `  ${label(0)}  ${t("{n, plural, one {# section} other {# sections}}", { n: text.text.length + text.layout.length + text.records.length })}${dot}${t("{size} in {n, plural, one {# file} other {# files}}", { size: size(text.size), n: text.files })}`,
+          ...(text.layout.length || text.records.length ? [`  ${label(1)}  ${sections([...text.layout, ...text.records])} ${pc.dim(t("(used while their text is unchanged)"))}`] : []),
+          ...(text.bytes.length ? [`  ${label(2)}  ${text.bytes.map((b) => `${b.name.trim()}${pc.dim(` (${b.why})`)}`).join(", ")}`] : []),
         ] : []),
         ...r.manifest.problems.map((p) => `${mark.warn} ${p}`));
     });
   map.command("pack").description(t("the folder scmjs map unpack wrote, back into a map file")).argument("<folder>").addOption(json)
-    .option("-o, --out <map>", t("the file to write; by default the name {manifest} records, beside the folder", { manifest: MANIFEST_FILE }))
+    .option("-o, --out <map>", t("the file to write; by default the name {manifest} records, beside the folder; - for standard output", { manifest: MANIFEST_FILE }))
     .option("--compression <method>", t("none, pkware or zlib for every member, instead of how the map was stored"))
+    .option("--dry-run", t("build the map and check it opens, and write nothing"))
     .addHelpText("after", t(`
 Every file in the folder goes in: the ones {manifest} names at their archive paths, and any added since at the
 path they have in the folder. The archive is compressed and encrypted as the map was, and written without a file list
 when the map had none. A folder map unpack --text wrote has its scenario built from the text in scenario/. The packed
 file is opened as a map before it is written.`, { manifest: MANIFEST_FILE }))
-    .action(async (dir: string, o: { json?: boolean; out?: string; compression?: string }) => {
-      if (o.compression && !["none", "pkware", "zlib"].includes(o.compression)) throw new CliError(t("--compression takes none, pkware or zlib, not \"{value}\"", { value: o.compression }), null, 2);
-      const r = await packMap(dir, { out: o.out ?? null, compression: o.compression as "none" | "pkware" | "zlib" | undefined });
+    .action(async (dir: string, o: { json?: boolean; out?: string; compression?: string; dryRun?: boolean }) => {
+      if (o.compression && !["none", "pkware", "zlib"].includes(o.compression.toLowerCase())) throw new CliError(t("--compression takes none, pkware or zlib, not \"{value}\"", { value: o.compression }), null, 2);
+      const piped = o.out === STDIO && !o.dryRun;
+      if (piped && o.json) throw new CliError(t("--json and the map both want standard output"), t("Write the map to a file with --out, or leave --json off."), 2);
+      const r = await packMap(dir, { out: o.out ?? null, compression: o.compression?.toLowerCase() as "none" | "pkware" | "zlib" | undefined, dryRun: !!o.dryRun });
       if (o.json) { print(JSON.stringify(r, null, 2)); return; }
-      print(`${mark.ok} ${pc.bold(relative(process.cwd(), r.path) || r.path)}: ${t("{n, plural, one {# member} other {# members}}", { n: r.members + 1 })}${r.fromText ? pc.dim(t(" (the scenario from text)")) : ""}${r.stored ? pc.dim(t(" ({n} without a name)", { n: r.stored })) : ""}${r.added.length ? `${dot}${t("{n, plural, one {# file} other {# files}} added: {list}", { n: r.added.length, list: r.added.join(", ") })}` : ""}${dot}${r.compression}${r.encrypted ? t(", encrypted") : ""}${dot}${size(r.bytes)}`);
+      const where = r.path === STDIO ? t("standard output") : relative(process.cwd(), r.path) || r.path;
+      say(piped, `${o.dryRun ? mark.info : mark.ok} ${pc.bold(where)}: ${t("the scenario and {n, plural, one {# member} other {# members}}", { n: r.members })}${r.fromText ? pc.dim(t(" (the scenario from text)")) : ""}${r.stored ? pc.dim(t(" ({n} without a name)", { n: r.stored })) : ""}${r.added.length ? `${dot}${t("{n, plural, one {# file} other {# files}} added: {list}", { n: r.added.length, list: r.added.join(", ") })}` : ""}${dot}${r.compression}${r.encrypted ? t(", encrypted") : ""}${dot}${size(r.bytes)}${o.dryRun ? pc.dim(` ${t("(--dry-run: nothing written)")}`) : ""}`,
+        r.changedSounds ? `${mark.warn} ${t("{n, plural, one {# sound was} other {# sounds were}} changed since the unpack and {n, plural, one {goes} other {go}} in as plain PCM, larger than StarEdit's compression; map optimize cannot make {n, plural, one {it} other {them}} smaller again", { n: r.changedSounds })}` : null);
     });
 
   const sounds = map.command("sounds").description(t("a map's sounds, listed or written out as files"))
@@ -733,6 +810,7 @@ under sound\\ is one of the game's own sounds.`));
   sounds.command("export").description(t("the sounds as .wav and .ogg files in a folder")).argument("<map>").addOption(json)
     .option("-o, --out <folder>", t("the folder to write; by default one named after the map with -sounds, beside it"))
     .action(async (file: string, o: { json?: boolean; out?: string }) => {
+      if (o.out === STDIO) throw new CliError(t("map sounds export writes a folder, so --out - cannot be standard output"), t("Name a folder; map sounds lists them."), 2);
       const input = await readInput(file);
       expectKind(input, "map");
       const base = input.path === STDIO ? "stdin" : input.path.replace(/\.(scm|scx|chk)$/i, "");
@@ -757,12 +835,12 @@ compile, a test fails or the build is refused; nothing is written then.`))
       const piped = !o.check && piping(input, o);
       const typescript = await loadTypeScript();
       const r = await buildMap(doc, input.path, typescript, { check: !!o.check, test: !!o.test, out: o.out ?? null });
-      if (o.json) print(JSON.stringify({ file: input.name, ...r }, null, 2));
+      if (o.json) print(JSON.stringify({ file: input.path, ...r }, null, 2));
       else say(piped, ...printBuild(input.name, r));
       if (!r.ok) process.exitCode = 1;
     });
 
-  map.command("run").description(t("run a plugin, or a script written like one, over a map with the plugin API")).argument("<plugin>", t("a folder with plugin.json, a plugin.ts/.js file, github:owner/repo or a URL")).argument("<map>").addOption(json)
+  map.command("run").description(t("run a plugin, or a script written like one, over a map with the plugin API")).argument("<plugin>", t("a folder with plugin.json, a plugin.ts/.js file, github:owner/repo or a URL")).argument("<map>", t("the map to run it over; - reads it from standard input")).addOption(json)
     .option("--command <id>", t("after it starts, run this command of its (the id it registered)"))
     .option("--arg <value...>", t("arguments for --command"))
     .option("-o, --out <map>", t("write the changed map here instead of over the map; - for standard output"))
@@ -773,10 +851,11 @@ would show — its status line, toasts, log — is printed here, and dialogs sho
 activate(api), like a plugin's entry; a .ts needs TypeScript installed. The map is written back only when the
 plugin changed it. Exits 1 when the plugin does not load or throws.`))
     .action(async (target: string, file: string, o: { json?: boolean; command?: string; arg?: string[]; out?: string; dryRun?: boolean }) => {
+      if (o.arg && !o.command) throw new CliError(t("--arg is for --command"), t("Name the command the arguments are for: --command <id> --arg <value>."), 2);
       const { input, doc } = await openForEdit(file);
       const piped = piping(input, o);
       const r = await runOnMap(doc, input.path, input.bytes, target, { command: o.command, args: o.arg, out: o.out ?? null, dryRun: !!o.dryRun, live: o.json ? undefined : (line) => say(piped, line) });
-      if (o.json) print(JSON.stringify({ file: input.name, ...r }, null, 2));
+      if (o.json) print(JSON.stringify({ file: input.path, ...r }, null, 2));
       else say(piped, ...printRun(input.name, r, { dryRun: !!o.dryRun }));
     });
 
@@ -1139,6 +1218,7 @@ StarCraft. Exits 1 with --strict when a trigger never fired, 2 when no replay co
   scmjs map coverage td.scx replays/ --tests --strict --format github`)
     .action(async (file: string, sources: string[], o: { json?: boolean; tests?: boolean; strict?: boolean; format: string; all?: boolean; force?: boolean; parallel?: string; starcraft?: string; engine?: string }) => {
       if (!(FORMATS as readonly string[]).includes(o.format)) throw new CliError(t("--format takes {formats}, not \"{value}\"", { formats: FORMATS.join(", "), value: o.format }), null, 2);
+      if (o.json && o.format !== "text" && o.format !== "json") throw new CliError(t("--json is --format json: it cannot be --format {format} too", { format: o.format }), t("Leave one of them off."), 2);
       const format: Format = o.json ? "json" : (o.format as Format);
       const { input, doc } = await openForEdit(file);
       const live = (line: string) => (format === "text" ? print(line) : process.stderr.write(visible(line) + "\n"));

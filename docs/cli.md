@@ -171,7 +171,7 @@ What it looks for:
 | Docker | `bot new`, `bot init`, `bot build` and `bot update` |
 | Desktop app | `map open` and `replay open`, which use the browser without it |
 | Claude Code | `scmjs mcp`, when you use it from Claude Code |
-| scmjs.dev | `map share`, `replay share` and `map play` |
+| scmjs.dev | `map share` and `replay share`; `map play` signs in on the play page instead |
 | Browser | `replay export`, which draws its clips in Chrome, Chromium or Edge |
 | ffmpeg | `replay export` to an `.mp4`; a `.webm` or a `.gif` does without it |
 | StarCraft | `map preview`, `map analyze`, `map generate` and every command that runs the game |
@@ -2784,7 +2784,8 @@ a QR code with `--qr`. `--json` prints it as JSON. `scmjs account login` and
 
 When scmjs.dev refuses something, for instance because your storage is full or you are
 sharing too many maps at once, the command shows scmjs.dev's own message. Until you sign
-in, the sharing commands say "Sign in first: scmjs login" and exit with 2.
+in, `map share`, `replay share` and `account` say "Sign in first: scmjs login" and exit
+with 2. `map play` does not need it: the play page asks you to sign in there.
 
 ### A link to a map
 
@@ -2865,7 +2866,9 @@ Opening a lobby needs a scmjs.dev account, so the page asks you to sign in when 
 not, and opens the lobby once you have. The first time, it asks for the game's files too,
 as the play page always does. The people you send the link to need their own StarCraft
 files and no account. The command waits up to five minutes for the page. `--json` prints
-the link, the invite code and what the page said on the way, and `--qr` draws a QR code.
+the link, the invite code and what the page said on the way, with the hand-over's own
+lines on standard error, and `--qr` draws a QR code. With `BROWSER=none` nothing is opened
+and the command prints the page's address for you to open.
 
 ### QR codes
 
@@ -3068,6 +3071,11 @@ a broken bot from a losing one.
 manifest, a `plugin.ts` that adds a Tools menu item, the Korean catalogue and the test
 that keeps it complete, the typings, and the build and CI every scm-js plugin uses. Then:
 
+The folder is named after the plugin's id, which is made from its name: lowercase letters,
+digits and dashes. A name with none of those, such as one in Hangul, makes no id, so the
+command asks for one: `scmjs plugin new "기지 검사" --id base-check`. `-o, --out <folder>`
+writes the plugin into another folder (`--dir` is the old name and still works).
+
 ```sh
 cd plugin-base-check
 npm install
@@ -3082,15 +3090,18 @@ and nothing is reloaded until it is fixed. Ctrl+C stops it.
 
 The editor remembers the plugin by its address, `http://127.0.0.1:5310/`, so it is the
 same plugin next time. `--port` serves it on another port, and `--no-open` prints the
-editor's address instead of opening it.
+editor's address instead of opening it. A change that leaves the plugin unloadable, such
+as a `plugin.json` that is not JSON, is said in red and nothing is reloaded until it is
+fixed.
 
 `scmjs plugin check` reads the folder the way the editor loads it and says what would go
 wrong: a manifest the editor would refuse, an API version it does not have, a missing
 icon, entry or build, a build older than its source, and, for a plugin without a build,
-imports of files that are not there or of npm packages. It exits with 1 when the editor
-would not load the plugin, so it can stop a CI step. The [plugin guide](plugins.md) covers
-the rest, and [`map run`](#running-a-plugin-over-a-map) runs a plugin over a map from the
-terminal.
+imports of files that are not there or of npm packages. It also notes an `id` the editor
+would keep in another form (`Bad Id!` is kept as `bad-id`) and a `version` that is not
+three numbers. It exits with 1 when the editor would not load the plugin, so it can stop a
+CI step. The [plugin guide](plugins.md) covers the rest, and
+[`map run`](#running-a-plugin-over-a-map) runs a plugin over a map from the terminal.
 
 ### AI tools
 
@@ -3255,6 +3266,10 @@ args = ["lsp"]
 name = "typescript"
 language-servers = ["scmjs"]
 ```
+
+Typed at a terminal, `scmjs lsp` says what it is and exits with 2, since it would only
+wait for an editor's messages. When the input ends before an editor has spoken to it, the
+server says so on standard error, which an editor shows as the server's log.
 
 **Other editors** take the same three things: the command `scmjs lsp` (`--stdio`, which
 some editors add, changes nothing), standard input and output, and the TypeScript file

@@ -1163,7 +1163,8 @@ their own StarCraft files and no account. Waits up to five minutes for the page.
     .action(async (file: string, o: { json?: boolean; play?: string; qr?: boolean }) => {
       const input = await readInput(file);
       expectKind(input, "map");
-      const r = await playInLobby(input, { play: o.play, qr: o.qr, live: o.json ? undefined : (line) => print(line) });
+      // With --json, standard output is the JSON alone: the hand-over's words go to standard error.
+      const r = await playInLobby(input, { play: o.play, qr: o.qr, live: o.json ? undefined : (line) => print(line), say: o.json ? (...lines) => { for (const l of lines) process.stderr.write(`${l}\n`); } : undefined });
       if (o.json) { print(JSON.stringify({ file: input.name, ...r }, null, 2)); return; }
       if (!r.link) throw new CliError(r.error ?? t("The page opened no lobby"), t("Invite Players on the play page opens one by hand."));
     });
@@ -1707,9 +1708,14 @@ Needs a game engine whose runners take a mod.`))
 
   const plugin = program.command("plugin").description(t("start, check and run a plugin for the editor")).helpGroup(t("Plugins and bots:"));
   plugin.command("new").description(t("a plugin to start from, in a new folder")).argument("[name]", t("the plugin's name, such as \"Base Check\""))
-    .option("--dir <folder>", t("the folder to write it in (default plugin-<id>)"))
-    .action((name: string | undefined, o: { dir?: string }) => {
-      const made = newPlugin({ name, dir: o.dir });
+    .option("-o, --out <folder>", t("the folder to write it in (default plugin-<id>)"))
+    .addOption(new Option("--dir <folder>", t("the folder to write it in (default plugin-<id>)")).hideHelp())
+    .option("--id <id>", t("the plugin's id: lowercase letters, digits and dashes (made from the name by default)"))
+    .action((name: string | undefined, o: { out?: string; dir?: string; id?: string }) => {
+      if (o.out !== undefined && o.dir !== undefined) throw new CliError(t("--out and --dir are the same option: give one"), null, 2);
+      const folder = o.out ?? o.dir;
+      if (folder === STDIO) throw new CliError(t("A plugin is a folder of files: --out - (standard output) cannot take it"), t("Name a folder, or leave --out off for plugin-<id>."), 2);
+      const made = newPlugin({ name, dir: folder, id: o.id });
       const rel = relative(process.cwd(), made.dir) || ".";
       print(`${mark.ok} ${t("{name} written in {folder}", { name: pc.bold(name ?? rel), folder: pc.cyan(rel) })}${dot}${t("{n, plural, one {# file} other {# files}}", { n: made.files.length })}`, "",
         pc.dim(`  ${t("Next:")}`), `    cd ${rel.includes(" ") ? JSON.stringify(rel) : rel}`, "    npm install", `    npm start            ${pc.dim(t("the editor with your plugin, reloaded each time you save"))}`, "",
@@ -1938,7 +1944,12 @@ units and switches, and goes to a definition in the standard library or a librar
 folder of a map scmjs map unpack wrote; the map's names come from the scenario beside it. docs.scmjs.dev/cli has
 the setup for each editor. Needs TypeScript, as map build does.`))
     // English whatever the language, as the TrigScript compiler's diagnostics it carries are.
-    .action(async (o: { map?: string }) => { setLocale("en"); await serveLsp({ map: o.map }); });
+    .action(async (o: { map?: string }) => {
+      // Typed at a terminal, it would wait for an editor's messages and say nothing.
+      if (process.stdin.isTTY) throw new CliError(t("scmjs lsp is a language server: a text editor starts it and speaks to it on standard input and output"), t("scmjs help lsp says how; docs.scmjs.dev/cli has the setup for each editor."), 2);
+      setLocale("en");
+      await serveLsp({ map: o.map });
+    });
 
   // Hidden from the overview, which holds 23 lines (banner.ts): the mod noun took its line.
   program.command("about", { hidden: true }).description(t("this version, any newer one, and links")).helpGroup(t("This tool:")).addOption(json)

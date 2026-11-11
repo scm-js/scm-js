@@ -44,7 +44,7 @@ export type { UnitSettings, UnitAvailability, UpgradeSettings, UpgradeRestrictio
 // Each settings table as a map has it before anyone opens its dialog (every entry on the game's own values).
 export { defaultUnitSettings, defaultUnitAvailability, defaultUpgradeSettings, defaultUpgradeRestrictions, defaultTechSettings, defaultTechRestrictions } from "../../src/formats/chk/sections/settings";
 // How many location slots MRGN holds in a file of a revision (64 below VER 63, 255 from it).
-export { locationSlots } from "../../src/formats/chk/sections/objects";
+export { locationSlots, ANYWHERE_INDEX, isLocationUsed } from "../../src/formats/chk/sections/objects";
 export type { StringTable } from "../../src/formats/chk/sections/strings";
 export type { CuwpSlot } from "../../src/formats/chk/sections/cuwp";
 
@@ -81,7 +81,7 @@ export {
   // The codec: any WAV the game or a sound tool writes read into floats (the game's IMA ADPCM included), and PCM written back.
   decodeWav, decodePcmWav, decodeImaAdpcm, encodeWav, isPlainPcm, canDecodeWav, wavFrames, wavCodecName, WAV_FORMAT, type PcmAudio, type WavBits,
 } from "../../src/formats/wav";
-export { resizeScenario, type ResizeOptions, type ResizeResult } from "../../src/editor/resize";
+export { resizeScenario, resizeOffset, type ResizeOptions, type ResizeResult } from "../../src/editor/resize";
 export { placeStartLocations, idealStarts, playableCount, DEFAULT_START_PLACEMENT, type StartLayout, type StartPlacementOptions, type StartPlacementResult } from "../../src/editor/startLocations";
 export { DEFAULT_PLACEMENT, type PlacementOptions } from "../../src/editor/placement";
 // Terrain and doodads as the editor lays them: the isometric brush (it needs the tileset's CV5 to say which tile joins

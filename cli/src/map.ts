@@ -25,6 +25,8 @@ export interface MapReport {
   usedSlots: number[];
   /** `map info` only: whether the map keeps a TrigScript script (`map build` builds it); null when this build cannot tell. */
   script?: boolean | null;
+  /** The strings that hold text: an empty slot is a gap the table keeps, as `map dump` and `map diff` count them. */
+  stringsWithText: number;
 }
 
 export function mapReport(input: Input, doc: OpenedMap): MapReport {
@@ -39,6 +41,7 @@ export function mapReport(input: Input, doc: OpenedMap): MapReport {
     issues: validateScenario(scn, { extras: doc.extras }),
     builtBy: (doc.builtBy ?? []).map((b) => b.label),
     usedSlots: statistics.players.filter((p) => p.slot < 8 && (!EMPTY_SLOT.has(scn.playerTypes[p.slot] ?? 0) || p.units || p.startLocations)).map((p) => p.slot),
+    stringsWithText: scn.strings.strings.filter((x, i) => i > 0 && !!x).length,
   };
 }
 
@@ -68,8 +71,9 @@ export function printMapInfo(r: MapReport): string[] {
       [t("Resources"), s.resources.fields || s.resources.geysers ? `${t("{n, plural, one {# mineral field} other {# mineral fields}}", { n: s.resources.fields })} ${pc.dim(`(${num(s.resources.minerals)})`)}${dot}${t("{n, plural, one {# geyser} other {# geysers}}", { n: s.resources.geysers })} ${pc.dim(`(${num(s.resources.gas)})`)}` : t("none")],
       [t("Triggers"), triggers + (s.briefings.count ? `${dot}${t("briefing {n, plural, one {# trigger} other {# triggers}}", { n: s.briefings.count })}` : "")],
       [t("Objects"), `${t("{n, plural, one {# location} other {# locations}}", { n: s.locations })}${dot}${t("{n, plural, one {# doodad} other {# doodads}}", { n: s.doodads })}${dot}${t("{n, plural, one {# sprite} other {# sprites}}", { n: s.sprites.pure + s.sprites.unit })}`],
-      [t("Strings"), `${t("{set} of {slots}", { set: num(s.strings.set), slots: num(s.strings.slots) })}${s.strings.extended ? pc.dim(` ${t("(extended)")}`) : ""}${dot}${t("{n, plural, one {# sound} other {# sounds}}", { n: s.sounds })}`],
+      [t("Strings"), `${t("{set} of {slots}", { set: num(r.stringsWithText), slots: num(s.strings.slots) })}${s.strings.extended ? pc.dim(` ${t("(extended)")}`) : ""}${dot}${t("{n, plural, one {# sound} other {# sounds}}", { n: s.sounds })}`],
       [t("Built by"), r.builtBy.length ? r.builtBy.join(", ") : null],
+      [t("Script"), r.script ? t("TrigScript (scmjs map build builds it)") : null],
       [t("Check"), issueLine(r.issues)],
     ]),
   ];

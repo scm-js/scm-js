@@ -133,15 +133,15 @@ describe("scmjs map dump", () => {
     const doc = await open("ums.scx");
     const d = dumpMap(doc, "ums.scx");
     const text = printDump(d, doc.scenario);
-    expect(text.split("\n")[0]).toBe("# ums.scx — scmjs map dump 1");
-    for (const part of ["## Map", "## Players", "## Forces", "## Units (21)", "## Locations (4)", "## Triggers (3)", "## Briefing (1)", "## Strings (", "## Archive members (1)", "## Sections"]) expect(text).toContain(part);
+    expect(text.split("\n")[0]).toBe("# scmjs map dump 2");
+    for (const part of ["## Map", "## Players", "## Forces", "## Units (21)", "## Sprites (", "## Doodads (", "## Locations (3, and Anywhere)", "## Settings (", "## Triggers (3)", "## Briefing (1)", "## Strings (", "## Archive members (1)", "## Sections"]) expect(text).toContain(part);
     expect(text).toContain("  Name         Test Scenario");
     expect(text).toContain("  1  Human      Terran           Red      force 1");
     expect(text).toContain("  Start Location  Player 1  336,1744");
     expect(text).toContain('Trigger("Player 1"){');
     expect(text).toContain("  13\tTest Marine");
     expect(text).toMatch(/ {2}staredit\\wav\\tone\.wav {2}\d+ B {2}sha1 [0-9a-f]{12}/);
-    expect(text).toMatch(/ {2}TRIG {2}\d+ B/);
+    expect(text).toMatch(/ {2}TRIG {2}\d+ B {2}sha1 [0-9a-f]{12}/);
     expect(visible(text)).toBe(text);
     const again = await open("ums.scx");
     expect(printDump(dumpMap(again, "ums.scx"), again.scenario)).toBe(text);
@@ -155,9 +155,9 @@ describe("scmjs map dump", () => {
     importStrings(b, "s.txt", "3\tRenamed\n");
     const [ta, tb] = [printDump(dumpMap(a, "x"), a.scenario).split("\n"), printDump(dumpMap(b, "x"), b.scenario).split("\n")];
     const changed = ta.filter((l) => !tb.includes(l));
-    // String 3 is not a force's name in this map, and "Renamed" is as long as "Force 1": only the one line moves.
-    expect(changed).toEqual(["  3\tForce 1"]);
-    expect(tb.filter((l) => !ta.includes(l))).toEqual(["  3\tRenamed"]);
+    // String 3 is not a force's name in this map: the string's line moves, and the string table's hash beside it.
+    expect(changed).toEqual(["  3\tForce 1", expect.stringMatching(/^ {2}STR +\d+ B {2}sha1 /)]);
+    expect(tb.filter((l) => !ta.includes(l))).toEqual(["  3\tRenamed", expect.stringMatching(/^ {2}STR +\d+ B {2}sha1 /)]);
     expect(sectionBytes(b.scenario).get("STR ")).not.toEqual(sectionBytes(a.scenario).get("STR "));
   });
 
@@ -172,15 +172,17 @@ describe("scmjs map find", () => {
   it("finds what the Find dialog finds, kind by kind, and says where", async () => {
     const doc = await open("ums.scx");
     const hits = findInMap(doc, "ums.scx", "marine", KINDS);
-    expect(hits.map((h) => h.kind)).toEqual(["units", "strings", "strings", "triggers"]);
+    // Trigger 2 by its Bring condition's unit: the trigger's text as triggers export writes it, not only its strings.
+    expect(hits.map((h) => h.kind)).toEqual(["units", "strings", "strings", "triggers", "triggers"]);
+    expect(hits[4]).toMatchObject({ label: "Trigger 2", detail: 'Bring("Player 1", "Terran Marine", "Middle", At least, 1);' });
     expect(hits[0]).toMatchObject({ file: "ums.scx", label: "Test Marine", x: 14.5, y: 50.5 });
-    expect(findInMap(doc, "ums.scx", "Marine", KINDS, true).map((h) => h.kind)).toEqual(["units", "strings", "strings", "triggers"]);
+    expect(findInMap(doc, "ums.scx", "Marine", KINDS, true).map((h) => h.kind)).toEqual(["units", "strings", "strings", "triggers", "triggers"]);
     expect(findInMap(doc, "ums.scx", "MARINE", KINDS, true)).toEqual([]);
     expect(findInMap(doc, "ums.scx", "middle", ["locations"]).map((h) => h.label)).toEqual(["Middle"]);
     expect(findInMap(doc, "ums.scx", "zzzz", KINDS)).toEqual([]);
     const lines = printHits(hits).map(visible);
     expect(lines[0]).toBe("  unit     Test Marine  Player 1 · 14, 50");
-    expect(lines[3]).toMatch(/^ {2}trigger {2}Trigger 1 {2}Bring a Marine/);
+    expect(lines[3]).toMatch(/^ {2}trigger {2}Trigger 1 {2}Set Mission Objectives\("Bring a Marine/);
   });
   it("takes --in as the kinds, and refuses one it does not know", () => {
     expect(parseKinds(undefined)).toEqual(KINDS);
@@ -237,12 +239,16 @@ describe("scmjs map new", () => {
 describe("scmjs map set", () => {
   it("sets what is given, reads colour codes as the string files do, and says what changed", async () => {
     const doc = await open("melee.scx");
-    const changes = setHeader(doc, { name: "Ridge <03>two", version: "remastered", encoding: "euc-kr" });
-    expect(changes.map((c) => c.field)).toEqual(["Name", "Version", "Text encoding"]);
+    // The map's text is plain ASCII, the same in every encoding: the encoding has nothing to change (B4).
+    const changes = setHeader(doc, { name: "Ridge <03>two", version: "Remastered", encoding: "EUC-KR" });
+    expect(changes.map((c) => c.field)).toEqual(["Name", "Version"]);
     expect(changes[0]).toEqual({ field: "Name", from: "Test Melee", to: "Ridge two" });
     expect(scenarioName(doc.scenario)).toBe("Ridge \x03two");
     expect(doc.scenario.fileVersion).toBe(206);
-    expect(doc.scenario.strings.encoding).toBe("euc-kr");
+    expect(doc.scenario.strings.encoding).toBe("utf-8");
+    const korean = await open("remastered.scx");
+    expect(setHeader(korean, { encoding: "cp949" }).map((c) => c.field)).toEqual(["Text encoding"]);
+    expect(korean.scenario.strings.encoding).toBe("euc-kr");
     expect(setHeader(doc, { name: "Ridge <03>two" })).toEqual([]);
     expect(() => setHeader(doc, { version: "nope" })).toThrow(CliError);
     expect(() => setHeader(doc, { encoding: "ascii" })).toThrow(CliError);

@@ -12,6 +12,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { looksLikeScenario, openMapBytes, readArchive, writeMapBytes } from "../src/editor/mapFile";
 import { SCENARIO_PATH } from "../src/formats/mpq/scm";
+import { scenarioName } from "../src/formats/chk/scenario";
 import { storedFormOf, storedInOtherForm } from "../src/formats/mpq/stored";
 import { program } from "../cli/src/main";
 import { CliError, visible } from "../cli/src/ui";
@@ -20,6 +21,7 @@ import { editInEditor } from "../cli/src/texteditor";
 import { exportTriggers, importStrings, importTriggers, trgKind, writeBack } from "../cli/src/exchange";
 
 const tmp = () => mkdtempSync(join(tmpdir(), "scmjs-audit-maps-"));
+const scenarioNameOf = (doc: { scenario: Parameters<typeof scenarioName>[0] }) => scenarioName(doc.scenario);
 
 /** A command run as `scmjs …` would run it: what it printed, and its exit code. */
 async function scmjs(...args: string[]): Promise<{ out: string; err: string; code: number; raw: Buffer }> {
@@ -367,5 +369,100 @@ describe("B5, B7: map run", () => {
     expect((await scmjs("map", "run", join(dir, "nope.mjs"), testMap("ums.scx"))).err).toMatch(/No file or folder/);
     writeFileSync(join(dir, "note.txt"), "x");
     expect((await scmjs("map", "run", join(dir, "note.txt"), testMap("ums.scx"))).err).toMatch(/note\.txt is not a plugin/);
+  });
+});
+
+describe("B4, B9 and the values: map set, map new, map generate", () => {
+  it("says an encoding has nothing to change on plain ASCII text, and writes nothing", async () => {
+    const { path } = copyOf("melee.scx");
+    const before = readFileSync(path);
+    const r = await scmjs("map", "set", path, "--encoding", "EUC-KR");
+    expect(r.code).toBe(0);
+    expect(r.out).toMatch(/plain ASCII, the same in every encoding/);
+    expect(r.out).toMatch(/nothing changed/);
+    expect(readFileSync(path)).toEqual(before);
+    const dry = await scmjs("map", "set", path, "--revision", "Remastered", "--dry-run");
+    expect(dry.out).toMatch(/Brood War 1\.04 → Remastered 1\.21\+ \(--dry-run: nothing written\)/);
+    expect(readFileSync(path)).toEqual(before);
+  });
+
+  it("reads --name as map set does, takes set's five revisions, and checks the name and --layout", async () => {
+    const dir = tmp();
+    const named = await scmjs("map", "new", join(dir, "b.scx"), "--name", "My <04>Map", "--players", "2", "--layout", "Corners");
+    expect(named.code).toBe(0);
+    expect(scenarioNameOf(await openMapBytes(new Uint8Array(readFileSync(join(dir, "b.scx"))), "b.scx"))).toBe("My \x04Map");
+    expect((await scmjs("map", "new", join(dir, "o"), "--revision", "Original")).code).toBe(0);
+    expect(existsSync(join(dir, "o.scm"))).toBe(true);
+    const txt = await scmjs("map", "new", join(dir, "f.txt"));
+    expect(txt.code).toBe(2);
+    expect(existsSync(join(dir, "f.txt"))).toBe(false);
+    expect((await scmjs("map", "new", join(dir, "g.scx"), "--layout", "corners")).err).toMatch(/--layout lays out start locations/);
+    const bare = await scmjs("map", "new", join(dir, "h.scx"));
+    expect(bare.out).toMatch(/No start locations yet/);
+  });
+});
+
+describe("B5: a baseline in a folder that is not there yet", () => {
+  it("is written there, and one of an unknown version is refused", async () => {
+    const dir = tmp();
+    const file = join(dir, "sub", "dir", "b.json");
+    const r = await scmjs("map", "check", testMap("ums.scx"), "--write-baseline", file);
+    expect(r.code).toBe(0);
+    expect(existsSync(file)).toBe(true);
+    writeFileSync(file, JSON.stringify({ version: 99, maps: {} }));
+    const v = await scmjs("map", "check", testMap("ums.scx"), "--baseline", file);
+    expect(v.code).toBe(2);
+    expect(v.err).toMatch(/version 99/);
+  });
+});
+
+describe("B8: map dump", () => {
+  it("has no file name in the first line, and shows a sprite, a doodad, a setting and a section's hash", async () => {
+    const a = await scmjs("map", "dump", testMap("ums.scx"));
+    const dir = tmp();
+    copyFileSync(testMap("ums.scx"), join(dir, "renamed.scx"));
+    expect((await scmjs("map", "dump", join(dir, "renamed.scx"))).out).toBe(a.out);
+    expect(a.out.split("\n")[0]).toBe("# scmjs map dump 2");
+    expect(a.out).toMatch(/## Sprites \(\d+\)/);
+    expect(a.out).toMatch(/## Settings \(1\)\n {2}units {2}/);
+    expect(a.out).toMatch(/ {2}MTXM +\d+ B {2}sha1 [0-9a-f]{12}/);
+    // A terrain-only change: the MTXM line changes.
+    const doc = await openMapBytes(new Uint8Array(readFileSync(testMap("ums.scx"))), "ums.scx");
+    doc.scenario.tiles[0] = (doc.scenario.tiles[0] + 1) & 0xffff;
+    doc.scenario.dirty.add("MTXM");
+    const { dumpMap, printDump } = await import("../cli/src/dump");
+    const before = a.out.split("\n"), after = printDump(dumpMap(doc, "ums.scx"), doc.scenario).split("\n");
+    expect(after.filter((l) => !before.includes(l))).toEqual([expect.stringMatching(/^ {2}MTXM /)]);
+  });
+});
+
+describe("B10 and the smaller ones: map find, map info, map check", () => {
+  it("finds a trigger by its arguments, numbers hits from 1 in JSON, and counts only the maps read", async () => {
+    const r = await scmjs("map", "find", "Marine", "nope.scx", testMap("ums.scx"), "--json");
+    const [missing, found] = JSON.parse(r.out);
+    expect(missing).toEqual({ file: "nope.scx", error: "No file nope.scx" });
+    expect(r.err).toMatch(/No file nope\.scx/);
+    expect(found.file).toBe(testMap("ums.scx"));
+    expect(found.hits.find((h: { label: string }) => h.label === "Trigger 2")).toMatchObject({ kind: "triggers", index: 1, number: 2 });
+    const none = await scmjs("map", "find", "zzzz", "nope.scx", testMap("ums.scx"));
+    expect(none.out).toMatch(/Nothing in 1 map matches/);
+    const both = await scmjs("map", "find", "Middle", testMap("ums.scx"), "--in", "locations", "--in", "triggers", "--json");
+    expect(new Set(JSON.parse(both.out).hits.map((h: { kind: string }) => h.kind))).toEqual(new Set(["locations", "triggers"]));
+  });
+
+  it("says a file it could not read in every format, and counts only the maps read", async () => {
+    const junit = await scmjs("map", "check", "--format", "junit", "nope.scx", testMap("melee.scx"));
+    expect(junit.err).toMatch(/No file nope\.scx/);
+    expect(junit.out).toMatch(/tests="2" failures="0" errors="1"/);
+    expect(junit.out).toMatch(/<error message="No file nope\.scx"\/>/);
+    const sarif = JSON.parse((await scmjs("map", "check", "--format", "sarif", "nope.scx")).out);
+    expect(sarif.runs[0].invocations[0].toolExecutionNotifications[0].message.text).toBe("No file nope.scx");
+    const text = await scmjs("map", "check", "nope.scx", testMap("melee.scx"));
+    expect(text.out).toMatch(/1 map checked, none failed · 1 file not read/);
+    expect(text.out).not.toMatch(/^\n/);
+    expect((await scmjs("map", "info", testMap("ums.scx"), "--table", "--json")).code).toBe(2);
+    expect((await scmjs("map", "check", testMap("ums.scx"), "--json", "--format", "github")).code).toBe(2);
+    const info = JSON.parse((await scmjs("map", "info", testMap("ums.scx"), "--json")).out);
+    expect(info).toMatchObject({ name: "Test Scenario", rawName: "Test Scenario", stringsWithText: expect.any(Number) });
   });
 });

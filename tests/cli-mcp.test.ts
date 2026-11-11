@@ -83,7 +83,7 @@ describe("scmjs mcp", () => {
     expect(r.structuredContent?.width).toBe(64);
     expect((r.structuredContent?.statistics as { triggers: { count: number } }).triggers.count).toBe(3);
     const dump = await call("map_dump", { path: ums });
-    expect(text(dump)).toMatch(/^# ums\.scx — scmjs map dump 1\n/);
+    expect(text(dump)).toMatch(/^# scmjs map dump 2\n/);
     expect(text(dump)).toContain("## Triggers (3)");
   });
 

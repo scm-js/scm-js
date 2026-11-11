@@ -431,7 +431,7 @@ describe("scmjs mcp: the mod tools", () => {
     const refused = await call("mod_unpack", { path: join(dir, "mymod.mpq"), out: "-" });
     expect(refused.isError).toBe(true);
     const missing = await call("mod_pack", { path: join(dir, "nowhere") });
-    expect(text(missing)).toMatch(/has no mod\.json: it is not a mod folder/);
+    expect(text(missing)).toMatch(/No folder .*nowhere/);
     await client.close();
   });
 });

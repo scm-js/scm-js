@@ -2022,6 +2022,7 @@
   "unnamed": "이름 없음",
   "none: played without them": "없음: 플러그인 없이 플레이함",
   "from {mod}, the same data set": "{mod}에서 (같은 데이터 세트)",
+  "from {mod}": "{mod}에서",
   "Chat": "채팅",
   "{n, plural, one {# line} other {# lines}}": "{n, plural, other {#줄}}",
   "team {n}": "팀 {n}",

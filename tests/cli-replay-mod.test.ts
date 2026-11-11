@@ -4,7 +4,7 @@
  * `--mod` once its data set's hash is the replay's; a different mod refused, an untagged replay warned of; and the
  * commands that play a replay in the engine refusing a mod's. Every replay and mod here is made by the test.
  */
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { appendModTag, parseReplay, type ModTag, type Replay } from "@scm-js/replay";
@@ -16,6 +16,9 @@ import { dataSetHash } from "../src/formats/mod/sources";
 import { printReplayInfo, replayReport } from "../cli/src/replay";
 import { buildOrders, checkPlayedMod, modReplayReason, refuseModReplay, replayNamer } from "../cli/src/replaymod";
 import { CliError, visible } from "../cli/src/ui";
+import { modOverlay, modTag } from "../cli/src/mod/overlay";
+import { openMod } from "../cli/src/mod/open";
+import { tagModReplay } from "../cli/src/ladder";
 
 const players = [{ index: 0, id: 0, race: 1, name: "Alpha" }, { index: 1, id: 1, race: 0, name: "Beta" }];
 /** Alpha trains an SCV twice, builds a Supply Depot, researches Stim Packs (tech 0) and upgrades Infantry Weapons (7). */
@@ -118,9 +121,71 @@ describe("scmjs replay info and a replay's mod", () => {
   it("warns when the replay does not say, and names from the mod", async () => {
     const mod = await testMod();
     const said: string[] = [];
-    const names = await replayNamer(await parseReplay(plain()), "game.rep", { mod: mod.folder, warn: (l) => said.push(l) });
+    const rep = await parseReplay(plain());
+    const names = await replayNamer(rep, "game.rep", { mod: mod.folder, warn: (l) => said.push(l) });
     expect(said).toEqual([expect.stringMatching(/^game\.rep does not say which mod it was played with/)]);
     expect(names.unit(7)).toBe("Test Mason");
+    // The names row does not claim the data set matched, which an untagged replay cannot say.
+    const r = { ...replayReport(input(plain()), rep), names: names.from };
+    const lines = printReplayInfo(r).map(visible).join("\n");
+    expect(lines).toMatch(/Names +from mod-\w+\n/);
+    expect(lines).not.toContain("the same data set");
+    const matched = await tagged(mod.hash);
+    const r2 = { ...replayReport(input(plain()), matched), names: (await replayNamer(matched, "game.rep", { mod: mod.folder, warn: quiet })).from };
+    expect(printReplayInfo(r2).map(visible).join("\n")).toContain("the same data set");
+  });
+
+  it("says a bad --starcraft rather than leaving the costs out in silence", async () => {
+    const e = await replayNamer(await parseReplay(plain()), "game.rep", { starcraft: join(dir, "no-such-copy"), costs: true, warn: quiet }).catch((x) => x);
+    expect(e).toBeInstanceOf(CliError);
+  });
+
+  it("heads a team game by its sides, and leaves out a time no game was played at", async () => {
+    const four = [0, 1, 2, 3].map((i) => ({ index: i, id: i, race: i % 3, name: `P${i}`, team: i < 2 ? 1 : 2 }));
+    const team = await parseReplay(writeReplay({ format: "legacy", players: four, commands: cmds([]), chk: chk(64, 64) }));
+    expect(visible(printReplayInfo(replayReport(input(plain()), team))[0])).toMatch(/^P0 & P1 vs P2 & P3 {2}ZTvPZ$/);
+    const one = await parseReplay(plain());
+    expect(visible(printReplayInfo(replayReport(input(plain()), one))[0])).toMatch(/^Alpha vs Beta/);
+    // (the replays the engine writes say 1970: no time)
+    const report = replayReport(input(plain()), { ...one, header: { ...one.header, started: new Date(1000) } });
+    expect(report.started).toBeNull();
+    expect(printReplayInfo(report).map(visible).join("\n")).not.toMatch(/Played/);
+  });
+});
+
+describe("a replay of a game of a mod, as the command line saves it", () => {
+  it("carries the mod's tag, as the play page's Save Replay writes it, so replay info names it and replay watch refuses it", async () => {
+    const mod = await testMod();
+    const file = join(dir, "ladder-game.rep");
+    writeFileSync(file, plain());
+    const overlay = modOverlay(mod.folder, async () => null, { code: true });
+    expect(await tagModReplay(file, overlay, null, "abcdef123456")).toBe(true);
+    const rep = await parseReplay(new Uint8Array(readFileSync(file)));
+    expect(rep.mod).toMatchObject({ v: 1, dataSet: { hash: mod.hash, url: null }, plugins: [], firegraft: null, noplugins: false, engine: { build: "abcdef123456" } });
+    expect(rep.mod!.madeBy).toMatch(/^scmjs /);
+    expect(printReplayInfo(replayReport(input(readFileSync(file)), rep)).map(visible).join("\n")).toMatch(new RegExp(`Mod +${mod.folder.split("/").pop()} · ${mod.hash}`));
+    expect(() => refuseModReplay(rep, "ladder-game.rep", "replay watch")).toThrow(/cannot play a mod's replay/);
+    try { refuseModReplay(rep, "ladder-game.rep", "replay export"); } catch (e) { expect((e as CliError).exitCode).toBe(2); }
+    // A file that is not a replay is left as it is.
+    const junk = join(dir, "junk.rep"); writeFileSync(junk, "REPLAY 1");
+    expect(await tagModReplay(junk, overlay, null, "b")).toBe(false);
+    expect(readFileSync(junk, "utf8")).toBe("REPLAY 1");
+  });
+
+  it("names the plugins that ran, and plays without them as noplugins", async () => {
+    const mod = await testMod();
+    mkdirSync(join(mod.folder, "plugins"), { recursive: true });
+    writeFileSync(join(mod.folder, "plugins", "a.qdp"), "A");
+    writeFileSync(join(mod.folder, "plugins", "b.qdp"), "B");
+    const source = await openMod(mod.folder, null);
+    const code = { name: "m", hash: "0".repeat(16), withoutPlugins: "1".repeat(16), plugins: ["Plugin A initialized", "b.qdp failed: no"], skipped: [], firegraft: null, hashMs: 0 };
+    const ran = await modTag(source, code, "x");
+    expect(ran.plugins.map((p) => p.name)).toEqual(["a.qdp"]);
+    expect(ran.noplugins).toBe(false);
+    const none = await modTag(source, null, "x");
+    expect(none.plugins).toEqual([]);
+    expect(none.noplugins).toBe(true);
+    expect(none.dataSet.hash).not.toBe(ran.dataSet.hash);
   });
 });
 

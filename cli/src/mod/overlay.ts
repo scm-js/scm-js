@@ -20,7 +20,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { decodeTblFile } from "../../../src/formats/dat/tblFile";
 import { gameName } from "../../../src/formats/mod/sources";
-import type { RunnerModReport } from "../engine";
+import type { ModTag } from "@scm-js/replay";
+import { fileDigest } from "../../../src/formats/mod/sources";
+import { VERSION } from "../about";
+import type { RunnerCodeReport, RunnerModReport } from "../engine";
 import type { GameFiles } from "../gamefiles";
 import { openMod } from "./open";
 import { writeLoose } from "./pack";
@@ -37,6 +40,12 @@ export interface ModOverlay {
   remove: () => void;
   /** How many plugins the mod carries as files: what the runners load beside a bot (one in its archive is not loaded). */
   plugins?: () => Promise<number>;
+  /**
+   * The `SCMJ` tag of a replay of a game played with the mod, as the play page's Save Replay writes it: the data set by
+   * the hash the game ran (without the plugins' lines when none ran), the plugins that ran and the FireGraft project,
+   * the engine's build. `code` is what the runner said of the mod's code (`start.code`), when it ran any.
+   */
+  tag?: (o: { code?: RunnerCodeReport | null; build: string }) => Promise<ModTag>;
 }
 
 /** What the game's reload of its startup data reads by name besides the pictures (scm-sim `src/exact/mods.ts`, `STARTUP_NAMES`). */
@@ -83,6 +92,7 @@ export function modOverlay(path: string, base: () => Promise<GameFiles | null>, 
   const open = () => (opened ??= base().then(async (game) => ({ game, source: await openMod(path, game) })));
   return {
     plugins: async () => (await open()).source.plugins.filter((p) => !p.member).length,
+    tag: async ({ code, build }) => modTag((await open()).source, code ?? null, build),
     layers: async () => {
       if (!dirs) {
         const { game, source } = await open();
@@ -121,4 +131,30 @@ async function writeCode(source: ModSource, dir: string): Promise<void> {
   const hash = await sourceHash(source);
   const link = (source.manifest as { link?: unknown; url?: unknown } | null)?.link ?? (source.manifest as { url?: unknown } | null)?.url;
   writeFileSync(join(dir, "mod.json"), JSON.stringify({ name: source.name, hash: hash.hash, withoutPlugins: hash.withoutPlugins, ...(typeof link === "string" && /^https?:\/\//.test(link) ? { link } : {}) }, null, 2) + "\n");
+}
+
+/**
+ * A replay's tag for a game of `source` (`ModOverlay.tag`). The plugins that ran are those the mod carries as files,
+ * less any the runner said failed (it names a plugin by the name the plugin gives itself, so a failure is matched by
+ * the file's name where it can be); `noplugins` when it carries some and none ran.
+ */
+export async function modTag(source: ModSource, code: RunnerCodeReport | null, build: string): Promise<ModTag> {
+  const hash = await sourceHash(source);
+  const carried = source.plugins.filter((p) => !p.member);
+  const failed = (code?.plugins ?? []).filter((l) => / failed: /.test(l)).map((l) => l.split(" failed: ")[0].toLowerCase());
+  const leaf = (n: string) => n.split(/[\\/]/).pop()!;
+  const ran = code ? carried.filter((p) => !failed.includes(leaf(p.name).toLowerCase())) : [];
+  const plugins = await Promise.all(ran.map(async (p) => ({ name: leaf(p.name), sha256: await fileDigest(await p.read()) })));
+  const fgp = code?.firegraft ? source.firegraft.find((f) => /\.fgp$/i.test(f.name)) : undefined;
+  const link = (source.manifest as { link?: unknown; url?: unknown } | null)?.link ?? (source.manifest as { url?: unknown } | null)?.url ?? code?.link;
+  const noplugins = carried.length > 0 && plugins.length === 0;
+  return {
+    v: 1,
+    dataSet: { hash: noplugins ? hash.withoutPlugins : hash.hash, name: source.name, url: typeof link === "string" && /^https?:\/\//i.test(link) ? link : null },
+    plugins,
+    firegraft: fgp ? { name: leaf(fgp.name), sha256: await fileDigest(await fgp.read()) } : null,
+    noplugins,
+    engine: { lifter: "shipped", build },
+    madeBy: `scmjs ${VERSION}`,
+  };
 }

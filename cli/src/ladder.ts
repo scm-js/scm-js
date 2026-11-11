@@ -7,6 +7,8 @@
  * head-to-head. Every game's replay is saved under the ladder's folder, named by its pairing, map, races and seed.
  */
 import { createInterface } from "node:readline";
+import { readFile, writeFile } from "node:fs/promises";
+import { appendModTag } from "@scm-js/replay";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, extname, join, relative, resolve } from "node:path";
 import { codeWords, ensureEngine, findGameCopy, fitWords, MOD_CODE, modArgs, modWords, runnerFor, startRunner, type BotFitReport, type Engine, type RunnerCodeReport, type RunnerModReport } from "./engine";
@@ -406,6 +408,18 @@ export async function playGame(runner: string, engine: Engine, copy: string, ent
   return { game: g, end, error: end ? null : error, winner, replay: end?.replay ? replay : null, start };
 }
 
+/**
+ * Writes the mod's `SCMJ` tag into a replay the runner saved of a game of the mod (`ModOverlay.tag`): what the play
+ * page's Save Replay writes. A file that is not a replay the tag can go in is left as it is; false then.
+ */
+export async function tagModReplay(path: string, mod: ModOverlay, code: RunnerCodeReport | null, build: string): Promise<boolean> {
+  if (!mod.tag || !existsSync(path)) return false;
+  try {
+    await writeFile(path, await appendModTag(new Uint8Array(await readFile(path)), await mod.tag({ code, build })));
+    return true;
+  } catch { return false; }
+}
+
 /** The ladder: every game scheduled, played one at a time (or `parallel` at once), then the standing. */
 export async function runLadder(entrants: Entrant[], o: LadderOptions): Promise<LadderOutcome> {
   const t0 = performance.now();
@@ -436,6 +450,9 @@ export async function runLadder(entrants: Entrant[], o: LadderOptions): Promise<
       const g = games[next++];
       const kind = o.game ? undefined : o.gameOf?.get(g.map);
       const r = await playGame(runner, engine, game.folder, entrants, g, { out, data, frames: o.frames, timeout: o.timeout, node: o.node, text: o.text, play: o.play, extra: kind ? [...extra, `--${kind}`] : extra });
+      // (a mod's game: its replay says which mod, as the play page's Save Replay writes it, so that replay info names
+      // it and replay watch refuses to play it with the game's own files)
+      if (o.mod && r.replay) await tagModReplay(r.replay, o.mod, r.start?.code ?? null, engine.build);
       results.push(r);
       // The mod, once: what the first game read of it, its code, and how each bot fits it.
       if (!told && r.start && (r.start.code || r.start.mod)) { told = true; for (const line of modLines(r.start, entrants, g, o.mod)) say(line); }

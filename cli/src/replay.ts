@@ -78,7 +78,8 @@ export function replayReport(input: Input, rep: Replay, races: readonly DataSetR
   return {
     file: { name: input.name, bytes: input.bytes.length },
     format: FORMATS[rep.format], engine: h.engine === 1 ? "Brood War" : "StarCraft",
-    started: h.started ? h.started.toISOString() : null, frames: h.frames, ms,
+    // (a replay the engine wrote has no real time in it — a second past 1970 —, which is no time a game was played)
+    started: h.started && h.started.getUTCFullYear() >= 1998 ? h.started.toISOString() : null, frames: h.frames, ms,
     speed: SPEEDS[h.speed] ?? `Speed ${h.speed}`, gameType: GAME_TYPES[h.gameType] ?? `Type ${h.gameType}`,
     title: h.title, host: h.host, map,
     players: rep.players.map((p) => {
@@ -106,8 +107,10 @@ export function printReplayInfo(r: ReplayReport, races: readonly DataSetRace[] =
     ? [...teams].map((t) => r.players.filter((p) => p.team === t).map((p) => matchupLetter(p.raceId, p.race, r.mod, races)).join("")).join("v")
     : null;
   const when = r.started ? new Date(r.started) : null;
+  // (sides of more than one player, as a team game has them: "A & B vs C & D"; else each player a side)
+  const sides = teams.size > 1 && teams.size < r.players.length ? [...teams].map((t) => r.players.filter((p) => p.team === t)) : r.players.map((p) => [p]);
   return [
-    pc.bold(`${r.players.map((p) => rgb(p.color, gameText(p.name))).join(pc.dim(" vs "))}`) + (matchup ? pc.dim(`  ${matchup}`) : ""),
+    pc.bold(sides.map((side) => side.map((p) => rgb(p.color, gameText(p.name))).join(pc.dim(" & "))).join(pc.dim(" vs "))) + (matchup ? pc.dim(`  ${matchup}`) : ""),
     pc.dim(t("{type} on {map}", { type: translate(r.gameType), map: gameText(r.map.name) })),
     "",
     ...rows([
@@ -118,7 +121,8 @@ export function printReplayInfo(r: ReplayReport, races: readonly DataSetRace[] =
       [t("Recorded by"), `${translate(r.engine)}${dot}${translate(r.format)}`],
       [t("Mod"), r.mod ? `${gameText(r.mod.dataSet.name) || pc.italic(t("unnamed"))}${dot}${r.mod.dataSet.hash}${r.mod.dataSet.url ? dot + r.mod.dataSet.url : ""}` : pc.dim(t("none"))],
       [t("Plugins"), r.mod ? (r.mod.noplugins ? pc.dim(t("none: played without them")) : [...r.mod.plugins.map((p) => p.name), ...(r.mod.firegraft ? [r.mod.firegraft.name] : [])].join(", ") || pc.dim(t("none"))) : null],
-      [t("Names"), r.names?.kind === "mod" ? t("from {mod}, the same data set", { mod: r.names.name ?? "" }) : null],
+      // (the same data set only where the replay names its mod and the mod named matched it; an untagged replay was warned of)
+      [t("Names"), r.names?.kind === "mod" ? (r.mod ? t("from {mod}, the same data set", { mod: r.names.name ?? "" }) : t("from {mod}", { mod: r.names.name ?? "" })) : null],
       [t("File"), `${r.file.name}${dot}${size(r.file.bytes)}`],
       [t("Chat"), r.chat ? t("{n, plural, one {# line} other {# lines}}", { n: r.chat }) : null],
     ]),

@@ -7,9 +7,9 @@
  * everything under its `Maps` folder are not read (`gameCopyFiles`, `gameCopy`).
  */
 import { readdir, readFile, stat } from "node:fs/promises";
-import { basename, join, relative, resolve } from "node:path";
+import { basename, dirname, join, relative, resolve } from "node:path";
 import { Archive } from "mopaq";
-import { exeArchive, GAME_ARCHIVES, GAME_FOLDERS, gameCopyFiles, gameName, isMpq, isSystemFile, isZip, modRoot, readZip, ModSourceError } from "../../../src/formats/mod/sources";
+import { exeArchive, GAME_ARCHIVES, GAME_FOLDERS, gameCopyFiles, gameName, isMpq, isSystemFile, isZip, modRoot, PatcherError, readZip, ModSourceError } from "../../../src/formats/mod/sources";
 import { probeNames } from "../../../src/formats/mod/hash";
 import { MOD_MANIFEST, readManifest, type ModManifest } from "../../../src/formats/mod/folder";
 import { normalizeRaces, type DataSetRace } from "../../../src/formats/mod/races";
@@ -42,8 +42,17 @@ export interface ModSource {
   files: Map<string, SourceFile>;
   plugins: CarriedFile[];
   firegraft: CarriedFile[];
-  /** A self-executing exe's archive and the FireGraft plugins in its overlay. */
-  exes: { file: string; kind: "sempq" | "firegraft"; at: number; plugins: { id: number; size: number }[] }[];
+  /**
+   * A self-executing exe's archive and the plugins FireGraft's patcher carries in its overlay, in the order it loads
+   * them: each one's id, where it is in the exe, its size and the name it gives itself. Never run, not written out, and
+   * no line of the mod's hash (only plugins carried as files are).
+   */
+  exes: { file: string; kind: "sempq" | "firegraft"; at: number; plugins: { id: number; at: number; size: number; name: string | null }[] }[];
+  /**
+   * Libraries (`.dll`) beside a mod's exe, as the folder spells them (for an exe named alone, the files in its folder): a
+   * plugin may load one (or import from it, so it cannot load without). Not the mod's files, not in its hash, never loaded.
+   */
+  beside: string[];
   /** Two files of a folder for one game path (any case): the later is used. */
   duplicates: string[];
   /** Files that are not the game's (a read-me beside the game's folders, a dll), left out. */
@@ -111,7 +120,12 @@ export async function openModSource(path: string, packed: (dir: string, manifest
   const bytes = new Uint8Array(await readFile(path));
   const kind: SourceKind = isZip(bytes) ? "zip" : isMpq(bytes) ? "archive" : bytes[0] === 0x4d && bytes[1] === 0x5a ? "exe" : "archive";
   if (kind === "archive" && !isMpq(bytes)) throw new CliError(t("{path} is not a mod: not an MPQ, a self-executing exe or a zip.", { path }), null, 2);
-  return fromPieces(path, kind, name, [{ path: basename(path), size: bytes.length, read: async () => bytes }]);
+  const source = await fromPieces(path, kind, name, [{ path: basename(path), size: bytes.length, read: async () => bytes }]);
+  // (an exe named alone: the libraries in its folder, which a plugin of its may load)
+  if (kind === "exe" && source.exes.length) {
+    try { source.beside = (await readdir(dirname(resolve(path)), { withFileTypes: true })).filter((e) => e.isFile() && /\.dll$/i.test(e.name) && !isSystemFile(e.name)).map((e) => e.name).sort(); } catch { /* a folder not to be listed */ }
+  }
+  return source;
 }
 
 /** The game's own data files as a source (what the proofs unpack): every name given that the copy has. */
@@ -126,7 +140,7 @@ export async function gameSource(files: GameFiles, names: readonly string[]): Pr
 }
 
 export function emptySource(path: string, kind: SourceKind, name: string): ModSource {
-  return { path, kind, name, layers: [], files: new Map(), plugins: [], firegraft: [], exes: [], duplicates: [], left: [], gameCopy: [], system: new Map(), manifest: null, races: [], probed: [], unheld: [] };
+  return { path, kind, name, layers: [], files: new Map(), plugins: [], firegraft: [], exes: [], beside: [], duplicates: [], left: [], gameCopy: [], system: new Map(), manifest: null, races: [], probed: [], unheld: [] };
 }
 
 async function fromPieces(path: string, kind: SourceKind, name: string, pieces: Piece[]): Promise<ModSource> {
@@ -171,14 +185,27 @@ async function fromPieces(path: string, kind: SourceKind, name: string, pieces: 
       } else if (leaf.endsWith(".mpq") && isMpq(bytes)) {
         try { archives.push({ label: p.path, archive: Archive.open(bytes) }); } catch (e) { throw new CliError(t("{file} could not be opened as an archive: {why}", { file: p.path, why: (e as Error).message }), null, 2); }
       } else if (leaf.endsWith(".exe")) {
-        const found = exeArchive(bytes);
-        if (!found) { source.left.push(p.path); continue; }
-        try { archives.push({ label: p.path, archive: Archive.open(found.archive) }); } catch (e) { throw new CliError(t("The archive inside {file} could not be opened: {why}", { file: p.path, why: (e as Error).message }), null, 2); }
-        source.exes.push({ file: p.path, kind: found.kind, at: found.at, plugins: found.plugins });
+        let found;
+        try { found = exeArchive(bytes); } catch (e) {
+          if (e instanceof PatcherError) throw new CliError(t("{file} cannot be read as a mod: its patcher overlay is in a form not read here ({what}).", { file: p.path, what: e.what }), null, 2);
+          throw e;
+        }
+        if (!found) {
+          // (the exe the person named is no mod: said, never shown as a mod of no files; one in a folder is left out)
+          if (depth === 0 && kind === "exe") throw new CliError(t("{file} holds no archive: it is a program only, not a mod's patcher or self-executing archive.", { file: p.path }), null, 2);
+          source.left.push(p.path); continue;
+        }
+        // (the whole exe and where its archive's header is: the archive's tables may lie before its header)
+        try { archives.push({ label: p.path, archive: Archive.open(found.bytes, { offset: found.at }) }); } catch (e) { throw new CliError(t("The archive inside {file} could not be opened: {why}", { file: p.path, why: (e as Error).message }), null, 2); }
+        source.exes.push({ file: p.path, kind: found.kind, at: found.at, plugins: found.plugins.map(({ id, at, size, name }) => ({ id, at, size, name })) });
       } else loose.push(p);
     }
   };
   try { await take(pieces, 0); } catch (e) { if (e instanceof ModSourceError) throw new CliError(e.message, null, 2); throw e; }
+  // Libraries beside a mod's exe, in the same folder: what its plugins may load (and import from).
+  const dirOf = (p: string) => p.slice(0, Math.max(0, p.lastIndexOf("/")));
+  const exeDirs = new Set(source.exes.map((e) => dirOf(e.file).toLowerCase()));
+  source.beside = source.left.filter((p) => /\.dll$/i.test(p) && exeDirs.has(dirOf(p).toLowerCase())).sort();
 
   for (const { label, archive } of archives) {
     source.layers.push(label);

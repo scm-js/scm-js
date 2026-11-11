@@ -20,7 +20,7 @@ import { forgetStoredFolders, keepInMemory, storedCopy, type StoredCopy } from "
 import { currentAssetSource } from "./source";
 import { findMembers, httpRangeReader, readZipDirectory, readZipMember, ZipError } from "./zip";
 import { t, translate } from "../i18n";
-import { exeArchive, GAME_FOLDERS, isSystemFile } from "../formats/mod/sources";
+import { exeArchive, GAME_FOLDERS, isSystemFile, PatcherError } from "../formats/mod/sources";
 import { isModCode } from "../formats/mod/hash";
 import { normalizeRaces, type DataSetRace } from "../formats/mod/races";
 
@@ -214,9 +214,12 @@ export async function installDataSet(profile: GameDataProfile, input: GameDataFi
   for (const a of orderArchives(input.archives)) {
     const bytes = await bytesOf(a.data);
     if (!/\.exe$/i.test(a.name)) { archives.push({ name: a.name, bytes }); continue; }
-    // A mod's loader: the archive appended to the program is the mod's (FireGraft's patcher, MPQDraft's); a program with none is not.
-    const found = exeArchive(new Uint8Array(bytes));
-    if (found) archives.push({ name: a.name, bytes: found.archive.slice().buffer as ArrayBuffer });
+    // A mod's loader: the archive appended to the program is the mod's (FireGraft's patcher, MPQDraft's); a program with
+    // none is not. The exe goes whole, with where the archive's header is: its tables may lie before the header.
+    let found;
+    try { found = exeArchive(new Uint8Array(bytes)); }
+    catch (e) { if (e instanceof PatcherError) throw new InstallError(t("{file} cannot be read as a mod: its patcher overlay is in a form not read here ({what}).", { file: a.name, what: e.what })); throw e; }
+    if (found) archives.push({ name: a.name, bytes, offset: found.at });
   }
   const overlay: NonNullable<ExtractRequest["overlay"]> = [];
   // The mod's files the extraction does not read (its sounds, say) go along for the hash alone, as Blobs where they are.

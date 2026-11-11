@@ -47,7 +47,8 @@ function copyReader(base: NonNullable<ExtractRequest["base"]>): CopyReader {
 
 export interface ExtractRequest {
   kind: "extract";
-  archives: { name: string; bytes: ArrayBuffer }[];
+  /** `offset`: where the archive's header is in `bytes` (a mod's exe, handed whole: its archive's tables may lie before its header). */
+  archives: { name: string; bytes: ArrayBuffer; offset?: number }[];
   /** What the stamp records as the origin. */
   from: string;
   /** The data set being installed; the game's own when absent. */
@@ -113,7 +114,7 @@ self.onmessage = async (e: MessageEvent<ExtractRequest>) => {
     } else {
       reportStep(progressOver(0, 1), 0, msg("Opening the archives"));
       staredit = !req.base && isStarEditDownload(req.archives.map((a) => ({ name: a.name, size: a.bytes.byteLength })));
-      const opened = openArchives(req.archives.map((a) => ({ name: a.name, bytes: new Uint8Array(a.bytes) })));
+      const opened = openArchives(req.archives.map((a) => ({ name: a.name, bytes: new Uint8Array(a.bytes), offset: a.offset })));
       problems = opened.problems;
       if (opened.archives.length === 0 && !req.base) throw problems[0] ? new Error(problems[0]) : new ExtractError(msg("No archive could be opened."));
 

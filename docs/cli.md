@@ -3253,7 +3253,12 @@ the same functions are the [`@scm-js/core` library](core.md); the command is bui
 | --- | --- |
 | 0 | All went well |
 | 1 | A map failed its check, two maps differed, a merge had conflicts it was not told how to settle, nothing matched a search, a build did not go through, a map test or a bot failed, a trigger never fired in `map coverage --strict`, a replay could not be played, or something went wrong |
-| 2 | A file was missing or the wrong kind for the command, an option was not valid, you need to sign in first, or the game could not start |
+| 2 | The command could not start its work: an unknown command or option, a missing argument, a value it does not take, a file or folder that is missing or the wrong kind, a file that could not be written, you need to sign in first, or the game could not start |
+
+A mistake in the command line says what was wrong and which help lists the options, such
+as `(scmjs map info --help lists its options)`. Asking for help — `scmjs map`, `scmjs help
+map diff`, `scmjs map diff --help` — prints it on standard output and exits with 0. A
+command whose output is cut short by a pipe that stops reading (`| head`) ends quietly with 0.
 
 ## Command reference
 

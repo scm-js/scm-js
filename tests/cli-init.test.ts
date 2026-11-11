@@ -116,7 +116,7 @@ describe("scmjs init", () => {
     expect(init).toBeDefined();
     expect((init as unknown as { _hidden?: boolean })._hidden).toBeFalsy();
     expect(init!.helpGroup()).toBe("Maps and replays:");
-    expect(init!.options.map((o) => o.long)).toEqual(["--json", "--print", "--git", "--force"]);
+    expect(init!.options.filter((o) => !o.hidden).map((o) => o.long)).toEqual(["--json", "--print", "--git", "--force"]);
   });
 
   it.skipIf(!haveTrigScript)("builds the maps that keep a TrigScript script in the workflow", async () => {

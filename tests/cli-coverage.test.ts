@@ -168,7 +168,7 @@ describe("map coverage: the run", () => {
     const forced = await runCoverage(input, await doc(), [join(dir, "other.rep")], { engine: staged.dir, starcraft: sc, force: true });
     expect(forced.games[0].match).toBe("forced");
     const old = stagedEngine(tmp(), true, OLD_RUNNER);
-    expect(await fail(runCoverage(input, await doc(), [join(dir, "a.rep")], { engine: old.dir, starcraft: sc }))).toEqual([1, expect.stringMatching(/map runner from before map trace --replay/)]);
+    expect(await fail(runCoverage(input, await doc(), [join(dir, "a.rep")], { engine: old.dir, starcraft: sc }))).toEqual([1, expect.stringMatching(/is from before map trace --replay/)]);
     // A game the engine could not play is left out and said, and the command fails; with none played, it says so.
     const refused: Input = { ...input, path: join(tmp(), "bad.scx"), name: "bad.scx" };
     writeFileSync(refused.path, input.bytes);

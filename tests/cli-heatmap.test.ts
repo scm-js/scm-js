@@ -294,7 +294,7 @@ describe("scmjs map heatmap", () => {
     expect(await fail(heatmapMap(input, map, [join(reps, "4.rep")], o, { term }))).toEqual([2, expect.stringMatching(/^4\.rep was not played on m\.chk/)]);
     const forced = await heatmapMap(input, map, [join(reps, "4.rep")], { ...o, force: true, json: true }, { term });
     expect(forced.report.replays[0].match).toBe("forced");
-    expect(await fail(heatmapMap(input, map, [join(reps, "old.rep")], o, { term }))).toEqual([1, expect.stringMatching(/replay runner from before map heatmap/)]);
+    expect(await fail(heatmapMap(input, map, [join(reps, "old.rep")], o, { term }))).toEqual([1, expect.stringMatching(/game engine at .* is from before map heatmap/)]);
     const broken = await heatmapMap(input, map, [join(reps, "broken.rep"), join(reps, "4.rep")], { ...o, force: true, json: true }, { term });
     expect(broken.report.skipped).toEqual([{ file: "broken.rep", reason: "the game could not play it: the game refused it" }]);
     process.exitCode = 0;

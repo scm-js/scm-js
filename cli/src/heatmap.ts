@@ -129,7 +129,7 @@ export async function playForEvents(runner: string, engineDir: string, starcraft
   const code = await exited;
   if (older) throw new OlderRunner();
   if (error) throw new CliError(error);
-  if (!ev || !ended) throw new CliError(`${t("the runner stopped without a result (exit {code})", { code })}${stderr.trim() ? `: ${stderr.trim().split("\n").at(-1)}` : ""}`, noResultHint(engineDir));
+  if (!ev || !ended) throw new CliError(`${t("the game stopped without a result (exit {code})", { code })}${stderr.trim() ? `: ${stderr.trim().split("\n").at(-1)}` : ""}`, noResultHint(engineDir));
   return ev;
 }
 
@@ -400,13 +400,13 @@ export async function heatmapMap(
       }
     };
     await Promise.all(Array.from({ length: at }, worker));
-    if (older) throw new CliError(t("The engine at {dir} has a replay runner from before map heatmap.", { dir: engine.dir }), t("A play page deployed since has one; the next run fetches it (or name a newer one with --engine)."));
+    if (older) throw new CliError(t("The game engine at {dir} is from before map heatmap.", { dir: engine.dir }), t("A play page deployed since has one; the next run fetches it (or name a newer one with --engine)."));
   }
   const t2 = performance.now();
   for (const [k, reason] of errors) skipped.push({ file: taken[k].file, reason: t("the game could not play it: {reason}", { reason }) });
   if (errors.size) process.exitCode = Math.max(Number(process.exitCode ?? 0), 1);
   const played = taken.map((r, k) => ({ r, ev: events[k], k })).filter((x): x is { r: (typeof taken)[number]; ev: GameEvents; k: number } => x.ev !== null);
-  if (!played.length) throw new CliError(t("The game played none of the {n, plural, one {# replay} other {# replays}}.", { n: taken.length }), t("The replay runner is scm-sim's; your own copy of StarCraft and replays the game itself plays are what it needs."));
+  if (!played.length) throw new CliError(t("The game played none of the {n, plural, one {# replay} other {# replays}}.", { n: taken.length }), t("Your own copy of StarCraft and replays the game itself plays are what it needs."));
 
   // What is counted, where.
   const chosen = heatPoints(played.map((p) => p.ev), { what, player, until });

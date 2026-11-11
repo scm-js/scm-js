@@ -287,7 +287,7 @@ export async function runCoverage(input: Input, doc: OpenedMap, sources: readonl
       });
     } finally { removeFolder(out); }
   }
-  if (!games.length) throw new CliError(t("The game played none of the {n, plural, one {# replay} other {# replays}}.", { n: taken.length }), t("The map runner is scm-sim's; your own copy of StarCraft and replays the game itself plays are what it needs."));
+  if (!games.length) throw new CliError(t("The game played none of the {n, plural, one {# replay} other {# replays}}.", { n: taken.length }), t("Your own copy of StarCraft and replays the game itself plays are what it needs."));
 
   const all = addGames(games.map((g) => ({ name: gameName(g.game), rows: g.rows })), rows);
   const owned = all.filter((c) => c.players.length);

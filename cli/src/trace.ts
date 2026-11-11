@@ -175,7 +175,7 @@ export async function runMapInGame(map: string | null, what: "trace" | "cost", o
 const cancelled = () => new CliError(t("The run was cancelled: the game was stopped before it finished."), null);
 
 /** Said when the runner is older than the replays: it wanted a map, or ran the map with nobody playing. */
-const olderThanReplays = (dir: string) => new CliError(t("The engine at {dir} has a map runner from before map trace --replay.", { dir }), t("A play page deployed since has one; the next run fetches it (or name a newer one with --engine)."));
+const olderThanReplays = (dir: string) => new CliError(t("The game engine at {dir} is from before map trace --replay.", { dir }), t("A play page deployed since has one; the next run fetches it (or name a newer one with --engine)."));
 
 async function runMap(map: string | null, what: "trace" | "cost", o: MapRunOptions): Promise<MapRunOutcome> {
   if (map !== null && !existsSync(map)) throw new CliError(t("No file {file}", { file: map }), null, 2);
@@ -224,8 +224,8 @@ async function runMap(map: string | null, what: "trace" | "cost", o: MapRunOptio
   const exitCode = await exited;
   if (o.signal?.aborted) throw cancelled();
   if (older || (o.replay && error && /--map is needed/.test(error))) throw olderThanReplays(engine.dir);
-  if (error) throw new CliError(error, o.replay ? t("The runner is scm-sim's; a replay StarCraft itself plays and your own copy of the game are what it needs.") : t("The runner is scm-sim's; a map StarCraft itself opens, with a slot for a person, and your own copy of the game are what it needs."));
-  if (!end) throw new CliError(`${t("The game did not finish: the runner stopped without a result (exit {code}).", { code: exitCode })}${stderr.trim() ? `\n${stderr.trim().split("\n").slice(-6).join("\n")}` : ""}`, noResultHint(engine.dir));
+  if (error) throw new CliError(error, o.replay ? t("A replay StarCraft itself plays and your own copy of the game are what it needs.") : t("A map StarCraft itself opens, with a slot for a person, and your own copy of the game are what it needs."));
+  if (!end) throw new CliError(`${t("The game did not finish: it stopped without a result (exit {code}).", { code: exitCode })}${stderr.trim() ? `\n${stderr.trim().split("\n").slice(-6).join("\n")}` : ""}`, noResultHint(engine.dir));
   return { engine: { build: engine.build, dir: engine.dir, fetched: engine.fetched }, game, start, progress, end };
 }
 
@@ -459,7 +459,7 @@ export interface CostReport {
 
 export function costReport(file: string, r: MapRunOutcome): CostReport {
   const c = r.end.cost;
-  if (!c) throw new CliError(t("The runner counted no cost."));
+  if (!c) throw new CliError(t("The game counted no cost."));
   const ran = c.ns.map((n, i) => [n, i] as const).filter(([n]) => n > 0);
   const peak = ran.reduce((best, x) => (x[0] > best[0] ? x : best), [0, -1] as readonly [number, number]);
   const rows = c.rows.map((x) => ({ row: x.row, msAFrame: x.ns / 1e6 / Math.max(1, x.frames), frames: x.frames, records: x.conditions + x.actions, triggers: x.triggers, peakMs: x.peakNs / 1e6 })).sort((a, b) => b.msAFrame - a.msAFrame || b.records - a.records);

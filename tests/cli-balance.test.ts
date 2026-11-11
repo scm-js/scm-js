@@ -224,7 +224,7 @@ describe("scmjs map balance over stand-in runners", () => {
     const text = printBalance(r).map(visible).join("\n");
     expect(text).toMatch(/Start 1 \(11 o'clock\) wins 100% where 50% was expected/);
     expect(text).toMatch(/Pairs met: 1–2 ×4, 1–3 ×4, 2–3 ×4/);
-    expect(text).toMatch(/has no option to fix them/);
+    expect(text).toMatch(/the game cannot be told which to give/);
   });
 
   it("plays a bot against itself once a seed: the other lobby order is the same game", async () => {

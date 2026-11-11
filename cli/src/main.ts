@@ -14,7 +14,7 @@ import { runBotGame } from "./botrun";
 import { ladderJson, parseEntrants, parseRaces, printLadder, runLadder } from "./ladder";
 import { costReport, gameMap, printCost, printTrace, removeGameMap, replayRun, runMapInGame, traceReport } from "./trace";
 import { printRush, runRush, rushJson, unitByName } from "./rush";
-import { balanceJson, printBalance, runBalance } from "./balance";
+import { balanceJson, printBalance, runBalance, startPlaces } from "./balance";
 import { buildMap, hasScript, loadTypeScript, printBuild } from "./build";
 import { completionScript, SHELLS, type Shell } from "./completion";
 import { LAYOUTS, nameFromFile, NEW_VERSIONS, parseSize, parseTileset, writeNewMap, type NewMapVersion } from "./create";
@@ -832,10 +832,14 @@ between two starts is an island map). The engine and your copy of StarCraft are 
 Exits 2 when the game could not start.`))
     .action(async (file: string, o: { json?: boolean; unit: string; seed: string; limit: string; starcraft?: string; engine?: string }) => {
       const unit = unitByName(o.unit);
+      const seed = whole(o.seed, "seed"), limit = whole(o.limit, "limit", 1);
       const { input, doc } = await openForEdit(file);
+      // Said before the game starts, as map analyze and map balance say it.
+      const starts = startPlaces(doc).length;
+      if (starts < 2) throw new CliError(starts ? t("{file} has one start location: a rush is walked between two or more.", { file: input.name }) : t("{file} has no start locations: a rush is walked between two or more.", { file: input.name }), t("A melee map places a Start Location for each player."), 2);
       const game = await gameMap(doc, input.path, input.name);
       if (game.converted && !o.json) print(pc.dim(t("{name} is in the StarCraft 1.00 form, which the engine does not run: a copy converted to Brood War is run instead", { name: input.name })));
-      const r = await runRush(game.path, { unit, seed: whole(o.seed, "seed"), limit: whole(o.limit, "limit", 1), starcraft: o.starcraft, engine: o.engine, live: o.json ? undefined : (line) => print(line) });
+      const r = await runRush(game.path, { unit, seed, limit, starcraft: o.starcraft, engine: o.engine, live: o.json ? undefined : (line) => print(line) });
       if (o.json) print(JSON.stringify(rushJson(input.name, r), null, 2));
       else print("", ...printRush(input.name, r));
     });

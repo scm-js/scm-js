@@ -2169,24 +2169,26 @@ at Fastest. The unit sets out five tiles from its start toward the middle of the
 stops at the edge of the town hall at the other start: a neutral Nexus stands on every
 start while the walks run, so the walk ends where a real rush ends, at the base. The two
 directions between a pair can differ by a second or so, because the way out of each base
-is not the same. The shortest and longest walks are compared with the straight line
-between the two starts, the distance a flyer goes. When the terminal is too narrow for
-both figures, the seconds and the pixels come as two tables.
+is not the same. The shortest and longest walks, by the pixels walked, are compared with
+the straight line between the two starts, the distance a flyer goes. When the terminal is
+too narrow for both figures, the seconds and the pixels come as two tables.
 
 A walk that does not arrive is a finding too. Two starts with no ground between them, on
 an island map or where the terrain walls one off, are reported as having no way; on a map
-where no two starts are joined, the report says so and lists the straight lines instead. A
-unit that stops short (at a wall of minerals or buildings the map places, say), gets
-stuck, or is still walking after seven minutes of game time is named with how far from the
-base it ended.
+where no two starts are joined, the report says so under a warning and lists the straight
+lines instead. On a map that places units of its own for player 1, the game walks those
+beside the unit asked for, and only the unit asked for is reported; where the game did not
+walk it at all, the pair is reported as not walked, with why. A unit that stops short (at
+a wall of minerals or buildings the map places, say), gets stuck, or is still walking
+after seven minutes of game time is named with how far from the base it ended.
 
 The walks run in one game with nobody else in it: about four seconds for a four-player map
 and fifteen for an eight-player map of 256 × 256. `--seed` changes the game's luck, such
 as a unit stepping round another; the default is the one the editor's Walkability plugin
 uses, so the two agree. `--json` gives every walk and the table as data. A building or a
-flyer is refused (exit 2), as is a map with fewer than two start locations.
-[`map analyze`](#a-maps-layout) gives the same distances in a second without the game,
-within a few percent, beside the map's naturals and narrow points.
+flyer is refused (exit 2), as is a map with fewer than two start locations, before the
+game starts. [`map analyze`](#a-maps-layout) gives the same distances in a second without
+the game, within a few percent, beside the map's naturals and narrow points.
 
 ### Is the map fair to every start
 

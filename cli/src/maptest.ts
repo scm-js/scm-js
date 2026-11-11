@@ -695,9 +695,9 @@ async function runScenario(runner: string, args: string[], engineDir: string, o:
   } finally { o.signal?.removeEventListener("abort", stop); }
   const exitCode = await exited;
   if (o.signal?.aborted) throw cancelled();
-  if (older) throw new CliError(t("The engine at {dir} has a map runner from before {what, select, replay {tests driven by a replay} other {map test}}.", { dir: engineDir, what: played ? "replay" : "test" }), t("A play page deployed since has one; the next run fetches it (or name a newer one with --engine)."));
-  if (error) throw new CliError(error, t("The runner is scm-sim's; a map StarCraft itself opens, with a slot for a person, and your own copy of the game are what it needs."), 2);
-  if (!start || !end) throw new CliError(`${t("The game did not finish: the runner stopped without a result (exit {code}).", { code: exitCode })}${stderr.trim() ? `\n${stderr.trim().split("\n").slice(-6).join("\n")}` : ""}`, noResultHint(engineDir));
+  if (older) throw new CliError(t("The game engine at {dir} is from before {what, select, replay {tests driven by a replay} other {map test}}.", { dir: engineDir, what: played ? "replay" : "test" }), t("A play page deployed since has one; the next run fetches it (or name a newer one with --engine)."));
+  if (error) throw new CliError(error, t("A map StarCraft itself opens, with a slot for a person, and your own copy of the game are what it needs."), 2);
+  if (!start || !end) throw new CliError(`${t("The game did not finish: it stopped without a result (exit {code}).", { code: exitCode })}${stderr.trim() ? `\n${stderr.trim().split("\n").slice(-6).join("\n")}` : ""}`, noResultHint(engineDir));
   return { start, end };
 }
 
@@ -881,7 +881,7 @@ export async function recordTest(mapName: string, map: { chk: Uint8Array } & Pic
   const planned = planScenario(map.chk, raw, testsFile, at < 0 ? list.length : at, { frames, seed: 1 });
   let end: TestEndLine | null = null;
   const run = await runTests(mapName, [planned], map, { ...o, update: false, quiet: true, onEnd: (_p, _s, e) => { end = e; } });
-  if (!end) throw new CliError(t("The game did not finish: the runner stopped without a result."));
+  if (!end) throw new CliError(t("The game did not finish: it stopped without a result."));
   const expect = snapshotExpect(planned, end, replay.players);
   // Held against the same game, every entry should hold; one that does not is left out rather than written wrong.
   const check = planScenario(map.chk, { ...raw, expect }, testsFile, planned.index, { frames, seed: 1 });

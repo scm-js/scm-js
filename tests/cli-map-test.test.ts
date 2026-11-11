@@ -230,7 +230,7 @@ describe("scmjs map test: the runner", () => {
     const copy = classicCopy(tmp()), map = await ums();
     const p = await planScenario(map.chk, { name: "a" }, "t.json", 0, DEFAULTS);
     // The trace's stand-in is such a runner: it ignores --test and starts with no mode.
-    await expect(runTests("ums.scx", [p], map, { out: tmp(), engine: stagedEngine(tmp()).dir, starcraft: copy })).rejects.toThrow(/map runner from before map test/);
+    await expect(runTests("ums.scx", [p], map, { out: tmp(), engine: stagedEngine(tmp()).dir, starcraft: copy })).rejects.toThrow(/is from before map test/);
     await expect(runTests("ums.scx", [p], map, { out: tmp(), engine: stagedEngine(tmp(), false).dir, starcraft: copy })).rejects.toThrow(/has no map runner/);
     await expect(runTests("bad.scx", [p], map, { out: tmp(), engine: stagedEngine(tmp(), true, FAKE_TEST_RUNNER).dir, starcraft: copy })).rejects.toThrow(/did not take this map/);
     await expect(runTests("ums.scx", [p], map, { out: tmp(), engine: stagedEngine(tmp(), true, FAKE_TEST_RUNNER).dir, starcraft: tmp() })).rejects.toThrow(/not a copy of StarCraft/);
@@ -280,7 +280,7 @@ describe("scmjs map test: scenarios driven by a replay", () => {
     expect(written.scenarios[0]).toEqual({ name: "steady", setup: [], expect: [{ ended: true }] });
     // A runner from before --play ran it with nobody playing: said, not judged.
     const old = stagedEngine(tmp(), true, OLD_TEST_RUNNER);
-    await expect(runTests("ums.scx", [scenarios[1]], map, { out: tmp(), engine: old.dir, starcraft: copy })).rejects.toThrow(/map runner from before tests driven by a replay/);
+    await expect(runTests("ums.scx", [scenarios[1]], map, { out: tmp(), engine: old.dir, starcraft: copy })).rejects.toThrow(/is from before tests driven by a replay/);
   });
 
   it("makes expectations from the end of a game, in the file's own words", async () => {

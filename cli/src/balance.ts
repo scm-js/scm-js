@@ -391,7 +391,7 @@ export async function runBalance(file: string, mapPath: string, doc: OpenedMap, 
         let ev: GameEvents | null = null, unread: string | null = null;
         if (result.replay) {
           try { ev = await playForEvents(replayRunner, engine.dir, game.folder, result.replay, o.node); }
-          catch (e) { unread = e instanceof Error && e.message ? e.message : t("the replay runner is from before map heatmap"); }
+          catch (e) { unread = e instanceof Error && e.message ? e.message : t("the game engine is from before map heatmap"); }
         }
         const b = readGame(g, result, ev, starts, unread);
         done.push(b);
@@ -439,7 +439,7 @@ the other side. Rush: the average walk to the other starts (map rush). t: tiles 
   const v = rep.verdict;
   out.push("", `${v.kind === "balanced" ? mark.ok : v.kind === "unbalanced" ? mark.warn : mark.info} ${v.text}`);
   for (const n of rep.notes) out.push(pc.dim(`  ${n}`));
-  out.push(pc.dim(`  ${t("The game deals the start locations; each game's are read from its replay (the match runner has no option to fix them).")}`));
+  out.push(pc.dim(`  ${t("The game deals the start locations; each game's are read from its replay (the game cannot be told which to give).")}`));
   if (r.rushError) out.push(pc.dim(`  ${t("The walks between the starts could not be measured: {error}", { error: r.rushError })}`));
   if (r.out) out.push(`${mark.info} ${t("Replays in {folder}", { folder: pc.cyan(r.out) })}`);
   return out;

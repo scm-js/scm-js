@@ -211,8 +211,8 @@ describe("scmjs map trace | cost --replay: a replay's game", () => {
 
   it("says when the engine's map runner is from before replays, or there is nothing to run", async () => {
     const old = stagedEngine(tmp(), true, OLD_RUNNER), copy = classicCopy(tmp());
-    await expect(runMapInGame(null, "trace", { engine: old.dir, starcraft: copy, replay: replayFile("a.rep") })).rejects.toThrow(/map runner from before map trace --replay/);
-    await expect(runMapInGame(testMap("ums.scx"), "trace", { engine: old.dir, starcraft: copy, replay: replayFile("a.rep") })).rejects.toThrow(/map runner from before map trace --replay/);
+    await expect(runMapInGame(null, "trace", { engine: old.dir, starcraft: copy, replay: replayFile("a.rep") })).rejects.toThrow(/is from before map trace --replay/);
+    await expect(runMapInGame(testMap("ums.scx"), "trace", { engine: old.dir, starcraft: copy, replay: replayFile("a.rep") })).rejects.toThrow(/is from before map trace --replay/);
     await expect(runMapInGame(null, "trace", { engine: old.dir, starcraft: copy })).rejects.toThrow(/name one, or a replay/);
     await expect(runMapInGame(null, "trace", { engine: old.dir, starcraft: copy, replay: join(tmp(), "none.rep") })).rejects.toThrow(/No file/);
   });

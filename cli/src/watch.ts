@@ -15,6 +15,7 @@ import { createInterface } from "node:readline";
 import type { ChildProcess } from "node:child_process";
 import { FRAME_MS, type Command, type Replay } from "@scm-js/replay";
 import { ensureEngine, findGameCopy, runnerFor, startRunner } from "./engine";
+import { atExit } from "./lifecycle";
 import type { Input } from "./files";
 import { t, translate } from "./i18n";
 import { CliError, columns, dot, duration, gameText, mark, num, pc, truecolor, unicode, visible } from "./ui";
@@ -431,7 +432,7 @@ export async function watchReplay(input: Input, replay: Replay, o: WatchOptions 
   };
   const raw = keys && "setRawMode" in keys && typeof keys.setRawMode === "function" && keys.isTTY;
   if (keys) { if (raw) keys.setRawMode(true); keys.resume(); keys.on("data", onKey); }
-  out("\x1b[?25l");
+  out("\x1b[?25l"); if (process.stdout.isTTY) atExit(() => process.stdout.write("\x1b[?25h"));
   try {
     // The runner stands at the first frame already; the picture of it first, then a step a picture.
     let l = await r.next();

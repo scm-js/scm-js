@@ -7,9 +7,9 @@
  * own melee triggers. A game whose players' commands parted from the map counts what fired before it parted, from the
  * firings in order the runner hands back, and is said.
  */
-import { mkdtempSync, readFileSync, rmSync, existsSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { basename, join, relative } from "node:path";
+import { readFileSync, existsSync } from "node:fs";
+import { removeFolder, tempFolder } from "./lifecycle";
+import { basename, relative } from "node:path";
 import { performance } from "node:perf_hooks";
 import { openMapBytes, readArchive, type OpenedMap } from "../../src/editor/mapFile";
 import { scenarioName, type Scenario } from "../../src/formats/chk/scenario";
@@ -271,7 +271,7 @@ export async function runCoverage(input: Input, doc: OpenedMap, sources: readonl
 
   // The tests' scenarios, one game each; whether they pass is map test's business, not this one's.
   if (scenarios.length) {
-    const out = mkdtempSync(join(tmpdir(), "scmjs-coverage-"));
+    const out = tempFolder("scmjs-coverage-");
     try {
       await runTests(input.name, scenarios, { extras: archive?.extras ?? new Map(), stored: archive?.stored ?? null }, {
         out, quiet: true, starcraft: game.folder, engine: o.engine, signal: o.signal, node: o.node, live,
@@ -284,7 +284,7 @@ export async function runCoverage(input: Input, doc: OpenedMap, sources: readonl
           live(gameLine(++done, total, g, g.file));
         },
       });
-    } finally { rmSync(out, { recursive: true, force: true }); }
+    } finally { removeFolder(out); }
   }
   if (!games.length) throw new CliError(t("The game played none of the {n, plural, one {# replay} other {# replays}}.", { n: taken.length }), t("The map runner is scm-sim's; your own copy of StarCraft and replays the game itself plays are what it needs."));
 

@@ -10,8 +10,8 @@
  * The runner speaks JSON lines — start, progress, end — kept here and worded against the map's own triggers, read
  * with the editor's code so a row is shown as the trigger window shows it.
  */
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, writeFileSync } from "node:fs";
+import { removeFolder, tempFolder } from "./lifecycle";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { mapVersionOf, parseScenario, serializeScenario, type Scenario } from "../../src/formats/chk/scenario";
@@ -134,7 +134,7 @@ export async function gameMap(doc: OpenedMap, inputPath: string, inputName = inp
   if (!converted && inputPath !== "-") return { path: inputPath, converted: false };
   const copy = parseScenario(serializeScenario(doc.scenario));
   if (converted) changeMapVersion(copy, "broodwar");
-  const path = join(mkdtempSync(join(tmpdir(), "scmjs-game-")), inputName.replace(/^.*[\\/]/, "").replace(/\.(scm|scx|chk)$/i, "") + ".scx");
+  const path = join(tempFolder("scmjs-game-"), inputName.replace(/^.*[\\/]/, "").replace(/\.(scm|scx|chk)$/i, "") + ".scx");
   temporary.add(path);
   try { writeFileSync(path, await writeMapBytes(copy, { format: "scx", extras: doc.extras, stored: doc.stored ?? null })); } catch (e) { removeGameMap(path); throw e; }
   return { path, converted };
@@ -146,7 +146,7 @@ const temporary = new Set<string>();
 /** A copy `gameMap` wrote, deleted with its folder; anything else is left alone. */
 export function removeGameMap(path: string): void {
   if (!temporary.delete(path)) return;
-  try { rmSync(dirname(path), { recursive: true, force: true }); } catch { /* the temporary folder is the system's to clear */ }
+  removeFolder(dirname(path));
 }
 
 /** A frame as the game's clock on Fastest, `m:ss`: 42 ms a frame, as `replay info` and `replay watch` count it. */

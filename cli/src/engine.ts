@@ -9,11 +9,12 @@
  * A runner is run in a process of its own (one game a process: the lifted game takes its memory when its module is
  * first imported) and speaks JSON lines, which each command turns into the terminal's.
  */
-import { spawn, type ChildProcess } from "node:child_process";
-import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import type { ChildProcess } from "node:child_process";
+import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { gunzipSync } from "node:zlib";
+import { spawnOwned } from "./lifecycle";
 import { runnerEnv } from "./runtime";
 import { msg, t, translate } from "./i18n";
 import { CliError, dot, mark, pc } from "./ui";
@@ -272,6 +273,11 @@ export function findGameCopy(named: string | undefined): { folder: string; kind:
  * pipe of JSON lines; its standard input a pipe too when `stdin` is asked for (a paced runner reads it), else closed.
  */
 export function startRunner(runner: string, args: string[], { node = process.execPath, stdin = false } = {}): ChildProcess {
+  // The runner's real path: it starts its game only when it is the main module, which it tells by comparing the path
+  // it was started with to its own, and Node gives a module its real one — a cache reached through a link differs.
+  let real = runner;
+  try { real = realpathSync(runner); } catch { /* not there: the spawn says so */ }
   // In the single executable `process.execPath` is scmjs itself, which runs the script as Node would when told to.
-  return spawn(node, [runner, ...args], { stdio: [stdin ? "pipe" : "ignore", "pipe", "pipe"], env: runnerEnv(node) });
+  // Ended with the command, whatever ends it, with any process it starts (lifecycle.ts).
+  return spawnOwned(node, [real, ...args], { stdio: [stdin ? "pipe" : "ignore", "pipe", "pipe"], env: runnerEnv(node) });
 }

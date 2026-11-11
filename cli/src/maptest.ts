@@ -18,8 +18,8 @@
  * a scenario with its expectations taken from the end of the game, as a snapshot to trim; `map test -u` rewrites the
  * expectations of replay-driven scenarios that no longer hold to what the game gives now.
  */
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { removeFolder, tempFolder } from "./lifecycle";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { createInterface } from "node:readline";
 import { readArchive, writeArchiveBytes } from "../../src/editor/mapFile";
@@ -577,7 +577,7 @@ export async function runTests(mapName: string, scenarios: PlannedScenario[], me
   const taken = new Set<string>();
   for (const p of scenarios) {
     if (o.signal?.aborted) throw cancelled();
-    const dir = mkdtempSync(join(tmpdir(), "scmjs-test-"));
+    const dir = tempFolder("scmjs-test-");
     try {
       const map = join(dir, `${mapName.replace(/\.(scm|scx|chk)$/i, "")}.scx`), spec = join(dir, "spec.json"), rep = join(dir, "game.rep");
       writeFileSync(map, await writeArchiveBytes(serializeScenario(p.scenario), { extras: members.extras, stored: members.stored }));
@@ -605,7 +605,7 @@ export async function runTests(mapName: string, scenarios: PlannedScenario[], me
       out.push(r);
       if (!o.quiet) o.live?.(scenarioLines(r).join("\n"));
     } finally {
-      rmSync(dir, { recursive: true, force: true });
+      removeFolder(dir);
     }
   }
   return { engine: { build: engine.build, dir: engine.dir, fetched: engine.fetched }, game, start: first, scenarios: out, ms: performance.now() - t0 };

@@ -4,9 +4,10 @@
  * browser reads messages on its file descriptor 3 and writes them on 4, each a JSON text ended by a NUL byte. Nothing
  * is bundled for it and nothing is installed: the command says where to get a browser when there is none.
  */
-import { spawn, type ChildProcess } from "node:child_process";
-import { existsSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
-import { homedir, tmpdir } from "node:os";
+import type { ChildProcess } from "node:child_process";
+import { existsSync, readdirSync, rmSync } from "node:fs";
+import { homedir } from "node:os";
+import { spawnOwned, tempFolder } from "./lifecycle";
 import { delimiter, join } from "node:path";
 import type { Readable, Writable } from "node:stream";
 import { msg, t, translate } from "./i18n";
@@ -133,7 +134,7 @@ export interface Launched {
 
 /** Starts `path` headless, a fresh profile in the temporary folder, speaking the protocol on a pipe. */
 export function launchBrowser(path: string, size: { width: number; height: number }): Launched {
-  const profile = mkdtempSync(join(tmpdir(), "scmjs-browser-"));
+  const profile = tempFolder("scmjs-browser-");
   const args = [
     "--headless", "--remote-debugging-pipe", `--user-data-dir=${profile}`, "--no-first-run", "--no-default-browser-check",
     "--mute-audio", "--hide-scrollbars", "--disable-extensions", "--disable-background-timer-throttling",
@@ -144,7 +145,7 @@ export function launchBrowser(path: string, size: { width: number; height: numbe
   ];
   let child: ChildProcess;
   try {
-    child = spawn(path, args, { stdio: ["ignore", "ignore", "pipe", "pipe", "pipe"] });
+    child = spawnOwned(path, args, { stdio: ["ignore", "ignore", "pipe", "pipe", "pipe"] });
   } catch (e) {
     rmSync(profile, { recursive: true, force: true });
     throw new CliError(t("{path} could not be started ({reason}).", { path, reason: String(e instanceof Error ? e.message : e) }), translate(NO_BROWSER));

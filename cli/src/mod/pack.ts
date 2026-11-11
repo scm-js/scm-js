@@ -6,9 +6,9 @@
  * not. The same folder always gives the same bytes: the members are added in name order, with fixed settings.
  */
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync, readFileSync } from "node:fs";
+import { rmSync, writeFileSync, readFileSync } from "node:fs";
 import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { tempFolder } from "../lifecycle";
 import { dirname, join, resolve } from "node:path";
 import { Creator } from "mopaq";
 import { DEFAULT_PALETTE, MOD_MANIFEST, ModFolderError, packFile, readManifest, type ModManifest, type PackContext } from "../../../src/formats/mod/folder";
@@ -58,7 +58,7 @@ async function folderFiles(dir: string, prefix = ""): Promise<string[]> {
 
 /** A sound that is not a WAV, as one: ffmpeg, when it is on the PATH, to 16-bit PCM at 22,050 Hz mono (the game's own). */
 export async function convertWithFfmpeg(bytes: Uint8Array, file: string): Promise<Uint8Array> {
-  const dir = mkdtempSync(join(tmpdir(), "scmjs-sound-"));
+  const dir = tempFolder("scmjs-sound-");
   try {
     const input = join(dir, `in${file.replace(/^.*(\.[^.]+)$/, "$1")}`), output = join(dir, "out.wav");
     writeFileSync(input, bytes);

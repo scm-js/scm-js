@@ -5,9 +5,9 @@
  * after `--command` ran one of its commands) the map is written back if it changed, or the change is only described
  * with `--dry-run`, as `map diff` would describe it.
  */
-import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, writeFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { tempFolder } from "./lifecycle";
 import { basename, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { t } from "./i18n";
@@ -31,7 +31,7 @@ export interface NodeLoaderOptions {
 
 /** The loader's deps for Node: `file:` URLs read from disk, the rest fetched; modules written to a folder and imported. */
 export function nodeLoaderDeps(options: NodeLoaderOptions = {}): LoaderDeps {
-  const dir = options.moduleDir ?? mkdtempSync(join(tmpdir(), "scmjs-run-"));
+  const dir = options.moduleDir ?? tempFolder("scmjs-run-");
   let n = 0;
   return {
     fetchText: async (url) => {

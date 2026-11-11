@@ -10,8 +10,8 @@
  * The game deals the start locations itself (melee), and the match runner has no option to fix them, so the starts are
  * read from each game's replay and the games binned by them; enough games give every start its turns.
  */
-import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
+import { madeFolder, tempFolder } from "./lifecycle";
 import { join, resolve } from "node:path";
 import { performance } from "node:perf_hooks";
 import type { OpenedMap } from "../../src/editor/mapFile";
@@ -374,7 +374,8 @@ export async function runBalance(file: string, mapPath: string, doc: OpenedMap, 
   }
 
   const keep = !!o.out;
-  const out = keep ? resolve(o.out!) : mkdtempSync(join(tmpdir(), "scmjs-balance-"));
+  const out = keep ? resolve(o.out!) : tempFolder("scmjs-balance-");
+  if (keep && !existsSync(out)) madeFolder(out);
   mkdirSync(out, { recursive: true });
   const data = join(out, "bwapi-data");
   say(`${pc.bold(t("{n, plural, one {# game} other {# games}}", { n: games.length }))}${dot}${entrants.map((e) => e.label).join(" vs ")}${dot}${t("{n, plural, one {# start location} other {# start locations}}", { n: starts.length })}${dot}${engine.build}${o.parallel && o.parallel > 1 ? `${dot}${t("{n} at once", { n: o.parallel })}` : ""}`);

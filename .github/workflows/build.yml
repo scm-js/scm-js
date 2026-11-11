@@ -33,6 +33,10 @@
 #             cuts one: it commits the version, tags, and dispatches this workflow on
 #             the tag. Nothing moves package.json on afterwards: a nightly's version is
 #             a patch bump of the newest tag, worked out by scripts/next-version.mjs.
+#             Once the release has its assets, the `packages` job at the end runs the
+#             Homebrew tap's and the Scoop bucket's update workflows, so `brew upgrade`
+#             and `scoop update` have the version at once and not at their own next
+#             look (packaging/README.md, "Each release").
 #
 # The container image (`docker/Dockerfile`, pushed by the `image` job to
 # `ghcr.io/<owner>/<repo>`) is nginx with the release's own web bundle in it — the very zip
@@ -941,3 +945,39 @@ jobs:
             gh release create nightly assets/* \
               --title "Nightly ($VERSION)" --notes "$notes" --prerelease --latest=false
           fi
+
+  # The package managers, told at once. The Homebrew tap and the Scoop bucket each look for a new release on a
+  # schedule of their own (every 4 hours as written; 8 to 10 as GitHub runs it), so a release used to reach
+  # `brew upgrade` and `scoop update` hours after it was out. This runs their workflows the moment the release
+  # has its assets. Their schedules stay as the net under this: nothing here fails the run, and a workflow that
+  # could not be run leaves a warning. winget is not here: each version is a pull request to
+  # microsoft/winget-pkgs, made by hand (packaging/README.md).
+  #
+  # One secret, not required (a fork releases without it): PACKAGES_PAT, a fine-grained token with Actions: write
+  # on <owner>/homebrew-tap and <owner>/scoop-bucket, which is all that running a workflow there takes.
+  packages:
+    name: Package managers (${{ needs.channel.outputs.tag }})
+    needs: [channel, release]
+    if: needs.channel.outputs.channel == 'stable'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      OWNER: ${{ github.repository_owner }}
+      VERSION: ${{ needs.channel.outputs.version }}
+    steps:
+      - name: Homebrew and Scoop
+        env:
+          GH_TOKEN: ${{ secrets.PACKAGES_PAT }}
+        run: |
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "::notice title=Package managers::PACKAGES_PAT is not set; the tap and the bucket pick $VERSION up on their own schedules."
+            exit 0
+          fi
+          # The tap fills its formula for the version named, installs it and runs its test before it pushes;
+          # the bucket's checkver reads the newest release itself.
+          gh workflow run update.yml --repo "$OWNER/homebrew-tap" -f version="$VERSION" \
+            || echo "::warning title=Homebrew::Could not run $OWNER/homebrew-tap's update.yml; it follows on its schedule."
+          gh workflow run excavator.yml --repo "$OWNER/scoop-bucket" \
+            || echo "::warning title=Scoop::Could not run $OWNER/scoop-bucket's excavator.yml; it follows on its schedule."
+

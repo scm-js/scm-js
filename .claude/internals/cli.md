@@ -1977,13 +1977,22 @@ passed on Windows 11 through WSL), Homebrew formula (on_macos arm/intel, on_linu
 
 **Leftovers**: signing (Authenticode, Developer ID + notarization) — the hook is after the injection; Linux arm64
 and Windows arm64 executables (SEA needs a runner of each; GitHub has `ubuntu-24.04-arm` and `windows-11-arm`);
-`useSnapshot` (startup) not tried; winget updates by hand (`wingetcreate update … --submit`; automating it needs a
-token secret in scm-js). **Published (2026-11-08):** `scm-js/scoop-bucket` and `scm-js/homebrew-tap` exist and follow
+`useSnapshot` (startup) not tried. **Published (2026-11-08):** `scm-js/scoop-bucket` and `scm-js/homebrew-tap` exist and follow
 each release by themselves (bucket `excavator.yml`, tap `update.yml`, every 4 h); winget's first version is
 microsoft/winget-pkgs#475062. Both repos' main needs PRs, so their workflows push over SSH with a per-repo deploy
 key (`CI_BUILD_KEY`), the workflow token read-only. Trap: ScoopInstaller/GithubActions' Excavator sets the push URL to
 HTTPS with the workflow token (`src/Helpers.psm1`), so it cannot push past the PR rule — the bucket runs Scoop's
 `checkver -Update` in its own steps instead. `packaging/README.md` "Each release" has it all.
+**The release tells the tap and the bucket (2026-11-11, the user's "without waiting 4 hours or so"):** `build.yml`'s
+`packages` job (stable only, `needs: release`) dispatches the tap's `update.yml -f version=` and the bucket's
+`excavator.yml` with `PACKAGES_PAT` (fine-grained, Actions: write on those two; set by the user the same day).
+Measured before: the "every 4 h" crons ran 8 to 10 h apart, and 0.13.3 (released 23:59) reached the tap at 07:12.
+Without the secret the step is a notice, a failed dispatch a warning, never a failed run; the crons stay as the net.
+**winget stays by hand** (`wingetcreate update … --submit`): a step that opened its pull request from the filled
+manifests through the git data API of a fork was written and then taken out at the user's word the same day (it
+needed a second, classic `public_repo` token, and could not run before the first version,
+microsoft/winget-pkgs#475062, is merged). It is in the branch's history (`release-packages`, commit ed42402) if it is
+wanted later.
 ## Many games and old maps: `map coverage`, `map check --baseline` (`coverage.ts`, `baseline.ts`) — 2026-11-07
 
 `scmjs map coverage <map> [replays…] [--tests] [--strict] [--format text|json|github|junit|sarif] [--all] [--force]

@@ -34,9 +34,9 @@
 #             the tag. Nothing moves package.json on afterwards: a nightly's version is
 #             a patch bump of the newest tag, worked out by scripts/next-version.mjs.
 #             Once the release has its assets, the `packages` job at the end runs the
-#             Homebrew tap's and the Scoop bucket's update workflows and opens winget's
-#             pull request, so the package managers have the version at once and not at
-#             their own next look (packaging/README.md, "Each release").
+#             Homebrew tap's and the Scoop bucket's update workflows, so `brew upgrade`
+#             and `scoop update` have the version at once and not at their own next
+#             look (packaging/README.md, "Each release").
 #
 # The container image (`docker/Dockerfile`, pushed by the `image` job to
 # `ghcr.io/<owner>/<repo>`) is nginx with the release's own web bundle in it — the very zip
@@ -949,14 +949,12 @@ jobs:
   # The package managers, told at once. The Homebrew tap and the Scoop bucket each look for a new release on a
   # schedule of their own (every 4 hours as written; 8 to 10 as GitHub runs it), so a release used to reach
   # `brew upgrade` and `scoop update` hours after it was out. This runs their workflows the moment the release
-  # has its assets, and opens winget's pull request, which was made by hand. Their schedules stay as the net
-  # under this: nothing here fails the run, a step that cannot do its part says so and stops.
+  # has its assets. Their schedules stay as the net under this: nothing here fails the run, and a workflow that
+  # could not be run leaves a warning. winget is not here: each version is a pull request to
+  # microsoft/winget-pkgs, made by hand (packaging/README.md).
   #
-  # Two secrets, neither required (a fork releases without them, and so does this repository until they are set):
-  #   PACKAGES_PAT  a fine-grained token with Actions: write on <owner>/homebrew-tap and <owner>/scoop-bucket,
-  #                 which is all that running a workflow there takes.
-  #   WINGET_PAT    a classic token with public_repo, of the account whose fork of microsoft/winget-pkgs the
-  #                 pull request comes from (a fine-grained token cannot open one on a repository it is not for).
+  # One secret, not required (a fork releases without it): PACKAGES_PAT, a fine-grained token with Actions: write
+  # on <owner>/homebrew-tap and <owner>/scoop-bucket, which is all that running a workflow there takes.
   packages:
     name: Package managers (${{ needs.channel.outputs.tag }})
     needs: [channel, release]
@@ -983,70 +981,3 @@ jobs:
           gh workflow run excavator.yml --repo "$OWNER/scoop-bucket" \
             || echo "::warning title=Scoop::Could not run $OWNER/scoop-bucket's excavator.yml; it follows on its schedule."
 
-      # winget has no repository of ours to push to: each version is a pull request to microsoft/winget-pkgs
-      # from a fork, with the three manifests packaging/winget holds, filled from this release's SHA256SUMS.
-      # Made through the API (one commit on a branch of the fork), since a clone of winget-pkgs is gigabytes.
-      - uses: actions/checkout@v4
-        with:
-          sparse-checkout: |
-            packaging
-            scripts/release-recipes.mjs
-            scripts/lib/recipes.mjs
-          sparse-checkout-cone-mode: false
-      - name: winget
-        env:
-          GH_TOKEN: ${{ secrets.WINGET_PAT }}
-          ID: scm-js.scmjs
-          DIR: manifests/s/scm-js/scmjs
-        run: |
-          set -uo pipefail
-          warn() { echo "::warning title=winget::$1 By hand: packaging/README.md, \"Each release\"."; exit 0; }
-          if [ -z "${GH_TOKEN:-}" ]; then
-            echo "::notice title=winget::WINGET_PAT is not set; $VERSION is not sent to winget."
-            exit 0
-          fi
-          # A package's first version is reviewed as a new package and is sent by hand; until that is in,
-          # a "new version" has nothing to be a version of.
-          if ! gh api "repos/microsoft/winget-pkgs/contents/$DIR" >/dev/null 2>&1; then
-            echo "::notice title=winget::$ID is not in microsoft/winget-pkgs yet; $VERSION is not sent."
-            exit 0
-          fi
-          if gh api "repos/microsoft/winget-pkgs/contents/$DIR/$VERSION" >/dev/null 2>&1; then
-            echo "$ID $VERSION is in winget already."
-            exit 0
-          fi
-          me=$(gh api user --jq .login) || warn "The token could not be used."
-          branch="$ID-$VERSION"
-          if [ -n "$(gh pr list --repo microsoft/winget-pkgs --head "$branch" --author "$me" --state open --json number --jq '.[].number')" ]; then
-            echo "A pull request for $ID $VERSION is open already."
-            exit 0
-          fi
-          node scripts/release-recipes.mjs "$VERSION" --out "$RUNNER_TEMP/recipes" || warn "The manifests could not be filled."
-          from="$RUNNER_TEMP/recipes/winget/$DIR/$VERSION"
-          ls "$from"/*.yaml >/dev/null || warn "No manifests were written."
-
-          fork="$me/winget-pkgs"
-          gh repo view "$fork" >/dev/null 2>&1 || gh repo fork microsoft/winget-pkgs --clone=false || warn "Could not fork microsoft/winget-pkgs."
-          gh repo sync "$fork" --branch master >/dev/null || warn "Could not bring $fork up to date."
-          base=$(gh api "repos/$fork/git/ref/heads/master" --jq .object.sha) || warn "Could not read $fork."
-          base_tree=$(gh api "repos/$fork/git/commits/$base" --jq .tree.sha) || warn "Could not read $fork."
-          entries='[]'
-          for f in "$from"/*.yaml; do
-            entries=$(jq --arg path "$DIR/$VERSION/$(basename "$f")" --rawfile content "$f" \
-              '. + [{ path: $path, mode: "100644", type: "blob", content: $content }]' <<< "$entries")
-          done
-          tree=$(jq -n --arg base "$base_tree" --argjson tree "$entries" '{ base_tree: $base, tree: $tree }' \
-            | gh api "repos/$fork/git/trees" --input - --jq .sha) || warn "Could not write the manifests to $fork."
-          commit=$(jq -n --arg m "New version: $ID version $VERSION" --arg tree "$tree" --arg parent "$base" \
-            '{ message: $m, tree: $tree, parents: [$parent] }' \
-            | gh api "repos/$fork/git/commits" --input - --jq .sha) || warn "Could not commit to $fork."
-          # A branch left by a run that got this far and no further is moved, not tripped over.
-          gh api "repos/$fork/git/refs" -f ref="refs/heads/$branch" -f sha="$commit" >/dev/null 2>&1 \
-            || gh api -X PATCH "repos/$fork/git/refs/heads/$branch" -f sha="$commit" -F force=true >/dev/null \
-            || warn "Could not make the branch $branch in $fork."
-          body="The command line of [scmJS](https://github.com/$GITHUB_REPOSITORY) $VERSION: https://github.com/$GITHUB_REPOSITORY/releases/tag/v$VERSION
-
-          The manifests are the ones the earlier versions were made from, with this release's version, date and SHA-256. Opened by the release's own workflow."
-          gh pr create --repo microsoft/winget-pkgs --base master --head "$me:$branch" \
-            --title "New version: $ID version $VERSION" --body "$body" \
-            || warn "Could not open the pull request."

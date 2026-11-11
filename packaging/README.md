@@ -42,36 +42,26 @@ local build instead, with zeros for the archives not built here, to try a recipe
 
 ## Each release
 
-The release tells all three itself: the `packages` job at the end of `build.yml` runs once
-the release has its assets, on a numbered release only.
+The release tells Homebrew and Scoop itself: the `packages` job at the end of `build.yml`
+runs once the release has its assets, on a numbered release only. winget is still by hand.
 
-- **Homebrew.** It runs `scm-js/homebrew-tap`'s `update.yml` with the version. That fills
-  `Formula/scmjs.rb` from `packaging/homebrew/scmjs.rb` at the release's tag, with
+- **Homebrew.** The job runs `scm-js/homebrew-tap`'s `update.yml` with the version. That
+  fills `Formula/scmjs.rb` from `packaging/homebrew/scmjs.rb` at the release's tag, with
   `scripts/release-recipes.mjs`, installs it from the tap, runs `brew test`, and pushes it
   to main.
-- **Scoop.** It runs `scm-js/scoop-bucket`'s `excavator.yml`. Scoop's `checkver` reads the
-  newest scm-js release (the nightly is a pre-release and is skipped), and `autoupdate`
+- **Scoop.** The job runs `scm-js/scoop-bucket`'s `excavator.yml`. Scoop's `checkver` reads
+  the newest scm-js release (the nightly is a pre-release and is skipped), and `autoupdate`
   rewrites `bucket/scmjs.json` with its URL and the hash from its `SHA256SUMS`. The commit
   is pushed to main.
-- **winget.** It opens the version's pull request to `microsoft/winget-pkgs` from a fork:
-  the three files of `packaging/winget`, filled by `scripts/release-recipes.mjs`, as one
-  commit on a branch `scm-js.scmjs-<version>`. Microsoft's checks and a moderator do the
-  rest, which takes from hours to days. Nothing is sent while the package is not in
-  winget-pkgs at all (its first version is reviewed as a new package and goes in by hand,
-  "The first time" below), or when the version is there or has an open pull request.
+- **winget.** Each version is a pull request to `microsoft/winget-pkgs`:
+  `wingetcreate update scm-js.scmjs --version <v> --urls https://github.com/scm-js/scm-js/releases/download/v<v>/scmjs-cli-windows-x64.zip --submit`.
 
-The job needs two secrets in scm-js, and does its part for whichever is set:
-
-| Secret | What it is | Lets the job |
-| --- | --- | --- |
-| `PACKAGES_PAT` | A fine-grained token for `scm-js/homebrew-tap` and `scm-js/scoop-bucket` with Actions: read and write | run the two workflows |
-| `WINGET_PAT` | A classic token with `public_repo`, of the account whose fork of `winget-pkgs` the pull request comes from | write the branch to the fork and open the pull request |
-
-Without `PACKAGES_PAT` the tap and the bucket still follow by themselves: each workflow
-also runs on a schedule, every 4 hours as written and every 8 to 10 as GitHub runs it.
-Without `WINGET_PAT` a version goes to winget by hand:
-`wingetcreate update scm-js.scmjs --version <v> --urls https://github.com/scm-js/scm-js/releases/download/v<v>/scmjs-cli-windows-x64.zip --submit`.
-A step that fails leaves a warning on the run and does not fail it.
+The job needs one secret in scm-js: `PACKAGES_PAT`, a fine-grained token for
+`scm-js/homebrew-tap` and `scm-js/scoop-bucket` with Actions: read and write, which is what
+running a workflow there takes. Without it the tap and the bucket still follow by
+themselves: each workflow also runs on a schedule, every 4 hours as written and every 8 to
+10 as GitHub runs it. A workflow that could not be run leaves a warning on the release's
+run and does not fail it.
 
 A release whose archives are not uploaded yet is left for the next run. Either workflow can
 be run by hand from its repository's Actions tab: it updates nothing that is already

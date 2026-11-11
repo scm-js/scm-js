@@ -1983,16 +1983,16 @@ microsoft/winget-pkgs#475062. Both repos' main needs PRs, so their workflows pus
 key (`CI_BUILD_KEY`), the workflow token read-only. Trap: ScoopInstaller/GithubActions' Excavator sets the push URL to
 HTTPS with the workflow token (`src/Helpers.psm1`), so it cannot push past the PR rule — the bucket runs Scoop's
 `checkver -Update` in its own steps instead. `packaging/README.md` "Each release" has it all.
-**The release tells them (2026-11-11, the user's "without waiting 4 hours or so"):** `build.yml`'s `packages` job
-(stable only, `needs: release`) dispatches the tap's `update.yml -f version=` and the bucket's `excavator.yml` with
-`PACKAGES_PAT` (fine-grained, Actions: write on those two), and opens winget's pull request with `WINGET_PAT` (classic
-`public_repo`): the filled `packaging/winget` files as one commit through the git data API on `<token's user>/winget-pkgs`
-(synced first; no clone, the repository is gigabytes), branch `scm-js.scmjs-<version>`, `gh pr create`. Measured before:
-the "every 4 h" crons ran 8 to 10 h apart, and 0.13.3 (released 23:59) reached the tap at 07:12. Every step is a
-notice without its secret and a warning on failure, never a failed run; the crons stay as the net. The winget step
-stops while `manifests/s/scm-js/scmjs` is not in winget-pkgs (the first version, #475062, was still waiting for a
-moderator on 2026-11-11), so **its fork-and-PR half has not run for real yet**: only the manifest fill and the tree
-payload were tried, against 0.13.3. Read the first run's log.
+**The release tells the tap and the bucket (2026-11-11, the user's "without waiting 4 hours or so"):** `build.yml`'s
+`packages` job (stable only, `needs: release`) dispatches the tap's `update.yml -f version=` and the bucket's
+`excavator.yml` with `PACKAGES_PAT` (fine-grained, Actions: write on those two; set by the user the same day).
+Measured before: the "every 4 h" crons ran 8 to 10 h apart, and 0.13.3 (released 23:59) reached the tap at 07:12.
+Without the secret the step is a notice, a failed dispatch a warning, never a failed run; the crons stay as the net.
+**winget stays by hand** (`wingetcreate update … --submit`): a step that opened its pull request from the filled
+manifests through the git data API of a fork was written and then taken out at the user's word the same day (it
+needed a second, classic `public_repo` token, and could not run before the first version,
+microsoft/winget-pkgs#475062, is merged). It is in the branch's history (`release-packages`, commit ed42402) if it is
+wanted later.
 ## Many games and old maps: `map coverage`, `map check --baseline` (`coverage.ts`, `baseline.ts`) — 2026-11-07
 
 `scmjs map coverage <map> [replays…] [--tests] [--strict] [--format text|json|github|junit|sarif] [--all] [--force]

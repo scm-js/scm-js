@@ -79,6 +79,7 @@ import { shownPath } from "./mod/source";
 import { chooseLocale, inEnglish, locale, setLocale, t, translate } from "./i18n";
 import { commanderError, helpExtras, helpTitle } from "./commanderText";
 import { CliError, columns, dot, gameText, mark, num, padColumns, pc, print, rows, size, table, visible } from "./ui";
+import { parseFrames, parseWhole } from "./values";
 
 /** The widest a command's term in the overview may be, so its description stays beside it (banner.ts fits 80 columns). */
 const TERM_WIDTH = 28;
@@ -726,12 +727,8 @@ plugin changed it. Exits 1 when the plugin does not load or throws.`))
       else say(piped, ...printRun(input.name, r, { dryRun: !!o.dryRun }));
     });
 
-  /** `--frames`, `--every`, `--seed`: whole numbers, or exit 2. */
-  function whole(value: string, name: string, least = 0): number {
-    const n = Number(value);
-    if (!Number.isInteger(n) || n < least) throw new CliError(least ? t("--{name} takes a whole number of {least} or more, not \"{value}\"", { name, least, value }) : t("--{name} takes a whole number, not \"{value}\"", { name, value }), null, 2);
-    return n;
-  }
+  /** `--every`, `--seed`, `--games`: whole numbers, or exit 2 (values.ts reads them for every command alike). */
+  const whole = parseWhole;
   const gameOptions = (cmd: Command) => cmd
     .option("--frames <n>", t("frames to run (24 a second); the game may end sooner"), "2400")
     .option("--every <n>", t("frames between progress lines; 0 for none"), "600")
@@ -760,7 +757,7 @@ plugin changed it. Exits 1 when the plugin does not load or throws.`))
       const { input, doc } = await openForEdit(file);
       const game = await gameMap(doc, input.path, input.name);
       if (game.converted && !o.json) print(pc.dim(t("{name} is in the StarCraft 1.00 form, which the engine does not run: a copy converted to Brood War is run instead", { name: input.name })));
-      return { name: input.name, scenario: doc.scenario, map: game.path as string | null, replay: undefined, frames: whole(o.frames, "frames", 1), extra: {} };
+      return { name: input.name, scenario: doc.scenario, map: game.path as string | null, replay: undefined, frames: parseFrames(o.frames), extra: {} };
     }
     const replayInput = await readInput(o.replay);
     expectKind(replayInput, "replay");
@@ -773,7 +770,7 @@ plugin changed it. Exits 1 when the plugin does not load or throws.`))
       if (run.converted) print(pc.dim(t("{name} is in the StarCraft 1.00 form, which the engine does not run: a copy converted to Brood War is played instead", { name: named ? named.input.name : t("The map in {file}", { file: replayInput.name }) })));
       if (named && run.differs) print(`${mark.warn} ${t("{name} differs from the map in the replay {how}. A changed map can make the replay go out of step: when a unit a player clicked is not there, the game plays on with commands meant for another game. The trace says if that happens.", { name: named.input.name, how: pc.dim(`(${run.differs})`) })}`);
     }
-    const frames = cmd.getOptionValueSource("frames") === "default" ? undefined : whole(o.frames, "frames", 1);
+    const frames = cmd.getOptionValueSource("frames") === "default" ? undefined : parseFrames(o.frames);
     return { name: replayInput.name, scenario: run.scenario, map: run.map, replay: replayInput.path, frames, extra: { replayFile: replayInput.name, map: named?.input.name ?? null, differs: run.differs } };
   }
 
@@ -904,7 +901,7 @@ as for scmjs bot ladder. Exits 1 when a game could not be played, 2 when the map
       let r;
       try {
         r = await runBalance(input.name, input.path, doc, {
-          bots, races, seeds, frames: whole(o.frames, "frames", 1), parallel: o.parallel === undefined ? undefined : whole(o.parallel, "parallel", 1), timeout: whole(o.timeout, "timeout", 1),
+          bots, races, seeds, frames: parseFrames(o.frames), parallel: o.parallel === undefined ? undefined : whole(o.parallel, "parallel", 1), timeout: whole(o.timeout, "timeout", 1),
           out: o.out, rush: o.rush, starcraft: o.starcraft, engine: o.engine, play: play.path, rushPlay: rushPlay?.path, live: say,
         });
       } finally { removeGameMap(play.path); if (rushPlay) removeGameMap(rushPlay.path); }
@@ -919,7 +916,7 @@ as for scmjs bot ladder. Exits 1 when a game could not be played, 2 when the map
     if (typeof o.clips === "string" && /\.json$/i.test(o.clips)) { testFiles.push(o.clips); o.clips = true; }
     if (!(FORMATS as readonly string[]).includes(o.format)) throw new CliError(t("--format takes {formats}, not \"{value}\"", { formats: FORMATS.join(", "), value: o.format }), null, 2);
     const format: Format = o.json ? "json" : (o.format as Format);
-    const defaults = { frames: whole(o.frames, "frames", 1), seed: whole(o.seed, "seed") };
+    const defaults = { frames: parseFrames(o.frames), seed: whole(o.seed, "seed") };
     const input = await readInput(file);
     expectKind(input, "map");
     if (input.path === STDIO && !testFiles.length) throw new CliError(t("A map read from standard input has no tests beside it: name the tests file."), null, 2);
@@ -996,7 +993,9 @@ the game ended with — how often each trigger fired, the switches, the lines sh
 minerals, gas and deaths. Delete the expectations you do not care about; scmjs map test runs the scenario against
 the map as it is then, and scmjs map test -u writes in what has changed.`) + `
   scmjs map test record bunker.scx bug-report.rep --name "bunker fills at 7:30"`)
-    .action(async (file: string, replayFile: string, o: { json?: boolean; name?: string; tests?: string; frames?: string; starcraft?: string; engine?: string }) => {
+    .action(async (file: string, replayFile: string, local: { json?: boolean; name?: string; tests?: string; frames?: string; starcraft?: string; engine?: string }, cmd: Command) => {
+      // map test declares --json, --frames, --starcraft and --engine too, and takes them wherever they are typed.
+      const o = typedOptions(cmd, local, ["json", "frames", "starcraft", "engine"]);
       const input = await readInput(file);
       expectKind(input, "map");
       const replayInput = await readInput(replayFile);
@@ -1007,11 +1006,13 @@ the map as it is then, and scmjs map test -u writes in what has changed.`) + `
       const players = rep.players.filter((p) => p.type === 1 || p.type === 2).map((p) => ({ slot: p.index, name: p.name, computer: p.type === 1 }));
       const map = await readMapForTests(input.bytes);
       const r = await recordTest(input.name, map, { path: replayInput.path, frames: rep.header.frames, players }, o.tests ?? defaultTests(input.path), {
-        name: o.name ?? basename(replayInput.name).replace(/\.rep$/i, ""), frames: o.frames === undefined ? undefined : whole(o.frames, "frames", 1),
+        name: o.name ?? basename(replayInput.name).replace(/\.rep$/i, ""), frames: o.frames === undefined ? undefined : parseFrames(o.frames),
         out: defaultOut(input.path), starcraft: o.starcraft, engine: o.engine, live: o.json ? undefined : (line) => print(line),
       });
-      if (o.json) print(JSON.stringify(r, null, 2));
-      else print(...recordLines(r));
+      // The map as it was typed, for the hint's command and the JSON (the runner had its name).
+      const typed = { ...r, map: file };
+      if (o.json) print(JSON.stringify(typed, null, 2));
+      else print(...recordLines(typed));
     });
 
   map.command("preview").description(t("a picture of the map in the terminal, or as a PNG, with your copy of the game's graphics")).argument("<map>").addOption(json)
@@ -1895,6 +1896,21 @@ the setup for each editor. Needs TypeScript, as map build does.`))
 // build theirs in English unless they set one.
 if (!process.env.VITEST) setLocale(chooseLocale(process.argv.slice(2)));
 export const program = buildProgram();
+
+/**
+ * A subcommand's options with those its parent declares too: commander gives an option both declare to the parent,
+ * wherever it is typed (`map test record … --json` sets `map test`'s), so what was typed there (not a default) is
+ * read from the parent.
+ */
+export function typedOptions<T extends object>(cmd: Command, local: T, keys: readonly (keyof T & string)[]): T {
+  const o = { ...local };
+  const parent = cmd.parent;
+  if (!parent) return o;
+  for (const key of keys) {
+    if (o[key] === undefined && ["cli", "env"].includes(parent.getOptionValueSource(key) ?? "")) (o as Record<string, unknown>)[key] = parent.opts()[key];
+  }
+  return o;
+}
 
 /** Runs the command line on `process.argv`. Not a top-level await: the single executable's bundle is CommonJS. */
 async function run() {

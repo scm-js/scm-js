@@ -200,8 +200,9 @@ walkable from the game's tilesets, and `map generate` lays its ground with them.
 itself. They need two things on your computer:
 
 - Your copy of StarCraft, Remastered or 1.16.1. It is found in the usual places; otherwise
-  name its folder with `--starcraft <folder>` or the `SCMJS_STARCRAFT` setting. Nothing of
-  the game is fetched or carried by the command.
+  name its folder with `--starcraft <folder>` or the `SCMJS_STARCRAFT` setting. A
+  `SCMJS_STARCRAFT` that names no copy of the game is said, with the copy used instead.
+  Nothing of the game is fetched or carried by the command.
 - The game engine, for the commands that run the game. It is the engine of
   [scmjs.dev/play](https://scmjs.dev/play/), about 25 MB to download (105 MB once on
   disk), fetched the first time a command needs it and kept in your cache folder
@@ -1760,10 +1761,15 @@ The tests are read from `<map>.tests.json` beside the map (`ums.tests.json` for
 }
 ```
 
-A scenario has a `name`, and may have `frames`, `seed`, `setup`, `steps` and `expect`.
-`frames` is how long to play: a number of frames, 24 to a second at Fastest, or `"m:ss"`;
-2,400 unless the file or `--frames` says otherwise. `frames` and `seed` at the top of the
-file apply to every scenario that does not set its own.
+A scenario has a `name` and an `expect` list, and may have `frames`, `seed`, `setup` and
+`steps`. A scenario that expects nothing would pass whatever the game did, so it is
+refused, as are two scenarios of one name in a file. A key the tests do not know, at any
+level, is refused with where it is and the nearest key they do know
+(`"frams": did you mean "frames"?`), so a misspelt key never goes unnoticed. A key that
+starts with `//` is a comment and is left alone. `frames` is how long to play: a number of
+frames, 24 to a second at Fastest, or `"m:ss"`; 2,400 unless the file or `--frames` says
+otherwise. `frames` and `seed` at the top of the file apply to every scenario that does
+not set its own.
 
 A scenario may name a `replay` instead of `setup` and `steps`. The replay's commands drive
 the game, played on the map being tested, and the scenario plays to the replay's end
@@ -1853,8 +1859,10 @@ trigger numbers in the report are the map's own.
 
 Because these triggers are part of the copy, the replay holds them. A failed scenario's
 replay is kept in `<map>.tests/` beside the map (or where `--out` says) and plays back the
-scenario exactly as it ran. `scmjs replay open` opens it in the editor, where the test's
-own triggers show first and last among the map's.
+scenario exactly as it ran. It is named after the tests file and the scenario, as the
+clips are (`ums.tests.loses.rep`), and it is removed once the scenario passes.
+`scmjs replay open` opens it in the editor, where the test's own triggers show first and
+last among the map's.
 
 `--clips` also keeps a clip of each failed scenario, to see what went wrong without
 opening the replay: the eight seconds of its game up to the moment it ended, and two more,

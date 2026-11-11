@@ -138,7 +138,7 @@ describe("map coverage: the run", () => {
   it("counts a tests file's scenarios as games", async () => {
     const dir = tmp();
     const tests = join(dir, "ums.tests.json");
-    writeFileSync(tests, JSON.stringify({ scenarios: [{ name: "quiet", frames: 100 }, { name: "quiet again", frames: 200 }] }));
+    writeFileSync(tests, JSON.stringify({ scenarios: [{ name: "quiet", frames: 100, expect: [{ ended: false }] }, { name: "quiet again", frames: 200, expect: [{ ended: false }] }] }));
     const answer = join(dir, "answer.json");
     writeFileSync(answer, JSON.stringify({ frame: 100, trace: [copy({ player: 0, row: 0, fired: 3, firstFired: 2 }), copy({ player: 0, row: 1, failed: 3, lastFail: { slot: 0, type: 3, frame: 64 } }), copy({ player: 1, row: 2, fired: 1, firstFired: 50 })] }));
     process.env.SCMJS_TEST_ANSWER = answer;

@@ -43,7 +43,7 @@
   "homepage": "https://docs.scmjs.dev/core/",
   "bugs": "https://github.com/scm-js/scm-js/issues",
   "dependencies": {
-    "mopaq": "^1.6.2"
+    "mopaq": "^1.6.3"
   },
   "scripts": {
     "prepack": "cd .. && node scripts/build-core.mjs"

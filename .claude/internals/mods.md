@@ -129,6 +129,17 @@ the first cut, 319,758 now.
   `openModSource` still reads a named file whole to tell what it is before `diskFiles` reads it again (Burning Ground's
   exe: 519 MB twice; not something 1.1.0 gives).
 
+
+## @scm-js/mod 1.2.0 (2026-11-12, branch `mod-1-2`)
+
+Only the range moves (`package.json`, `core/package.json`, the lock). What changes for the command line, the core and
+the installer comes from the package: an archive without a list of its files is searched for the names 1.16.1's own
+image, sound and portrait tables give too (the package carries them, names only), as the play page always searched
+with the person's tables. So such an archive that holds a file only those tables name is found to hold it here now,
+and its hash is the page's. No reader here ever passed `ReadOptions.tables`, which is deprecated and no longer asked.
+The hash such an archive had here before is in `identity.earlier` (`without-stock-names`), which `replaymod.ts`
+already takes whole. No mod in hand changes: SC Revolution, the one without a list, carries its own tables.
+
 ## Decisions (taken by the user, 2026-11-08 — do not reopen)
 
 - PyMS's dialects and graftc's text are *the* text forms; indexed PNG sheets with the palette named (default

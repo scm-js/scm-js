@@ -230,8 +230,9 @@ dot (`.git`) is a tool's and is never read.
 
 A zip's stored and deflated members are read; a zip64 or encrypted zip is not. An
 archive's list of its files is taken as its files; an archive with no list is searched for
-the names the game reads. A name the list holds and the archive does not (Cosmonarchy's
-loader lists six tileset files it never packed) is left out and said.
+the names the game reads, the names its own image, sound and portrait tables give, and the
+names the game's own three tables give. A name the list holds and the archive does not
+(Cosmonarchy's loader lists six tileset files it never packed) is left out and said.
 
 A copy of the game in the folder is not the mod. Some downloads carry the whole game the
 mod runs on beside the mod itself; a folder that holds a `StarDat.mpq` is taken for such a

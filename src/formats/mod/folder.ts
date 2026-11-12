@@ -37,8 +37,8 @@ import { grpToPng, pngToGrp, type NamedPalette, type QuantiseReport } from "../d
 import { buttonGraftFromText, buttonGraftToText, decodeButtonGraft, decodeReqGraft, encodeButtonGraft, encodeReqGraft, reqGraftFromText, reqGraftToText } from "../dat/graft";
 import { decodePng, isPng } from "../png";
 import type { TextEncoding } from "../text/encoding";
-import { gameName } from "./sources";
-import { normalizeRaces, type DataSetRace } from "./races";
+import { gameName } from "@scm-js/mod";
+import { normalizeRaces, type DataSetRace } from "@scm-js/mod";
 
 /** The manifest's file name, at the folder's root. */
 export const MOD_MANIFEST = "mod.json";

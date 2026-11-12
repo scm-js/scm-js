@@ -1,7 +1,9 @@
 /**
  * `scmjs mod unpack <source> <dir>`: a mod as a folder of text and pictures (`src/formats/mod/folder.ts` has the
  * layout). Each member is written as text or a PNG sheet only when that packs back to the same bytes; anything else is
- * kept as bytes under `files/`, and `mod.json` says which and why. Plugins and FireGraft files are copied as they are.
+ * kept as bytes under `files/`, and `mod.json` says which and why. Plugins and FireGraft files are copied as they are,
+ * and so is every other module of the mod's code its hash has a line for (a plugin a patcher exe carries in itself, a
+ * library its plugins load), under `plugins/`, so the folder packs back to the same mod and the same hash.
  */
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
@@ -9,13 +11,13 @@ import {
   DEFAULT_PALETTE, emptyManifest, MOD_FOLDERS, MOD_MANIFEST, recordRendered, renderAiScripts, renderMember, tidyManifest, folderPath,
   type ModManifest, type Rendered,
 } from "../../../src/formats/mod/folder";
-import { gameName } from "../../../src/formats/mod/sources";
+import { gameName, leafOf } from "@scm-js/mod";
 import { loadModData } from "../../../src/formats/mod/data";
 import { datTableOf, type DatTableName } from "../../../src/formats/dat/schema";
 import type { GameFiles } from "../gamefiles";
-import { inEnglish, t } from "../i18n";
+import { t } from "../i18n";
 import { CliError } from "../ui";
-import { gameCopyFolders, gameCopyWords, reader, type ModSource } from "./source";
+import { gameCopySaid, reader, type CarriedFile, type ModSource } from "./source";
 import { modTarget } from "./target";
 
 export interface UnpackReport {
@@ -129,11 +131,13 @@ export async function unpackMod(source: ModSource, dir: string, o: UnpackOptions
     }
   }
 
-  // Plugins and FireGraft files, as they are.
-  for (const [list, folder, into] of [[source.plugins, MOD_FOLDERS.plugins, manifest.plugins], [source.firegraft, MOD_FOLDERS.firegraft, manifest.firegraft]] as const) {
+  // Plugins and FireGraft files, as they are; and the rest of the mod's code by the name its hash knows it by.
+  const asFiles = new Set(source.plugins.filter((p) => !p.member).map((p) => leafOf(p.name).toLowerCase()));
+  const otherCode: CarriedFile[] = source.code.filter((c) => !asFiles.has(c.name.toLowerCase()));
+  for (const [list, folder, into] of [[[...source.plugins, ...otherCode], MOD_FOLDERS.plugins, manifest.plugins], [source.firegraft, MOD_FOLDERS.firegraft, manifest.firegraft]] as const) {
     const names = new Set<string>();
     for (const p of list) {
-      let leaf = p.name.split(/[\\/]/).pop()!;
+      let leaf = leafOf(p.name);
       while (names.has(leaf.toLowerCase())) leaf = `${leaf.replace(/(\.[^.]+)$/, "")}.2${leaf.match(/\.[^.]+$/)?.[0] ?? ""}`;
       names.add(leaf.toLowerCase());
       const file = `${folder}/${folderPath(leaf)}`;
@@ -141,13 +145,13 @@ export async function unpackMod(source: ModSource, dir: string, o: UnpackOptions
       const path = join(out, ...file.split("/"));
       await mkdir(dirname(path), { recursive: true });
       await writeFile(path, data);
-      into.push({ name: p.name.split(/[\\/]/).pop()!, bytes: data.length, file, ...(p.member ? { member: p.member } : {}) });
+      into.push({ name: leafOf(p.name), bytes: data.length, file, ...(p.member ? { member: p.member } : {}) });
       bytes += data.length;
     }
   }
   if (source.probed.length) manifest.notes.push(`${source.probed.join(", ")} had no list of its files: only the names the game reads were found in it`);
   // (mod.json is in English whatever the language, as every file a command writes.)
-  for (const copy of gameCopyFolders(source)) manifest.notes.push(inEnglish(() => gameCopyWords(copy)));
+  for (const said of gameCopySaid(source)) manifest.notes.push(said.text);
   if (!palette) manifest.notes.push(`no palette ${paletteName} was found (the mod's tileset\\${paletteName}.wpe, or the game's): the GRPs are kept as bytes`);
   tidyManifest(manifest);
   await writeFile(join(out, MOD_MANIFEST), `${JSON.stringify(manifest, null, 2)}\n`);

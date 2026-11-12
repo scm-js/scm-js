@@ -1,10 +1,10 @@
 /**
  * A replay's mod. A replay records commands, not the files the game read, so scm-sim and the editor's tools add an
  * `SCMJ` section that names the mod a game was played with (`@scm-js/replay`'s `mod`: the data set's hash, name and
- * link, the plugins that ran). Here: the mod named with `--mod` checked against it by that hash (the play page's rule,
- * core's `modHashOfDigests` over every file the mod provides, with its plugins or without them; and, for a replay
- * tagged before that rule, the older forms: the game files alone, or those that differ from the person's game; and each
- * of these as it was while an operating system's files had lines, where the mod has such files), the names and costs of
+ * link, the plugins that ran). Here: the mod named with `--mod` checked against it by that hash (`@scm-js/mod`'s
+ * identity of the mod, with its code or without it; and, for a replay tagged by an earlier rule, the older forms: the
+ * hash before every module of a mod's code had a line, the hashes while an operating system's files had lines, the
+ * game files alone, or those that differ from the person's game), the names and costs of
  * units, upgrades and technologies from the mod's tables (the game's for a replay of the game itself, and bare ids for
  * a mod's replay with no mod named: never the game's name for a mod's id), and the refusal of the commands that play a
  * replay, which would play another game with other files.
@@ -13,9 +13,7 @@ import { FRAME_MS, type ModTag, type Replay } from "@scm-js/replay";
 import { techName, unitName, upgradeName } from "../../src/data/units";
 import type { DatFile } from "../../src/formats/dat/table";
 import { loadModData, type ModData } from "../../src/formats/mod/data";
-import type { DataSetRace } from "../../src/formats/mod/races";
-import { hashLinesAsWere } from "../../src/formats/mod/hash";
-import { dataSetHashOfDigests, fileDigest, gameName } from "../../src/formats/mod/sources";
+import { hashLines, hashLinesAsWere, sha256Hex, type DataSetRace } from "@scm-js/mod";
 import { sourceHash } from "./mod/hash";
 import type { GameFiles } from "./gamefiles";
 import { t, translate } from "./i18n";
@@ -34,8 +32,10 @@ export interface ModHashes {
   all: string;
   changed: string | null;
   /**
-   * Each of those as it was until 2026-11-09, while an operating system's files (`desktop.ini`, …) had lines: there
-   * only for a mod that has such files where the command line reads them. A replay tagged then names the mod by one.
+   * The mod's hash by the rule before 2026-11-11 (`beforeCode`), and its hashes while an operating system's files
+   * (`desktop.ini`, …) had lines (until 2026-11-09), where the mod has any: by the rule then, and the two forms before it
+   * (the game files alone, those that differ from the person's game) with those files' lines, as the play page tagged
+   * its replays until 2026-11-08. A replay tagged then names the mod by one.
    */
   older: string[];
 }
@@ -45,22 +45,18 @@ export async function sourceHashes(source: ModSource, base: GameFiles | null): P
   const h = await sourceHash(source);
   let changed: string | null = null, changedWere: string | null = null;
   if (base) {
-    const differ: { name: string; sha256: string }[] = [];
-    for (const f of source.files.values()) {
+    const differ: string[] = [];
+    for (const [name, f] of source.files) {
       let data: Uint8Array;
       try { data = await f.read(); } catch { continue; }
       const theirs = await base.read(f.name);
-      if (!(theirs && theirs.length === data.length && theirs.every((b, i) => b === data[i]))) differ.push({ name: f.name, sha256: await fileDigest(data) });
+      if (!(theirs && theirs.length === data.length && theirs.every((b, i) => b === data[i]))) differ.push(`${name}\t${await sha256Hex(data)}`);
     }
-    changed = await dataSetHashOfDigests(differ);
+    changed = await hashLines(differ);
     // (An operating system's file is in no copy of the game, so it always differed.)
-    if (source.system.size) {
-      const lines = new Map(differ.map((f) => [gameName(f.name), f.sha256]));
-      for (const [name, f] of source.system) { try { lines.set(name, await fileDigest(await f.read())); } catch { /* left out then too */ } }
-      changedWere = await hashLinesAsWere([...lines].map(([name, sha]) => `${name}\t${sha}`));
-    }
+    if (h.systemLines.length) changedWere = await hashLinesAsWere([...differ, ...h.systemLines]);
   }
-  const older = [h.older?.hash, h.older?.withoutPlugins, h.gameFilesOnlyWere, changedWere].filter((x): x is string => !!x);
+  const older = [h.beforeCode, h.older?.hash, h.older?.withoutPlugins, h.gameFilesOnlyWere, changedWere].filter((x): x is string => !!x);
   return { hash: h.hash, withoutPlugins: h.withoutPlugins, all: h.gameFilesOnly, changed, older };
 }
 

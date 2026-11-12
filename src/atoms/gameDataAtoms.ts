@@ -2,7 +2,7 @@ import { atom } from "jotai";
 import { atomWithStorage } from "jotai/utils";
 import { DEFAULT_PROFILE, racesTableWith } from "../gamedata/profiles";
 import { currentAssetSource, setAssetSource, type AssetSource } from "../gamedata/source";
-import type { DataSetRace } from "../formats/mod/races";
+import type { DataSetRace } from "@scm-js/mod";
 import { mergedStorage } from "./storage";
 
 /**

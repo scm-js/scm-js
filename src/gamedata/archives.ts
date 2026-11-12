@@ -5,6 +5,7 @@
  * `scripts/lib/archives.mjs` because they also find the files on disk.
  */
 import { Archive } from "mopaq";
+import type { ModEntry, ModFiles } from "@scm-js/mod";
 import type { ReadMember } from "./extract";
 
 export interface OpenedArchive {
@@ -42,16 +43,13 @@ export function isStarEditDownload(archives: readonly { name: string; size: numb
   return Object.entries(STAREDIT_SIZES).every(([name, size]) => named.get(name) === size);
 }
 
-/**
- * Open each archive that opens; the ones that do not are reported, not thrown. `offset`: where the header is in the
- * bytes, for an archive inside a mod's exe (its tables may lie before its header).
- */
-export function openArchives(inputs: { name: string; bytes: Uint8Array; offset?: number }[]): { archives: OpenedArchive[]; problems: string[] } {
+/** Open each archive that opens; the ones that do not are reported, not thrown. */
+export function openArchives(inputs: { name: string; bytes: Uint8Array }[]): { archives: OpenedArchive[]; problems: string[] } {
   const archives: OpenedArchive[] = [];
   const problems: string[] = [];
-  for (const { name, bytes, offset } of sortArchives(inputs)) {
+  for (const { name, bytes } of sortArchives(inputs)) {
     try {
-      archives.push({ name, archive: Archive.open(bytes, offset === undefined ? undefined : { offset }) });
+      archives.push({ name, archive: Archive.open(bytes) });
     } catch (err) {
       problems.push(`${name}: ${err instanceof Error ? err.message : String(err)}`);
     }
@@ -61,6 +59,15 @@ export function openArchives(inputs: { name: string; bytes: Uint8Array; offset?:
 
 /** A member path as the overlay keys it: lower case, backslashes, no leading separator. */
 export const memberKey = (path: string) => path.replaceAll("/", "\\").replace(/^\\+/, "").toLowerCase();
+
+/** The member prefixes an extraction ever asks for: a mod's files under any other folder are not read for it. */
+const MEMBER_PREFIXES = ["arr\\", "tileset\\", "unit\\", "game\\", "scripts\\", "rez\\"];
+
+/** Whether a file could be a game data member the extraction reads: its path starts with one of the folders it reads. */
+export function isMemberPath(path: string): boolean {
+  const key = memberKey(path);
+  return MEMBER_PREFIXES.some((prefix) => key.startsWith(prefix));
+}
 
 /**
  * A `ReadMember` over the archives: the last one that has the member answers. `overlay`
@@ -82,5 +89,28 @@ export function readerFor(archives: OpenedArchive[], overlay?: ReadonlyMap<strin
       }
     }
     return null;
+  };
+}
+
+/**
+ * A data set's mod (`ExtractRequest.mod`: its files by path, as `Blob`s or bytes) as the files `@scm-js/mod`'s
+ * `readMod` reads. An archive or a program is read once and kept (the reader opens it, and the
+ * extraction reads its members again after); any other file each time it is asked for.
+ */
+export function modTree(mod: { name: string; files: readonly { path: string; data: Blob | ArrayBuffer }[]; layout?: "game" }): ModFiles {
+  const byPath = new Map(mod.files.map((f) => [f.path, f.data]));
+  const kept = new Map<string, Promise<Uint8Array>>();
+  const bytes = async (data: Blob | ArrayBuffer) => new Uint8Array(data instanceof Blob ? await data.arrayBuffer() : data);
+  return {
+    name: mod.name,
+    ...(mod.layout ? { layout: mod.layout } : {}),
+    list: async () => mod.files.map((f): ModEntry => ({ path: f.path, size: f.data instanceof Blob ? f.data.size : f.data.byteLength })),
+    read: (path) => {
+      const data = byPath.get(path);
+      if (!data) return Promise.reject(new Error(`${path} is not among ${mod.name}'s files`));
+      if (!/\.(mpq|exe|zip)$/i.test(path)) return bytes(data);
+      if (!kept.has(path)) kept.set(path, bytes(data));
+      return kept.get(path)!;
+    },
   };
 }

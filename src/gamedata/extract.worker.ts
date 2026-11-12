@@ -13,20 +13,24 @@
  * source that is not a full installation has none and the copy is the editor's alone; so is
  * a copy that could only be kept in memory.
  *
+ * A data set's mod arrives as its files (`ExtractRequest.mod`) and is read here by
+ * `@scm-js/mod` (`readMod`): which of its files win, its code and its hash. The game files it
+ * lays that the extraction reads are laid over the game's archives (or the copy underneath).
+ *
  * Nothing here is in the user's language: the locale is the main thread's, never set in this
  * module instance. A progress line or an error goes back in English with its template and
- * values (`ExtractText`), which `install.ts#runWorker` translates as it arrives. The problems
- * stay English; they only reach the console.
+ * values (`ExtractText`), or as the package's message (`mod`), which `install.ts#runWorker`
+ * translates as it arrives. The problems stay English; they only reach the console.
  */
-import { isGameArchive, isStarEditDownload, memberKey, openArchives, readerFor } from "./archives";
+import { fileReaders, ModError, readMod, type ModMessage } from "@scm-js/mod";
+import { isMemberPath, isStarEditDownload, memberKey, modTree, openArchives, readerFor } from "./archives";
 import { describeExtraction, ExtractError, extractGameData, reportStep, type ExtractProgress, type ExtractText, type GameDataExtraction } from "./extract";
 import { msg } from "../i18n";
 import { copyPlaySet } from "./play";
 import { DEFAULT_PROFILE, type GameDataProfile } from "./profiles";
 import { extractRemastered, pickedFilesSource, type PickedFile } from "./remastered";
 import { readStored, writeStoredCopy, type StoredStamp } from "./store";
-import { dataSetHashOf, extractOverCopy, hdOffImages, type CopyReader } from "./overCopy";
-import { probeNames } from "../formats/mod/hash";
+import { extractOverCopy, hdOffImages, type CopyReader } from "./overCopy";
 import type { ReadMember } from "./extract";
 
 /** The copy a data set is laid over, read a file at a time: from this browser's storage, or from the build's own files. */
@@ -47,14 +51,12 @@ function copyReader(base: NonNullable<ExtractRequest["base"]>): CopyReader {
 
 export interface ExtractRequest {
   kind: "extract";
-  /** `offset`: where the archive's header is in `bytes` (a mod's exe, handed whole: its archive's tables may lie before its header). */
-  archives: { name: string; bytes: ArrayBuffer; offset?: number }[];
+  /** The game's own archives (`StarDat.mpq`, `BrooDat.mpq`, `patch_rt.mpq`). */
+  archives: { name: string; bytes: ArrayBuffer }[];
   /** What the stamp records as the origin. */
   from: string;
   /** The data set being installed; the game's own when absent. */
   profile?: GameDataProfile;
-  /** Loose files laid over the archives, by member path. */
-  overlay?: { path: string; bytes: ArrayBuffer }[];
   /** A StarCraft: Remastered installation folder, read in the archives' place. */
   remastered?: FileSystemDirectoryHandle | PickedFile[];
   /** Keep what the play page's real-time lighting reads of Remastered's sprites (about 200 MB more). */
@@ -66,18 +68,18 @@ export interface ExtractRequest {
    */
   base?: { profile: string } | { url: string };
   /**
-   * The set's other files in the game's folders (`sound\…`, `font\…`): the extraction does
-   * not read them, but they are the mod's, so its hash covers them as the play page's does.
+   * A data set's mod: its files by path (a picked folder's from the folder's parent; `layout` "game" when they are in the
+   * game's paths, archives at the top). Read with `@scm-js/mod`'s `readMod`: what it lays is laid over the archives
+   * (or the copy underneath), and its hash is the set's.
    */
-  hashOnly?: { path: string; data: Blob | ArrayBuffer }[];
-  /** The plugins (`.qdp`, `.bwl`) and FireGraft files the set carries as files: never run, only hashed. */
-  code?: { path: string; data: Blob | ArrayBuffer }[];
+  mod?: { name: string; files: { path: string; data: Blob | ArrayBuffer }[]; layout?: "game" };
 }
 
 export type ExtractResponse =
-  | { kind: "progress"; fraction: number; label: string; message?: ExtractText }
+  | { kind: "progress"; fraction: number; label: string; message?: ExtractText; mod?: ModMessage }
   | { kind: "done"; stamp: StoredStamp; where: "opfs" | "memory"; problems: string[]; files?: [string, ArrayBuffer][] }
-  | { kind: "error"; message: string; text?: ExtractText };
+  | { kind: "error"; message: string; text?: ExtractText; mod?: ModMessage };
+
 
 const post = (reply: ExtractResponse, transfer: Transferable[] = []) => (self as unknown as Worker).postMessage(reply, transfer);
 /** Progress over `scale` of the bar from `start`. */
@@ -114,12 +116,24 @@ self.onmessage = async (e: MessageEvent<ExtractRequest>) => {
     } else {
       reportStep(progressOver(0, 1), 0, msg("Opening the archives"));
       staredit = !req.base && isStarEditDownload(req.archives.map((a) => ({ name: a.name, size: a.bytes.byteLength })));
-      const opened = openArchives(req.archives.map((a) => ({ name: a.name, bytes: new Uint8Array(a.bytes), offset: a.offset })));
+      const opened = openArchives(req.archives.map((a) => ({ name: a.name, bytes: new Uint8Array(a.bytes) })));
       problems = opened.problems;
       if (opened.archives.length === 0 && !req.base) throw problems[0] ? new Error(problems[0]) : new ExtractError(msg("No archive could be opened."));
 
+      // The mod (`@scm-js/mod`): every file it lays over the game, each from the layer that wins it, and its hash —
+      // every file of its own and every module of its code, never what it is laid over. The ones the extraction reads
+      // are laid over the game's archives as loose files are.
       const overlay = new Map<string, Uint8Array>();
-      for (const { path, bytes } of req.overlay ?? []) overlay.set(memberKey(path), new Uint8Array(bytes));
+      let modFile: (name: string) => Promise<Uint8Array | null> = async () => null;
+      if (req.mod) {
+        const tree = modTree(req.mod);
+        const d = await readMod(tree, { progress: (m) => post({ kind: "progress", fraction: 0, label: m.text, mod: m }) });
+        if (d.files.length) hash = d.identity.hash;
+        const readOf = fileReaders(tree, d);
+        const winners = new Map(d.files.map((f) => [f.name, f]));
+        for (const f of d.files) if (isMemberPath(f.name)) overlay.set(f.name, await readOf(f)());
+        modFile = async (name) => { const f = winners.get(memberKey(name)); return f ? readOf(f)() : null; };
+      }
       const reader: ReadMember = readerFor(opened.archives, overlay.size ? overlay : undefined);
 
       // Extraction is 0–80% of the bar, the write the rest.
@@ -133,28 +147,9 @@ self.onmessage = async (e: MessageEvent<ExtractRequest>) => {
         overCopy = true;
       } else {
         result = extractGameData(reader, progressOver(0, 0.8));
-        member = async (name) => reader(name);
+        // (the play set: the mod's file where it lays one — its sounds too — else the game's)
+        member = async (name) => (await modFile(name)) ?? reader(name);
       }
-
-      // The set's hash (core's `modHashOfDigests`, as the play page and the command line have it): every file of its
-      // own — loose, and in its own archives — and the plugins and FireGraft files it carries; never what it is laid over.
-      const own = opened.archives.filter((a) => !isGameArchive(a.name));
-      const ownRead = readerFor(own, overlay.size ? overlay : undefined);
-      const more = new Map((req.hashOnly ?? []).map((f) => [memberKey(f.path), f.data]));
-      const bytesOf = async (data: Blob | ArrayBuffer) => new Uint8Array(data instanceof Blob ? await data.arrayBuffer() : data);
-      // An archive's list of its files is its files, as the play page reads it; one with no list is looked into by name.
-      const members = own.flatMap((a) => {
-        const listed = (a.archive.files() ?? []).filter((n) => !n.startsWith("("));
-        return listed.length ? listed : probeNames((n) => { try { return a.archive.readFile(n); } catch { return null; } });
-      });
-      const code: { name: string; bytes: Uint8Array }[] = [];
-      for (const f of req.code ?? []) code.push({ name: f.path, bytes: await bytesOf(f.data) });
-      const set = await dataSetHashOf([...overlay.keys(), ...more.keys(), ...members], async (name) => {
-        const extra = more.get(name);
-        if (extra) return bytesOf(extra);
-        return ownRead(name);
-      }, code);
-      hash = set?.hash;
     }
     const stamp: StoredStamp = {
       from,
@@ -210,6 +205,6 @@ self.onmessage = async (e: MessageEvent<ExtractRequest>) => {
       post({ kind: "done", stamp, where: "memory", problems, files }, transfer);
     }
   } catch (err) {
-    post({ kind: "error", message: err instanceof Error ? err.message : String(err), ...(err instanceof ExtractError ? { text: err.text } : {}) });
+    post({ kind: "error", message: err instanceof Error ? err.message : String(err), ...(err instanceof ExtractError ? { text: err.text } : {}), ...(err instanceof ModError ? { mod: err.detail } : {}) });
   }
 };

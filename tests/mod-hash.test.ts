@@ -1,10 +1,10 @@
 /**
- * The mod's hash: one rule wherever it is worked out — the play page (scm-sim `web/modDrop.ts#buildMod`), core
- * (`src/formats/mod/hash.ts`), `scmjs mod info|play` and `replay --mod`, the editor's data sets. A made mod (a loose game
- * file and a dot file, an MPQ of three members, a plugin, a FireGraft project and database, a read-me) is hashed here;
- * the values pinned below are what the play page's own `buildMod` gives for the same folder, so the two implementations
- * are tied without anyone's game files. Cosmonarchy's release, when `SCM_COSMONARCHY` names it (or
- * `SCMJS_COSMONARCHY` the download), gives the page's values for it.
+ * The mod's hash: one rule wherever it is worked out, `@scm-js/mod`'s (its own tests hold the rule itself) — here as
+ * `scmjs mod info|play` and `replay --mod` and the editor's data sets come to it. A made mod (a loose game file and a
+ * dot file, an MPQ of three members, a plugin, a FireGraft project and database, a read-me) is hashed here; the values
+ * pinned below are what the play page's own `buildMod` gave for the same folder, so the routes are tied without
+ * anyone's game files. Cosmonarchy's release, when `SCM_COSMONARCHY` names it (or `SCMJS_COSMONARCHY` the download),
+ * gives the values `@scm-js/mod` pins for it.
  */
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
@@ -12,10 +12,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { Archive, Creator } from "mopaq";
-import { dataSetHash, isSystemFile, SYSTEM_FILES } from "../src/formats/mod/sources";
-import { firegraftLine, hashLines, hashLinesAsWere, modHash, pluginLine, probeNames } from "../src/formats/mod/hash";
-import { dataSetHashOf } from "../src/gamedata/overCopy";
-import { isGamePath, splitPickedFiles } from "../src/gamedata/install";
+import { isSystemFile, readMod } from "@scm-js/mod";
+import { modTree } from "../src/gamedata/archives";
+import { dataSetMod, pickedDataSet } from "../src/gamedata/modInput";
 import { openMod } from "../cli/src/mod/open";
 import { sourceHash } from "../cli/src/mod/hash";
 import { HANDED_MEMBERS, notLoose, playSet } from "../cli/src/mod/play";
@@ -24,6 +23,7 @@ import { packFolder } from "../cli/src/mod/pack";
 import { readManifest } from "../src/formats/mod/folder";
 import { isTaggedMod, sourceHashes } from "../cli/src/replaymod";
 import { modInfo, printModInfo } from "../cli/src/mod/info";
+import type { GameFiles } from "../cli/src/gamefiles";
 import { visible } from "../cli/src/ui";
 
 const text = (s: string) => new TextEncoder().encode(s);
@@ -62,40 +62,6 @@ function madeFolder(): string {
   return dir;
 }
 
-describe("the mod hash's rule", () => {
-  it("is SHA-256 over the sorted name<TAB>sha256 lines, sixteen hex digits; plugins under plugins\\, the project by its name", async () => {
-    const lines = [pluginLine("Plugins/GPTP.qdp", "2".repeat(64)), `arr\\units.dat\t${"1".repeat(64)}`, firegraftLine("Mod.FGP", "3".repeat(64))];
-    expect(lines[0]).toBe(`plugins\\gptp.qdp\t${"2".repeat(64)}`);
-    expect(lines[2]).toBe(`mod.fgp\t${"3".repeat(64)}`);
-    const want = sha(`arr\\units.dat\t${"1".repeat(64)}\nmod.fgp\t${"3".repeat(64)}\nplugins\\gptp.qdp\t${"2".repeat(64)}`).slice(0, 16);
-    expect(await hashLines(lines)).toBe(want);
-  });
-
-  it("takes game files by game name, plugins and projects once by file name, and leaves FireGraft's database out", async () => {
-    const h = await modHash({
-      files: [{ name: "Arr/Units.dat", bytes: text("u") }],
-      plugins: [{ name: "plugins/a.qdp", bytes: text("p") }, { name: "elsewhere/A.QDP", bytes: text("other") }],
-      firegraft: [{ name: "m.fgp", bytes: text("f") }, { name: "m.fgd", bytes: text("d") }],
-    });
-    expect(h.lines).toEqual([`arr\\units.dat\t${sha("u")}`, `m.fgp\t${sha("f")}`]);
-    expect(h.pluginLines).toEqual([`plugins\\a.qdp\t${sha("p")}`]);
-    expect(h.withoutPlugins).toBe(await hashLines(h.lines));
-    // Without plugins or a project the rule is dataSetHash's.
-    const plain = await modHash({ files: [{ name: "arr\\units.dat", bytes: text("u") }] });
-    expect(plain.hash).toBe(await dataSetHash([{ name: "arr\\units.dat", bytes: text("u") }]));
-    expect(plain.withoutPlugins).toBe(plain.hash);
-  });
-
-  it("looks into an archive with no list by the play page's names and those its own tables name", () => {
-    const images = (() => { const s = "terran\\made.grp\0"; const b = new Uint8Array(4 + s.length); new DataView(b.buffer).setUint16(0, 1, true); new DataView(b.buffer).setUint16(2, 4, true); b.set(text(s), 4); return b; })();
-    const names = probeNames((n) => (n === "arr\\images.tbl" ? images : null));
-    expect(names).toContain("unit\\terran\\made.grp");
-    expect(names).toContain("arr\\units.datex");
-    expect(names).toContain("tileset\\jungle.vx4ex");
-    expect(names).toContain("unit\\cmdbtns\\cmdicons.grp");
-  });
-});
-
 describe("a made mod hashes as the play page hashes it", () => {
   it("through scmjs: opened from its folder, as a zip of the folder, and as the folder mod unpack writes", async () => {
     const dir = madeFolder();
@@ -117,15 +83,20 @@ describe("a made mod hashes as the play page hashes it", () => {
     expect({ hash: again.hash, withoutPlugins: again.withoutPlugins }).toEqual(PAGE);
   });
 
-  it("through the editor's data set: its loose files, its archive's members, its plugins and project", async () => {
-    const archive = Archive.open(madeMpq());
-    const loose = new Map([["arr\\units.dat", text(LOOSE["arr/units.dat"])], ["lua\\.gitignore", text(LOOSE["lua/.gitignore"])]]);
-    const listed = (archive.files() ?? []).filter((n) => !n.startsWith("("));
-    const own = (name: string) => loose.get(name) ?? (() => { try { return archive.readFile(name); } catch { return null; } })();
-    const code = ["plugins/x.qdp", "y.fgp", "y.fgd"].map((p) => ({ name: p, bytes: text(LOOSE[p]) }));
-    const h = await dataSetHashOf([...loose.keys(), ...listed, "tileset\\jungle.cv5"], own, code);
-    expect({ hash: h?.hash, withoutPlugins: h?.withoutPlugins }).toEqual(PAGE);
-    expect(await dataSetHashOf([], own, code)).toBeNull();
+  it("through the editor's data set: a picked folder, and its archive, loose files and code handed over as a plugin hands them", async () => {
+    // The Game Data dialog's folder: every file picked, read in the extraction's worker by @scm-js/mod.
+    const picked = Object.entries({ ...LOOSE, "made.mpq": madeMpq() }).map(([path, data]) => pickedFile(`Made/${path}`, typeof data === "string" ? text(data) : data));
+    const { input } = await pickedDataSet(picked);
+    const fromPick = (await readMod(modTree(dataSetMod("Made", input)!))).identity;
+    expect({ hash: fromPick.hash, withoutPlugins: fromPick.withoutPlugins }).toEqual(PAGE);
+    // A plugin's api.gameData.install: the archive, the loose files by member path, the plugin and FireGraft files.
+    const handed = dataSetMod("Made", {
+      archives: [{ name: "made.mpq", data: madeMpq() }],
+      files: [{ path: "arr/units.dat", data: text(LOOSE["arr/units.dat"]) }, { path: "lua/.gitignore", data: text(LOOSE["lua/.gitignore"]) }],
+      code: ["plugins/x.qdp", "y.fgp", "y.fgd"].map((p) => ({ path: p, data: text(LOOSE[p]) })),
+    })!;
+    const fromApi = (await readMod(modTree(handed))).identity;
+    expect({ hash: fromApi.hash, withoutPlugins: fromApi.withoutPlugins }).toEqual(PAGE);
   });
 
   it("is what mod play hands the page: every file, the members the page would not take loose in an MPQ of their own", async () => {
@@ -150,82 +121,38 @@ describe("a made mod hashes as the play page hashes it", () => {
   });
 });
 
+describe("@scm-js/core's hash helpers from before @scm-js/mod (deprecated, kept)", () => {
+  it("give the package's hash for the same files, and the same older form", async () => {
+    const core = await import("../core/src/index");
+    const files = [["arr/units.dat", LOOSE["arr/units.dat"]], ["lua/.gitignore", LOOSE["lua/.gitignore"]], ...Object.entries(MEMBERS)].map(([name, data]) => ({ name, bytes: text(data) }));
+    const h = await core.modHash({ files, plugins: [{ name: "plugins/x.qdp", bytes: text(LOOSE["plugins/x.qdp"]) }], firegraft: ["y.fgp", "y.fgd"].map((n) => ({ name: n, bytes: text(LOOSE[n]) })) });
+    expect({ hash: h.hash, withoutPlugins: h.withoutPlugins }).toEqual(PAGE);
+    expect(h.older).toBeUndefined();
+    expect(await core.dataSetHash(files)).toBe((await core.modHash({ files })).hash);
+    expect(core.gameLine("\\Arr\\Units.dat", "x")).toBe("arr\\units.dat\tx");
+    expect(core.pluginLine("Plugins/GPTP.qdp", "x")).toBe("plugins\\gptp.qdp\tx");
+    expect(core.isFiregraftProject("Mod.FGP")).toBe(true);
+    const seen = await core.modHash({ files: [...files, { name: "sound/desktop.ini", bytes: text("[ViewState]") }] });
+    expect(seen.hash).toBe((await core.modHash({ files })).hash);
+    expect(seen.older?.left).toEqual(["sound\\desktop.ini"]);
+  });
+});
+
 /* ── An operating system's files ───────────────────────── */
 
-/** One file of each kind the list names, by a path under a game folder (and the zip folder macOS makes). */
-const SYSTEM: Record<string, string> = {
-  "sound/desktop.ini": "[ViewState]\r\nFolderType=Music\r\n",
-  "sound/made/Desktop.INI": "[ViewState]",
-  "unit/Thumbs.db": "thumbnails",
-  "unit/ehthumbs.db": "thumbnails",
-  "unit/ehthumbs_vista.db": "thumbnails",
-  "arr/.DS_Store": "Bud1",
-  "arr/._units.dat": "AppleDouble",
-  "arr/Icon\r": "",
-  "lua/.directory": "[Dolphin]",
-  "__MACOSX/arr/._units.dat": "AppleDouble",
-  "arr/__MACOSX/units.dat": "anything under that folder",
-};
-/** Names that only hold one of the list's: files of the mod like any other. */
-const NOT_SYSTEM = ["sound/mydesktop.ini", "sound/desktop.ini.bak", "sound/desktop.ini/voice.wav", "unit/thumbs.db.txt", "unit/xthumbs.db", "arr/.ds_store2", "arr/a._b", "arr/_.units.dat", "lua/x.directory", "arr/icon", "my__macosx/units.dat", "__macosx.dat", "samase/config.ini", "lua/.gitignore"];
+const SYSTEM: Record<string, string> = { "sound/desktop.ini": "[ViewState]\r\nFolderType=Music\r\n" };
 
 /** The rule as it was until 2026-11-09, written out: every line, sorted by name, SHA-256, sixteen hex digits. */
 const ruleAsWas = (files: Record<string, string>) => sha(Object.keys(files).sort().map((n) => `${n}\t${sha(files[n])}`).join("\n")).slice(0, 16);
-const asGameNames = (files: Record<string, string>) => Object.fromEntries(Object.entries(files).map(([p, d]) => [p.replace(/\//g, "\\").toLowerCase(), d]));
+
+/** A file as a browser's folder pick hands it over. */
+function pickedFile(path: string, bytes: Uint8Array): File {
+  const f = new File([bytes as Uint8Array<ArrayBuffer>], path.split("/").pop()!);
+  Object.defineProperty(f, "webkitRelativePath", { value: path });
+  return f;
+}
 
 describe("an operating system's files are not a mod's", () => {
-  const MOD: Record<string, string> = { "arr/units.dat": "a made units.dat", "sound/made/new.wav": "RIFF made sound", "lua/.gitignore": "*.bak" };
-  const digests = (files: Record<string, string>) => Object.entries(files).map(([name, data]) => ({ name, bytes: text(data) }));
-
-  it("is told by name alone, any case and either slash; a name that only holds one is a file like any other", () => {
-    for (const path of Object.keys(SYSTEM)) {
-      expect(isSystemFile(path), path).toBe(true);
-      expect(isSystemFile(path.toUpperCase().replace(/\//g, "\\")), path).toBe(true);
-    }
-    for (const path of NOT_SYSTEM) expect(isSystemFile(path), path).toBe(false);
-    // Every name on the list is covered above.
-    for (const name of SYSTEM_FILES.names) expect(Object.keys(SYSTEM).some((p) => p.toLowerCase().endsWith(`/${name}`)), JSON.stringify(name)).toBe(true);
-  });
-
-  it("the hash is the same with each of them and without, and other with a file that only holds the name", async () => {
-    const plain = await modHash({ files: digests(MOD) });
-    expect(plain.hash).toBe(ruleAsWas(asGameNames(MOD)));
-    expect(plain.older).toBeUndefined();
-    for (const [path, data] of Object.entries(SYSTEM)) {
-      const withIt = await modHash({ files: digests({ ...MOD, [path]: data }) });
-      expect(withIt.hash, path).toBe(plain.hash);
-      expect(withIt.withoutPlugins, path).toBe(plain.withoutPlugins);
-      expect(withIt.lines, path).toEqual(plain.lines);
-      expect(await dataSetHash(digests({ ...MOD, [path]: data })), path).toBe(plain.hash);
-      expect(await hashLines([...plain.lines, `${path}\t${sha(data)}`]), path).toBe(plain.hash);
-    }
-    for (const path of NOT_SYSTEM) {
-      const withIt = await modHash({ files: digests({ ...MOD, [path]: "x" }) });
-      expect(withIt.hash, path).not.toBe(plain.hash);
-      expect(withIt.hash, path).toBe(ruleAsWas(asGameNames({ ...MOD, [path]: "x" })));
-      expect(withIt.older, path).toBeUndefined();
-    }
-    // A plugin's AppleDouble half is no plugin, and a FireGraft project's is no project.
-    const code = await modHash({ files: digests(MOD), plugins: [{ name: "plugins/x.qdp", bytes: text("p") }, { name: "plugins/._x.qdp", bytes: text("fork") }], firegraft: [{ name: "__MACOSX/y.fgp", bytes: text("fork") }] });
-    expect(code.pluginLines).toEqual([`plugins\\x.qdp\t${sha("p")}`]);
-    expect(code.lines).toEqual(plain.lines);
-  });
-
-  it("the hash as it was, with their lines, is kept beside it as the older form", async () => {
-    const seen = { ...MOD, "sound/desktop.ini": SYSTEM["sound/desktop.ini"], "unit/Thumbs.db": SYSTEM["unit/Thumbs.db"] };
-    const h = await modHash({ files: digests(seen), plugins: [{ name: "plugins/x.qdp", bytes: text("p") }] });
-    const plain = await modHash({ files: digests(MOD), plugins: [{ name: "plugins/x.qdp", bytes: text("p") }] });
-    expect({ hash: h.hash, withoutPlugins: h.withoutPlugins }).toEqual({ hash: plain.hash, withoutPlugins: plain.withoutPlugins });
-    expect(h.older).toEqual({
-      hash: ruleAsWas({ ...asGameNames(seen), "plugins\\x.qdp": "p" }),
-      withoutPlugins: ruleAsWas(asGameNames(seen)),
-      left: ["sound\\desktop.ini", "unit\\thumbs.db"],
-    });
-    expect(h.older!.hash).not.toBe(h.hash);
-    // The rule as it was takes every line it is given.
-    expect(await hashLinesAsWere(Object.entries(asGameNames(seen)).map(([n, d]) => `${n}\t${sha(d)}`))).toBe(h.older!.withoutPlugins);
-  });
-
   it("through scmjs: a folder with them loose and packed into its archive hashes as the folder without, and answers to the hash it had", async () => {
     const dir = madeFolder();
     const put = (path: string, b: Uint8Array) => { mkdirSync(join(dir, path, ".."), { recursive: true }); writeFileSync(join(dir, path), b); };
@@ -244,7 +171,6 @@ describe("an operating system's files are not a mod's", () => {
     const source = await openMod(dir, null);
     expect([...source.files.keys()].sort()).toEqual([...clean.files.keys()].sort());
     expect(source.plugins.map((p) => p.name)).toEqual(clean.plugins.map((p) => p.name));
-    expect([...source.system.keys()].sort()).toEqual(["arr\\._units.dat", "arr\\.ds_store", "sound\\desktop.ini", "sound\\made\\desktop.ini"]);
     const h = await sourceHash(source);
     expect({ hash: h.hash, withoutPlugins: h.withoutPlugins }).toEqual(PAGE);
     expect({ files: h.files, plugins: h.plugins, firegraft: h.firegraft }).toEqual({ files: 5, plugins: 1, firegraft: 1 });
@@ -259,7 +185,15 @@ describe("an operating system's files are not a mod's", () => {
     // A replay tagged while those lines counted names the mod by that hash: still this mod. One that never had them does not.
     const hashes = await sourceHashes(source, null);
     expect(hashes.hash).toBe(PAGE.hash);
-    for (const older of [h.older!.hash, h.older!.withoutPlugins, h.gameFilesOnlyWere!]) {
+    // (and the play page's forms before the one rule, the game files alone and those that differ from a copy, with those
+    // files' lines: its replays saved until 2026-11-08)
+    expect(h.gameFilesOnlyWere).toBe(ruleAsWas(Object.fromEntries(Object.entries(was).filter(([n]) => !n.endsWith(".fgp")))));
+    const copy: GameFiles = { folder: "copy", kind: "classic", label: "copy", read: async (n) => (n === "arr\\units.dat" ? text(LOOSE["arr/units.dat"]) : null) };
+    const withCopy = await sourceHashes(source, copy);
+    const changedWere = ruleAsWas(Object.fromEntries(Object.entries(was).filter(([n]) => !n.endsWith(".fgp") && n !== "arr\\units.dat")));
+    expect(withCopy.older).toContain(changedWere);
+    expect(isTaggedMod(changedWere, withCopy)).toBe(true);
+    for (const older of [h.older!.hash, h.older!.withoutPlugins!, h.gameFilesOnlyWere!]) {
       expect(isTaggedMod(older, hashes), older).toBe(true);
       expect(isTaggedMod(older, before), older).toBe(false);
     }
@@ -289,22 +223,20 @@ describe("an operating system's files are not a mod's", () => {
     expect({ hash: again.hash, withoutPlugins: again.withoutPlugins }).toEqual(PAGE);
   });
 
-  it("through the editor: a picked folder's are no loose member and no code, and its data set hash has no line for one in an archive", async () => {
-    const file = (path: string) => { const f = new File([text("x")], path.split("/").pop()!); Object.defineProperty(f, "webkitRelativePath", { value: path }); return f; };
-    const split = splitPickedFiles([
-      file("Mod/mpq/arr/units.dat"), file("Mod/mpq/sound/desktop.ini"), file("Mod/mpq/sound/cm/Desktop.ini"), file("Mod/mpq/unit/Thumbs.db"),
-      file("Mod/mpq/arr/.DS_Store"), file("Mod/plugins/x.qdp"), file("Mod/plugins/._x.qdp"), file("Mod/__MACOSX/mpq/arr/._units.dat"), file("Mod/mpq/samase/config.ini"),
-    ]);
-    expect(split.files!.map((f) => f.path)).toEqual(["arr/units.dat", "samase/config.ini"]);
-    expect(split.code!.map((f) => f.path)).toEqual(["plugins/x.qdp"]);
-    expect([isGamePath("sound/desktop.ini"), isGamePath("sound/cm/voice.wav"), isGamePath("samase/config.ini")]).toEqual([false, true, true]);
-    // An archive packed from a folder that had one: the member is listed, and is no line.
-    const own = new Map([["arr\\units.dat", text("u")], ["sound\\desktop.ini", text("[ViewState]")], ["sound\\cm\\thumbs.db", text("t")]]);
-    const read: string[] = [];
-    const h = await dataSetHashOf(own.keys(), (n) => { read.push(n); return own.get(n) ?? null; }, [{ name: "plugins/._x.qdp", bytes: text("fork") }]);
-    expect(h?.hash).toBe(await dataSetHash([{ name: "arr\\units.dat", bytes: text("u") }]));
-    expect(h?.pluginLines).toEqual([]);
-    expect(read).toEqual(["arr\\units.dat"]);
+  it("through the editor: a picked folder's are no file and no code of the set, loose or in its archive", async () => {
+    const picked = (extra: Record<string, string>, member?: string) => {
+      const mpq = new Creator({ listfile: true });
+      for (const [name, data] of Object.entries(MEMBERS)) mpq.addFile(name, text(data));
+      if (member) mpq.addFile(member, text("[ViewState]"));
+      return Object.entries({ ...LOOSE, ...extra }).map(([path, data]) => pickedFile(`Made/${path}`, text(data))).concat(pickedFile("Made/made.mpq", mpq.write()));
+    };
+    const hashOf = async (files: File[]) => (await readMod(modTree(dataSetMod("Made", (await pickedDataSet(files)).input)!))).identity;
+    const clean = await hashOf(picked({}));
+    expect(clean.hash).toBe(PAGE.hash);
+    const seen = await hashOf(picked({ "sound/made/desktop.ini": SYSTEM["sound/desktop.ini"], "arr/.DS_Store": "Bud1", "plugins/._x.qdp": "AppleDouble", "__MACOSX/arr/._units.dat": "AppleDouble" }, "sound\\desktop.ini"));
+    expect({ hash: seen.hash, withoutPlugins: seen.withoutPlugins }).toEqual(PAGE);
+    expect(seen.older?.hash).toBeDefined();
+    expect(seen.plugins).toEqual(clean.plugins);
   });
 });
 
@@ -312,11 +244,11 @@ const cosmonarchy = process.env.SCM_COSMONARCHY ?? (process.env.SCMJS_COSMONARCH
 const haveCosmonarchy = !!cosmonarchy && existsSync(join(cosmonarchy, "mpq", "arr", "units.datex"));
 
 describe.skipIf(!haveCosmonarchy)("Cosmonarchy's release (SCM_COSMONARCHY)", () => {
-  it("hashes as the play page hashes it: 7,769 game files, 7 plugins and the project", { timeout: 120_000 }, async () => {
+  it("hashes as @scm-js/mod pins it: 7,767 game files, 8 modules of code and the project", { timeout: 120_000 }, async () => {
     const source = await openMod(cosmonarchy, null);
     const h = await sourceHash(source);
-    expect({ hash: h.hash, withoutPlugins: h.withoutPlugins }).toEqual({ hash: "ac3f86533e4b5a31", withoutPlugins: "b13e467fb5abb298" });
-    expect({ files: h.files, plugins: h.plugins, firegraft: h.firegraft }).toEqual({ files: 7769, plugins: 7, firegraft: 1 });
+    expect({ hash: h.hash, withoutPlugins: h.withoutPlugins, beforeCode: h.beforeCode }).toEqual({ hash: "c94acdf31982fa4b", withoutPlugins: "db23a1f9dd8cef66", beforeCode: "20e1c6d89ae2af75" });
+    expect({ files: h.files, plugins: h.plugins, firegraft: h.firegraft }).toEqual({ files: 7767, plugins: 8, firegraft: 1 });
     // The loader exe's archive lists six tileset files it does not hold: left out.
     expect(source.unheld).toHaveLength(6);
     // The dot files under the game's folders are the mod's.

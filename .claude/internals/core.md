@@ -50,6 +50,25 @@ command and other people's tools sit on it.
   (`changeTileset`, placement, sprites, map image), the plugin host, sync, saving to disk. An export, once
   released, stays or goes with a note in the guide.
 
+## Mod names from `@scm-js/mod` (2026-11-12)
+
+`@scm-js/mod` is a dependency beside mopaq (`core/package.json`, `EXTERNAL` in `build-core.mjs`, `index.d.ts` imports
+its types). The Mods block re-exports its names under the old ones (`fileDigest` = `sha256Hex`, `ModSourceError` =
+`ModError`, `isModCode` = `isCodeFile`, `PatcherPlugin` = `CarriedModule`, `RACE_NAME_MAX` = `MAX_RACE_NAME`), plus
+`readMod`, `MOD_MESSAGES`, `renderMessage` and the description types. **Nothing released is removed** (the planner's
+rule, 2026-11-12): `src/formats/mod/legacy.ts` keeps `modHash`, `modHashOfDigests`, `dataSetHash`,
+`dataSetHashOfDigests`, `gameLine`, `isFiregraftProject`, `ModHash`, `ModHashInput`, `Digest` with their signatures over
+the package's `hashLines`/`pluginLine`/`firegraftLine` (deprecated; the same inputs give the package's lines' hash,
+`tests/mod-hash.test.ts` "@scm-js/core's hash helpers"), core's `gameName` (no leading backslash, as released),
+`pluginLine`/`firegraftLine` taking a path, and `exeArchive`/`ExeArchive` with 0.13.3's `kind` and `archive` beside
+`form`/`bytes`/`at`. **Breaking, cannot be kept:** `probeNames` is the package's `(archive, tables?) => Promise<string[]>`
+(0.13.3: `(read) => string[]`, sync); the package's needs an opened archive and is async. **Changed values:**
+`GAME_FOLDERS` is the game's 24 (0.13.3: 28), `DataSetRace` has an index signature, `normalizeRaces` keeps at most 248
+rows. `PatcherError.what` and `libraryName` were never released (main after 0.13.3): `PatcherError` is the package's.
+Who imports these (grep of `/home/jeany/github/plugin-*`, 2026-11-12): plugin-mods (and its two worktrees) import from
+core `Digest`, `GAME_FOLDERS`, `exeArchive` (uses `.kind`, `.archive`), `gameName`, `isMpq`, `isZip`, `modHash` (tests),
+`modHashOfDigests`, `modRoot`, `readZip`; nothing else imports these names or `src/formats/mod/*`.
+
 ## Checked
 
 `node --input-type=module -e 'import("./core/dist/index.mjs")'` on tests/maps/ums.scx: open → statistics → Check Map

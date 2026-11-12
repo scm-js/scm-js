@@ -8,7 +8,7 @@ import { DAT_SCHEMAS, DAT_TABLES, type DatField, type DatTableName } from "../da
 import { decodeTblFile } from "../dat/tblFile";
 import { ISCRIPT_ANIMS, ISCRIPT_OPCODES, readIscriptHeaders } from "../dat/iscriptText";
 import { entryText, rowChanges, type ModData } from "./data";
-import { gameName } from "./sources";
+import { gameName } from "@scm-js/mod";
 
 export type ModChangeKind = "table" | "strings" | "iscript" | "ai" | "pictures" | "overlays" | "sounds" | "grafts" | "maps" | "files";
 

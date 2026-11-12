@@ -10,10 +10,22 @@
  * language file against what was found: keys nothing asks for, keys with no entry, and
  * translations whose placeholders are not the source's. `scripts/i18n.mjs` is the
  * command over both; `tests/i18n.test.ts` runs the check.
+ *
+ * A package may hand its sentences over as data rather than say them through `t`:
+ * `@scm-js/mod` lists every sentence it can produce in `MOD_MESSAGES` (key, English
+ * template, parameters), and the code that shows one translates it by its template. A
+ * tree that imports the package asks for every one of those templates, so its catalogue
+ * holds them all and a sentence the package adds is missing until it is translated.
  */
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import ts from "typescript";
+import { MOD_MESSAGES } from "@scm-js/mod";
+
+/** The packages whose sentences come as data, by the name a source file imports them by: their templates. */
+const PACKAGE_MESSAGES = {
+  "@scm-js/mod": Object.values(MOD_MESSAGES).map((m) => m.text),
+};
 
 const CONTEXT_SEPARATOR = "\u0004";
 const CALLS = new Set(["t", "tc", "msg"]);
@@ -82,15 +94,25 @@ export function messagesIn(source, fileName = "source.ts") {
 export function extractMessages(root) {
   const messages = new Map();
   const errors = [];
+  const packages = new Set();
   for (const path of sourceFiles(root)) {
     const rel = relative(root, path).replace(/\\/g, "/");
-    const found = messagesIn(readFileSync(path, "utf8"), rel);
+    const source = readFileSync(path, "utf8");
+    const found = messagesIn(source, rel);
     for (const m of found.messages) {
       const entry = messages.get(m.key) ?? { text: m.text, context: m.context, uses: [] };
       entry.uses.push(`${rel}:${m.line}`);
       messages.set(m.key, entry);
     }
     errors.push(...found.errors);
+    for (const name of Object.keys(PACKAGE_MESSAGES)) if (new RegExp(`from\\s+["']${name}(/[^"']*)?["']`).test(source)) packages.add(name);
+  }
+  for (const name of [...packages].sort()) {
+    for (const text of PACKAGE_MESSAGES[name]) {
+      const entry = messages.get(text) ?? { text, context: "", uses: [] };
+      entry.uses.push(name);
+      messages.set(text, entry);
+    }
   }
   return { messages, errors };
 }

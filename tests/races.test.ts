@@ -10,7 +10,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createStore } from "jotai";
 import { afterEach, describe, expect, it } from "vitest";
-import { normalizeRaces, raceCandidates, raceChoices, raceLabel, racePlaysAs, sameRaces, GAME_RACE_NAMES, type DataSetRace } from "../src/formats/mod/races";
+import { normalizeRaces, raceCandidates, readMod, type DataSetRace } from "@scm-js/mod";
+import { raceChoices, raceLabel, racePlaysAs, sameRaces, GAME_RACE_NAMES } from "../src/formats/mod/races";
 import { emptyManifest, readManifest, tidyManifest } from "../src/formats/mod/folder";
 import { encodeTblFile } from "../src/formats/dat/tblFile";
 import { playerRaceLabel } from "../src/data/players";
@@ -18,7 +19,8 @@ import { dataSetRaces, raceOptions, raceText } from "../src/data/races";
 import { keptRaces, normalizeProfile, RACES_KEY, racesOf } from "../src/gamedata/profiles";
 import { clearStoredDataAtom, clearStoredKeysAtom, exportStoredPreferences, importStoredPreferencesAtom, ownedStoredKeys } from "../src/atoms/preferencesAtoms";
 import { browserStorage } from "../src/atoms/storage";
-import { pickedFolderRaces, splitPickedFiles } from "../src/gamedata/install";
+import { dataSetMod, pickedDataSet } from "../src/gamedata/modInput";
+import { modTree } from "../src/gamedata/archives";
 import { resetAssetSource, setAssetSource, type AssetSource } from "../src/gamedata/source";
 import { dataSetRacesAtom, gameDataSourceAtom, keepRacesAtom } from "../src/atoms/gameDataAtoms";
 import { Contributions, createPluginApi } from "../src/plugins/host";
@@ -352,12 +354,16 @@ describe("the editor's data set races", () => {
   it("Add a data set from a folder takes the races of the folder's own mod.json", async () => {
     const file = (path: string, body: string) => { const f = new File([body], path.split("/").pop()!); Object.defineProperty(f, "webkitRelativePath", { value: path }); return f; };
     const json = JSON.stringify({ name: "Mod", races: [{ id: 70, name: "Bloodsummon" }, { id: 69, name: "Askosi", letter: "a", like: 1 }, { id: 2, name: "No" }] });
-    expect(await pickedFolderRaces([file("Mod/arr/units.dat", "u"), file("Mod/mod.json", json)])).toEqual(ADDED);
-    // Only the one directly in the folder picked; a broken or absent one is none.
-    expect(await pickedFolderRaces([file("Mod/arr/mod.json", json)])).toEqual([]);
-    expect(await pickedFolderRaces([file("Mod/mod.json", "{ not json")])).toEqual([]);
-    expect(await pickedFolderRaces([file("Mod/arr/units.dat", "u")])).toEqual([]);
-    // Not a file of the set's: the split leaves it out, so the hash does not see it.
-    expect(splitPickedFiles([file("Mod/arr/units.dat", "u"), file("Mod/mod.json", json)]).files.map((f) => f.path)).toEqual(["arr/units.dat"]);
+    const races = async (files: File[]) => (await pickedDataSet(files)).races;
+    expect(await races([file("Mod/arr/units.dat", "u"), file("Mod/mod.json", json)])).toEqual(ADDED);
+    // The one in the folder picked or one folder down (a release that wraps the mod in a folder of its own), never one
+    // in a game folder; a broken or absent one is none.
+    expect(await races([file("Mod/Release/arr/units.dat", "u"), file("Mod/Release/mod.json", json)])).toEqual(ADDED);
+    expect(await races([file("Mod/arr/mod.json", json)])).toEqual([]);
+    expect(await races([file("Mod/mod.json", "{ not json")])).toEqual([]);
+    expect(await races([file("Mod/arr/units.dat", "u")])).toEqual([]);
+    // Not a file of the set's: the set's hash does not see it.
+    const hashOf = async (files: File[]) => (await readMod(modTree(dataSetMod("Mod", (await pickedDataSet(files)).input)!))).identity.hash;
+    expect(await hashOf([file("Mod/arr/units.dat", "u"), file("Mod/mod.json", json)])).toBe(await hashOf([file("Mod/arr/units.dat", "u")]));
   });
 });

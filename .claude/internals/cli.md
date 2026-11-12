@@ -2662,7 +2662,10 @@ holding `0x…`, "stack words", `x.dll!`, "no stand-in for"; rewrites "the scmbo
 update, then scmjs bot build`; `SCMJS_DEBUG` keeps the raw text) and `plainReason` for a replay's end. The hint "The
 runner is scm-sim's…" is gone everywhere.
 
-**Plugin-only mod on Remastered (B13).** The runner's `readsStartupData(names)` is `!names.length || …`: a mod with **no
+**Plugin-only mod on Remastered (B13).** Superseded 2026-11-12: `@scm-js/mod`'s `readsStartupData` (the engine's rule,
+which scm-sim's runner on `mods-next` follows) says no for a mod with no game files, and `overlay.ts#gameLayer` takes
+`identity.readsStartupData`, so a plugins-only mod gets no game layer (`mods.md` "@scm-js/mod adopted"). As it was:
+The runner's `readsStartupData(names)` is `!names.length || …`: a mod with **no
 game files** reloads the startup data. `overlay.ts#readsStartupData` lacked the empty case, so no game layer was laid
 and the reload stopped at `unit\zerg\avenger.grp`. Mirrored now. Then EUDEnableR's plugins fail to load (no stand-ins
 for `kernel32.dll!CreateRemoteThread`, `msvcrt.dll!_strcmpi`) — scm-sim's; the game plays on without them.

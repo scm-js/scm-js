@@ -4,9 +4,9 @@
  */
 import { checkMod, type ModFinding } from "../../../src/formats/mod/check";
 import { loadModData } from "../../../src/formats/mod/data";
-import { gameName } from "../../../src/formats/mod/sources";
+import { gameName, raceCandidates, type RaceCandidates } from "@scm-js/mod";
 import { datTableOf, type DatTableName } from "../../../src/formats/dat/schema";
-import { hasRaceCandidates, raceCandidates, type RaceCandidates } from "../../../src/formats/mod/races";
+import { hasRaceCandidates } from "../../../src/formats/mod/races";
 import type { GameFiles } from "../gamefiles";
 import { t } from "../i18n";
 import { dot, mark, pc } from "../ui";
@@ -86,7 +86,7 @@ export async function checkModSource(source: ModSource, base: GameFiles | null):
   for (const f of source.files.values()) if (/\.graft$/i.test(f.name)) grafts.push({ member: f.name, bytes: await f.read() });
   const inBase = await baseHas(base);
   const findings = await checkMod(data, { inMod: (n) => source.files.has(gameName(n)), inBase, grafts });
-  for (const d of source.duplicates) findings.push({ level: "warning", rule: "duplicate-file", where: d, why: t("one game path, two files in another case: the game reads one of them") });
+  for (const d of source.description?.duplicates ?? []) findings.push({ level: "warning", rule: "duplicate-file", where: d.paths.join(" and "), why: t("one game path, two files in another case: the game reads one of them") });
   const notes = [...data.problems];
   if (!base) notes.push(t("No copy of StarCraft was found, so the game's own files were not looked in: only what the mod adds is checked against them (name one with --starcraft)."));
   else if (!(await base.read("unit\\terran\\marine.grp"))) notes.push(t("{copy} has no 1.16.1 GRPs or WAVs: pictures and sounds the mod does not have were not looked for.", { copy: base.label }));

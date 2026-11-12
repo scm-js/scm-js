@@ -2496,9 +2496,11 @@ reads them. The names and costs then come from the mod's tables. The mod is chec
 [its hash](mods.md#the-mods-hash), with its plugins or without them, must be the one the
 replay names, or the command stops and says both (exit 2). A replay tagged before the hash
 had lines for the plugins and the FireGraft project is matched by the hash of the game
-files alone, or of those that differ from your copy of the game. One tagged before 9
-November 2026, when the hash still had lines for the files an operating system leaves in
-folders (`desktop.ini`, `Thumbs.db`), is matched by [the hash the mod had
+files alone, or of those that differ from your copy of the game. One tagged before 11
+November 2026, when only the plugins a mod carries as files had lines, is matched by [the
+hash by that rule](mods.md#the-mods-hash) (`Earlier hash` in `mod info`). One tagged
+before 9 November 2026, when the hash still had lines for the files an operating system
+leaves in folders (`desktop.ini`, `Thumbs.db`), is matched by [the hash the mod had
 then](mods.md#the-mods-hash), when the mod you name holds such files. With a replay that
 names no mod, `--mod` warns that the names may not be the game's and uses them; the
 `Names` line then says only where they are from, since nothing in the replay says whether
@@ -2706,22 +2708,24 @@ says what a mod is: its files and their sizes by kind, its tables and which are 
 the game's (DatExtend's expanded `.dat`, GPTP's `.datex`), its scripts, the plugins and
 FireGraft files it carries (kept, never run), a self-executing exe's archive, the game it
 is for, and [the mod's hash](mods.md#the-mods-hash) with the hash without its plugins
-beside it, the older hash of a mod that holds an operating system's files, and the races
-its `mod.json` [names](mods.md#races-a-mod-adds). It reads a folder (the game's paths at
-its root or in a folder under it), an `.mpq`, a self-executing `.exe` (MPQDraft's or
-FireGraft's patcher, read and never run) or a `.zip`. A copy of the game inside the
-folder, a folder that holds `StarDat.mpq`, is not the mod: its own archives and everything
-under its `Maps` folder are left out, and the command says so ([which
-files](mods.md#what-a-mod-is)). `--json` prints the same as data, the files left out as
-`gameCopy`; each mod has `file` and `path`, the path as you typed it, and a plugin of the
-same name as another is told apart by where it is. Reading a large mod (an `.exe` or a
-`.zip` of hundreds of megabytes) takes several seconds, and a line on standard error says
-it is reading.
+beside it, the hash by the rule before 11 November 2026 where it was another
+(`Earlier hash`), the older hash of a mod that holds an operating system's files, the
+libraries of its code, and the races its `mod.json` [names](mods.md#races-a-mod-adds). It
+reads a folder (the game's paths at its root or in a folder under it), an `.mpq`, a
+self-executing `.exe` (MPQDraft's or FireGraft's patcher, read and never run) or a `.zip`.
+A copy of the game inside the folder, a folder that holds `StarDat.mpq`, is not the mod:
+its own archives and everything under its `Maps` folder are left out, and the command says
+so ([which files](mods.md#what-a-mod-is)). `--json` prints the same as data, the files
+left out as `gameCopy`, the earlier hash as `beforeCode`; each mod has `file` and `path`,
+the path as you typed it. Reading a large mod (an `.exe` or a `.zip` of hundreds of
+megabytes) takes several seconds, and a line on standard error says it is reading.
 
 Something that holds none of the game's files is not a mod, and is said for what it is,
 with exit 2: a map (`scmjs map info` reads it), a replay (`scmjs replay info`), an empty
 folder, an `.exe` with no archive in it. A `mod.json` that is not JSON is said, with the
-file, rather than the folder read as if it had none.
+file, rather than the folder read as if it had none. A mod that cannot be read (a damaged
+archive or zip, a patcher laid out in a way not known) is said with the reason, in the
+language the command speaks.
 
 ### A mod as a folder of text
 
@@ -2808,7 +2812,7 @@ account: the page asks you to sign in, and the command prints that it is waiting
 command prints what the page said and the bot's row:
 
 ```
-Cosmonarchy BW: 7,769 files to hand over (and 9 plugins and FireGraft files) · 931.1 MB · hash ac3f86533e4b5a31
+Cosmonarchy BW: 7,767 files to hand over (and 10 plugins and FireGraft files) · 931.2 MB · hash c94acdf31982fa4b
 ℹ Opening the play page with Cosmonarchy BW in your browser
   If nothing opens, go to http://127.0.0.1:33525/58aab12d25f4b5a8cf293c11
 ℹ The play page is ready: the mod is handed over
@@ -2840,27 +2844,29 @@ opens the play page with `?handoff=1` and, each time that page says `scmjs.ready
 the kind of game: the map's own settings for a mod with plugins or a FireGraft project,
 otherwise the page's own guess.
 
-`path` is the game's path in lower case with forward slashes; a plugin the mod carries is
-under `plugins/` and a FireGraft file under `firegraft/`. A game file the page would not
-take as a loose file — one beside the game's folders or under `plugins\` or `firegraft\`,
-as the members of Cosmonarchy's loader archive `plugins\apply` and `firegraft\reqlist.txt`
-are — goes in a small MPQ, `scmjs-members.mpq`, which the page opens as it opens a mod's
-own.
+`path` is the game's path in lower case with forward slashes; each module of the mod's
+code, every one its hash has a line for (a plugin it carries as a file, a plugin its
+patcher `.exe` carries in itself, a library its plugins load), is under `plugins/`, and a
+FireGraft file under `firegraft/`. A game file the page would not take as a loose file —
+one beside the game's folders or under `plugins\` or `firegraft\`, as the members of
+Cosmonarchy's loader archive `plugins\apply` and `firegraft\reqlist.txt` are — goes in a
+small MPQ, `scmjs-members.mpq`, which the page opens as it opens a mod's own.
 
 `hash` is [the mod's hash](mods.md#the-mods-hash), which the page works out again from the
 same files and arrives at. It is SHA-256 over one line `name<TAB>sha256 of the file` a
 file, sorted by name and joined with newlines; its first sixteen hex digits. A game file's
-name is the game's, lower case with backslashes (`arr\weapons.dat`); a plugin's is
-`plugins\` and its file name, lower case (`plugins\gptp.qdp`); the FireGraft project's is
-its file name, lower case (`cosmonarchy bw.fgp`). FireGraft's database has no line, nor a
-plugin inside the mod's archive, which the page does not load, nor a file an operating
-system leaves in folders (`desktop.ini`, `Thumbs.db`, `.DS_Store` and [the rest of that
-list](mods.md#the-mods-hash)), which is not handed over either. Without the plugins' lines
-it is the hash a page that runs none of them presents. A page that already keeps a mod
-with that hash can skip storing it again. The editor records the same hash for a data set
-made from the same files (see [Game data](game-data.md#a-map-remembers-its-data-set)). The
-page answers with `scmjs.play.started`, `scmjs.play.shown` or `scmjs.taken`, which end the
-wait, or `scmjs.play.error` with a `message`, which the command prints before it exits 1;
+name is the game's, lower case with backslashes (`arr\weapons.dat`); a module of the mod's
+code is `plugins\` and its file name, lower case (`plugins\gptp.qdp`, `plugins\fmod.dll`);
+the FireGraft project's is its file name, lower case (`cosmonarchy bw.fgp`). FireGraft's
+database has no line, nor a plugin inside the mod's archive, which no loader loads, nor a
+file an operating system leaves in folders (`desktop.ini`, `Thumbs.db`, `.DS_Store` and
+[the rest of that list](mods.md#the-mods-hash)), which is not handed over either. Without
+the code's lines it is the hash a page that runs none of it presents. A page that already
+keeps a mod with that hash can skip storing it again. The editor records the same hash for
+a data set made from the same files (see [Game
+data](game-data.md#a-map-remembers-its-data-set)). The page answers with
+`scmjs.play.started`, `scmjs.play.shown` or `scmjs.taken`, which end the wait, or
+`scmjs.play.error` with a `message`, which the command prints before it exits 1;
 `scmjs.waiting` and `scmjs.play.waiting` messages are printed as they come. With `--json`
 the address and those messages go to standard error and the result alone to standard
 output. With `BROWSER=none` the command opens no browser: it prints
@@ -3156,15 +3162,16 @@ scmjs bot run out/cosmonarchy-example.scmbot "(4)Exodus 1.0.scx" --mod "Cosmonar
 
 `--mod` takes a mod as `mod info` does: a mod folder, an `.mpq`, a mod's `.exe` or `.zip`,
 or the release folder as its makers ship it. The mod's files are laid over the game's, and
-its code runs beside the bot: the plugins it carries as files and the FireGraft project
-its patcher holds, loaded before the game starts, as the play page loads them. The map is
-played with its own settings, as a mod's maps are meant to be, when the mod has plugins or
-the map looks made for its own settings; a melee map under a mod with no plugins (one
-whose only code is a FireGraft project, say) is played as melee. `--melee` and `--ums`
-choose either way. A game that starts with nobody against the bot, the map's own settings
-seating no other player, says so and names `--melee`. The first lines say what the game
-read of the mod, the mod's name and [hash](mods.md#the-mods-hash), the plugins loaded, and
-how the bot fits the mod:
+its code runs beside the bot: every module of it the mod's hash has a line for (the
+plugins it carries as files, the plugins its patcher `.exe` carries in itself, the
+libraries they load) and its FireGraft project, loaded before the game starts, as the play
+page loads them. The map is played with its own settings, as a mod's maps are meant to be,
+when the mod has plugins or the map looks made for its own settings; a melee map under a
+mod with no plugins (one whose only code is a FireGraft project, say) is played as melee.
+`--melee` and `--ums` choose either way. A game that starts with nobody against the bot,
+the map's own settings seating no other player, says so and names `--melee`. The first
+lines say what the game read of the mod, the mod's name and [hash](mods.md#the-mods-hash),
+the plugins loaded, and how the bot fits the mod:
 
 ```
 Cosmonarchy Example on (4)Exodus 1.0.scx 128 × 128, desert · computer terran vs … · seed 7 · 1.16.1 files
@@ -3183,9 +3190,9 @@ warning that names both. The game's own computer players are the mod's AI. A mod
 plugins needs a game of 2 GB and the bot's room above it, which the engine makes; a bot
 built before bots could sit beside a mod's plugins is refused with the sentence that says
 to build it again: `scmjs bot update`, then `scmjs bot build` in the bot's folder, since
-an older toolchain builds the same bot again. A mod that is only plugins has the game read
-its startup data again, and on a Remastered copy the game's pictures are laid under it for
-that, as for any mod that changes them.
+an older toolchain builds the same bot again. A mod that is only plugins changes none of
+the game's startup data, so the game does not read it again and nothing is laid under the
+mod on a Remastered copy.
 
 ### A ladder for bots
 

@@ -12,7 +12,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { Creator } from "mopaq";
-import { GAME_ARCHIVES, gameCopyFiles } from "../src/formats/mod/sources";
+import { GAME_ARCHIVES, gameCopyFiles } from "@scm-js/mod";
 import { openMod } from "../cli/src/mod/open";
 import { sourceHash } from "../cli/src/mod/hash";
 import { modInfo, printModInfo } from "../cli/src/mod/info";
@@ -153,8 +153,11 @@ describe("scmjs mod: a copy of the game handed over with the mod", () => {
     expect(whole.files.has("scripts\\iscript.bin")).toBe(false);
     expect(whole.files.get("arr\\images.dat")?.layer).toBe("Release/Made Mod.exe");
     expect(whole.files.get("arr\\units.dat")?.layer).toBe("Release/mpq/");
-    expect(whole.plugins.map((p) => p.name)).toEqual(["Release/plugins/gptp.qdp"]);
-    expect(whole.name).toBe("Made Mod");
+    expect(whole.plugins.map((p) => p.layer)).toEqual(["Release/plugins/gptp.qdp"]);
+    // (named after the one program at the top of the folder given: the release's own is one folder down here, so the
+    // folder gives the name, and the release folder named alone is named after its program)
+    expect(whole.name).toBe(dir.split("/").pop());
+    expect(alone.name).toBe("Made Mod");
     const [a, b] = [await sourceHash(whole), await sourceHash(alone)];
     expect({ hash: a.hash, withoutPlugins: a.withoutPlugins, files: a.files }).toEqual({ hash: b.hash, withoutPlugins: b.withoutPlugins, files: b.files });
     expect(alone.gameCopy).toEqual([]);

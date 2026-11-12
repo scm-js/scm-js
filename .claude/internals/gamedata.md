@@ -28,8 +28,9 @@ a file's own terrain is never touched. `tests/blank-fill.test.ts`.
 **Data sets** (`gamedata/profiles.ts`, `services/gameData.ts`): the editor draws from one set of
 game files at a time, and a `GameDataProfile` (id + name) names it — `DEFAULT_PROFILE` is the game's
 own; any other is a mod's, the same formats with files replaced, installed under its id
-(`installDataSet`: the game's two archives required, the mod's archives and loose files laid over
-them through `readerFor`'s overlay; `splitPickedFiles` turns a picked folder into that) and stored
+(`installDataSet`: the game's two archives required, the mod read in the worker by `@scm-js/mod`'s `readMod`
+and its winning files under the extraction's folders laid over them through `readerFor`'s overlay;
+`pickedDataSet` turns a picked folder into that — since 2026-11-12, `mods.md` "@scm-js/mod adopted") and stored
 under `gamedata-profiles/<id>/` beside the game's `gamedata/` (`store.ts#profileDir`, every store
 function takes the id, `listStoredCopies`). The choice is `scmjs.gameData` (`gameDataProfileAtom`,
 in `STORED_RESETS`; the resolver reads the key itself through `activeProfileId` since it runs
@@ -394,7 +395,10 @@ The mods plan's slice M4 (`scm-sim` branch mods-plan, `docs/mods-plan.md`, "Tier
   now renames only the extraction's own tileset subfiles (four remaps + `dddata.bin`) — the play set's
   `tileset\<name>\dark.pcx` etc. stay at the game's path, which is where `play.ts` writes them (the old regex sent
   them to `tileset/<name>.dark.pcx`, a path nothing writes).
-- **Hash** (the one mod hash, 2026-11-08 branch `mod-hash`; `mods.md` "The mod hash, one rule"):
+- **Hash** (the one mod hash, 2026-11-08 branch `mod-hash`; `mods.md` "The mod hash, one rule"). **Superseded
+  2026-11-12:** the stamp's hash is `readMod(modTree(req.mod)).identity.hash` in the worker (`ExtractRequest.mod`,
+  made by `install.ts#dataSetMod`); `dataSetHashOf`, `hashOnly`, `code`, `overlay` and `splitPickedFiles` below are
+  gone (`mods.md` "@scm-js/mod adopted"). The record as it was:
   `overCopy.ts#dataSetHashOf(names, own, code)` = core's `modHashOfDigests` over **every** own file — never compared
   with the base (the old `changedFiles`/`firstOf`/`copyChain`/`hashUnbased` are gone; `hashUnbased` stays in
   `StoredStamp` only so old stamps read). Names: the overlay's keys, `ExtractRequest.hashOnly` (loose files in

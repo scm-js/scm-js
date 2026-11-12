@@ -54,7 +54,8 @@ import { cleanStoredPath, storedPathOf } from "../gamedata/paths";
 import { attachReaderDataSet, dataSetRaceCandidates, installDataSetInto, listDataSets, rehashDataSet, reloadDataSet, removeDataSet, setDataSetRaces, switchDataSet } from "../services/gameData";
 import { displayColorHex, PLAYER_TYPES, playerTypeLabel } from "../data/players";
 import { dataSetRaceLabel, dataSetRaces } from "../data/races";
-import { normalizeRaces, raceChoices } from "../formats/mod/races";
+import { normalizeRaces } from "@scm-js/mod";
+import { raceChoices } from "../formats/mod/races";
 import { dataSetUnitGroups, starEditUnitGroups, TECH_NAMES, techName, UNIT_NAMES, unitName, unitTypeCount, UPGRADE_NAMES, upgradeName } from "../data/units";
 import { WEAPON_NAMES, weaponName } from "../data/weapons";
 import {
@@ -1668,7 +1669,8 @@ export function gameDataApi(store: Store): GameDataApi {
     attach: async (profile, read, options) => {
       if (!isProfileId(profile.id)) throw new Error(`"${profile.id}" is not a data set id: lower-case letters, digits and hyphens, up to 40 characters.`);
       if (typeof read !== "function") throw new Error("gameData.attach needs a function that reads a file");
-      return publish(attachReaderDataSet(store, profile, read, options?.hash));
+      const { races, ...rest } = profile;
+      return publish(attachReaderDataSet(store, { ...rest, ...(races ? { races: normalizeRaces(races) } : {}) }, read, options?.hash));
     },
     reload: () => reloadDataSet(store),
     rehash: (hash) => {

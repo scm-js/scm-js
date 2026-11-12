@@ -12,6 +12,7 @@
  * What stays English, whatever the language: `--json` keys, the files the command writes (a dump, a baseline, a
  * README, a workflow, a test file), map text, and the MCP server and language server (main.ts sets English for them).
  */
+import { renderMessage, type ModMessage } from "@scm-js/mod";
 import { format, isLocale, locale, setLocale, translate as editorText, type Locale, type Params } from "../../src/i18n";
 import ko from "./ko.json";
 
@@ -37,6 +38,15 @@ export function msg(text: string): string {
 /** `t` for a text that is not a literal here: a `msg()` in a table, or one of the editor's (a finding's `where`). */
 export function translate(text: string, params?: Params): string {
   return inLanguage(text, params);
+}
+
+/**
+ * A sentence `@scm-js/mod` hands over as data (an error's `detail`, a line of what it said of a mod), in the reader's
+ * language: its English template looked up as any other text, a parameter that is itself a sentence the same way. The
+ * catalogue holds every template of `MOD_MESSAGES` (`npm run i18n` adds them for a tree that imports the package).
+ */
+export function modText(message: ModMessage): string {
+  return renderMessage(message, (template, params) => inLanguage(template, params));
 }
 
 /** A language tag (`ko`, `ko-KR`, `ko_KR.UTF-8`) as one of ours, or null. */

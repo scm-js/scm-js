@@ -446,6 +446,72 @@ on a Cosmonarchy replay (a player of race 69, the mod's fourth race; ids 69–71
   Not done: an editor dialog to name races; `api.gameData.raceCandidates` gives nothing for a stored copy
   (`gamedata.md`).
 
+## A patcher exe's overlay, and an archive whose tables lie before its header (2026-11-10, branch `patcher-exe`)
+
+Found on two mods kept outside every repository (SC Revolution 2.2, Burning Ground 2.00); the fixes are general and
+name neither. mopaq 1.6.3 (`Archive.open(data, { offset })`) is needed: the `mopaq` link points at its worktree until
+it is published.
+
+**FireGraft's patcher overlay** (`sources.ts#exeArchive`; the same reader is scm-sim `src/mods/unpack.ts`, and the
+layout with its evidence is scm-sim `docs/patcher.md`). Five samples, two builds of the program ("FG Patcher",
+`PatchLoader.pdb`): the program's own header holds the overlay's offset at 0x18 (the program seeks there and reads
+`PEGF`; all five = the program's end). Then u32 **count**, u32 **form** (1 in all five; copied through by the program),
+and per plugin u32 id, u32 size, u32 0 **and its bytes at once** (interleaved: read from the program's code — after
+`PEGF` it reads the count into its loop counter, then per plugin three words and `size` bytes). No terminator; the
+archive follows at a 512-byte boundary, where storm looks. The old reader had count and form swapped and the entries
+grouped: right only for one plugin (Cosmonarchy, SC Revolution); Burning Ground's two (`EUDE`, GPTP) read as
+"MPQDraft's self-executing MPQ" with none, and TriFresh / remove-protoss (count 0) were "MPQDraft's" too — they are
+FireGraft's patcher with no plugins, and say so now (files and hashes unchanged). Refused with `PatcherError`
+(a `ModSourceError`; `what` in a few English words, the sentence through `t()` in the CLI and the editor's install): a
+form other than 1, more than 256 plugins, a third word not 0, a plugin past the file's end or not starting `MZ`, a
+patcher with no archive after it. `libraryName` names a plugin by its export directory (`GPTP.qdp`, `GPTP-v2.41.qdp`;
+the UPX-packed EUD Enabler says `qdp.dll`); `mod info` prints `name, id <hex or four letters>, size`.
+
+**`ExeArchive` changed shape**: `bytes` (the whole exe) and `at` instead of `archive` (a slice from the header), so
+every caller opens `Archive.open(found.bytes, { offset: found.at })`. A slice cannot reach tables before the header.
+`mpqHeaderAt` no longer believes a version 0 header's own size (SC Revolution writes 0xFFFFFFFF); it requires the
+tables' wrapped positions inside the file instead (the old check rejected the header, so `exeArchive` returned null and
+`mod info` said "Files 0 · 0 B" with no word why). The editor's install hands the worker the whole exe and an `offset`
+(`ExtractRequest.archives[].offset`, `openArchives`), not a copy from the header.
+
+**mopaq 1.6.3** (its CHANGELOG has the rules and StormLib's places): positions modulo 2^32; a cut table read as far as
+it goes (block table cut, hash table's missing slots empty); a table of 256 MB or more is a fake header; header size
+and archive size not believed; the scan passes over a fake header. **And storm's lookup**: StarCraft 1.16.1's
+storm.dll (0x15014610) returns an entry of the asked locale at once but otherwise keeps the *last* neutral match. SC
+Revolution puts a garbage decoy (flags `0x80020100`, IMPLODE|ADJUST_KEY without ENCRYPTED, bytes of nothing) at each
+name's home slot and the real entry later; mopaq read the decoy (`units.dat` 61,062 bytes of nothing) and now reads
+the real one (19,876). 490 of its 732 named slots are such decoys or fillers.
+
+**SC Revolution** has no `(listfile)`: the CLI probes (`probeNames`) and finds 205 files (11 tables of 1.16.1's sizes,
+both AI and iscript, 91 pictures, 97 sounds, 4 string tables), hash `90b8c22d9cb4ba31`. Its FireGraft project
+(`Firegraft\ModDatResurection - New.fgp`, named by the patcher's own `Firegraft\datalist.txt`) is **not** found here:
+the probe list has no FireGraft names, and adding them would change list-less archives' hashes on one side only
+(the page's `namesToProbe` would need the same). scm-sim's runners find it through the datalist for loading only.
+
+**Libraries beside the exe**: `ModSource.beside` (for an exe named alone, the `.dll`s in its folder; in a folder, those
+in the exe's folder, still in `left`), a ▲ line in `mod info`, `beside` in `--json`. Burning Ground's GPTP imports 17
+functions from `fmod.dll` (beside its exe), so it cannot load without it; Cosmonarchy's folder has
+`discord_game_sdk.dll`. The hash rule is unchanged (`.dll` left out; a plugin inside the exe has no line either).
+
+**What each command does with the patcher's own plugins**: `mod info` lists them (`exes[].plugins`: id, at, size,
+name; never bytes); `mod unpack`, `mod play` and the bot runners' folder (`overlay.ts#writeCode`) carry only plugins
+that are files, so none of these. The page does not run them (scm-sim `web/modDrop.ts` names them only).
+
+Measured (`scmjs mod info`, before = this branch's parent with mopaq 1.6.2, after = this branch):
+
+| exe | before | after |
+| --- | --- | --- |
+| SC Revolution 2.2 (21 MB) | Files 0 · 0 B, no word why | 205 files · 41.1 MB, 1 plugin (GPTP-v2.41.qdp), probed, `90b8c22d9cb4ba31` |
+| Burning Ground 2.00 (519 MB) | "MPQDraft's self-executing MPQ", no plugins | 2 plugins (qdp.dll id EUDE 13 KB; GPTP.qdp 483 KB), ▲ fmod.dll; 2,882 files, `0ed055cf80a95bd0` both |
+| TriFresh | "MPQDraft's self-executing MPQ" | "FireGraft's patcher"; 66 files, `ea488d3ac3575bda` both |
+| remove-protoss | "MPQDraft's self-executing MPQ" | "FireGraft's patcher"; 11 files, `fbd2edc992e7377e` both |
+| Cosmonarchy BW.exe | 1 plugin (id fc724f8c) | qdp-hotloader.qdp named, ▲ discord_game_sdk.dll; 7 files, `e18fe9901e9edd71` both |
+| Cosmonarchy release folder | 7,767 files, `20e1c6d89ae2af75` / `db23a1f9dd8cef66` | the same |
+
+Tests: `tests/cli-mod.test.ts` "reads FireGraft's patcher in both forms…" and "says why an exe is not read…", the bytes
+made by `tests/support/patcherExe.ts` (a copy of scm-sim's). Not done: `mod unpack` writing the patcher's plugins out;
+any hash line for them (a decision for all four repositories).
+
 ## Open
 
 - The hash is one rule everywhere since `mod-hash` ("The mod hash, one rule" above, with its known gaps). The copy

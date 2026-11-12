@@ -7,10 +7,12 @@
  *   `DecompressionStream("deflate-raw")`. No zip64 and no encryption; such a zip is refused in words.
  * - **MPQDraft's self-executing MPQ** (SEMPQ): a small Windows program with the archive appended at a 512-byte boundary
  *   after the program, where storm looks for one.
- * - **FireGraft's patcher**: the program, then an overlay `"PEGF"`, u32 1, u32 count, and for each plugin u32 id,
- *   u32 size, u32 0; then the plugins' bytes, then the archive. The plugins are recorded, never run.
+ * - **FireGraft's patcher** ("FG Patcher"): the program, then an overlay whose offset the program keeps in its own
+ *   header (the u32 at 0x18): `"PEGF"`, u32 count, u32 1, then for each plugin u32 id, u32 size, u32 0 and that many
+ *   bytes of the plugin, one after the other; then the archive at a 512-byte boundary after the last plugin, where
+ *   storm finds it — its tables may lie before its header. The plugins are found and named, never run.
  *
- * Nothing of an exe is run or kept but its archive.
+ * Nothing of an exe is run.
  */
 
 /** The game's own top folders: a mod's files sit under these. */
@@ -112,17 +114,30 @@ export function modRoot(paths: readonly string[]): string {
   return best([...hasArr]) ?? best([...score.keys()]) ?? "";
 }
 
+/** Why what was handed over cannot be read as a mod, in words. */
+export class ModSourceError extends Error {}
+
 const MPQ_MAGIC = 0x1a51504d; // "MPQ\x1A"
 const MPQ_USER = 0x1b51504d; // "MPQ\x1B", a user-data header that says where the archive is
-const PEGF = 0x46474550; // "PEGF"
+const PEGF = 0x46474550; // "PEGF", FireGraft's patcher overlay
+/** Where FireGraft's patcher keeps its overlay's offset: the u32 at 0x18 of its own header, which its program reads. */
+const OVERLAY_AT = 0x18;
+/** The overlay's second word in every patcher seen (five, two builds of the program): its form. */
+const OVERLAY_FORM = 1;
 
 const view = (b: Uint8Array) => new DataView(b.buffer, b.byteOffset, b.byteLength);
 
+/**
+ * Whether an archive header storm would read starts at `at`. A version 0 header's own size is not believed (patchers
+ * write 0xFFFFFFFF there), so it is told by its tables: their positions, the header's plus theirs modulo 2^32, must
+ * fall inside the file. A later version's size and format are the known ones.
+ */
 function mpqHeaderAt(b: Uint8Array, at: number): boolean {
   if (at < 0 || at + 32 > b.length) return false;
   const v = view(b);
   if (v.getUint32(at, true) !== MPQ_MAGIC) return false;
   const size = v.getUint32(at + 4, true), version = v.getUint16(at + 12, true);
+  if (version === 0) return (at + v.getUint32(at + 16, true)) % 0x100000000 < b.length && (at + v.getUint32(at + 20, true)) % 0x100000000 < b.length;
   return size >= 32 && size <= 0xd0 && version <= 3;
 }
 
@@ -147,43 +162,126 @@ export function programEnd(b: Uint8Array): number | null {
   return Math.min(end, b.length);
 }
 
-export interface ExeArchive {
-  /** The archive, from its header on. */
-  archive: Uint8Array;
-  /** Where in the exe it starts. */
-  at: number;
-  kind: "sempq" | "firegraft";
-  /** FireGraft's plugins in the overlay, by id and size (never run, not kept). */
-  plugins: { id: number; size: number }[];
+/**
+ * The name a Windows library gives itself in its export directory (`GPTP.qdp`), or null when it has none or the bytes
+ * are no library. An MPQDraft plugin exports `GetMPQDraftPlugin`, so it has one.
+ */
+export function libraryName(b: Uint8Array): string | null {
+  try {
+    if (b.length < 64 || b[0] !== 0x4d || b[1] !== 0x5a) return null;
+    const v = view(b), pe = v.getUint32(0x3c, true);
+    if (pe + 24 > b.length || v.getUint32(pe, true) !== 0x00004550) return null;
+    const optional = pe + 24, wide = v.getUint16(optional, true) === 0x20b;
+    if (v.getUint32(optional + (wide ? 108 : 92), true) < 1) return null;
+    const exports = v.getUint32(optional + (wide ? 112 : 96), true);
+    if (!exports) return null;
+    const sections = v.getUint16(pe + 6, true), table = optional + v.getUint16(pe + 20, true);
+    const offset = (rva: number): number | null => {
+      for (let i = 0; i < sections; i++) {
+        const s = table + i * 40, va = v.getUint32(s + 12, true), raw = v.getUint32(s + 16, true), at = v.getUint32(s + 20, true);
+        if (rva >= va && rva < va + raw) return at + rva - va;
+      }
+      return null;
+    };
+    const dir = offset(exports);
+    const name = dir === null || dir + 16 > b.length ? null : offset(v.getUint32(dir + 12, true));
+    if (name === null) return null;
+    let end = name;
+    while (end < b.length && end - name < 260 && b[end] !== 0) end++;
+    const text = String.fromCharCode(...b.subarray(name, end));
+    return /^[\x20-\x7e]+$/.test(text) ? text : null;
+  } catch { return null; }
 }
 
-/** The mod archive inside a self-executing exe, or null when the exe holds none (a program only). */
+/** A plugin a FireGraft patcher's overlay carries, as the patcher loads it. */
+export interface PatcherPlugin {
+  /** The id the overlay gives it: the plugin's own MPQDraft id (GPTP's is 0x1B4D69B6; some are four letters, `EUDE`). */
+  id: number;
+  /** Where its bytes start in the exe, and how many. */
+  at: number;
+  size: number;
+  /** The name its export directory gives (`GPTP.qdp`), or null. */
+  name: string | null;
+  /** Its bytes (a view into the exe's). */
+  bytes: Uint8Array;
+}
+
+export interface ExeArchive {
+  /**
+   * The whole exe. Its archive is opened as `Archive.open(bytes, { offset: at })`: the archive's tables may lie before
+   * its header (positions are the header's plus theirs modulo 2^32), which a slice from the header on cannot reach.
+   */
+  bytes: Uint8Array;
+  /** Where in the exe the archive's header is. */
+  at: number;
+  kind: "sempq" | "firegraft";
+  /** The plugins FireGraft's patcher carries, in the order it loads them (none for a SEMPQ). Never run. */
+  plugins: PatcherPlugin[];
+}
+
+/** A patcher's overlay in a form not read here, or one that does not hold together. `what` says how, in a few words. */
+export class PatcherError extends ModSourceError {
+  readonly what: string;
+  constructor(what: string) { super(`Its patcher overlay is in a form not read here: ${what}.`); this.what = what; }
+}
+
+/** FireGraft's patcher overlay: its plugins and where they end. Null when the exe has none. Throws `PatcherError`. */
+function patcherOverlay(b: Uint8Array, end: number): { plugins: PatcherPlugin[]; after: number } | null {
+  const v = view(b);
+  // Where the program reads it: its header's word at 0x18. Else at the program's end or a little after (some linkers pad).
+  let at = -1;
+  const said = v.getUint32(OVERLAY_AT, true);
+  if (said >= end && said + 12 <= b.length && v.getUint32(said, true) === PEGF) at = said;
+  else for (let p = end; p + 12 <= b.length && p < end + 4096; p++) if (v.getUint32(p, true) === PEGF) { at = p; break; }
+  if (at < 0) return null;
+  const count = v.getUint32(at + 4, true), form = v.getUint32(at + 8, true);
+  if (form !== OVERLAY_FORM) throw new PatcherError(`form ${form} at byte ${at}, where only form ${OVERLAY_FORM} is known`);
+  if (count > 256) throw new PatcherError(`${count} plugins said at byte ${at}, which is no number a patcher writes`);
+  const plugins: PatcherPlugin[] = [];
+  let p = at + 12;
+  for (let i = 0; i < count; i++) {
+    if (p + 12 > b.length) throw new PatcherError(`${count} plugins said, and the file ends after ${i}`);
+    const id = v.getUint32(p, true), size = v.getUint32(p + 4, true), zero = v.getUint32(p + 8, true);
+    const from = p + 12;
+    if (zero !== 0) throw new PatcherError(`plugin ${i + 1}'s third word (at byte ${p + 8}) is ${zero}, where every patcher seen has 0`);
+    if (from + size > b.length) throw new PatcherError(`plugin ${i + 1} is said to be ${size} bytes, and the file ends ${b.length - from} bytes after its start`);
+    const bytes = b.subarray(from, from + size);
+    if (size < 2 || bytes[0] !== 0x4d || bytes[1] !== 0x5a) throw new PatcherError(`plugin ${i + 1} (at byte ${from}) is no Windows library`);
+    plugins.push({ id, at: from, size, name: libraryName(bytes), bytes });
+    p = from + size;
+  }
+  return { plugins, after: p };
+}
+
+/**
+ * The mod archive inside a self-executing exe, or null when the exe holds none (a program only). A FireGraft patcher's
+ * overlay is read as its program reads it and its archive looked for after the plugins; a SEMPQ's archive at 512-byte
+ * boundaries after the program, then anywhere after it. Throws `PatcherError` for a patcher overlay not read here, or
+ * one with no archive after it.
+ */
 export function exeArchive(b: Uint8Array): ExeArchive | null {
   const end = programEnd(b);
   if (end === null) return null;
   const v = view(b);
-  for (let at = end; at + 24 <= b.length && at < end + 4096; at++) {
-    if (v.getUint32(at, true) !== PEGF) continue;
-    const count = v.getUint32(at + 8, true);
-    if (v.getUint32(at + 4, true) !== 1 || count === 0 || count > 64) continue;
-    const plugins: { id: number; size: number }[] = [];
-    let p = at + 12;
-    for (let i = 0; i < count && p + 12 <= b.length; i++, p += 12) plugins.push({ id: v.getUint32(p, true), size: v.getUint32(p + 4, true) });
-    let mpq = p + plugins.reduce((n, x) => n + x.size, 0);
-    if (!mpqHeaderAt(b, mpq)) mpq = findMpq(b, p);
-    if (mpq < 0) return null;
-    return { archive: b.subarray(mpq), at: mpq, kind: "firegraft", plugins };
+  const overlay = patcherOverlay(b, end);
+  if (overlay) {
+    // (storm looks at 512-byte boundaries; the archive's tables may come first, between the plugins and its header)
+    let mpq = -1;
+    for (let at = Math.ceil(overlay.after / 512) * 512; at + 32 <= b.length; at += 512) if (mpqHeaderAt(b, at)) { mpq = at; break; }
+    if (mpq < 0) mpq = findMpq(b, overlay.after);
+    if (mpq < 0) throw new PatcherError(`no archive after its ${overlay.plugins.length === 1 ? "plugin" : `${overlay.plugins.length} plugins`}`);
+    return { bytes: b, at: mpq, kind: "firegraft", plugins: overlay.plugins };
   }
   for (let at = Math.ceil(end / 512) * 512; at + 32 <= b.length; at += 512) {
     const word = v.getUint32(at, true);
     if (word === MPQ_USER && at + 12 <= b.length) {
       const real = at + v.getUint32(at + 8, true);
-      if (mpqHeaderAt(b, real)) return { archive: b.subarray(real), at: real, kind: "sempq", plugins: [] };
+      if (mpqHeaderAt(b, real)) return { bytes: b, at: real, kind: "sempq", plugins: [] };
     }
-    if (mpqHeaderAt(b, at)) return { archive: b.subarray(at), at, kind: "sempq", plugins: [] };
+    if (mpqHeaderAt(b, at)) return { bytes: b, at, kind: "sempq", plugins: [] };
   }
   const any = findMpq(b, end);
-  return any < 0 ? null : { archive: b.subarray(any), at: any, kind: "sempq", plugins: [] };
+  return any < 0 ? null : { bytes: b, at: any, kind: "sempq", plugins: [] };
 }
 
 /** An MPQ from its first byte (a mod's `.mpq`). */
@@ -199,8 +297,6 @@ export interface ZipMember {
   size: number;
   read(): Promise<Uint8Array>;
 }
-
-export class ModSourceError extends Error {}
 
 /** The files of a zip (folders left out), read lazily. */
 export function readZip(b: Uint8Array): ZipMember[] {

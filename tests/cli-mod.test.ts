@@ -20,7 +20,7 @@ import { aiscriptFromText } from "../src/formats/dat/aiscript";
 import { encodeLoFile } from "../src/formats/dat/loFile";
 import { encodeGrpImage, frameFromPicture } from "../src/formats/dat/grpFile";
 import { encodeReqGraft } from "../src/formats/dat/graft";
-import { dataSetHash, exeArchive, gameName, modRoot, readZip } from "../src/formats/mod/sources";
+import { dataSetHash, exeArchive, gameName, libraryName, modRoot, PatcherError, readZip } from "../src/formats/mod/sources";
 import { readManifest } from "../src/formats/mod/folder";
 import { archiveFiles, storageFiles, type GameFiles } from "../cli/src/gamefiles";
 import { codeWords, fitWords, MOD_CODE, modArgs, MOD_OVERLAY, type Engine } from "../cli/src/engine";
@@ -41,6 +41,7 @@ import { CliError, visible } from "../cli/src/ui";
 import { TEST_MAPS_DIR } from "./support/maps";
 import { PassThrough } from "node:stream";
 import { cosmonarchyPath, gameFile, gameImagePaths, haveCosmonarchy, haveGameArchives } from "./support/modFiles";
+import { library, modArchive, patcherExe, program as patcherProgram } from "./support/patcherExe";
 
 const root = mkdtempSync(join(tmpdir(), "scmjs-mod-"));
 let n = 0;
@@ -162,14 +163,66 @@ describe("scmjs mod info: what a mod ships as", () => {
     expect(modRoot(["mpq/arr/units.dat", "mpq/unit/x.grp", "README.md"])).toBe("mpq");
     expect(modRoot(["arr/units.dat", "unit/terran/marine.grp"])).toBe("");
     const mpq = await writeMpq(members(madeMod()), "zlib");
-    const plugin = latin("PLUGINBYTES!");
+    const plugin = latin("MZ PLUGINBYTES!");
     const overlay = new Uint8Array(24); const ov = new DataView(overlay.buffer);
     ov.setUint32(0, 0x46474550, true); ov.setUint32(4, 1, true); ov.setUint32(8, 1, true); ov.setUint32(12, 0xfc724f8c, true); ov.setUint32(16, plugin.length, true);
     const firegraft = concat(program(), overlay, plugin, mpq);
-    expect(exeArchive(firegraft)).toMatchObject({ kind: "firegraft", at: 0x300 + 24 + plugin.length, plugins: [{ id: 0xfc724f8c, size: plugin.length }] });
+    expect(exeArchive(firegraft)).toMatchObject({ kind: "firegraft", at: 0x300 + 24 + plugin.length, plugins: [{ id: 0xfc724f8c, at: 0x300 + 24, size: plugin.length, name: null }] });
     const sempq = concat(program(), new Uint8Array(0x100), mpq);
     expect(exeArchive(sempq)).toMatchObject({ kind: "sempq", at: 0x400, plugins: [] });
     expect(exeArchive(program())).toBeNull();
+  });
+
+  it("reads FireGraft's patcher in both forms: its plugins one after the other, its archive's tables before its header", async () => {
+    // Two plugins, named by their export directories, then the archive at the next 512-byte boundary.
+    const eude = library("qdp.dll"), gptp = library("GPTP.qdp");
+    const two = patcherExe([{ id: 0x45445545, bytes: eude }, { id: 0x1b4d69b6, bytes: gptp }], modArchive());
+    expect(exeArchive(two.exe)).toMatchObject({ kind: "firegraft", at: two.at, plugins: [{ id: 0x45445545, at: 0x400 + 24, size: 0x400, name: "qdp.dll" }, { id: 0x1b4d69b6, at: 0x400 + 24 + 0x400 + 12, size: 0x400, name: "GPTP.qdp" }] });
+    expect(libraryName(gptp)).toBe("GPTP.qdp");
+    // No plugins: the patcher all the same.
+    expect(exeArchive(patcherExe([], modArchive()).exe)).toMatchObject({ kind: "firegraft", at: 0x600, plugins: [] });
+    // Tables before the header, the header's sizes 0xFFFFFFFF; no list of its files.
+    const wrapped = patcherExe([{ id: 0x1b4d69b6, bytes: library("GPTP-v2.41.qdp") }], modArchive(false), { tablesFirst: true });
+    expect(new DataView(wrapped.exe.buffer).getUint32(wrapped.at + 16, true)).toBeGreaterThan(0x80000000);
+    expect(exeArchive(wrapped.exe)).toMatchObject({ at: wrapped.at, plugins: [{ name: "GPTP-v2.41.qdp" }] });
+    const dir = tmp("patcher"); mkdirSync(dir);
+    writeFileSync(join(dir, "Two.exe"), two.exe);
+    writeFileSync(join(dir, "Wrapped.exe"), wrapped.exe);
+    writeFileSync(join(dir, "fmod.dll"), latin("MZ a library"));
+    writeFileSync(join(dir, "plain.mpq"), modArchive());
+    const r = modInfo(await openMod(join(dir, "Wrapped.exe"), null));
+    expect(r.files).toBe(1); // weapons.dat, by the names the game reads (the archive lists none)
+    expect(r.probed).toEqual(["Wrapped.exe"]);
+    expect(r.beside).toEqual(["fmod.dll"]);
+    const lines = printModInfo(r).map(visible).join("\n");
+    expect(lines).toContain("FireGraft's patcher with 1 plugin (GPTP-v2.41.qdp, id 1b4d69b6, 1.0 KB)");
+    expect(lines).toContain("Beside the exe: fmod.dll.");
+    // The patcher's own plugins are no line of the mod's hash: the exe hashes as its archive alone does.
+    const fromExe = modInfo(await openMod(join(dir, "Two.exe"), null)), fromMpq = modInfo(await openMod(join(dir, "plain.mpq"), null));
+    expect(fromExe.exes[0].plugins.map((p) => p.name)).toEqual(["qdp.dll", "GPTP.qdp"]);
+    expect(printModInfo(fromExe).map(visible).join("\n")).toContain("(qdp.dll, id EUDE, 1.0 KB; GPTP.qdp, id 1b4d69b6, 1.0 KB)");
+    expect(fromExe.hash).toBe(fromMpq.hash);
+    expect(fromExe.plugins).toEqual([]);
+    // As a folder: the library beside the exe is named, and still left out.
+    const folder = modInfo(await openMod(dir, null));
+    expect(folder.beside).toEqual(["fmod.dll"]);
+    expect(folder.left).toContain("fmod.dll");
+  });
+
+  it("says why an exe is not read, never showing it as a mod of no files", async () => {
+    const dir = tmp("not-read"); mkdirSync(dir);
+    const said = async (file: string, bytes: Uint8Array) => {
+      writeFileSync(join(dir, file), bytes);
+      try { await openMod(join(dir, file), null); } catch (e) { expect(e).toBeInstanceOf(CliError); return (e as Error).message; }
+      throw new Error(`${file} was read`);
+    };
+    expect(await said("Tool.exe", patcherProgram())).toMatch(/Tool\.exe has no archive in it: it is not a self-executing mod/);
+    expect(await said("Odd.exe", patcherExe([], modArchive(), { form: 2 }).exe)).toBe("Odd.exe cannot be read as a mod: its patcher overlay is in a form not read here (form 2 at byte 1024, where only form 1 is known).");
+    expect(await said("Junk.exe", patcherExe([{ id: 1, bytes: new Uint8Array(32) }], modArchive()).exe)).toMatch(/plugin 1 \(at byte 1048\) is no Windows library/);
+    const { exe, at } = patcherExe([], modArchive());
+    const broken = exe.slice(); new DataView(broken.buffer).setUint32(at + 24, 0x40000000, true);
+    expect(await said("Broken.exe", broken)).toMatch(/^The archive inside Broken\.exe could not be opened: /);
+    expect(() => exeArchive(patcherExe([], modArchive(), { form: 2 }).exe)).toThrow(PatcherError);
   });
 
   it("reads a folder, an MPQ, an exe and a zip alike, and names what each carries", async () => {

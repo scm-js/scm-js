@@ -42,13 +42,16 @@ export function isStarEditDownload(archives: readonly { name: string; size: numb
   return Object.entries(STAREDIT_SIZES).every(([name, size]) => named.get(name) === size);
 }
 
-/** Open each archive that opens; the ones that do not are reported, not thrown. */
-export function openArchives(inputs: { name: string; bytes: Uint8Array }[]): { archives: OpenedArchive[]; problems: string[] } {
+/**
+ * Open each archive that opens; the ones that do not are reported, not thrown. `offset`: where the header is in the
+ * bytes, for an archive inside a mod's exe (its tables may lie before its header).
+ */
+export function openArchives(inputs: { name: string; bytes: Uint8Array; offset?: number }[]): { archives: OpenedArchive[]; problems: string[] } {
   const archives: OpenedArchive[] = [];
   const problems: string[] = [];
-  for (const { name, bytes } of sortArchives(inputs)) {
+  for (const { name, bytes, offset } of sortArchives(inputs)) {
     try {
-      archives.push({ name, archive: Archive.open(bytes) });
+      archives.push({ name, archive: Archive.open(bytes, offset === undefined ? undefined : { offset }) });
     } catch (err) {
       problems.push(`${name}: ${err instanceof Error ? err.message : String(err)}`);
     }

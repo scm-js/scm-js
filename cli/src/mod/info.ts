@@ -50,6 +50,8 @@ export interface ModInfo {
   plugins: { name: string; bytes: number; path: string }[];
   firegraft: { name: string; bytes: number; path: string }[];
   exes: ModSource["exes"];
+  /** Libraries (`.dll`) beside the mod's exe: a plugin of its may load them. Not the mod's files, not in its hash. */
+  beside: string[];
   maps: string[];
   /** The game the mod is for, as far as its files say. */
   game: string;
@@ -109,7 +111,7 @@ export function modInfo(source: ModSource, hash: SourceHash | null = null): ModI
     scripts: [...source.files.values()].filter((f) => /^scripts\\.*\.bin$/.test(gameName(f.name))).map((f) => f.name).sort(),
     plugins: source.plugins.map((p) => ({ name: p.name.split(/[\\/]/).pop()!, bytes: p.bytes, path: carriedPath(p) })),
     firegraft: source.firegraft.map((p) => ({ name: p.name.split(/[\\/]/).pop()!, bytes: p.bytes, path: carriedPath(p) })),
-    exes: source.exes, maps: [...source.files.values()].filter((f) => kindOf(f.name) === "maps").map((f) => f.name).sort(),
+    exes: source.exes, beside: source.beside, maps: [...source.files.values()].filter((f) => kindOf(f.name) === "maps").map((f) => f.name).sort(),
     game, races: source.races, duplicates: source.duplicates, left: source.left, gameCopy: source.gameCopy, probed: source.probed, unheld: source.unheld,
     hash: hash?.hash ?? null, withoutPlugins: hash?.withoutPlugins ?? null, older: hash?.older ?? null,
   };
@@ -163,8 +165,10 @@ function raceDetail(r: DataSetRace): string {
 export function printModInfo(r: ModInfo): string[] {
   const lines = [pc.bold(r.name), pc.dim(fromWords(r.kind, r.game)), ""];
   const kinds = MOD_KINDS.filter((k) => r.kinds[k]).map((k) => `${kindWords(k, r.kinds[k]!.files)} ${pc.dim(`(${bigSize(r.kinds[k]!.bytes)})`)}`);
+  // (a plugin by the name it gives itself and the id the patcher keeps it under; an id of four letters as its letters)
+  const idWord = (id: number) => { const s = String.fromCharCode(id & 0xff, (id >>> 8) & 0xff, (id >>> 16) & 0xff, id >>> 24); return /^[A-Za-z0-9]{4}$/.test(s) ? s : id.toString(16).padStart(8, "0"); };
   const patcher = (e: ModInfo["exes"][number]) => e.plugins.length
-    ? t("FireGraft's patcher with {n, plural, one {# plugin} other {# plugins}} ({list})", { n: e.plugins.length, list: e.plugins.map((p) => `id ${p.id.toString(16)}, ${size(p.size)}`).join("; ") })
+    ? t("FireGraft's patcher with {n, plural, one {# plugin} other {# plugins}} ({list})", { n: e.plugins.length, list: e.plugins.map((p) => `${p.name ? `${p.name}, ` : ""}id ${idWord(p.id)}, ${size(p.size)}`).join("; ") })
     : t("FireGraft's patcher");
   lines.push(...rows([
     [t("Files"), `${num(r.files)}${dot}${bigSize(r.bytes)}`],
@@ -186,6 +190,7 @@ export function printModInfo(r: ModInfo): string[] {
       : t("(with {list}, which the hash leaves out)", { list: r.older.left.join(", ") }))}` : null],
   ]));
   for (const copy of gameCopyFolders(r)) lines.push("", `${pc.yellow("▲")} ${gameCopyWords(copy)}`);
+  if (r.beside.length) lines.push("", `${pc.yellow("▲")} ${t("Beside the exe: {list}. A plugin of the mod may need {n, plural, one {it} other {them}}; {n, plural, one {it is} other {they are}} not among the mod's files or in its hash, and nothing here loads {n, plural, one {it} other {them}}.", { list: r.beside.map((p) => p.split("/").pop()).join(", "), n: r.beside.length })}`);
   if (r.probed.length) lines.push("", `${pc.yellow("▲")} ${t("{archives} has no list of its files: only the names the game reads were looked for", { archives: r.probed.join(", ") })}`);
   if (r.unheld.length) lines.push("", pc.dim(t("Listed by its archive and not in it, left out: {list}", { list: `${r.unheld.slice(0, 3).join(", ")}${r.unheld.length > 3 ? ` ${t("and {n} more", { n: num(r.unheld.length - 3) })}` : ""}` })));
   if (r.duplicates.length) lines.push("", `${pc.yellow("▲")} ${t("{n, plural, one {# file} other {# files}} twice, in another case: {list}", { n: r.duplicates.length, list: `${r.duplicates.slice(0, 3).join("; ")}${r.duplicates.length > 3 ? " …" : ""}` })}`);

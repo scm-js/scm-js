@@ -182,7 +182,7 @@ A mod for StarCraft 1.16.1, from a folder of the game's files
                    units.datex: 3,000 entries (the game's 228), GPTP's .datex layout
   Plugins          _qdp-hotloader.qdp (358 KB), aise.qdp (1.0 MB), gptp.qdp (5.9 MB), … — kept, not run
   FireGraft        1161.fgd (555 KB), Cosmonarchy BW.fgp (98 KB) — kept, not applied
-  Exe              Cosmonarchy BW.exe: FireGraft's patcher with 1 plugin (id fc724f8c, 358 KB), its archive at byte 804,352
+  Exe              Cosmonarchy BW.exe: FireGraft's patcher with 1 plugin (qdp-hotloader.qdp, id fc724f8c, 358 KB), its archive at byte 804,352
   Layers           Cosmonarchy BW.exe then mpq
   Hash             ac3f86533e4b5a31
   Without plugins  b13e467fb5abb298 (a page that runs none of the plugins)
@@ -192,7 +192,18 @@ It takes a folder (the game's paths at its root or in a folder under it, as a re
 keeps them under `mpq/`), an `.mpq`, a mod's `.exe` or a `.zip`. A folder's own archives
 and exes are read too, archives first and loose files over them, the later winning, as the
 game lays its own archives. A self-executing exe is read for the archive appended to it,
-never run: MPQDraft's self-executing MPQ, or FireGraft's patcher with its plugins listed.
+never run: MPQDraft's self-executing MPQ, or FireGraft's patcher. FireGraft's patcher can
+carry plugins of its own after the program, and `mod info` lists them in the order the
+patcher loads them, each by the name it gives itself and its id (`GPTP.qdp, id 1b4d69b6`;
+some ids are four letters, `EUDE`). Some patchers keep the archive's tables in front of
+its header and write nonsense in its size fields; the archive is read the way the game
+reads it all the same. An exe that holds no archive, or a patcher laid out in a way not
+known here, is refused with the reason rather than shown as a mod of no files.
+
+A library (`.dll`) beside the exe is named in a ▲ line: a plugin of the mod may load it,
+or need it to load at all (Burning Ground's GPTP takes its sound functions from the
+`fmod.dll` that ships beside it). It is not one of the mod's files and is not in its hash.
+
 A zip's stored and deflated members are read; a zip64 or encrypted zip is not. An
 archive's list of its files is taken as its files; an archive with no list is searched for
 the names the game reads. A name the list holds and the archive does not (Cosmonarchy's
@@ -355,8 +366,9 @@ A mod goes by a hash of sixteen hex digits, worked out the same way by the play 
 one mod has one hash everywhere. It covers every file the mod provides: each file it lays
 over the game, loose under its game folders or inside its archives (an `.mpq`, or the
 archive inside a FireGraft or MPQDraft loader `.exe`), each plugin it carries as a file,
-and its FireGraft project (`.fgp`). It is never compared with anyone's copy of the game,
-so two people with different copies give the same mod the same hash, and a release
+and its FireGraft project (`.fgp`). A plugin FireGraft's patcher carries inside the exe is
+not a file of the mod's and has no line. It is never compared with anyone's copy of the
+game, so two people with different copies give the same mod the same hash, and a release
 unpacked into a folder and packed again keeps it. Left out are what is not the mod's
 files: a file an archive lists and does not hold, a folder's read-mes, programs and
 libraries, and FireGraft's database (`.fgd`). A page that does not run the plugins plays
@@ -629,6 +641,10 @@ give `--bot cosmonarchy-example` in step 5.
 - The command line keeps and lists plugins (`.qdp`, `.bwl`) and never runs them on your
   computer; a FireGraft file's edits to the game's program are applied only inside the
   game that the play page and the engine's bot runners play, where the plugins run too.
+- The plugins FireGraft's patcher carries inside its exe are listed and nothing more:
+  `mod unpack` does not write them out, `mod play` does not hand them to the play page,
+  and the play page does not run them. Nor does anything load a library that ships beside
+  the exe.
 - `scmjs mod test`, `map test`, `map trace` and `map cost` lay a mod's files over the game
   but run none of its plugins, and have no scenario with a bot on the other side yet.
 - With a mod's plugins running, a game goes at about the game's own pace: analysing its

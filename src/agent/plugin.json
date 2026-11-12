@@ -1,0 +1,11 @@
+{
+  "name": "Claude Agent",
+  "id": "claude-agent",
+  "version": "0.1.0",
+  "description": "A panel where Claude reads and edits the open map with you: terrain, units, locations, doodads, sprites, fog, triggers, the mission briefing, strings, switches, players and forces, unit / upgrade / technology settings and the map's properties. Every change is one undo step. Runs on your own Anthropic API key, sent from this browser straight to the API (or to a proxy you name).",
+  "author": "scmJS contributors",
+  "homepage": "https://github.com/scm-js/scm-js",
+  "entry": "plugin.ts",
+  "icon": "icon.svg",
+  "api": 1
+}

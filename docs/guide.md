@@ -1838,6 +1838,75 @@ joins the old at the edges.
 - **Use the AI features**: unticked, it removes the menu, the assistant, the status-bar
   cell and the AI buttons, and keeps your key.
 
+## Claude Agent
+
+This copy of the editor also has **Claude Agent**: a panel where Claude reads and changes
+the open map with you, on your own Anthropic API key, with no account and no server in
+between. Open it with **Tools ▸ Claude Agent**, **Ctrl+Alt+C**, or the *Claude* cell in
+the status bar. It works separately from the scmjs.dev AI in [The AI](#the-ai); you can
+use either or both.
+
+Ask in plain words: "put a mineral line and a geyser at each start location", "make Player
+2 a Zerg computer", "add a trigger that gives Player 1 victory when the beacon is
+reached", "what do this map's triggers do?". Claude looks at the map first, makes the
+change, looks again to check it, and says what it did and where.
+
+### What it can do
+
+Everything the editor's own tools can, through the same commands:
+
+- **Terrain**: paint with the isometric or flat brush over an area or an ellipse, fill,
+  and replace one terrain with another. Needs the tileset graphics.
+- **Units, doodads and sprites**: list, place (one at a time or as a group), change owner,
+  type, hit points, resources and states such as invincible or burrowed, move and delete.
+- **Locations**: create, rename, move, resize, set elevations and delete.
+- **Triggers and the mission briefing**: read, add, rewrite, move and delete, written in
+  the Text Trigger Editor's syntax. It reads this guide's [Trigger reference](triggers.md)
+  for what a condition or action really does, and checks which switches and death counters
+  are free before it takes one.
+- **Scenario settings**: name and description, player slots, forces, unit, upgrade and
+  technology settings, the Create Unit with Properties slots, strings and switch names.
+- **Fog of war**, **start locations**, **resizing** the map and **changing its tileset**.
+- **Looking**: a picture of the map or an area, Check Map, Statistics, the Ctrl+F search,
+  and what you have selected, so "these units" and "here" mean what you picked.
+
+It cannot save the map: you save, as always. Without StarCraft's graphics it cannot see or
+paint terrain, and the picture it takes is a plain diagram of units and locations.
+
+### Your key
+
+The first time, the panel asks for an Anthropic API key (make one at
+[console.anthropic.com](https://console.anthropic.com)). The key goes from your browser
+straight to Anthropic and nowhere else. It is forgotten when the page closes unless you
+tick **Remember the key on this device**, which keeps it in this browser's storage.
+
+**API address** is for a proxy on your own network that adds a key itself. With one set,
+the key field can stay empty, so nobody using the editor there needs a key of their own.
+
+### Changes, undo and approval
+
+Every change Claude makes is one step on the undo stack, named *Claude: …*, so Ctrl+Z
+takes it back like anything you did. Under each reply, **Undo these changes** takes back
+that whole reply's changes at once, as long as nothing of yours has been done on top of
+them.
+
+By default Claude asks before anything that deletes or replaces existing work. Under the
+gear you can have it ask before every change, or never. **Allow all this reply** lets the
+rest of one reply's changes through without asking again.
+
+### Settings
+
+- **Model**: Claude Opus 5.5 (the default), Sonnet 5.5 (faster, cheaper) or Haiku 5.5
+  (fastest, cheapest, best for small jobs).
+- **Effort**: *Quick* to *Extra thorough*. More effort takes longer and costs more.
+- **Where the panel sits**: a window over the map that you can drag, resize and maximize,
+  the right dock, or a strip under the map.
+- **Bring each change on screen** and **Show Claude's reasoning**.
+
+The bottom of the panel shows how full the conversation is and roughly what it has cost at
+Anthropic's list prices. The circular arrow starts a new conversation. Each open map keeps
+a conversation of its own while the editor is open.
+
 ## Keyboard and preferences
 
 Press F1 for a list of every shortcut. These are the ones the editor starts with; any of

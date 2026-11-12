@@ -50,7 +50,7 @@ import {
   reloadPlugin, resolveActivate, runTransaction, runUpdate, setInstalled, DEACTIVATED_NOTE,
 } from "../src/plugins/host";
 import { pluginContextRows } from "../src/plugins/contextMenu";
-import { DEFAULT_REGISTRIES, DEFAULT_REMOTE_PLUGINS, defaultPlugins, defaultPluginSpecs, pluginKey, updateAddress } from "../src/plugins/defaults";
+import { DEFAULT_REGISTRIES, DEFAULT_REMOTE_PLUGINS, defaultPlugins, defaultPluginSpecs, isLocalBuiltin, pluginKey, updateAddress } from "../src/plugins/defaults";
 import { BUILTIN_REPLACES } from "../src/plugins/builtin";
 import { failureToast, pluginFailures } from "../src/plugins/failures";
 import {
@@ -1311,7 +1311,9 @@ describe("plugin lifecycle", () => {
     // Whether this build bundled them (`scripts/vendor-plugins.mjs`, which the desktop
     // build runs) or fetches them, every default is in the list exactly once and under
     // the same identity — that is what stops a bundled copy appearing beside its remote.
-    expect(defaultPlugins().map((d) => pluginKey(d.spec))).toEqual(DEFAULT_REMOTE_PLUGINS.map((d) => pluginKey(d.spec)));
+    expect(defaultPlugins().filter((d) => !isLocalBuiltin(d.spec)).map((d) => pluginKey(d.spec))).toEqual(DEFAULT_REMOTE_PLUGINS.map((d) => pluginKey(d.spec)));
+    // The Claude Agent, a built-in with no remote default, follows the remote defaults and starts on.
+    expect(defaultPlugins().filter((d) => isLocalBuiltin(d.spec))).toEqual([{ spec: "builtin:claude-agent", enabled: true }]);
     expect(defaultPluginSpecs()).toEqual(defaultPlugins().map((d) => d.spec));
     // A fresh editor runs all five, Walkability and Paint with the rest.
     const fresh = effectiveInstalls([]).map((p) => pluginKey(p.spec));
@@ -2022,7 +2024,7 @@ describe("plugin previews", () => {
     // The check button used to be `isPinned(spec)`, which vendoring turned off: a bundled
     // default is `builtin:paint`, so the one button that moves a plugin forward appeared on
     // every row except the ones the editor ships — and only in builds that did not vendor.
-    for (const d of defaultPlugins()) {
+    for (const d of defaultPlugins().filter((x) => !isLocalBuiltin(x.spec))) {
       const address = updateAddress(d.spec);
       expect(address, d.spec).not.toBeNull();
       expect(pluginKey(address!), d.spec).toBe(pluginKey(d.spec));
@@ -2030,6 +2032,8 @@ describe("plugin previews", () => {
     }
     // A plugin that follows a branch has no update to check for — Reload is its update.
     expect(updateAddress("github:o/p")).toBeNull();
+    // A built-in with no remote default (the Claude Agent) has no repository, so nothing to check.
+    expect(updateAddress("builtin:claude-agent")).toBeNull();
     expect(updateAddress("github:o/p@main")).toBeNull();
     expect(updateAddress("https://example.com/p/plugin.json")).toBeNull();
     expect(updateAddress("builtin:not-vendored-here")).toBeNull();

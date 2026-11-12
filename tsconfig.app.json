@@ -6,6 +6,7 @@
     "lib": ["ES2023", "DOM"],
     "module": "esnext",
     "types": ["vite/client"],
+    "paths": { "undici-types": ["./src/agent/undici-types-stub.d.ts"], "undici": ["./src/agent/undici-types-stub.d.ts"] },
     "allowArbitraryExtensions": true,
     "skipLibCheck": true,
 

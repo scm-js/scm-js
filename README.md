@@ -52,6 +52,11 @@ Plugins ▸ Browse Plugins….
   open map with you, and Tools ▸ AI lays out maps, writes triggers and briefings, and
   reviews a map. The prompts are public in
   [ai-engine](https://github.com/scm-js/ai-engine). See [The AI](docs/guide.md#the-ai).
+- **Claude Agent.** Tools ▸ Claude Agent (Ctrl+Alt+C) opens a panel where Claude edits the
+  open map with you: terrain, units, locations, doodads, sprites, fog, triggers, the
+  briefing, players, forces, unit / upgrade / technology settings and strings. Each change
+  is one undo step. It runs on your own Anthropic key, straight from the browser, with no
+  account. See [Claude Agent](docs/guide.md#claude-agent).
 - **Triggers as a graph.** Trigger Map (*Browse Plugins*) shows which triggers set and
   read each switch, death counter and location, and what is never set, read or run.
 - **Walkability.** View ▸ Walkability (Ctrl+Shift+W) draws islands, regions, chokes with

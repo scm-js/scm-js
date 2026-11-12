@@ -420,7 +420,10 @@ Burning Ground's `BG_v2.00.exe` (two plugins in the patcher, `fmod.dll` beside i
 Revolution 2.2 was `90b8c22d9cb4ba31` and is `d9e4e6ff76c7e71d`; Cosmonarchy's release was
 `20e1c6d89ae2af75` and is `c94acdf31982fa4b`. A mod with no such code, such as TriFresh
 (`ea488d3ac3575bda`), keeps its hash. `mod info` prints the earlier one as `Earlier hash`,
-and the replay commands accept it.
+and the replay commands accept it. Between 11 and 12 November 2026 the play page gave a
+line to every module of a mod's code but still none to a FireGraft project found only
+through FireGraft's own list, so SC Revolution 2.2 was `693bf4a83f3a69a1` there; the
+replay commands accept that hash too.
 
 **Files an operating system leaves in folders are not the mod's.** Windows Explorer writes
 `desktop.ini` and `Thumbs.db` into folders it has shown, the macOS Finder `.DS_Store`, and

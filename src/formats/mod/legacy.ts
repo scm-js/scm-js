@@ -5,7 +5,7 @@
  * `identity`.
  */
 import {
-  exeArchive as packageExeArchive, gameName as packageGameName, hashLines, hashLinesAsWere, isSystemFile, pluginLine as packagePluginLine,
+  exeArchive as packageExeArchive, gameFileLine, gameName as packageGameName, hashLines, hashLinesAsWere, isSystemFile, pluginLine as packagePluginLine,
   firegraftLine as packageFiregraftLine, leafOf, sha256Hex,
   type ExeArchive as PackageExeArchive,
 } from "@scm-js/mod";
@@ -52,7 +52,7 @@ export const firegraftLine = (name: string, sha256: string): string => packageFi
 export const isFiregraftProject = (name: string): boolean => /\.fgp$/i.test(name);
 
 /** @deprecated A game file's line, `name<TAB>sha256` by its game name: `ModDescription.identity.lines` holds them. */
-export const gameLine = (name: string, sha256: string): string => `${gameName(name)}\t${sha256}`;
+export const gameLine = (name: string, sha256: string): string => gameFileLine(gameName(name), sha256);
 
 /**
  * @deprecated Use `readMod` and its `identity`, which also has lines for a patcher's own plugins and the libraries a
@@ -73,7 +73,7 @@ export async function modHashOfDigests(input: ModHashInput): Promise<ModHash> {
     }
     return out;
   };
-  const were = [...[...game].map(([name, f]) => ({ line: `${name}\t${f.sha256}`, system: f.system })), ...once(input.firegraft ?? [], isFiregraftProject, firegraftLine)];
+  const were = [...[...game].map(([name, f]) => ({ line: gameFileLine(name, f.sha256), system: f.system })), ...once(input.firegraft ?? [], isFiregraftProject, firegraftLine)];
   const pluginsWere = once(input.plugins ?? [], (n) => /\.(qdp|bwl)$/i.test(n), pluginLine);
   const lines = were.filter((l) => !l.system).map((l) => l.line).sort(byName);
   const pluginLines = pluginsWere.filter((l) => !l.system).map((l) => l.line).sort(byName);

@@ -13,7 +13,7 @@ import { FRAME_MS, type ModTag, type Replay } from "@scm-js/replay";
 import { techName, unitName, upgradeName } from "../../src/data/units";
 import type { DatFile } from "../../src/formats/dat/table";
 import { loadModData, type ModData } from "../../src/formats/mod/data";
-import { hashLines, hashLinesAsWere, sha256Hex, type DataSetRace } from "@scm-js/mod";
+import { gameFileLine, hashLines, hashLinesAsWere, sha256Hex, type DataSetRace } from "@scm-js/mod";
 import { sourceHash } from "./mod/hash";
 import type { GameFiles } from "./gamefiles";
 import { t, translate } from "./i18n";
@@ -28,13 +28,16 @@ export interface ModHashes {
   hash: string;
   /** The same without the plugins' lines: a page that ran none of them. */
   withoutPlugins: string;
-  /** Older forms, for replays tagged before the rule: over the game files alone, and over those that differ from the person's game (null without a copy). */
-  all: string;
+  /**
+   * Older forms, for replays tagged before the rule: over the game files alone (`identity.earlier`'s `game-files`), and
+   * over those that differ from the person's game (null without a copy).
+   */
+  all: string | null;
   changed: string | null;
   /**
-   * The mod's hash by the rule before 2026-11-11 (`beforeCode`), and its hashes while an operating system's files
-   * (`desktop.ini`, …) had lines (until 2026-11-09), where the mod has any: by the rule then, and the two forms before it
-   * (the game files alone, those that differ from the person's game) with those files' lines, as the play page tagged
+   * Every other hash an earlier rule gave the mod (`identity.earlier`, with and without its code: the rule before
+   * 2026-11-11, the hashes while an operating system's files (`desktop.ini`, …) had lines until 2026-11-09, the game files
+   * alone with those lines), and the files that differ from the person's game with those lines, as the play page tagged
    * its replays until 2026-11-08. A replay tagged then names the mod by one.
    */
   older: string[];
@@ -43,6 +46,8 @@ export interface ModHashes {
 /** Every hash the mod may be named by in a replay's tag. */
 export async function sourceHashes(source: ModSource, base: GameFiles | null): Promise<ModHashes> {
   const h = await sourceHash(source);
+  // (the lines of the operating system's files the older rule counted, for the form of the files that differ)
+  const systemLines = source.description?.identity.older?.lines ?? [];
   let changed: string | null = null, changedWere: string | null = null;
   if (base) {
     const differ: string[] = [];
@@ -50,14 +55,16 @@ export async function sourceHashes(source: ModSource, base: GameFiles | null): P
       let data: Uint8Array;
       try { data = await f.read(); } catch { continue; }
       const theirs = await base.read(f.name);
-      if (!(theirs && theirs.length === data.length && theirs.every((b, i) => b === data[i]))) differ.push(`${name}\t${await sha256Hex(data)}`);
+      if (!(theirs && theirs.length === data.length && theirs.every((b, i) => b === data[i]))) differ.push(gameFileLine(name, await sha256Hex(data)));
     }
     changed = await hashLines(differ);
     // (An operating system's file is in no copy of the game, so it always differed.)
-    if (h.systemLines.length) changedWere = await hashLinesAsWere([...differ, ...h.systemLines]);
+    if (systemLines.length) changedWere = await hashLinesAsWere([...differ, ...systemLines]);
   }
-  const older = [h.beforeCode, h.older?.hash, h.older?.withoutPlugins, h.gameFilesOnlyWere, changedWere].filter((x): x is string => !!x);
-  return { hash: h.hash, withoutPlugins: h.withoutPlugins, all: h.gameFilesOnly, changed, older };
+  const all = h.earlier.find((e) => e.rule === "game-files")?.hash ?? null;
+  const known = new Set([h.hash, h.withoutPlugins, all]);
+  const older = [...new Set([...h.earlier.flatMap((e) => [e.hash, e.withoutPlugins]), changedWere])].filter((x): x is string => !!x && !known.has(x));
+  return { hash: h.hash, withoutPlugins: h.withoutPlugins, all, changed, older };
 }
 
 /** Whether a replay's data set is the mod, by any of the forms it may be named by. */

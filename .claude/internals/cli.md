@@ -2495,6 +2495,9 @@ handed to it; it reads the four sections and nothing after.
 - Tests: `tests/cli-replay-mod.test.ts` (9, no game data: a two-file mod of units.dat + unitnames.tbl made by the codecs).
 - Not done: `replay watch|export` with a mod (needs the replay runner / viewer to take a data set: R2); the hash rule
   will gain the plugins and the project in step 7a — `sourceHashes` must follow.
+- Since `@scm-js/mod` 1.1.0 (2026-11-12, `mods.md` "@scm-js/mod 1.1.0"): `all` is `identity.earlier`'s `game-files`;
+  `older` is every other hash `identity.earlier` lists (with its `withoutPlugins`) plus `changedWere`, the one form that
+  needs the person's copy, made from `identity.older.lines`. Nothing here derives an earlier form itself.
 
 ## Races a mod adds (2026-11-10, branch `mod-races`)
 

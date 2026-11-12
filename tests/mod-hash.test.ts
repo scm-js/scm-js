@@ -117,6 +117,10 @@ describe("a made mod hashes as the play page hashes it", () => {
     // The game files alone: what a replay tagged before the plugins had lines names.
     expect(isTaggedMod(h.all, h)).toBe(true);
     expect(h.all).not.toBe(PAGE.withoutPlugins);
+    // Every hash an earlier rule gave the same files, as @scm-js/mod lists them.
+    const earlier = (source.description!.identity.earlier ?? []).flatMap((e) => [e.hash, e.withoutPlugins]).filter((x): x is string => !!x);
+    expect(earlier.length).toBeGreaterThan(0);
+    for (const x of earlier) expect(isTaggedMod(x, h), x).toBe(true);
     expect(isTaggedMod("0123456789abcdef", h)).toBe(false);
   });
 });
@@ -187,13 +191,14 @@ describe("an operating system's files are not a mod's", () => {
     expect(hashes.hash).toBe(PAGE.hash);
     // (and the play page's forms before the one rule, the game files alone and those that differ from a copy, with those
     // files' lines: its replays saved until 2026-11-08)
-    expect(h.gameFilesOnlyWere).toBe(ruleAsWas(Object.fromEntries(Object.entries(was).filter(([n]) => !n.endsWith(".fgp")))));
+    const gameFilesWere = h.earlier.find((e) => e.rule === "game-files-older")?.hash;
+    expect(gameFilesWere).toBe(ruleAsWas(Object.fromEntries(Object.entries(was).filter(([n]) => !n.endsWith(".fgp")))));
     const copy: GameFiles = { folder: "copy", kind: "classic", label: "copy", read: async (n) => (n === "arr\\units.dat" ? text(LOOSE["arr/units.dat"]) : null) };
     const withCopy = await sourceHashes(source, copy);
     const changedWere = ruleAsWas(Object.fromEntries(Object.entries(was).filter(([n]) => !n.endsWith(".fgp") && n !== "arr\\units.dat")));
     expect(withCopy.older).toContain(changedWere);
     expect(isTaggedMod(changedWere, withCopy)).toBe(true);
-    for (const older of [h.older!.hash, h.older!.withoutPlugins!, h.gameFilesOnlyWere!]) {
+    for (const older of [h.older!.hash, h.older!.withoutPlugins!, gameFilesWere!]) {
       expect(isTaggedMod(older, hashes), older).toBe(true);
       expect(isTaggedMod(older, before), older).toBe(false);
     }

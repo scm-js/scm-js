@@ -44,9 +44,12 @@ export function translate(text: string, params?: Params): string {
  * A sentence `@scm-js/mod` hands over as data (an error's `detail`, a line of what it said of a mod), in the reader's
  * language: its English template looked up as any other text, a parameter that is itself a sentence the same way. The
  * catalogue holds every template of `MOD_MESSAGES` (`npm run i18n` adds them for a tree that imports the package).
+ * An archive that could not be opened carries the reason twice: `why`, the archive library's English text, which the
+ * English sentence shows, and `reason`, the same as a sentence of the package's, which a translation shows instead
+ * (where a message has no `reason`, `why` stands in for it).
  */
 export function modText(message: ModMessage): string {
-  return renderMessage(message, (template, params) => inLanguage(template, params));
+  return renderMessage(message, (template, params) => inLanguage(template, "why" in params && !("reason" in params) ? { ...params, reason: params.why } : params));
 }
 
 /** A language tag (`ko`, `ko-KR`, `ko_KR.UTF-8`) as one of ours, or null. */

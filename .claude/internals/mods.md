@@ -37,8 +37,8 @@ in the commands' `ModSource`: `files` (from `d.files` + `fileReaders`), `plugins
 `identity.plugins` has a line for, by module name: plugin files, a patcher's carried plugins, libraries),
 `description`, `link`, `races`, `said` (paths shown), `gameCopy`/`left`/`probed`/`unheld` (paths shown: the folder's or
 zip's own name stripped). `exes`, `beside`, `duplicates`, `system` are gone (read `description`). `hash.ts#sourceHash`
-is `identity` + `beforeCode` + `older` (with `left`: loose system files by game name under the folder layer;
-archive members are not named — package gap) + `gameFilesOnly` (`hashLines` of the lines without `.fgp`). Refusals:
+is `identity` + `beforeCode` + `older` (`left` = `older.files`) + `earlier` (since 1.1.0; it held `gameFilesOnly` and
+`systemLines` of its own before, "@scm-js/mod 1.1.0" below). Refusals:
 `ModError` → `CliError(modText(e.detail), …, 2)` (`exe-no-archive` keeps the "Name a mod" hint); `copy-only` from
 `d.said` is thrown with the folder as given. The CLI still sniffs replays, maps, bots, and an empty folder, before
 reading.
@@ -77,8 +77,8 @@ folder `c76bfa18e9fc4fb5` / `0ed055cf80a95bd0` (was `0ed055cf80a95bd0`), SC Revo
 
 **Package needs found, fixed in the package (main fce2ce8, unpacked 2026-11-12):** a `.dll` under `plugins/` in
 `layout: "game"` was also a game file (two lines); `identity.older.files` now names the system files the older hash
-counted (archive members too). `sourceHash`'s `older.left` is `older.files`; `hash.ts#systemLines` reads their bytes
-(loose under the folder layer, else the archives) for the earlier forms.
+counted (archive members too). `sourceHash`'s `older.left` is `older.files`; `hash.ts#systemLines` read their bytes
+(loose under the folder layer, else the archives) for the earlier forms until 1.1.0 gave `older.lines`.
 
 **Follow-ups (2026-11-12).** Core keeps every released export (`core.md` "Mod names from @scm-js/mod"). `mod info
 --json` keeps 0.13.3's fields: `exes[].kind` (`firegraft`/`sempq`) beside `form`, `older.withoutPlugins` a string
@@ -100,6 +100,34 @@ nothing when no game folder is there. `overlay.ts` leaves out a file its archive
 `installDataSet`; `install.ts#runWorker` imports `renderMessage` only when the worker posts a message. So the editor's
 startup `source` chunk holds no package code (only the catalogue's 80 entries): 315,576 bytes at bfa4650, 335,994 in
 the first cut, 319,758 now.
+
+## @scm-js/mod 1.1.0 (2026-11-12, branch `mod-1-1`)
+
+`^1.1.0` in `package.json` and `core/package.json`. What it replaced (ADOPTION.md "What the last two adopters found"):
+
+- **Earlier forms.** `cli/src/mod/hash.ts`'s `systemLines` (read the system files' bytes again: loose, else every archive
+  layer opened a second time), `gameFilesOnly` (`hashLines` of the lines without `.fgp`) and `gameFilesOnlyWere` are
+  gone; `SourceHash.earlier` is `identity.earlier`. `replaymod.ts#sourceHashes`: `all` = the `game-files` entry; `older`
+  = every hash and `withoutPlugins` of `earlier` that is not `hash`/`withoutPlugins`/`all`, plus `changedWere` (the
+  differing files with `identity.older.lines`: the one form that needs the person's copy, so it stays here). Checked
+  before deleting (main's code with 1.1.0 installed, ten mods: Cosmonarchy release, Burning Ground folder, SC Revolution
+  exe, TriFresh exe and folder, remove-protoss, EUD Enabler, ThunderGraft, BWMetaAI's patch_rt.mpq, Cosmonarchy Plus):
+  `gameFilesOnly` = `game-files`, `gameFilesOnlyWere` = `game-files-older`, `systemLines` = `older.lines`, all ten.
+  **One form more is accepted**: `before-unlisted-project` (scm-sim's reader from 2026-11-11 until 1.0.0; SC
+  Revolution `693bf4a83f3a69a1`). `mod info --json` of Cosmonarchy, Burning Ground's folder, SC Revolution's exe and
+  TriFresh's exe: byte-identical to main's (`~/mods-under-test/_out/mod-package/scm-js-1-1/{before,after}/`).
+- **Lines by hand.** `replaymod.ts` (the differing files) and `legacy.ts` (`gameLine`, `modHashOfDigests`) write lines
+  with `gameFileLine`; legacy's names are core's `gameName` first (no leading backslash), so the values are 0.13.3's.
+- **Archives opened twice.** `source.ts#describedSource` and the extraction worker pass one `archives` map to `readMod`,
+  `fileReaders`, `openLayer` (a plugin inside an archive) and `firegraftBytes`. No `close()`: the CLI's readers live as
+  long as the `ModSource` (a command, an MCP call, `replaymod`'s per-process cache on purpose), the worker is terminated.
+- **Words.** Nine new templates in both `ko.json`. `archive-unopenable` / `exe-archive-unopenable` carry a hidden
+  `reason` (a message); the Korean entries show `{reason}` in place of `{why}`, the English is untouched. The check
+  allows it (`i18n.md`); both `modText`s let `why` stand in where a message has no `reason`.
+- Left as it was: `info.ts#SAID_HERE` (which `said` keys `mod info` prints on lines of its own: a choice of this command,
+  not a group `MOD_MESSAGE_GROUPS` has); `scripts/lib/i18n.mjs` asks for every template (all groups are shown somewhere);
+  `openModSource` still reads a named file whole to tell what it is before `diskFiles` reads it again (Burning Ground's
+  exe: 519 MB twice; not something 1.1.0 gives).
 
 ## Decisions (taken by the user, 2026-11-08 — do not reopen)
 

@@ -11,7 +11,7 @@ import { basename, relative, resolve } from "node:path";
 import { Archive } from "mopaq";
 import {
   fileReaders, firegraftBytes, gameCopyText, gameName, isMpq, isPluginFile, isZip, ModError, moduleBytes, openLayer, readMod,
-  type DataSetRace, type Layer, type ModDescription, type ModFiles, type ModMessage,
+  type DataSetRace, type Layer, type ModDescription, type ModFiles, type ModMessage, type OpenArchives,
 } from "@scm-js/mod";
 import { diskFiles } from "@scm-js/mod/node";
 import { MOD_MANIFEST, readManifest, type ModManifest } from "../../../src/formats/mod/folder";
@@ -165,7 +165,9 @@ export function emptySource(path: string, kind: SourceKind, name: string): ModSo
  */
 export async function describedSource(path: string, kind: SourceKind, tree: ModFiles, hint: string | null = null): Promise<ModSource> {
   let d: ModDescription;
-  try { d = await readMod(tree); } catch (e) { if (e instanceof ModError) throw refusal(e.detail, e.detail.key === "exe-no-archive" ? hint : null); throw e; }
+  // (the archives `readMod` opens, kept for the readers below: none is opened twice)
+  const archives: OpenArchives = new Map();
+  try { d = await readMod(tree, { archives }); } catch (e) { if (e instanceof ModError) throw refusal(e.detail, e.detail.key === "exe-no-archive" ? hint : null); throw e; }
   // (paths as the folder given spells them: a folder's tree starts with its own name, a zip's members with the zip's)
   const top = kind === "folder" ? basename(resolve(path)) : kind === "zip" ? basename(path).replace(/\.zip$/i, "") : "";
   const shown = (p: string) => (top && p.startsWith(`${top}/`) ? p.slice(top.length + 1) : p === top ? "" : p);
@@ -181,7 +183,7 @@ export async function describedSource(path: string, kind: SourceKind, tree: ModF
   source.races = d.races ?? [];
   source.link = d.link ?? null;
   source.layers = d.layers.map(layerName);
-  const readOf = fileReaders(tree, d);
+  const readOf = fileReaders(tree, d, { archives });
   for (const f of d.files) {
     const l = d.layers[f.layer];
     const name = f.member ?? (l.path ? f.path!.slice(l.path.length + 1) : f.path!).replace(/\//g, "\\");
@@ -195,12 +197,12 @@ export async function describedSource(path: string, kind: SourceKind, tree: ModF
   for (const c of d.carried) {
     if (c.source?.kind !== "member") continue;
     const s = c.source, layer = d.layers.find((l) => l.path === s.archive);
-    const archive = layer ? await openLayer(tree, layer) : null;
+    const archive = layer ? await openLayer(tree, layer, { archives }) : null;
     const size = (() => { try { return archive?.fileInfo(s.member)?.uncompressedSize ?? 0; } catch { return 0; } })();
     source.plugins.push({ name: c.name, bytes: size, read: async () => archive?.readFile(s.member) ?? new Uint8Array(0), member: s.member, layer: shown(s.archive) });
   }
   for (const f of d.patches[0]?.files ?? []) {
-    source.firegraft.push({ name: f.name, bytes: f.size, read: () => firegraftBytes(tree, d, f), ...(f.member ? { member: f.member } : {}), layer: shown(f.archive ?? f.path ?? "") });
+    source.firegraft.push({ name: f.name, bytes: f.size, read: () => firegraftBytes(tree, d, f, { archives }), ...(f.member ? { member: f.member } : {}), layer: shown(f.archive ?? f.path ?? "") });
   }
   for (const name of Object.keys(d.identity.plugins)) {
     const m = d.modules.find((x) => x.name === name && x.sha256 === d.identity.plugins[name]);

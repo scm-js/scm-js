@@ -16,15 +16,22 @@
  * template, parameters), and the code that shows one translates it by its template. A
  * tree that imports the package asks for every one of those templates, so its catalogue
  * holds them all and a sentence the package adds is missing until it is translated.
+ * Such a sentence may carry a parameter its English text does not show (`hidden`: the
+ * reason an archive could not be opened, as a sentence of its own beside the library's
+ * English `why`). A translation may show a hidden parameter in place of shown ones, and
+ * the check lets it.
  */
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import ts from "typescript";
 import { MOD_MESSAGES } from "@scm-js/mod";
 
-/** The packages whose sentences come as data, by the name a source file imports them by: their templates. */
+/**
+ * The packages whose sentences come as data, by the name a source file imports them by: their templates, each with
+ * the parameters it carries and does not show.
+ */
 const PACKAGE_MESSAGES = {
-  "@scm-js/mod": Object.values(MOD_MESSAGES).map((m) => m.text),
+  "@scm-js/mod": Object.values(MOD_MESSAGES).map((m) => ({ text: m.text, hidden: [...(m.hidden ?? [])] })),
 };
 
 const CONTEXT_SEPARATOR = "\u0004";
@@ -108,9 +115,10 @@ export function extractMessages(root) {
     for (const name of Object.keys(PACKAGE_MESSAGES)) if (new RegExp(`from\\s+["']${name}(/[^"']*)?["']`).test(source)) packages.add(name);
   }
   for (const name of [...packages].sort()) {
-    for (const text of PACKAGE_MESSAGES[name]) {
+    for (const { text, hidden } of PACKAGE_MESSAGES[name]) {
       const entry = messages.get(text) ?? { text, context: "", uses: [] };
       entry.uses.push(name);
+      if (hidden.length) entry.hidden = [...new Set([...(entry.hidden ?? []), ...hidden])];
       messages.set(text, entry);
     }
   }
@@ -168,20 +176,26 @@ export function placeholderNames(message) {
  * A catalogue against the extracted messages: `missing` keys the source asks for and the
  * file lacks, `unused` keys the file has and nothing asks for, `untranslated` keys whose
  * entry is empty (they show in English; allowed, so a string can be added before its
- * translation), and `mismatched` entries whose placeholders are not the source's.
+ * translation), and `mismatched` entries whose placeholders are not the source's. A
+ * message's `hidden` parameters (a package's, which its English text does not show) may
+ * stand in for shown ones: a translation may leave out one shown parameter for each
+ * hidden one it shows.
  */
 export function checkCatalogue(messages, catalogue) {
   const missing = [];
   const unused = [];
   const untranslated = [];
   const mismatched = [];
-  for (const [key, { text }] of messages) {
+  for (const [key, { text, hidden = [] }] of messages) {
     if (!(key in catalogue)) { missing.push(key); continue; }
     const translation = catalogue[key];
     if (!translation) { untranslated.push(key); continue; }
     const want = placeholderNames(text).sort();
     const have = placeholderNames(translation).sort();
-    if (want.join("\0") !== have.join("\0")) mismatched.push({ key, want, have });
+    const extra = have.filter((n) => !want.includes(n)), lacking = want.filter((n) => !have.includes(n));
+    // (each hidden parameter shown may stand in for one shown parameter left out)
+    const fits = extra.every((n) => hidden.includes(n)) && lacking.length <= extra.length;
+    if (!fits) mismatched.push({ key, want, have });
   }
   for (const key of Object.keys(catalogue)) if (!messages.has(key)) unused.push(key);
   return { missing, unused, untranslated, mismatched };

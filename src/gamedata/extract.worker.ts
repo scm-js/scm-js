@@ -22,7 +22,7 @@
  * values (`ExtractText`), or as the package's message (`mod`), which `install.ts#runWorker`
  * translates as it arrives. The problems stay English; they only reach the console.
  */
-import { fileReaders, ModError, readMod, type ModMessage } from "@scm-js/mod";
+import { fileReaders, ModError, readMod, type ModMessage, type OpenArchives } from "@scm-js/mod";
 import { isMemberPath, isStarEditDownload, memberKey, modTree, openArchives, readerFor } from "./archives";
 import { describeExtraction, ExtractError, extractGameData, reportStep, type ExtractProgress, type ExtractText, type GameDataExtraction } from "./extract";
 import { msg } from "../i18n";
@@ -127,9 +127,11 @@ self.onmessage = async (e: MessageEvent<ExtractRequest>) => {
       let modFile: (name: string) => Promise<Uint8Array | null> = async () => null;
       if (req.mod) {
         const tree = modTree(req.mod);
-        const d = await readMod(tree, { progress: (m) => post({ kind: "progress", fraction: 0, label: m.text, mod: m }) });
+        // (the archives `readMod` opens are the ones the files are read from: none is opened twice)
+        const archives: OpenArchives = new Map();
+        const d = await readMod(tree, { archives, progress: (m) => post({ kind: "progress", fraction: 0, label: m.text, mod: m }) });
         if (d.files.length) hash = d.identity.hash;
-        const readOf = fileReaders(tree, d);
+        const readOf = fileReaders(tree, d, { archives });
         const winners = new Map(d.files.map((f) => [f.name, f]));
         for (const f of d.files) if (isMemberPath(f.name)) overlay.set(f.name, await readOf(f)());
         modFile = async (name) => { const f = winners.get(memberKey(name)); return f ? readOf(f)() : null; };

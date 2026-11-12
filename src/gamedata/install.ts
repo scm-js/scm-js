@@ -251,8 +251,12 @@ export function installFromPickedRemastered(files: readonly PickedFile[], progre
   return runWorker([], "StarCraft: Remastered", progress, profile && !isDefaultProfile(profile.id) ? profile : undefined, picked, options.lighting);
 }
 
-/** A sentence `@scm-js/mod` handed over (the worker posts it as it is), in the reader's language: loaded when one comes. */
-const modText = async (m: ModMessage) => (await import("@scm-js/mod")).renderMessage(m, (template, params) => translate(template, params));
+/**
+ * A sentence `@scm-js/mod` handed over (the worker posts it as it is), in the reader's language: loaded when one comes.
+ * A translation shows an archive's `reason` (a sentence of the package's) where the English shows `why` (the archive
+ * library's text); a message without a `reason` has its `why` stand in.
+ */
+const modText = async (m: ModMessage) => (await import("@scm-js/mod")).renderMessage(m, (template, params) => translate(template, "why" in params && !("reason" in params) ? { ...params, reason: params.why } : params));
 
 function runWorker(
   archives: ExtractRequest["archives"],

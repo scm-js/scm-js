@@ -2498,9 +2498,11 @@ replay names, or the command stops and says both (exit 2). A replay tagged befor
 had lines for the plugins and the FireGraft project is matched by the hash of the game
 files alone, or of those that differ from your copy of the game. One tagged before 11
 November 2026, when only the plugins a mod carries as files had lines, is matched by [the
-hash by that rule](mods.md#the-mods-hash) (`Earlier hash` in `mod info`). One tagged
-before 9 November 2026, when the hash still had lines for the files an operating system
-leaves in folders (`desktop.ini`, `Thumbs.db`), is matched by [the hash the mod had
+hash by that rule](mods.md#the-mods-hash) (`Earlier hash` in `mod info`), and one tagged
+between 11 and 12 November 2026, when a FireGraft project found only through FireGraft's
+own list still had no line, by the hash it had then. One tagged before 9 November 2026,
+when the hash still had lines for the files an operating system leaves in folders
+(`desktop.ini`, `Thumbs.db`), is matched by [the hash the mod had
 then](mods.md#the-mods-hash), when the mod you name holds such files. With a replay that
 names no mod, `--mod` warns that the names may not be the game's and uses them; the
 `Names` line then says only where they are from, since nothing in the replay says whether

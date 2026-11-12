@@ -30,9 +30,12 @@ describe("the clip asked for", () => {
     expect(clipFormat("b.mp4")).toBe("mp4");
     expect(clipFormat("b.gif")).toBe("gif");
     refused(() => clipFormat("b.avi"), /\.webm, \.mp4 or \.gif/);
-    expect(parseSize("1281x721")).toEqual({ width: 1282, height: 722 });
-    refused(() => parseSize("10x10"), /--size/);
-    refused(() => parseSize("big"), /--size/);
+    // An odd side is made even, and said so (rounded).
+    expect(parseSize("1281x721")).toEqual({ width: 1282, height: 722, rounded: true });
+    expect(parseSize("1280x720")).toEqual({ width: 1280, height: 720, rounded: false });
+    refused(() => parseSize("10x10"), /--resolution/);
+    refused(() => parseSize("big"), /--resolution/);
+    refused(() => clipFormat("ex/noext"), /no extension; a clip is \.webm, \.mp4 or \.gif/);
     expect(parseFps("30", "webm")).toBe(30);
     // A GIF's pictures last whole hundredths: 12 a second is a picture every 8, 12.5 a second.
     expect(parseFps("12", "gif")).toBe(12.5);
@@ -77,6 +80,9 @@ describe("the clip asked for", () => {
     expect(gif).toMatchObject({ format: "gif", width: 640, height: 360, fps: 12.5, from: 0, to: 24 * 600, camera: { kind: "all" } });
     expect(planClip(input("/maps/game.rep"), rep, { at: "1,2" }, map).camera).toEqual({ kind: "at", x: 48, y: 80 });
     refused(() => planClip(input("/maps/game.rep"), rep, { at: "1,2", all: true }, map), /give one/);
+    // --whole-map and --resolution, the new names; --all and --size, the old, the same.
+    expect(planClip(input("/maps/game.rep"), rep, { out: "/tmp/x.gif", wholeMap: true, resolution: "320x200" }, map)).toMatchObject({ width: 320, height: 200, camera: { kind: "all" } });
+    refused(() => planClip(input("/maps/game.rep"), rep, { at: "1,2", wholeMap: true }, map), /--whole-map each place the camera: give one/);
     refused(() => planClip(input("/maps/game.rep"), rep, { from: "20:00" }, map), /past the replay's end/);
     refused(() => planClip(input("/maps/game.rep"), rep, { from: "2:00", to: "1:00" }, map), /not after/);
     refused(() => planClip(input("/maps/game.rep"), rep, { to: "1:xx" }, map), /--to takes m:ss/);

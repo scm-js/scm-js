@@ -179,11 +179,26 @@ export function mcpCheck(config = join(homedir(), ".claude.json"), cwd = process
   return { what, state: "ok", detail: t("not registered"), note: why, fix: add };
 }
 
-/** A browser `replay export` can draw with: Chrome, Chromium, Edge (or one named with SCMJS_BROWSER). */
-export function browserCheck(found = findBrowser()): Check {
-  return found
-    ? { what: msg("Browser"), state: "ok", detail: `${t("found")}${pc.dim(` · ${found}`)}`, path: found }
-    : { what: msg("Browser"), state: "warn", detail: t("not found"), fix: translate(NO_BROWSER), note: t("scmjs replay export draws its clips in one, started without a window.") };
+/**
+ * Whether the browser starts: `--version`, five seconds at most. Null when it does, else the first line it said
+ * (a Linux build without its libraries: "error while loading shared libraries: libnspr4.so: …"). Not tried on
+ * Windows, where a browser asked its version may open a window instead.
+ */
+export function browserStarts(path: string, run: typeof spawnSync = spawnSync): string | null {
+  if (process.platform === "win32" || /\.exe$/i.test(path)) return null;
+  const r = run(path, ["--version"], { encoding: "utf8", timeout: 5000 });
+  if (r.error) return (r.error as NodeJS.ErrnoException).code === "ETIMEDOUT" ? t("it did not answer within 5 seconds") : r.error.message;
+  if (r.status === 0) return null;
+  const said = `${r.stderr ?? ""}\n${r.stdout ?? ""}`.split("\n").map((l) => l.trim()).find(Boolean);
+  return said ? said.replace(`${path}: `, "") : t("it stopped with exit code {code}", { code: String(r.status) });
+}
+
+/** A browser `replay export` and `map test --clips` can draw with: Chrome, Chromium, Edge (or SCMJS_BROWSER's), and that it starts. */
+export function browserCheck(found = findBrowser(), starts: (path: string) => string | null = browserStarts): Check {
+  if (!found) return { what: msg("Browser"), state: "warn", detail: t("not found"), fix: translate(NO_BROWSER), note: t("scmjs replay export draws its clips in one, started without a window.") };
+  const problem = starts(found);
+  if (problem) return { what: msg("Browser"), state: "warn", detail: `${t("does not start")}${pc.dim(` · ${found}`)}`, path: found, note: `${problem}\n      ${t("scmjs replay export and map test --clips draw in it; the other commands do not need it.")}`, fix: process.platform === "linux" ? t("npx playwright install-deps chromium installs what it lacks, or SCMJS_BROWSER names another browser") : t("Install Chrome, Chromium or Edge again, or name another with SCMJS_BROWSER") };
+  return { what: msg("Browser"), state: "ok", detail: `${t("found")}${pc.dim(` · ${found}`)}`, path: found };
 }
 
 /** ffmpeg, optional: `replay export` makes .mp4 files with it. */
@@ -243,6 +258,7 @@ const READY: { commands: string; needs: Need[] }[] = [
   { commands: RUNNER_COMMANDS.bot, needs: ["StarCraft", "bot"] },
   { commands: RUNNER_COMMANDS.replay, needs: ["StarCraft", "replay"] },
   { commands: "replay export", needs: ["StarCraft", "Browser"] },
+  { commands: "map test --clips", needs: ["StarCraft", "map", "Browser"] },
   { commands: RUNNER_COMMANDS.map, needs: ["StarCraft", "map"] },
   { commands: RUNNER_COMMANDS.match, needs: ["StarCraft", "match"] },
   { commands: "map balance", needs: ["StarCraft", "match", "replay"] },
@@ -267,9 +283,17 @@ export function readiness(checks: Check[]): Ready[] {
   });
 }
 
-/** What the report says, in JSON: the same checks without colour, and what is ready. */
+/**
+ * What the report says, in JSON: the same checks without colour, named and judged as the text shows them — Claude
+ * Code's row is "Claude Code", and a thing that is fine but not there (shown with a dot) is "absent", not "ok" — and
+ * what is ready.
+ */
 export function doctorJson(r: { checks: Check[]; blocked: boolean; install?: Install }) {
-  return { blocked: r.blocked, ...(r.install ? { install: r.install } : {}), checks: r.checks.map((c) => ({ ...c, detail: visible(c.detail) })), ready: readiness(r.checks) };
+  return {
+    blocked: r.blocked, ...(r.install ? { install: r.install } : {}),
+    checks: r.checks.map((c) => ({ ...c, what: c.what === "MCP" ? "Claude Code" : c.what, state: absent(c) ? "absent" : c.state, detail: visible(c.detail) })),
+    ready: readiness(r.checks),
+  };
 }
 
 /** A path for the eye: the home folder as `~`, and cut from the left to `room` columns. */
@@ -283,7 +307,7 @@ export function shortPath(path: string, room: number, home = homedir()): string 
 function lackLine(g: Ready, checks: Check[]): string {
   if (g.lacks === "engine runner") return t("no runner for it in the fetched engine");
   const c = g.lacks ? checks.find((x) => x.what === g.lacks) : undefined;
-  return c ? `${translate(c.what)} ${visible(c.detail)}` : g.lacks ?? "";
+  return c ? `${translate(c.what)} ${valueOf(c)}` : g.lacks ?? "";
 }
 
 /**
@@ -308,7 +332,7 @@ function valueOf(c: Check): string {
     const d = visible(c.detail);
     return d === t("not registered") ? t("scmjs mcp not added") : d === t("Claude Code not found") ? t("not found") : t("scmjs mcp added");
   }
-  if ((c.what === "Desktop app" || c.what === "Browser") && c.path) return basename(c.path);
+  if ((c.what === "Desktop app" || c.what === "Browser") && c.path && c.state === "ok") return basename(c.path);
   if (c.what === "Game engine" && c.engine?.build) return c.engine.build;
   const d = visible(c.detail);
   return c.path && d.includes(" · ") ? d.slice(0, d.indexOf(" · ")) : d;
@@ -320,6 +344,9 @@ function valueOf(c: Check): string {
  */
 const ABSENT = /^not |(?:않음|못함|없음)$/;
 
+/** Fine, but not there (no desktop app, Claude Code without scmjs mcp, not signed in): a dot in the text. */
+const absent = (c: Check) => c.state === "ok" && ABSENT.test(valueOf(c).replace(/^scmjs mcp /, ""));
+
 export function printDoctor(r: { checks: Check[]; blocked: boolean }, width = process.stdout.columns || 100): string[] {
   const by = (what: string) => r.checks.find((c) => c.what === what);
   const node = by("Node"), self = by("scmjs");
@@ -330,7 +357,7 @@ export function printDoctor(r: { checks: Check[]; blocked: boolean }, width = pr
   const marks: Record<CheckState, string> = { ok: mark.ok, warn: mark.warn, bad: mark.error };
   const row = (c: Check) => {
     // Fine, but not there (no desktop app, no Claude Code): a quiet dot rather than a tick.
-    const m = c.state === "ok" && ABSENT.test(valueOf(c).replace(/^scmjs mcp /, "")) ? pc.dim("·") : marks[c.state];
+    const m = absent(c) ? pc.dim("·") : marks[c.state];
     const name = c.what === "MCP" ? "Claude Code" : translate(c.what);
     const head = `  ${m} ${pc.bold(padColumns(name, 12))} ${padColumns(valueOf(c), 14)}`;
     const room = width - columns(head) - 2;

@@ -280,11 +280,12 @@ describe("scmjs: the overview", () => {
 
   it("lists every command in its group, and fits a 24-row terminal", () => {
     const lines = help();
-    for (const group of ["Maps and replays:", "Plugins and bots:", "This tool:"]) expect(lines).toContain(group);
+    for (const group of ["Maps and replays:", "Plugins and bots:", "This tool:"]) expect(lines.some((l) => l === group || l.startsWith(`${group} `)), group).toBe(true);
     for (const cmd of program.commands.filter((c) => !(c as unknown as { _hidden?: boolean })._hidden)) expect(lines.some((l) => l.startsWith(`  ${cmd.name()} `)), cmd.name()).toBe(true);
     // A noun with more verbs than fit beside its description shows the first few and an ellipsis; its own help has them all.
     expect(lines.some((l) => /^ {2}map info\|check\|open\|(\w+\|)*…/.test(l))).toBe(true);
-    expect(lines.some((l) => l.includes("completion"))).toBe(false);
+    // The hidden commands are named on the last group's heading line, not given rows of their own.
+    expect(lines.filter((l) => l.includes("completion"))).toEqual(["This tool:                    also about, completion, login, logout, lsp"]);
     expect(lines.some((l) => l.includes("scmjs 0.0.0-dev"))).toBe(true);
     expect(lines.at(-1)).toBe("Options: -v, --version   --no-color   --lang <code>   -h, --help");
     expect(lines.length, "a line left for the prompt").toBeLessThanOrEqual(23);
@@ -296,7 +297,7 @@ describe("scmjs: the overview", () => {
     try {
       const korean = buildProgram();
       const lines = help(korean);
-      for (const group of ["맵과 리플레이:", "플러그인과 봇:", "이 도구:"]) expect(lines).toContain(group);
+      for (const group of ["맵과 리플레이:", "플러그인과 봇:", "이 도구:"]) expect(lines.some((l) => l === group || l.startsWith(`${group} `)), group).toBe(true);
       for (const cmd of korean.commands.filter((c) => !(c as unknown as { _hidden?: boolean })._hidden)) expect(lines.some((l) => l.startsWith(`  ${cmd.name()} `)), cmd.name()).toBe(true);
       expect(lines.at(-1)).toBe("옵션: -v, --version   --no-color   --lang <code>   -h, --help");
       expect(lines.length, "a line left for the prompt").toBeLessThanOrEqual(23);

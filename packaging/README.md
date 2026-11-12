@@ -42,18 +42,26 @@ local build instead, with zeros for the archives not built here, to try a recipe
 
 ## Each release
 
-Scoop and Homebrew follow a release by themselves; winget is still by hand.
+The release tells Homebrew and Scoop itself: the `packages` job at the end of `build.yml`
+runs once the release has its assets, on a numbered release only. winget is still by hand.
 
-- **Scoop.** `scm-js/scoop-bucket`'s `excavator.yml` runs every 4 hours. Scoop's `checkver`
-  reads the newest scm-js release (the nightly is a pre-release and is skipped), and
-  `autoupdate` rewrites `bucket/scmjs.json` with its URL and the hash from its `SHA256SUMS`.
-  The commit is pushed to main.
-- **Homebrew.** `scm-js/homebrew-tap`'s `update.yml` runs every 4 hours. When the newest
-  release is newer than the formula, it fills `Formula/scmjs.rb` from
-  `packaging/homebrew/scmjs.rb` at that release's tag, with `scripts/release-recipes.mjs`,
-  installs it from the tap, runs `brew test`, and pushes it to main.
+- **Homebrew.** The job runs `scm-js/homebrew-tap`'s `update.yml` with the version. That
+  fills `Formula/scmjs.rb` from `packaging/homebrew/scmjs.rb` at the release's tag, with
+  `scripts/release-recipes.mjs`, installs it from the tap, runs `brew test`, and pushes it
+  to main.
+- **Scoop.** The job runs `scm-js/scoop-bucket`'s `excavator.yml`. Scoop's `checkver` reads
+  the newest scm-js release (the nightly is a pre-release and is skipped), and `autoupdate`
+  rewrites `bucket/scmjs.json` with its URL and the hash from its `SHA256SUMS`. The commit
+  is pushed to main.
 - **winget.** Each version is a pull request to `microsoft/winget-pkgs`:
   `wingetcreate update scm-js.scmjs --version <v> --urls https://github.com/scm-js/scm-js/releases/download/v<v>/scmjs-cli-windows-x64.zip --submit`.
+
+The job needs one secret in scm-js: `PACKAGES_PAT`, a fine-grained token for
+`scm-js/homebrew-tap` and `scm-js/scoop-bucket` with Actions: read and write, which is what
+running a workflow there takes. Without it the tap and the bucket still follow by
+themselves: each workflow also runs on a schedule, every 4 hours as written and every 8 to
+10 as GitHub runs it. A workflow that could not be run leaves a warning on the release's
+run and does not fail it.
 
 A release whose archives are not uploaded yet is left for the next run. Either workflow can
 be run by hand from its repository's Actions tab: it updates nothing that is already

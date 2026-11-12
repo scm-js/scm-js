@@ -46,8 +46,8 @@ command's output changes, with `--play-url` at a staged scm-sim deploy when the 
   ✔ ✖ ▲ ℹ fall back to ASCII on the old Windows console. `rows()` aligns label/value pairs (`null` = blank line,
   one width for all groups); `table()` pads by visible width. `gameText` turns StarCraft's colour bytes into 24-bit
   colour only when `COLORTERM` says truecolor, else drops them; replays colour player names by the replay's colours.
-  `--json` everywhere: one object, or a list for several files. Exit codes: 1 failed check / error, 2 a missing or
-  wrong-kind file. A failing file in a list is reported on stderr and the rest go on.
+  `--json` everywhere: one object, or a list for several files. Exit codes: 1 failed check / error, 2 the command
+  could not start (a usage error, a missing or wrong-kind file; see "Audit fixes: the shell" at the end). A failing file in a list is reported on stderr and the rest go on.
 - **The overview's banner** (`cli/src/banner.ts`, 2026-11-06, the user's "the scmjs wireframe in ascii art"): only
   the root help (`scmjs`, `--help`, `help`) — `configureHelp({ formatHelp })` in main.ts sends `!cmd.parent` to
   `rootHelp` and everything else to `Help.prototype.formatHelp`, so `scmjs map --help` is commander's. `GLOBE` is
@@ -111,11 +111,9 @@ native/ — see scm-sim's docs/own-bots.md. Added 2026-11-06 with "Made by Jeany
   marks dirty — the first version compared `scn.chk.sections` and saw no change after an edit). Exit 1 when
   different, like diff(1); docs say so under exit codes. Lists cut at 20 unless `--all`.
 - `completion bash|zsh|fish` (**hidden** from the overview so the root help stays within 23 lines; documented, and
-  `scmjs help completion`): `commandTree(program)` walks commander (`cmd.options` minus hidden, `cmd.commands`
-  minus `_hidden`/help) and three generators write the scripts, so a new command is in them with no list. bash:
-  nested `case` on the typed path → `compgen -W`, else files; `bash -n` in the test. zsh: one function per command,
-  `_arguments -C` + `_describe`. fish: `__fish_seen_subcommand_from` chains; options as `-l`/`-s`. zsh/fish are not
-  syntax-checked here (neither shell is on this machine).
+  `scmjs help completion`): `commandTree(program)` walks commander and three generators write the scripts, so a new command is in them with
+  no list. (Rewritten 2026-11-11 — options that take a value, choices, hidden commands kept: "Audit fixes: the
+  shell" at the end.) zsh/fish are not run here (neither shell is on this machine).
 - **Overview term cap** (`main.ts` `TERM_WIDTH` 28): a noun with many verbs shows `map info|check|open|…` so the
   description column stays beside it and the banner's 80×23 holds; the noun's own help lists all. The test in
   cli.test.ts skips hidden commands and asserts the ellipsis.
@@ -325,7 +323,7 @@ the standing (Elo, games, won/lost/undecided, average length, the bot's ms a fra
 
 ## Replays in the terminal (`cli/src/watch.ts`, `engine.ts`) — 2026-11-06
 
-`scmjs replay watch <rep> [--speed x] [--from m:ss] [--size WxH] [--every n] [--json] [--starcraft] [--engine]`: the
+`scmjs replay watch <rep> [--speed x] [--from m:ss] [--cells WxH (was --size)] [--every n] [--json] [--starcraft] [--engine]`: the
 first of the "things people can see" slice (the user: "replay watch first"), the demo that gets screenshotted.
 
 - **The engine's half is scm-sim's `src/exact/runReplay.ts`** (PR jeany55/scm-sim, branch `replay-runner`), modelled on
@@ -399,7 +397,8 @@ slice proposed: four thin layers on existing library code, plus a git recipe.
   `map triggers import` could take the part back), strings as `formatStringTable`, members with size + sha1 prefix,
   sections as they would be written (`sectionBytes`, the same gather `diff.ts` uses — moved here, exported). Every
   part is printed even when empty (`(none)`) so two dumps line up. No colour ever (it is for files and git), first
-  line `# <file> — scmjs map dump 1` (`DUMP_FORMAT`, bump when the form changes incompatibly). **The git recipe**
+  line `# <file> — scmjs map dump 1` (`DUMP_FORMAT`, bump when the form changes incompatibly; **2 since the 2026-11-11
+  audit: `# scmjs map dump 2`, no file name** — see the last section). **The git recipe**
   (docs/cli.md "A map as text, and in git"): `diff.scmjs.textconv "scmjs map dump"`, `diff.scmjs.xfuncname "^## .*"`
   (hunk headers name the part; **0.9.0 shipped `"^## "`**, and git puts what the expression *matched* in the header,
   so it showed a bare `##` — found by `scmjs init`'s demo, 2026-11-07), `.gitattributes` `*.scx diff=scmjs`. Verified in a scratch repo: `git diff` and
@@ -450,8 +449,8 @@ slice proposed: four thin layers on existing library code, plus a git recipe.
     command was being added in parallel) — add its row with its needs; the StarCraft note already names it.
   - **MCP** (`mcpCheck(config = ~/.claude.json, cwd)`): `mcpServers` at the top (every folder) and
     `projects[cwd].mcpServers`, then any other project's; an entry counts when one of `[command, ...args]` matches
-    `@scm-js/cli|scmjs` and another is exactly `mcp` (npx, a global `scmjs`, `node …/scmjs.mjs`). Always `ok`; the
-    fix `claude mcp add scmjs -- npx -y @scm-js/cli mcp` (`MCP_ADD`) when not registered here; a missing or
+    `@scm-js/cli|scmjs` and another is exactly `mcp` (npx, a global `scmjs`, `node …/scmjs.mjs`). Always `ok` (doctor's JSON says `absent` for
+    "not added" since 2026-11-11); the fix `claude mcp add scmjs -- npx -y @scm-js/cli mcp` (`MCP_ADD`) when not registered here; a missing or
     unparsable file is a quiet dim "Claude Code not found". Nothing else in the file is read out. The project-scoped
     `.mcp.json` is not looked at.
   - `doctorReport`/`doctorJson`/`printDoctor` keep their names and shapes (the MCP server's `doctor` tool calls them);
@@ -687,8 +686,8 @@ The second DX slice (the user's "go for it" on the second suggestion round), sta
   the modules called never `print()` themselves (main.ts does the printing — the reason the split existed).
   `StdioServerTransport` does not close on stdin's end, so `serveStdio` waits on `process.stdin` `end` (or the
   server's `onclose`) and closes the server; without it Node exited with 13 "unsettled top-level await".
-- **Overview**: `mcp` took a line in "This tool:", so the `help [command]` row is hidden (`program.createCommand("help")`
-  + `_hidden`, `addHelpCommand`) — `scmjs help map` still works and `-h, --help` is on the same screen; 23 lines held.
+- **Overview**: `mcp` took a line in "This tool:", so the `help [command]` row is hidden (since 2026-11-11 a real
+  hidden `help [command...]` under every noun, made by `finishProgram`) — `scmjs help map` still works and `-h, --help` is on the same screen; 23 lines held.
 - `tests/cli-mcp.test.ts` (7): the SDK `Client` over `InMemoryTransport.createLinkedPair()` — tool list with
   descriptions, annotations and instructions; info/dump; check; triggers export → import `--append` to `out` → diff;
   strings by number + header in place; find + new; failures as text. A stdio smoke (initialize, tools/list, two
@@ -1282,7 +1281,7 @@ Phase one of "share links from files on disk". Server half: ai-server 0.36.0 (`P
 - **Overview**: `account show|login|logout` is a row under "This tool:" (one-line description); the `login` / `logout`
   shortcuts stay **hidden** (as `completion`), since the account row names them; `map share` is under `map …`. Found
   by: `map share` without a session says `scmjs login`, the doctor's row says it, `scmjs help account`, docs. Hidden
-  commands are not in the completion scripts either (`commandTree` skips `_hidden`). The rows for `init` and `account`
+  commands are in the completion scripts since 2026-11-11 (the guide documents them). The rows for `init` and `account`
   came from dropping the blank lines between the groups — see "The overview's rows".
 - **Doctor**: `scmjsDevCheck(file, server)` reads the file only — "signed in as Ann" + the file's path, or a dim `·
   not signed in` (`not signed in to scmjs.dev` for a session from another server) with `scmjs login` under it, state
@@ -1509,8 +1508,8 @@ already bundled for `lsp`, would carry it (DAP is not JSON-RPC, but the framing 
 
 ## A replay as a clip: `replay export` (`cli/src/export.ts`, `browser.ts`, `camera.ts`, `gif.ts`) — 2026-11-07
 
-`scmjs replay export <rep> [--out x.webm|.mp4|.gif] [--from --to m:ss] [--follow <player>|--at x,y|--all] [--speed]
-[--size WxH] [--fps] [--browser] [--starcraft] [--json]`, hidden `--play <url>` (SCMJS_PLAY_URL). Needs scm-sim's
+`scmjs replay export <rep> [--out x.webm|.mp4|.gif] [--from --to m:ss] [--follow <player>|--at x,y|--whole-map (was --all)] [--speed]
+[--resolution WxH (was --size)] [--fps] [--browser] [--starcraft] [--json]`, hidden `--play <url>` (SCMJS_PLAY_URL). Needs scm-sim's
 `replay-export` branch deployed (the page's `scmjs.view.record`, `?files=`); an older page answers ready without
 `record` and the command says so.
 
@@ -1582,7 +1581,7 @@ already bundled for `lsp`, would carry it (DAP is not JSON-RPC, but the framing 
 ## Where things happened: `map heatmap` (`cli/src/heatmap.ts`, `heat.ts`) — 2026-11-07
 
 `scmjs map heatmap <map> <replays…|folders> [--what deaths|kills|buildings|paths] [--player n|name] [--until m:ss]
-[--out p.png|-] [--side-by-side] [--scale n] [--width cols] [--blocks] [--force] [--parallel n] [--starcraft] [--json]`.
+[--out p.png|-] [--side-by-side] [--scale n] [--width cols] [--blocks] [--any-map] [--parallel n] [--starcraft] [--json]`.
 A fork built both ends (scm-sim branch `heatmap`, scm-js `cli-map-heatmap`).
 
 - **The runner is the replay runner's `--events` mode, not a new bundle** (as rush is the map runner's): no
@@ -1977,16 +1976,25 @@ passed on Windows 11 through WSL), Homebrew formula (on_macos arm/intel, on_linu
 
 **Leftovers**: signing (Authenticode, Developer ID + notarization) — the hook is after the injection; Linux arm64
 and Windows arm64 executables (SEA needs a runner of each; GitHub has `ubuntu-24.04-arm` and `windows-11-arm`);
-`useSnapshot` (startup) not tried; winget updates by hand (`wingetcreate update … --submit`; automating it needs a
-token secret in scm-js). **Published (2026-11-08):** `scm-js/scoop-bucket` and `scm-js/homebrew-tap` exist and follow
+`useSnapshot` (startup) not tried. **Published (2026-11-08):** `scm-js/scoop-bucket` and `scm-js/homebrew-tap` exist and follow
 each release by themselves (bucket `excavator.yml`, tap `update.yml`, every 4 h); winget's first version is
 microsoft/winget-pkgs#475062. Both repos' main needs PRs, so their workflows push over SSH with a per-repo deploy
 key (`CI_BUILD_KEY`), the workflow token read-only. Trap: ScoopInstaller/GithubActions' Excavator sets the push URL to
 HTTPS with the workflow token (`src/Helpers.psm1`), so it cannot push past the PR rule — the bucket runs Scoop's
 `checkver -Update` in its own steps instead. `packaging/README.md` "Each release" has it all.
+**The release tells the tap and the bucket (2026-11-11, the user's "without waiting 4 hours or so"):** `build.yml`'s
+`packages` job (stable only, `needs: release`) dispatches the tap's `update.yml -f version=` and the bucket's
+`excavator.yml` with `PACKAGES_PAT` (fine-grained, Actions: write on those two; set by the user the same day).
+Measured before: the "every 4 h" crons ran 8 to 10 h apart, and 0.13.3 (released 23:59) reached the tap at 07:12.
+Without the secret the step is a notice, a failed dispatch a warning, never a failed run; the crons stay as the net.
+**winget stays by hand** (`wingetcreate update … --submit`): a step that opened its pull request from the filled
+manifests through the git data API of a fork was written and then taken out at the user's word the same day (it
+needed a second, classic `public_repo` token, and could not run before the first version,
+microsoft/winget-pkgs#475062, is merged). It is in the branch's history (`release-packages`, commit ed42402) if it is
+wanted later.
 ## Many games and old maps: `map coverage`, `map check --baseline` (`coverage.ts`, `baseline.ts`) — 2026-11-07
 
-`scmjs map coverage <map> [replays…] [--tests] [--strict] [--format text|json|github|junit|sarif] [--all] [--force]
+`scmjs map coverage <map> [replays…] [--tests] [--strict] [--format text|json|github|junit|sarif] [--all] [--any-map]
 [--parallel n] [--starcraft]` and `scmjs map check … --baseline [file] | --write-baseline [file]`. One PR (branch
 `cli-coverage-baseline`); no scm-sim change — the map runner's `--play` + `--order` already said everything needed.
 Docs: `docs/cli.md` "A baseline for old maps" (under Checking a map) and "Which triggers fired across many games"
@@ -1994,7 +2002,7 @@ Docs: `docs/cli.md` "A baseline for old maps" (under Checking a map) and "Which 
 
 - **Coverage = `map trace --replay` per replay, added up.** `runCoverage`: `replayFiles(paths, deep = true)` (new
   `deep` parameter on heatmap's walker; heatmap itself still takes a folder's own files only), dedupe by sha256,
-  `matchReplay` against `mapIdentity` (same scenario, else same name + size; `--force` takes the rest) — heatmap's rule,
+  `matchReplay` against `mapIdentity` (same scenario, else same name + size; `--any-map`, once `--force`, takes the rest) — heatmap's rule,
   so a newer version of a map still takes the old replays — then **non-UMS replays are left out before anything runs**
   (`header.gameType !== 10`: in melee the game runs its own triggers; the trace would hold only row −1 copies, and
   39 of the 42 psistorm replays are melee/1v1/TvB). Each taken replay → `gameMap` (a 1.00 map converted per run, since
@@ -2157,7 +2165,7 @@ Branch `cli-balance-optimize`, one PR; nothing in scm-sim changed (the runner fa
   its old offset** (the key is offset-adjusted), so the archive could not shrink past it (Fortress with
   `--strip-editor` saved 0 B). `relocate.ts` moves them: the MPQ cipher copied from mopaq's `crypto.ts` (MIT, not
   exported), sector table decrypted with key−1 and each sector with key+i under the old offset's key, encrypted under
-  the new; `packStored` lays them from offset 32 round the nameless members; `(attributes)`/`(signature)` found by
+  the new (now `src/formats/mpq/stored.ts`, shared with every save since the 2026-11-11 audit); `packStored` lays them from offset 32 round the nameless members; `(attributes)`/`(signature)` found by
   `slotOf` among the nameless move too. Single-unit and sector-CRC members (not in SC1 maps; mopaq reads neither) are
   left in place. With members carried, a `(listfile)` naming them is written by hand (`listfile: false` + an extra),
   since the writer lists only what it encoded; a protected map (no listfile) gets none. `writeBest` also tries
@@ -2349,7 +2357,7 @@ per-picture links (an artifact is one zip; `archive: false` uploads one file an 
 the clips for a replay-driven scenario could use its replay with the map's own scenario swapped in.
 ## A melee map's layout: `map analyze` (`cli/src/analyze.ts`, `walk.ts`) — 2026-11-08
 
-`scmjs map analyze <map> [--json] [--picture out.png|-] [--scale n] [--all] [--starcraft dir]`, branch
+`scmjs map analyze <map> [--json] [-o, --out out.png|-] [--scale n] [--all] [--starcraft dir]` (`--out` was `--picture`, still taken, hidden), branch
 `cli-map-analyze`. Starts, mains, naturals, every pair's ground and air distance, the narrowest points, terrain shares
 and verdicts, **without the engine**: the tileset from the copy (`openGameFiles` → `readTileset`, `readUnitsDat`,
 `readSpeedTables`) and pure TypeScript after that. Whole command 0.4–0.8 s (the copy's kascade open ~0.2–0.5 s of it);
@@ -2500,3 +2508,339 @@ the runner's race string; a numeric one maps to a declared letter — but `map h
 so no table reaches it today. `mod` side: `mods.md` "Races a mod adds". Tests: `tests/cli-races.test.ts` (made replays
 with race 69; the real BattleGuard replay when `SCMJS_COSMONARCHY` names the release folder — either the folder itself or
 a root holding `release/` — and the replay is in `~/.cache/scmjs-cosmonarchy/replays/` or `SCMJS_COSMONARCHY_REPLAY`).
+
+## Audit fixes: the shell, maps in git, developer commands (2026-11-11)
+
+Branch `cli-audit-shell`, one of four after the end-to-end audit of 0.13.3. The rules (exit codes, `--out`, JSON,
+words) are the round's, in docs/cli.md "Exit codes" and the other areas' sections.
+
+**The program (main.ts head and tail).**
+- `ScmjsCommand extends Command` (`createCommand` returns one, so every command is one): `error()` forces exit code 2
+  for everything commander raises (unknown option/command, missing argument, choices, excess arguments, a required
+  option, an argParser's `InvalidArgumentError` — all go through `error`); `help({ error: true })` — commander's answer
+  to a noun alone or a global option alone — prints to stdout and exits 0; `unknownCommand()` suggests among all
+  commands, hidden ones too (`similarNames`, commander's own `suggestSimilar` is not exported: Damerau–Levenshtein, ≤ 2
+  edits, similarity > 0.4). Help and `--version` stay 0 (commander's own exit codes for them).
+- **`-v` only before a command**: `enablePositionalOptions()` on the program (inherited by every command made after
+  it). Then `--lang`/`--no-color` after the command would be unknown options, so `finishProgram` gives every command
+  hidden copies (`hideHelp()`); their values land in each action's `o` as `lang`/`color` — checked that no action
+  passes `o` on to something reading a `color` or `lang` field (`watch.ts` has `color?`, but `replay watch` passes its
+  fields one by one). chooseLocale and picocolors read argv themselves, so commander only has to accept them.
+- **`finishProgram(program)`** after every command is defined (the only place that touches other areas' commands, by
+  walking them): the hidden options, `showHelpAfterError("(scmjs map info --help lists its options)")` per command
+  ("its commands" for a noun without an action), a hidden `help [command...]` under every command that has
+  subcommands and no action (program `helpCommand(false)`; the path is walked, an unknown word is `unknownName` →
+  exit 2), and `COMMAND_GROUPS` → `helpGroup()` + `GROUP_RANK`. **commander orders groups by the first appearance in
+  `cmd.commands` (creation order)**, so `configureHelp` overrides `visibleCommands` (stable sort by rank) and
+  `groupItems` (groups ordered by the sorted list) — `map.commands` itself is not reordered, so the overview term
+  `map info|check|open|…` and completion keep creation order. A `map` command in no group fails `tests/cli-program`.
+- `subcommandTerm` shows a command's own usage when it has an action as well as subcommands (`test <map> [tests...]`).
+- **`run(args, prog)`** is exported (tests run it in-process with `exitOverride` on every command). Its catch: a
+  `CliError`; else `fileProblem(e)` — ENOENT/EISDIR/ENOTDIR/EACCES/EPERM/EEXIST/EROFS/EMFILE/ENFILE (also on
+  `e.cause`) → one line with the path (relative when under cwd), exit 2, ENOSPC exit 1, stack under `SCMJS_DEBUG`;
+  EPIPE → 0; `CommanderError` → its code; anything else the old "Something went wrong" + stack. **Trap:**
+  `readFileSync(<folder>)` throws EISDIR with no `path` (the read is on a descriptor), hence the pathless wordings.
+  The stdout/stderr `error` listener now exits 0 on EPIPE (was the pending exit code).
+- `SCMJS_LANG=fr`: `unknownLanguage(args, env)` (i18n.ts) → one ▲ line on stderr; `--lang` given → silent.
+- Overview: the hidden root commands are named on the last group's heading line (`This tool:   also about,
+  completion, …`), dim, only when it fits 80 columns — no extra row, the 23 held (banner.ts).
+- **Completion** rewritten: `commandTree` keeps hidden commands (help only at the top), adds `--lang` (choices) and
+  `--help` to every node, and per option `value: none|file|word` (`PATHLIKE` on the `<name>` in the flags: file,
+  folder, map, path, png, replay…; an optional `[value]` counts as a flag so `--baseline a.scx` does not swallow the
+  map) and `choices` from `argChoices`; args from `registeredArguments` (choices, variadic). bash: lookup functions
+  (`_scmjs_children/options/value/args`) and a walk that skips an option's value, counts positionals, and offers
+  value choices → options on `-` → subcommands (+ files when the node runs) → the argument's choices or files →
+  options when nothing else. Tested by sourcing it in bash with COMP_WORDS (`tests/cli-completion.test.ts`). fish:
+  `__scmjs_path` walks `commandline -opc` the same way and every rule is `-n '__scmjs_at map check'`. zsh: `:value:(a
+  b)` / `:value:_files` / `:value: ` per option. **zsh and fish were not run** (neither installed). Choices given in
+  this area: `completion <shell>`, `account login --provider`, `map share --keep`. Options of other areas that list
+  values in prose and so complete nothing yet: `map check --format`, `map coverage --format`, `map test --format`,
+  `map optimize --compression`, `map pack --compression`, `map preview|diff --scale`, `map new --tileset|--layout|
+  --revision`, `map set --revision|--encoding`, `map resize --anchor`, `map generate --symmetry|--style`.
+- doctor: `browserStarts(path)` runs `<browser> --version` (5 s; not on Windows or a `.exe`, where it may open a
+  window) — found and not starting is `warn` "does not start", its first stderr line in the note, and blocks `replay
+  export` and the new READY row `map test --clips`. `doctorJson` names `MCP` as "Claude Code" and turns a fine-but-not-
+  there check (the dot) into `state: "absent"`; `Check.state` itself is unchanged (readiness reads it).
+
+**MCP (mcp.ts).** `reg` wraps every raw shape in `z.strictObject(shape, { error })` — the SDK 1.32 accepts a zod
+object as `inputSchema` and validates before the handler; an unknown key is `isError` "`dry_run` is not an argument of
+map_strings_prune: it takes `path`, `dryRun`, `out`", and `tools/list` now says `additionalProperties: false`. The
+SDK's own validation words are reworded through the instance's private `createToolError` (`argumentError`:
+"`path` is missing (a string)"). Aliases for the commands' spellings (`in`/`case`, `arg`, `units`, `dryRun` on
+`map_optimize`, `anyMap` on `map_coverage` beside `force`); `map_trace|cost` gained `every`, `replay`, `order`
+(`path` optional with `replay`; `replayRun` + `checkPlayedMod` as main.ts's `gameRun`). **Paths are confined** to
+the folder the server started in (`createMcpServer({ root })`, `serveStdio` passes cwd) unless `scmjs mcp
+--allow-outside`; `outsideRoot` checks `path, out, a, b, paths, replays, baseline, mod, map, bot, folder, replay,
+plugin` (`plugin` github:/URL and `bot` keys pass; `starcraft` is never confined). Resolution is lexical (`resolve`),
+not `realpath`: a symlink inside the folder can still lead out. Tests' `createMcpServer()` without `root` is
+unconfined, as before. A line on stdin that is not JSON gets `-32700` (`id: null`), JSON that is not JSON-RPC `-32600`
+— the SDK transport only calls `onerror` and answers nothing; `serveStdio` wraps the protocol's `onerror`. `mcp
+--help` lists the tools from `createMcpServer().tools`, made lazily in an `addHelpText` function. The quoting hint of
+a missing file is cut under MCP (`failed`).
+
+**Maps in git.**
+- `revisionInput`: a `..` range is refused (git show `A..B:path` prints nothing, exit 0 — a blank map); `A...[B]` is
+  `git merge-base A (B|HEAD)`. `map log` and `map blame` keep their own ranges (history.ts `checkRevision`).
+- **`map log` order**: `--parents` turns on parent rewriting, which makes git walk the whole history first and emit it
+  **by commit date** — a commit dated before its parent came after it (reproduced: root, c1 dated earlier, c2). The
+  plain `git log --format=%H [-n] <rev> -- <path>` order is now asked for apart and the `--parents` records are put
+  in it (`commitsTouching` without `topo`; `-n` moved to that call). Blame (`topo`) unchanged.
+- `MapDiff` gained `triggersReordered`/`briefingReordered` (multiset equal, order not), a "Triggers reordered" group;
+  `Entry.number` (strings; locations as triggers number them, from 1) and `Entry.index` (locations' slot, which `text`
+  keeps). The text rows are `N  what` for added/removed/changed alike. `BlameRow.number/index` for locations, their
+  text `#1` (was `#0`); `--location 3` / `#3` match the number from 1.
+- `locate()` refuses a folder (it had a history: every commit "map removed").
+- `map merge`: `kind: "conflicts"` when conflicts were left (was "merged"); `around(line, at, width, keep)` keeps a
+  trigger's owners (up to `: `) at the start of a cut line.
+- `init`: the workflow's globs are all three extensions (+ any other spelling found), since the action errors only
+  when no glob matches; an existing workflow it wrote (`Written by scmjs init` + a 10-space `maps:`) gets the new
+  folder's globs added (`workflowGlobs`/`withGlobs`), one it did not write is left and the lines to add are said, and
+  the "checks <folder>/ from there" note is said only when true. `InitMap.fails` (error or warning, as `strict`) →
+  a note naming them with the `--write-baseline` line to run from the top. `--print` states are
+  `would-write|would-replace|would-add`. A folder with no maps whose subfolders have some (`mapFolders`, 3 deep) is
+  refused (exit 2) unless `--force`. `showFolder` names a repository above cwd by its basename. **`cachetextconv`
+  is validated by git against the textconv command string only** (checked: a changed program with the same command
+  kept showing the old text until `git update-ref -d refs/notes/textconv/scmjs`), so a dump-form change needs that
+  line — in the guide; the setting is kept for speed.
+- Korean: `changed`/`removed` are 변경/삭제 (were 변경됨/제거됨, mixed with "이름 변경"); `-n` and `--trigger`'s
+  refusals use `{value|은}`.
+
+**Developer commands.** `map play` needs no `scmjs login` (the page signs in) — the guide's "sharing commands"
+sentence and doctor table were wrong, fixed there; `playInLobby({ say })` sends the hand-over's lines to stderr under
+`--json`, and with `BROWSER=none` says "Open <address> …" instead of "Opening …". `plugin new`: `-o, --out` (`--dir`
+hidden), `--id`; a name that slugs to nothing is refused rather than becoming `my-plugin`. `plugin check`: an `id`
+that is not already `pluginIdOf`'s slug is a warning naming the slug the editor keeps (`editorId`); a `version` not
+x.y.z an info (the loader refuses neither). `plugin dev` runs `checkPlugin` after each change and says the first
+error instead of "✔ … no editor connected"; `--no-open` says "Open <url>". `lsp`: on a TTY a CliError (exit 2); an
+end with no shutdown logs why on stderr.
+
+**Not done / for others**: `map dump` still 0-based locations (maps agent); "1 (1 conditions, 1 actions)" is
+`map.ts` (maps agent); `replay share <map>`'s hint `scmjs info` comes from `files.ts#expectKind` (maps agent's file;
+replay block is the mods agent's); the options above that need real `.choices()`.
+
+## Audit fixes: replays, mods and bots (2026-11-11)
+
+Branch `cli-audit-mods`, one of four from the 0.13.3 end-to-end audit (brief ids B1–B13, "Replays", "consistency").
+
+**Mod folders (`mod/target.ts`, new).** `modTarget(dir, {force, source})` is the one rule for the folders `mod unpack`
+and `mod new` write: not there → made (parents too); empty → taken; holds a `mod.json` `readManifest` accepts → refused
+(exit 2) unless `force`, which removes every top-level entry **except dot names** (`.git` survives; the guide says so);
+anything else non-empty, a file, or a file in the path → refused even with `force`. The source inside the target is
+refused (`within`), since a forced clear would delete it before a folder source is read (folder sources are read
+lazily). Before: an unpack over an unpack `rm`'d only the known folders, so edits were lost silently and stray files
+under them too (B5). MCP `mod_unpack`/`mod_new` call the same functions without `force`: they now refuse an earlier
+unpack — the MCP descriptions (shell agent's) still say otherwise.
+
+**What is not a mod (`mod/source.ts`).** `openModSource` refuses (exit 2) a source that holds nothing of the game's
+(`holdsNothing`: no files, plugins, FireGraft files or archives), named by what it is (`otherKind`: a replay by
+`detectFormat`, a bot by `SCMBOT1\n`, a map = `.chk` or an MPQ with `staredit\scenario.chk` — `kindOf` in files.ts calls
+every MPQ a map, so it cannot be used), an empty folder, an `.exe` with no archive. A **mod folder is exempt**: `mod new`'s
+empty folder is a mod. `folderManifest` separates a `mod.json` that is not JSON (now an error, with the path) from one
+that is JSON without `scmjs` (a game-files folder naming itself: still read as a folder) — `readManifest` (core) returns
+null for both, which is why `check`/`info` used to fall back silently (B3). `readModFolder` says "No folder" / "is a
+file". `mod test` checks the pair first (`checkModAndMap`), since `mapTestAction` would read the mod as a map.
+
+**`--out` (B4).** `mod pack|build -o -`: the MPQ through `packMod(..., { stdout })`; **without a `stdout` stream `-` is
+refused**, so the MCP server (whose stdout is the protocol) cannot be made to write into it. `checkPackOut` refuses
+`-o` with `--folder`, `--folder -`, `--json` with `-o -`, and a non-`.mpq` name. `replay map` refuses a non-map
+extension (`checkMapOut`) and makes the folder. Paths in JSON are as typed now: `mod unpack|new` `dir`, `mod pack`
+`path`, `mod header` `files`, `replay map` `file`, `replay export` `file`, `ladder.json` `out` (`LadderOutcome.typed`).
+`mod info|check` entries have both `file` and `path`; `replay info` entries gained `path`.
+
+**`bot run` (B6, B7, B8).** `botRunValues` (botrun.ts) reads every value through `values.ts` before anything starts;
+`checkBotGame` reads both files first (swapped, replay-as-map, bot folder → names `out/<key>.scmbot`, unreadable map,
+**zlib/bzip2 scenario** → refused: the engine is 1.16.1's code, Storm has no zlib and calls `LoadLibraryA`, which the
+engine has no stand-in for — that was the "LoadLibraryA from 0x1501E69D" on `tests/maps/ums.scx`, the only committed map
+compressed with zlib), and the start-location count for a melee game. `gameKind`: with a mod and no `--ums/--melee`,
+ask `--melee` on a melee-looking map (`looksLikeMapSettings`, the runner's own test copied) when the mod carries no
+plugins as files. The runner's `useMapSettings` counts a FireGraft project with **0 edits** as code (`withCode =
+plugins.length > 0 || !!firegraft`), which seated the bot alone and "won at frame 48"; scm-sim should count plugins (or a
+project with edits). A start line with no non-bot player → `alone` + a warning. The bot's player is called "oracle" by
+the engine: text lines get the bot's name (the engine should name the player). Loss → `▲`. `runnerwords.ts` (new, so
+`ladder.ts` can use it without an import cycle through values.ts) holds `plainRunnerError` (drops brackets and `: `-parts
+holding `0x…`, "stack words", `x.dll!`, "no stand-in for"; rewrites "the scmbot toolchain (scmbot build)" to `scmjs bot
+update, then scmjs bot build`; `SCMJS_DEBUG` keeps the raw text) and `plainReason` for a replay's end. The hint "The
+runner is scm-sim's…" is gone everywhere.
+
+**Plugin-only mod on Remastered (B13).** The runner's `readsStartupData(names)` is `!names.length || …`: a mod with **no
+game files** reloads the startup data. `overlay.ts#readsStartupData` lacked the empty case, so no game layer was laid
+and the reload stopped at `unit\zerg\avenger.grp`. Mirrored now. Then EUDEnableR's plugins fail to load (no stand-ins
+for `kernel32.dll!CreateRemoteThread`, `msvcrt.dll!_strcmpi`) — scm-sim's; the game plays on without them.
+
+**A mod's replays (B9).** The ladder's runner writes replays without `SCMJ`; `tagModReplay` appends
+`ModOverlay.tag()` (`modTag`: dataSet = `hash`, or `withoutPlugins` when the mod carries plugins and none ran;
+plugins = carried-as-file plugins minus those the runner said failed — the runner names a plugin by its own display
+name, so a failure is matched by file name where it can be; firegraft = the `.fgp` when `start.code.firegraft`;
+engine `{ lifter: "shipped", build }`; `madeBy: "scmjs <version>"`), as the play page's `replayTagOf` does. A file the
+tag cannot go in (the tests' stand-in runner writes "REPLAY n") is left alone. **Not done: `map test --mod` / `mod
+test`** (maptest.ts is not this area's): after the runner writes `rep`, the same
+`writeFile(rep, await appendModTag(bytes, await overlay.tag({ code: null, build: engine.build })))`. `bot run` saves no
+replay. `refuseModReplay` and a wrong `--mod` are exit 2 now.
+
+**`replay watch`.** The default is a line at each minute of the clock: the runner is asked `--every 12` (half a second,
+so no minute is stepped over: 24 frames is 1.008 s and would skip a second now and then) and the first frame whose
+`clock` reads the next whole minute is printed. 1,440 drifted (1:00, 2:01, 3:01 …). `--every 0` asks the runner past
+the replay's end. `watchValues` reads every option first; `--from` past the end refused. The start line's map name is
+the replay's `header.mapName` (the runner gives the file's). The end's `reason` goes through `plainReason`.
+**Measured**: 1548.rep (21:47) piped, 18.7 s either way. `--size` → `--cells`, export's `--size` → `--resolution`,
+`--all` → `--whole-map`, `mod build --force` → `--ignore-errors`: old spellings are hidden options with the same effect.
+
+**Smaller.** `mod info`: `bigSize` (GB past 1,024 MB; `ui.ts#size` has no GB step), a plugin named twice shown by path,
+`slowLine` on stderr after 1.5 s. `mod new --tables` = `gameSource` + `unpackMod` (needs a copy of the game). `bot
+ladder`: `--races` takes words with commas, `x:bogus` after an existing file says "not a race", `ladderValues`,
+`clearLadderFolder` (refuses an earlier ladder's folder unless `--force`, which removes top-level `*.rep` and
+`ladder.json` and keeps `bwapi-data`), `parseEntrants(..., command)` for `map balance`'s wording. `mod diff a b` exits 1
+when they differ. A mod folder's text error is printed `<folder>/<file>:<line>`. `bot build` checks scmbot.json's
+licence file before Docker; Docker missing or 125–127 from `docker run` → exit 2. `mod play --json` sends the address to
+stderr; `--start` needs `--bot`; `BROWSER=none` gets its own line. `loadReplayInput` failures are exit 2 (files.ts).
+
+**Left / elsewhere.** A Ctrl-C'd ladder still leaves its folder (made before the first game; the runner writes into it).
+`bot run --ums --opponents …`: the opponents do nothing there and are not said. The runner's failed-plugin lines in
+`codeWords` (engine.ts) still name `kernel32.dll!…`. `replay info`'s `Game oracle hosted by …` is the engine's game name
+in the file. The core's "expected an entry header (Name(id):) or a field line" for a bad value is `src/formats/dat`'s.
+
+## Audit fixes: maps (2026-11-11)
+
+Branch `cli-audit-maps`, one of four after an end-to-end audit of 0.13.3 (rules in the lead's brief: exit 2 for a
+command that cannot start, `--out` always written on success, never merge into a folder, `--force` = overwrite only,
+JSON `file` as typed, progress to stderr). Tests: `tests/cli-audit-maps.test.ts` (whole commands through
+`program.parseAsync`, stdout captured as bytes so a map on stdout can be reopened; `piped()` swaps `process.stdin`).
+
+- **S1 not-a-map**: `looksLikeScenario` in `readArchive` (saving.md). `MapReadError` and optimize's unreadable map are
+  exit 2 now, as is pack's "packed file is not a map".
+- **S2 ADPCM**: `src/formats/mpq/stored.ts` (relocate.ts moved there; core exports it). Every writer and the editor's
+  Save carry an unchanged ADPCM member as stored (saving.md). `map unpack` writes the stored form to `stored/NNN.bin`
+  with `members[].stored = { slot, hash, block, sectorSize, file, sha256 }` (sha256 of the decoded file), and the
+  manifest goes to **version 3** only when such a member exists (a pre-0.13.4 pack would have packed the `.bin` as a
+  member; it refuses a 3 instead). `pack` hands the stored form back through `keepStoredForm` while the WAV's sha256
+  matches, and says how many changed sounds went in as PCM. `optimize` passes `carryStored: false` to its own writes
+  (it measures both ways itself) and no longer carries a zlib member into a PKWARE map (it did: ums.scx's tone.wav —
+  1.16.1 could not have read it); the ADPCM note is said only of members with ADPCM sectors.
+- **S3**: `importTriggers` refuses a file with no triggers (exit 2) unless `allowEmpty` (`--allow-empty`); `trgKind`
+  tells a briefing `.trg` (condition 13, Mission Briefing) from triggers (another condition, or an action above 9) and a
+  mismatch is refused. `importStrings` refuses an empty file and a number on two lines. `triggers edit` passes
+  `allowEmpty` (emptying the editor is meant); `strings edit` with every line removed is "nothing changed". **MCP's
+  `map_import_triggers` with empty text is now an error** (mcp.ts untouched).
+- **S4**: `editInEditor` takes `write`, run before the temp file is removed; a failed write keeps the file and the hint
+  names the import command. main.ts refuses `--editor ""` and, with no editor named and no TTY on stdin/stdout, vi.
+- **Writes** (`files.ts`): `writeFileMade` makes the parent folder and `writeError` turns EISDIR/ENOTDIR/EEXIST/EACCES
+  into one line, exit 2 — used by `writeOutput`, `emit`, `.trg` export, baselines, sounds, unpack. `readTextArg` reads a
+  text argument or stdin for `-` (both imports).
+- **B2 `--out` always written**: optimize writes the input bytes as they were when it cannot make them smaller (to
+  `--out` or a pipe); prune, edit and `run` (also when piped) likewise. B3: an explicit `--compression` writes even when
+  larger; the list says "Would go" when nothing was removed from a written file.
+- **`--keep`** is `--keep <member>` repeatable (the variadic form ate the map argument); an unknown name is a warning.
+- **`map run`**: `sourceFor` refuses a missing path / non-plugin file / folder without plugin.json itself (exit 2;
+  only `github:`, `builtin:`, `http(s):` go to `parseSpec`); `nodeLoaderDeps.fetchText` drops `build` from a local
+  manifest whose build file is missing but whose entry is there (`sourceWhenNotBuilt`). While the plugin runs,
+  `console.*` goes to stderr (`consoleToStderr`, an Error as `name: message`) — the Repair traces were the game-data
+  loader's `console.warn(msg, err)`. **Waiting for un-awaited work** (`settle`): Repair's `check` command is `run: () =>
+  { void session.check(); }`; the run now waits until (a) no timer set during the run is pending (`trackTimers` wraps
+  `setTimeout`/`clearTimeout` for the run) and (b) `process.getActiveResourcesInfo()` has no kind above its count
+  before the plugin started (counted per kind: a CloseReq ending can hide a new Timeout in a plain total — first try
+  missed a 200 ms timer that way), 10 s at most. Repair shows its findings in a dialog, so still nothing is printed for
+  it; the guide's example now uses a script that names a switch. `headless.ts`: `api.document.save` resolves true,
+  `saveAs` false (they reached for the page's file APIs: "window is not defined"), `api.ui.toast("text")` takes a
+  string as the title. `--arg` without `--command` refused.
+- **B4**: a map whose strings are all ASCII is the same bytes in every encoding and the encoding is detected on open,
+  so `setHeader` makes no encoding change there (`plainAsciiText`) and main.ts says so. `parseRevision`/`parseEncoding`
+  take any case (CP949 → euc-kr); `map new` takes the five revisions (`NEW_VERSIONS` is all of `MAP_VERSIONS`).
+- **B8 `map dump` 2**: no file name in line 1 (git's textconv of a renamed file differed); sprites (`spriteLine`),
+  doodads, `changedSettings` (custom units/upgrades/techs with `useDefault` 0; availability/levels where the shared
+  column differs from a fresh table, a player's own values only where `playerUsesDefault` is 0 — StarEdit leaves
+  bytes in the other players' columns, which made 240 lines of noise on Crescent Moon; weapons when any unit is
+  custom, ~78 lines of dat values on campaign maps), `sha1` per section, strings with text only, locations numbered
+  from 1 with Anywhere counted apart. `init`, `map log`, `blame`, `unpack --text` do not parse the dump.
+- **B10**: `find` builds each trigger's `formatTrigger` text for triggers/briefing (the editor's Find reads only the
+  trigger's strings); `hitJson` adds `number`.
+- **`map unpack` never merges** (`clearEarlierUnpack`): the manifest has `files` (path → 16 hex of sha256) of what the
+  unpack wrote; a re-unpack removes the earlier unpack's files (then empty folders, never dot-folders), refuses another
+  map's unpack (by `fileName`), files changed or added since (unless `--force`), and a folder that is no unpack (even
+  with `--force`: `--out .` would otherwise clear the working directory). Manifests from before `files`: a listed file
+  is "changed" only when it differs from what this unpack writes there.
+- **Counting**: locations without Anywhere, strings with text (`stringsWithText` in `MapReport`; `statistics.strings.set`
+  counts "" slots) — `map info` and `map dump` agree. **`map log` (maplog.ts, not this branch) counts Anywhere** (Crescent
+  Moon "1 location"): it should count as `info` does.
+- **Shared code touched**: `eachFile` (main.ts, above the map block) prints a failed file's line on stderr in every
+  mode and no longer prints a blank stdout line before it; the `node:fs/promises` import line lost `writeFile`.
+  `tests/cli-mcp.test.ts`: the dump's first line. `report.ts` formats take `unread`.
+- **Not done / for others**: a Check Map rule for zero-size or off-map locations (editor's `validate.ts`); `map log
+  README.md` lists 153 commits each "could not be read" instead of refusing the file up front (maplog.ts); `map fetch
+  --json` raw name (fetch.ts): `map info --json` now gives `name` cleaned and `rawName` raw — fetch should match; the
+  mpq.test "Wakka Wakka when its file list is gone" times out (5 s) under the full parallel run on this machine, as
+  before the branch (3.2 s alone).
+
+## Audit fixes: the game commands, processes and temporary folders (2026-11-11)
+
+Branch `cli-audit-game`, from the 0.13.3 audit. What was wrong, what changed, and the traps.
+
+**Processes and folders end with the command (`cli/src/lifecycle.ts`).** Runners kept playing after scmjs died any way
+but a terminal Ctrl-C (`| head`'s EPIPE → `process.exit`, `kill -TERM` from a supervisor, `timeout`), and a ladder's
+`--seat` processes with them; temp folders stayed on every interrupt, and `scmjs-run-*` on every run. Now:
+- `spawnOwned(cmd, args, opts)` spawns with `detached: true` on POSIX, so the child leads its own process group; the
+  group is killed (`process.kill(-pid)`), which takes the match runner's seats and Chromium's renderers. When a leader
+  exits, its group gets SIGKILL at once (a seat left by a match that ended badly). Every runner goes through it
+  (`engine.ts#startRunner`), and the browser (`browser.ts`). Not the text editor (interactive, on the terminal) nor
+  `open.ts` (meant to outlive us) nor `spawnSync` calls (ffmpeg, git: they block the loop; a signal waits for them).
+- `tempFolder(prefix, { untilStopped? })` = `mkdtempSync` + removal at exit; `removeFolder` now; `madeFolder` for a
+  `--out` folder the run created (balance), removed only on a signal; `atExit(undo)` for terminal state (watch's
+  cursor-show, one line in `watch.ts`, registered only when stdout is a TTY). `untilStopped` is for folders kept on
+  purpose: texteditor's (a failed import keeps the text).
+- Armed lazily (first registration). `process.on("exit")` runs `finish`: undo hooks, SIGTERM to every live group,
+  a 150 ms `Atomics.wait`, SIGKILL, then `rmSync` with retries. Synchronous, so it also runs for `process.exit` from the
+  EPIPE handler in `main.ts` and for an uncaught exception.
+- SIGINT/SIGTERM/SIGHUP: answered **only when ours is the sole listener** (`process.listenerCount(sig) > 1` → leave it):
+  the text editor adds an ignore-SIGINT while the editor runs, `plugin dev` its own stop. Then `finish(true)`, raw mode
+  off if stdin was raw (a default-disposition death skips Node's tty reset), "▲ Stopped." on stderr when a child was
+  alive, listeners removed and the signal raised again so a shell sees a signal death (130/143/129);
+  `process.exit(128+n)` if it did not take.
+- SIGKILL of scmjs cannot be answered: the children then run on (detached groups do not get the terminal's signal).
+- Tests: `tests/cli-lifecycle.test.ts` bundles `tests/support/lifecycleDriver.ts` with rolldown (the package's own
+  dependency through vite) and signals it — the only way to test signal handling without the engine. Trap: kill only
+  pids the test recorded; a failing run of it once left `node -e setInterval` grandchildren behind before `afterAll`
+  learned to kill what it saw.
+- The suites' own temp folders: `vitest.config.ts` `globalSetup: tests/support/tmpdir.ts` points TMPDIR/TMP/TEMP at
+  one `scmjs-tests-*` folder for the run (workers and the processes they start inherit it) and removes it at the end.
+  No test file had to change. (`node-compile-cache/` in TMPDIR is Node's, not ours.)
+
+**The engine (`engine.ts`).**
+- E1: the runners decide "am I main" with `import.meta.url === pathToFileURL(process.argv[1])`; Node gives the module
+  its real path, so a cache reached through a symlink made the runner do nothing and exit 0. `startRunner` passes
+  `realpathSync(runner)`. "Stopped without a result" now carries `noResultHint(dir)` (doctor, then remove the folder).
+- E2: `findGameCopy` throws exit 2 for a named folder that is no copy and for no copy at all (diff --picture,
+  preview, analyze, generate and the replay commands follow, since they share it — their tests were moved to 2).
+  A `SCMJS_STARCRAFT` naming no copy is said once on stderr with the copy used. coverage/heatmap check `--starcraft`
+  before printing anything.
+- E3: `ensureEngine` ignores its third argument (kept for the callers' signatures) and writes the fetch line to stderr
+  itself. Measured 2026-11-11: 24.3 MB over the wire (the bucket gzips; `fetch` asks for it), 105 MB on disk.
+- E4: after fetching, runners the deploy's `current.json` no longer names are removed from the build's folder
+  (`pruneRunners`; only names matching `RUNNERS[*].file`, never `.part` files — a concurrent fetch writes those).
+  Old *build* folders are not pruned (105 MB each): a game of another scmjs may be using one; left as a proposal.
+- `endReason`/`endDetail`: the runner's end `reason` names addresses ("its reason word 0x6D11F0 …"); anything with
+  `0x…`, "frame loop", "word" or "over" becomes "the game ended", the raw text under `detail` with `SCMJS_DEBUG`.
+  trace uses it; `replay watch` (watch.ts) should too.
+
+**map test.** B1: `map test` declares `--json/--frames/--starcraft/--engine`, and commander gives an option both
+declare to the parent wherever it is typed, so `record` never saw them. `typedOptions(cmd, local, keys)` (main.ts)
+reads the parent's value when its source is `cli`/`env` (not `default`: the parent's 2,400 frames must not leak in).
+B2: `onlyKnown` refuses unknown keys at file/scenario/entry/expectation level with the nearest key (Levenshtein ≤
+max(2, len/3)); `//`-prefixed keys are comments; a scenario with no `expect` and duplicate names (case-folded) are
+refused in `readTests` — not in `planScenario`, which tests and `recordTest` call with partial scenarios. Failed
+replays are `<tests stem>.<slug>.rep` (as clips), and a passing scenario's old one is removed.
+
+**map rush.** B3: the runner's `walkUnits` walks *every* unit of the local player (sorted with the asked type first),
+so on a map with pre-placed units for P1 it reports a walk per unit per pair — Carriers "arriving" by air, pre-placed
+SCVs — and sometimes no walk of the placed unit at all (ums.scx: Carrier 72, Interceptors 73, CC 106, no SCV). The CLI
+takes, per pair, the walk of the asked type that set out nearest the from-start; none → `unwalked` (with `instead`
+when other units were walked). The runner fix belongs in scm-sim (`src/exact/mapRush.ts`/`walkUnits`: walk only the
+units `pathingScenario` placed). Progress lines are buffered per pair for the same reason. Shortest/Longest are by
+pixels; seconds round once (`secondsOf`). < 2 starts is refused in main before the game.
+
+**heatmap/coverage.** `heatPoints(…, { bounds })` drops points off the map into `outside` (B4). `unreadable`/`noReplays`
+(heatmap.ts) word missing/unreadable files and the empty case (B5): all unreadable or none found → exit 2; some → left
+out, exit 0. `--force` → `--any-map` (hidden old name). File names as typed. `playingLine` draws an updating "playing
+…" line on a TTY stderr. Coverage still plays every replay on every run: its per-replay result could be cached as
+heatmap's is (key: map scenario hash + replay hash + engine build + `--order`), not done.
+
+**Messages.** No "the runner is scm-sim's" in the game commands; runner-version errors read "The game engine at {dir}
+is from before …". Progress for trace/cost/rush/coverage/heatmap/balance goes to stderr (`note` in main.ts).

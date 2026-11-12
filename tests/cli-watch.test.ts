@@ -12,7 +12,8 @@ import { describe, expect, it } from "vitest";
 import type { Replay } from "@scm-js/replay";
 import { ensureEngine, runnerFor } from "../cli/src/engine";
 import type { Input } from "../cli/src/files";
-import { brailleCell, clock, drawMinimap, fitPicture, nearestAnsi, parseClock, pictureLines, plainPicture, sidesOf, summaryLine, Tally, watchReplay, watchSummary, type Side, type WatchFrame, type WatchStart } from "../cli/src/watch";
+import { brailleCell, clock, drawMinimap, fitPicture, nearestAnsi, parseClock, pictureLines, plainPicture, sidesOf, summaryLine, Tally, watchReplay, watchSummary, watchValues, type Side, type WatchFrame, type WatchStart } from "../cli/src/watch";
+import { plainReason } from "../cli/src/runnerwords";
 import { CliError, visible } from "../cli/src/ui";
 
 const tmp = () => mkdtempSync(join(tmpdir(), "scmjs-watch-"));
@@ -36,6 +37,7 @@ const frame: WatchFrame = {
 };
 /** A replay as far as the picture reads one: players with colours and ids, commands with chat. */
 const replay = {
+  header: { mapName: "Test Map", frames: 2400 },
   players: [{ slot: 0, id: 0, name: "Alpha", color: "#f40404" }, { slot: 1, id: 1, name: "Beta", color: "#0c48cc" }],
   commands: [
     { frame: 10, player: 0, kind: "select" }, { frame: 20, player: 0, kind: "train" }, { frame: 30, player: 1, kind: "rightClick" },
@@ -129,6 +131,8 @@ describe("scmjs replay watch: the picture", () => {
     expect(parseClock("0:05")).toBe(119);
     expect(parseClock("1:00:00")).toBe(85714);
     expect(() => parseClock("abc")).toThrow(CliError);
+    expect(() => parseClock("1:75")).toThrow(CliError);
+    expect(parseClock("90")).toBe(2143);
   });
 });
 
@@ -167,7 +171,7 @@ const terrain = "1".repeat(64 * 64);
 say({ kind: "start", map: { name: require("node:path").basename(args[0]), width: 64, height: 64, tileset: "jungle" }, frames: 2400, players: [{ slot: 0, name: "A", race: "terran", type: 2 }, { slot: 1, name: "B", race: "zerg", type: 2 }], copy: "classic", terrain, ms: { load: 1, start: 1 } });
 let frame = Number(flag("from") ?? 0);
 const line = () => say({ kind: "frame", frame, players: [[50 + frame, 0, 4, 9, 4], [50, 0, 4, 9, 4]], units: [512, 512, 0, 3, 1536, 1536, 1, 3, 600 + frame, 540, 0, 1], ...(ENDS && frame >= 1900 ? { left: [null, 1900] } : {}) });
-const end = (ended) => { say({ kind: "end", frame, ended, reason: null, check: { named: 1, gone: 0, ahead: 0, parted: null }, ms: { game: 1, load: 1, start: 1, total: 3 }, ...(ENDS ? { left: [null, frame >= 1900 ? 1900 : null], outcomes: ended ? ["victory", "defeat"] : [null, null], by: ended ? "victory" : null } : {}) }); process.exit(0); };
+const end = (ended) => { say({ kind: "end", frame, ended, reason: null, check: { named: 1, gone: 0, ahead: 0, parted: null }, ms: { game: 1, load: 1, start: 1, total: 3 }, ...(ENDS ? { left: [null, frame >= 1900 ? 1900 : null], outcomes: ended ? ["victory", "defeat"] : [null, null], by: ended ? "victory" : null } : {}) }); process.stdout.write("", () => process.exit(0)); };
 line();
 const every = flag("every");
 if (every !== undefined) { while (frame < 2400) { frame = Math.min(2400, frame + Number(every)); line(); } end(true); }
@@ -279,6 +283,36 @@ describe("scmjs replay watch: the runner", () => {
     expect(plain).toMatch(/Starting the game · 1\.16\.1 files · g\.rep\n/);
     expect(plain).toContain("■ Alpha  T  5");
     expect(visible(watchSummary(s.replay, r))).toMatch(/^ℹ g\.rep: stopped at 0:01 \(frame 15 of 2,400\) · 0\.0 s$/);
+  });
+
+  it("into a pipe by default: a line at each minute of the game's clock; --every 0: none; the map by its own name", async () => {
+    const s = staged();
+    const out: string[] = [];
+    const r = await watchReplay(s.replay, replay, { engine: s.dir, starcraft: s.copy, tty: false, out: (t) => out.push(visible(t)) });
+    expect(out.join("").split("\n").filter((l) => /^\s*\d+:\d\d {2}Alpha/.test(l)).map((l) => l.trim().split(" ")[0])).toEqual(["1:00"]);
+    expect(r.start.map.name).toBe("Test Map");
+    expect(r.frame).toBe(2400);
+    const none: string[] = [];
+    await watchReplay(s.replay, replay, { engine: s.dir, starcraft: s.copy, tty: false, every: 0, out: (t) => none.push(visible(t)) });
+    expect(none.join("")).not.toMatch(/Alpha T/);
+  });
+
+  it("reads its values before the game starts", () => {
+    const rep = { ...replay, header: { ...replay.header, frames: 31116 } } as unknown as Replay;
+    expect(watchValues(rep, { speed: "8", cells: "40x20", every: "0", from: "1:00" })).toEqual({ speed: 8, size: { cols: 40, rows: 20 }, every: 0, from: 1429 });
+    expect(watchValues(rep, { speed: "8", size: "40x20" }).size).toEqual({ cols: 40, rows: 20 });
+    for (const [o, said] of [[{ from: "90:00" }, /--from 90:00 is past the replay's end \(21:47\)/], [{ every: "abc" }, /--every takes/], [{ cells: "2x2" }, /--cells takes WxH/], [{ speed: "0" }, /--speed takes/]] as const) {
+      const e = (() => { try { watchValues(rep, { speed: "8", ...o }); } catch (x) { return x as CliError; } })();
+      expect(e, JSON.stringify(o)).toBeInstanceOf(CliError);
+      expect(e!.message).toMatch(said);
+      expect(e!.exitCode).toBe(2);
+    }
+  });
+
+  it("says why the game ended in plain words", () => {
+    expect(plainReason("the frame loop returned to its caller five times (reason word 0x6D11F0 = 3)")).toBe("the game ended");
+    expect(plainReason("a player won")).toBe("a player won");
+    expect(plainReason(null)).toBeNull();
   });
 
   it("says what went wrong: a runner that could not start, a deploy with no replay runner", async () => {

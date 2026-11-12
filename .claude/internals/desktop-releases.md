@@ -81,7 +81,8 @@ comment now says; pushes to main skip it). `release` needs it beside `desktop`, 
 before `gh release create`/`upload --clobber`; Scoop's autoupdate reads the zip's line from it. So a
 failed executable blocks the release as a failed installer does. The recipes the user publishes are
 `packaging/` (Scoop bucket, winget-pkgs, Homebrew tap; `packaging/README.md`), filled per release by
-`scripts/release-recipes.mjs <version>` from that SHA256SUMS. No macOS capacity trap is recorded
+`scripts/release-recipes.mjs <version>` from that SHA256SUMS. The `packages` job (stable, after `release`) has the tap and
+the bucket take the version at once (`cli.md`, "The release tells the tap and the bucket"); winget is by hand. No macOS capacity trap is recorded
 here: the matrix uses the same `macos-latest` label as `desktop`, one Mac job per run, not a second
 (Intel) Mac runner.
 **Both hosted builds are releases**: the `pages` job serves the *tag* at `editor.scmjs.dev` (it was

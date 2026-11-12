@@ -12,10 +12,10 @@
 import { spawnSync } from "node:child_process";
 import { createInterface } from "node:readline";
 import { randomBytes } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { tmpdir } from "node:os";
-import { basename, dirname, extname, join, resolve } from "node:path";
+import { tempFolder } from "./lifecycle";
+import { basename, dirname, extname, join, relative, resolve } from "node:path";
 import { gunzipSync } from "node:zlib";
 import { FRAME_MS, type Replay, type ReplayPlayer } from "@scm-js/replay";
 import { parseScenario } from "../../src/formats/chk/scenario";
@@ -39,8 +39,12 @@ export interface ExportOptions {
   to?: string;
   follow?: string;
   at?: string;
+  /** `--whole-map` (`all`: its old name, and what map test's clips pass). */
+  wholeMap?: boolean;
   all?: boolean;
   speed?: string;
+  /** `--resolution` (`size`: its old name, and what map test's clips pass). */
+  resolution?: string;
   size?: string;
   fps?: string;
   json?: boolean;
@@ -80,15 +84,16 @@ export function clipFormat(out: string): ClipFormat {
   if (ext === ".webm") return "webm";
   if (ext === ".mp4" || ext === ".m4v") return "mp4";
   if (ext === ".gif") return "gif";
-  throw new CliError(ext ? t("--out names a {ext} file; a clip is .webm, .mp4 or .gif", { ext }) : t("--out names a nameless file; a clip is .webm, .mp4 or .gif"), null, 2);
+  throw new CliError(ext ? t("--out names a {ext} file; a clip is .webm, .mp4 or .gif", { ext }) : t("--out names a file with no extension; a clip is .webm, .mp4 or .gif"), null, 2);
 }
 
-/** `WxH`, each even (video encoders work in pairs of pixels). */
-export function parseSize(spec: string): { width: number; height: number } {
+/** `WxH`, each even (video encoders work in pairs of pixels): an odd side is made the next even one, `rounded` then. */
+export function parseSize(spec: string): { width: number; height: number; rounded: boolean } {
   const m = /^(\d+)x(\d+)$/i.exec(spec.trim());
   const width = m ? Number(m[1]) : NaN, height = m ? Number(m[2]) : NaN;
-  if (!m || width < 64 || height < 64 || width > 3840 || height > 2160) throw new CliError(t("--size takes WxH in pixels, from 64x64 to 3840x2160, not \"{spec}\"", { spec }), null, 2);
-  return { width: Math.round(width / 2) * 2, height: Math.round(height / 2) * 2 };
+  if (!m || width < 64 || height < 64 || width > 3840 || height > 2160) throw new CliError(t("--resolution takes WxH in pixels, from 64x64 to 3840x2160, not \"{spec}\"", { spec }), null, 2);
+  const even = { width: Math.round(width / 2) * 2, height: Math.round(height / 2) * 2 };
+  return { ...even, rounded: even.width !== width || even.height !== height };
 }
 
 /** Pictures a second; a GIF's is what its hundredths of a second allow (12 → 12.5, a picture every 8). */
@@ -118,7 +123,7 @@ export function pickPlayer(players: readonly ReplayPlayer[], who: string | undef
   const humans = players.filter((p) => p.type === 2);
   if (who === undefined) {
     const first = humans[0] ?? players[0];
-    if (!first) throw new CliError(t("The replay names no players to follow."), t("Use --at x,y or --all."), 2);
+    if (!first) throw new CliError(t("The replay names no players to follow."), t("Use --at x,y or --whole-map."), 2);
     return first;
   }
   const n = Number(who);
@@ -145,7 +150,9 @@ export function planClip(input: Input, rep: Replay, o: ExportOptions, map: { wid
   const out = resolve(o.out ?? join(input.path === "-" ? "." : dirname(input.path), `${basename(input.name, extname(input.name)) || "replay"}.webm`));
   const format = clipFormat(out);
   const d = format === "gif" ? DEFAULTS.gif : DEFAULTS.video;
-  const { width, height } = o.size ? parseSize(o.size) : d;
+  const asked = o.resolution ?? o.size;
+  const { width, height } = asked ? parseSize(asked) : d;
+  const whole = !!(o.wholeMap ?? o.all);
   const fps = parseFps(o.fps ?? String(d.fps), format);
   const speed = parseSpeed(o.speed ?? "1");
   const frames = Math.max(rep.header.frames, rep.commands.at(-1)?.frame ?? 0);
@@ -153,9 +160,9 @@ export function planClip(input: Input, rep: Replay, o: ExportOptions, map: { wid
   const to = Math.min(frames, o.toFrame ?? (o.to ? parseClock(o.to, "--to") : frames));
   if (from >= frames) throw new CliError(t("--from {from} is past the replay's end ({end})", { from: String(o.from), end: duration(frames * FRAME_MS) }), null, 2);
   if (to <= from) throw new CliError(t("--to {to} is not after --from {from}", { to: String(o.to), from: o.from ?? "0:00" }), null, 2);
-  const chosen = [o.follow !== undefined, o.at !== undefined, !!o.all].filter(Boolean).length;
-  if (chosen > 1) throw new CliError(t("--follow, --at and --all each place the camera: give one"), null, 2);
-  const camera: Camera = o.all ? { kind: "all" } : o.at !== undefined ? { kind: "at", ...parseAt(o.at, map) } : { kind: "follow", player: pickPlayer(rep.players, o.follow) };
+  const chosen = [o.follow !== undefined, o.at !== undefined, whole].filter(Boolean).length;
+  if (chosen > 1) throw new CliError(t("--follow, --at and --whole-map each place the camera: give one"), null, 2);
+  const camera: Camera = whole ? { kind: "all" } : o.at !== undefined ? { kind: "at", ...parseAt(o.at, map) } : { kind: "follow", player: pickPlayer(rep.players, o.follow) };
   const pictures = Math.max(1, Math.floor(((to - from) * FRAME_MS * fps) / (1000 * speed)) + 1);
   return { out, format, width, height, fps, speed, from, to, pictures, rows: rowsFor(height), camera };
 }
@@ -360,7 +367,7 @@ export async function gameMoments(input: Input, from: number, to: number, o: { p
   const runner = runnerFor(engine, "replay");
   const copy = findGameCopy(o.starcraft);
   let file = resolve(input.path), work: string | null = null;
-  if (!existsSync(file)) { work = mkdtempSync(join(tmpdir(), "scmjs-export-")); file = join(work, "replay.rep"); writeFileSync(file, input.bytes); }
+  if (!existsSync(file)) { work = tempFolder("scmjs-export-"); file = join(work, "replay.rep"); writeFileSync(file, input.bytes); }
   try {
     const child = startRunner(runner, [file, "--engine", engine.dir, "--starcraft", copy.folder, "--every", String(SAMPLE_EVERY), "--from", String(Math.max(0, from)), "--to", String(to)]);
     let said = "";
@@ -540,7 +547,7 @@ export async function exportReplay(input: Input, rep: Replay, o: ExportOptions, 
   else if (!got) throw new CliError(t("The play page finished without a clip."));
   else if (plan.format === "webm") writeFileSync(plan.out, got);
   else {
-    const work = mkdtempSync(join(tmpdir(), "scmjs-export-"));
+    const work = tempFolder("scmjs-export-");
     try {
       const webm = join(work, "clip.webm");
       writeFileSync(webm, got);
@@ -552,8 +559,9 @@ export async function exportReplay(input: Input, rep: Replay, o: ExportOptions, 
   }
   const now = Date.now();
   return {
-    file: plan.out, bytes: statSync(plan.out).size, format: plan.format, width: plan.width, height: plan.height, fps: plan.fps, speed: plan.speed,
-    pictures: plan.pictures, from: plan.from, to: plan.to, seconds: plan.pictures / plan.fps, camera: followedBy === "clicks" ? t("{camera} (by their clicks)", { camera: cameraWords(plan.camera) }) : cameraWords(plan.camera),
+    // (the path as it was typed, or beside the replay as its path was typed: as the other commands give theirs)
+    file: o.out ?? relative(process.cwd(), plan.out), bytes: statSync(plan.out).size, format: plan.format, width: plan.width, height: plan.height, fps: plan.fps, speed: plan.speed,
+    pictures: plan.pictures, from: plan.from, to: plan.to, seconds: Math.round((plan.pictures / plan.fps) * 100) / 100, camera: followedBy === "clicks" ? t("{camera} (by their clicks)", { camera: cameraWords(plan.camera) }) : cameraWords(plan.camera),
     ms: { load: (times.loaded || now) - started, record: (times.recorded || now) - (times.loaded || started), convert: now - convertStart, total: now - started },
     browser: browserPath, encodedBy,
   };

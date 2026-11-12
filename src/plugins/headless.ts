@@ -4,7 +4,8 @@
  * is around it. There is no page, so the surfaces that would show something — the status line, toasts, the log —
  * are reported to `sinks` instead, dialogs and panels register and show nothing, and `pickFiles` answers none. A
  * map goes in as an `OpenedMap` and comes back out as one (`document()`), with whether the plugin changed it, so
- * the caller writes it where it wants to; `api.document.save()` is the editor's and does nothing useful here.
+ * the caller writes it where it wants to; `api.document.save()` resolves true and writes nothing (the caller
+ * writes the map), `saveAs()` resolves false (no dialog).
  *
  * Loading code is the editor's loader (`loader.ts`) with deps the caller brings (`LoaderDeps`: the command's read
  * files from disk, transpile with the TypeScript it found, and write modules to a folder to import them). Nothing
@@ -99,6 +100,13 @@ export async function runHeadless(source: PluginSource | string, doc: OpenedMap,
     const { manifest, icon, module } = await loadPlugin(source, deps, { accept: checkApiVersion });
     const info: PluginInfo = { id: pluginIdOf(manifest), name: manifest.name, source: spec, version: manifest.version, icon };
     const api = createPluginApi(store, info, bag);
+    // Saving is the caller's, once the plugin is done (`scmjs map run` writes the map): Save resolves as if it wrote,
+    // and Save As has no dialog to show. The editor's would reach for the page's file APIs, which are not here.
+    api.document.save = async () => true;
+    api.document.saveAs = async () => false;
+    // A script that hands toast a plain string means it as the title, as a reader would.
+    const toast = api.ui.toast;
+    api.ui.toast = (x) => toast(typeof x === "string" ? { title: x } : x);
     deactivate = await resolveActivate(module)(api);
     const host: HeadlessHost = {
       store, api, info, manifest,

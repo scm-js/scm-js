@@ -92,7 +92,7 @@ export async function storageFiles(folder: string): Promise<GameFiles> {
 export async function openGameFiles(named: string | undefined, why = t("The picture is drawn with your own installation's tileset graphics")): Promise<GameFiles> {
   let copy: ReturnType<typeof findGameCopy>;
   try { copy = findGameCopy(named); } catch (e) {
-    if (e instanceof CliError && !named) throw new CliError(e.message, t("{why}: name its folder with --starcraft (or SCMJS_STARCRAFT).", { why }));
+    if (e instanceof CliError && !named) throw new CliError(e.message, t("{why}: name its folder with --starcraft (or SCMJS_STARCRAFT).", { why }), e.exitCode);
     throw e;
   }
   return copy.kind === "remastered" ? storageFiles(copy.folder) : archiveFiles(copy.folder);

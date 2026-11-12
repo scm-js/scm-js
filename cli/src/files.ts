@@ -1,6 +1,6 @@
 /** Reading what the person named: what kind of file it is, and a map or replay out of it, as the editor reads them. */
-import { readFile, stat } from "node:fs/promises";
-import { basename } from "node:path";
+import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { basename, dirname } from "node:path";
 import type { Readable } from "node:stream";
 import { openMapBytes, type OpenedMap } from "../../src/editor/mapFile";
 import { looksLikeMpq } from "../../src/formats/mpq/scm";
@@ -63,7 +63,7 @@ export function kindOf(name: string, bytes: Uint8Array): FileKind | null {
 /** A file that is not a map this can read; `reason` is why, without the file's name (the message has both). */
 export class MapReadError extends CliError {
   readonly reason: string;
-  constructor(name: string, reason: string) { super(t("{name} is not a map this can read: {reason}", { name, reason })); this.reason = reason; }
+  constructor(name: string, reason: string) { super(t("{name} is not a map this can read: {reason}", { name, reason }), null, 2); this.reason = reason; }
 }
 
 export async function loadMapInput(input: Input): Promise<OpenedMap> {
@@ -78,7 +78,7 @@ export async function loadReplayInput(input: Input): Promise<Replay> {
   try {
     return await parseReplay(input.bytes);
   } catch (e) {
-    throw new CliError(t("{name} is not a replay this can read: {reason}", { name: input.name, reason: e instanceof Error ? e.message : String(e) }));
+    throw new CliError(t("{name} is not a replay this can read: {reason}", { name: input.name, reason: e instanceof Error ? e.message : String(e) }), null, 2);
   }
 }
 
@@ -89,4 +89,46 @@ export function expectKind(input: Input, ...kinds: FileKind[]): FileKind {
   throw new CliError(
     input.kind ? t("{name} is {kind}, not {wanted}", { name: input.name, kind: what(input.kind), wanted: kinds.map(what).join(t(" or ")) }) : t("{name} is not a map or a replay", { name: input.name }),
     input.kind && input.path !== STDIO ? t("Try: scmjs info \"{path}\"", { path: input.path }) : t("scmjs reads maps (.scm, .scx, .chk) and replays (.rep)."), 2);
+}
+
+/**
+ * Why a file could not be written, in a line a person can act on: the folder in the way, a file where a folder should
+ * be, no permission. Exit 2 — the command could not do its work for where it was pointed.
+ */
+export function writeError(path: string, e: unknown): CliError {
+  const code = String((e as NodeJS.ErrnoException).code ?? "");
+  if (code === "EISDIR") return new CliError(t("{path} is a folder", { path }), t("Name a file to write."), 2);
+  if (code === "ENOTDIR" || code === "EEXIST") return new CliError(t("{path} could not be written: a part of the path is a file, not a folder", { path }), null, 2);
+  if (code === "EACCES" || code === "EPERM" || code === "EROFS") return new CliError(t("{path} could not be written: no permission to write there", { path }), null, 2);
+  return new CliError(t("{path} could not be written ({code})", { path, code: code || String(e) }), null, 2);
+}
+
+/** Bytes or text to a file, its folder made first when it is missing; a failure is `writeError`'s line. */
+export async function writeFileMade(path: string, data: Uint8Array | string): Promise<void> {
+  try {
+    await mkdir(dirname(path), { recursive: true });
+    await writeFile(path, data);
+  } catch (e) {
+    throw writeError(path, e);
+  }
+}
+
+/**
+ * A text file a command reads (triggers, strings), or standard input for `-`: its bytes, or one line saying what is
+ * wrong with the name (missing, a folder) and exit 2.
+ */
+export async function readTextArg(path: string, stdin: Readable = process.stdin): Promise<Uint8Array> {
+  if (path === STDIO) {
+    const chunks: Uint8Array[] = [];
+    for await (const c of stdin) chunks.push(typeof c === "string" ? new TextEncoder().encode(c) : c);
+    return new Uint8Array(Buffer.concat(chunks));
+  }
+  try {
+    if ((await stat(path)).isDirectory()) throw new CliError(t("{path} is a folder", { path }), t("Name the file to read."), 2);
+    return new Uint8Array(await readFile(path));
+  } catch (e) {
+    if (e instanceof CliError) throw e;
+    const code = (e as NodeJS.ErrnoException).code;
+    throw new CliError(code === "ENOENT" ? t("No file {path}", { path }) : t("{path} cannot be read ({code})", { path, code: String(code ?? e) }), code === "ENOENT" ? t("Check the name; put quotes round a name with spaces or brackets.") : null, 2);
+  }
 }

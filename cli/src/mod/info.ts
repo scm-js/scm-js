@@ -46,8 +46,9 @@ export interface ModInfo {
   /** Tables wider than the game's: `units.datex (3,000 entries, GPTP's .datex)`. */
   extended: string[];
   scripts: string[];
-  plugins: { name: string; bytes: number }[];
-  firegraft: { name: string; bytes: number }[];
+  /** Each by its file's name; `path` where in the mod it is (two plugins of one name are told apart by it). */
+  plugins: { name: string; bytes: number; path: string }[];
+  firegraft: { name: string; bytes: number; path: string }[];
   exes: ModSource["exes"];
   /** Libraries (`.dll`) beside the mod's exe: a plugin of its may load them. Not the mod's files, not in its hash. */
   beside: string[];
@@ -108,12 +109,24 @@ export function modInfo(source: ModSource, hash: SourceHash | null = null): ModI
     path: source.path, name: source.name, kind: source.kind, layers: source.layers, files: source.files.size, bytes, kinds, tables,
     extended: tables.filter((x) => x.extended).map((x) => `${x.member.split("\\").pop()}: ${x.how}`),
     scripts: [...source.files.values()].filter((f) => /^scripts\\.*\.bin$/.test(gameName(f.name))).map((f) => f.name).sort(),
-    plugins: source.plugins.map((p) => ({ name: p.name.split(/[\\/]/).pop()!, bytes: p.bytes })),
-    firegraft: source.firegraft.map((p) => ({ name: p.name.split(/[\\/]/).pop()!, bytes: p.bytes })),
+    plugins: source.plugins.map((p) => ({ name: p.name.split(/[\\/]/).pop()!, bytes: p.bytes, path: carriedPath(p) })),
+    firegraft: source.firegraft.map((p) => ({ name: p.name.split(/[\\/]/).pop()!, bytes: p.bytes, path: carriedPath(p) })),
     exes: source.exes, beside: source.beside, maps: [...source.files.values()].filter((f) => kindOf(f.name) === "maps").map((f) => f.name).sort(),
     game, races: source.races, duplicates: source.duplicates, left: source.left, gameCopy: source.gameCopy, probed: source.probed, unheld: source.unheld,
     hash: hash?.hash ?? null, withoutPlugins: hash?.withoutPlugins ?? null, older: hash?.older ?? null,
   };
+}
+
+/** Where a carried file is: its path in the folder or zip, or the archive it is a member of with the member's name. */
+const carriedPath = (p: ModSource["plugins"][number]) => (p.member ? `${p.layer}: ${p.member}` : p.name);
+
+/** A size as `size` gives it, and past a thousand megabytes in gigabytes. */
+export const bigSize = size;
+
+/** Carried files by name, each by its path where another has the same name. */
+function carriedList(list: ModInfo["plugins"]): string {
+  const twice = new Set(list.filter((p, i) => list.findIndex((q) => q.name.toLowerCase() === p.name.toLowerCase()) !== i).map((p) => p.name.toLowerCase()));
+  return list.map((p) => `${twice.has(p.name.toLowerCase()) ? p.path : p.name} ${pc.dim(`(${bigSize(p.bytes)})`)}`).join(", ");
 }
 
 /** A count of files of one kind, in words. */
@@ -151,21 +164,21 @@ function raceDetail(r: DataSetRace): string {
 
 export function printModInfo(r: ModInfo): string[] {
   const lines = [pc.bold(r.name), pc.dim(fromWords(r.kind, r.game)), ""];
-  const kinds = MOD_KINDS.filter((k) => r.kinds[k]).map((k) => `${kindWords(k, r.kinds[k]!.files)} ${pc.dim(`(${size(r.kinds[k]!.bytes)})`)}`);
+  const kinds = MOD_KINDS.filter((k) => r.kinds[k]).map((k) => `${kindWords(k, r.kinds[k]!.files)} ${pc.dim(`(${bigSize(r.kinds[k]!.bytes)})`)}`);
   // (a plugin by the name it gives itself and the id the patcher keeps it under; an id of four letters as its letters)
   const idWord = (id: number) => { const s = String.fromCharCode(id & 0xff, (id >>> 8) & 0xff, (id >>> 16) & 0xff, id >>> 24); return /^[A-Za-z0-9]{4}$/.test(s) ? s : id.toString(16).padStart(8, "0"); };
   const patcher = (e: ModInfo["exes"][number]) => e.plugins.length
     ? t("FireGraft's patcher with {n, plural, one {# plugin} other {# plugins}} ({list})", { n: e.plugins.length, list: e.plugins.map((p) => `${p.name ? `${p.name}, ` : ""}id ${idWord(p.id)}, ${size(p.size)}`).join("; ") })
     : t("FireGraft's patcher");
   lines.push(...rows([
-    [t("Files"), `${num(r.files)}${dot}${size(r.bytes)}`],
+    [t("Files"), `${num(r.files)}${dot}${bigSize(r.bytes)}`],
     [t("Kinds"), kinds.join(", ") || pc.dim(t("none"))],
     [t("Tables"), r.tables.length ? r.tables.map((x) => x.member.split("\\").pop()).join(", ") : null],
     [t("Extended"), r.extended.length ? r.extended[0] : null],
     ...r.extended.slice(1).map((e) => ["", e] as [string, string]),
     [t("Scripts"), r.scripts.length ? r.scripts.map((s) => s.split("\\").pop()).join(", ") : null],
-    [t("Plugins"), r.plugins.length ? `${r.plugins.map((p) => `${p.name} ${pc.dim(`(${size(p.bytes)})`)}`).join(", ")} ${pc.dim(t("— kept, not run"))}` : null],
-    ["FireGraft", r.firegraft.length ? `${r.firegraft.map((p) => `${p.name} ${pc.dim(`(${size(p.bytes)})`)}`).join(", ")} ${pc.dim(t("— kept, not applied"))}` : null],
+    [t("Plugins"), r.plugins.length ? `${carriedList(r.plugins)} ${pc.dim(t("— kept, not run"))}` : null],
+    ["FireGraft", r.firegraft.length ? `${carriedList(r.firegraft)} ${pc.dim(t("— kept, not applied"))}` : null],
     ...r.exes.map((e) => ["Exe", t("{file}: {what}, its archive at byte {at}", { file: e.file, what: e.kind === "firegraft" ? patcher(e) : t("MPQDraft's self-executing MPQ"), at: num(e.at) })] as [string, string]),
     [t("Races"), r.races.length ? r.races.map((x) => `${x.name} ${pc.dim(`(${raceDetail(x)})`)}`).join(", ") : null],
     [t("Maps"), r.maps.length ? `${t("{n, plural, one {# map} other {# maps}}", { n: r.maps.length })}${r.maps.length <= 4 ? `: ${r.maps.map((m) => m.split("\\").pop()).join(", ")}` : ""}` : null],

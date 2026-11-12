@@ -154,13 +154,6 @@ export function withMod(scmbotJson: string, mod: ModHeader["mod"]): string {
   return JSON.stringify(c, null, 2) + "\n";
 }
 
-/** The link to the mod's makers in its `mod.json`, when it has one. */
-function linkOf(source: ModSource): string | undefined {
-  const m = source.manifest as unknown as Record<string, unknown> | null;
-  const v = m?.link ?? m?.url ?? m?.homepage;
-  return typeof v === "string" && /^https?:\/\//.test(v) ? v : undefined;
-}
-
 export interface HeaderOptions {
   /** The folder to write in (the bot's with `bot`); the working folder by default. */
   out?: string;
@@ -223,7 +216,7 @@ export async function writeModHeader(source: ModSource, base: GameFiles | null, 
   if (!data.tables.units) throw new CliError(t("{mod} has no units.dat, and no copy of StarCraft was found to read the game's: there are no units to name.", { mod: source.name }), t("Name your copy of the game with --starcraft."));
   const names = await modNames(source, data);
   const hash = await sourceHash(source);
-  const link = linkOf(source);
+  const link = source.link ?? undefined;
   const h = modHeaderOf({ name: source.name, hash: hash.hash, ...(link ? { link } : {}) }, names.names, o.namespace);
   const date = o.date ?? new Date().toISOString().slice(0, 10);
   mkdirSync(out, { recursive: true });

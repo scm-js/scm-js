@@ -3,7 +3,8 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { memberKey, openArchives, readerFor } from "../src/gamedata/archives";
 import { describeExtraction, ExtractError, extractGameData, extractTilesets, extractUnits, TILESET_NAMES } from "../src/gamedata/extract";
-import { isGamePath, isMemberPath, pickArchives, splitPickedFiles } from "../src/gamedata/install";
+import { isMemberPath, pickArchives } from "../src/gamedata/install";
+import { pickedDataSet } from "../src/gamedata/modInput";
 import { activeProfileId, DEFAULT_PROFILE, isProfileId, normalizeProfile, PROFILE_KEY, profileIdFrom } from "../src/gamedata/profiles";
 import { locateGameData, type LocateDeps } from "../src/gamedata/source";
 import { clearStoredCopy, keepInMemory, listStoredCopies, profileDir, profileOf, readStored, storedCopy, type StoredCopy } from "../src/gamedata/store";
@@ -297,19 +298,21 @@ describe("installing a data set from files", () => {
     expect(isMemberPath("plugins/gptp.qdp")).toBe(false);
   });
 
-  it("splits a picked folder into archives and members, dropping the folder's own name", () => {
+  it("takes a picked folder's game archives from the copy of the game in it, and everything picked as the mod", async () => {
     const file = (rel: string) => { const f = new File([], rel.split("/").pop()!); Object.defineProperty(f, "webkitRelativePath", { value: rel }); return f; };
-    const split = splitPickedFiles([
+    const { input } = await pickedDataSet([
       file("Cosmonarchy/StarDat.mpq"), file("Cosmonarchy/BrooDat.mpq"), file("Cosmonarchy/mpq/arr/units.dat"),
       file("Cosmonarchy/mpq/unit/terran/marine.grp"), file("Cosmonarchy/README.md"), file("Cosmonarchy/plugins/gptp.qdp"),
       file("Cosmonarchy/mpq/sound/misc/buzz.wav"),
     ]);
-    expect(split.archives.map((a) => a.name)).toEqual(["StarDat.mpq", "BrooDat.mpq"]);
-    // The sound is the mod's too: the extraction does not read it, but the data set's hash covers it.
-    expect(split.files!.map((f) => f.path)).toEqual(["arr/units.dat", "unit/terran/marine.grp", "sound/misc/buzz.wav"]);
+    expect(input.archives.map((a) => a.name)).toEqual(["StarDat.mpq", "BrooDat.mpq"]);
+    // The mod is read in the worker by @scm-js/mod, which leaves the copy's archives out (the sound is the mod's too: the
+    // extraction does not read it, but the data set's hash covers it).
+    expect(input.picked?.name).toBe("Cosmonarchy");
+    expect(input.picked?.files.length).toBe(7);
     expect(isMemberPath("sound/misc/buzz.wav")).toBe(false);
-    expect(isGamePath("sound/misc/buzz.wav")).toBe(true);
-    expect(isGamePath("plugins/gptp.qdp")).toBe(false);
-    expect(isGamePath("sound")).toBe(false);
+    // A patch_rt.mpq outside a copy of the game is the mod's, standing in for the game's.
+    const { input: alone } = await pickedDataSet([file("Mod/patch_rt.mpq"), file("Mod/arr/units.dat")]);
+    expect(alone.archives).toEqual([]);
   });
 });

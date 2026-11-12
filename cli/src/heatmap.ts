@@ -38,7 +38,7 @@ import { clock, parseClock } from "./watch";
 import { parseWhole } from "./values";
 import { t, translate } from "./i18n";
 import { CliError, dot, gameText, mark, num, pc, size } from "./ui";
-import type { DataSetRace } from "../../src/formats/mod/races";
+import type { DataSetRace } from "@scm-js/mod";
 
 /* ── The replays ────────────────────────────────────────────── */
 

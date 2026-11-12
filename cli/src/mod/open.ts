@@ -5,7 +5,7 @@
  */
 import { readFile, stat } from "node:fs/promises";
 import { Archive } from "mopaq";
-import { isMpq } from "../../../src/formats/mod/sources";
+import { isMpq } from "@scm-js/mod";
 import { t } from "../i18n";
 import { findGameCopy } from "../engine";
 import { archiveFiles, storageFiles, type GameFiles } from "../gamefiles";

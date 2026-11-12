@@ -4,7 +4,8 @@
  * the data set in use is installed here whenever the session's source changes (`gamedata/source.ts`), as the loaded
  * unit names are in `data/units.ts`, so code with no store in reach names races the same way.
  */
-import { GAME_RACE_NAMES, raceChoices, raceLabel, type DataSetRace } from "../formats/mod/races";
+import type { DataSetRace } from "@scm-js/mod";
+import { GAME_RACE_NAMES, raceChoices, raceLabel } from "../formats/mod/races";
 import { t, translate } from "../i18n";
 
 let installed: readonly DataSetRace[] = [];

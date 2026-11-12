@@ -13,16 +13,14 @@ import type { Writable } from "node:stream";
 import { dirname, extname, join, resolve } from "node:path";
 import { Creator } from "mopaq";
 import { DEFAULT_PALETTE, MOD_MANIFEST, ModFolderError, packFile, type ModManifest, type PackContext } from "../../../src/formats/mod/folder";
-import { gameName, isSystemFile } from "../../../src/formats/mod/sources";
-import { isModCode } from "../../../src/formats/mod/hash";
+import { filesOf, gameName, isCodeFile, isSystemFile, normalizeRaces, readModJson } from "@scm-js/mod";
 import { loadModData } from "../../../src/formats/mod/data";
-import { normalizeRaces } from "../../../src/formats/mod/races";
 import type { NamedPalette, QuantiseReport } from "../../../src/formats/dat/grpPng";
 import type { GameFiles } from "../gamefiles";
 import { t } from "../i18n";
 import { CliError } from "../ui";
 import { STDIO } from "../files";
-import { emptySource, folderManifest, type ModSource } from "./source";
+import { describedSource, folderManifest, type ModSource } from "./source";
 
 export type ModCompression = "zlib" | "pkware" | "none";
 export const MOD_COMPRESSIONS: readonly ModCompression[] = ["zlib", "pkware", "none"];
@@ -131,15 +129,28 @@ export async function packFolder(dir: string, manifest: ModManifest, options: Pa
   for (const f of later) await pack(f);
 
   const members = [...out.values()].sort((a, b) => (gameName(a.member) < gameName(b.member) ? -1 : gameName(a.member) > gameName(b.member) ? 1 : 0));
-  const source = emptySource(dir, "mod folder", manifest.name || dir.replace(/[\\/]+$/, "").split(/[\\/]/).pop()!);
+  // The folder read as the mod it packs to (`@scm-js/mod`, the game's paths at its top): its members, each module of its
+  // code under plugins/, its FireGraft files under firegraft/. A plugin or FireGraft file that was in the mod's archive
+  // (`member`) goes back in as a member when packed, and is the mod's code, not a game file; a plugin there is loaded
+  // by no loader and has no line in the hash, so it is not read as one here.
+  const tree = new Map<string, Uint8Array>();
+  for (const m of members) if (!isCodeFile(m.member)) tree.set(gameName(m.member).replace(/\\/g, "/"), m.data);
+  for (const p of manifest.plugins) if (!p.member) tree.set(`plugins/${p.name}`, new Uint8Array(await readFile(join(dir, p.file))));
+  for (const f of manifest.firegraft) tree.set(`firegraft/${f.name}`, new Uint8Array(await readFile(join(dir, f.file))));
+  const name = manifest.name || dir.replace(/[\\/]+$/, "").split(/[\\/]/).pop()!;
+  const source = await describedSource(dir, "mod folder", filesOf(name, tree, { layout: "game" }));
+  source.name = name;
   source.manifest = manifest;
   source.races = normalizeRaces(manifest.races);
-  source.layers.push(...manifest.layers);
-  // (A plugin or FireGraft file that was in the mod's archive goes back in as a member, and is the mod's code, not a game file.)
-  for (const m of members) if (!isModCode(m.member)) source.files.set(gameName(m.member), { name: m.member, size: m.data.length, read: async () => m.data, layer: m.file });
+  source.link = readModJson(JSON.stringify(manifest))?.link ?? null;
+  source.layers = [...manifest.layers];
+  const fileOf = new Map(members.map((m) => [gameName(m.member), m.file]));
+  for (const [key, f] of source.files) f.layer = fileOf.get(key) ?? f.layer;
+  source.plugins = [];
+  source.firegraft = [];
   for (const p of [...manifest.plugins, ...manifest.firegraft]) {
     const path = join(dir, p.file);
-    const carried = { name: p.name, bytes: p.bytes, read: async () => new Uint8Array(await readFile(path)), member: p.member, layer: p.file };
+    const carried = { name: p.name, bytes: p.bytes, read: async () => new Uint8Array(await readFile(path)), ...(p.member ? { member: p.member } : {}), layer: p.file };
     (manifest.plugins.includes(p) ? source.plugins : source.firegraft).push(carried);
   }
   return { source, manifest, members, left: left.filter((f) => ![...manifest.plugins, ...manifest.firegraft].some((p) => p.file === f)), quantised, converted };

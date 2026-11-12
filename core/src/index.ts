@@ -133,8 +133,19 @@ export { grpToPng, pngToGrp, sheetColumns, type GrpToPngOptions, type NamedPalet
 // ── Mods: a mod as a folder of text and pictures ──
 // What a mod comes in (a folder, an MPQ, a self-executing exe, a zip), the folder's form both ways with the check that
 // keeps a text only when it packs back to the same bytes, the lints across tables, and a changelog between two mods.
-export { GAME_FOLDERS, SYSTEM_FILES, isSystemFile, GAME_ARCHIVES, gameCopyFiles, gameName, modRoot, programEnd, exeArchive, libraryName, isMpq, isZip, isExe, readZip, dataSetHash, fileDigest, dataSetHashOfDigests, ModSourceError, PatcherError, type ExeArchive, type PatcherPlugin, type ZipMember } from "../../src/formats/mod/sources";
-export { modHash, modHashOfDigests, hashLines, hashLinesAsWere, isSystemLine, gameLine, pluginLine, firegraftLine, isPluginFile, isFiregraftProject, isModCode, probeNames, type ModHash, type ModHashInput, type Digest } from "../../src/formats/mod/hash";
+// Reading a mod is `@scm-js/mod`'s (a dependency): these names are its, re-exported so that code written against
+// earlier releases of this library keeps working; `readMod` and the description are there too. The hash's helpers
+// this library had keep their signatures over it (`legacy.ts`), deprecated in favour of `readMod`'s `identity`.
+export {
+  GAME_FOLDERS, SYSTEM_FILES, isSystemFile, GAME_ARCHIVES, gameCopyFiles, modRoot, programEnd, libraryName, isMpq, isZip, isExe, readZip,
+  sha256Hex as fileDigest, ModError as ModSourceError, PatcherError, hashLines, hashLinesAsWere, isSystemLine, isPluginFile,
+  isCodeFile as isModCode, probeNames, readMod, MOD_MESSAGES, renderMessage,
+  type CarriedModule as PatcherPlugin, type ZipMember, type ModDescription, type ModFiles, type ModMessage, type Identity,
+} from "@scm-js/mod";
+export {
+  gameName, pluginLine, firegraftLine, exeArchive, modHash, modHashOfDigests, dataSetHash, dataSetHashOfDigests, gameLine, isFiregraftProject,
+  type ExeArchive, type ModHash, type ModHashInput, type Digest,
+} from "../../src/formats/mod/legacy";
 export {
   MOD_MANIFEST, MOD_FORMAT, MOD_FOLDERS, DEFAULT_PALETTE, emptyManifest, readManifest, folderPath, memberPath, placeOf, memberOf, aiNames, renderMember, renderAiScripts, packFile,
   recordRendered, tidyManifest, ModFolderError,
@@ -145,10 +156,8 @@ export { checkMod, GAME_ISCRIPT_LAST, type ModFinding, type CheckFiles } from ".
 export { diffMods, type ModChange, type ModChangeKind, type DiffSide } from "../../src/formats/mod/diff";
 // Races a data set adds to the game's own: the table `mod.json`'s `races` holds, a race's name by its byte, the hints a
 // mod's files give, and which of the game's three races a list of units plays as.
-export {
-  normalizeRaces, sameRaces, raceLabel, raceChoices, raceCandidates, hasRaceCandidates, racePlaysAs, GAME_RACE_NAMES, FIRST_DATASET_RACE, RACE_NAME_MAX, GAME_NETWORK_TBL_ENTRIES,
-  type DataSetRace, type RaceCandidates,
-} from "../../src/formats/mod/races";
+export { sameRaces, raceLabel, raceChoices, hasRaceCandidates, racePlaysAs, GAME_RACE_NAMES, FIRST_DATASET_RACE } from "../../src/formats/mod/races";
+export { normalizeRaces, raceCandidates, MAX_RACE_NAME as RACE_NAME_MAX, GAME_NETWORK_TBL_ENTRIES, type DataSetRace, type RaceCandidates } from "@scm-js/mod";
 
 // ── Names and tables ──
 export { TILESETS, TILESET_BY_ID, MAP_SIZES, type TilesetId, type TilesetInfo } from "../../src/data/tilesets";

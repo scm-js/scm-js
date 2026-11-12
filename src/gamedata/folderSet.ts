@@ -13,7 +13,7 @@
  *
  * Pure: the files come as anything with a size and `arrayBuffer()`, so tests hand in made ones.
  */
-import { GAME_FOLDERS, gameName, isSystemFile, modRoot } from "../formats/mod/sources";
+import { GAME_FOLDERS, gameName, inDotFolder, isSystemFile, modRoot } from "@scm-js/mod";
 import type { DataSetReader } from "./source";
 
 /** One file of a picked folder: its path from the folder's parent, forward slashes (`My Mod/mpq/arr/units.dat`). */
@@ -25,7 +25,7 @@ export interface FolderPiece {
 export interface FolderSet {
   /** The picked folder's own name. */
   name: string;
-  /** The folder in it the game's paths start in (`formats/mod/sources.ts#modRoot`); "" for the pick's parent. */
+  /** The folder in it the game's paths start in (`@scm-js/mod`'s `modRoot`); "" for the pick's parent. */
   root: string;
   /** The loose game files by the game's name: lower case, backslashes (`tileset\jungle.cv5`). */
   files: Map<string, FolderPiece["file"]>;
@@ -37,22 +37,30 @@ const isArchive = (path: string) => /\.(mpq|exe)$/i.test(path);
 
 /**
  * A picked folder's files sorted into the game files it holds loose and the archives it holds. An operating system's
- * file (`isSystemFile`: `sound/desktop.ini`, macOS's `._units.dat`) is neither, as nowhere else that reads a mod.
+ * file (`isSystemFile`: `sound/desktop.ini`, macOS's `._units.dat`) is neither, nor a file in a tool's dot folder
+ * (`inDotFolder`: `.git/`), as nowhere else that reads a mod (`@scm-js/mod`'s rules).
  */
 export function folderSet(pieces: readonly FolderPiece[]): FolderSet {
   const paths = pieces.map((p) => p.path.replaceAll("\\", "/"));
-  const root = modRoot(paths.filter((p) => !isSystemFile(p)));
+  // (the picked folder's own name is no tool's folder, whatever it starts with)
+  const skip = (p: string) => isSystemFile(p) || inDotFolder(p.slice(p.indexOf("/") + 1));
+  const kept = paths.filter((p) => !skip(p));
+  const root = modRoot(kept);
+  // (no file under one of the game's folders: nothing in the folder is the game's)
+  const rooted = kept.some((p) => p.toLowerCase().split("/").slice(0, -1).some((f) => f !== "maps" && GAME_FOLDERS.includes(f)));
   const under = root ? `${root}/` : "";
   const files = new Map<string, FolderPiece["file"]>();
   const archives: string[] = [];
   pieces.forEach((piece, i) => {
     const path = paths[i];
-    if (isSystemFile(path)) return;
+    if (skip(path)) return;
     if (isArchive(path)) { archives.push(path.split("/").pop()!); return; }
-    if (!path.startsWith(under)) return;
+    if (!rooted || !path.startsWith(under)) return;
     const inner = path.slice(under.length);
     const top = inner.split("/")[0].toLowerCase();
-    if (inner.includes("/") && GAME_FOLDERS.includes(top)) files.set(gameName(inner), piece.file);
+    // (every file in a folder under the root, as `@scm-js/mod` lays a folder — a plugin's own `samase/`, `lua/` too — but
+    // not one beside the game's folders, nor a plugin's or FireGraft's own beside them)
+    if (inner.includes("/") && top !== "plugins" && top !== "firegraft") files.set(gameName(inner), piece.file);
   });
   return { name: paths[0]?.split("/")[0] ?? "", root, files, archives };
 }

@@ -6,13 +6,15 @@
  * archives the user picked off their own disk (`installFromFiles`).
  *
  * A third is a *data set* of its own (`profiles.ts`): the same extraction over the game's
- * archives plus whatever a mod adds — more archives, or loose files by member path laid
- * over them (`installDataSet`) — stored under the set's id rather than as the game's own.
+ * archives plus a mod laid over them (`installDataSet`), stored under the set's id rather
+ * than as the game's own. What the mod is — its layers, which of its files win, its code
+ * and its hash — is read in the worker by `@scm-js/mod` (`readMod`); here the game's own
+ * archives are told from the mod's, and a picked folder becomes the mod's files.
  *
  * And a StarCraft: Remastered installation (`installFromRemastered`), which has no archives
  * to pick: its folder is handed to the worker and read there (`remastered.ts`).
  */
-import { isGameArchive, memberKey, sortArchives } from "./archives";
+import { isGameArchive, isMemberPath, sortArchives } from "./archives";
 import type { ExtractRequest, ExtractResponse } from "./extract.worker";
 import { DEFAULT_PROFILE, isDefaultProfile, isProfileId, normalizeProfile, type GameDataProfile } from "./profiles";
 import { BUILD_INFO, installRootOf, type PickedFile } from "./remasteredFolder";
@@ -20,9 +22,9 @@ import { forgetStoredFolders, keepInMemory, storedCopy, type StoredCopy } from "
 import { currentAssetSource } from "./source";
 import { findMembers, httpRangeReader, readZipDirectory, readZipMember, ZipError } from "./zip";
 import { t, translate } from "../i18n";
-import { exeArchive, GAME_FOLDERS, isSystemFile, PatcherError } from "../formats/mod/sources";
-import { isModCode } from "../formats/mod/hash";
-import { normalizeRaces, type DataSetRace } from "../formats/mod/races";
+import type { ModMessage } from "@scm-js/mod";
+
+export { isMemberPath };
 
 export type InstallProgress = (fraction: number, label: string) => void;
 
@@ -90,14 +92,20 @@ export type InstallBytes = Blob | Uint8Array;
 export interface GameDataFiles {
   /**
    * The archives, `StarDat.mpq` and `BrooDat.mpq` among them (a mod replaces files, it
-   * does not bring the rest); the game's own are read first and any other after them in
-   * the order given, later ones winning as in the game.
+   * does not bring the rest). The game's own (`isGameArchive`) are read first; any other is
+   * the mod's, read with its loose files and its code as one mod (`@scm-js/mod`), each
+   * archive at the priority its loader gives it.
    */
   archives: readonly { name: string; data: InstallBytes }[];
-  /** Loose files by member path (`arr/units.dat`, `unit/terran/marine.grp`), read before any archive. */
+  /** Loose files by member path (`arr/units.dat`, `unit/terran/marine.grp`): the mod's, over every archive. */
   files?: readonly { path: string; data: InstallBytes }[];
-  /** The plugins (`.qdp`, `.bwl`) and FireGraft files the mod carries: never run, only part of its hash. */
+  /** The plugins (`.qdp`, `.bwl`), the libraries they load (`.dll`) and FireGraft files the mod carries: never run, only part of its hash. */
   code?: readonly { path: string; data: InstallBytes }[];
+  /**
+   * A mod as it was picked, in its own folder's layout (`pickedDataSet`): every file with its path from the folder's
+   * parent. Read as the mod instead of `files` and `code`, where the game's paths start found as `@scm-js/mod` finds them.
+   */
+  picked?: { name: string; files: readonly { path: string; data: InstallBytes }[] };
   /**
    * Lay the files over the copy of this data set (an id; the game's own is `starcraft`)
    * instead of over the game's archives, which are then not needed. Where the game's own
@@ -106,133 +114,29 @@ export interface GameDataFiles {
   base?: string;
 }
 
-/** The member prefixes an extraction ever asks for: anything else in a picked folder is not sent to the worker. */
-const MEMBER_PREFIXES = ["arr\\", "tileset\\", "unit\\", "game\\", "scripts\\", "rez\\"];
-
-/** Whether a loose file could be a game data member: its path starts with one of the folders the extraction reads. */
-export function isMemberPath(path: string): boolean {
-  const key = memberKey(path);
-  return MEMBER_PREFIXES.some((prefix) => key.startsWith(prefix));
-}
-
-/**
- * Whether a loose file is in one of the game's folders at all (`sound\…`, `font\…` too): a
- * mod's file, which the data set's hash covers even where the extraction does not read it.
- * An operating system's file there (`isSystemFile`: `sound\desktop.ini`) is not one.
- */
-export function isGamePath(path: string): boolean {
-  const parts = memberKey(path).split("\\");
-  return parts.length > 1 && (GAME_FOLDERS as readonly string[]).includes(parts[0]) && !isSystemFile(path);
-}
-
-/**
- * A folder pick as `GameDataFiles`: every `.mpq` is an archive, and so is a mod's loader
- * `.exe` (its appended archive is read at install, an exe with none is passed over); a
- * plugin or FireGraft file anywhere is the mod's code (hashed, never run); and every other
- * file whose path (relative to the picked folder) starts with one of the game's folders is a
- * loose member (the extraction reads those under `isMemberPath`; the rest count for the hash).
- * An operating system's file (`isSystemFile`: `desktop.ini`, `Thumbs.db`, `.DS_Store`, …) is
- * none of these, whatever its name ends in: not every way of picking a folder hands them over,
- * and the data set is the same either way.
- * The picked folder's own name is the first segment of `webkitRelativePath` and is dropped,
- * so a mod's `mpq/arr/units.dat` is the member `arr\units.dat`.
- */
-export function splitPickedFiles(files: readonly File[]): GameDataFiles {
-  const archives: { name: string; data: InstallBytes }[] = [];
-  const loose: { path: string; data: InstallBytes }[] = [];
-  const code: { path: string; data: InstallBytes }[] = [];
-  for (const file of files) {
-    const rel = (file as File & { webkitRelativePath?: string }).webkitRelativePath || file.name;
-    const segments = rel.split(/[\\/]/).filter(Boolean);
-    if (isSystemFile(rel)) continue;
-    if (/\.(mpq|exe)$/i.test(file.name)) {
-      archives.push({ name: file.name, data: file });
-      continue;
-    }
-    if (isModCode(file.name)) {
-      code.push({ path: segments.slice(1).join("/") || file.name, data: file });
-      continue;
-    }
-    // (A program's library is never one of the game's files.)
-    if (/\.dll$/i.test(file.name)) continue;
-    // Drop the picked folder's name, then look for a member path; a mod folder named
-    // `mpq` or a StarCraft folder both put the game folders one level down.
-    for (let skip = 0; skip < Math.min(3, segments.length - 1); skip++) {
-      const path = segments.slice(skip).join("/");
-      if (isGamePath(path)) {
-        loose.push({ path, data: file });
-        break;
-      }
-    }
-  }
-  return { archives, files: loose, ...(code.length ? { code } : {}) };
-}
-
-/**
- * The races a picked folder's `mod.json` declares (`[]` for none, or no such file, or one
- * that is not JSON): only a `mod.json` directly in the folder picked, the one `scmjs mod`
- * reads as the mod's name. It is no game file and does not change the set's hash.
- */
-export async function pickedFolderRaces(files: readonly File[]): Promise<DataSetRace[]> {
-  const manifest = files.find((f) => {
-    const segments = ((f as File & { webkitRelativePath?: string }).webkitRelativePath || f.name).split(/[\\/]/).filter(Boolean);
-    return segments.length <= 2 && segments.at(-1)?.toLowerCase() === "mod.json";
-  });
-  if (!manifest) return [];
-  try {
-    const json: unknown = JSON.parse(await manifest.text());
-    return json && typeof json === "object" ? normalizeRaces((json as { races?: unknown }).races) : [];
-  } catch {
-    return [];
-  }
-}
-
-/** The archives in the game's order: `StarDat`, `BrooDat`, then the rest as given. */
-function orderArchives<T extends { name: string }>(archives: readonly T[]): T[] {
-  const known = sortArchives(archives.filter((a) => isGameArchive(a.name)));
-  const rest = archives.filter((a) => !isGameArchive(a.name));
-  return [...known, ...rest];
-}
-
 const bytesOf = async (data: InstallBytes): Promise<ArrayBuffer> =>
   data instanceof Uint8Array ? (data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer) : await data.arrayBuffer();
 
 /**
  * Extract a data set and store it under its id. The game's own archives must be among
  * `input.archives` (the same rule as `pickArchives`) unless `input.base` names a copy to lay
- * the files over instead; a mod's archives and loose files are laid over them. Installing
- * under the default id is `installFromFiles` with extras.
+ * the files over instead; the mod is laid over them as its loader lays it, and its hash is
+ * `@scm-js/mod`'s. Installing under the default id is `installFromFiles` with extras.
  */
 export async function installDataSet(profile: GameDataProfile, input: GameDataFiles, progress?: InstallProgress): Promise<StoredCopy> {
   const normalized = normalizeProfile(profile);
   if (!normalized) throw new InstallError(t("\"{id}\" is not a usable data set id: lower-case letters, digits and hyphens, up to 40 characters.", { id: profile.id }));
   const base = input.base !== undefined ? await baseOf(input.base) : undefined;
-  const names = input.archives.map((a) => ({ name: a.name }));
-  if (!base) pickArchives(names.map((n) => new File([], n.name))); // throws naming what is missing
+  const games = input.archives.filter((a) => isGameArchive(a.name));
+  if (!base) pickArchives(games.map((a) => new File([], a.name))); // throws naming what is missing
   progress?.(0, t("Reading the archives"));
   const archives: ExtractRequest["archives"] = [];
-  for (const a of orderArchives(input.archives)) {
-    const bytes = await bytesOf(a.data);
-    if (!/\.exe$/i.test(a.name)) { archives.push({ name: a.name, bytes }); continue; }
-    // A mod's loader: the archive appended to the program is the mod's (FireGraft's patcher, MPQDraft's); a program with
-    // none is not. The exe goes whole, with where the archive's header is: its tables may lie before the header.
-    let found;
-    try { found = exeArchive(new Uint8Array(bytes)); }
-    catch (e) { if (e instanceof PatcherError) throw new InstallError(t("{file} cannot be read as a mod: its patcher overlay is in a form not read here ({what}).", { file: a.name, what: e.what })); throw e; }
-    if (found) archives.push({ name: a.name, bytes, offset: found.at });
-  }
-  const overlay: NonNullable<ExtractRequest["overlay"]> = [];
-  // The mod's files the extraction does not read (its sounds, say) go along for the hash alone, as Blobs where they are.
-  const hashOnly: NonNullable<ExtractRequest["hashOnly"]> = [];
-  for (const f of input.files ?? []) {
-    if (isSystemFile(f.path)) continue;
-    if (isMemberPath(f.path)) overlay.push({ path: f.path, bytes: await bytesOf(f.data) });
-    else if (isGamePath(f.path)) hashOnly.push({ path: f.path, data: f.data instanceof Blob ? f.data : await bytesOf(f.data) });
-  }
-  const code: NonNullable<ExtractRequest["code"]> = [];
-  for (const f of input.code ?? []) code.push({ path: f.path, data: f.data instanceof Blob ? f.data : await bytesOf(f.data) });
-  const from = [...archives.map((a) => a.name), ...(overlay.length ? [t("{n, plural, one {# loose file} other {# loose files}}", { n: overlay.length })] : [])].join(" + ");
-  return runWorker(archives, from, progress, isDefaultProfile(normalized.id) ? undefined : normalized, overlay, undefined, false, base, hashOnly, code);
+  for (const a of sortArchives([...games])) archives.push({ name: a.name, bytes: await bytesOf(a.data) });
+  // (the mod's side, `@scm-js/mod` among it, is loaded when a data set is installed: not on the editor's start)
+  const { dataSetMod } = await import("./modInput");
+  const mod = dataSetMod(normalized.name || normalized.id, input);
+  const from = [...archives.map((a) => a.name), ...(mod ? [mod.name] : [])].join(" + ");
+  return runWorker(archives, from, progress, isDefaultProfile(normalized.id) ? undefined : normalized, undefined, false, base, mod);
 }
 
 /**
@@ -326,7 +230,7 @@ export function installFromRemastered(folder: RemasteredFolder, progress?: Insta
     return installFromPickedRemastered((folder as readonly File[]).map((file, i) => ({ path: paths[i], file })), progress, profile, options);
   }
   progress?.(0, t("Opening the installation"));
-  return runWorker([], "StarCraft: Remastered", progress, profile && !isDefaultProfile(profile.id) ? profile : undefined, [], folder as FileSystemDirectoryHandle, options.lighting);
+  return runWorker([], "StarCraft: Remastered", progress, profile && !isDefaultProfile(profile.id) ? profile : undefined, folder as FileSystemDirectoryHandle, options.lighting);
 }
 
 /**
@@ -344,20 +248,21 @@ export function installFromPickedRemastered(files: readonly PickedFile[], progre
     if (rel === root + BUILD_INFO || rel.startsWith(`${root}Data/`)) picked.push({ path: rel, file });
   }
   progress?.(0, t("Opening the installation"));
-  return runWorker([], "StarCraft: Remastered", progress, profile && !isDefaultProfile(profile.id) ? profile : undefined, [], picked, options.lighting);
+  return runWorker([], "StarCraft: Remastered", progress, profile && !isDefaultProfile(profile.id) ? profile : undefined, picked, options.lighting);
 }
+
+/** A sentence `@scm-js/mod` handed over (the worker posts it as it is), in the reader's language: loaded when one comes. */
+const modText = async (m: ModMessage) => (await import("@scm-js/mod")).renderMessage(m, (template, params) => translate(template, params));
 
 function runWorker(
   archives: ExtractRequest["archives"],
   from: string,
   progress?: InstallProgress,
   profile?: GameDataProfile,
-  overlay: NonNullable<ExtractRequest["overlay"]> = [],
   remastered?: ExtractRequest["remastered"],
   lighting = false,
   base?: ExtractRequest["base"],
-  hashOnly: NonNullable<ExtractRequest["hashOnly"]> = [],
-  code: NonNullable<ExtractRequest["code"]> = [],
+  mod?: ExtractRequest["mod"],
 ): Promise<StoredCopy> {
   return new Promise((resolve, reject) => {
     let worker: Worker;
@@ -375,12 +280,14 @@ function runWorker(
     worker.onmessage = (e: MessageEvent<ExtractResponse>) => {
       const reply = e.data;
       if (reply.kind === "progress") {
-        progress?.(reply.fraction, reply.message ? translate(reply.message.text, reply.message.params) : reply.label);
+        if (reply.mod) void modText(reply.mod).then((label) => progress?.(reply.fraction, label));
+        else progress?.(reply.fraction, reply.message ? translate(reply.message.text, reply.message.params) : reply.label);
         return;
       }
       worker.terminate();
       if (reply.kind === "error") {
-        reject(new InstallError(reply.text ? translate(reply.text.text, reply.text.params) : reply.message));
+        if (reply.mod) void modText(reply.mod).then((text) => reject(new InstallError(text)), () => reject(new InstallError(reply.message)));
+        else reject(new InstallError(reply.text ? translate(reply.text.text, reply.text.params) : reply.message));
         return;
       }
       for (const p of reply.problems) console.warn("game data:", p);
@@ -390,7 +297,7 @@ function runWorker(
       }
       resolve({ ...reply.stamp, where: reply.where });
     };
-    const req: ExtractRequest = { kind: "extract", archives, from, profile, overlay, ...(remastered ? { remastered } : {}), ...(lighting ? { lighting } : {}), ...(base ? { base } : {}), ...(hashOnly.length ? { hashOnly } : {}), ...(code.length ? { code } : {}) };
-    worker.postMessage(req, [...archives.map((a) => a.bytes), ...overlay.map((o) => o.bytes)]);
+    const req: ExtractRequest = { kind: "extract", archives, from, profile, ...(remastered ? { remastered } : {}), ...(lighting ? { lighting } : {}), ...(base ? { base } : {}), ...(mod ? { mod } : {}) };
+    worker.postMessage(req, archives.map((a) => a.bytes));
   });
 }

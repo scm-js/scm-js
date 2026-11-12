@@ -6,7 +6,7 @@
  * are there, and skip otherwise.
  */
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { stripVTControlCharacters } from "node:util";
@@ -20,7 +20,8 @@ import { aiscriptFromText } from "../src/formats/dat/aiscript";
 import { encodeLoFile } from "../src/formats/dat/loFile";
 import { encodeGrpImage, frameFromPicture } from "../src/formats/dat/grpFile";
 import { encodeReqGraft } from "../src/formats/dat/graft";
-import { dataSetHash, exeArchive, gameName, libraryName, modRoot, PatcherError, readZip } from "../src/formats/mod/sources";
+import { exeArchive, gameName, PatcherError } from "@scm-js/mod";
+import { gameFilesHash as dataSetHash } from "./support/modHash";
 import { readManifest } from "../src/formats/mod/folder";
 import { archiveFiles, storageFiles, type GameFiles } from "../cli/src/gamefiles";
 import { codeWords, fitWords, MOD_CODE, modArgs, MOD_OVERLAY, type Engine } from "../cli/src/engine";
@@ -159,17 +160,20 @@ const members = (m: Map<string, Uint8Array>) => [...m].map(([member, data]) => (
 /* ── Reading what a mod ships as ───────────────────────────────────────── */
 
 describe("scmjs mod info: what a mod ships as", () => {
-  it("finds the game's paths at a folder's root or one folder down, and the archive in a self-executing exe", async () => {
-    expect(modRoot(["mpq/arr/units.dat", "mpq/unit/x.grp", "README.md"])).toBe("mpq");
-    expect(modRoot(["arr/units.dat", "unit/terran/marine.grp"])).toBe("");
+  it("finds the archive in a self-executing exe, after FireGraft's overlay or after the program", async () => {
     const mpq = await writeMpq(members(madeMod()), "zlib");
     const plugin = latin("MZ PLUGINBYTES!");
     const overlay = new Uint8Array(24); const ov = new DataView(overlay.buffer);
     ov.setUint32(0, 0x46474550, true); ov.setUint32(4, 1, true); ov.setUint32(8, 1, true); ov.setUint32(12, 0xfc724f8c, true); ov.setUint32(16, plugin.length, true);
     const firegraft = concat(program(), overlay, plugin, mpq);
-    expect(exeArchive(firegraft)).toMatchObject({ kind: "firegraft", at: 0x300 + 24 + plugin.length, plugins: [{ id: 0xfc724f8c, at: 0x300 + 24, size: plugin.length, name: null }] });
+    expect(exeArchive(firegraft)).toMatchObject({ form: "firegraft-patcher", at: 0x300 + 24 + plugin.length, plugins: [{ id: 0xfc724f8c, at: 0x300 + 24, size: plugin.length, name: null }] });
     const sempq = concat(program(), new Uint8Array(0x100), mpq);
-    expect(exeArchive(sempq)).toMatchObject({ kind: "sempq", at: 0x400, plugins: [] });
+    expect(exeArchive(sempq)).toMatchObject({ at: 0x400, plugins: [] });
+    // @scm-js/core's exeArchive keeps the fields it had: `kind`, and the archive from its header on.
+    const core = await import("../core/src/index");
+    expect(core.exeArchive(firegraft)).toMatchObject({ kind: "firegraft", form: "firegraft-patcher" });
+    expect(core.exeArchive(sempq)).toMatchObject({ kind: "sempq", at: 0x400 });
+    expect(core.exeArchive(sempq)!.archive).toEqual(mpq);
     expect(exeArchive(program())).toBeNull();
   });
 
@@ -177,10 +181,9 @@ describe("scmjs mod info: what a mod ships as", () => {
     // Two plugins, named by their export directories, then the archive at the next 512-byte boundary.
     const eude = library("qdp.dll"), gptp = library("GPTP.qdp");
     const two = patcherExe([{ id: 0x45445545, bytes: eude }, { id: 0x1b4d69b6, bytes: gptp }], modArchive());
-    expect(exeArchive(two.exe)).toMatchObject({ kind: "firegraft", at: two.at, plugins: [{ id: 0x45445545, at: 0x400 + 24, size: 0x400, name: "qdp.dll" }, { id: 0x1b4d69b6, at: 0x400 + 24 + 0x400 + 12, size: 0x400, name: "GPTP.qdp" }] });
-    expect(libraryName(gptp)).toBe("GPTP.qdp");
+    expect(exeArchive(two.exe)).toMatchObject({ form: "firegraft-patcher", at: two.at, plugins: [{ id: 0x45445545, at: 0x400 + 24, size: 0x400, name: "qdp.dll" }, { id: 0x1b4d69b6, at: 0x400 + 24 + 0x400 + 12, size: 0x400, name: "GPTP.qdp" }] });
     // No plugins: the patcher all the same.
-    expect(exeArchive(patcherExe([], modArchive()).exe)).toMatchObject({ kind: "firegraft", at: 0x600, plugins: [] });
+    expect(exeArchive(patcherExe([], modArchive()).exe)).toMatchObject({ form: "firegraft-patcher", at: 0x600, plugins: [] });
     // Tables before the header, the header's sizes 0xFFFFFFFF; no list of its files.
     const wrapped = patcherExe([{ id: 0x1b4d69b6, bytes: library("GPTP-v2.41.qdp") }], modArchive(false), { tablesFirst: true });
     expect(new DataView(wrapped.exe.buffer).getUint32(wrapped.at + 16, true)).toBeGreaterThan(0x80000000);
@@ -193,20 +196,75 @@ describe("scmjs mod info: what a mod ships as", () => {
     const r = modInfo(await openMod(join(dir, "Wrapped.exe"), null));
     expect(r.files).toBe(1); // weapons.dat, by the names the game reads (the archive lists none)
     expect(r.probed).toEqual(["Wrapped.exe"]);
-    expect(r.beside).toEqual(["fmod.dll"]);
+    expect(r.libraries).toEqual(["fmod.dll"]);
     const lines = printModInfo(r).map(visible).join("\n");
     expect(lines).toContain("FireGraft's patcher with 1 plugin (GPTP-v2.41.qdp, id 1b4d69b6, 1.0 KB)");
-    expect(lines).toContain("Beside the exe: fmod.dll.");
-    // The patcher's own plugins are no line of the mod's hash: the exe hashes as its archive alone does.
-    const fromExe = modInfo(await openMod(join(dir, "Two.exe"), null)), fromMpq = modInfo(await openMod(join(dir, "plain.mpq"), null));
+    expect(lines).toContain("A library of the mod's code: fmod.dll.");
+    // The patcher's own plugins and the library beside it are the mod's code, each a line of its hash (since 2026-11-11):
+    // without them it hashes as its archive alone does.
+    const twoSource = await openMod(join(dir, "Two.exe"), null);
+    const fromExe = modInfo(twoSource, await sourceHash(twoSource)), plain = await openMod(join(dir, "plain.mpq"), null), fromMpq = modInfo(plain, await sourceHash(plain));
     expect(fromExe.exes[0].plugins.map((p) => p.name)).toEqual(["qdp.dll", "GPTP.qdp"]);
     expect(printModInfo(fromExe).map(visible).join("\n")).toContain("(qdp.dll, id EUDE, 1.0 KB; GPTP.qdp, id 1b4d69b6, 1.0 KB)");
-    expect(fromExe.hash).toBe(fromMpq.hash);
+    expect(fromExe.hash).not.toBe(fromMpq.hash);
+    expect(fromExe.withoutPlugins).toBe(fromMpq.hash);
+    expect(twoSource.code.map((c) => c.name).sort()).toEqual(["GPTP.qdp", "fmod.dll", "qdp.dll"]);
     expect(fromExe.plugins).toEqual([]);
-    // As a folder: the library beside the exe is named, and still left out.
+    // As a folder: the library beside the exes is the mod's code too, not left out.
     const folder = modInfo(await openMod(dir, null));
-    expect(folder.beside).toEqual(["fmod.dll"]);
-    expect(folder.left).toContain("fmod.dll");
+    expect(folder.libraries).toEqual(["fmod.dll"]);
+    expect(folder.left).not.toContain("fmod.dll");
+  });
+
+  it("hands every module of the mod's code on: a patcher's own plugins and the library beside it, with the hash's line each", async () => {
+    // A release folder: FireGraft's patcher with two plugins, the library its plugin imports beside it, a plugin file.
+    const dir = tmp("code"); mkdirSync(join(dir, "plugins"), { recursive: true });
+    const two = patcherExe([{ id: 0x45445545, bytes: library("qdp.dll") }, { id: 0x1b4d69b6, bytes: library("GPTP.qdp") }], modArchive());
+    writeFileSync(join(dir, "Release.exe"), two.exe);
+    writeFileSync(join(dir, "fmod.dll"), latin("MZ a library"));
+    writeFileSync(join(dir, "plugins", "extra.qdp"), library("extra.qdp"));
+    const source = await openMod(dir, null);
+    const h = await sourceHash(source);
+    expect(source.code.map((c) => c.name).sort()).toEqual(["GPTP.qdp", "extra.qdp", "fmod.dll", "qdp.dll"]);
+    // By the rule before 2026-11-11 only the plugin file had a line: that hash is neither of the two now, and is shown.
+    expect(h.beforeCode).toMatch(/^[0-9a-f]{16}$/);
+    expect([h.hash, h.withoutPlugins]).not.toContain(h.beforeCode);
+    const lines = printModInfo(modInfo(source, h)).map(visible).join("\n");
+    expect(lines).toContain(`Earlier hash     ${h.beforeCode} (by the rule before 2026-11-11, when only plugin files had lines)`);
+    expect(lines).toContain("A library of the mod's code: fmod.dll.");
+    // The runner's folder: every module under plugins/, and mod.json with the package's hash.
+    const overlay = modOverlay(dir, async () => null, { code: true });
+    const [folder] = await overlay.layers();
+    expect(readdirSync(join(folder, "plugins")).sort()).toEqual(["GPTP.qdp", "extra.qdp", "fmod.dll", "qdp.dll"]);
+    expect(JSON.parse(readFileSync(join(folder, "mod.json"), "utf8"))).toMatchObject({ hash: h.hash, withoutPlugins: h.withoutPlugins });
+    expect(await overlay.plugins!()).toBe(3);
+    overlay.remove();
+    // The play page is handed the same modules.
+    const set = await playSet(source);
+    expect(set.files.filter((f) => f.path.startsWith("plugins/")).map((f) => f.path).sort()).toEqual(["plugins/GPTP.qdp", "plugins/extra.qdp", "plugins/fmod.dll", "plugins/qdp.dll"]);
+    expect(set.hash).toBe(h.hash);
+  });
+
+  it("unpacks a patcher's own plugins into the mod folder, which packs back to the release's hash", async () => {
+    const dir = tmp("code-qdp"); mkdirSync(dir);
+    writeFileSync(join(dir, "Release.exe"), patcherExe([{ id: 0x1b4d69b6, bytes: library("GPTP.qdp") }], modArchive()).exe);
+    const source = await openMod(dir, null);
+    const h = await sourceHash(source);
+    const unpacked = tmp("code-qdp-unpacked");
+    await unpackMod(source, unpacked);
+    expect(existsSync(join(unpacked, "plugins", "GPTP.qdp"))).toBe(true);
+    expect((await sourceHash(await openMod(unpacked, null))).hash).toBe(h.hash);
+  });
+
+  // (a DLL under plugins/ of a tree in the game's paths is a library and no game file, so the library's line is there once)
+  it("unpacks a library of the mod's code into the mod folder, which packs back to the release's hash", async () => {
+    const dir = tmp("code-dll"); mkdirSync(dir);
+    writeFileSync(join(dir, "Release.exe"), patcherExe([{ id: 0x1b4d69b6, bytes: library("GPTP.qdp") }], modArchive()).exe);
+    writeFileSync(join(dir, "fmod.dll"), latin("MZ a library"));
+    const source = await openMod(dir, null);
+    const unpacked = tmp("code-dll-unpacked");
+    await unpackMod(source, unpacked);
+    expect((await sourceHash(await openMod(unpacked, null))).hash).toBe((await sourceHash(source)).hash);
   });
 
   it("says why an exe is not read, never showing it as a mod of no files", async () => {
@@ -216,12 +274,12 @@ describe("scmjs mod info: what a mod ships as", () => {
       try { await openMod(join(dir, file), null); } catch (e) { expect(e).toBeInstanceOf(CliError); return (e as Error).message; }
       throw new Error(`${file} was read`);
     };
-    expect(await said("Tool.exe", patcherProgram())).toMatch(/Tool\.exe has no archive in it: it is not a self-executing mod/);
-    expect(await said("Odd.exe", patcherExe([], modArchive(), { form: 2 }).exe)).toBe("Odd.exe cannot be read as a mod: its patcher overlay is in a form not read here (form 2 at byte 1024, where only form 1 is known).");
-    expect(await said("Junk.exe", patcherExe([{ id: 1, bytes: new Uint8Array(32) }], modArchive()).exe)).toMatch(/plugin 1 \(at byte 1048\) is no Windows library/);
+    expect(await said("Tool.exe", patcherProgram())).toMatch(/Tool\.exe holds no archive: it is a program only/);
+    expect(await said("Odd.exe", patcherExe([], modArchive(), { form: 2 }).exe)).toBe("Odd.exe cannot be read as a mod: its patcher overlay (at byte 1024) is of form 2; only form 1 is known.");
+    expect(await said("Junk.exe", patcherExe([{ id: 1, bytes: new Uint8Array(32) }], modArchive()).exe)).toMatch(/plugin 1 of its patcher overlay \(at byte 1048\) is no Windows library/);
     const { exe, at } = patcherExe([], modArchive());
     const broken = exe.slice(); new DataView(broken.buffer).setUint32(at + 24, 0x40000000, true);
-    expect(await said("Broken.exe", broken)).toMatch(/^The archive inside Broken\.exe could not be opened: /);
+    expect(await said("Broken.exe", broken)).toMatch(/^the archive inside Broken\.exe \(at byte \d+\) could not be opened: /);
     expect(() => exeArchive(patcherExe([], modArchive(), { form: 2 }).exe)).toThrow(PatcherError);
   });
 
@@ -245,30 +303,32 @@ describe("scmjs mod info: what a mod ships as", () => {
     }
     const fromFolder = modInfo(await openMod(folder, null));
     expect(fromFolder.plugins).toEqual([{ name: "gptp.qdp", bytes: 7, path: "plugins/gptp.qdp" }]);
-    // Two plugins of one name are told apart by where they are; a size past a thousand megabytes is in gigabytes.
+    // A second plugin of one file name is no plugin of the mod's (a loader loads one file of a name): the first in the
+    // folder's order is, the other left out. A size past a thousand megabytes is in gigabytes.
     mkdirSync(join(folder, "more"));
     writeFileSync(join(folder, "more", "gptp.qdp"), latin("other"));
-    const two = printModInfo(modInfo(await openMod(folder, null))).map(visible).join("\n");
-    expect(two).toMatch(/Plugins +more\/gptp\.qdp \(5 B\), plugins\/gptp\.qdp \(7 B\)/);
+    const twoInfo = modInfo(await openMod(folder, null));
+    expect(printModInfo(twoInfo).map(visible).join("\n")).toMatch(/Plugins +gptp\.qdp \(5 B\) — kept, not run/);
+    expect(twoInfo.left).toContain("plugins/gptp.qdp");
     expect(bigSize(1093341184)).toBe("1.0 GB");
     expect(bigSize(723.7 * 1048576)).toBe("723.7 MB");
     expect(fromFolder.left).toEqual(["README.md"]);
     expect(fromFolder.layers).toEqual(["mpq/"]);
     const fromExe = modInfo(await openMod(exe, null));
     expect(fromExe.kind).toBe("exe");
-    expect(fromExe.exes[0]).toMatchObject({ kind: "sempq", at: 0x400 });
+    expect(fromExe.exes[0]).toMatchObject({ kind: "sempq", form: "archive-after-program", at: 0x400 });
     expect(fromExe.name).toBe("Made Mod");
     const lines = printModInfo(fromExe).map(visible).join("\n");
     expect(lines).toMatch(/^Made Mod\nA mod for StarCraft 1\.16\.1, from a self-executing mod/);
-    expect(lines).toContain("MPQDraft's self-executing MPQ");
+    expect(lines).toContain("a program with an archive after it");
     // An extended table is named with its layout and width.
     const wide = new Map([["arr\\units.datex", table("units", undefined, 300).subarray(0, 0)]]);
     wide.set("arr\\units.datex", new Uint8Array(300 * 99));
     const wideMpq = join(root, "wide.mpq"); writeFileSync(wideMpq, await writeMpq(members(wide), "zlib"));
     expect(modInfo(await openMod(wideMpq, null)).extended).toEqual(["units.datex: 300 entries (the game's 228), GPTP's .datex layout"]);
     // A zip's members read whether stored or deflated.
-    const read = readZip(readFileSync(z));
-    expect(await read[0].read()).toEqual(mod.get([...mod.keys()][0]));
+    const zipped = await openMod(z, null);
+    for (const [name, data] of mod) expect(await zipped.files.get(gameName(name))!.read(), name).toEqual(data);
   });
 });
 
@@ -287,7 +347,7 @@ describe("scmjs mod: what is not a mod", () => {
     const cases: [string, RegExp, RegExp][] = [
       [empty, /is an empty folder: there is no mod in it/, /Name a mod/],
       [notes, /holds none of the game's files: it is not a mod/, /Name a mod/],
-      [exe, /has no archive in it: it is not a self-executing mod/, /Name a mod/],
+      [exe, /holds no archive: it is a program only/, /Name a mod/],
       [join(TEST_MAPS_DIR, "melee.scx"), /melee\.scx is a map, not a mod/, /scmjs map info/],
       [join(root, "nope"), /No file or folder/, /Name a mod/],
     ];
@@ -838,13 +898,13 @@ describe("scmjs mod test and --mod", () => {
     expect(await classic.layers()).toHaveLength(1);
     classic.remove();
 
-    // A mod that is only plugins holds none of the game's files, and the runner reads the startup data again for it all
-    // the same: the pictures go under it too (else the reload stops at the first picture, unit\zerg\avenger.grp).
+    // A mod that is only plugins changes none of the startup data, so the runner does not read it again (`@scm-js/mod`'s
+    // readsStartupData, the engine's rule): nothing is laid under it, and its plugin goes beside its files.
     const plugins = tmp("overlay-plugins"); mkdirSync(plugins); writeFileSync(join(plugins, "EUD.qdp"), latin("plugin"));
     const code = modOverlay(plugins, async () => remastered, { code: true });
     const layers = await code.layers();
-    expect(layers).toHaveLength(2);
-    expect(same(readFileSync(join(layers[0], "unit", "zerg", "avenger.grp")), game.get("unit\\zerg\\avenger.grp"))).toBe(true);
+    expect(layers).toHaveLength(1);
+    expect(existsSync(join(layers[0], "plugins", "EUD.qdp"))).toBe(true);
     code.remove();
   });
 });

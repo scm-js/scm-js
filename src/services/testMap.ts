@@ -21,7 +21,7 @@ import { ensurePermission, loadHandle, removeHandle, storeHandle, type StoredHan
 import { saveBytes } from "./mapIo";
 import { t } from "../i18n";
 import { dataSetOf } from "./mapDataSet";
-import type { DataSetRace } from "../formats/mod/races";
+import type { DataSetRace } from "@scm-js/mod";
 import { gameDataSourceAtom } from "../atoms/gameDataAtoms";
 import { currentAssetSource } from "../gamedata/source";
 

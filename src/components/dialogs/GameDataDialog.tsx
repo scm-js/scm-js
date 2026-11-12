@@ -5,9 +5,10 @@ import { gameDataRevisionAtom, gameDataSourceAtom } from "../../atoms/gameDataAt
 import { closeDialogAtom, pushToastAtom } from "../../atoms/uiAtoms";
 import { desktopBridge, type DesktopLocateResult } from "../../gamedata/desktop";
 import { isGameArchive } from "../../gamedata/archives";
+import { pickedDataSet } from "../../gamedata/modInput";
 import { hostTerms } from "../../editor/platform";
 import {
-  ARCHIVE_NAMES, BLIZZARD_ZIP_URL, installFromFiles, installFromRemastered, installFromZipUrl, isRemasteredFolder, pickArchives, pickedFolderRaces, splitPickedFiles,
+  ARCHIVE_NAMES, BLIZZARD_ZIP_URL, installFromFiles, installFromRemastered, installFromZipUrl, isRemasteredFolder, pickArchives,
   type InstallProgress, type RemasteredFolder,
 } from "../../gamedata/install";
 import { DEFAULT_PROFILE, isDefaultProfile, profileIdFrom, type GameDataProfile } from "../../gamedata/profiles";
@@ -246,9 +247,8 @@ export function GameDataBody({ onReady }: { onReady?: (next: AssetSource) => voi
     const id = profileIdFrom(name);
     if (!id) throw new Error(t("Give the data set a name first."));
     if (sets.some((p) => p.id === id)) throw new Error(t("There is already a data set called {name}.", { name }));
-    const input = splitPickedFiles(files);
     // (The races the folder's mod.json names come with it, kept for the set's id.)
-    const races = await pickedFolderRaces(files);
+    const { input, races } = await pickedDataSet(files);
     // A mod's folder without the game's archives is laid over the copy in use (or the one that copy was laid over).
     const games = input.archives.filter((a) => isGameArchive(a.name)).length;
     const base = games >= ARCHIVE_NAMES.length ? undefined : source?.stored?.base ?? (source?.kind === "stored" || source?.kind === "bundled" ? source.profile.id : undefined);

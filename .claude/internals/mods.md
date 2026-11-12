@@ -6,15 +6,13 @@ fifteenth guide) and the "Mods" page of `docs/cli.md`.
 
 ## Where things are
 
-- **Core (pure, exported from `core/src/index.ts`, "Mods: a mod as a folder" block):**
-  - `src/formats/mod/sources.ts` — `gameName` (lower case, backslashes: the key everywhere), `modRoot` (the game's
-    paths at the root or **one folder down only**, so `unit/terran/` under a root is not a second root),
-    `exeArchive` (FireGraft `PEGF` overlay first, then SEMPQ at 512-byte boundaries after the PE's last section, then
-    any `MPQ\x1A` with a sane header), `readZip` (central directory, stored + deflate via
-    `DecompressionStream("deflate-raw")`, no zip64/encryption), `dataSetHash`.
-  - `src/formats/mod/hash.ts` — the mod hash (`modHash`, `modHashOfDigests`, `hashLines`, the line forms) and
-    `probeNames` for a list-less archive; "The mod hash, one rule" below. `sources.ts` holds `SYSTEM_FILES` /
-    `isSystemFile`: an operating system's files, which have no line and are no file of a mod's.
+- **Reading a mod is `@scm-js/mod`'s** (`/home/jeany/github/mod`, `ADOPTION.md` there; adopted 2026-11-12, branch
+  `mod-package`, section "@scm-js/mod adopted" below). `src/formats/mod/sources.ts` and `hash.ts` are gone; nothing
+  here decides what a mod's files are, its layers, its code or its hash. The sections further down that describe
+  `sources.ts`, `hash.ts`, `fromPieces`, `dataSetHashOf`, `splitPickedFiles` are history: the rules they record are the
+  package's now (where the two disagreed, ADOPTION.md "Where the copies disagreed" says which was kept).
+- **Core (pure, exported from `core/src/index.ts`, "Mods" block):** re-exports the package's names it had (list in
+  "@scm-js/mod adopted"); its own:
   - `src/formats/mod/folder.ts` — the form: `placeOf(member)` (rule: member → folder file), `memberOf(file, manifest)`
     (inverse, with `manifest.members` overrides), `renderMember` / `renderAiScripts` (unpack, checked), `packFile`
     (pack), `recordRendered` + `tidyManifest` (the manifest), `ModManifest` (`mod.json`).
@@ -23,9 +21,85 @@ fifteenth guide) and the "Mods" page of `docs/cli.md`.
     past the standard count), `namesOf` (unitnames.tbl[id] when non-empty, else stat_txt[id] for id < 228; labels
     1-based into stat_txt).
   - `src/formats/mod/check.ts`, `diff.ts` — the lints and the changelog.
-- **CLI:** `cli/src/mod/{source,open,unpack,pack,info,check,diff,new,play,overlay}.ts`; registrations in `main.ts`
+  - `src/formats/mod/races.ts` — the editor's half of races: `raceLabel`, `raceChoices`, `GAME_RACE_NAMES`, `sameRaces`,
+    `racePlaysAs`, `hasRaceCandidates`. `normalizeRaces`, `raceCandidates`, `DataSetRace` are the package's.
+- **CLI:** `cli/src/mod/{source,open,unpack,pack,info,check,diff,new,play,overlay,hash}.ts`; registrations in `main.ts`
   under `mod`; MCP tools `mod_info|check|diff|unpack|pack|new` in `mcp.ts`. `engine.ts` gained `EngineCurrent.mods`,
   `Engine.mods`, `MOD_OVERLAY = 1`, `modArgs`; `maptest.ts`/`trace.ts` an option `mod: { folder() }`.
+
+## @scm-js/mod adopted (2026-11-12, branch `mod-package`)
+
+**Shape.** `cli/src/mod/source.ts#describedSource(path, kind, tree)` = `readMod(tree)` (a `diskFiles` tree from
+`@scm-js/mod/node`; for a text-form folder `pack.ts#packFolder` builds a `filesOf(…, { layout: "game" })` tree of its
+members, `plugins/<name>` for each non-member `manifest.plugins`, `firegraft/<name>` for each `manifest.firegraft`) put
+in the commands' `ModSource`: `files` (from `d.files` + `fileReaders`), `plugins` (plugin-file modules, and
+`d.carried` members inside archives with `member`), `firegraft` (`d.patches[0].files`), **`code`** (every module
+`identity.plugins` has a line for, by module name: plugin files, a patcher's carried plugins, libraries),
+`description`, `link`, `races`, `said` (paths shown), `gameCopy`/`left`/`probed`/`unheld` (paths shown: the folder's or
+zip's own name stripped). `exes`, `beside`, `duplicates`, `system` are gone (read `description`). `hash.ts#sourceHash`
+is `identity` + `beforeCode` + `older` (with `left`: loose system files by game name under the folder layer;
+archive members are not named — package gap) + `gameFilesOnly` (`hashLines` of the lines without `.fgp`). Refusals:
+`ModError` → `CliError(modText(e.detail), …, 2)` (`exe-no-archive` keeps the "Name a mod" hint); `copy-only` from
+`d.said` is thrown with the folder as given. The CLI still sniffs replays, maps, bots, and an empty folder, before
+reading.
+
+**What moved with it.** `overlay.ts`: `readsStartupData`/`STARTUP_NAMES` are the package's (`identity.readsStartupData`:
+a plugins-only mod no longer gets a game layer; scm-sim's runner already follows that rule on `mods-next`);
+`writeCode` writes `source.code` under `plugins/` by module name and `mod.json` `{ name, hash, withoutPlugins, link }`
+from `identity`; `modTag` names the data set by `hash` / `withoutPlugins` / `runningHash(lines, plugins, ran +
+libraries)`. `play.ts#playSet` hands `source.code` under `plugins/` and takes `identity` (no own digest). `unpack.ts`
+writes `source.code` that is not a plugin file into `plugins/` too (so an unpacked patcher mod packs back to the
+release's hash — not for a library: package gap, `tests/cli-mod.test.ts` `it.fails`). `replaymod.ts#sourceHashes`:
+`older` = `[beforeCode, older.hash, older.withoutPlugins]`; the derived older forms `gameFilesOnlyWere` /
+`changedWere` were dropped (system members of archives are not exposed). `info.ts`: `kindOf`, `MOD_KINDS`,
+`kindTotals`, `tableShape` from the package; `libraries` replaces `beside`; `exes[].form` replaces `kind`;
+`beforeCode` ("Earlier hash" row) and `said` (package sentences other than game-copy/unheld/duplicate) added.
+
+**Editor.** `install.ts#pickedDataSet(files)` replaces `splitPickedFiles` + `pickedFolderRaces`: game archives = the
+pick's `gameCopyFiles` ∩ `isGameArchive`; races by `isModJsonPath` + `readModJson`; the whole pick goes as
+`GameDataFiles.picked`. `dataSetMod(name, input)` makes `ExtractRequest.mod` (picked as picked; or the API's
+`archives`/`files`/`code` in game layout: archives at top, files at their paths, `.qdp/.bwl/.dll` under `plugins/`,
+`.fgp/.fgd` under `firegraft/`). The worker: `archives.ts#modTree` → `readMod` → `identity.hash` is the stamp's hash;
+`d.files` winners under `isMemberPath` are preloaded as the overlay over the game's archives; the play set asks the mod's
+winners first. `overCopy.ts#dataSetHashOf`, `hashOnly`, `code`, `overlay` and archive `offset` are gone.
+`folderSet.ts` takes `modRoot`/`GAME_FOLDERS`/`isSystemFile`/`inDotFolder` from the package (24 folders: a
+`samase/` file is no longer served there).
+
+**Words.** `scripts/lib/i18n.mjs#extractMessages` adds every `MOD_MESSAGES` template to a tree that imports
+`@scm-js/mod` (both do), so both `ko.json` hold all 79; `cli/src/i18n.ts#modText` and `install.ts`'s `modText`
+render a `ModMessage` through `translate`. `tests/i18n.test.ts` "@scm-js/mod's sentences".
+
+**Measured** (`scmjs mod info`, the five real mods; before = `scm-js-patcher-exe` bfa4650): Burning Ground exe and
+folder `c76bfa18e9fc4fb5` / `0ed055cf80a95bd0` (was `0ed055cf80a95bd0`), SC Revolution `d9e4e6ff76c7e71d` /
+`bb3f273690cf8d8d`, earlier `90b8c22d9cb4ba31`, TriFresh `ea488d3ac3575bda` unchanged, Cosmonarchy release
+`c94acdf31982fa4b` / `db23a1f9dd8cef66`, earlier `20e1c6d89ae2af75`, older `1c41a2d7701fe842`. Cosmonarchy's release reads in
+3.0 s (5.6 s before), this machine's Linux-disk copy. Outputs under `~/mods-under-test/_out/adopt-scm-js/{before,after}/`.
+
+**Package needs found, fixed in the package (main fce2ce8, unpacked 2026-11-12):** a `.dll` under `plugins/` in
+`layout: "game"` was also a game file (two lines); `identity.older.files` now names the system files the older hash
+counted (archive members too). `sourceHash`'s `older.left` is `older.files`; `hash.ts#systemLines` reads their bytes
+(loose under the folder layer, else the archives) for the earlier forms.
+
+**Follow-ups (2026-11-12).** Core keeps every released export (`core.md` "Mod names from @scm-js/mod"). `mod info
+--json` keeps 0.13.3's fields: `exes[].kind` (`firegraft`/`sempq`) beside `form`, `older.withoutPlugins` a string
+(the older hash when there are no plugin files). `replaymod.ts#sourceHashes` restores `gameFilesOnlyWere` and
+`changedWere`, as 0.13.1–0.13.3 accepted them. Who could have written them (scm-sim history read 2026-11-12): nobody.
+The replay tag (`SCMJ`) was first written by the play page in R2 (scm-sim 1731de9, 2026-11-08 13:35), already by the
+all-files rule decided that morning (ab0ff4b 11:37, "no real modded replay exists before R2"), so a tag from then to
+the system-files cutover (scm-sim cf2e8ee, 2026-11-09 15:35) is `older.hash` (Cosmonarchy `1c41a2d7701fe842`); scmjs
+tags replays only since `6b198b4` (unreleased); bots and ladders (scm-sim C4/C5) came after the rule too. The game
+files alone and the files that differ from a copy were never a tag's rule: they were the editor's data set stamp (up
+to 0.12.1) and the page's kept-mod key before 2026-11-08, matched by the page, not by these commands. Kept anyway
+(cheap, and what released versions accepted). `folderSet` serves every folder under a root
+found by the game's folders (Cosmonarchy's `config/`, `datreq/`, `lua/`, `samase/`: 102 files the first cut lost), and
+nothing when no game folder is there. `overlay.ts` leaves out a file its archive cannot give (SC Revolution's
+`wardendth00.wav` made `map test --mod` throw before this change too). Hand-over side by side (before =
+`scm-js-patcher-exe`, after = this): `~/mods-under-test/_out/adopt-scm-js/handover/`. `patcherPluginWords` is not used:
+`mod info`'s Exe row carries sizes and four-letter ids, which its sentence has not (its Korean is in the catalogues).
+`pickedDataSet`/`dataSetMod` moved to `src/gamedata/modInput.ts`, imported by the Game Data dialog and dynamically by
+`installDataSet`; `install.ts#runWorker` imports `renderMessage` only when the worker posts a message. So the editor's
+startup `source` chunk holds no package code (only the catalogue's 80 entries): 315,576 bytes at bfa4650, 335,994 in
+the first cut, 319,758 now.
 
 ## Decisions (taken by the user, 2026-11-08 — do not reopen)
 

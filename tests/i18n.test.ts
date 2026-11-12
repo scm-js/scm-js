@@ -8,9 +8,11 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { format, josa, LOCALES, locale, makeTranslator, messageKey, placeholderNames, resolveLocale, setLocale, t, tc } from "../src/i18n";
+import { format, josa, LOCALES, locale, makeTranslator, messageKey, placeholderNames, resolveLocale, setLocale, t, tc, translate } from "../src/i18n";
 import ko from "../src/i18n/ko.json";
 import { checkCatalogue, extractMessages, messagesIn, updatedCatalogue } from "../scripts/lib/i18n.mjs";
+import { MOD_MESSAGES, renderMessage, say } from "@scm-js/mod";
+import cliKo from "../cli/src/ko.json";
 
 const SRC = join(import.meta.dirname, "..", "src");
 const CLI = join(import.meta.dirname, "..", "cli", "src");
@@ -160,3 +162,31 @@ for (const [tree, root, catalogueOf] of [
     }
   });
 }
+
+// `@scm-js/mod` hands its sentences over as data (`MOD_MESSAGES`: key, English template, parameters), translated by the
+// template where they are shown. Each tree that imports the package asks for every template, so a sentence the package
+// adds is missing from both catalogues, and the check above fails, until it is translated.
+describe("@scm-js/mod's sentences", () => {
+  const templates = Object.values(MOD_MESSAGES).map((m) => m.text);
+
+  it("are asked for by both trees, every one", () => {
+    for (const root of [SRC, CLI]) {
+      const { messages } = extractMessages(root);
+      expect(templates.filter((text) => !messages.has(text)), root).toEqual([]);
+    }
+  });
+
+  it("are in Korean in both catalogues, rendered with their parameters by the translator", () => {
+    for (const catalogue of [ko, cliKo] as Record<string, string>[]) expect(templates.filter((text) => !catalogue[text])).toEqual([]);
+    setLocale("ko");
+    try {
+      const said = say("exe-unreadable", { path: "BG.exe", why: say("overlay-form", { at: 1024, form: 2, known: 1 }) });
+      const text = renderMessage(said, (template, params) => translate(template, params));
+      expect(text).toContain("BG.exe");
+      expect(text).toContain("1024");
+      expect(text).not.toContain("cannot be read");
+      const copy = renderMessage(say("game-copy", { folder: "Starcraft", list: "StarDat.mpq", more: 2 }), (template, params) => translate(template, params));
+      expect(copy).toContain("외 2개");
+    } finally { setLocale("en"); }
+  });
+});

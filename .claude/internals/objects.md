@@ -113,15 +113,25 @@ the soundness measure, is taken *before* this pass for the reason above. A third
 same-walkability tiles for better seams changed nothing on any cliff ramp and was removed; the dark
 stripe every two columns along a Badlands ramp's lower edge is not something another tile of the doodad
 fixes. Planning is ≤ 35 ms for the largest doodad and axis.
-**Widening a bridge is not solved.** The user asked for it of the Twilight bridge, which is offered its
-deck's diagonal only. Across the deck the middle of the span widens well (deck tile beside deck tile),
-and the two ends do not: a line across the bridge at its end runs from one rail's tip to the other's with
-no deck between them, so the tips are what is laid again. Badlands, Ice and Desert #83 bridges do widen,
-straight down (`s`). Two things were tried in the cut search and taken out: letting a line be *parted*
-(its cells stay or move, the gap left bare) changed no plan for the Twilight bridge, since bare ground
-beside a rail tip costs more than a second rail tip; letting a line borrow its fill from the lines
-beside it left the Twilight bridge unsound (27% walk-breaks) and cost Ashworld #46 and both Ice bridges
-the axis they had. It wants an end piece the doodad does not have, or a different model for the ends.
+**Widening a bridge, and the two measures of "the middle".** The user asked for it of the Twilight
+bridge. Across the deck the rails' ends were laid again in place of the road, and three fixes aimed at
+the symptom did nothing or harm (a line *parted* with the gap left bare: no plan changed, bare ground
+beside a rail tip costs more than a second tip; a fill borrowed from the lines beside: Twilight still
+unsound, Ashworld #46 and both Ice bridges lost their axis; a bare gap wherever a wall end would be laid
+again: the tips touch at their corners, so they were never separate islands). The cause was the centre
+pull. It measured a cell's distance from the centre *square to the axis on the tile grid*, and (2, 1) and
+(2, −1) are not square to each other there (their dot product is 3): on the isometric ground they are.
+For a long piece crossed the short way that puts "the middle" of the bridge's left end on its far rail
+and of its right end on its near one. `stretchPlan` now searches the cut twice, pulled towards the middle
+measured `square` and measured `isometric` (along the other diagonal: `c / (2·dx) + r / (2·dy)`), and
+keeps the plan with fewer `islandsPerStep`, then fewer `walkBreaks`, then less seam. Neither alone
+works: isometric alone lost the Badlands, Jungle and Ashworld cliff ramps their axis (a seam-better cut
+that leaves rocks), and choosing by seam alone did the same; choosing without `walkBreaks` cost Twilight
+#176 its lengthways axis (3% → 14%). With both, lengthways plans are what they were, all twelve cliff
+ramps are as before, and across the deck is sound for Badlands, all six Platform, both Twilight, both
+Desert and Jungle #270/#271 (walk-breaks 0–5%, the added cells 100% road on Badlands). Jungle #268/#269
+(13%) and the Ice bridges (15%) are not offered across; Ice widens straight down. 28 of the 40 ramps are
+offered their diagonal now (more wall ramps than before pass `islandsPerStep === 0`). ≤ 30 ms a plan.
 Not done: a mirrored image under a symmetry mode stretches the same doodad the same way (it needs the
 doodad's twin and the mirrored axis), tiles from outside the doodad to hide the joins, the plugin API, and
 a marked area. `tests/stretch.test.ts`.

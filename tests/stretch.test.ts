@@ -344,14 +344,38 @@ describe.skipIf(installed.length === 0)("stretching the game's doodads", () => {
       const { tileset, catalogue } = real(name);
       for (const def of catalogue.doodads.filter((d) => d.category === "Bridges")) {
         bridges++;
-        // One diagonal is offered, the deck's, and it is the one that joins.
-        const diagonals = soundAxes(tileset, def).filter((a) => a === "se" || a === "ne");
-        expect(diagonals.length, `${name} #${def.id}`).toBe(1);
-        expect(stretchPlan(tileset, def, diagonals[0]).seam, `${name} #${def.id}`).toBeLessThan(VISIBLE_SEAM);
-        expect(stretchPlan(tileset, def, diagonals[0]).walkBreaks, `${name} #${def.id}`).toBeLessThan(stretchPlan(tileset, def, diagonals[0] === "se" ? "ne" : "se").walkBreaks);
+        // The diagonal that joins best is offered, and joins without a seam the eye finds.
+        const [deck, across] = stretchPlan(tileset, def, "se").seam <= stretchPlan(tileset, def, "ne").seam ? (["se", "ne"] as const) : (["ne", "se"] as const);
+        expect(soundAxes(tileset, def), `${name} #${def.id}`).toContain(deck);
+        expect(stretchPlan(tileset, def, deck).seam, `${name} #${def.id}`).toBeLessThan(VISIBLE_SEAM);
+        expect(stretchPlan(tileset, def, deck).islandsPerStep, `${name} #${def.id}`).toBe(0);
+        // The other, where it is offered, leaves no wall end standing in the road either.
+        if (soundAxes(tileset, def).includes(across)) expect(stretchPlan(tileset, def, across).islandsPerStep, `${name} #${def.id}`).toBe(0);
       }
     }
     if (installed.includes("badlands")) expect(bridges).toBeGreaterThan(0);
+  });
+
+  it.skipIf(!haveNames)("widens a bridge across its deck: rails where they were, more road between them", () => {
+    // What the first cut of this could not do: across the deck the rails' ends were laid
+    // again in place of the road, because the middle of the piece was measured square to the
+    // axis on the tile grid, and a bridge is crossed along the other diagonal.
+    for (const [name, wide] of [["badlands", 2], ["platform", 6], ["twilight", 2]] as const) {
+      if (!installed.includes(name)) continue;
+      const { tileset, catalogue } = real(name);
+      const both = catalogue.doodads.filter((d) => d.category === "Bridges").filter((def) => {
+        const axes = soundAxes(tileset, def);
+        return axes.includes("se") && axes.includes("ne");
+      });
+      expect(both.length, name).toBe(wide);
+      for (const def of both) {
+        // Lengthways a step adds road and the rails beside it; across, more road than that.
+        const road = (axis: "se" | "ne") => walkable(tileset, stretchPiece(def, stretchPlan(tileset, def, axis), 4));
+        const [along, across] = road("se") <= road("ne") ? [road("se"), road("ne")] : [road("ne"), road("se")];
+        expect(across, `${name} #${def.id}`).toBeGreaterThan(0.6);
+        expect(across, `${name} #${def.id}`).toBeGreaterThan(along);
+      }
+    }
   });
 
   it.skipIf(!haveNames)("offers every bridge of every tileset a way to stretch", () => {

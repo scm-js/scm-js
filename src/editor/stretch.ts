@@ -417,55 +417,84 @@ export function stretchPlan(tileset: Tileset, piece: TilePiece, axis: StretchAxi
   const lines = linesOf(piece, axis);
   const seams = new Seams(tileset, piece);
   const cx = (piece.width - 1) / 2, cy = (piece.height - 1) / 2;
-  const span = dx * dx + dy * dy;
-  /** How far a cell is from the line across the piece's centre, in steps. */
-  const off = (cell: number) => Math.abs(((cell % piece.width) - cx) * dx + (((cell / piece.width) | 0) - cy) * dy) / span;
-  // Start from the cut straight across the middle.
-  const cut = lines.map((line) => {
-    let best = 0;
-    for (let i = 1; i < line.length; i++) if (off(line[i]) < off(line[best])) best = i;
-    return best;
-  });
-  const pull = () => CENTRE_PULL * JUDGED_STEPS * lines.reduce((s, line, i) => s + off(line[cut[i]]), 0);
-  // Looks alone choose the cut. Two attempts to have walkability choose it too made things
-  // worse, since a cut can always buy clean walking by laying a wall across the slope: see
-  // the note in .claude/internals/objects.md before trying a third.
-  const score = () => seams.total(build(piece, axis, lines, cut, JUDGED_STEPS)) + pull();
+  /**
+   * How far a cell is from the line across the piece's centre, in steps, measured two
+   * ways. Square to the axis on the tile grid suits a compact piece, a ramp. Along the
+   * other diagonal, which is what "across" is on the isometric ground the tiles draw,
+   * suits a long one crossed the short way: a bridge that runs down-right is crossed by
+   * lines running up-right, and measured the square way the middle of its left end comes
+   * out as its far rail and the middle of its right end as its near one, so a bridge made
+   * wider had its rails laid again instead of its deck. Neither is right for both, so the
+   * cut is searched from each and the one that joins better is kept.
+   */
+  const square = (cell: number) => Math.abs(((cell % piece.width) - cx) * dx + (((cell / piece.width) | 0) - cy) * dy) / (dx * dx + dy * dy);
+  const isometric = (cell: number) => Math.abs(((cell % piece.width) - cx) / (2 * dx) + (((cell / piece.width) | 0) - cy) / (2 * dy));
 
-  // One line at a time, to the cell that leaves the least; a few passes settle it, since a
-  // line only meets the ones beside it.
-  let current = score();
-  for (let pass = 0; pass < 8; pass++) {
-    let moved = false;
-    for (let i = 0; i < lines.length; i++) {
-      const keep = cut[i];
-      let best = keep, bestScore = current;
-      for (let alt = 0; alt < lines[i].length; alt++) {
-        if (alt === keep) continue;
-        cut[i] = alt;
-        const s = score();
-        if (s < bestScore - 1e-6) { bestScore = s; best = alt; }
+  /** The cut that leaves the least, pulled towards the middle as `off` measures it, and what it leaves. */
+  const search = (off: (cell: number) => number): { cut: number[]; left: number } => {
+    // Start from the cut straight across the middle.
+    const cut = lines.map((line) => {
+      let best = 0;
+      for (let i = 1; i < line.length; i++) if (off(line[i]) < off(line[best])) best = i;
+      return best;
+    });
+    const pull = () => CENTRE_PULL * JUDGED_STEPS * lines.reduce((s, line, i) => s + off(line[cut[i]]), 0);
+    // Looks alone choose the cut. Two attempts to have walkability choose it too made things
+    // worse, since a cut can always buy clean walking by laying a wall across the slope: see
+    // the note in .claude/internals/objects.md before trying a third.
+    const score = () => seams.total(build(piece, axis, lines, cut, JUDGED_STEPS)) + pull();
+
+    // One line at a time, to the cell that leaves the least; a few passes settle it, since a
+    // line only meets the ones beside it.
+    let current = score();
+    for (let pass = 0; pass < 8; pass++) {
+      let moved = false;
+      for (let i = 0; i < lines.length; i++) {
+        const keep = cut[i];
+        let best = keep, bestScore = current;
+        for (let alt = 0; alt < lines[i].length; alt++) {
+          if (alt === keep) continue;
+          cut[i] = alt;
+          const s = score();
+          if (s < bestScore - 1e-6) { bestScore = s; best = alt; }
+        }
+        cut[i] = best;
+        if (best !== keep) { moved = true; current = bestScore; }
       }
-      cut[i] = best;
-      if (best !== keep) { moved = true; current = bestScore; }
+      if (!moved) break;
     }
-    if (!moved) break;
-  }
-
-  // What tells a sound axis from a mess is measured on the cut as looks chose it, before any
-  // mending: a measure stops telling once something is done to improve it.
-  const { walkBreaks } = seams.fresh(build(piece, axis, lines, cut, JUDGED_STEPS));
-  const fill = borrowFloor(tileset, piece, axis, lines, cut, seams);
-  const judged = build(piece, axis, lines, cut, JUDGED_STEPS, fill);
-  const fresh = seams.fresh(judged);
-  const plan: StretchPlan = {
-    axis, lines, cut, fill,
-    seam: fresh.seams.length ? fresh.seams.reduce((s, v) => s + v, 0) / fresh.seams.length : 0,
-    seamsPerStep: fresh.seams.length / JUDGED_STEPS,
-    walkBreaks,
-    islandsPerStep: Math.max(0, seams.islands(judged) - seams.islands(build(piece, axis, lines, cut, JUDGED_STEPS - 1, fill))),
-    groundContinues: groundContinues(piece, axis),
+    return { cut, left: seams.total(build(piece, axis, lines, cut, JUDGED_STEPS)) };
   };
+  /** A cut made into a plan: mended, and measured. */
+  const finish = ({ cut, left }: { cut: number[]; left: number }): { plan: StretchPlan; left: number } => {
+    // What tells a sound axis from a mess is measured on the cut as looks chose it, before any
+    // mending: a measure stops telling once something is done to improve it.
+    const { walkBreaks } = seams.fresh(build(piece, axis, lines, cut, JUDGED_STEPS));
+    const fill = borrowFloor(tileset, piece, axis, lines, cut, seams);
+    const judged = build(piece, axis, lines, cut, JUDGED_STEPS, fill);
+    const fresh = seams.fresh(judged);
+    return {
+      left,
+      plan: {
+        axis, lines, cut, fill,
+        seam: fresh.seams.length ? fresh.seams.reduce((s, v) => s + v, 0) / fresh.seams.length : 0,
+        seamsPerStep: fresh.seams.length / JUDGED_STEPS,
+        walkBreaks,
+        islandsPerStep: Math.max(0, seams.islands(judged) - seams.islands(build(piece, axis, lines, cut, JUDGED_STEPS - 1, fill))),
+        groundContinues: groundContinues(piece, axis),
+      },
+    };
+  };
+  const bySquare = finish(search(square));
+  // The two measures are one and the same on the straight axes. Of the two cuts, the one
+  // that walks more as the piece does (nothing left standing in the way, then fewer walls
+  // set against floor), and between two that walk alike, the one that joins better.
+  const byIsometric = dx !== 0 && dy !== 0 ? finish(search(isometric)) : bySquare;
+  const a = byIsometric.plan, b = bySquare.plan;
+  const better = a.islandsPerStep !== b.islandsPerStep ? a.islandsPerStep < b.islandsPerStep
+    : Math.abs(a.walkBreaks - b.walkBreaks) > 1e-9 ? a.walkBreaks < b.walkBreaks
+    : byIsometric.left < bySquare.left - 1e-6;
+  const { plan } = better ? byIsometric : bySquare;
   byAxis.set(axis, plan);
   return plan;
 }

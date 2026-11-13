@@ -502,9 +502,9 @@ same at placement, for ramps and cliff pieces you mean to work over by hand.
 
 ### Stretching a ramp or a bridge
 
-A ramp can be made wider and a bridge longer as it is placed. With the doodad picked,
-press where it should stand and drag along it instead of clicking. The ghost grows by a
-step for every two tiles of the drag, and releasing the button places it.
+A ramp can be made wider and a bridge longer or wider as it is placed. With the doodad
+picked, press where it should stand and drag along it instead of clicking. The ghost grows
+by a step for every two tiles of the drag, and releasing the button places it.
 
 ![A cliff ramp being stretched three steps along its cliff](images/doodad-stretch.webp)
 
@@ -514,13 +514,16 @@ the middle again in the gap. The game's files do not say where the middle is, so
 editor finds it by comparing the pictures of the doodad's tiles, the way the Blend brush
 finds a neighbour, and repeats the tiles that join each other best.
 
-- **Direction.** A doodad stretches only the way it has a middle to repeat, and the drag
-  snaps to that line: a ramp along the cliff it cuts into, a bridge along its deck.
-  Dragging the other way along the line stretches back from where you pressed. A doodad
-  with no such line says so in the status bar. Holding Shift while dragging offers all
-  four lines whatever the doodad: the two diagonals (two tiles across for each one down or
-  up), straight across and straight down. Expect walls laid across the slope and rail ends
-  in the road that way; it is there for the pieces you mean to rework by hand.
+- **Direction.** A doodad stretches only the ways it has a middle to repeat, and the drag
+  snaps to the nearest of them: a ramp along the cliff it cuts into, a bridge along its
+  deck to make it longer and, for most bridges, across it to make it wider, with the rails
+  where they were and more road between them. The status bar shows the ways on offer as
+  arrows when the drag begins. Dragging the other way along a line stretches back from
+  where you pressed. A doodad with no such line says so in the status bar. Holding Shift
+  while dragging offers all four lines whatever the doodad: the two diagonals (two tiles
+  across for each one down or up), straight across and straight down. Expect walls laid
+  across the slope and rail ends in the road that way; it is there for the pieces you mean
+  to rework by hand.
 - **The ground check covers the whole stretch.** Every added tile wants the ground the
   tile it repeats wanted, so a ramp stretches along a straight cliff and turns red where
   the cliff bends or ends. *Place anywhere* drops the check as it does for any doodad.

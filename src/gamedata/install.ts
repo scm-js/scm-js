@@ -74,13 +74,31 @@ export function pickArchives(files: readonly File[]): File[] {
   return archives;
 }
 
-/** Extract from the archives and store the result as the game's own data. Resolves with the copy's stamp. */
+/** 1.16.1's language module as an installation's folder names it; Windows matches the name in any case. */
+const LANGUAGE_FILE = "local.dll";
+
+/**
+ * 1.16.1's language module (`Local.dll`, beside `StarCraft.exe`) among a folder's files, the
+ * shallowest when there are several; undefined when the pick has none — a Remastered folder, the
+ * archives picked by themselves, a trimmed copy. The name is matched whole, in any case
+ * (`EditLocal.dll`, StarEdit's, is another file), as the play page picks it from a folder of its own.
+ */
+export function pickLanguageModule(files: readonly File[]): File | undefined {
+  const depth = (f: File) => ((f as File & { webkitRelativePath?: string }).webkitRelativePath || f.name).split(/[\\/]/).length;
+  return files.filter((f) => f.name.toLowerCase() === LANGUAGE_FILE).sort((a, b) => depth(a) - depth(b))[0];
+}
+
+/**
+ * Extract from the archives and store the result as the game's own data. Resolves with the copy's stamp.
+ * A folder's `Local.dll` goes with them, for the play page (`play.ts#PLAY_LANGUAGE`).
+ */
 export async function installFromFiles(files: readonly File[], progress?: InstallProgress): Promise<StoredCopy> {
   const archives = pickArchives(files);
   progress?.(0, t("Reading the archives"));
   const inputs: ExtractRequest["archives"] = [];
   for (const file of archives) inputs.push({ name: file.name, bytes: await file.arrayBuffer() });
-  return runWorker(inputs, archives.map((f) => f.name).join(" + "), progress);
+  const language = await pickLanguageModule(files)?.arrayBuffer().catch(() => undefined);
+  return runWorker(inputs, archives.map((f) => f.name).join(" + "), progress, undefined, undefined, false, undefined, undefined, language);
 }
 
 /* ── Data sets ──────────────────────────────────────────── */
@@ -267,6 +285,7 @@ function runWorker(
   lighting = false,
   base?: ExtractRequest["base"],
   mod?: ExtractRequest["mod"],
+  language?: ArrayBuffer,
 ): Promise<StoredCopy> {
   return new Promise((resolve, reject) => {
     let worker: Worker;
@@ -301,7 +320,7 @@ function runWorker(
       }
       resolve({ ...reply.stamp, where: reply.where });
     };
-    const req: ExtractRequest = { kind: "extract", archives, from, profile, ...(remastered ? { remastered } : {}), ...(lighting ? { lighting } : {}), ...(base ? { base } : {}), ...(mod ? { mod } : {}) };
-    worker.postMessage(req, archives.map((a) => a.bytes));
+    const req: ExtractRequest = { kind: "extract", archives, from, profile, ...(remastered ? { remastered } : {}), ...(lighting ? { lighting } : {}), ...(base ? { base } : {}), ...(mod ? { mod } : {}), ...(language ? { language } : {}) };
+    worker.postMessage(req, [...archives.map((a) => a.bytes), ...(language ? [language] : [])]);
   });
 }

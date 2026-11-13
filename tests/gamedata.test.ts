@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { memberKey, openArchives, readerFor } from "../src/gamedata/archives";
 import { describeExtraction, ExtractError, extractGameData, extractTilesets, extractUnits, TILESET_NAMES } from "../src/gamedata/extract";
-import { isMemberPath, pickArchives } from "../src/gamedata/install";
+import { isMemberPath, pickArchives, pickLanguageModule } from "../src/gamedata/install";
 import { pickedDataSet } from "../src/gamedata/modInput";
 import { activeProfileId, DEFAULT_PROFILE, isProfileId, normalizeProfile, PROFILE_KEY, profileIdFrom } from "../src/gamedata/profiles";
 import { locateGameData, type LocateDeps } from "../src/gamedata/source";
@@ -114,6 +114,29 @@ describe("pickArchives", () => {
   it("names what is missing", () => {
     expect(() => pickArchives([file("StarDat.mpq")])).toThrow(/BrooDat\.mpq missing/);
     expect(() => pickArchives([file("map.scx")])).toThrow(/No StarCraft archives/);
+  });
+});
+
+describe("pickLanguageModule", () => {
+  /** A file of a folder pick, as the browser gives it: the name and its path from the folder's parent. */
+  const inFolder = (path: string) => ({ name: path.split("/").pop()!, webkitRelativePath: path }) as File;
+  const folder = ["StarCraft/StarDat.mpq", "StarCraft/BrooDat.mpq", "StarCraft/patch_rt.mpq", "StarCraft/StarCraft.exe", "StarCraft/EditLocal.dll", "StarCraft/storm.dll"];
+
+  it("finds 1.16.1's Local.dll beside the archives, in any case", () => {
+    for (const name of ["Local.dll", "local.dll", "LOCAL.DLL"]) {
+      expect(pickLanguageModule([...folder, `StarCraft/${name}`].map(inFolder))?.webkitRelativePath).toBe(`StarCraft/${name}`);
+    }
+  });
+
+  it("takes the shallowest, and never StarEdit's EditLocal.dll", () => {
+    const picked = pickLanguageModule([...folder, "StarCraft/Backup/Local.dll", "StarCraft/Local.dll"].map(inFolder));
+    expect(picked?.webkitRelativePath).toBe("StarCraft/Local.dll");
+    expect(pickLanguageModule(folder.map(inFolder))).toBeUndefined();
+  });
+
+  it("finds none in a Remastered folder or among archives picked by themselves", () => {
+    expect(pickLanguageModule(["StarCraft/.build.info", "StarCraft/Data/data/data.000", "StarCraft/x86_64/StarCraft.exe"].map(inFolder))).toBeUndefined();
+    expect(pickLanguageModule([{ name: "StarDat.mpq" } as File, { name: "BrooDat.mpq" } as File])).toBeUndefined();
   });
 });
 

@@ -4,7 +4,7 @@
  * and the copy itself with what its stamp comes to say.
  */
 import { describe, expect, it } from "vitest";
-import { copyPlaySet, PLAY_COUNTDOWN, PLAY_MEMBERS, PLAY_REQUIRED, PLAY_VERSION, playImageMembers, playSoundMembers } from "../src/gamedata/play";
+import { copyPlaySet, PLAY_COUNTDOWN, PLAY_LANGUAGE, PLAY_MEMBERS, PLAY_REQUIRED, PLAY_VERSION, playImageMembers, playSoundMembers } from "../src/gamedata/play";
 
 /** sfxdata.dat with the given sound ids pointing at entries of the table, and that table. */
 function sfx(names: string[], ids: [id: number, index1: number][]) {
@@ -100,6 +100,31 @@ describe("the play set", () => {
     expect(again).toContain("unit/hd/main_000.anim");
     expect(again).toContain("unit/hd/main_001.anim");
     expect(play?.lit).toBeUndefined();
+  });
+
+  it("keeps a 1.16.1 folder's language module beside a whole set, under the name the play page asks for", async () => {
+    const { dat, tbl } = twenty();
+    const dll = new Uint8Array(52224);
+    const written = new Map<string, number>();
+    const play = await copyPlaySet(async (m) => new Uint8Array(m.length), async (path, data) => { written.set(path, data.length); }, { sfxDat: dat, sfxTbl: tbl }, undefined, undefined, { language: dll });
+    // At the copy's top, lower case: scm-sim's web/gameSource.ts reads `local.dll` there.
+    expect(PLAY_LANGUAGE).toBe("local.dll");
+    expect(written.get("local.dll")).toBe(52224);
+    // Counted with the set, and the version the play page already reads.
+    expect(play).toEqual({ version: PLAY_VERSION, files: PLAY_MEMBERS.length + 1, sounds: 20, bytes: [...written.values()].reduce((a, b) => a + b, 0), language: 52224 });
+  });
+
+  it("makes the set as before from a folder without one: Remastered, or the archives picked alone", async () => {
+    const { dat, tbl } = twenty();
+    const written: string[] = [];
+    const play = await copyPlaySet(async () => new Uint8Array(1), async (path) => { written.push(path); }, { sfxDat: dat, sfxTbl: tbl }, undefined, undefined, {});
+    expect(written).not.toContain(PLAY_LANGUAGE);
+    expect(play).not.toHaveProperty("language");
+    expect(play?.version).toBe(PLAY_VERSION);
+    // A set that cannot be played from does not take it either.
+    const none: string[] = [];
+    expect(await copyPlaySet(async (m) => (m.startsWith("sound\\") ? null : new Uint8Array(1)), async (path) => { none.push(path); }, { sfxDat: dat, sfxTbl: tbl }, undefined, undefined, { language: new Uint8Array(8) })).toBeNull();
+    expect(none).not.toContain(PLAY_LANGUAGE);
   });
 
   it("says nothing of a source without the sounds, or without a file a game needs", async () => {

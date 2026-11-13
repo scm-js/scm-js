@@ -86,14 +86,29 @@ both made it worse and are worth not repeating. A cost per walk-break across add
 and left the ramp's rocks in place, since they sit at joins the doodad ships with. A cost per extra
 connected piece of wall/floor (`Seams.islands`) got its zero by laying the ramp's *wall* across the slope
 — 79 of 256 added minitiles unwalkable a step instead of 8 — and passed every axis of every bridge.
-What is true and still open: within "repeat one cell of each line", Badlands, Jungle, Ashworld, Ice and
-Twilight cliff ramps cannot avoid repeating a wall tip (two or three unwalkable minitiles) on one or two
-lines, so a stretched ramp has a line of small rocks along its top edge, 2–3 a step (`islandsPerStep`;
-Desert's and Low Platform's have none). `placeAt` reports the count in the status line. Fixing it needs
-fill cells borrowed from other lines or other tiles (the Heal idea), not a different cut.
+What worked is a second pass that cannot make that trade, `borrowFloor`. Within "repeat one cell of each
+line", Badlands, Jungle, Ashworld, Ice and Twilight cliff ramps cannot avoid repeating a wall tip (two or
+three unwalkable minitiles) on one or two lines: 5–11 unwalkable minitiles a step in a line along the
+ramp's top edge. So on a line whose repeated cell is part floor and part wall, the *added* cells may show
+another of the piece's tiles (`StretchPlan.fill`) when (a) its walkable minitiles are a superset of the
+repeated cell's — it can only add floor; (b) `megatileHeight` is the same; (c) the stretched piece has
+strictly fewer separate pieces of wall and floor for it. (c) is what tells a rock from the edge of a wall
+that runs along the axis (a bridge's rail, a ramp's side): trading that for floor removes no piece, so it
+stays. Best seam among those that qualify. The count is `Seams.islands` (floor 4-connected, wall
+8-connected, bare cells neither), and what a *step* adds is `islands(3 steps) − islands(2 steps)`, not the
+difference from the shipped piece: pulling the ends apart can part two rocks the doodad ships touching,
+once (Badlands #77: +2 whatever the length), which misreported clean ramps as having spots. Result: all
+twelve cliff ramps and the Low Platform ramps stretch with 0 unwalkable minitiles in the added cells and
+`islandsPerStep` 0; the seam mean also fell (Badlands 16.5 → 13.3). Wall ramps keep theirs (17–66
+minitiles a step: no middle), and `placeAt` reports `islandsPerStep` × steps in the status line.
+`required` of an added cell stays the repeated cell's, so the ground check is as before. `walkBreaks`,
+the soundness measure, is taken *before* this pass for the reason above. A third pass that swapped in
+same-walkability tiles for better seams changed nothing on any cliff ramp and was removed; the dark
+stripe every two columns along a Badlands ramp's lower edge is not something another tile of the doodad
+fixes. Planning is ≤ 35 ms for the largest doodad and axis.
 Not done: a mirrored image under a symmetry mode stretches the same doodad the same way (it needs the
-doodad's twin and the mirrored axis), tiles from outside the doodad to hide the joins and the rocks, the
-plugin API, and a marked area. `tests/stretch.test.ts`.
+doodad's twin and the mirrored axis), tiles from outside the doodad to hide the joins, the plugin API, and
+a marked area. `tests/stretch.test.ts`.
 
 The palette's preview size (`doodadThumbSizeAtom`, `scmjs.doodadThumbSize`, small / medium / large)
 sets `DoodadThumb`'s box and, through `--doodad-thumb-w` / `-h` on `.doodad-grid`, the cell width the

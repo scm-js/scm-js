@@ -533,12 +533,13 @@ finds a neighbour, and repeats the tiles that join each other best.
   repeat with a faint join every two tiles, as the long ramps of hand-made maps do. A ramp
   built into a wall, with stairs or a gate, has no middle that repeats. The status bar
   says when the joins will show; the Tile and Blend brushes are there to touch them up.
-- **Check how it walks.** The tiles that repeat are the doodad's own, and in most tilesets
-  the middle of a cliff ramp includes the tip of a wall: a rock of two or three small
-  squares that a stretched ramp then has at every step, in a line along its top edge.
-  Units walk between them, and large units have less room to. The status bar counts the
-  spots when it places the ramp, and View ▸ Walkability shows them. Desert's cliff ramps
-  and Space Platform's low ramps stretch with none.
+- **It walks as the doodad does.** In most tilesets the tile of a cliff ramp that repeats
+  best carries the tip of a wall, a rock of two or three small squares, and laid again at
+  every step it would stand in the way. Where that happens the added tiles are another of
+  the doodad's own that a unit walks everywhere the first is walked, so the slope of a
+  stretched cliff ramp is clear in every tileset. A ramp built into a wall has nothing
+  clean to lend; the status bar counts the spots left when it places one, and View ▸
+  Walkability shows them.
 
 ## Units
 

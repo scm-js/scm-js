@@ -23,7 +23,7 @@
  * Everything here is pure and canvas-free; `tests/stretch.test.ts` runs it against a
  * synthetic tileset and, where they are installed, the game's.
  */
-import { megatileForTile, TileFlag, type Tileset } from "../formats/tileset/decode";
+import { megatileForTile, megatileHeight, TileFlag, type Tileset } from "../formats/tileset/decode";
 import type { DoodadDef } from "../formats/tileset/doodads";
 import { edgeDistance, edgeTable, type EdgeTable } from "./blend";
 
@@ -54,6 +54,12 @@ export interface StretchPlan {
   lines: number[][];
   /** For each line, the position within it of the cell a stretch repeats. */
   cut: number[];
+  /**
+   * For each line, the tile the added cells get: the repeated cell's own, or one borrowed
+   * from elsewhere in the piece where the cell's own would leave a rock standing on
+   * ground a unit walks (see `borrowFloor`).
+   */
+  fill: number[];
   /**
    * How the seams a stretch adds compare with a visible one: the mean edge distance over
    * the joins the piece as shipped does not have (0 when it adds none), and how many of
@@ -133,7 +139,7 @@ function linesOf(piece: TilePiece, axis: StretchAxis): number[][] {
 }
 
 /** The stretched piece for a cut. `steps` may be negative: the far end stays put and the near end moves back. */
-function build(piece: TilePiece, axis: StretchAxis, lines: readonly number[][], cut: readonly number[], steps: number): StretchedPiece {
+function build(piece: TilePiece, axis: StretchAxis, lines: readonly number[][], cut: readonly number[], steps: number, fill?: readonly number[]): StretchedPiece {
   const { dx, dy } = STRETCH_STEP[axis];
   const n = Math.abs(steps);
   const width = piece.width + dx * n, height = piece.height + Math.abs(dy) * n;
@@ -146,9 +152,11 @@ function build(piece: TilePiece, axis: StretchAxis, lines: readonly number[][], 
     for (let j = 0; j < line.length + n; j++) {
       const cell = line[j < m ? j : j <= m + n ? m : j - n];
       const at = (r0 + dy * j + shiftY) * width + c0 + dx * j;
-      tiles[at] = piece.tiles[cell];
+      const isAdded = j > m && j <= m + n;
+      tiles[at] = isAdded && fill ? fill[i] : piece.tiles[cell];
+      // An added cell stands on the ground its line's repeated cell stands on, whatever tile it shows.
       required[at] = piece.required?.[cell] ?? 0;
-      if (j > m && j <= m + n) added[at] = 1;
+      if (isAdded) added[at] = 1;
     }
   });
   const forward = steps >= 0;
@@ -311,6 +319,68 @@ class Seams {
   }
 }
 
+/** Which of a tile's sixteen minitiles a unit can walk, a bit each. */
+function walkMask(tileset: Tileset, tile: number): number {
+  const base = megatileForTile(tileset, tile) * 16;
+  let mask = 0;
+  for (let m = 0; m < 16; m++) if ((tileset.megatileFlags[base + m] ?? 0) & TileFlag.Walkable) mask |= 1 << m;
+  return mask;
+}
+
+/**
+ * The second pass over a plan, for the rocks the first leaves. The cut is chosen on looks,
+ * and on some lines the cell that looks best is the tip of a wall: mostly floor, with two
+ * or three minitiles of rock, which a stretch then stands on the walking surface at every
+ * step. For such a line the added cells may show another of the piece's tiles instead,
+ * on three conditions that keep this from doing what the failed attempts did (see the
+ * note in .claude/internals/objects.md):
+ *
+ * - the tile walks everywhere the repeated cell walks, so it can only add floor, never
+ *   lay wall across a slope;
+ * - it is at the height the game takes the repeated cell to be at;
+ * - the stretched piece ends up with fewer separate pieces of wall and floor than before,
+ *   so a wall's edge that carries on along the axis is left alone (trading it for floor
+ *   removes nothing), and only a rock that stood by itself goes.
+ *
+ * Among the tiles that qualify, the one that joins its neighbours best. Returns the fill
+ * per line, the repeated cells' own where nothing was borrowed.
+ */
+function borrowFloor(tileset: Tileset, piece: TilePiece, axis: StretchAxis, lines: readonly number[][], cut: readonly number[], seams: Seams): number[] {
+  const fill = lines.map((line, i) => piece.tiles[line[cut[i]]]);
+  // What a step adds, not what the stretch has: pulling the ends apart can part two rocks
+  // the doodad ships touching, once, and that is nothing a tile could mend.
+  const perStep = () => seams.islands(build(piece, axis, lines, cut, JUDGED_STEPS, fill)) - seams.islands(build(piece, axis, lines, cut, JUDGED_STEPS - 1, fill));
+  if (perStep() <= 0) return fill;
+  let islands = seams.islands(build(piece, axis, lines, cut, JUDGED_STEPS, fill));
+
+  const pool = [...new Set(Array.from(piece.tiles).filter((t) => t !== 0))];
+  const masks = new Map(pool.map((t) => [t, walkMask(tileset, t)]));
+  const heights = new Map(pool.map((t) => [t, megatileHeight(tileset, megatileForTile(tileset, t))]));
+  for (let pass = 0; pass < 4; pass++) {
+    let changed = false;
+    for (let i = 0; i < lines.length; i++) {
+      const own = piece.tiles[lines[i][cut[i]]];
+      const mask = masks.get(own) ?? 0;
+      if (own === 0 || mask === 0 || mask === 0xffff) continue; // bare, all wall or all floor: nothing to mend
+      const before = fill[i];
+      let best: { tile: number; islands: number; seam: number } | null = null;
+      for (const tile of pool) {
+        if (tile === before || ((masks.get(tile) ?? 0) & mask) !== mask || heights.get(tile) !== heights.get(own)) continue;
+        fill[i] = tile;
+        const g = build(piece, axis, lines, cut, JUDGED_STEPS, fill);
+        const count = seams.islands(g);
+        if (count >= islands) continue;
+        const seam = seams.total(g);
+        if (!best || count < best.islands || (count === best.islands && seam < best.seam)) best = { tile, islands: count, seam };
+      }
+      fill[i] = best ? best.tile : before;
+      if (best) { islands = best.islands; changed = true; }
+    }
+    if (!changed || perStep() <= 0) break;
+  }
+  return fill;
+}
+
 /** The share of cell pairs one step apart along `axis` that want the same ground; null when no two do. */
 function groundContinues(piece: TilePiece, axis: StretchAxis): number | null {
   const { required, width, height } = piece;
@@ -382,14 +452,18 @@ export function stretchPlan(tileset: Tileset, piece: TilePiece, axis: StretchAxi
     if (!moved) break;
   }
 
-  const judged = build(piece, axis, lines, cut, JUDGED_STEPS);
+  // What tells a sound axis from a mess is measured on the cut as looks chose it, before any
+  // mending: a measure stops telling once something is done to improve it.
+  const { walkBreaks } = seams.fresh(build(piece, axis, lines, cut, JUDGED_STEPS));
+  const fill = borrowFloor(tileset, piece, axis, lines, cut, seams);
+  const judged = build(piece, axis, lines, cut, JUDGED_STEPS, fill);
   const fresh = seams.fresh(judged);
   const plan: StretchPlan = {
-    axis, lines, cut,
+    axis, lines, cut, fill,
     seam: fresh.seams.length ? fresh.seams.reduce((s, v) => s + v, 0) / fresh.seams.length : 0,
     seamsPerStep: fresh.seams.length / JUDGED_STEPS,
-    walkBreaks: fresh.walkBreaks,
-    islandsPerStep: Math.max(0, seams.islands(judged) - seams.islands(piece)) / JUDGED_STEPS,
+    walkBreaks,
+    islandsPerStep: Math.max(0, seams.islands(judged) - seams.islands(build(piece, axis, lines, cut, JUDGED_STEPS - 1, fill))),
     groundContinues: groundContinues(piece, axis),
   };
   byAxis.set(axis, plan);
@@ -418,7 +492,7 @@ export function soundAxes(tileset: Tileset, piece: TilePiece & { ramp?: boolean 
 
 /** `piece` stretched by `steps` along the plan's axis; a negative count stretches back from the far end. */
 export function stretchPiece(piece: TilePiece, plan: StretchPlan, steps: number): StretchedPiece {
-  return build(piece, plan.axis, plan.lines, plan.cut, steps);
+  return build(piece, plan.axis, plan.lines, plan.cut, steps, plan.fill);
 }
 
 /** A doodad stretched: the same doodad with a larger footprint, for the ghost, the ground check and the placement. */

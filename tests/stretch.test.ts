@@ -21,7 +21,8 @@ const RED = 1, GREEN = 2, BLUE = 3;
 /**
  * Megatiles: 1 red, 2 green, 3 blue, 4 red over green, 5 green over blue, 6 red beside
  * green, 7 green beside blue. All of them sit in group 2, so megatile `m` is tile
- * `0x20 + m - 1`. Green is floor a unit walks; red and blue are wall.
+ * `0x20 + m - 1`. Green is floor a unit walks; red and blue are wall. Megatile 8 is floor
+ * with one minitile of rock in the middle of it.
  */
 function synthetic(): Tileset {
   const palette = new Uint8Array(256 * 4);
@@ -33,7 +34,7 @@ function synthetic(): Tileset {
   minitiles.fill(RED, 64, 128);
   minitiles.fill(GREEN, 128, 192);
   minitiles.fill(BLUE, 192, 256);
-  const megatileCount = 8;
+  const megatileCount = 9;
   const refs = new Uint32Array(megatileCount * 16);
   const paint = (m: number, colour: (col: number, row: number) => number) => { for (let i = 0; i < 16; i++) refs[m * 16 + i] = colour(i % 4, i >> 2) << 1; };
   paint(1, () => RED);
@@ -43,10 +44,11 @@ function synthetic(): Tileset {
   paint(5, (_c, r) => (r < 2 ? GREEN : BLUE));
   paint(6, (c) => (c < 2 ? RED : GREEN));
   paint(7, (c) => (c < 2 ? GREEN : BLUE));
+  paint(8, (c, r) => (c === 1 && r === 1 ? BLUE : GREEN));
   const cv5 = new Uint8Array(3 * 52);
   const view = new DataView(cv5.buffer);
   view.setUint16(2 * 52, 2, true);
-  for (let s = 0; s < 7; s++) view.setUint16(2 * 52 + 20 + s * 2, s + 1, true);
+  for (let s = 0; s < 8; s++) view.setUint16(2 * 52 + 20 + s * 2, s + 1, true);
   const vx4 = new Uint8Array(megatileCount * 32);
   const v = new DataView(vx4.buffer);
   refs.forEach((ref, i) => v.setUint16(i * 2, ref, true));
@@ -63,7 +65,7 @@ function seeded(seed: number): () => number {
 }
 
 const ts = synthetic();
-const [R, G, B, RG_V, GB_V, RG_H, GB_H] = [0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26];
+const [R, G, B, RG_V, GB_V, RG_H, GB_H, ROCK] = [0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27];
 const piece = (width: number, height: number, tiles: number[], required?: number[]): TilePiece =>
   ({ width, height, tiles: Uint16Array.from(tiles), required: required && Uint16Array.from(required) });
 const rows = (g: { width: number; height: number; tiles: Uint16Array }) =>
@@ -142,6 +144,38 @@ describe("the axes a piece stretches along", () => {
     // Laid again, either half leaves a strip of wall and a strip of floor cut off from the rest.
     expect(stretchPlan(ts, piece(1, 2, [RG_V, GB_V]), "s").islandsPerStep).toBe(2);
     expect(stretchPlan(ts, piece(1, 3, [RG_V, G, GB_V]), "s").islandsPerStep).toBe(0);
+  });
+});
+
+describe("a rock on the walking surface", () => {
+  // Wall, floor with a rock in it, wall, and a tile of clean floor at the far end. On looks
+  // the rock tile is the one to repeat: it joins itself, and it is nearer the middle.
+  const rocky = piece(1, 4, [RG_V, ROCK, GB_V, G], [7, 8, 9, 10]);
+
+  it("is not laid again: the added cells borrow a tile of the piece that walks wherever the repeated one does", () => {
+    const plan = stretchPlan(ts, rocky, "s");
+    expect(plan.cut).toEqual([1]);
+    expect(plan.fill).toEqual([G]);
+    expect(plan.islandsPerStep).toBe(0);
+    const g = stretchPiece(rocky, plan, 2);
+    expect(rows(g)).toEqual([[RG_V], [ROCK], [G], [G], [GB_V], [G]]);
+    // The borrowed tiles stand on the ground the repeated cell stands on.
+    expect([...g.required]).toEqual([7, 8, 8, 8, 9, 10]);
+  });
+
+  it("stays where the piece has no cleaner tile to lend, and is counted", () => {
+    const plan = stretchPlan(ts, piece(1, 3, [RG_V, ROCK, GB_V]), "s");
+    expect(plan.fill).toEqual([ROCK]);
+    expect(plan.islandsPerStep).toBe(1);
+  });
+
+  it("is told from the edge of a wall that carries on, which is left as drawn", () => {
+    // Floor on the left, a rail on the right, all the way down: trading the rail's tile for
+    // floor would cut the rail in two.
+    const railed = piece(2, 3, [G, GB_H, G, GB_H, G, GB_H]);
+    const plan = stretchPlan(ts, railed, "s");
+    expect(plan.fill).toEqual([G, GB_H]);
+    expect(plan.islandsPerStep).toBe(0);
   });
 });
 
@@ -272,7 +306,8 @@ describe.skipIf(installed.length === 0)("stretching the game's doodads", () => {
         }
       }
     }
-  });
+  // Some two thousand doodads on four axes each: seconds, and more beside the rest of the suite.
+  }, 60_000);
 
   it("offers every ramp one diagonal, and a cliff ramp widened along it is ground a unit can walk", () => {
     for (const name of installed) {
@@ -282,7 +317,11 @@ describe.skipIf(installed.length === 0)("stretching the game's doodads", () => {
         expect(axes.length, `${name} #${def.id}`).toBe(1);
         expect(["se", "ne"], `${name} #${def.id}`).toContain(axes[0]);
         if (!haveNames || def.category !== "Cliff") continue;
-        expect(walkable(tileset, stretchPiece(def, stretchPlan(tileset, def, axes[0]), 4)), `${name} #${def.id}`).toBeGreaterThan(0.9);
+        // Not a minitile of rock on the slope, in any tileset: where the tile that repeats best
+        // carries the tip of a wall, a clean one is borrowed.
+        const plan = stretchPlan(tileset, def, axes[0]);
+        expect(walkable(tileset, stretchPiece(def, plan, 4)), `${name} #${def.id}`).toBe(1);
+        expect(plan.islandsPerStep, `${name} #${def.id}`).toBe(0);
       }
     }
   });

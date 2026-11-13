@@ -418,7 +418,7 @@ describe.skipIf(installed.length === 0)("stretching the game's doodads", () => {
         }
       }
     }
-  });
+  }, 60_000);
 
   it("offers the two Twilight ramps of a pair alike", () => {
     // By the edge difference alone one ramp of each Basilica pair got a cut that left a

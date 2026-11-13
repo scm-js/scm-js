@@ -475,6 +475,17 @@ where the copies will land.
   goes to its own player: P1's start location gives P2's under the two-way modes, and
   P2's, P3's and P4's under the four-way ones. Neutral units and resources stay neutral. A
   doodad that would have to turn is skipped.
+- A doodad cannot be flipped, so across a left-right mirror its image is its *twin*: the
+  doodad the tileset drew as its mirror image. A ramp for a cliff running down to the
+  right gives the ramp for the cliff running up to the right, a bridge gives the bridge
+  running the other way, and a stretched one gives its twin stretched the same. Every ramp
+  and bridge of the game's eight tilesets has a twin. The status bar names it, and says
+  when the game's two do not play alike: the two Desert cliff ramps differ in 83 small
+  squares of height and ramp, the Ice ones in 16, and in Badlands, Jungle, Ashworld and
+  Twilight the cliff ramps are exact images. Across a top-bottom mirror or a half turn a
+  doodad has no twin (nobody drew a ramp facing up the screen), and the same doodad is
+  tried there as before. Selecting a doodad selects its twin across the mirror too, so the
+  two move together.
 - Selecting something also selects whatever stands at its images. Dragging then moves them
   all as mirror images, resizing a location resizes its copies, and Delete removes them
   all. A map made symmetric by hand works the same way.

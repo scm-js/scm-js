@@ -11,6 +11,8 @@ import {
 } from "../editor/doodads";
 import { applyChanges, Stroke } from "../editor/terrain";
 import { isStretched, soundAxes, STRETCH_AXES, stretchDoodad, stretchFromDrag, VISIBLE_SEAM, type StretchAxis } from "../editor/stretch";
+import { doodadTwin, mirroredDoodad, mirrorsAcross, twinDifference } from "../editor/doodadTwin";
+import type { Tileset } from "../formats/tileset/decode";
 import type { DoodadRecord } from "../formats/chk/sections/objects";
 import type { Scenario } from "../formats/chk/scenario";
 import { doodadOrigin, NO_DOODADS, type DoodadCatalogue, type DoodadDef } from "../formats/tileset/doodads";
@@ -31,12 +33,14 @@ export interface DoodadGhost {
 /** How far (pixels) a doodad may sit from the exact mirror image of another and still count as its copy — a tile, for the two-tile snap. */
 const MIRROR_MATCH_PX = 32;
 /** Each doodad by the centre of its footprint, since that is what the mirror images of a footprint share. */
-function placedDoodads(scn: Scenario, catalogue: DoodadCatalogue): (Placed | null)[] {
+function placedDoodads(scn: Scenario, catalogue: DoodadCatalogue, tileset: Tileset | null): (Placed | null)[] {
   return scn.doodads.map((rec) => {
     const def = catalogue.byId.get(rec.doodadId);
     if (!def) return null;
     const o = doodadOrigin(def, rec.x, rec.y);
-    return { x: (o.x + def.width / 2) * 32, y: (o.y + def.height / 2) * 32, kind: rec.doodadId };
+    // A doodad and its twin are one kind: across a mirror the one is the image of the other.
+    const twin = tileset ? doodadTwin(tileset, catalogue, def) : null;
+    return { x: (o.x + def.width / 2) * 32, y: (o.y + def.height / 2) * 32, kind: twin ? Math.min(rec.doodadId, twin.id) : rec.doodadId };
   });
 }
 
@@ -142,9 +146,14 @@ export function useDoodadTools() {
     const opts = store.get(doodadPlacementAtom);
     const mode = store.get(symmetryAtom);
     const own = store.get(symmetryOptionsAtom).players;
-    return mirrorTileRectImages(mode, first.x, first.y, first.def.width, first.def.height, scn.width, scn.height).map((q, i) =>
-      i === 0 ? first : { ...first, x: q.x, y: q.y, owner: own ? mirroredOwner(mode, first.owner, q.element) : first.owner, verdict: checkDoodadPlacement(scn, tileset, first.def, q.x, q.y, opts) });
-  }, [store, tileset, ghostAt]);
+    return mirrorTileRectImages(mode, first.x, first.y, first.def.width, first.def.height, scn.width, scn.height).map((q, i) => {
+      if (i === 0) return first;
+      // Across a left-right mirror a doodad's image is its twin, where the tileset drew one:
+      // the ramp for the cliff that runs the other way, stretched the same.
+      const def = tileset && mirrorsAcross(mode, q.element) ? mirroredDoodad(tileset, catalogue, first.def) ?? first.def : first.def;
+      return { ...first, def, x: q.x, y: q.y, owner: own ? mirroredOwner(mode, first.owner, q.element) : first.owner, verdict: checkDoodadPlacement(scn, tileset, def, q.x, q.y, opts) };
+    });
+  }, [store, tileset, catalogue, ghostAt]);
 
   /**
    * Place the active doodad at `p` and, under a symmetry mode, at its images (each checked
@@ -166,8 +175,12 @@ export function useDoodadTools() {
     const asTerrain = opts.asTerrain || long !== null;
     const tiles: TileChange[] = [], doodads: DoodadChange[] = [], sprites: SpriteChange[] = [];
     let placed = 0;
+    /** The twin a mirror image was placed as, and how many of its minitiles play otherwise than the doodad's mirrored. */
+    let twin: { def: DoodadDef; unlike: number } | null = null;
+    const shipped = (def: DoodadDef) => (isStretched(def) ? def.stretched.from : def);
     for (const g of ghosts) {
       if (g !== ghost && !checkDoodadPlacement(scn, tileset, g.def, g.x, g.y, opts).ok) continue;
+      if (g !== ghost && tileset && shipped(g.def).id !== shipped(ghost.def).id) twin = { def: shipped(g.def), unlike: twinDifference(tileset, shipped(ghost.def), shipped(g.def)) };
       if (asTerrain) {
         // Tiles into both sections and the overlay as a plain sprite; no record to select or move later.
         const edit = placeDoodadAsTerrain(scn, g.def, g.x, g.y, g.owner);
@@ -190,17 +203,22 @@ export function useDoodadTools() {
       : asTerrain ? { label: t("{label} as terrain", { label }), changes: tiles, sprites } : entryFor(label, { tiles, doodads, sprites }));
     const what = placed === 1 ? doodadLabel(ghost.def) : t("{n} × {name}", { n: placed, name: doodadLabel(ghost.def) });
     const where = { what, w: ghost.def.width, h: ghost.def.height, x: ghost.x, y: ghost.y };
+    // Across the mirror stands the doodad's twin. Say so, and say when the game's two do not play alike.
+    const mirrorNote = !twin ? null
+      : twin.unlike > 0 ? t("its mirror image is {twin}, which the game's tiles make play differently in {n, plural, one {# small square} other {# small squares}}", { twin: doodadLabel(twin.def), n: twin.unlike })
+        : t("its mirror image is {twin}", { twin: doodadLabel(twin.def) });
     if (long) {
       const steps = Math.abs(long.steps);
       const base = t("Placed {what} stretched {arrow} by {n} ({w}×{h}) as terrain at tile {x}, {y}", { ...where, arrow: stretchArrow(long.axis, long.steps), n: steps });
       // What the tileset could not give: say it, since both are worth a look before the map is played.
-      const notes: string[] = [];
+      const notes: string[] = mirrorNote ? [mirrorNote] : [];
       const spots = Math.round(long.plan.islandsPerStep * steps) * placed;
       if (spots > 0) notes.push(t("it leaves {n, plural, one {# small spot} other {# small spots}} units cannot walk on, which View ▸ Walkability shows", { n: spots }));
       if (long.plan.seam > VISIBLE_SEAM) notes.push(t("its middle does not repeat cleanly, so the joins show"));
       setStatus(notes.length ? `${base} — ${notes.join("; ")}` : base);
     } else {
-      setStatus(asTerrain ? t("Placed {what} ({w}×{h}) as terrain at tile {x}, {y} — Esc or right-click to stop placing", where) : t("Placed {what} ({w}×{h}) at tile {x}, {y} — Esc or right-click to stop placing", where));
+      const base = asTerrain ? t("Placed {what} ({w}×{h}) as terrain at tile {x}, {y} — Esc or right-click to stop placing", where) : t("Placed {what} ({w}×{h}) at tile {x}, {y} — Esc or right-click to stop placing", where);
+      setStatus(mirrorNote ? `${base}; ${mirrorNote}` : base);
     }
     return true;
   }, [store, tileset, catalogue, ghostsAt, apply, commit, setSelected, setStatus]);
@@ -232,8 +250,8 @@ export function useDoodadTools() {
     const scn = store.get(scenarioAtom);
     const mode = store.get(symmetryAtom);
     if (!scn || mode === "none" || indices.length === 0) return indices;
-    return withMirrorImages(mode, placedDoodads(scn, catalogue), indices, scn.width, scn.height, MIRROR_MATCH_PX);
-  }, [store, catalogue]);
+    return withMirrorImages(mode, placedDoodads(scn, catalogue, tileset), indices, scn.width, scn.height, MIRROR_MATCH_PX);
+  }, [store, catalogue, tileset]);
 
   const select = useCallback((indices: number[], additive = false) => {
     if (!additive) { setSelected(withImages(indices)); return; }
@@ -265,7 +283,7 @@ export function useDoodadTools() {
     if (!scn) return;
     const indices = store.get(selectedDoodadsAtom).filter((i) => scn.doodads[i]);
     // Under a symmetry mode the mirror images in the selection move as mirror images.
-    const moves = mirrorMoves(store.get(symmetryAtom), placedDoodads(scn, catalogue), indices, { x: p.px, y: p.py }, scn.width, scn.height, MIRROR_MATCH_PX);
+    const moves = mirrorMoves(store.get(symmetryAtom), placedDoodads(scn, catalogue, tileset), indices, { x: p.px, y: p.py }, scn.width, scn.height, MIRROR_MATCH_PX);
     // The column the snap is measured from: the first doodad's own left column, the way a
     // location move snaps the first box's corner rather than the pointer. Snapping the
     // *offset* instead only preserved whatever parity the selection already had, so a
@@ -279,7 +297,7 @@ export function useDoodadTools() {
       if (def && (moves.get(i) ?? SAME_MOVE) === SAME_MOVE) { anchorX = doodadOrigin(def, rec.x, rec.y).x; break; }
     }
     drag.current = { from: p, indices, moves, anchorX, dx: 0, dy: 0 };
-  }, [store, catalogue]);
+  }, [store, catalogue, tileset]);
 
   /** Track the pointer; returns true when the offset (in tiles, snapped) changed. */
   const dragTo = useCallback((p: MapPoint): boolean => {

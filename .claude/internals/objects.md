@@ -132,9 +132,27 @@ ramps are as before, and across the deck is sound for Badlands, all six Platform
 Desert and Jungle #270/#271 (walk-breaks 0–5%, the added cells 100% road on Badlands). Jungle #268/#269
 (13%) and the Ice bridges (15%) are not offered across; Ice widens straight down. 28 of the 40 ramps are
 offered their diagonal now (more wall ramps than before pass `islandsPerStep === 0`). ≤ 30 ms a plan.
-Not done: a mirrored image under a symmetry mode stretches the same doodad the same way (it needs the
-doodad's twin and the mirrored axis), tiles from outside the doodad to hide the joins, the plugin API, and
-a marked area. `tests/stretch.test.ts`.
+**Twins (`src/editor/doodadTwin.ts`, 2026-11-13).** Across a left-right mirror (`mirrorsAcross`: modes
+`h` and `hv`, element 1) a doodad's image is `mirroredDoodad`: `doodadTwin(tileset, catalogue, def)`, the
+doodad of the same footprint whose tiles in the mirrored cells are the mirrored pictures (mean pixel
+difference ≤ `TWIN_PICTURE` 8; the game's pairs measure 0–5.8, strangers 20+), in groups with the same
+flag word, with at most `TWIN_FLAGS` 20% of minitile flag words unlike the mirrored ones; same category
+first, then fewest unlike flags, then nearest picture; cached per catalogue. **The flags cannot be
+required to match**, which was the first version and found no twin for a Desert ramp or a Platform
+bridge: Blizzard's pairs are pixel mirrors whose VF4 flags were set by hand and not alike — Desert
+Compound 30 of 736 minitiles (walkable, mid, ramp bits), Desert cliff 83 of 736, Ice cliff 16 of 480, a
+Platform bridge 7 of 992; Badlands, Jungle, Ashworld, Twilight cliff ramps exact. The flag check is still
+what keeps a Compound ramp from pairing with the High Compound ramp of the same picture. `twinDifference`
+is that count and `placeAt` puts it in the status line, since it is a real asymmetry on a mirrored map.
+All 40 ramps and 18 bridges have a twin, and the twin's twin is the doodad. A *stretched* doodad's image
+is not the twin re-planned (twins' plans can differ by a cell, the local search being what it is) but
+the stretched grid mirrored cell for cell through a tile → twin-tile map built from the two shipped
+footprints, `required` through the same kind of map, `stretched.offset.x` mirrored within the footprint.
+`ghostsAt` uses it for the image's def, so the ghost, the ground check and the placement follow;
+`placedDoodads` gives a doodad and its twin one `kind` (the lower id), so `withMirrorImages` selects and
+moves the pair. No twin exists for a top-bottom mirror or a turn (the game has no flip bit for it and no
+doodad drawn that way), and those images still try the same doodad. `tests/doodad-twin.test.ts`.
+Not done: tiles from outside the doodad to hide the joins, and the plugin API. `tests/stretch.test.ts`.
 
 The palette's preview size (`doodadThumbSizeAtom`, `scmjs.doodadThumbSize`, small / medium / large)
 sets `DoodadThumb`'s box and, through `--doodad-thumb-w` / `-h` on `.doodad-grid`, the cell width the

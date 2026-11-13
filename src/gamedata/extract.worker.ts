@@ -73,6 +73,8 @@ export interface ExtractRequest {
    * (or the copy underneath), and its hash is the set's.
    */
   mod?: { name: string; files: { path: string; data: Blob | ArrayBuffer }[]; layout?: "game" };
+  /** 1.16.1's language module (`Local.dll`) from the folder the archives were picked in: kept with the play set (`play.ts#PLAY_LANGUAGE`). */
+  language?: ArrayBuffer;
 }
 
 export type ExtractResponse =
@@ -185,7 +187,7 @@ self.onmessage = async (e: MessageEvent<ExtractRequest>) => {
               { sfxDat: result.files.get("arr/sfxdata.dat"), sfxTbl: result.files.get("arr/sfxdata.tbl"), imagesDat: result.files.get("arr/images.dat"), imagesTbl: result.files.get("arr/images.tbl") },
               progressOver(0.88, 0.12),
               (path) => result.files.has(path),
-              { lighting: req.lighting === true },
+              { lighting: req.lighting === true, ...(req.language ? { language: new Uint8Array(req.language) } : {}) },
             );
           } catch (err) {
             // The editor's copy is whole without it.

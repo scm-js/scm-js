@@ -40,7 +40,9 @@ import { msg } from "../i18n";
  * offers the lighting from such a copy and plays without it from any other. 5 (2026-10-13):
  * the faces Remastered's command icons are drawn on, which the play page draws the icons
  * straight on the console without. 6 (2026-10-13): the beat of the count down to a game between
- * people (`PLAY_COUNTDOWN`), which the play page sounds a tone of its own without.
+ * people (`PLAY_COUNTDOWN`), which the play page sounds a tone of its own without. The language
+ * module (`PLAY_LANGUAGE`, 2026-11-13) is not a version: the play page asks every copy for it and
+ * does without, and it refuses a version it does not list (scm-sim `web/gameSource.ts#PLAY_VERSIONS`).
  */
 export const PLAY_VERSION = 6;
 
@@ -57,6 +59,16 @@ export const PLAY_COUNTDOWN = "sound\\glue\\countdown.wav";
  * explosion by. Kept with the lighting's layers, and of no use without them.
  */
 export const PLAY_LIGHTS = "anim\\main.lit";
+
+/**
+ * 1.16.1's language module: `Local.dll`, a file of the game's folder beside `StarCraft.exe` and in
+ * none of its archives. Its accelerator tables hold the game's keys for control groups (Ctrl or Alt
+ * with a digit) and the screen places (F2–F4), which the play page hands to the game's own code.
+ * Kept at the top of the copy under this name, lower case, which is the name the play page asks the
+ * copy for (scm-sim `src/exact/named.ts#LANGUAGE_MODULE`). Optional, and outside `PLAY_VERSION`: a
+ * Remastered installation has no such file, and a copy without it plays with those keys doing nothing.
+ */
+export const PLAY_LANGUAGE = "local.dll";
 
 /** What a sprite file keeps in a copy for playing: the editor's two layers and the lighting's four. */
 const PLAY_ANIM_LAYERS: readonly string[] = [...ANIM_KEPT_LAYERS, ...ANIM_LIT_LAYERS];
@@ -158,6 +170,8 @@ export interface PlayStamp {
   bytes: number;
   /** The Remastered sprites kept the layers the real-time lighting reads (asked for at install). */
   lit?: boolean;
+  /** The bytes of the language module kept with the set (`PLAY_LANGUAGE`): a 1.16.1 folder that had one. */
+  language?: number;
 }
 
 /** A member under the stored copy: the game's path, lower case, forward slashes. */
@@ -173,7 +187,9 @@ const stored = (member: string) => member.toLowerCase().replaceAll("\\", "/");
  * `tables`: the sound and image tables, which the extraction has already read. `has`:
  * whether the copy holds a path already (the editor's own files), so nothing is read twice.
  * `options.lighting`: keep the lighting's layers in every Remastered sprite — then the
- * sprites the copy holds are read again too, and written over whole.
+ * sprites the copy holds are read again too, and written over whole. `options.language`: the
+ * folder's language module (`PLAY_LANGUAGE`), which no archive holds and `read` cannot answer —
+ * written with a set that is whole, and left out of one that is not.
  */
 export async function copyPlaySet(
   read: (member: string) => Promise<Uint8Array | null>,
@@ -181,7 +197,7 @@ export async function copyPlaySet(
   tables: { sfxDat: Uint8Array | undefined; sfxTbl: Uint8Array | undefined; imagesDat?: Uint8Array; imagesTbl?: Uint8Array },
   progress?: ExtractProgress,
   has: (path: string) => boolean = () => false,
-  options: { lighting?: boolean } = {},
+  options: { lighting?: boolean; language?: Uint8Array } = {},
 ): Promise<PlayStamp | null> {
   const lighting = options.lighting === true;
   const sounds = tables.sfxDat && tables.sfxTbl ? playSoundMembers(tables.sfxDat, tables.sfxTbl) : [];
@@ -235,5 +251,9 @@ export async function copyPlaySet(
   // Nearly all of the game's sounds, or the copy is not one to play from: a source whose sounds could not be read
   // (mopaq before 1.6 decoded none of an installation's compressed ones) would otherwise make a silent game. Remastered
   // lacks one of the eleven hundred. (`lit` only where a sprite did keep such a layer: a 1.16 installation has none.)
-  return sounds.length > 0 && heard >= sounds.length * 0.95 ? { version: PLAY_VERSION, files, sounds: heard, bytes, ...(lit ? { lit: true } : {}) } : null;
+  if (sounds.length === 0 || heard < sounds.length * 0.95) return null;
+  // The language module, from the folder rather than the archives: only beside a set that can be played from.
+  const language = options.language?.length ? options.language : null;
+  if (language) { await write(PLAY_LANGUAGE, language); files++; bytes += language.length; }
+  return { version: PLAY_VERSION, files, sounds: heard, bytes, ...(lit ? { lit: true } : {}), ...(language ? { language: language.length } : {}) };
 }

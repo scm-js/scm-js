@@ -116,6 +116,16 @@ effects, selection circles). The editor opens none of them. They are for the pla
 scmjs.dev/play, which runs maps and replays in the browser from the same copy. The desktop
 app's own copy leaves them out.
 
+From a classic installation's folder the copy also keeps `Local.dll`, the file beside
+`StarCraft.exe` (in no archive) that holds the game's keyboard shortcuts for control
+groups (Ctrl or Alt with a number) and the screen positions on F2–F4. The play page hands
+those keys to the game when it shows the game's own screen (an option of the play page).
+Remastered has no such file, and a copy without it still plays; on the game's own screen
+those keys then do nothing. A copy made before the editor kept it, or from `StarDat.mpq`
+and `BrooDat.mpq` picked on their own, is marked on the [Game Data
+page](https://scmjs.dev/editor/data); to add the file, remove the copy and choose the
+StarCraft folder again.
+
 From a Remastered installation, the copy can also keep what the game's real-time lighting
 reads: tick **Keep the files for real-time lighting on the play page** when you choose the
 folder. Choosing the folder again with the box ticked adds them to an existing copy.

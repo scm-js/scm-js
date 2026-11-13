@@ -245,6 +245,34 @@ const SCENES = [
     await p.page.mouse.up();
   }),
 
+  // A cliff ramp pulled out along its cliff: a plateau laid with the isometric brush, the ramp picked,
+  // pressed where it fits and dragged, the picture taken with the button still down.
+  scene("stretch", "mode=isom", async (p) => {
+    await p.brush(7);
+    await p.terrain("High Dirt");
+    await p.stroke(Array.from({ length: 21 }, (_, i) => at(330 + i * 16, 200 + i * 8)));
+    await p.page.click(rail(1)); await p.wait(800);
+    await p.search("#77");
+    await p.page.locator(".palette .doodad").first().click(); await p.wait(400);
+    // The ramp fits one edge of the plateau only: try spots until the status bar says it went down.
+    const placed = async () => /Placed Cliff/.test((await p.page.locator("body").innerText()).split("\n").filter((l) => /Placed|Can't place/.test(l)).at(-1) ?? "");
+    let spot = null;
+    for (let y = 230; y < 520 && !spot; y += 16) {
+      for (let x = 180; x < 520 && !spot; x += 32) {
+        await p.page.mouse.click(...at(x, y)); await p.wait(40);
+        if (await placed()) spot = [x, y];
+      }
+    }
+    if (!spot) throw new Error("no place on the plateau took the ramp");
+    await p.page.keyboard.press("Control+z"); await p.wait(300);
+    await p.page.mouse.move(...at(...spot)); await p.page.mouse.down();
+    await p.page.mouse.move(...at(spot[0] + 192, spot[1] + 96), { steps: 12 }); await p.wait(400);
+    // A plugin's update notice, if one is up, is not part of the picture.
+    await p.page.evaluate(() => document.querySelectorAll(".toasts").forEach((el) => { el.style.visibility = "hidden"; }));
+    await p.take("doodad-stretch", MAP);
+    await p.page.mouse.up();
+  }),
+
   scene("desert", "layer=doodads", async (p) => {
     await p.drop("(2)Binary Burghs.scx");
     await p.minimap(0.5, 0.5);

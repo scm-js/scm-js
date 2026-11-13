@@ -506,7 +506,7 @@ A ramp can be made wider and a bridge longer as it is placed. With the doodad pi
 press where it should stand and drag along it instead of clicking. The ghost grows by a
 step for every two tiles of the drag, and releasing the button places it.
 
-![A Badlands cliff ramp stretched five steps along its cliff](images/doodad-stretch.webp)
+![A cliff ramp being stretched three steps along its cliff](images/doodad-stretch.webp)
 
 A doodad has ends and a middle: a ramp is two side walls with a slope between them, a
 bridge two landings with a deck between them. The stretch moves the ends apart and lays

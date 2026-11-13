@@ -49,7 +49,7 @@ function Row({ k, children }: { k: string; children: React.ReactNode }) {
   );
 }
 
-const MODE_LABEL = { isom: msg("Isometric"), rect: msg("Rectangular"), tile: msg("Tile"), blend: msg("Blend"), heal: msg("Heal") } as const;
+const MODE_LABEL = { isom: msg("Isometric"), rect: msg("Rectangular"), tile: msg("Tile"), blend: msg("Blend"), heal: msg("Heal"), pin: msg("Pin") } as const;
 
 function TerrainProps() {
   const info = TILESET_BY_ID[useAtomValue(mapTilesetAtom)];
@@ -75,6 +75,7 @@ function TerrainProps() {
         {mode === "isom" || mode === "rect"
           ? <>{brushTerrain ? terrainLabel(brushTerrain) : translate(terrainName(info, terrain))}{mode === "rect" && variation >= 0 ? <span className="faint"> {t("· var {variation}", { variation })}</span> : null}</>
           : mode === "heal" ? t("joins that show")
+          : mode === "pin" ? t("tiles to keep")
           : <span className="row" style={{ gap: 6 }}><TileThumb loaded={loaded} id={tile} size={16} /><span className="mono">{hexTile(tile)}</span></span>}
       </Row>
       <Row k={t("Mode")}>{MODE_LABEL[mode]}</Row>

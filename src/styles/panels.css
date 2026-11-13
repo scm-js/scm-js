@@ -171,6 +171,14 @@ body.dock-resizing iframe {
   padding: 0 6px;
   background: var(--bg-1);
 }
+/* Six tabs in the narrowest palette: closer together, and onto a second row before one is cut off. */
+.terrain-palette .tabs-list {
+  gap: 0;
+  flex-wrap: wrap;
+}
+.terrain-palette .tabs.compact .tab {
+  padding: 0 4px;
+}
 .palette-toolbar {
   display: flex;
   align-items: center;

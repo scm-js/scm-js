@@ -1207,7 +1207,7 @@ export function queryApi(store: Store): QueryApi {
       const def = l?.doodads.byId.get(doodadId);
       if (!scn || !l || !def) return null;
       // The rule itself, not the palette's switch: a plugin asking is asking whether StarEdit would allow it.
-      return checkDoodadPlacement(scn, l.tileset, def, tx, ty, { placeAnywhere: false, snapToGrid: false, asTerrain: false });
+      return checkDoodadPlacement(scn, l.tileset, def, tx, ty, { placeAnywhere: false, snapToGrid: false, asTerrain: false, pin: false });
     },
     validate: () => {
       const scn = scenario();

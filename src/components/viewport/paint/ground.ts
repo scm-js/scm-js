@@ -33,6 +33,7 @@ export interface GroundLayer {
   elevation: boolean;
   buildability: boolean;
   seams: boolean;
+  pins: Uint8Array | null;
   /** The water-cycle step the layer's cycling tiles show. */
   step: number;
   /** Whether any visible tile cycles — what decides if a step repaints. */
@@ -80,6 +81,8 @@ export interface Ground {
   buildability: boolean;
   /** View ▸ Seam Overlay: a line along every join between two tiles that shows. */
   seams: boolean;
+  /** The pinned tiles to mark (editor/pins.ts), a byte per tile, or null to mark none. */
+  pins: Uint8Array | null;
   /** Set while View ▸ Animate Water is on; the 2x terrain's water and lava then move. */
   motion: GroundMotion | null;
   /**
@@ -95,6 +98,8 @@ export interface Ground {
 const MID = "rgba(230,185,92,0.30)";
 const HIGH = "rgba(240,90,90,0.32)";
 const UNBUILDABLE = "rgba(80,140,240,0.26)";
+const PINNED = "rgba(60,220,200,0.12)";
+const PIN_TAB = "rgba(60,220,200,0.9)";
 const HATCH = "rgba(80,140,240,0.55)";
 
 /**
@@ -149,7 +154,7 @@ export function paintGround(v: PaintView, cache: { current: GroundLayer | null }
   const sameGround = layer !== null && layer.scenario === g.scenario && layer.tiles === tiles && layer.assets === g.assets && layer.effects === effects &&
     layer.w === v.w && layer.h === v.h && layer.dpr === dpr && layer.tilePx === tilePx &&
     layer.terrainRevision === g.terrainRevision && layer.doodadsRevision === g.doodadsRevision &&
-    layer.elevation === g.elevation && layer.buildability === g.buildability && layer.seams === g.seams;
+    layer.elevation === g.elevation && layer.buildability === g.buildability && layer.seams === g.seams && layer.pins === g.pins;
   // The layer sits at the scroll position rounded to a device pixel, and every tile at
   // its own place on the map rounded likewise. A tile's pixels then depend on the tile
   // alone, not on the scroll, so a scroll moves the picture by a whole number of
@@ -189,7 +194,7 @@ export function paintGround(v: PaintView, cache: { current: GroundLayer | null }
     }
     layer = {
       canvas, scenario: g.scenario, tiles, assets: g.assets, ox, oy, w: v.w, h: v.h, dpr, tilePx,
-      terrainRevision: g.terrainRevision, doodadsRevision: g.doodadsRevision, elevation: g.elevation, buildability: g.buildability, seams: g.seams,
+      terrainRevision: g.terrainRevision, doodadsRevision: g.doodadsRevision, elevation: g.elevation, buildability: g.buildability, seams: g.seams, pins: g.pins,
       step, animated: false, effects, mask, version: (layer?.version ?? 0) + 1, moving: false,
     };
     cache.current = layer;
@@ -258,6 +263,19 @@ export function paintGround(v: PaintView, cache: { current: GroundLayer | null }
           if (hatched) lc.drawImage(hatchStamp(pw, ph, dpr), px, py);
         }
       }
+      if (g.pins?.[ty * mapW + tx]) {
+        // A wash over the tile and a tab in its corner, which still reads when the wash is lost on bright ground.
+        lc.fillStyle = PINNED;
+        lc.fillRect(px, py, pw, ph);
+        const tab = Math.max(2, Math.round(pw / 4));
+        lc.fillStyle = PIN_TAB;
+        lc.beginPath();
+        lc.moveTo(px, py);
+        lc.lineTo(px + tab, py);
+        lc.lineTo(px, py + tab);
+        lc.closePath();
+        lc.fill();
+      }
       if (g.seams && megatile > 0) {
         for (const side of SIDES) {
           const other = neighbour(tx + (side === "left" ? -1 : side === "right" ? 1 : 0), ty + (side === "top" ? -1 : side === "bottom" ? 1 : 0));
@@ -272,7 +290,7 @@ export function paintGround(v: PaintView, cache: { current: GroundLayer | null }
         }
       }
     };
-    const overlays = !flat && (g.elevation || g.buildability || g.seams);
+    const overlays = !flat && (g.elevation || g.buildability || g.seams || g.pins !== null);
     // Laid from the map's corner, so a strip a scroll uncovers continues the lines beside it.
     const marker = lacks ? missingTilePattern(lc, dpr, -ox, -oy) : null;
     /** Blit the tiles of a block of the map — all of them, or only the ones that cycle — and say whether any cycles. */

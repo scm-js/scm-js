@@ -52,7 +52,7 @@ import {
 } from "../../atoms/editorAtoms";
 import { animateUnitsSpeedAtom, animateWaterSpeedAtom, gridLookAtom, preferencesAtom, remasteredEffectsAtom } from "../../atoms/preferencesAtoms";
 import { openDialogAtom, statusMessageAtom } from "../../atoms/uiAtoms";
-import { activeDocumentIdAtom, canEdit, doodadsRevisionAtom, locationsAtom, scenarioAtom, startLocationsAtom, terrainRevisionAtom, unitsRevisionAtom, viewOnlyAtom } from "../../atoms/documentAtoms";
+import { activeDocumentIdAtom, canEdit, doodadsRevisionAtom, locationsAtom, pinnedTilesAtom, scenarioAtom, startLocationsAtom, terrainRevisionAtom, unitsRevisionAtom, viewOnlyAtom } from "../../atoms/documentAtoms";
 import { useTileset } from "../../hooks/useTileset";
 import { useMissingTerrain } from "../../hooks/useMissingTerrain";
 import { paintsTiles, useTerrainTools, type MapPoint } from "../../hooks/useTerrainTools";
@@ -299,6 +299,7 @@ export default function MapViewport() {
   const open = useSetAtom(openDialogAtom);
   const scenario = useAtomValue(scenarioAtom);
   const terrainRevision = useAtomValue(terrainRevisionAtom);
+  const pinned = useAtomValue(pinnedTilesAtom);
   /** Blend mode: a click picks the anchor cell; tiles are placed from the palette, never by stroke. */
   const blending = layer === "terrain" && scenario !== null && terrainMode === "blend";
   // (Never on a view-only map, so no brush outline promises a stroke that will not happen.)
@@ -389,6 +390,7 @@ export default function MapViewport() {
     if (tiles && tilesetAssets) {
       ({ animated: animatedInView, moving: movingInView } = paintGround(v, groundLayerRef, {
         scenario, tiles, assets: tilesetAssets, terrainRevision, doodadsRevision, elevation: flags.elevation, buildability: flags.buildability, seams: flags.seams,
+        pins: flags.pins || (layer === "terrain" && terrainMode === "pin") ? pinned : null,
         lacks: scenario ? mapLacks(tiles, tilesetIndex(scenario), tilesetAssets.tileset.groups.length, terrainRevision + doodadsRevision) : null,
         motion: flags.animateWater ? { pass: effectPass, seconds: (performance.now() / 1000) * waterSpeed, tune: effectTune } : null,
       }));
@@ -567,7 +569,7 @@ export default function MapViewport() {
       lastViewportRect.current = rect;
       setViewportRect(rect);
     }
-  }, [size, tilePx, zoom, mapW, mapH, worldW, worldH, tileset, flags, gridSize, gridLook, layer, brush, setViewportRect, scenario, tilesetAssets, terrainRevision, locations, startLocations, terrainMode, painting, blending, blendAnchor, tools, tilesetLoading, unitsEditing, unitPlacing, unitTools, unitAssets, animator, selectedUnits, showFog, fogViewPlayer, fogPainting, fogMode, doodadsEditing, doodadPlacing, doodadTools, doodadsRevision, selectedDoodads, clipEditing, clipPasting, clip, clipParts, clipSelection, clipTools, picking, mapPick, tooling, mapTool, overlays, spritesEditing, spritePlacing, spriteTools, selectedSprites, locationsEditing, locationTools, selectedLocations, symmetry, flashes, waterSpeed, effectTune, effectPass]);
+  }, [size, tilePx, zoom, mapW, mapH, worldW, worldH, tileset, flags, gridSize, gridLook, layer, brush, setViewportRect, scenario, tilesetAssets, terrainRevision, pinned, locations, startLocations, terrainMode, painting, blending, blendAnchor, tools, tilesetLoading, unitsEditing, unitPlacing, unitTools, unitAssets, animator, selectedUnits, showFog, fogViewPlayer, fogPainting, fogMode, doodadsEditing, doodadPlacing, doodadTools, doodadsRevision, selectedDoodads, clipEditing, clipPasting, clip, clipParts, clipSelection, clipTools, picking, mapPick, tooling, mapTool, overlays, spritesEditing, spritePlacing, spriteTools, selectedSprites, locationsEditing, locationTools, selectedLocations, symmetry, flashes, waterSpeed, effectTune, effectPass]);
 
   /**
    * Every repaint request — a pointer move, a scroll, a render that changed what is drawn —

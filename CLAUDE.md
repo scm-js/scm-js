@@ -26,7 +26,7 @@ reach, and the traps in them are not visible from the code.
 | Working on | Read first |
 | --- | --- |
 | `src/formats/chk/**` — the container, the section registry, `scenario.ts`, `create.ts`, `mpq/scm.ts` | `chk-format.md` |
-| `src/editor/{terrain,isom,blend,heal,symmetry}.ts`, `useTerrainTools`, `data/isomTables.ts` | `terrain.md` |
+| `src/editor/{terrain,isom,blend,heal,pins,symmetry}.ts`, `useTerrainTools`, `data/isomTables.ts` | `terrain.md` |
 | `src/editor/{sprites,locations,fog,doodads,stretch,doodadTwin}.ts` and their hooks, `viewport/fog.ts` | `objects.md` |
 | `src/formats/{dat,units}/**`, `src/editor/{units,placement}.ts`, `useUnitTools`, `data/units.ts` | `units.md` |
 | `src/editor/{clipboard,history}.ts`, `useClipboardTools` | `clipboard.md` |

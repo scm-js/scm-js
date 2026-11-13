@@ -113,6 +113,15 @@ the soundness measure, is taken *before* this pass for the reason above. A third
 same-walkability tiles for better seams changed nothing on any cliff ramp and was removed; the dark
 stripe every two columns along a Badlands ramp's lower edge is not something another tile of the doodad
 fixes. Planning is ≤ 35 ms for the largest doodad and axis.
+**Widening a bridge is not solved.** The user asked for it of the Twilight bridge, which is offered its
+deck's diagonal only. Across the deck the middle of the span widens well (deck tile beside deck tile),
+and the two ends do not: a line across the bridge at its end runs from one rail's tip to the other's with
+no deck between them, so the tips are what is laid again. Badlands, Ice and Desert #83 bridges do widen,
+straight down (`s`). Two things were tried in the cut search and taken out: letting a line be *parted*
+(its cells stay or move, the gap left bare) changed no plan for the Twilight bridge, since bare ground
+beside a rail tip costs more than a second rail tip; letting a line borrow its fill from the lines
+beside it left the Twilight bridge unsound (27% walk-breaks) and cost Ashworld #46 and both Ice bridges
+the axis they had. It wants an end piece the doodad does not have, or a different model for the ends.
 Not done: a mirrored image under a symmetry mode stretches the same doodad the same way (it needs the
 doodad's twin and the mirrored axis), tiles from outside the doodad to hide the joins, the plugin API, and
 a marked area. `tests/stretch.test.ts`.

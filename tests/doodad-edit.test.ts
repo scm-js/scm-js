@@ -14,6 +14,7 @@ import {
   applyDoodadChanges, applySpriteChanges, checkDoodadPlacement, convertDoodads, DEFAULT_DOODAD_PLACEMENT, doodadAt, doodadsInBox, groundUnder,
   placeDoodad, placeDoodadAsTerrain, removeDoodads, snapDoodad, strandedDoodads, updateDoodads, type DoodadEdit,
 } from "../src/editor/doodads";
+import { stretchDoodad } from "../src/editor/stretch";
 
 /* ── A synthetic tileset: 2 flat pairs, a 2×1 tree with a sprite overlay, a 4×2 ramp ── */
 
@@ -275,6 +276,23 @@ describe("placing and removing", () => {
     expect(scn.tiles[3 * 16 + 4]).toBe(0x60);
     expect(scn.editorTiles[3 * 16 + 4]).toBe(0x20);
     expect(scn.editorTiles[3 * 16 + 5]).toBe(0x30);
+  });
+
+  it("a stretched doodad goes down as terrain, its overlay where the doodad as shipped stands", () => {
+    const scn = fresh();
+    // The tree pulled three rows up from where it was pressed: the footprint grows upwards.
+    const long = stretchDoodad(ts, tree, "s", -3);
+    expect([long.width, long.height]).toEqual([2, 4]);
+    expect(long.stretched.offset).toEqual({ x: 0, y: -3 });
+    const edit = placeDoodadAsTerrain(scn, long, 4, 1, 5);
+    expect(edit.tiles.map((c) => c.at).sort((a, b) => a - b)).toEqual([1, 2, 3, 4].flatMap((y) => [y * 16 + 4, y * 16 + 5]));
+    expect(edit.tiles.every((c) => c.after === 0x60 || c.after === 0x61)).toBe(true);
+    // One overlay, at the centre of the 2×1 tree standing at (4, 4).
+    expect(edit.sprites.map((c) => c.after && [c.after.spriteId, c.after.x, c.after.y])).toEqual([[300, 4 * 32 + 32, 4 * 32 + 16]]);
+    // The ground check reads the stretched footprint: every added cell wants what its source wanted.
+    expect(checkDoodadPlacement(scn, ts, long, 4, 1, opts).ok).toBe(true);
+    expect(checkDoodadPlacement(scn, ts, long, 5, 1, opts).ok).toBe(false);
+    expect(checkDoodadPlacement(scn, ts, long, 4, 6, opts).outOfBounds).toBe(true);
   });
 
   it("placing as terrain stamps both sections and the overlay with no record; undo restores the ground", () => {

@@ -513,6 +513,9 @@ export default function MapViewport() {
       drawIsomDiamonds(v, tools.ghostDiamondsAt(hp));
     } else if (doodadDrag?.mode === "move") {
       for (const g of doodadTools.dragGhosts()) drawDoodadGhost(v, paint, tilesetAssets, g, 0.6);
+    } else if (doodadDrag?.mode === "stretch") {
+      // The doodad pulled out along the drag, standing where the press put it.
+      doodadTools.ghostsAt(doodadDrag.from).forEach((ghost, i) => drawDoodadGhost(v, paint, tilesetAssets, ghost, ghost.verdict.ok ? (i === 0 ? 0.75 : 0.5) : 0.45));
     } else if (hp && doodadDrag?.mode === "marquee") {
       drawMarquee(v, doodadDrag.from, doodadDrag.to);
     } else if (hp && spriteDrag?.mode === "marquee") {
@@ -949,7 +952,7 @@ export default function MapViewport() {
    */
   const objectLayer = (): ObjectLayer | null => {
     const layer = editableObjectLayer();
-    return layer && viewOnly ? { ...layer, placing: false, beginDrag: () => {}, dragTo: () => {}, endDrag: () => {}, placeAt: () => {} } : layer;
+    return layer && viewOnly ? { ...layer, placing: false, beginDrag: () => {}, dragTo: () => {}, endDrag: () => {}, placeAt: () => {}, stretch: undefined } : layer;
   };
 
   /** The active object layer as its gesture sees it; the three differ only in what they pick and box-select by. */
@@ -973,6 +976,7 @@ export default function MapViewport() {
         select: doodadTools.select, beginDrag: doodadTools.beginDrag, dragTo: doodadTools.dragTo, endDrag: doodadTools.endDrag,
         selectInBox: (a, b, additive) => doodadTools.selectInBox({ x0: tileOf(a.px), y0: tileOf(a.py), x1: tileOf(b.px), y1: tileOf(b.py) }, additive),
         placeAt: (p) => { doodadTools.placeAt(p); },
+        stretch: { to: (from, p, any) => { doodadTools.stretchTo(from, p, any); }, end: doodadTools.endStretch },
       };
     }
     if (spritesEditing) {

@@ -1,0 +1,363 @@
+import { describe, expect, it } from "vitest";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import { loadTileset, megatileForTile, TileFlag, type Tileset } from "../src/formats/tileset/decode";
+import { buildDoodadCatalogue } from "../src/formats/tileset/doodads";
+import { TILESET_FILENAMES } from "../src/formats/tileset/load";
+import { decodeTbl } from "../src/formats/dat/tbl";
+import { TILESETS } from "../src/data/tilesets";
+import type { Scenario } from "../src/formats/chk/scenario";
+import { baseTerrain, flatTerrain } from "../src/formats/tileset/terrain";
+import { paintIsom } from "../src/editor/isom";
+import { checkDoodadPlacement, DEFAULT_DOODAD_PLACEMENT } from "../src/editor/doodads";
+import {
+  isStretched, soundAxes, STRETCH_AXES, STRETCH_STEP, stretchDoodad, stretchFromDrag, stretchPiece, stretchPlan, VISIBLE_SEAM, type TilePiece,
+} from "../src/editor/stretch";
+
+/* ── A synthetic tileset: solid colours and two-colour halves ── */
+
+const RED = 1, GREEN = 2, BLUE = 3;
+
+/**
+ * Megatiles: 1 red, 2 green, 3 blue, 4 red over green, 5 green over blue, 6 red beside
+ * green, 7 green beside blue. All of them sit in group 2, so megatile `m` is tile
+ * `0x20 + m - 1`. Green is floor a unit walks; red and blue are wall.
+ */
+function synthetic(): Tileset {
+  const palette = new Uint8Array(256 * 4);
+  const set = (i: number, r: number, g: number, b: number) => { palette[i * 4] = r; palette[i * 4 + 1] = g; palette[i * 4 + 2] = b; palette[i * 4 + 3] = 255; };
+  set(RED, 255, 0, 0);
+  set(GREEN, 0, 255, 0);
+  set(BLUE, 0, 0, 255);
+  const minitiles = new Uint8Array(4 * 64);
+  minitiles.fill(RED, 64, 128);
+  minitiles.fill(GREEN, 128, 192);
+  minitiles.fill(BLUE, 192, 256);
+  const megatileCount = 8;
+  const refs = new Uint32Array(megatileCount * 16);
+  const paint = (m: number, colour: (col: number, row: number) => number) => { for (let i = 0; i < 16; i++) refs[m * 16 + i] = colour(i % 4, i >> 2) << 1; };
+  paint(1, () => RED);
+  paint(2, () => GREEN);
+  paint(3, () => BLUE);
+  paint(4, (_c, r) => (r < 2 ? RED : GREEN));
+  paint(5, (_c, r) => (r < 2 ? GREEN : BLUE));
+  paint(6, (c) => (c < 2 ? RED : GREEN));
+  paint(7, (c) => (c < 2 ? GREEN : BLUE));
+  const cv5 = new Uint8Array(3 * 52);
+  const view = new DataView(cv5.buffer);
+  view.setUint16(2 * 52, 2, true);
+  for (let s = 0; s < 7; s++) view.setUint16(2 * 52 + 20 + s * 2, s + 1, true);
+  const vx4 = new Uint8Array(megatileCount * 32);
+  const v = new DataView(vx4.buffer);
+  refs.forEach((ref, i) => v.setUint16(i * 2, ref, true));
+  const vf4 = new Uint8Array(megatileCount * 32);
+  const flags = new DataView(vf4.buffer);
+  refs.forEach((ref, i) => flags.setUint16(i * 2, ref >> 1 === GREEN ? 1 : 0, true));
+  return loadTileset({ cv5, vf4, vr4: minitiles, vx4, wpe: palette.slice(0, 1024) });
+}
+
+/** A repeatable stand-in for Math.random. */
+function seeded(seed: number): () => number {
+  let s = seed;
+  return () => { s = (s * 1103515245 + 12345) & 0x7fffffff; return s / 0x7fffffff; };
+}
+
+const ts = synthetic();
+const [R, G, B, RG_V, GB_V, RG_H, GB_H] = [0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26];
+const piece = (width: number, height: number, tiles: number[], required?: number[]): TilePiece =>
+  ({ width, height, tiles: Uint16Array.from(tiles), required: required && Uint16Array.from(required) });
+const rows = (g: { width: number; height: number; tiles: Uint16Array }) =>
+  Array.from({ length: g.height }, (_, r) => [...g.tiles.subarray(r * g.width, (r + 1) * g.width)]);
+
+describe("the cut", () => {
+  it("repeats the cell that joins itself, wherever in the line it is", () => {
+    // A column: red fading to green, green, green fading to blue, blue. Only the green repeats without a seam.
+    const column = piece(1, 4, [RG_V, G, GB_V, B]);
+    const plan = stretchPlan(ts, column, "s");
+    expect(plan.lines).toEqual([[0, 1, 2, 3]]);
+    expect(plan.cut).toEqual([1]);
+    expect(plan.seam).toBe(0);
+    expect(rows(stretchPiece(column, plan, 2))).toEqual([[RG_V], [G], [G], [G], [GB_V], [B]]);
+  });
+
+  it("goes through the middle when every cell would do", () => {
+    const plan = stretchPlan(ts, piece(1, 5, [G, G, G, G, G]), "s");
+    expect(plan.cut).toEqual([2]);
+  });
+
+  it("does not open a hole where the piece has a tile, nor fill one it has", () => {
+    // Two columns side by side; the right one is bare in its middle row, and the piece ships with
+    // green beside that bare cell, so the bare cell repeats with it.
+    const holed = piece(2, 3, [RG_V, RG_V, G, 0, GB_V, GB_V]);
+    const plan = stretchPlan(ts, holed, "s");
+    expect(plan.cut).toEqual([1, 1]);
+    expect(rows(stretchPiece(holed, plan, 1))).toEqual([[RG_V, RG_V], [G, 0], [G, 0], [GB_V, GB_V]]);
+    // A hole at the end of a line is not what repeats when a tile that joins itself is on offer.
+    const capped = piece(1, 3, [0, G, GB_V]);
+    expect(stretchPlan(ts, capped, "s").cut).toEqual([1]);
+  });
+
+  it("reports the seams a stretch adds", () => {
+    // Nothing here joins itself top to bottom: any cut leaves red against green or green against blue.
+    const plan = stretchPlan(ts, piece(1, 2, [RG_V, GB_V]), "s");
+    expect(plan.seam).toBeGreaterThan(VISIBLE_SEAM);
+    expect(plan.seamsPerStep).toBe(1);
+  });
+
+  it("is worked out once for a piece and an axis", () => {
+    const p = piece(1, 3, [RG_V, G, GB_V]);
+    expect(stretchPlan(ts, p, "s")).toBe(stretchPlan(ts, p, "s"));
+    expect(stretchPlan(ts, p, "e")).not.toBe(stretchPlan(ts, p, "s"));
+  });
+});
+
+describe("the axes a piece stretches along", () => {
+  it("are those where the added joins keep wall against wall and floor against floor", () => {
+    // Wall, floor, wall down a column: the floor repeats, and floor meets floor.
+    const passage = piece(1, 3, [RG_V, G, GB_V]);
+    expect(stretchPlan(ts, passage, "s").walkBreaks).toBe(0);
+    expect(soundAxes(ts, passage)).toContain("s");
+    // Two halves with no floor between them that could repeat: whichever is laid again,
+    // its wall lands on the other's floor.
+    const halves = piece(1, 2, [RG_V, GB_V]);
+    expect(stretchPlan(ts, halves, "s").walkBreaks).toBe(1);
+    expect(soundAxes(ts, halves)).not.toContain("s");
+    // Side by side the same two carry on cleanly: red beside red, green beside green.
+    expect(soundAxes(ts, halves)).toContain("e");
+  });
+
+  it("are, for a ramp, those its ground carries on along, whatever the joins do", () => {
+    // The same two halves as a ramp that wants one ground under both cells: it stretches
+    // down the column, where that ground carries on, and nowhere else.
+    const onOneGround = { ...piece(1, 2, [RG_V, GB_V], [5, 5]), ramp: true };
+    expect(stretchPlan(ts, onOneGround, "s").groundContinues).toBe(1);
+    expect(stretchPlan(ts, onOneGround, "e").groundContinues).toBeNull();
+    expect(soundAxes(ts, onOneGround)).toEqual(["s"]);
+    const onTwoGrounds = { ...piece(1, 2, [RG_V, GB_V], [5, 6]), ramp: true };
+    expect(stretchPlan(ts, onTwoGrounds, "s").groundContinues).toBe(0);
+    expect(soundAxes(ts, onTwoGrounds)).toEqual([]);
+  });
+
+  it("counts the pieces of wall and floor a step leaves behind", () => {
+    // Laid again, either half leaves a strip of wall and a strip of floor cut off from the rest.
+    expect(stretchPlan(ts, piece(1, 2, [RG_V, GB_V]), "s").islandsPerStep).toBe(2);
+    expect(stretchPlan(ts, piece(1, 3, [RG_V, G, GB_V]), "s").islandsPerStep).toBe(0);
+  });
+});
+
+describe("a stretched piece", () => {
+  it("steps two tiles across, so left and right halves stay on their columns", () => {
+    // Left and right halves alternate; a one-tile step would put two left halves together.
+    const row = piece(4, 1, [RG_H, GB_H, RG_H, GB_H]);
+    const plan = stretchPlan(ts, row, "e");
+    expect(plan.lines).toEqual([[0, 2], [1, 3]]);
+    const g = stretchPiece(row, plan, 2);
+    expect(g.width).toBe(8);
+    expect(rows(g)).toEqual([[RG_H, GB_H, RG_H, GB_H, RG_H, GB_H, RG_H, GB_H]]);
+  });
+
+  it("runs two across and one down on a diagonal, and marks what it added", () => {
+    const p = piece(4, 2, [R, R, G, G, B, B, R, R]);
+    const plan = stretchPlan(ts, p, "se");
+    // (0,0)→(2,1) and (1,0)→(3,1) are the two-cell lines; the other four cells stand alone.
+    expect(plan.lines.map((l) => l.length).sort()).toEqual([1, 1, 1, 1, 2, 2]);
+    const g = stretchPiece(p, plan, 3);
+    expect([g.width, g.height]).toEqual([4 + 2 * 3, 2 + 3]);
+    expect(g.offset).toEqual({ x: 0, y: 0 });
+    expect(g.added.reduce((s, v) => s + v, 0)).toBe(6 * 3);
+    // The top-left cell has not moved, and its line carries on down the diagonal.
+    expect(g.tiles[0]).toBe(R);
+    expect(g.tiles[4 * g.width + 8]).toBe(R);
+  });
+
+  it("climbs on the other diagonal, with its top-left tile that much higher", () => {
+    const p = piece(4, 2, [R, R, G, G, B, B, R, R]);
+    const g = stretchPiece(p, stretchPlan(ts, p, "ne"), 2);
+    expect([g.width, g.height]).toEqual([8, 4]);
+    expect(g.offset).toEqual({ x: 0, y: -2 });
+    // The bottom-left cell of the piece stays where it was: two rows down in the taller grid.
+    expect(g.tiles[3 * g.width]).toBe(B);
+  });
+
+  it("stretches back from the far end with a negative count", () => {
+    const p = piece(4, 2, [R, R, G, G, B, B, R, R]);
+    const forward = stretchPiece(p, stretchPlan(ts, p, "se"), 2), back = stretchPiece(p, stretchPlan(ts, p, "se"), -2);
+    expect(back.tiles).toEqual(forward.tiles);
+    expect(back.offset).toEqual({ x: -4, y: -2 });
+    expect(stretchPiece(p, stretchPlan(ts, p, "ne"), -2).offset).toEqual({ x: -4, y: 0 });
+    expect(stretchPiece(p, stretchPlan(ts, p, "s"), -3).offset).toEqual({ x: 0, y: -3 });
+  });
+
+  it("carries what each cell needs under it along with the cell", () => {
+    const column = piece(1, 3, [RG_V, G, GB_V], [7, 8, 9]);
+    const g = stretchPiece(column, stretchPlan(ts, column, "s"), 2);
+    expect([...g.required]).toEqual([7, 8, 8, 8, 9]);
+  });
+
+  it("is the piece itself at no steps", () => {
+    const p = piece(4, 2, [R, R, G, G, B, B, R, R]);
+    for (const axis of STRETCH_AXES) {
+      const g = stretchPiece(p, stretchPlan(ts, p, axis), 0);
+      expect(g.tiles).toEqual(p.tiles);
+      expect(g.offset.x === 0 && g.offset.y === 0).toBe(true);
+    }
+  });
+});
+
+describe("the stretch a drag asks for", () => {
+  it("takes the axis the drag lies along and a step for each step's length", () => {
+    expect(stretchFromDrag(64 * 3, 32 * 3)).toEqual({ axis: "se", steps: 3 });
+    expect(stretchFromDrag(64 * 2, -32 * 2)).toEqual({ axis: "ne", steps: 2 });
+    expect(stretchFromDrag(64 * 4, 0)).toEqual({ axis: "e", steps: 4 });
+    expect(stretchFromDrag(0, 32 * 5)).toEqual({ axis: "s", steps: 5 });
+  });
+
+  it("goes against the axis for a drag the other way", () => {
+    expect(stretchFromDrag(-64 * 2, -32 * 2)).toEqual({ axis: "se", steps: -2 });
+    expect(stretchFromDrag(0, -70)).toEqual({ axis: "s", steps: -2 });
+  });
+
+  it("is nothing for a drag shorter than half a step", () => {
+    expect(stretchFromDrag(10, 4).steps).toBe(0);
+    expect(stretchFromDrag(0, 0).steps).toBe(0);
+  });
+
+  it("forgives a drag that strays from the axis", () => {
+    expect(stretchFromDrag(64 * 3 + 9, 32 * 3 - 11)).toEqual({ axis: "se", steps: 3 });
+  });
+});
+
+/* ── The game's own tilesets, where they are installed ── */
+
+const TILESET_DIR = join(import.meta.dirname, "..", "public", "tileset");
+const installed = TILESET_FILENAMES.filter((n) => existsSync(join(TILESET_DIR, `${n}.cv5`)) && existsSync(join(TILESET_DIR, `${n}.dddata.bin`)));
+const haveNames = existsSync(join(TILESET_DIR, "stat_txt.tbl"));
+
+function real(name: string) {
+  const part = (ext: string) => new Uint8Array(readFileSync(join(TILESET_DIR, `${name}.${ext}`)));
+  const tileset = loadTileset({ cv5: part("cv5"), vf4: part("vf4"), vr4: part("vr4"), vx4: part("vx4"), wpe: part("wpe") });
+  const names = haveNames ? decodeTbl(new Uint8Array(readFileSync(join(TILESET_DIR, "stat_txt.tbl")))) : null;
+  return { tileset, catalogue: buildDoodadCatalogue(tileset, part("dddata.bin"), names) };
+}
+
+/** The share of the added cells' minitiles a unit can walk. */
+function walkable(tileset: Tileset, g: { tiles: Uint16Array; added: Uint8Array }): number {
+  let walk = 0, cells = 0;
+  for (let i = 0; i < g.tiles.length; i++) {
+    if (!g.added[i] || !g.tiles[i]) continue;
+    cells++;
+    const m = megatileForTile(tileset, g.tiles[i]);
+    for (let q = 0; q < 16; q++) if (tileset.megatileFlags[m * 16 + q] & TileFlag.Walkable) walk += 1 / 16;
+  }
+  return cells ? walk / cells : 0;
+}
+
+describe.skipIf(installed.length === 0)("stretching the game's doodads", () => {
+  it("keeps every doodad whole on every axis: the tiles it ships with are all still there", () => {
+    for (const name of installed) {
+      const { tileset, catalogue } = real(name);
+      for (const def of catalogue.doodads) {
+        const shipped = new Map<number, number>();
+        for (const id of def.tiles) if (id) shipped.set(id, (shipped.get(id) ?? 0) + 1);
+        for (const axis of STRETCH_AXES) {
+          const long = stretchDoodad(tileset, def, axis, 3);
+          const { dx, dy } = STRETCH_STEP[axis];
+          expect([long.width, long.height], `${name} #${def.id} ${axis}`).toEqual([def.width + dx * 3, def.height + Math.abs(dy) * 3]);
+          const got = new Map<number, number>();
+          for (const id of long.tiles) if (id) got.set(id, (got.get(id) ?? 0) + 1);
+          for (const [id, n] of shipped) expect(got.get(id) ?? 0, `${name} #${def.id} ${axis} tile ${id}`).toBeGreaterThanOrEqual(n);
+          // Nothing but the doodad's own tiles.
+          for (const id of got.keys()) expect(shipped.has(id), `${name} #${def.id} ${axis} tile ${id}`).toBe(true);
+          expect(isStretched(long) && long.stretched.from).toBe(def);
+        }
+      }
+    }
+  });
+
+  it("offers every ramp one diagonal, and a cliff ramp widened along it is ground a unit can walk", () => {
+    for (const name of installed) {
+      const { tileset, catalogue } = real(name);
+      for (const def of catalogue.doodads.filter((d) => d.ramp)) {
+        const axes = soundAxes(tileset, def);
+        expect(axes.length, `${name} #${def.id}`).toBe(1);
+        expect(["se", "ne"], `${name} #${def.id}`).toContain(axes[0]);
+        if (!haveNames || def.category !== "Cliff") continue;
+        expect(walkable(tileset, stretchPiece(def, stretchPlan(tileset, def, axes[0]), 4)), `${name} #${def.id}`).toBeGreaterThan(0.9);
+      }
+    }
+  });
+
+  it.skipIf(!haveNames)("lengthens a bridge along its deck without a seam the eye finds", () => {
+    let bridges = 0;
+    for (const name of installed) {
+      // The bridges of these three are drawn to repeat; the others' are one-off pictures.
+      if (!["badlands", "platform", "jungle"].includes(name)) continue;
+      const { tileset, catalogue } = real(name);
+      for (const def of catalogue.doodads.filter((d) => d.category === "Bridges")) {
+        bridges++;
+        // One diagonal is offered, the deck's, and it is the one that joins.
+        const diagonals = soundAxes(tileset, def).filter((a) => a === "se" || a === "ne");
+        expect(diagonals.length, `${name} #${def.id}`).toBe(1);
+        expect(stretchPlan(tileset, def, diagonals[0]).seam, `${name} #${def.id}`).toBeLessThan(VISIBLE_SEAM);
+        expect(stretchPlan(tileset, def, diagonals[0]).walkBreaks, `${name} #${def.id}`).toBeLessThan(stretchPlan(tileset, def, diagonals[0] === "se" ? "ne" : "se").walkBreaks);
+      }
+    }
+    if (installed.includes("badlands")) expect(bridges).toBeGreaterThan(0);
+  });
+
+  it.skipIf(!haveNames)("offers every bridge of every tileset a way to stretch", () => {
+    for (const name of installed) {
+      const { tileset, catalogue } = real(name);
+      for (const def of catalogue.doodads.filter((d) => d.category === "Bridges")) expect(soundAxes(tileset, def).length, `${name} #${def.id}`).toBeGreaterThan(0);
+    }
+  });
+
+  it("fits a stretched ramp wherever the cliff it was drawn for runs straight, and only along that cliff", () => {
+    let checked = 0;
+    for (const name of installed) {
+      const era = TILESET_FILENAMES.indexOf(name);
+      const { tileset, catalogue } = real(name);
+      const info = TILESETS[era];
+      const high = info.terrain.find((t) => /^High |Platform|Substructure|Temple/.test(t.name));
+      if (!high) continue;
+      // A plateau painted with the isometric brush: cliffs on both diagonals, straight for a dozen tiles.
+      const W = 96, H = 64;
+      const { tiles, isom } = flatTerrain(W, H, baseTerrain(tileset, info.defaultIsom), tileset, seeded(7), era);
+      const scn = { width: W, height: H, era, tiles, editorTiles: tiles.slice(), isom, dirty: new Set<string>() } as unknown as Scenario & { isom: Uint16Array };
+      if (!paintIsom(scn, tileset, { x: 24, y: 30 }, high.id, 13, seeded(3))) continue;
+      for (const def of catalogue.doodads.filter((d) => d.ramp)) {
+        const fits: Record<string, number> = { se: 0, ne: 0 };
+        let places = 0;
+        for (let y = 0; y + def.height <= H; y++) {
+          for (let x = 0; x + def.width <= W; x += 2) {
+            if (!checkDoodadPlacement(scn, tileset, def, x, y, DEFAULT_DOODAD_PLACEMENT).ok) continue;
+            places++;
+            for (const axis of ["se", "ne"] as const) {
+              for (const steps of [2, -2]) {
+                const long = stretchDoodad(tileset, def, axis, steps);
+                if (checkDoodadPlacement(scn, tileset, long, x + long.stretched.offset.x, y + long.stretched.offset.y, DEFAULT_DOODAD_PLACEMENT).ok) fits[axis]++;
+              }
+            }
+          }
+        }
+        if (places === 0) continue; // a ramp for another cliff than the one painted
+        checked++;
+        // The diagonal the ramp is offered is the one the cliff takes it on.
+        const [offered] = soundAxes(tileset, def);
+        expect(fits[offered], `${name} #${def.id}`).toBeGreaterThan(places);
+        expect(fits[offered === "se" ? "ne" : "se"], `${name} #${def.id}`).toBe(0);
+      }
+    }
+    if (installed.includes("badlands")) expect(checked).toBeGreaterThan(0);
+  });
+
+  it("plans the largest doodad in well under a frame's worth of drags", () => {
+    for (const name of installed) {
+      const { tileset, catalogue } = real(name);
+      const largest = catalogue.doodads.reduce((a, b) => (b.width * b.height > a.width * a.height ? b : a));
+      const t0 = performance.now();
+      for (const axis of STRETCH_AXES) stretchPlan(tileset, largest, axis);
+      expect(performance.now() - t0, `${name} #${largest.id}`).toBeLessThan(500);
+    }
+  });
+});

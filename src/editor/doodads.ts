@@ -24,6 +24,7 @@ import { doodadCenter, doodadOrigin, type DoodadCatalogue, type DoodadDef } from
 import { pickVariation, variationsOf } from "../formats/tileset/terrain";
 import { Stroke, type TileChange } from "./terrain";
 import { applyList, applySpriteChanges, type SpriteChange } from "./sprites";
+import { isStretched } from "./stretch";
 
 // The THG2 half of a doodad edit lives in editor/sprites.ts; re-exported for the callers that grew up here.
 export { applySpriteChanges, type SpriteChange };
@@ -200,7 +201,10 @@ export function placeDoodadAsTerrain(scn: Scenario, def: DoodadDef, tx: number, 
       if (scn.tiles[at] !== id || scn.editorTiles[at] !== id) tiles.push({ at, before: scn.tiles[at], after: id });
     }
   }
-  const sprite = makeOverlaySprite(def, makeDoodad(def, tx, ty, owner));
+  // A stretched doodad keeps the one overlay it came with, where the piece as shipped stands.
+  const sprite = isStretched(def)
+    ? makeOverlaySprite(def.stretched.from, makeDoodad(def.stretched.from, tx - def.stretched.offset.x, ty - def.stretched.offset.y, owner))
+    : makeOverlaySprite(def, makeDoodad(def, tx, ty, owner));
   return { tiles, sprites: sprite ? [{ index: scn.sprites.length, before: null, after: sprite }] : [] };
 }
 

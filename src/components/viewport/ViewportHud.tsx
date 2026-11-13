@@ -84,7 +84,7 @@ export default function ViewportHud({ tilesetName, tilesetLoading, unitAssets, d
       {tooling && mapTool && <span className="hud-chip pick"><b>{mapTool.spec.name}</b>{mapTool.spec.hint && <> · {mapTool.spec.hint}</>} {" "}{t("· Esc / right-click to stop")}</span>}
       {unitPlacing && !tooling && <span className="hud-chip">{t("placing")}{" "}<b>{unitLabel(activeUnit)}</b> {" "}{t("· Esc / right-click to stop")}</span>}
       {spritePlacing && !tooling && <span className="hud-chip">{t("placing sprite")}{" "}<b>{spriteName(unitAssets, activeSpriteKind, activeSpriteKind === "pure" ? activeSprite : activeUnitSprite)}</b>{spritePlaceOptions.flipped ? t(" · flipped") : ""} {" "}{t("· Esc / right-click to stop")}</span>}
-      {doodad && <span className="hud-chip">{t("placing")}{" "}<b>{doodadLabel(doodad)}</b>{doodadPlacement.placeAnywhere ? t(" · anywhere") : ""} {" "}{t("· Esc / right-click to stop")}</span>}
+      {doodad && <span className="hud-chip">{t("placing")}{" "}<b>{doodadLabel(doodad)}</b>{doodadPlacement.placeAnywhere ? t(" · anywhere") : ""} {" "}{t("· drag to stretch")} {" "}{t("· Esc / right-click to stop")}</span>}
       {locationsEditing && <span className="hud-chip">{t("locations · drag empty ground to create · snap")}{" "}<b>{locationSnap ? `${locationSnap} px` : "off"}</b></span>}
       {clipEditing && !clipPasting && (
         <span className="hud-chip">

@@ -38,6 +38,63 @@ the same stamp as terrain-layer changes plus the overlay sprite, no record, one 
 and `sprites`. It is the palette's option only — `tx.placeDoodad` ignores it, since a plugin says what
 it means by calling `convertDoodads`.
 
+**Stretching (`src/editor/stretch.ts`, 2026-11-13).** A drag while a doodad is armed pulls it out along
+one of four axes — `se` (2, 1), `ne` (2, −1), `e` (2, 0), `s` (0, 1); the across step is two tiles
+because ground is drawn in left/right halves — and places the result as terrain. Why it exists: the long
+ramps and bridges of modern maps are doodads pulled apart by hand with the middle laid again in the gap.
+The cells of the piece on one line along the axis are a *line*; a stretch by `n` repeats one cell of
+every line `n` times. `stretchPlan` picks that cell per line (the *cut*) by coordinate descent on the
+total `edgeDistance` (blend.ts) of the piece stretched three steps, starting from the cut straight across
+the centre, with (a) a tile beside bare ground costing `BARE_COST` unless the piece as shipped leaves
+that side of that tile bare, and (b) a small pull towards the centre. Both were found the hard way:
+the first version repeated the middle *index* of each line and laid wall rocks instead of ramp on the
+lines whose middle cell is wall (Badlands #77, line through (1,3)/(3,4)/(5,5)); the second treated a
+missing tile as free and the optimiser opened holes all over the Platform bridges' decks, since a hole
+has no seam. Plans are cached in a `WeakMap` on the piece's `tiles` array (a catalogue's defs are made
+once per tileset); the largest doodads plan in ≤ 12 ms an axis.
+Measured over the eight tilesets (the mean edge distance of the joins a stretch adds, against the Blend
+brush's 16 for a visible seam): bridges along their deck — Badlands 10, Platform 5–7, Jungle 11–13 (drawn
+to repeat; they look seamless), Twilight 15, Desert 20, Ice 26; cliff ramps along their cliff — Ashworld,
+Twilight, Low Platform 10, Desert 7, Badlands/Jungle 17, Ice 20 (a join every two columns, which is what
+hand-made long ramps look like too); wall ramps (Structure, Temple, Compound, Outpost, Basilica) 18–50,
+no repeating middle. The fill of a cliff ramp along its cliff is > 90% walkable in every tileset, and on
+a plateau painted with the isometric brush a stretched ramp passes `checkDoodadPlacement` wherever the
+cliff runs straight for the stretch, on the cliff's diagonal only — `required` is stretched with the
+tiles, so the existing check, ghost and red cells needed no change. `stretchDoodad` returns a
+`StretchedDoodad`: a `DoodadDef` with the larger footprint plus `stretched` (`from`, `offset` of the
+top-left tile, the plan), which is why `ghostAt`, `checkDoodadPlacement`, `drawDoodadGhost`, the
+symmetry images and `placeDoodadAsTerrain` take it as they take any def; only the overlay's position
+reads `stretched` (one overlay, where the doodad as shipped stands). It is never a DD2 record — the id
+names the shipped footprint — so `placeAt` goes the `asTerrain` way whatever the palette's tick says.
+The gesture: `ObjectLayer.stretch` (doodads only) turns a placing press that travels into mode
+`"stretch"` instead of `"marquee"`; `stretchFromDrag` takes, among the axes it is given, the one the
+drag lies closest to (distance from the pointer to the axis, among axes with at least one step).
+**Which axes it is given is `soundAxes`, and that rule is the part that cost the most.** The user's first
+try produced junk on three of four drags: a ramp smeared across its cliff, a bridge widened into rail
+ends. The seam measure does not tell those from the good ones (Badlands #77: 16.5 along the cliff, 13.3
+straight down, 17.2 across, 20.4 on the other diagonal). What does, over all 40 ramps and 18 bridges:
+(1) for a ramp, `groundContinues` — the share of cell pairs one step apart whose `required` group is the
+same — is 78–100% on exactly one diagonal, the cliff's, and ≤ 54% elsewhere, which is also the axis the
+ground check accepts on a painted cliff; (2) for anything else, `walkBreaks` — the share of minitile pairs
+facing across the added joins that differ in the VF4 walkable bit — is 0–11% along a bridge's deck and
+13–50% across it (`SOUND_WALK_BREAKS` 0.12; the gap is narrow at the Ice bridges, which join badly either
+way). The ground rule must not be asked of bridges: their ground continues *across* them, along the
+channel (Badlands #329: 83% on the junk axis). Shift (`any`) offers all four.
+**Looks alone choose the cut; walkability only reports.** Two attempts to put walking into the objective
+both made it worse and are worth not repeating. A cost per walk-break across added joins drove
+`walkBreaks` under the threshold on every axis (the measure stops discriminating once it is optimised)
+and left the ramp's rocks in place, since they sit at joins the doodad ships with. A cost per extra
+connected piece of wall/floor (`Seams.islands`) got its zero by laying the ramp's *wall* across the slope
+— 79 of 256 added minitiles unwalkable a step instead of 8 — and passed every axis of every bridge.
+What is true and still open: within "repeat one cell of each line", Badlands, Jungle, Ashworld, Ice and
+Twilight cliff ramps cannot avoid repeating a wall tip (two or three unwalkable minitiles) on one or two
+lines, so a stretched ramp has a line of small rocks along its top edge, 2–3 a step (`islandsPerStep`;
+Desert's and Low Platform's have none). `placeAt` reports the count in the status line. Fixing it needs
+fill cells borrowed from other lines or other tiles (the Heal idea), not a different cut.
+Not done: a mirrored image under a symmetry mode stretches the same doodad the same way (it needs the
+doodad's twin and the mirrored axis), tiles from outside the doodad to hide the joins and the rocks, the
+plugin API, and a marked area. `tests/stretch.test.ts`.
+
 The palette's preview size (`doodadThumbSizeAtom`, `scmjs.doodadThumbSize`, small / medium / large)
 sets `DoodadThumb`'s box and, through `--doodad-thumb-w` / `-h` on `.doodad-grid`, the cell width the
 grid wraps on. Large is sized to stay one per row at the left dock's 220 px drag minimum.

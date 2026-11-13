@@ -10,6 +10,7 @@ import {
   snapDoodad, updateDoodads, type DoodadChange, type DoodadEdit, type DoodadVerdict, type SpriteChange, type TileRect,
 } from "../editor/doodads";
 import { applyChanges, Stroke } from "../editor/terrain";
+import { isStretched, soundAxes, STRETCH_AXES, stretchDoodad, stretchFromDrag, VISIBLE_SEAM, type StretchAxis } from "../editor/stretch";
 import type { DoodadRecord } from "../formats/chk/sections/objects";
 import type { Scenario } from "../formats/chk/scenario";
 import { doodadOrigin, NO_DOODADS, type DoodadCatalogue, type DoodadDef } from "../formats/tileset/doodads";
@@ -43,6 +44,10 @@ export function doodadLabel(def: DoodadDef): string {
   return `${def.category} #${def.id}`;
 }
 
+const AXIS_ARROW: Record<StretchAxis, [forward: string, back: string]> = { se: ["↘", "↖"], ne: ["↗", "↙"], e: ["→", "←"], s: ["↓", "↑"] };
+/** The way a stretch runs, as an arrow. */
+export const stretchArrow = (axis: StretchAxis, steps: number): string => AXIS_ARROW[axis][steps >= 0 ? 0 : 1];
+
 function describeRefusal(def: DoodadDef, v: DoodadVerdict, hasPlacementData: boolean): string {
   if (v.outOfBounds) return t("Can't place {doodad} here: it would leave the map", { doodad: doodadLabel(def) });
   const cells = v.bad.length;
@@ -67,6 +72,8 @@ export function useDoodadTools() {
   const tilesetName = useAtomValue(tilesetFileNameAtom);
   const catalogue: DoodadCatalogue = loaded?.doodads ?? NO_DOODADS;
   const tileset = loaded?.tileset ?? null;
+  /** The stretch in progress: where the press was and how far along which axis the drag has pulled the doodad. */
+  const stretch = useRef<{ from: MapPoint; axis: StretchAxis; steps: number } | null>(null);
   /** The drag in progress: where it started and the records it moves. */
   const drag = useRef<{ from: MapPoint; indices: number[]; moves: Map<number, Linear>; anchorX: number; dx: number; dy: number } | null>(null);
 
@@ -81,9 +88,39 @@ export function useDoodadTools() {
     const def = activeDef();
     if (!scn || !def) return null;
     const opts = store.get(doodadPlacementAtom);
+    const owner = store.get(unitOwnerAtom);
+    const pull = stretch.current;
+    if (pull && pull.steps !== 0 && tileset) {
+      // Stretched: the doodad stands where the press put it and grows along the drag.
+      const at = snapDoodad(def, pull.from.px, pull.from.py, scn.width, scn.height, opts.snapToGrid);
+      const long = stretchDoodad(tileset, def, pull.axis, pull.steps);
+      const x = at.x + long.stretched.offset.x, y = at.y + long.stretched.offset.y;
+      return { def: long, x, y, owner, verdict: checkDoodadPlacement(scn, tileset, long, x, y, opts) };
+    }
     const { x, y } = snapDoodad(def, p.px, p.py, scn.width, scn.height, opts.snapToGrid);
-    return { def, x, y, owner: store.get(unitOwnerAtom), verdict: checkDoodadPlacement(scn, tileset, def, x, y, opts) };
+    return { def, x, y, owner, verdict: checkDoodadPlacement(scn, tileset, def, x, y, opts) };
   }, [store, tileset, activeDef]);
+
+  /**
+   * Pull the doodad pressed at `from` out towards `p`: a step for each two tiles of the
+   * drag, along whichever of the ways the doodad stretches the drag lies closest to —
+   * or, with `any`, along any of the four. Returns true when the stretch changed.
+   */
+  const stretchTo = useCallback((from: MapPoint, p: MapPoint, any = false): boolean => {
+    const def = activeDef();
+    if (!def || !tileset) return false;
+    const axes = any ? STRETCH_AXES : soundAxes(tileset, def);
+    const next = axes.length ? stretchFromDrag(p.px - from.px, p.py - from.py, axes) : { axis: "se" as const, steps: 0 };
+    const was = stretch.current;
+    if (was && was.axis === next.axis && was.steps === next.steps) return false;
+    stretch.current = { from, ...next };
+    if (axes.length === 0) setStatus(t("{doodad} has no middle that repeats, so it does not stretch — hold Shift to stretch it anyway", { doodad: doodadLabel(def) }));
+    else if (next.steps === 0) setStatus(t("Drag {arrows} to stretch {doodad} — hold Shift for any direction", { doodad: doodadLabel(def), arrows: axes.map((a) => `${stretchArrow(a, -1)}${stretchArrow(a, 1)}`).join(" ") }));
+    else setStatus(t("Stretching {doodad} {arrow} by {n, plural, one {# step} other {# steps}} — release to place it as terrain", { doodad: doodadLabel(def), arrow: stretchArrow(next.axis, next.steps), n: Math.abs(next.steps) }));
+    return true;
+  }, [tileset, activeDef, setStatus]);
+
+  const endStretch = useCallback(() => { stretch.current = null; }, []);
 
   const apply = useCallback((scn: Scenario, edit: DoodadEdit) => {
     applyChanges(scn, edit.tiles, "do", "mtxm");
@@ -124,11 +161,14 @@ export function useDoodadTools() {
       return false;
     }
     const opts = store.get(doodadPlacementAtom);
+    // A stretched doodad is no doodad the map's records can name, so it goes down as terrain.
+    const long = isStretched(ghost.def) ? ghost.def.stretched : null;
+    const asTerrain = opts.asTerrain || long !== null;
     const tiles: TileChange[] = [], doodads: DoodadChange[] = [], sprites: SpriteChange[] = [];
     let placed = 0;
     for (const g of ghosts) {
       if (g !== ghost && !checkDoodadPlacement(scn, tileset, g.def, g.x, g.y, opts).ok) continue;
-      if (opts.asTerrain) {
+      if (asTerrain) {
         // Tiles into both sections and the overlay as a plain sprite; no record to select or move later.
         const edit = placeDoodadAsTerrain(scn, g.def, g.x, g.y, g.owner);
         applyChanges(scn, edit.tiles);
@@ -146,10 +186,22 @@ export function useDoodadTools() {
     }
     setSelected([]);
     const label = placed === 1 ? t("Place {name}", { name: doodadLabel(ghost.def) }) : t("Place {n} × {name}", { n: placed, name: doodadLabel(ghost.def) });
-    commit(opts.asTerrain ? { label: t("{label} as terrain", { label }), changes: tiles, sprites } : entryFor(label, { tiles, doodads, sprites }));
+    commit(long ? { label: t("{label}, stretched", { label }), changes: tiles, sprites }
+      : asTerrain ? { label: t("{label} as terrain", { label }), changes: tiles, sprites } : entryFor(label, { tiles, doodads, sprites }));
     const what = placed === 1 ? doodadLabel(ghost.def) : t("{n} × {name}", { n: placed, name: doodadLabel(ghost.def) });
     const where = { what, w: ghost.def.width, h: ghost.def.height, x: ghost.x, y: ghost.y };
-    setStatus(opts.asTerrain ? t("Placed {what} ({w}×{h}) as terrain at tile {x}, {y} — Esc or right-click to stop placing", where) : t("Placed {what} ({w}×{h}) at tile {x}, {y} — Esc or right-click to stop placing", where));
+    if (long) {
+      const steps = Math.abs(long.steps);
+      const base = t("Placed {what} stretched {arrow} by {n} ({w}×{h}) as terrain at tile {x}, {y}", { ...where, arrow: stretchArrow(long.axis, long.steps), n: steps });
+      // What the tileset could not give: say it, since both are worth a look before the map is played.
+      const notes: string[] = [];
+      const spots = Math.round(long.plan.islandsPerStep * steps) * placed;
+      if (spots > 0) notes.push(t("it leaves {n, plural, one {# small spot} other {# small spots}} units cannot walk on, which View ▸ Walkability shows", { n: spots }));
+      if (long.plan.seam > VISIBLE_SEAM) notes.push(t("its middle does not repeat cleanly, so the joins show"));
+      setStatus(notes.length ? `${base} — ${notes.join("; ")}` : base);
+    } else {
+      setStatus(asTerrain ? t("Placed {what} ({w}×{h}) as terrain at tile {x}, {y} — Esc or right-click to stop placing", where) : t("Placed {what} ({w}×{h}) at tile {x}, {y} — Esc or right-click to stop placing", where));
+    }
     return true;
   }, [store, tileset, catalogue, ghostsAt, apply, commit, setSelected, setStatus]);
 
@@ -157,7 +209,10 @@ export function useDoodadTools() {
   const startPlacing = useCallback((id?: number) => {
     if (id !== undefined) store.set(activeDoodadAtom, id);
     setPlacing(true);
-  }, [store, setPlacing]);
+    // The stretch is a drag nobody would try unprompted, so say it where the eye goes after a pick.
+    const def = catalogue.byId.get(store.get(activeDoodadAtom));
+    if (def) setStatus(t("Placing {doodad} — click to place it, or press and drag along it to stretch it", { doodad: doodadLabel(def) }));
+  }, [store, catalogue, setPlacing, setStatus]);
 
   const stopPlacing = useCallback(() => {
     if (!store.get(doodadPlacingAtom)) return false;
@@ -344,7 +399,7 @@ export function useDoodadTools() {
   }, [convertSelectedDoodads, setStatus]);
 
   return useMemo(
-    () => ({ loaded, catalogue, tilesetName, activeDef, ghostAt, ghostsAt, placeAt, startPlacing, stopPlacing, pickAt, select, selectInBox, footprintOf, beginDrag, dragTo, dragGhosts, endDrag, dragging, updateSelected, setOwner, setDisabled, deleteSelected, convertSelected }),
-    [loaded, catalogue, tilesetName, activeDef, ghostAt, ghostsAt, placeAt, startPlacing, stopPlacing, pickAt, select, selectInBox, footprintOf, beginDrag, dragTo, dragGhosts, endDrag, dragging, updateSelected, setOwner, setDisabled, deleteSelected, convertSelected],
+    () => ({ loaded, catalogue, tilesetName, activeDef, ghostAt, ghostsAt, stretchTo, endStretch, placeAt, startPlacing, stopPlacing, pickAt, select, selectInBox, footprintOf, beginDrag, dragTo, dragGhosts, endDrag, dragging, updateSelected, setOwner, setDisabled, deleteSelected, convertSelected }),
+    [loaded, catalogue, tilesetName, activeDef, ghostAt, ghostsAt, stretchTo, endStretch, placeAt, startPlacing, stopPlacing, pickAt, select, selectInBox, footprintOf, beginDrag, dragTo, dragGhosts, endDrag, dragging, updateSelected, setOwner, setDisabled, deleteSelected, convertSelected],
   );
 }

@@ -421,6 +421,20 @@ Two overlays on the View menu show what the ground means to the game:
 
 ![The buildability overlay hatches the tiles a building cannot stand on](images/terrain-buildability.webp)
 
+A third shows what the eye would find. **View ▸ Seam Overlay** draws a line along every
+join between two tiles where the picture steps: one tile ends lighter or darker than the
+next begins, by more than either picture changes by itself at that edge. Rough rock hides
+a join that a smooth slope shows, and the overlay weighs them the same way. The stronger
+the line, the plainer the join.
+
+![The seam overlay on a ramp stretched along a cliff: lines where its tiles join visibly](images/terrain-seams.webp)
+
+Ground laid by the isometric brush is almost free of lines; a few stand around doodads and
+cliff faces, where the game's own pieces meet roughly. Hand-placed tiles, a stretched ramp
+and a pasted block show where they need touching up, and the Tile and Blend brushes are
+the tools for it. The overlay compares the classic pictures, so with Remastered Graphics
+on it marks the same joins, whether or not the 2x pictures hide them.
+
 **View ▸ Walkability** (Ctrl+Shift+W) draws the ground as a unit walks it: islands, the
 areas the map divides into, the chokes between them with their widths, and the distances
 between start locations. In the editor at scmjs.dev its panel (Tools ▸ Walkability…) can

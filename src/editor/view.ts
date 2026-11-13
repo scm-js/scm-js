@@ -30,6 +30,8 @@ export interface ViewFlags {
   elevation: boolean;
   /** Unbuildable tile groups, hatched in blue. */
   buildability: boolean;
+  /** The joins between tiles that show: a line along each, stronger the more of a step it is. */
+  seams: boolean;
   startLocations: boolean;
   /** Cycle the palette so water and lava animate as they do in game. */
   animateWater: boolean;

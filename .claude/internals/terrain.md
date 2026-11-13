@@ -125,6 +125,20 @@ listed tile follows undo), and the palette's `tools.blendAt(side, id)` is the on
 when `blendFollowAtom` is set. `tests/blend.test.ts` pins the edge extraction (including the minitile
 flip bit), ranking and placement against a synthetic tileset and the designed seams of the real ones.
 
+**The seam overlay (View ▸ Seam Overlay, `viewFlags.seams`, 2026-11-13).** `blend.ts#seamStep(tileset, a,
+side, b)` is `edgeDistance` across the join less the mean of the two pictures' own *grain* at that edge
+(`edgeGrain`: the difference between a megatile's outermost pixel row and the next one in, per side,
+cached per tileset). The plain edge distance was tried first and is no use for this: at the Blend
+brush's 16, 1–11% of the joins of sixteen Blizzard maps are over it (7% on Badlands, 11% on Ice — rough
+rock against rough rock) and 9.8% of those inside a stretched cliff ramp, whose joins the eye finds at
+once because the slope is smooth. Against the grain, at `SEAM_SHOWS` 8: 0.2–2% of the maps' joins and
+10.7% of the ramp's; a plateau painted with the isometric brush, < 2%. Drawn in `paint/ground.ts`'s
+`overlay`, each tile its own half of the line inside its own pixels (a tile is redrawn alone when it
+cycles or a scroll uncovers it, so nothing may spill onto a neighbour); any terrain edit redraws the
+layer, so a line never outlives the join. It reads the classic VR4 pixels whatever is drawn, like the
+Blend brush. Not done with it: the stretch still chooses and reports by the plain distance
+(`VISIBLE_SEAM`), and a Heal brush that swaps a marked tile for one that joins.
+
 Tile values as the game reads them (2026-10-17 audit, PR 3): MTXM bit 15 is a creep flag — the
 group is `(id >> 4) & 0x7FF` (`tileGroupOf`, `TILE_CREEP_FLAG` in tileset/decode.ts; run T01:
 0x8084 draws as 0x84, flags 0x41FFFF). `megatileForTile`, `tileGroup`, placement, the overlays

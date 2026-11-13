@@ -271,6 +271,11 @@ const SCENES = [
     await p.page.evaluate(() => document.querySelectorAll(".toasts").forEach((el) => { el.style.visibility = "hidden"; }));
     await p.take("doodad-stretch", MAP);
     await p.page.mouse.up();
+    // The same ramp, placed, with the joins that show drawn over it.
+    await p.esc();
+    await p.menu("View", /Seam Overlay/);
+    await p.page.mouse.move(...at(820, 40));
+    await p.take("terrain-seams", MAP);
   }),
 
   scene("desert", "layer=doodads", async (p) => {

@@ -10,6 +10,7 @@ import type { Scenario } from "../src/formats/chk/scenario";
 import { baseTerrain, flatTerrain } from "../src/formats/tileset/terrain";
 import { paintIsom } from "../src/editor/isom";
 import { checkDoodadPlacement, DEFAULT_DOODAD_PLACEMENT } from "../src/editor/doodads";
+import { SEAM_SHOWS, seamStep } from "../src/editor/blend";
 import {
   isStretched, soundAxes, STRETCH_AXES, STRETCH_STEP, stretchDoodad, stretchFromDrag, stretchPiece, stretchPlan, VISIBLE_SEAM, type TilePiece,
 } from "../src/editor/stretch";
@@ -425,6 +426,38 @@ describe.skipIf(installed.length === 0)("stretching the game's doodads", () => {
       }
     }
     if (installed.includes("badlands")) expect(checked).toBeGreaterThan(0);
+  });
+
+  it("the seam overlay is quiet on painted ground and marks the joins of a stretched ramp", () => {
+    if (!installed.includes("badlands")) return;
+    const era = TILESET_FILENAMES.indexOf("badlands");
+    const { tileset, catalogue } = real("badlands");
+    const info = TILESETS[era];
+    const W = 96, H = 64;
+    const { tiles, isom } = flatTerrain(W, H, baseTerrain(tileset, info.defaultIsom), tileset, seeded(7), era);
+    const scn = { width: W, height: H, era, tiles, editorTiles: tiles.slice(), isom, dirty: new Set<string>() } as unknown as Scenario & { isom: Uint16Array };
+    paintIsom(scn, tileset, { x: 24, y: 30 }, info.terrain.find((t) => t.name === "High Dirt")!.id, 13, seeded(3));
+    /** The share of the joins between two tiles of a grid that the overlay would draw. */
+    const shown = (grid: ArrayLike<number>, width: number, height: number) => {
+      let joins = 0, drawn = 0;
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          const a = megatileForTile(tileset, grid[y * width + x]);
+          if (a <= 0 || !grid[y * width + x]) continue;
+          for (const [side, at] of [["right", x + 1 < width ? y * width + x + 1 : -1], ["bottom", y + 1 < height ? (y + 1) * width + x : -1]] as const) {
+            if (at < 0 || !grid[at]) continue;
+            joins++;
+            if (seamStep(tileset, a, side, megatileForTile(tileset, grid[at])) > SEAM_SHOWS) drawn++;
+          }
+        }
+      }
+      return drawn / joins;
+    };
+    // Flat ground and a plateau with its cliffs, as the isometric brush lays them.
+    expect(shown(scn.tiles, W, H)).toBeLessThan(0.02);
+    const ramp = catalogue.doodads.find((d) => d.ramp && d.width === 6 && d.height === 6)!;
+    const long = stretchDoodad(tileset, ramp, soundAxes(tileset, ramp)[0], 5);
+    expect(shown(long.tiles, long.width, long.height)).toBeGreaterThan(0.05);
   });
 
   it("plans the largest doodad in well under a frame's worth of drags", () => {

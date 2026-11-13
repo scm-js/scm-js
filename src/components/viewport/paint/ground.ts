@@ -9,6 +9,7 @@ import { atlasSource, atlasTileSize } from "../../../formats/tileset/atlas";
 import { groupBuildable, megatileForTile, megatileHeight, minitileHeight, tileGroupOf } from "../../../formats/tileset/decode";
 import { HD_TILE_PX, hdSource, type HdEffects } from "../../../formats/tileset/hd";
 import { isLackedTile } from "../../../data/remasteredTiles";
+import { SEAM_GLARES, SEAM_SHOWS, seamStep, SIDES } from "../../../editor/blend";
 import type { EffectPass } from "../effectPass";
 import { missingTilePattern } from "../missingTile";
 import { hashNoise } from "../noise";
@@ -31,6 +32,7 @@ export interface GroundLayer {
   doodadsRevision: number;
   elevation: boolean;
   buildability: boolean;
+  seams: boolean;
   /** The water-cycle step the layer's cycling tiles show. */
   step: number;
   /** Whether any visible tile cycles — what decides if a step repaints. */
@@ -76,6 +78,8 @@ export interface Ground {
   elevation: boolean;
   /** View ▸ Buildability Overlay: unbuildable groups washed and hatched in blue. */
   buildability: boolean;
+  /** View ▸ Seam Overlay: a line along every join between two tiles that shows. */
+  seams: boolean;
   /** Set while View ▸ Animate Water is on; the 2x terrain's water and lava then move. */
   motion: GroundMotion | null;
   /**
@@ -133,7 +137,7 @@ function hatchStamp(pw: number, ph: number, dpr: number): HTMLCanvasElement {
  * costs one drawImage instead of a thousand.
  */
 export function paintGround(v: PaintView, cache: { current: GroundLayer | null }, g: Ground): GroundPaint {
-  const { ctx, sx, sy, dpr, tilePx, x0, y0, x1, y1, mapW } = v;
+  const { ctx, sx, sy, dpr, tilePx, x0, y0, x1, y1, mapW, mapH } = v;
   const { tiles } = g;
   const { atlas, tileset: ts } = g.assets;
   const step = atlas.animation?.step ?? 0;
@@ -145,7 +149,7 @@ export function paintGround(v: PaintView, cache: { current: GroundLayer | null }
   const sameGround = layer !== null && layer.scenario === g.scenario && layer.tiles === tiles && layer.assets === g.assets && layer.effects === effects &&
     layer.w === v.w && layer.h === v.h && layer.dpr === dpr && layer.tilePx === tilePx &&
     layer.terrainRevision === g.terrainRevision && layer.doodadsRevision === g.doodadsRevision &&
-    layer.elevation === g.elevation && layer.buildability === g.buildability;
+    layer.elevation === g.elevation && layer.buildability === g.buildability && layer.seams === g.seams;
   // The layer sits at the scroll position rounded to a device pixel, and every tile at
   // its own place on the map rounded likewise. A tile's pixels then depend on the tile
   // alone, not on the scroll, so a scroll moves the picture by a whole number of
@@ -185,7 +189,7 @@ export function paintGround(v: PaintView, cache: { current: GroundLayer | null }
     }
     layer = {
       canvas, scenario: g.scenario, tiles, assets: g.assets, ox, oy, w: v.w, h: v.h, dpr, tilePx,
-      terrainRevision: g.terrainRevision, doodadsRevision: g.doodadsRevision, elevation: g.elevation, buildability: g.buildability,
+      terrainRevision: g.terrainRevision, doodadsRevision: g.doodadsRevision, elevation: g.elevation, buildability: g.buildability, seams: g.seams,
       step, animated: false, effects, mask, version: (layer?.version ?? 0) + 1, moving: false,
     };
     cache.current = layer;
@@ -222,7 +226,15 @@ export function paintGround(v: PaintView, cache: { current: GroundLayer | null }
      * tile is redrawn alone when it cycles or a scroll uncovers it, and anything that
      * spilled onto a neighbour would be laid down twice there.
      */
-    const overlay = (id: number, megatile: number, px: number, py: number, pw: number, ph: number) => {
+    const lacks = g.lacks;
+    // Half the line's width, in device pixels: each tile draws its own half, inside itself.
+    const seamPx = Math.max(1, Math.round(devTile / 16));
+    const neighbour = (tx: number, ty: number): number => {
+      if (tx < 0 || ty < 0 || tx >= mapW || ty >= mapH) return -1;
+      const other = tiles[ty * mapW + tx];
+      return isLackedTile(lacks, other) ? -1 : megatileForTile(ts, other);
+    };
+    const overlay = (id: number, megatile: number, px: number, py: number, pw: number, ph: number, tx: number, ty: number) => {
       if (g.elevation && megatile >= 0) {
         if (perMini) {
           for (let m = 0; m < 16; m++) {
@@ -246,9 +258,21 @@ export function paintGround(v: PaintView, cache: { current: GroundLayer | null }
           if (hatched) lc.drawImage(hatchStamp(pw, ph, dpr), px, py);
         }
       }
+      if (g.seams && megatile > 0) {
+        for (const side of SIDES) {
+          const other = neighbour(tx + (side === "left" ? -1 : side === "right" ? 1 : 0), ty + (side === "top" ? -1 : side === "bottom" ? 1 : 0));
+          if (other <= 0) continue;
+          const step = seamStep(ts, megatile, side, other);
+          if (step <= SEAM_SHOWS) continue;
+          lc.fillStyle = `rgba(255,70,210,${(0.45 + 0.5 * Math.min(1, (step - SEAM_SHOWS) / (SEAM_GLARES - SEAM_SHOWS))).toFixed(2)})`;
+          if (side === "left") lc.fillRect(px, py, Math.min(seamPx, pw), ph);
+          else if (side === "right") lc.fillRect(px + pw - Math.min(seamPx, pw), py, Math.min(seamPx, pw), ph);
+          else if (side === "top") lc.fillRect(px, py, pw, Math.min(seamPx, ph));
+          else lc.fillRect(px, py + ph - Math.min(seamPx, ph), pw, Math.min(seamPx, ph));
+        }
+      }
     };
-    const overlays = !flat && (g.elevation || g.buildability);
-    const lacks = g.lacks;
+    const overlays = !flat && (g.elevation || g.buildability || g.seams);
     // Laid from the map's corner, so a strip a scroll uncovers continues the lines beside it.
     const marker = lacks ? missingTilePattern(lc, dpr, -ox, -oy) : null;
     /** Blit the tiles of a block of the map — all of them, or only the ones that cycle — and say whether any cycles. */
@@ -295,7 +319,7 @@ export function paintGround(v: PaintView, cache: { current: GroundLayer | null }
             else if (onlyAnimated) continue;
             lc.drawImage(src.image, src.sx, src.sy, src.size, src.size, px, py, pw, ph);
           }
-          if (overlays) overlay(id, megatile, px, py, pw, ph);
+          if (overlays) overlay(id, megatile, px, py, pw, ph, tx, ty);
         }
       }
       return animated;

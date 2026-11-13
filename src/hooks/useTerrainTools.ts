@@ -10,6 +10,7 @@ import {
   applyChanges, brushRect, floodRegion, laidPairAt, laidPairs, replaceTerrain, stampTerrain, stampTile,
   Stroke, type Rect, type TerrainPick, type TileChange,
 } from "../editor/terrain";
+import { healTiles, shownSeams } from "../editor/heal";
 import { mirrorIndices, mirrorPixel, mirrorRect } from "../editor/symmetry";
 import {
   applyIsomChanges, brushDiamonds, diamondAt, hasIsom, isDiamond, isomTables, isomTerrains, isomWidth, paintIsom, type Diamond,
@@ -43,7 +44,7 @@ export interface MapPoint {
  * the Blend brush places from its palette (see `blendAt`).
  */
 export function paintsTiles(mode: TerrainMode): boolean {
-  return mode === "rect" || mode === "tile";
+  return mode === "rect" || mode === "tile" || mode === "heal";
 }
 
 /**
@@ -132,6 +133,13 @@ export function useTerrainTools() {
       return stampTerrain(scn, loaded.tileset, { group: terrain.group, variation: store.get(rectVariationAtom) }, footprint(scn, x, y));
     }
     if (mode === "tile") return stampTile(scn, footprint(scn, x, y), store.get(activeTileAtom));
+    if (mode === "heal") {
+      if (!loaded) {
+        setStatus(t("The Heal brush needs the tileset graphics — Help ▸ Game Data…"));
+        return null;
+      }
+      return healTiles(scn, loaded.tileset, footprint(scn, x, y));
+    }
     return null;
   }, [store, loaded, currentTerrain, footprint, setStatus]);
 
@@ -188,7 +196,8 @@ export function useTerrainTools() {
     strokeLabel.current =
       mode === "rect" ? (currentTerrain() ? t("Paint {terrain}", { terrain: terrainLabel(currentTerrain()!) }) : t("Paint terrain"))
         : mode === "isom" ? t("Paint {terrain} (isometric)", { terrain: translate(terrainName(info, currentIsomTerrain() ?? -1)) })
-          : t("Place tile {tile}", { tile: hexTile(store.get(activeTileAtom)) });
+          : mode === "heal" ? t("Heal seams")
+            : t("Place tile {tile}", { tile: hexTile(store.get(activeTileAtom)) });
     paintAt(x, y, p);
   }, [store, info, currentTerrain, currentIsomTerrain, paintAt]);
 
@@ -217,7 +226,7 @@ export function useTerrainTools() {
     const scn = store.get(scenarioAtom);
     if (!scn) return;
     const mode = store.get(terrainModeAtom);
-    if (!paintsTiles(mode)) return;
+    if (!paintsTiles(mode) || mode === "heal") return;
     const seed = scn.tiles[y * scn.width + x];
     let changes: TileChange[] = [];
     let label = t("Fill area");
@@ -313,6 +322,33 @@ export function useTerrainTools() {
     commitTerrain(scn, { label, changes }, rect ? t("{label} — {n, plural, one {# tile} other {# tiles}} in the marked area", { label, n: changes.length }) : t("{label} — {n, plural, one {# tile} other {# tiles}}", { label, n: changes.length }));
     return changes.length;
   }, [store, loaded, terrainOf, commitTerrain, setStatus]);
+
+  /**
+   * The Heal tab's button: mend the joins that show over the whole map or a rect, as the
+   * Heal brush would over each tile. One undo step. Returns how many tiles changed.
+   */
+  const heal = useCallback((rect?: Rect): number => {
+    const scn = store.get(scenarioAtom);
+    if (!scn) return 0;
+    if (!loaded) {
+      setStatus(t("The Heal brush needs the tileset graphics — Help ▸ Game Data…"));
+      return 0;
+    }
+    const area = rect ?? { x0: 0, y0: 0, x1: scn.width, y1: scn.height };
+    const cells: number[] = [];
+    for (let y = Math.max(0, area.y0); y < Math.min(scn.height, area.y1); y++) for (let x = Math.max(0, area.x0); x < Math.min(scn.width, area.x1); x++) cells.push(y * scn.width + x);
+    const before = shownSeams(scn, loaded.tileset, cells);
+    const changes = healTiles(scn, loaded.tileset, cells);
+    if (changes.length === 0) {
+      setStatus(before === 0 ? t("No join shows here — nothing to heal.") : t("{n, plural, one {# join shows} other {# joins show}} here, and the tileset has no tile that would mend one and play the same.", { n: before }));
+      return 0;
+    }
+    applyChanges(scn, changes);
+    const after = shownSeams(scn, loaded.tileset, cells);
+    const label = t("Heal seams");
+    commitTerrain(scn, { label, changes }, t("Healed {n, plural, one {# tile} other {# tiles}}: {before} joins showed, {after} still do", { n: changes.length, before, after }));
+    return changes.length;
+  }, [store, loaded, commitTerrain, setStatus]);
 
   /**
    * Eyedropper. Isometric mode reads the diamond's terrain straight from the ISOM, so
@@ -428,8 +464,8 @@ export function useTerrainTools() {
   }, [store]);
 
   return useMemo(
-    () => ({ types, terrainOf, isomTypes, isomReady, loaded, beginStroke, paintAt, endStroke, isStroking, fillAt, fillMap, replace, pickAt, blendAt, ghostAt, ghostDiamondsAt }),
-    [types, terrainOf, isomTypes, isomReady, loaded, beginStroke, paintAt, endStroke, isStroking, fillAt, fillMap, replace, pickAt, blendAt, ghostAt, ghostDiamondsAt],
+    () => ({ types, terrainOf, isomTypes, isomReady, loaded, beginStroke, paintAt, endStroke, isStroking, fillAt, fillMap, replace, heal, pickAt, blendAt, ghostAt, ghostDiamondsAt }),
+    [types, terrainOf, isomTypes, isomReady, loaded, beginStroke, paintAt, endStroke, isStroking, fillAt, fillMap, replace, heal, pickAt, blendAt, ghostAt, ghostDiamondsAt],
   );
 }
 

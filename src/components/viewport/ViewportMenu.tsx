@@ -128,7 +128,7 @@ export default function ViewportMenuItems({ target, tools, painting, fogPainting
   } else if (layer === "terrain") {
     rows.push(
       { label: terrainMode === "rect" || terrainMode === "isom" ? t("Pick Terrain") : terrainMode === "blend" ? t("Blend From Here") : t("Pick Tile"), onSelect: atTile((x, y) => tools.terrain.pickAt(x, y, point ?? undefined)), disabled: !scenario },
-      { edits: true, label: t("Fill Area"), onSelect: atTile(tools.terrain.fillAt), disabled: !painting || terrainMode === "isom" },
+      { edits: true, label: t("Fill Area"), onSelect: atTile(tools.terrain.fillAt), disabled: !painting || terrainMode === "isom" || terrainMode === "heal" },
     );
   }
   rows.push(

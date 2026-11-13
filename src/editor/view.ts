@@ -15,7 +15,7 @@ export type EditorLayer =
   | "fog"
   | "clipboard";
 
-export type TerrainMode = "isom" | "rect" | "tile" | "blend";
+export type TerrainMode = "isom" | "rect" | "tile" | "blend" | "heal";
 
 export interface ViewFlags {
   grid: boolean;

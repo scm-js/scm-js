@@ -28,7 +28,7 @@ export type { EditorLayer, TerrainMode, ViewFlags } from "../editor/view";
 export const activeLayerAtom = atom<EditorLayer>("terrain");
 
 /** Terrain sub-mode inside the Terrain palette. */
-export const TERRAIN_MODES: readonly TerrainMode[] = ["isom", "rect", "tile", "blend"];
+export const TERRAIN_MODES: readonly TerrainMode[] = ["isom", "rect", "tile", "blend", "heal"];
 export const terrainModeAtom = atom<TerrainMode>("isom");
 
 export const brushSizeAtom = atom<number>(1);

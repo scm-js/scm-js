@@ -6,7 +6,7 @@ import {
   activeTerrainAtom, activeTileAtom, blendAnchorAtom, blendFollowAtom, brushSizeAtom, mapTilesetAtom, placementOptionsAtom,
   rectVariationAtom, symmetryAtom, terrainModeAtom, type TerrainMode,
 } from "../../atoms/editorAtoms";
-import { activeLayerAtom, clipSelectionAtom } from "../../atoms/editorAtoms";
+import { activeLayerAtom, clipSelectionAtom, viewFlagsAtom } from "../../atoms/editorAtoms";
 import { scenarioAtom, terrainRevisionAtom } from "../../atoms/documentAtoms";
 import { pluginContextItemsAtom } from "../../atoms/pluginAtoms";
 import { openDialogAtom } from "../../atoms/uiAtoms";
@@ -392,6 +392,27 @@ function BlendSide({ side, list, loaded, onPick }: { side: Side; list: BlendCand
   );
 }
 
+/**
+ * The Heal brush's tab: nothing to pick, so it says what the brush does and offers the
+ * same over the marked area or the whole map.
+ */
+function HealTab() {
+  const scenario = useAtomValue(scenarioAtom);
+  const { loaded } = useTileset();
+  const markedArea = useAtomValue(clipSelectionAtom);
+  const [flags, setFlags] = useAtom(viewFlagsAtom);
+  const tools = useTerrainTools();
+  return (
+    <div className="hint" style={{ padding: "10px 12px", display: "grid", gap: 10, justifyItems: "start" }}>
+      <div>{t("Drag over joins that show. Where the tileset has a tile that joins its neighbours better and is the same tile to the game (it walks, builds and blocks sight alike, at the same height, and is the same kind of ground), that tile is laid instead. Ground that already joins is left as it is, and so are placed doodads.")}</div>
+      <Check label={t("Show the joins (View ▸ Seam Overlay)")} checked={flags.seams} onChange={(e) => setFlags({ ...flags, seams: e.target.checked })} />
+      <Button size="sm" disabled={!scenario || !loaded} onClick={() => tools.heal(markedArea ?? undefined)}>
+        {markedArea ? t("Heal the Marked Area") : t("Heal the Whole Map")}
+      </Button>
+    </div>
+  );
+}
+
 function BlendTab() {
   const info = TILESET_BY_ID[useAtomValue(mapTilesetAtom)];
   const { loaded, error } = useTileset();
@@ -479,7 +500,7 @@ export default function TerrainPalette() {
 
   // The palette's own menu, then whatever plugins registered for the "terrainPalette" surface.
   const rows: { label: string; disabled?: boolean; onSelect?: () => void; sep?: boolean }[] = [
-    { label: mode === "tile" ? t("Fill Map with This Tile") : t("Fill Map with This Terrain"), disabled: !scenario || mode === "blend", onSelect: tools.fillMap },
+    { label: mode === "tile" ? t("Fill Map with This Tile") : t("Fill Map with This Terrain"), disabled: !scenario || mode === "blend" || mode === "heal", onSelect: tools.fillMap },
   ];
   if (mode === "tile") {
     rows.push({
@@ -512,6 +533,7 @@ export default function TerrainPalette() {
           { value: "rect", label: t("Rect"), content: <RectTab /> },
           { value: "tile", label: t("Tile"), content: <TileTab /> },
           { value: "blend", label: t("Blend"), content: <BlendTab /> },
+          { value: "heal", label: t("Heal"), content: <HealTab /> },
         ]}
       />
         </div>

@@ -342,7 +342,7 @@ what is in a different place, and what to check before you move a map you care a
 
 ## Terrain
 
-Terrain is painted with four brushes, each a tab in the palette:
+Terrain is painted with five brushes, each a tab in the palette:
 
 | Brush | Paints |
 | --- | --- |
@@ -350,6 +350,7 @@ Terrain is painted with four brushes, each a tab in the palette:
 | Rect | Flat ground of one terrain type, with StarEdit's random variation. No cliffs, no edges. |
 | Tile | Any single tile by number: cliff pieces, doodad tiles, anything the tileset has. |
 | Blend | One tile next to a tile you picked, chosen from those whose facing edge continues it. |
+| Heal | Nothing of its own: it trades a tile that joins its neighbours visibly for one that joins them and plays the same. |
 
 ![Cliffs and a shore laid by the isometric brush, with a 3×3 brush ghost](images/terrain-isometric.webp)
 
@@ -385,7 +386,19 @@ editor's work.
   into another, a hand-laid shoreline. Click a tile to make it the anchor, and the palette
   lists for each side the tiles whose opposite edge continues it, best seam first.
 
-These three leave the isometric record alone.
+- **Heal** mends what **View ▸ Seam Overlay** marks. Drag over a join that shows, and
+  where the tileset has another tile that meets the neighbours better, that tile is laid
+  instead. It only takes a tile that is the same to the game: it walks, builds and blocks
+  sight exactly as the old one does, at the same height, and is the same kind of ground.
+  So a stroke changes how the map looks and nothing about how it plays. Ground that
+  already joins is left as it was laid, and a placed doodad is left whole (convert it to
+  terrain first if its tiles are what needs mending). The tab's button does the same over
+  the marked area, or over the whole map when nothing is marked, and says how many joins
+  showed before and after. On the game's own maps that removes about half of the lines and
+  changes one tile in a hundred. A stretched ramp gains less, since few tiles play the
+  same as a ramp's.
+
+These four leave the isometric record alone.
 
 ### Ground a mod adds
 
@@ -733,6 +746,16 @@ units, sprites and doodads under the clip first, though never locations. Terrain
 different tileset is refused, since tile numbers mean something else there, while the
 objects still paste. The clip survives File ▸ Open, which is how a base moves between
 maps.
+
+A clip stretches as a doodad does (see [Stretching a ramp or a
+bridge](#stretching-a-ramp-or-a-bridge)), which is how a ramp or a wall made by hand, or
+copied from another map, is made longer. Press where the clip's corner should go and drag
+instead of clicking: its picture is pulled out along the drag, the ends moved apart and
+the middle laid again, and releasing pastes it. Mark the piece with both its ends in the
+area, since the ends are what stay as they are. A stretched clip pastes its terrain only,
+into the ground itself: a doodad's record cannot name half a doodad, so the picture goes
+down as tiles, and units, sprites, locations and fog stay behind. The drag snaps to the
+ways the piece has a middle to repeat, and Shift offers all four.
 
 A piece worth keeping for other maps, such as a ramp, a bridge or a cliff corner, can be
 saved as a *stamp* (Edit ▸ Save as Stamp…, or the right-click menu on the marked area) and

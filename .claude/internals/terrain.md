@@ -137,7 +137,26 @@ once because the slope is smooth. Against the grain, at `SEAM_SHOWS` 8: 0.2–2%
 cycles or a scroll uncovers it, so nothing may spill onto a neighbour); any terrain edit redraws the
 layer, so a line never outlives the join. It reads the classic VR4 pixels whatever is drawn, like the
 Blend brush. Not done with it: the stretch still chooses and reports by the plain distance
-(`VISIBLE_SEAM`), and a Heal brush that swaps a marked tile for one that joins.
+(`VISIBLE_SEAM`).
+
+**The Heal brush (`src/editor/heal.ts`, terrain mode `"heal"`, 2026-11-13).** `healTiles(scn, tileset,
+cells)` trades a tile for another of the same *kind* that joins its four neighbours better by `seamStep`.
+Kind is the CV5 group's whole flag word plus the megatile's sixteen VF4 words, compared as a string key
+(`healTables`, per tileset: tiles by kind from `drawableTiles`, and each megatile's mean colour), so
+nothing the game reads changes; `HEAL_SAME_GROUND` (mean colour within 14 a channel) keeps dirt from
+becoming grass that happens to end on the right pixels. **It only touches a cell with at least one join
+over `SEAM_SHOWS`**, and takes a candidate that leaves fewer such joins, or as many and `HEAL_GAIN` less
+step in all. The first cut took any improvement and was a lesson in what a "heal" must not do: over a
+whole Blizzard Badlands map it changed 19% of the tiles (one variation of dirt for another) for 6% fewer
+lines. As it is, over sixteen Blizzard maps a whole-map heal changes 0.1–3.3% of the tiles and removes
+30–60% of the lines (Ashworld Hunters 568 → 24), in ≤ 180 ms; on a ramp stretched along its cliff,
+Badlands 21 → 13, Twilight 7 → 3, Ice 25 → 21 — little, because few tiles have a ramp tile's flags, and
+the stripe along a Badlands ramp's lower edge stays. Cells where `tiles[at] !== editorTiles[at]` (a
+placed doodad's) are skipped: a stroke that changes one would strand the doodad. Cells are processed in
+order against the neighbours as already changed, twice. The brush goes through `stampAt` like Rect and
+Tile (`paintsTiles`), so symmetry, the stroke's undo entry and `commitTerrain` are theirs; `tools.heal(rect?)`
+is the tab's button (marked area or whole map, `shownSeams` before and after in the status line).
+ISOM is untouched. `tests/heal.test.ts`.
 
 Tile values as the game reads them (2026-10-17 audit, PR 3): MTXM bit 15 is a creep flag — the
 group is `(id >> 4) & 0x7FF` (`tileGroupOf`, `TILE_CREEP_FLAG` in tileset/decode.ts; run T01:

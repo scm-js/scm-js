@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  beginAreaGesture, beginLocationGesture, beginObjectGesture, beginStrokeGesture, objectGestureOn,
+  beginAreaGesture, beginLocationGesture, beginObjectGesture, beginPasteGesture, beginStrokeGesture, objectGestureOn,
   type LocationLayer, type ObjectLayer, type PointerSample,
 } from "../src/components/viewport/gestures";
 
@@ -110,6 +110,38 @@ describe("an object-layer gesture", () => {
     expect(objectGestureOn(g, "units")).toBe(g);
     expect(objectGestureOn(g, "doodads")).toBeNull();
     expect(objectGestureOn(null, "units")).toBeNull();
+  });
+});
+
+describe("a paste gesture", () => {
+  const record = () => {
+    const calls: string[] = [];
+    const on = {
+      stretch: (from: { px: number; py: number }, p: { px: number; py: number }, any: boolean) => { calls.push(`stretch ${from.px},${from.py} ${p.px},${p.py}${any ? " any" : ""}`); },
+      paste: (tile: { x: number; y: number }) => { calls.push(`paste ${tile.x},${tile.y}`); },
+      end: () => { calls.push("end"); },
+    };
+    return { calls, on };
+  };
+
+  it("stamps the clip on a click, with its corner on the tile pressed", () => {
+    const { calls, on } = record();
+    const g = beginPasteGesture(at(100, 70), on);
+    g.move(at(102, 71));
+    g.up();
+    expect(calls).toEqual(["paste 3,2", "end"]);
+  });
+
+  it("pulls the clip out on a drag, from where it was pressed, and stamps it on the release", () => {
+    const { calls, on } = record();
+    const g = beginPasteGesture(at(100, 70), on);
+    g.move(at(164, 102));
+    expect(g.stretching).toBe(true);
+    g.move(at(228, 134, true));
+    // Back near the press it is still a stretch, of nothing: the tools say how many steps.
+    g.move(at(101, 70));
+    g.up();
+    expect(calls).toEqual(["stretch 100,70 164,102", "stretch 100,70 228,134 any", "stretch 100,70 101,70", "paste 3,2", "end"]);
   });
 });
 

@@ -91,7 +91,7 @@ export default function ViewportHud({ tilesetName, tilesetLoading, unitAssets, d
           {t("cut / copy / paste · drag to mark an area")}{clipSelection && <> · <b>{clipSelection.x1 - clipSelection.x0}×{clipSelection.y1 - clipSelection.y0}</b> {t("at {x}, {y}", { x: clipSelection.x0, y: clipSelection.y0 })}</>} {" "}{t("· Ctrl+C copies")}{clip && t(" · Ctrl+V pastes")}
         </span>
       )}
-      {clipPasting && clip && !tooling && <span className="hud-chip">{t("pasting")}{" "}<b>{clipSummary(clip)}</b> {" "}{t("· click to stamp · Esc / right-click to stop")}</span>}
+      {clipPasting && clip && !tooling && <span className="hud-chip">{t("pasting")}{" "}<b>{clipSummary(clip)}</b> {" "}{t("· click to stamp · drag to stretch · Esc / right-click to stop")}</span>}
       {showFog && <span className="hud-chip">{t("fog of war")}{" "}<b>{t("P{v}", { v: fogViewPlayer + 1 })}</b>{fogPainting && <> · {fogMode === "fog" ? t("painting") : t("clearing")} {" "}{t("· Shift inverts")}</>}</span>}
     </div>
   );

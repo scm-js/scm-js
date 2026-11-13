@@ -218,6 +218,38 @@ export function beginAreaGesture(kind: "clip" | "pick", s: PointerSample, on: { 
   return g;
 }
 
+/* ── A paste ─────────────────────────────────────────────── */
+
+/**
+ * A press while a clip is armed: a click stamps it with its corner on the tile pressed; a
+ * drag pulls it out from there first, the way a doodad stretches, and the release stamps
+ * what the drag made of it.
+ */
+export interface PasteGesture extends Live {
+  kind: "paste";
+  from: Tile;
+  stretching: boolean;
+}
+
+export function beginPasteGesture(s: PointerSample, on: { stretch(from: MapPoint, p: MapPoint, any: boolean): void; paste(tile: Tile): void; end(): void }): PasteGesture {
+  const from = s.point;
+  const g: PasteGesture = {
+    kind: "paste",
+    from: s.tile,
+    stretching: false,
+    move(m) {
+      if (!g.stretching && !travelled(from, m.mapPoint, m.zoom)) return;
+      g.stretching = true;
+      on.stretch(from, m.mapPoint, m.shift);
+    },
+    up() {
+      on.paste(g.from);
+      on.end();
+    },
+  };
+  return g;
+}
+
 /* ── A brush stroke ──────────────────────────────────────── */
 
 export interface Brush {
@@ -261,7 +293,7 @@ export interface ToolGesture {
   kind: "tool";
 }
 
-export type Gesture = ObjectGesture | LocationGesture | AreaGesture | StrokeGesture | ToolGesture;
+export type Gesture = ObjectGesture | LocationGesture | AreaGesture | StrokeGesture | ToolGesture | PasteGesture;
 
 /** The object-layer gesture in progress on `layer`, if that is what is in progress. */
 export function objectGestureOn(g: Gesture | null, layer: ObjectLayerId): ObjectGesture | null {

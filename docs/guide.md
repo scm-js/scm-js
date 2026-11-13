@@ -736,6 +736,16 @@ different tileset is refused, since tile numbers mean something else there, whil
 objects still paste. The clip survives File ▸ Open, which is how a base moves between
 maps.
 
+A clip stretches as a doodad does (see [Stretching a ramp or a
+bridge](#stretching-a-ramp-or-a-bridge)), which is how a ramp or a wall made by hand, or
+copied from another map, is made longer. Press where the clip's corner should go and drag
+instead of clicking: its picture is pulled out along the drag, the ends moved apart and
+the middle laid again, and releasing pastes it. Mark the piece with both its ends in the
+area, since the ends are what stay as they are. A stretched clip pastes its terrain only,
+into the ground itself: a doodad's record cannot name half a doodad, so the picture goes
+down as tiles, and units, sprites, locations and fog stay behind. The drag snaps to the
+ways the piece has a middle to repeat, and Shift offers all four.
+
 A piece worth keeping for other maps, such as a ramp, a bridge or a cliff corner, can be
 saved as a *stamp* (Edit ▸ Save as Stamp…, or the right-click menu on the marked area) and
 laid down on any later map from Tools ▸ Stamp Library…; see [Plugins](#plugins).

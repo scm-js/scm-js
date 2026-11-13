@@ -11,6 +11,9 @@ import { baseTerrain, flatTerrain } from "../src/formats/tileset/terrain";
 import { paintIsom } from "../src/editor/isom";
 import { checkDoodadPlacement, DEFAULT_DOODAD_PLACEMENT } from "../src/editor/doodads";
 import { SEAM_SHOWS, seamStep } from "../src/editor/blend";
+import { clipPicture, DEFAULT_CLIP_PARTS, pasteClip, STRETCHED_CLIP_PARTS, stretchClip, type Clip } from "../src/editor/clipboard";
+import { createScenario } from "../src/formats/chk/create";
+import { NO_DOODADS } from "../src/formats/tileset/doodads";
 import {
   isStretched, soundAxes, STRETCH_AXES, STRETCH_STEP, stretchDoodad, stretchFromDrag, stretchPiece, stretchPlan, VISIBLE_SEAM, type TilePiece,
 } from "../src/editor/stretch";
@@ -241,6 +244,50 @@ describe("a stretched piece", () => {
       expect(g.tiles).toEqual(p.tiles);
       expect(g.offset.x === 0 && g.offset.y === 0).toBe(true);
     }
+  });
+});
+
+describe("a clip stretched", () => {
+  const record = { doodadId: 1, x: 16, y: 16, owner: 0, disabled: 0 };
+  const clip: Clip = {
+    width: 1, height: 3, era: 0,
+    tiles: Uint16Array.from([RG_V, G, GB_V]), ground: Uint16Array.from([R, G, B]),
+    doodads: [record], units: [], sprites: [], locations: [], fog: new Uint8Array(3),
+  };
+
+  it("is its picture with the middle laid again, as terrain and nothing else", () => {
+    const long = stretchClip(ts, clip, { ...DEFAULT_CLIP_PARTS, doodads: true }, "s", 2)!;
+    expect([long.clip.width, long.clip.height]).toEqual([1, 5]);
+    expect([...long.clip.tiles!]).toEqual([RG_V, G, G, G, GB_V]);
+    // The picture goes into both tile sections, and the objects and the fog stay behind.
+    expect(long.clip.ground).toBe(long.clip.tiles);
+    expect(long.clip.doodads).toEqual([]);
+    expect(long.clip.fog).toBeNull();
+    expect(long.offset).toEqual({ x: 0, y: 0 });
+    expect(stretchClip(ts, clip, { ...DEFAULT_CLIP_PARTS, doodads: true }, "s", -2)!.offset).toEqual({ x: 0, y: -2 });
+  });
+
+  it("is the ground under the doodads when the doodads are not being pasted", () => {
+    expect(clipPicture(clip, { ...DEFAULT_CLIP_PARTS, doodads: false })).toBe(clip.ground);
+    const long = stretchClip(ts, clip, { ...DEFAULT_CLIP_PARTS, doodads: false }, "s", 1)!;
+    expect([...long.clip.tiles!]).toEqual([R, G, G, B]);
+  });
+
+  it("is nothing for a clip pasted without its terrain", () => {
+    expect(stretchClip(ts, clip, { ...DEFAULT_CLIP_PARTS, terrain: false }, "s", 2)).toBeNull();
+    expect(stretchClip(ts, { ...clip, tiles: null, ground: null }, DEFAULT_CLIP_PARTS, "s", 2)).toBeNull();
+  });
+
+  it("pastes like any clip: its tiles into both sections, one undo step", () => {
+    const scn = createScenario({ name: "t", description: "", width: 4, height: 8, era: 0, tiles: new Uint16Array(32).fill(R) });
+    const long = stretchClip(ts, clip, { ...DEFAULT_CLIP_PARTS, doodads: true }, "s", 2)!;
+    const result = pasteClip(scn, long.clip, 1, 1, { parts: STRETCHED_CLIP_PARTS, mode: "merge", catalogue: NO_DOODADS, tileset: ts });
+    expect(result.counts.tiles).toBe(5);
+    for (const [row, tile] of [RG_V, G, G, G, GB_V].entries()) {
+      expect(scn.tiles[(1 + row) * 4 + 1]).toBe(tile);
+      expect(scn.editorTiles[(1 + row) * 4 + 1]).toBe(tile);
+    }
+    expect(scn.doodads).toEqual([]);
   });
 });
 

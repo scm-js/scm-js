@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useRef } from "react";
 import { useAtomValue, useSetAtom, useStore } from "jotai";
 import {
   activeLayerAtom, clipboardAtom, clipPartsAtom, clipPasteModeAtom, clipPastingAtom, clipSelectionAtom, selectedDoodadsAtom, selectedLocationsAtom,
@@ -7,9 +7,13 @@ import {
 import { canEdit, commitEditAtom, scenarioAtom, tilesetFileNameAtom } from "../atoms/documentAtoms";
 import { statusMessageAtom } from "../atoms/uiAtoms";
 import {
-  clipSummary, copyObjects, copyRegion, EMPTY_SELECTION, pasteClip, regionObjects, removeObjects, selectionSize, type Clip, type ObjectSelection,
+  clipPicture, clipSummary, copyObjects, copyRegion, EMPTY_SELECTION, pasteClip, regionObjects, removeObjects, selectionSize, STRETCHED_CLIP_PARTS, stretchClip,
+  type Clip, type ClipParts, type ObjectSelection,
 } from "../editor/clipboard";
+import { soundAxes, STRETCH_AXES, stretchFromDrag, type StretchAxis, type StretchPlan } from "../editor/stretch";
 import type { Rect } from "../editor/terrain";
+import { stretchArrow } from "./useDoodadTools";
+import type { MapPoint } from "./useTerrainTools";
 import { peekTileset } from "../formats/tileset/load";
 import { NO_DOODADS } from "../formats/tileset/doodads";
 import { t } from "../i18n";
@@ -34,6 +38,9 @@ export function useClipboardTools() {
   const setPasting = useSetAtom(clipPastingAtom);
   const setLayer = useSetAtom(activeLayerAtom);
   const tilesetName = useAtomValue(tilesetFileNameAtom);
+
+  /** The stretch a drag from a paste's press has asked for so far. */
+  const stretch = useRef<{ axis: StretchAxis; steps: number } | null>(null);
 
   const graphics = useCallback(() => {
     const loaded = peekTileset(tilesetName);
@@ -145,12 +152,75 @@ export function useClipboardTools() {
     return true;
   }, [store, setPasting, setStatus]);
 
+  /**
+   * Pull the clip pressed at `from` out towards `p`, the way a doodad stretches: a step
+   * for each two tiles of the drag along whichever way the clip's picture has a middle to
+   * lay again, or along any of the four with `any`. Returns true when the stretch changed.
+   */
+  const stretchTo = useCallback((from: MapPoint, p: MapPoint, any = false): boolean => {
+    const clip = store.get(clipboardAtom);
+    const { tileset } = graphics();
+    const picture = clip && clipPicture(clip, store.get(clipPartsAtom));
+    if (!clip || !tileset || !picture) {
+      if (stretch.current === null) setStatus(t("Only terrain stretches — tick Terrain among the parts to paste"));
+      stretch.current = { axis: "se", steps: 0 };
+      return false;
+    }
+    const axes = any ? STRETCH_AXES : soundAxes(tileset, { width: clip.width, height: clip.height, tiles: picture });
+    const next = axes.length ? stretchFromDrag(p.px - from.px, p.py - from.py, axes) : { axis: "se" as const, steps: 0 };
+    const was = stretch.current;
+    if (was && was.axis === next.axis && was.steps === next.steps) return false;
+    stretch.current = next;
+    if (axes.length === 0) setStatus(t("This piece has no middle that repeats, so it does not stretch — hold Shift to stretch it anyway"));
+    else if (next.steps === 0) setStatus(t("Drag {arrows} to stretch the piece — hold Shift for any direction", { arrows: axes.map((a) => `${stretchArrow(a, -1)}${stretchArrow(a, 1)}`).join(" ") }));
+    else setStatus(t("Stretching the piece {arrow} by {n, plural, one {# step} other {# steps}} — release to paste its terrain", { arrow: stretchArrow(next.axis, next.steps), n: Math.abs(next.steps) }));
+    return true;
+  }, [store, graphics, setStatus]);
+
+  const endStretch = useCallback(() => { stretch.current = null; }, []);
+
+  /**
+   * What a press at tile (tx, ty) would paste: the clip with its corner there, or, while a
+   * drag is pulling it out, its picture stretched, standing where the press put it.
+   */
+  const ghostAt = useCallback((tx: number, ty: number): { clip: Clip; parts: ClipParts; x: number; y: number; stretched: { axis: StretchAxis; steps: number; plan: StretchPlan } | null } | null => {
+    const clip = store.get(clipboardAtom);
+    if (!clip) return null;
+    const parts = store.get(clipPartsAtom);
+    const pull = stretch.current;
+    const { tileset } = graphics();
+    const long = pull && pull.steps !== 0 && tileset ? stretchClip(tileset, clip, parts, pull.axis, pull.steps) : null;
+    if (!long || !pull) return { clip, parts, x: tx, y: ty, stretched: null };
+    return { clip: long.clip, parts: STRETCHED_CLIP_PARTS, x: tx + long.offset.x, y: ty + long.offset.y, stretched: { axis: pull.axis, steps: pull.steps, plan: long.plan } };
+  }, [store, graphics]);
+
   /** Stamp the clip with its top-left tile at (tx, ty) as one undo step; the pasted area becomes the marked one. */
   const pasteAt = useCallback((tx: number, ty: number): boolean => {
     const scn = store.get(scenarioAtom);
-    const clip = store.get(clipboardAtom);
-    if (!scn || !clip || !canEdit(store.get, store.set)) return false;
+    const whole = store.get(clipboardAtom);
+    if (!scn || !whole || !canEdit(store.get, store.set)) return false;
     const { catalogue, tileset } = graphics();
+    // Stretched, it is the picture alone that goes down, as terrain, from wherever the stretch put its corner.
+    const ghost = ghostAt(tx, ty);
+    if (ghost?.stretched) {
+      const { clip: long, x, y, stretched } = ghost;
+      const result = pasteClip(scn, long, x, y, { parts: STRETCHED_CLIP_PARTS, mode: store.get(clipPasteModeAtom), catalogue, tileset });
+      if (result.counts.tiles === 0) {
+        setStatus(t("Nothing pasted") + (result.notes.length ? ` — ${result.notes.join("; ")}` : ""));
+        return false;
+      }
+      clearObjectSelections();
+      commit({ label: t("Paste {clipSummary}, stretched", { clipSummary: clipSummary(whole) }), ...result.edit });
+      setSelection({ x0: Math.max(0, x), y0: Math.max(0, y), x1: Math.min(scn.width, x + long.width), y1: Math.min(scn.height, y + long.height) });
+      const steps = Math.abs(stretched.steps);
+      const notes = [...result.notes];
+      const spots = Math.round(stretched.plan.islandsPerStep * steps);
+      if (spots > 0) notes.push(t("it leaves {n, plural, one {# small spot} other {# small spots}} units cannot walk on, which View ▸ Walkability shows", { n: spots }));
+      const base = t("Pasted the terrain stretched {arrow} by {n} ({w}×{h}) at {x}, {y}", { arrow: stretchArrow(stretched.axis, stretched.steps), n: steps, w: long.width, h: long.height, x, y });
+      setStatus((notes.length ? `${base} — ${notes.join("; ")}` : base) + t(" · Esc to stop pasting"));
+      return true;
+    }
+    const clip = whole;
     const result = pasteClip(scn, clip, tx, ty, { parts: store.get(clipPartsAtom), mode: store.get(clipPasteModeAtom), catalogue, tileset });
     const c = result.counts;
     const placed = c.tiles + c.doodads + c.units + c.sprites + c.locations + c.fog;
@@ -172,7 +242,7 @@ export function useClipboardTools() {
     ].filter((b): b is string => b !== null);
     setStatus(t("Pasted {what} at {x}, {y}", { what: bits.join(", "), x: tx, y: ty }) + (result.notes.length ? ` — ${result.notes.join("; ")}` : "") + t(" · Esc to stop pasting"));
     return true;
-  }, [store, graphics, commit, clearObjectSelections, setSelection, setStatus]);
+  }, [store, graphics, ghostAt, commit, clearObjectSelections, setSelection, setStatus]);
 
   /** Mark the whole map (Edit ▸ Select All on the clipboard layer). */
   const selectAll = useCallback(() => {
@@ -185,7 +255,7 @@ export function useClipboardTools() {
   const clearSelection = useCallback(() => setSelection(null), [setSelection]);
 
   return useMemo(
-    () => ({ source, copy, cut, paste, pasteAt, stopPasting, deleteRegion, selectAll, clearSelection }),
-    [source, copy, cut, paste, pasteAt, stopPasting, deleteRegion, selectAll, clearSelection],
+    () => ({ source, copy, cut, paste, pasteAt, ghostAt, stretchTo, endStretch, stopPasting, deleteRegion, selectAll, clearSelection }),
+    [source, copy, cut, paste, pasteAt, ghostAt, stretchTo, endStretch, stopPasting, deleteRegion, selectAll, clearSelection],
   );
 }

@@ -78,6 +78,26 @@ describe("an object-layer gesture", () => {
     expect(calls).toEqual(["box 100,100 300,260 +"]);
   });
 
+  it("stretches instead where the layer's choice can be pulled out, and places on the release", () => {
+    const { layer, calls } = objects({ placing: true });
+    layer.stretch = { to: (from, p, any) => { calls.push(`stretch ${from.px},${from.py} ${p.px},${p.py}${any ? " any" : ""}`); }, end: () => { calls.push("end"); } };
+    const g = beginObjectGesture(layer, at(100, 100));
+    g.move(at(102, 100));
+    expect(g.mode).toBe("click");
+    g.move(at(164, 132));
+    expect(g.mode).toBe("stretch");
+    // Shift, held while dragging, asks for any direction.
+    g.move(at(228, 164, true));
+    g.up();
+    expect(calls).toEqual(["stretch 100,100 164,132", "stretch 100,100 228,164 any", "select []", "place 100,100", "end"]);
+    // Not placing, the same layer still draws a marquee.
+    const selecting = objects();
+    selecting.layer.stretch = layer.stretch;
+    const m = beginObjectGesture(selecting.layer, at(100, 100));
+    m.move(at(200, 200));
+    expect(m.mode).toBe("marquee");
+  });
+
   it("follows the edge of the map when the pointer leaves it", () => {
     const { layer, calls } = objects({ objectAt: 0 });
     const g = beginObjectGesture(layer, at(100, 100));

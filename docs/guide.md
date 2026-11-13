@@ -421,6 +421,20 @@ Two overlays on the View menu show what the ground means to the game:
 
 ![The buildability overlay hatches the tiles a building cannot stand on](images/terrain-buildability.webp)
 
+A third shows what the eye would find. **View ▸ Seam Overlay** draws a line along every
+join between two tiles where the picture steps: one tile ends lighter or darker than the
+next begins, by more than either picture changes by itself at that edge. Rough rock hides
+a join that a smooth slope shows, and the overlay weighs them the same way. The stronger
+the line, the plainer the join.
+
+![The seam overlay on a ramp stretched along a cliff: lines where its tiles join visibly](images/terrain-seams.webp)
+
+Ground laid by the isometric brush is almost free of lines; a few stand around doodads and
+cliff faces, where the game's own pieces meet roughly. Hand-placed tiles, a stretched ramp
+and a pasted block show where they need touching up, and the Tile and Blend brushes are
+the tools for it. The overlay compares the classic pictures, so with Remastered Graphics
+on it marks the same joins, whether or not the 2x pictures hide them.
+
 **View ▸ Walkability** (Ctrl+Shift+W) draws the ground as a unit walks it: islands, the
 areas the map divides into, the chokes between them with their widths, and the distances
 between start locations. In the editor at scmjs.dev its panel (Tools ▸ Walkability…) can
@@ -499,6 +513,53 @@ and choose *Convert Doodad to Terrain* (the Properties panel has the same button
 tiles stay, the doodad goes, and an overlay stays on as an ordinary sprite. From then on
 the Terrain layer treats the cells as ground. *Place as terrain* in the palette does the
 same at placement, for ramps and cliff pieces you mean to work over by hand.
+
+### Stretching a ramp or a bridge
+
+A ramp can be made wider and a bridge longer or wider as it is placed. With the doodad
+picked, press where it should stand and drag along it instead of clicking. The ghost grows
+by a step for every two tiles of the drag, and releasing the button places it.
+
+![A cliff ramp being stretched three steps along its cliff](images/doodad-stretch.webp)
+
+A doodad has ends and a middle: a ramp is two side walls with a slope between them, a
+bridge two landings with a deck between them. The stretch moves the ends apart and lays
+the middle again in the gap. The game's files do not say where the middle is, so the
+editor finds it by comparing the pictures of the doodad's tiles, the way the Blend brush
+finds a neighbour, and repeats the tiles that join each other best.
+
+- **Direction.** A doodad stretches only the ways it has a middle to repeat, and the drag
+  snaps to the nearest of them: a ramp along the cliff it cuts into, a bridge along its
+  deck to make it longer and, for most bridges, across it to make it wider, with the rails
+  where they were and more road between them. The status bar shows the ways on offer as
+  arrows when the drag begins. Dragging the other way along a line stretches back from
+  where you pressed. A doodad with no such line says so in the status bar. Holding Shift
+  while dragging offers all four lines whatever the doodad: the two diagonals (two tiles
+  across for each one down or up), straight across and straight down. Expect walls laid
+  across the slope and rail ends in the road that way; it is there for the pieces you mean
+  to rework by hand.
+- **The ground check covers the whole stretch.** Every added tile wants the ground the
+  tile it repeats wanted, so a ramp stretches along a straight cliff and turns red where
+  the cliff bends or ends. *Place anywhere* drops the check as it does for any doodad.
+- **It is placed as terrain.** A map's doodad list can only name a doodad as the game
+  ships it, so a stretched one goes down as tiles, the same as *Place as terrain*. It
+  cannot be selected or moved afterwards. Undo takes the whole stretch back in one step. A
+  doodad with a sprite drawn over it keeps the one sprite.
+- **How clean the result is depends on the tileset.** The bridges of Badlands, Space
+  Platform and Jungle are drawn to repeat and stretch without a visible join. Cliff ramps
+  repeat with a faint join every two tiles, as the long ramps of hand-made maps do. The
+  status bar says when the joins will show; the Tile and Blend brushes are there to touch
+  them up.
+- **Some ramps do not stretch.** A ramp built into a wall, such as the Badlands Structure
+  ramp, is two tiles wide with a side wall in each. It has no middle, and stretched it is
+  a row of half ramps with wedges of wall between them. The drag does nothing for such a
+  ramp and the status bar says why. Shift stretches it anyway.
+- **It walks as the doodad does.** In most tilesets the tile of a cliff ramp that repeats
+  best carries the tip of a wall, a rock of two or three small squares, and laid again at
+  every step it would stand in the way. Where that happens the added tiles are another of
+  the doodad's own that a unit walks everywhere the first is walked, so the slope of a
+  stretched cliff ramp is clear in every tileset. When a stretch forced with Shift leaves
+  spots a unit cannot walk, the status bar counts them, and View ▸ Walkability shows them.
 
 ## Units
 

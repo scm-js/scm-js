@@ -2944,6 +2944,8 @@
   "{label}, stretched": "{label}, 늘임",
   "{label} as terrain": "{label}을(를) 지형으로",
   "{n} × {name}": "{name} × {n}",
+  "its mirror image is {twin}, which the game's tiles make play differently in {n, plural, one {# small square} other {# small squares}}": "대칭 위치에는 {twin}이(가) 놓이며, 게임의 타일 차이로 작은 칸 {n, plural, other {#개}}에서 다르게 동작합니다",
+  "its mirror image is {twin}": "대칭 위치에는 {twin}이(가) 놓입니다",
   "Placed {what} stretched {arrow} by {n} ({w}×{h}) as terrain at tile {x}, {y}": "{what}을(를) {arrow} 방향으로 {n}단계 늘여 ({w}×{h}) 타일 {x}, {y}에 지형으로 배치함",
   "it leaves {n, plural, one {# small spot} other {# small spots}} units cannot walk on, which View ▸ Walkability shows": "유닛이 지나갈 수 없는 작은 지점이 {n, plural, other {#곳}} 생깁니다 (보기 ▸ Walkability에서 확인)",
   "its middle does not repeat cleanly, so the joins show": "가운데 부분이 깔끔하게 반복되지 않아 이음새가 보입니다",

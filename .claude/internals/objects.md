@@ -80,6 +80,13 @@ facing across the added joins that differ in the VF4 walkable bit — is 0–11%
 13–50% across it (`SOUND_WALK_BREAKS` 0.12; the gap is narrow at the Ice bridges, which join badly either
 way). The ground rule must not be asked of bridges: their ground continues *across* them, along the
 channel (Badlands #329: 83% on the junk axis). Shift (`any`) offers all four.
+A ramp must also have `islandsPerStep === 0` on that axis. The user's next question was a picture of the
+Badlands Structure ramp (#45, 4×4): its ground continues along the wall, so it was offered, and stretched
+it is a row of half ramps with wedges of wall between them (34 of 128 added minitiles unwalkable, seam
+49) — every line along the wall has two cells, a side each, and no middle. The cliff ramps, Low Platform,
+Platform Wall #159, Compound #190/#197 and the catwalks pass; the other wall ramps (Structure,
+Substructure, Temple, Outpost, Basilica, and the twins of the three that pass, which the local search
+cuts a cell differently) are not offered and the status line says the doodad has no middle.
 **Looks alone choose the cut; walkability only reports.** Two attempts to put walking into the objective
 both made it worse and are worth not repeating. A cost per walk-break across added joins drove
 `walkBreaks` under the threshold on every axis (the measure stops discriminating once it is optimised)

@@ -477,7 +477,9 @@ export function stretchPlan(tileset: Tileset, piece: TilePiece, axis: StretchAxi
  *
  * - A ramp stretches the way its ground carries on: the cliff it cuts runs along the
  *   axis, so the stretched ramp still has a cliff to stand in, and the ground check
- *   will pass on a straight cliff.
+ *   will pass on a straight cliff. And only if what a step adds walks as the ramp does:
+ *   a ramp two tiles wide, built into a wall, has both its sides in every tile, and
+ *   stretched it is a row of half ramps with wedges of wall between them.
  * - Anything else stretches where the joins a stretch adds do not set wall against
  *   floor: a bridge along its deck, rail carrying on into rail and road into road. Across
  *   the deck every step puts rail ends against the road.
@@ -486,7 +488,7 @@ export function stretchPlan(tileset: Tileset, piece: TilePiece, axis: StretchAxi
  */
 export function soundAxes(tileset: Tileset, piece: TilePiece & { ramp?: boolean }): StretchAxis[] {
   const plans = STRETCH_AXES.map((axis) => stretchPlan(tileset, piece, axis));
-  if (piece.ramp) return plans.filter((p) => p.groundContinues !== null && p.groundContinues >= SOUND_GROUND).map((p) => p.axis);
+  if (piece.ramp) return plans.filter((p) => p.groundContinues !== null && p.groundContinues >= SOUND_GROUND && p.islandsPerStep === 0).map((p) => p.axis);
   return plans.filter((p) => p.walkBreaks <= SOUND_WALK_BREAKS).map((p) => p.axis);
 }
 

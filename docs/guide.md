@@ -530,16 +530,19 @@ finds a neighbour, and repeats the tiles that join each other best.
   doodad with a sprite drawn over it keeps the one sprite.
 - **How clean the result is depends on the tileset.** The bridges of Badlands, Space
   Platform and Jungle are drawn to repeat and stretch without a visible join. Cliff ramps
-  repeat with a faint join every two tiles, as the long ramps of hand-made maps do. A ramp
-  built into a wall, with stairs or a gate, has no middle that repeats. The status bar
-  says when the joins will show; the Tile and Blend brushes are there to touch them up.
+  repeat with a faint join every two tiles, as the long ramps of hand-made maps do. The
+  status bar says when the joins will show; the Tile and Blend brushes are there to touch
+  them up.
+- **Some ramps do not stretch.** A ramp built into a wall, such as the Badlands Structure
+  ramp, is two tiles wide with a side wall in each. It has no middle, and stretched it is
+  a row of half ramps with wedges of wall between them. The drag does nothing for such a
+  ramp and the status bar says why. Shift stretches it anyway.
 - **It walks as the doodad does.** In most tilesets the tile of a cliff ramp that repeats
   best carries the tip of a wall, a rock of two or three small squares, and laid again at
   every step it would stand in the way. Where that happens the added tiles are another of
   the doodad's own that a unit walks everywhere the first is walked, so the slope of a
-  stretched cliff ramp is clear in every tileset. A ramp built into a wall has nothing
-  clean to lend; the status bar counts the spots left when it places one, and View ▸
-  Walkability shows them.
+  stretched cliff ramp is clear in every tileset. When a stretch forced with Shift leaves
+  spots a unit cannot walk, the status bar counts them, and View ▸ Walkability shows them.
 
 ## Units
 

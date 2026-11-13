@@ -128,16 +128,21 @@ describe("the axes a piece stretches along", () => {
     expect(soundAxes(ts, halves)).toContain("e");
   });
 
-  it("are, for a ramp, those its ground carries on along, whatever the joins do", () => {
-    // The same two halves as a ramp that wants one ground under both cells: it stretches
+  it("are, for a ramp, those its ground carries on along, where it has a middle to lay again", () => {
+    // Wall, floor, wall as a ramp that wants one ground under all three cells: it stretches
     // down the column, where that ground carries on, and nowhere else.
-    const onOneGround = { ...piece(1, 2, [RG_V, GB_V], [5, 5]), ramp: true };
+    const onOneGround = { ...piece(1, 3, [RG_V, G, GB_V], [5, 5, 5]), ramp: true };
     expect(stretchPlan(ts, onOneGround, "s").groundContinues).toBe(1);
     expect(stretchPlan(ts, onOneGround, "e").groundContinues).toBeNull();
     expect(soundAxes(ts, onOneGround)).toEqual(["s"]);
-    const onTwoGrounds = { ...piece(1, 2, [RG_V, GB_V], [5, 6]), ramp: true };
-    expect(stretchPlan(ts, onTwoGrounds, "s").groundContinues).toBe(0);
-    expect(soundAxes(ts, onTwoGrounds)).toEqual([]);
+    const onThreeGrounds = { ...piece(1, 3, [RG_V, G, GB_V], [5, 6, 7]), ramp: true };
+    expect(stretchPlan(ts, onThreeGrounds, "s").groundContinues).toBe(0);
+    expect(soundAxes(ts, onThreeGrounds)).toEqual([]);
+    // With no floor between its two walls, a ramp on the right ground still does not stretch:
+    // every step would stand a strip of wall across it.
+    const noMiddle = { ...piece(1, 2, [RG_V, GB_V], [5, 5]), ramp: true };
+    expect(stretchPlan(ts, noMiddle, "s").groundContinues).toBe(1);
+    expect(soundAxes(ts, noMiddle)).toEqual([]);
   });
 
   it("counts the pieces of wall and floor a step leaves behind", () => {
@@ -309,14 +314,19 @@ describe.skipIf(installed.length === 0)("stretching the game's doodads", () => {
   // Some two thousand doodads on four axes each: seconds, and more beside the rest of the suite.
   }, 60_000);
 
-  it("offers every ramp one diagonal, and a cliff ramp widened along it is ground a unit can walk", () => {
+  it("offers a ramp one diagonal at most, and a cliff ramp widened along its own is ground a unit can walk", () => {
     for (const name of installed) {
       const { tileset, catalogue } = real(name);
       for (const def of catalogue.doodads.filter((d) => d.ramp)) {
         const axes = soundAxes(tileset, def);
-        expect(axes.length, `${name} #${def.id}`).toBe(1);
-        expect(["se", "ne"], `${name} #${def.id}`).toContain(axes[0]);
+        // None for a ramp with no middle: two tiles wide and built into a wall, say.
+        expect(axes.length, `${name} #${def.id}`).toBeLessThanOrEqual(1);
+        for (const axis of axes) {
+          expect(["se", "ne"], `${name} #${def.id}`).toContain(axis);
+          expect(stretchPlan(tileset, def, axis).islandsPerStep, `${name} #${def.id}`).toBe(0);
+        }
         if (!haveNames || def.category !== "Cliff") continue;
+        expect(axes.length, `${name} #${def.id}`).toBe(1);
         // Not a minitile of rock on the slope, in any tileset: where the tile that repeats best
         // carries the tip of a wall, a clean one is borrowed.
         const plan = stretchPlan(tileset, def, axes[0]);
@@ -381,10 +391,13 @@ describe.skipIf(installed.length === 0)("stretching the game's doodads", () => {
         }
         if (places === 0) continue; // a ramp for another cliff than the one painted
         checked++;
-        // The diagonal the ramp is offered is the one the cliff takes it on.
-        const [offered] = soundAxes(tileset, def);
-        expect(fits[offered], `${name} #${def.id}`).toBeGreaterThan(places);
-        expect(fits[offered === "se" ? "ne" : "se"], `${name} #${def.id}`).toBe(0);
+        // The diagonal its ground carries on along is the one the cliff takes it on, and the only
+        // one a ramp is ever offered.
+        const along = (["se", "ne"] as const).filter((axis) => (stretchPlan(tileset, def, axis).groundContinues ?? 0) >= 0.7);
+        expect(along.length, `${name} #${def.id}`).toBe(1);
+        expect(fits[along[0]], `${name} #${def.id}`).toBeGreaterThan(places);
+        expect(fits[along[0] === "se" ? "ne" : "se"], `${name} #${def.id}`).toBe(0);
+        for (const axis of soundAxes(tileset, def)) expect(axis, `${name} #${def.id}`).toBe(along[0]);
       }
     }
     if (installed.includes("badlands")) expect(checked).toBeGreaterThan(0);

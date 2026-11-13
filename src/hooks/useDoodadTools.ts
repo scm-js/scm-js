@@ -10,7 +10,7 @@ import {
   snapDoodad, updateDoodads, type DoodadChange, type DoodadEdit, type DoodadVerdict, type SpriteChange, type TileRect,
 } from "../editor/doodads";
 import { applyChanges, Stroke } from "../editor/terrain";
-import { isStretched, soundAxes, STRETCH_AXES, stretchDoodad, stretchFromDrag, VISIBLE_SEAM, type StretchAxis } from "../editor/stretch";
+import { isStretched, soundAxes, STRETCH_AXES, stretchDoodad, stretchFromDrag, type StretchAxis } from "../editor/stretch";
 import { doodadTwin, mirroredDoodad, mirrorsAcross, twinDifference } from "../editor/doodadTwin";
 import type { Tileset } from "../formats/tileset/decode";
 import type { DoodadRecord } from "../formats/chk/sections/objects";
@@ -214,7 +214,8 @@ export function useDoodadTools() {
       const notes: string[] = mirrorNote ? [mirrorNote] : [];
       const spots = Math.round(long.plan.islandsPerStep * steps) * placed;
       if (spots > 0) notes.push(t("it leaves {n, plural, one {# small spot} other {# small spots}} units cannot walk on, which View ▸ Walkability shows", { n: spots }));
-      if (long.plan.seam > VISIBLE_SEAM) notes.push(t("its middle does not repeat cleanly, so the joins show"));
+      const shown = Math.round(long.plan.shownPerStep * steps) * placed;
+      if (shown > 0) notes.push(t("{n, plural, one {# of its joins shows} other {# of its joins show}}, which View ▸ Seam Overlay marks", { n: shown }));
       setStatus(notes.length ? `${base} — ${notes.join("; ")}` : base);
     } else {
       const base = asTerrain ? t("Placed {what} ({w}×{h}) as terrain at tile {x}, {y} — Esc or right-click to stop placing", where) : t("Placed {what} ({w}×{h}) at tile {x}, {y} — Esc or right-click to stop placing", where);

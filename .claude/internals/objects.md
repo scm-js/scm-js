@@ -152,7 +152,39 @@ footprints, `required` through the same kind of map, `stretched.offset.x` mirror
 `placedDoodads` gives a doodad and its twin one `kind` (the lower id), so `withMirrorImages` selects and
 moves the pair. No twin exists for a top-bottom mirror or a turn (the game has no flip bit for it and no
 doodad drawn that way), and those images still try the same doodad. `tests/doodad-twin.test.ts`.
-Not done: tiles from outside the doodad to hide the joins, and the plugin API. `tests/stretch.test.ts`.
+**Two measures of a join, and why not tiles from outside the doodad (2026-11-13, later).** The cut was
+first searched by `edgeDistance` alone and reported by its mean against 16. The Seam Overlay's `seamStep`
+(edge distance less the two pictures' grain) is what the eye goes by, so the search now runs under each:
+`Seams.cost(…, "edge" | "step")`, four candidate cuts on a diagonal (each middle × each measure), two on a
+straight axis, `borrowFloor`'s tie-break by the same measure as the cut it mends. The plan kept is the one
+with fewer `islandsPerStep`, then fewer `walkBreaks`, then fewer joins the overlay would draw
+(`shownPerStep`), then the smaller sum of their steps, then less edge distance. **Neither measure alone
+works.** By step alone the Badlands, Jungle and Ashworld cliff ramps and Platform #262/#263 lose their
+axis (a cut that leaves rocks). By edge alone the Twilight ramps #154/#161 laid a lamp post and the
+plateau's hexagon paving down the slope (22 joins shown in three steps; 15 now), their twins #155/#162
+were not offered at all, and the Ice bridges were not offered across the deck. Ordering by looks before
+`walkBreaks`, or treating `walkBreaks` only as the threshold it is in `soundAxes`, bought two or three
+fewer joins on the Desert and Twilight bridges for twice the walk-breaks and cost Desert #83 and Twilight
+#176 an axis. With the order above no axis that was offered is lost and none got more joins: over the 69
+axes offered, Twilight ramps 22 → 15, Desert Compound ramps 18 → 12 and 30 → 26, Twilight bridges across
+15 → 12 and 17 → 13, Jungle #268/#269 lengthways 3 → 0; newly offered, Twilight #155/#162 and both Ice
+bridges across the deck (clean deck, 9–10 joins in three steps). 30 of 40 ramps are offered now. The
+status line after placing counts `shownPerStep × steps` and names View ▸ Seam Overlay (it used to say
+"its middle does not repeat cleanly" when the mean edge distance passed 16, which for a cliff ramp was
+a coin toss). Planning is twice the work: ≤ 60 ms for the largest doodad and axis, once per doodad.
+*Tiles from outside the doodad: tried, measured better, looked worse, not shipped.* A last pass let the
+added cells of a line show any tile of the tileset that is the same to the game (the Heal brush's rule:
+group flag word and sixteen VF4 words identical, mean colour within `HEAL_SAME_GROUND`) where fewer
+joins would show. Over all offered axes the joins shown fell from 652 to 492 (Badlands #78 12 → 4,
+Twilight #175 across 12 → 3). The pictures are worse: the only same-kind tiles a slope or a deck has
+outside its doodad are its mirror twin's, so a Twilight bridge got slats running the other way laid
+into its deck in a herringbone, a Badlands slope got the twin's mirrored shading in diamonds, and the low
+edge of a ramp got the pebble doodads (walkable, same flags, same mean colour) one a step. A join
+measured on the outermost row of pixels does not see which way a texture runs. The dark stripe on a
+Badlands ramp's low edge is the shadow of its left wall in the one tile that line has, and no tile in
+the tileset is that edge without the shadow. Do not retry this with the same measure; it would take a
+measure of direction (a few rows deep, not one) or drawn tiles.
+Not done: the plugin API. `tests/stretch.test.ts`.
 
 The palette's preview size (`doodadThumbSizeAtom`, `scmjs.doodadThumbSize`, small / medium / large)
 sets `DoodadThumb`'s box and, through `--doodad-thumb-w` / `-h` on `.doodad-grid`, the cell width the

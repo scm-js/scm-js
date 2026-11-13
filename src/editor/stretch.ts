@@ -15,17 +15,19 @@
  * cells of the piece that lie on one line along the axis form a *line*; a stretch by
  * `n` steps lays one cell of every line `n` more times and moves the rest of the line
  * along. Which cell — the *cut* — is what `stretchPlan` works out: the choice per line
- * that leaves the least visible seams in a stretched piece, measured with the Blend
- * brush's edge distance, with a tile beside bare ground counted as a seam where the
- * piece as shipped has none there, and a slight pull towards the middle so that a piece
- * that could be cut anywhere is cut through its centre.
+ * that leaves the least visible seams in a stretched piece, with a tile beside bare
+ * ground counted as a seam where the piece as shipped has none there, and a slight pull
+ * towards the middle so that a piece that could be cut anywhere is cut through its
+ * centre. A seam is measured two ways, by the Blend brush's edge distance and by the
+ * step the Seam Overlay draws, and the cut is searched by each: neither finds the best
+ * one for every doodad.
  *
  * Everything here is pure and canvas-free; `tests/stretch.test.ts` runs it against a
  * synthetic tileset and, where they are installed, the game's.
  */
 import { megatileForTile, megatileHeight, TileFlag, type Tileset } from "../formats/tileset/decode";
 import type { DoodadDef } from "../formats/tileset/doodads";
-import { edgeDistance, edgeTable, type EdgeTable } from "./blend";
+import { edgeDistance, edgeTable, SEAM_SHOWS, seamStep, type EdgeTable } from "./blend";
 
 export type StretchAxis = "se" | "ne" | "e" | "s";
 
@@ -67,6 +69,8 @@ export interface StretchPlan {
    */
   seam: number;
   seamsPerStep: number;
+  /** How many of those joins per step View ▸ Seam Overlay draws (`seamStep` over `SEAM_SHOWS`). */
+  shownPerStep: number;
   /**
    * The share of the minitile pairs facing each other across those added joins where one
    * can be walked and the other cannot: a wall end against open ground, which a doodad
@@ -169,10 +173,14 @@ function build(piece: TilePiece, axis: StretchAxis, lines: readonly number[][], 
 
 const H = 0, V = 1;
 
+/** What a join is measured by while the cut is searched for. */
+type SeamMeasure = "edge" | "step";
+
 /** Seam costs between the piece's own tiles, with the joins it ships with remembered. */
 class Seams {
   private readonly edges: EdgeTable;
   private readonly memo = new Map<number, number>();
+  private readonly stepMemo = new Map<number, number>();
   /** `tile * 4 + side` for every side of a tile that the piece as shipped leaves bare (side: 0 left, 1 top, 2 right, 3 bottom). */
   private readonly bare = new Set<number>();
   /** `(a * 65536 + b) * 2 + orientation` for every pair the piece as shipped joins. */
@@ -202,11 +210,19 @@ class Seams {
 
   isShipped(a: number, b: number, o: number) { return this.shipped.has(this.key(a, b, o)); }
 
-  /** `a` with `b` to its right (H) or below it (V); either may be 0 for bare ground. */
-  cost(a: number, b: number, o: number): number {
+  /**
+   * `a` with `b` to its right (H) or below it (V); either may be 0 for bare ground. By
+   * `edge`, how unlike the two rows of pixels that meet are; by `step`, that less the
+   * grain of the two pictures there, which is what the Seam Overlay draws.
+   */
+  cost(a: number, b: number, o: number, measure: SeamMeasure = "edge"): number {
     if (!a && !b) return 0;
     if (!a) return this.bare.has(b * 4 + (o === H ? 0 : 1)) ? 0 : BARE_COST;
     if (!b) return this.bare.has(a * 4 + (o === H ? 2 : 3)) ? 0 : BARE_COST;
+    return measure === "edge" ? this.edge(a, b, o) : Math.max(0, this.step(a, b, o));
+  }
+
+  private edge(a: number, b: number, o: number): number {
     const key = this.key(a, b, o);
     let d = this.memo.get(key);
     if (d === undefined) {
@@ -217,18 +233,29 @@ class Seams {
     return d;
   }
 
+  /** The step the Seam Overlay measures between two tiles (`seamStep`); over `SEAM_SHOWS` it draws the join. */
+  step(a: number, b: number, o: number): number {
+    const key = this.key(a, b, o);
+    let d = this.stepMemo.get(key);
+    if (d === undefined) {
+      d = seamStep(this.tileset, megatileForTile(this.tileset, a), o === H ? "right" : "bottom", megatileForTile(this.tileset, b));
+      this.stepMemo.set(key, d);
+    }
+    return d;
+  }
+
   /** Every join of a stretched piece, the outline included. */
-  total(g: StretchedPiece): number {
+  total(g: StretchedPiece, measure: SeamMeasure = "edge"): number {
     const { width, height, tiles } = g;
     let sum = 0;
     for (let r = 0; r < height; r++) {
       for (let c = 0; c < width; c++) {
         const a = tiles[r * width + c];
         const right = c + 1 < width ? tiles[r * width + c + 1] : 0, below = r + 1 < height ? tiles[(r + 1) * width + c] : 0;
-        sum += this.cost(a, right, H);
-        sum += this.cost(a, below, V);
-        if (c === 0) sum += this.cost(0, a, H);
-        if (r === 0) sum += this.cost(0, a, V);
+        sum += this.cost(a, right, H, measure);
+        sum += this.cost(a, below, V, measure);
+        if (c === 0) sum += this.cost(0, a, H, measure);
+        if (r === 0) sum += this.cost(0, a, V, measure);
       }
     }
     return sum;
@@ -250,13 +277,15 @@ class Seams {
    * costs, and the share of the minitile pairs across them that differ in whether they
    * walk.
    */
-  fresh(g: StretchedPiece): { seams: number[]; walkBreaks: number } {
+  fresh(g: StretchedPiece): { seams: number[]; walkBreaks: number; shown: number; steps: number } {
     const { width, height, tiles } = g;
     const seams: number[] = [];
-    let pairs = 0, breaks = 0;
+    let pairs = 0, breaks = 0, shown = 0, steps = 0;
     const join = (a: number, b: number, o: number) => {
       if (!b || this.isShipped(a, b, o)) return;
       seams.push(this.cost(a, b, o));
+      const step = this.step(a, b, o);
+      if (step > SEAM_SHOWS) { shown++; steps += step; }
       const near = this.walks(a, o === H ? 2 : 3), far = this.walks(b, o === H ? 0 : 1);
       for (let i = 0; i < 4; i++) { pairs++; if (near[i] !== far[i]) breaks++; }
     };
@@ -268,7 +297,7 @@ class Seams {
         join(a, r + 1 < height ? tiles[(r + 1) * width + c] : 0, V);
       }
     }
-    return { seams, walkBreaks: pairs ? breaks / pairs : 0 };
+    return { seams, walkBreaks: pairs ? breaks / pairs : 0, shown, steps };
   }
 
   /**
@@ -345,7 +374,7 @@ function walkMask(tileset: Tileset, tile: number): number {
  * Among the tiles that qualify, the one that joins its neighbours best. Returns the fill
  * per line, the repeated cells' own where nothing was borrowed.
  */
-function borrowFloor(tileset: Tileset, piece: TilePiece, axis: StretchAxis, lines: readonly number[][], cut: readonly number[], seams: Seams): number[] {
+function borrowFloor(tileset: Tileset, piece: TilePiece, axis: StretchAxis, lines: readonly number[][], cut: readonly number[], seams: Seams, measure: SeamMeasure): number[] {
   const fill = lines.map((line, i) => piece.tiles[line[cut[i]]]);
   // What a step adds, not what the stretch has: pulling the ends apart can part two rocks
   // the doodad ships touching, once, and that is nothing a tile could mend.
@@ -370,7 +399,7 @@ function borrowFloor(tileset: Tileset, piece: TilePiece, axis: StretchAxis, line
         const g = build(piece, axis, lines, cut, JUDGED_STEPS, fill);
         const count = seams.islands(g);
         if (count >= islands) continue;
-        const seam = seams.total(g);
+        const seam = seams.total(g, measure);
         if (!best || count < best.islands || (count === best.islands && seam < best.seam)) best = { tile, islands: count, seam };
       }
       fill[i] = best ? best.tile : before;
@@ -431,7 +460,7 @@ export function stretchPlan(tileset: Tileset, piece: TilePiece, axis: StretchAxi
   const isometric = (cell: number) => Math.abs(((cell % piece.width) - cx) / (2 * dx) + (((cell / piece.width) | 0) - cy) / (2 * dy));
 
   /** The cut that leaves the least, pulled towards the middle as `off` measures it, and what it leaves. */
-  const search = (off: (cell: number) => number): { cut: number[]; left: number } => {
+  const search = (off: (cell: number) => number, measure: SeamMeasure): { cut: number[]; left: number; measure: SeamMeasure } => {
     // Start from the cut straight across the middle.
     const cut = lines.map((line) => {
       let best = 0;
@@ -442,7 +471,7 @@ export function stretchPlan(tileset: Tileset, piece: TilePiece, axis: StretchAxi
     // Looks alone choose the cut. Two attempts to have walkability choose it too made things
     // worse, since a cut can always buy clean walking by laying a wall across the slope: see
     // the note in .claude/internals/objects.md before trying a third.
-    const score = () => seams.total(build(piece, axis, lines, cut, JUDGED_STEPS)) + pull();
+    const score = () => seams.total(build(piece, axis, lines, cut, JUDGED_STEPS), measure) + pull();
 
     // One line at a time, to the cell that leaves the least; a few passes settle it, since a
     // line only meets the ones beside it.
@@ -463,38 +492,50 @@ export function stretchPlan(tileset: Tileset, piece: TilePiece, axis: StretchAxi
       }
       if (!moved) break;
     }
-    return { cut, left: seams.total(build(piece, axis, lines, cut, JUDGED_STEPS)) };
+    return { cut, left: seams.total(build(piece, axis, lines, cut, JUDGED_STEPS)), measure };
   };
   /** A cut made into a plan: mended, and measured. */
-  const finish = ({ cut, left }: { cut: number[]; left: number }): { plan: StretchPlan; left: number } => {
+  const finish = ({ cut, left, measure }: { cut: number[]; left: number; measure: SeamMeasure }): { plan: StretchPlan; left: number; steps: number } => {
     // What tells a sound axis from a mess is measured on the cut as looks chose it, before any
     // mending: a measure stops telling once something is done to improve it.
     const { walkBreaks } = seams.fresh(build(piece, axis, lines, cut, JUDGED_STEPS));
-    const fill = borrowFloor(tileset, piece, axis, lines, cut, seams);
+    const fill = borrowFloor(tileset, piece, axis, lines, cut, seams, measure);
     const judged = build(piece, axis, lines, cut, JUDGED_STEPS, fill);
     const fresh = seams.fresh(judged);
     return {
       left,
+      steps: fresh.steps,
       plan: {
         axis, lines, cut, fill,
         seam: fresh.seams.length ? fresh.seams.reduce((s, v) => s + v, 0) / fresh.seams.length : 0,
         seamsPerStep: fresh.seams.length / JUDGED_STEPS,
+        shownPerStep: fresh.shown / JUDGED_STEPS,
         walkBreaks,
         islandsPerStep: Math.max(0, seams.islands(judged) - seams.islands(build(piece, axis, lines, cut, JUDGED_STEPS - 1, fill))),
         groundContinues: groundContinues(piece, axis),
       },
     };
   };
-  const bySquare = finish(search(square));
-  // The two measures are one and the same on the straight axes. Of the two cuts, the one
-  // that walks more as the piece does (nothing left standing in the way, then fewer walls
-  // set against floor), and between two that walk alike, the one that joins better.
-  const byIsometric = dx !== 0 && dy !== 0 ? finish(search(isometric)) : bySquare;
-  const a = byIsometric.plan, b = bySquare.plan;
-  const better = a.islandsPerStep !== b.islandsPerStep ? a.islandsPerStep < b.islandsPerStep
-    : Math.abs(a.walkBreaks - b.walkBreaks) > 1e-9 ? a.walkBreaks < b.walkBreaks
-    : byIsometric.left < bySquare.left - 1e-6;
-  const { plan } = better ? byIsometric : bySquare;
+  // Four cuts on a diagonal, two on a straight axis (where the two middles are one): each
+  // middle, searched by each measure of a join. By the edge difference alone the Twilight
+  // ramps laid a lamp post and the plateau's paving down the slope, tiles whose last row of
+  // pixels happens to be near the slope's; by the overlay's step alone the Badlands, Jungle
+  // and Ashworld cliff ramps got a cut that leaves rocks. Of the cuts, the one that walks
+  // more as the piece does (nothing left standing in the way, then fewer walls set against
+  // floor), and among those that walk alike, the one with the fewest joins that show.
+  const found = [finish(search(square, "edge")), finish(search(square, "step"))];
+  if (dx !== 0 && dy !== 0) found.push(finish(search(isometric, "edge")), finish(search(isometric, "step")));
+  type Found = (typeof found)[number];
+  const order = (a: Found, b: Found): number => {
+    if (a.plan.islandsPerStep !== b.plan.islandsPerStep) return a.plan.islandsPerStep - b.plan.islandsPerStep;
+    if (Math.abs(a.plan.walkBreaks - b.plan.walkBreaks) > 1e-9) return a.plan.walkBreaks - b.plan.walkBreaks;
+    if (a.plan.shownPerStep !== b.plan.shownPerStep) return a.plan.shownPerStep - b.plan.shownPerStep;
+    if (Math.abs(a.steps - b.steps) > 1e-6) return a.steps - b.steps;
+    return a.left - b.left;
+  };
+  let chosen = found[0];
+  for (const f of found) if (order(f, chosen) < 0) chosen = f;
+  const { plan } = chosen;
   byAxis.set(axis, plan);
   return plan;
 }

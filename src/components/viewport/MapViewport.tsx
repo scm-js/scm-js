@@ -56,6 +56,7 @@ import { activeDocumentIdAtom, canEdit, doodadsRevisionAtom, locationsAtom, pinn
 import { useTileset } from "../../hooks/useTileset";
 import { useMissingTerrain } from "../../hooks/useMissingTerrain";
 import { paintsTiles, useTerrainTools, type MapPoint } from "../../hooks/useTerrainTools";
+import { useFairness } from "../../hooks/useFairness";
 import { cancelMapPickAtom, cancelMapToolAtom, mapPickAtom, mapViewStateAtom, mapToolAtom, mapToolRevisionAtom, pluginOverlayRevisionAtom, pluginOverlaysAtom, shownMapViewAtom, viewFlashesAtom, type PluginOverlayEntry } from "../../atoms/pluginAtoms";
 import type { MapPointer, MapView, OverlayAbove, PickedObject } from "../../plugins/api";
 import { wheelStep } from "../../plugins/mapViews";
@@ -326,6 +327,8 @@ export default function MapViewport() {
   const { loaded: tilesetAssets, loading: tilesetLoading, error: tilesetError } = useTileset();
   // Terrain the data set in use has not got (a mod's map over the game's files): said once, as a toast.
   useMissingTerrain(tilesetAssets);
+  // View ▸ Symmetry Differences: measured only while it is on.
+  const fairness = useFairness(flags.asymmetry, tilesetAssets?.tileset ?? null);
 
   const tilePx = TILE * zoom;
   const worldW = mapW * tilePx;
@@ -391,6 +394,7 @@ export default function MapViewport() {
       ({ animated: animatedInView, moving: movingInView } = paintGround(v, groundLayerRef, {
         scenario, tiles, assets: tilesetAssets, terrainRevision, doodadsRevision, elevation: flags.elevation, buildability: flags.buildability, seams: flags.seams,
         pins: flags.pins || (layer === "terrain" && terrainMode === "pin") ? pinned : null,
+        unlike: fairness?.report?.mask ?? null,
         lacks: scenario ? mapLacks(tiles, tilesetIndex(scenario), tilesetAssets.tileset.groups.length, terrainRevision + doodadsRevision) : null,
         motion: flags.animateWater ? { pass: effectPass, seconds: (performance.now() / 1000) * waterSpeed, tune: effectTune } : null,
       }));
@@ -569,7 +573,7 @@ export default function MapViewport() {
       lastViewportRect.current = rect;
       setViewportRect(rect);
     }
-  }, [size, tilePx, zoom, mapW, mapH, worldW, worldH, tileset, flags, gridSize, gridLook, layer, brush, setViewportRect, scenario, tilesetAssets, terrainRevision, pinned, locations, startLocations, terrainMode, painting, blending, blendAnchor, tools, tilesetLoading, unitsEditing, unitPlacing, unitTools, unitAssets, animator, selectedUnits, showFog, fogViewPlayer, fogPainting, fogMode, doodadsEditing, doodadPlacing, doodadTools, doodadsRevision, selectedDoodads, clipEditing, clipPasting, clip, clipParts, clipSelection, clipTools, picking, mapPick, tooling, mapTool, overlays, spritesEditing, spritePlacing, spriteTools, selectedSprites, locationsEditing, locationTools, selectedLocations, symmetry, flashes, waterSpeed, effectTune, effectPass]);
+  }, [size, tilePx, zoom, mapW, mapH, worldW, worldH, tileset, flags, gridSize, gridLook, layer, brush, setViewportRect, scenario, tilesetAssets, terrainRevision, pinned, fairness, locations, startLocations, terrainMode, painting, blending, blendAnchor, tools, tilesetLoading, unitsEditing, unitPlacing, unitTools, unitAssets, animator, selectedUnits, showFog, fogViewPlayer, fogPainting, fogMode, doodadsEditing, doodadPlacing, doodadTools, doodadsRevision, selectedDoodads, clipEditing, clipPasting, clip, clipParts, clipSelection, clipTools, picking, mapPick, tooling, mapTool, overlays, spritesEditing, spritePlacing, spriteTools, selectedSprites, locationsEditing, locationTools, selectedLocations, symmetry, flashes, waterSpeed, effectTune, effectPass]);
 
   /**
    * Every repaint request — a pointer move, a scroll, a render that changed what is drawn —

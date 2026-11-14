@@ -204,6 +204,7 @@ export const viewFlagsAtom = atom<ViewFlags>({
   buildability: false,
   seams: false,
   pins: false,
+  asymmetry: false,
   startLocations: true,
   animateWater: true,
   animateUnits: true,

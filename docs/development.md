@@ -778,9 +778,12 @@ node scripts/cli-screenshots.mjs --play-url http://127.0.0.1:8766/play --bots ~/
 The map pictures need a copy of StarCraft, and the pictures of commands that run the game
 need the play page's engine too: `--play-url` points at a staged play page when the newest
 runners are not deployed yet. The ladder and the replay picture need built bots (`--bots`,
-a folder with `ualbertabot.scmbot` and `example.scmbot`). A picture whose inputs are
-missing is skipped and its file left as it is. The terminal for `replay watch` comes from
-util-linux's `script`, so that picture is taken on Linux.
+a folder with `ualbertabot.scmbot` and `example.scmbot`). The heatmap and the frame of a
+`replay export` clip are made from games a JavaScript bot plays, `starter.mjs` in the same
+folder (scmbot's `examples/starter/starter.mjs`), and the clip needs a browser
+`replay export` can start (`--browser`). A picture whose inputs are missing is skipped and
+its file left as it is. The terminal for `replay watch` comes from util-linux's `script`,
+so that picture is taken on Linux.
 
 ## Contributing
 

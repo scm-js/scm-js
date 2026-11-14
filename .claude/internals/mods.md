@@ -641,7 +641,6 @@ any hash line for them (a decision for all four repositories).
 - The runners' `--mod <folder>` and `current.json` `"mods"` (now 2) are scm-sim's to publish with a deploy.
 - `map run` (plugins, no engine) has no `--mod`; `map test|trace|cost` and `mod test` do.
 - iscript header comments (images using an id) are not written; table comments are.
-- `docs/images/cli-overview.webp` predates the `mod` row (re-run `scripts/cli-screenshots.mjs`).
 - Writing a 1 GB MPQ holds every member and the output in memory (~2 GB for Cosmonarchy).
 
 ## Terrain a mod declares (2026-11-14, branch `mod-terrain-file`)

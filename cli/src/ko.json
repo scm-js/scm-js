@@ -1539,7 +1539,6 @@
   "Needs Docker: the toolchain is a Docker image, downloaded the first time. scmjs mod play --bot hands the file to the play page.": "Docker가 필요합니다: 툴체인은 Docker 이미지이며 처음에 내려받습니다. scmjs mod play --bot이 그 파일을 플레이 페이지에 넘깁니다.",
   "the newest toolchain, the one the play page expects": "플레이 페이지가 기대하는 최신 툴체인",
   "play the bot against the game's computers on a map, with no page": "페이지 없이 맵에서 봇을 게임의 컴퓨터와 플레이",
-  "a .scmbot file": ".scmbot 파일",
   "a map StarCraft itself opens: a .scm or .scx": "스타크래프트가 직접 여는 맵: .scm 또는 .scx",
   "the bot's race: zerg, terran, protoss or random": "봇의 종족: zerg, terran, protoss 또는 random",
   "the game's computers, a race each (zerg,terran)": "게임의 컴퓨터, 하나에 종족 하나 (zerg,terran)",
@@ -1555,7 +1554,6 @@
   "--mod needs a play page whose engine runs a mod's code (\"mods\": 2 in its engine/current.json); with an older one\nthe command stops and says which version it needs.": "--mod에는 모드의 코드를 실행하는 엔진을 가진 플레이 페이지가 필요합니다 (engine/current.json의\n\"mods\": 2). 더 오래된 엔진이면 명령은 멈추고 필요한 버전을 알려 줍니다.",
   "--ums and --melee: one kind of game": "--ums와 --melee 중 하나만: 게임 종류는 하나입니다",
   "a round robin of bots and the game's computer over maps: a table, Elo and every replay": "봇과 게임의 컴퓨터가 여러 맵에서 돌아가며 붙는 리그: 순위표, Elo, 모든 리플레이",
-  "bots (.scmbot files) and computer; a race after a colon: mybot.scmbot:p, computer:t": "봇 (.scmbot 파일)과 computer. 콜론 뒤에 종족: mybot.scmbot:p, computer:t",
   "the maps to play on": "플레이할 맵",
   "games of each pairing on each map, in each race, a seed each (1, 2, 3, …)": "맵마다, 종족마다 각 대진의 게임 수, 게임마다 시드 하나 (1, 2, 3, …)",
   "where the replays and ladder.json go (default: ladder-<date>-<time> here)": "리플레이와 ladder.json을 둘 곳 (기본값: 여기의 ladder-<date>-<time>)",
@@ -2568,5 +2566,7 @@
   "--bot is for a C++ bot's folder (its scmbot.json); a JavaScript bot is told the mod at run time, and --js writes the module alone.": "--bot은 C++ 봇의 폴더(scmbot.json)를 위한 것입니다. JavaScript 봇은 실행할 때 모드를 전달받으며, --js는 모듈만 씁니다.",
   "for a JavaScript bot: <Mod>.mjs in place of the C++ header": "JavaScript 봇용: C++ 헤더 대신 <Mod>.mjs",
   "With --js, <Mod>.mjs in place of the header: the same ids as a JavaScript module (UnitTypes.Terran_Mason). A\nJavaScript bot is given the mod's names and its name and hash at run time anyway; the module is for an editor's\ncompletion, and for ids pinned to one version of the mod.": "--js를 주면 헤더 대신 <Mod>.mjs를 씁니다: 같은 ID를 JavaScript 모듈로(UnitTypes.Terran_Mason). JavaScript\n봇은 어차피 실행할 때 모드의 이름들과 모드의 이름·해시를 전달받습니다. 이 모듈은 편집기의 자동 완성과,\n모드의 한 버전에 고정된 ID를 위한 것입니다.",
-  "Module": "모듈"
+  "Module": "모듈",
+  "a .scmbot file, or a bot written in JavaScript or TypeScript (.js, .mjs, .ts)": ".scmbot 파일, 또는 JavaScript나 TypeScript로 쓴 봇(.js, .mjs, .ts)",
+  "bots (.scmbot files, or .js, .mjs, .ts) and computer; a race after a colon: mybot.scmbot:p, computer:t": "봇(.scmbot 파일, 또는 .js, .mjs, .ts)과 computer; 콜론 뒤에 종족: mybot.scmbot:p, computer:t"
 }

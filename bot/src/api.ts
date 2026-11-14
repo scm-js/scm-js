@@ -517,7 +517,7 @@ export interface BotApi {
   build(worker: number, unitType: number, tileX: number, tileY: number): void;
   buildAddon(building: number, unitType: number): void;
   research(building: number, tech: number): void;
-  /** Casts `tech` (a `TechTypes` id the game can cast: see docs/bots.md) with one unit at a unit or a point. */
+  /** Casts `tech` (a `TechTypes` id the game can cast: `TECH_ORDERS` lists them) with one unit at a unit or a point. */
   useTech(unit: number, tech: number, target: BotTarget): void;
   cloak(units: number | number[]): void;
   decloak(units: number | number[]): void;
@@ -535,7 +535,10 @@ export interface BotApi {
   cancelMorph(units: number | number[]): void;
   /** The add-on a terran building is putting up. */
   cancelAddon(building: number | number[]): void;
-  /** Calls off the nuclear strike these ghosts are painting (round thirteen): the missile is lost unless it is already coming down. */
+  /**
+   * Calls off the nuclear strike these ghosts are painting: the missile is lost unless it is already coming down. Not
+   * available where the bot plays as BWAPI's client (the play page's game, `scmjs bot run`): BWAPI has no command for it.
+   */
   cancelNuke(ghosts: number | number[]): void;
   siege(units: number | number[]): void;
   unsiege(units: number | number[]): void;
@@ -659,7 +662,7 @@ export const Orders = {
 export const TECH_ORDERS: Readonly<Record<number, number>> = {
   1: 115, 2: 122, 3: 132, 4: 139, 6: 141, 7: 143, 15: 144, 17: 146, 22: 147, 24: 180,
   8: 113, 12: 27, 13: 121, 14: 119, 16: 145, 18: 120, 19: 142, 20: 148, 21: 137, 25: 181, 27: 182, 29: 184, 30: 185, 31: 186,
-  45: 126, // round thirteen: Nuclear Strike (a ghost, with a missile ready in a Nuclear Silo — `train(silo, 14)`); no energy, no research
+  45: 126, // Nuclear Strike (a ghost, with a missile ready in a Nuclear Silo — `train(silo, 14)`); no energy, no research
 };
 
 /** The command kinds a bot may give; anything else it sends is dropped. */

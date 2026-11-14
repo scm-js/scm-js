@@ -1,5 +1,5 @@
 /**
- * The friendly layer over `BOT_API` (docs/js-bots-plan.md, J6): units as objects with their orders on them, the race's
+ * The friendly layer over `BOT_API`: units as objects with their orders on them, the race's
  * own words, counts that include what is on its way, and the game's traps handled once — a building that gets its
  * builder, its money and its site, and starts again when the game turned the builder away.
  *
@@ -17,7 +17,7 @@
  *     },
  *   };
  *
- * Every host takes this shape (`shell.ts` wraps it with `easyBot`), so a bot written this way runs wherever a bot
+ * Every host takes this shape (the host wraps it with `easyBot`), so a bot written this way runs wherever a bot
  * runs, as one plain file with no imports. Underneath it is `BOT_API` 1: `game.view` and `game.api` are there for
  * anything the layer does not cover. It imports nothing but `api.ts`, so the two files can be copied next to a bot
  * together.

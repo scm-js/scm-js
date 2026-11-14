@@ -1891,7 +1891,7 @@ ${pc.dim(t("Guide: {url}", { url: BOT_GUIDE }))}`);
     .action(async () => { await runBot(["build"]); });
   bot.command("update").description(t("the newest toolchain, the one the play page expects"))
     .action(async () => { await updateBot(); });
-  bot.command("run").description(t("play the bot against the game's computers on a map, with no page")).argument("<bot>", t("a .scmbot file")).argument("<map>", t("a map StarCraft itself opens: a .scm or .scx")).addOption(json)
+  bot.command("run").description(t("play the bot against the game's computers on a map, with no page")).argument("<bot>", t("a .scmbot file, or a bot written in JavaScript or TypeScript (.js, .mjs, .ts)")).argument("<map>", t("a map StarCraft itself opens: a .scm or .scx")).addOption(json)
     .option("--race <race>", t("the bot's race: zerg, terran, protoss or random"), "random")
     .option("--opponents <races>", t("the game's computers, a race each (zerg,terran)"), "zerg")
     .option("--seed <n>", t("the game's seed; the same seed, bot and map give the same game"))
@@ -1927,7 +1927,7 @@ the command stops and says which version it needs.`))
     });
 
   bot.command("ladder").description(t("a round robin of bots and the game's computer over maps: a table, Elo and every replay"))
-    .argument("<bots...>", t("bots (.scmbot files) and computer; a race after a colon: mybot.scmbot:p, computer:t")).addOption(json)
+    .argument("<bots...>", t("bots (.scmbot files, or .js, .mjs, .ts) and computer; a race after a colon: mybot.scmbot:p, computer:t")).addOption(json)
     .requiredOption("--maps <maps...>", t("the maps to play on"))
     .option("--races <races>", t("the races a side plays when it has none of its own: letters of z, t, p and r (random) run together, or words with commas"), "r")
     .option("--games <n>", t("games of each pairing on each map, in each race, a seed each (1, 2, 3, …)"), "1")

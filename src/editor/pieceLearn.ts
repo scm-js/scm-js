@@ -9,6 +9,8 @@ import { lackedGroups } from "../data/remasteredTiles";
 import type { Cv5Group } from "../formats/tileset/decode";
 import { openMapBytes } from "./mapFile";
 import { cutPieces, emptyEvidence, gatherEvidence, type PieceEvidence } from "./pieces";
+import { emptyBorderEvidence, gatherBorderEvidence, type BorderClasses, type BorderEvidence } from "./borderTable";
+import type { StandIns } from "./borderLattice";
 
 /** A map to read: its name for the report and its bytes when asked. */
 export interface LearnFile {
@@ -27,6 +29,8 @@ export interface LearnResult {
   skipped: { name: string; reason: SkipReason }[];
   /** The evidence by ERA index (0–7), for every tileset at least one map was counted on. */
   evidence: Map<number, PieceEvidence>;
+  /** Drawn borders' evidence by ERA index, for every tileset `LearnDeps.borders` gave a setup for. */
+  borders: Map<number, BorderEvidence>;
 }
 
 export interface LearnDeps {
@@ -38,14 +42,20 @@ export interface LearnDeps {
   pause?(): Promise<void>;
   /** True to stop early: what was read so far is kept. */
   stopped?(): boolean;
+  /**
+   * What drawn borders are read with on a tileset (`borderTable.ts`): its classes (the known sources' copies) and the
+   * stand-ins; null where no source is known. Without it nothing is learned of borders.
+   */
+  borders?(era: number): Promise<{ classes: BorderClasses; standIns: StandIns } | null>;
 }
 
 /** Whether a file name is a map the editor opens. */
 export const isMapName = (name: string) => /\.sc[mx]$/i.test(name);
 
 export async function learnFromMaps(files: readonly LearnFile[], deps: LearnDeps): Promise<LearnResult> {
-  const result: LearnResult = { read: 0, tables: new Map(), skipped: [], evidence: new Map() };
+  const result: LearnResult = { read: 0, tables: new Map(), skipped: [], evidence: new Map(), borders: new Map() };
   const tables = new Map<number, readonly Cv5Group[] | null>();
+  const borderSetups = new Map<number, { classes: BorderClasses; standIns: StandIns } | null>();
   let done = 0;
   for (const file of files) {
     if (deps.stopped?.()) break;
@@ -61,6 +71,13 @@ export async function learnFromMaps(files: readonly LearnFile[], deps: LearnDeps
         if (!into) result.evidence.set(era, (into = emptyEvidence()));
         result.tables.set(era, groups);
         gatherEvidence(into, scenario.tiles, scenario.width, scenario.height, { groups: groups as Cv5Group[] });
+        if (deps.borders && !borderSetups.has(era)) borderSetups.set(era, await deps.borders(era).catch(() => null));
+        const b = borderSetups.get(era);
+        if (b && b.classes.host.groups.length === groups.length) {
+          let bInto = result.borders.get(era);
+          if (!bInto) result.borders.set(era, (bInto = emptyBorderEvidence()));
+          gatherBorderEvidence(bInto, scenario.tiles, scenario.width, scenario.height, b.classes, b.standIns);
+        }
         result.read++;
       }
     } catch {

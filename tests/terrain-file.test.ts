@@ -50,7 +50,7 @@ const GOOD = {
       terrains: [{ name: "Plating", group: 20 }],
       pieces: [{ name: "Long ramp", category: "Ramps", cols: 2, rows: 2, tiles: [0x140, 0x141, -1, 0x151] }, { cols: 1, rows: 1, tiles: [0x160] }],
       borrow: [{ source: "install", pairs: [[0x30, 0x170], [0x31, 0x171]] }],
-      borders: [{ future: true }],
+      shading: [{ future: true }],
     },
   },
   maker: "made by hand",
@@ -65,7 +65,7 @@ describe("the terrain file, read and written", () => {
     expect(s.terrains).toEqual([{ name: "Plating", group: 20 }]);
     expect(s.pieces).toHaveLength(2);
     expect(s.borrow[0].pairs).toHaveLength(2);
-    expect(s.extra).toEqual({ borders: [{ future: true }] });
+    expect(s.extra).toEqual({ shading: [{ future: true }] });
     expect(file.extra).toEqual({ maker: "made by hand" });
     const again = readTerrainFile(writeTerrainFile(file));
     expect(again.dropped).toEqual([]);
@@ -118,12 +118,12 @@ describe("the terrain file, read and written", () => {
 
   it("replaces one tileset's section and keeps the others", () => {
     const file = readTerrainFile(GOOD).file;
-    const next = withTerrainSection(file, "jungle", { table: "abc", terrains: [{ name: "Swamp", group: 2 }], pieces: [], borrow: [], extra: {} });
+    const next = withTerrainSection(file, "jungle", { table: "abc", terrains: [{ name: "Swamp", group: 2 }], pieces: [], borrow: [], borders: [], extra: {} });
     const back = readTerrainFile(writeTerrainFile(next)).file;
     expect(Object.keys(back.tilesets)).toEqual(["badlands", "jungle"]);
     expect(back.tilesets.badlands).toEqual(file.tilesets.badlands);
     expect(back.extra).toEqual({ maker: "made by hand" });
-    expect(terrainFileCounts(back).jungle).toEqual({ terrains: 1, pieces: 0, borrow: [] });
+    expect(terrainFileCounts(back).jungle).toEqual({ terrains: 1, pieces: 0, borrow: [], borders: [] });
   });
 
   it("says what the table cannot use", () => {
@@ -264,7 +264,7 @@ describe("a terrain file on the command line", () => {
     put("terrain.json", JSON.stringify({ ...GOOD, tilesets: { ...GOOD.tilesets, jungle: { table: "otherhash", pieces: [{ cols: 1, rows: 1, tiles: [1] }] }, ice: { table: TABLE, terrains: [{ name: "", group: 2 }] } } }));
     const source = await openMod(dir, null);
     const info = modInfo(source);
-    expect(info.terrain?.tilesets.badlands).toEqual({ terrains: 1, pieces: 2, borrow: [{ source: "install", pairs: 2 }] });
+    expect(info.terrain?.tilesets.badlands).toEqual({ terrains: 1, pieces: 2, borrow: [{ source: "install", pairs: 2 }], borders: [] });
     expect(info.terrain?.dropped).toBe(1);
     expect(printModInfo(info).join("\n")).toMatch(/badlands.*1 terrain, 2 pieces, 2 pairs from install/);
     const r = await checkModSource(source, null);

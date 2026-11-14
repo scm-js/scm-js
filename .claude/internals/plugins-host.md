@@ -716,6 +716,17 @@ and `pieces()` lists them (`tests/plugin-pieces.test.ts` "the host without the e
 list are the only readers that need a page. `@scm-js/core` exports the pure half (`core.md`).
 
 
+**Drawn borders on the API (2026-11-14, branch `borrowed-borders`)**, additive, version 1: `BorrowedTerrainInfo.borders?`
+(a field on `borrowed()` rows rather than a new `borders()` call: a border belongs to one borrowed terrain and the rows
+are what a plugin already holds; each `{ ground, from }`, `from` `"maps"`, a plugin id or `@dataset:<id>`) and
+`api.terrain.provideBorderTable(spec: BorderTableSpec)` (`{ id, tileset, source, terrain, ground, shapes }`, kept in
+`providedBordersAtom` ahead of the data set's rows, `bag.add(remove)`). Precedence per pair: plugin > terrain file >
+learned (`services/borders.ts#borderTables`). `borrowed()` now also `prepareBorders` before it resolves, and
+`tx.paintBorrowed` passes the record member and `peekBorderSetup` to its `BorrowStroke`, applies `r.changes` after the
+stroke's own, and records both members before their first change (so `finishEntry` / rollback carry the record too).
+The headless host gets both through `createPluginApi`; with no game Badlands to stand in, `peekBorderSetup` is null and
+`paintBorrowed` lays as before.
+
 **Borrowed terrain on the API (2026-11-14)**, additive, version 1: types `BorrowedTerrainInfo` (id, source, terrain, name,
 standIns, from — `"scan"` or the plugin id) and `BorrowTableSpec`. `api.terrain.borrowed(options?)` and
 `provideBorrowTable(spec)` are `plugins/borrow.ts#borrowCalls`, spread into the terrain group beside `pieceCalls`.

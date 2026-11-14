@@ -6,9 +6,11 @@ import {
 } from "../atoms/editorAtoms";
 import { archiveExtrasAtom, commitTerrainAtom, pinCellsAtom, pinnedTilesAtom, scenarioAtom, terrainRevisionAtom, tilesetFileNameAtom, type HistoryEntry } from "../atoms/documentAtoms";
 import { borrowHostsAtom } from "../atoms/borrowAtoms";
-import { borrowedParts, isBorrowedTerrain, type BorrowedTerrain } from "../editor/borrow";
+import { borrowedParts, isBorrowedTerrain, isTakeBack, TAKE_BACK, type BorrowedTerrain } from "../editor/borrow";
 import { BorrowStroke, borrowMember, withMember, type BorrowStrokeResult } from "../editor/borrowLattice";
 import { borrowContext, hostKeyOf, peekBorrowContext } from "../services/borrow";
+import { bordersMember } from "../editor/borderRecord";
+import { peekBorderSetup } from "../services/borders";
 import { countPins, handLaidCells, withoutPinned } from "../editor/pins";
 import { statusMessageAtom } from "../atoms/uiAtoms";
 import {
@@ -67,6 +69,10 @@ export function blockLabel(block: Pick<TileBlock, "cols" | "rows">): string {
 /** What a status line adds when pinned tiles stood in a brush's way. */
 function borrowNote(r: BorrowStrokeResult): string {
   let out = "";
+  if (r.borders) {
+    out += t(" — drawn border: {drawn, plural, one {# cell} other {# cells}} drawn, {hard, plural, one {# left} other {# left}} hard", { drawn: r.borders.drawn, hard: r.borders.hard });
+    if (r.borders.unlike > 0) out += t(" ({n, plural, one {# border tile walks or builds} other {# border tiles walk or build}} unlike either side)", { n: r.borders.unlike });
+  }
   if (r.seams > 0) out += t(" — {n, plural, one {# join} other {# joins}} to this map's own ground show (Heal softens them)", { n: r.seams });
   if (r.untranslated > 0) out += t(" — {n, plural, one {# tile has} other {# tiles have}} no copy in this tileset and stayed as they were", { n: r.untranslated });
   if (r.standIns > 0) out += t(" — {n, plural, one {# tile is} other {# tiles are}} the nearest picture this tileset has", { n: r.standIns });
@@ -90,6 +96,7 @@ export function borrowedLabel(b: Pick<BorrowedTerrain, "name" | "sourceEra">): s
 /** The same for a borrowed terrain's id alone. */
 export function borrowedIdLabel(id: number): string {
   const { sourceEra, index } = borrowedParts(id);
+  if (index === TAKE_BACK) return t("Take back ground from {tileset}", { tileset: translate(TILESETS[sourceEra].name) });
   return borrowedLabel({ name: terrainName(TILESETS[sourceEra], index), sourceEra });
 }
 
@@ -174,12 +181,13 @@ export function useTerrainTools() {
   /** The isometric brush's terrain: the active one when paintable, else the tileset's first. */
   const currentIsomTerrain = useCallback((): number | null => {
     const id = store.get(activeTerrainAtom);
-    if (isBorrowedTerrain(id) && borrowed.some((b) => b.id === id)) return id;
+    if (isBorrowedTerrain(id) && borrowed.some((b) => b.id === id || (isTakeBack(id) && b.sourceEra === borrowedParts(id).sourceEra))) return id;
     return isomTypes.includes(id) ? id : isomTypes[0] ?? null;
   }, [store, isomTypes, borrowed]);
 
   /** The isometric brush's terrain as the status line and the history name it. */
   const isomLabel = useCallback((id: number | null): string => {
+    if (id !== null && isTakeBack(id)) return borrowedIdLabel(id);
     const b = id !== null && isBorrowedTerrain(id) ? borrowed.find((x) => x.id === id) : undefined;
     return b ? borrowedLabel(b) : translate(terrainName(info, id ?? -1));
   }, [borrowed, info]);
@@ -256,14 +264,18 @@ export function useTerrainTools() {
           setStatus(t("Getting {tileset}'s tiles ready — paint again in a moment.", { tileset: translate(TILESETS[sourceEra].name) }));
           return;
         }
-        bs = borrowStroke.current = new BorrowStroke(scn, ctx, store.get(archiveExtrasAtom).get(borrowMember(sourceEra)) ?? null, store.get(pinnedTilesAtom));
+        const extras = store.get(archiveExtrasAtom);
+        bs = borrowStroke.current = new BorrowStroke(scn, ctx, extras.get(borrowMember(sourceEra)) ?? null, store.get(pinnedTilesAtom), {
+          record: extras.get(bordersMember(sourceEra)) ?? null,
+          borders: peekBorderSetup(store, era, loaded.tileset, ctx),
+        });
       }
       const diamonds: Diamond[] = [];
       for (const q of mirrorPixel(store.get(symmetryAtom), p.px, p.py, scn.width, scn.height)) {
         const dq = diamondAt(q.x, q.y);
         if (isDiamond(dq)) diamonds.push(...brushDiamonds(scn, dq, store.get(brushSizeAtom)));
       }
-      const changes = bs.paint(diamonds, index);
+      const changes = index === TAKE_BACK ? bs.takeBack(diamonds) : bs.paint(diamonds, index);
       if (!changes || changes.length === 0) return;
       applyChanges(scn, changes);
       s.add(changes);
@@ -359,17 +371,26 @@ export function useTerrainTools() {
     borrowStroke.current = null;
     if (bs) {
       const r = bs.finish();
+      // The drawn border, laid as the stroke ends: part of the same step.
+      if (r.changes.length > 0) {
+        applyChanges(scn, r.changes);
+        s.add(r.changes);
+      }
       for (const at of r.kept) strokeKept.current.add(at);
       const changes = s.finish();
-      const name = borrowMember(bs.ctx.sourceEra);
-      const moved = !sameMember(r.before, r.after);
-      if (changes.length === 0 && !moved) {
+      const name = borrowMember(bs.ctx.sourceEra), recordName = bordersMember(bs.ctx.sourceEra);
+      const members: { name: string; before: Uint8Array | null; after: Uint8Array | null }[] = [];
+      if (!sameMember(r.before, r.after)) members.push({ name, before: r.before, after: r.after });
+      if (!sameMember(r.recordBefore, r.recordAfter)) members.push({ name: recordName, before: r.recordBefore, after: r.recordAfter });
+      if (changes.length === 0 && members.length === 0) {
         if (strokeKept.current.size > 0) setStatus(t("Nothing painted: the tiles here are pinned (the Pin tab unpins)"));
         return;
       }
-      // The lattice is a file of the archive: in force now, and the entry carries it for undo.
-      if (moved) store.set(archiveExtrasAtom, withMember(store.get(archiveExtrasAtom), name, r.after));
-      commitTerrain(scn, { label: strokeLabel.current, changes, members: moved ? [{ name, before: r.before, after: r.after }] : undefined },
+      // The lattice and the record are files of the archive: in force now, and the entry carries them for undo.
+      let extras = store.get(archiveExtrasAtom);
+      for (const m of members) extras = withMember(extras, m.name, m.after);
+      if (members.length > 0) store.set(archiveExtrasAtom, extras);
+      commitTerrain(scn, { label: strokeLabel.current, changes, members: members.length > 0 ? members : undefined },
         t("{label} — {n, plural, one {# tile} other {# tiles}}", { label: strokeLabel.current, n: changes.length }) + borrowNote(r) + keptNote(strokeKept.current.size));
       return;
     }

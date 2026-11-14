@@ -404,20 +404,53 @@ tilesets is borrowed.
 Painting one works as the isometric brush does: the brush size, symmetry and pinned tiles
 apply, and a stroke is one step to undo. A stroke meets ground no borrowed stroke has
 painted as the other tileset's base ground (what a new map of that tileset is made of:
-Floor for Installation), and only the tiles the stroke changes are written; the ground
-around is left as it is. Later strokes continue the earlier ones' cliffs and edges,
-because the editor keeps the other tileset's record of the diamonds with the map, as a
-small file inside it (`scmjs\borrowed-install.bin` for Installation). It is saved with the
-map, follows undo and Resize, and is shared on a shared map; the game never reads it.
-Where another brush has painted over borrowed ground since, that part is taken as base
-ground again before the next stroke, so a stroke does not continue edges that are gone.
+Floor for Installation), and only the tiles around the stroke are written; the rest of the
+map is left as it is. Later strokes continue the earlier ones' cliffs and edges, because
+the editor keeps the other tileset's record of the diamonds with the map, as a small file
+inside it (`scmjs\borrowed-install.bin` for Installation). Beside it a second one
+(`scmjs\borders-install.bin`) keeps where the brush painted and the tile each cell had
+before it, so the ground can be given back. Both are saved with the map, follow undo and
+Resize, and are shared on a shared map; the game never reads them. Where another brush has
+painted over borrowed ground since, that part is taken as base ground again before the
+next stroke, so a stroke does not continue edges that are gone.
+
+**Take back**, at the end of each tileset's list, gives ground back: paint it over
+borrowed ground and each cell gets the tile it had before the borrowed brush wrote it, the
+border around what is left laid again. Painting all of a patch back leaves the map as it
+was.
+
+#### Drawn borders
+
+A mod that copies another tileset's ground in usually draws its own pieces for where that
+ground meets the tileset's: a trim along a floor's edge, a cliff wall from a raised floor
+down to dirt. With **Drawn borders** on (the switch under the list's heading, on by
+default where any is known), a stroke lays those pieces where its ground meets the
+tileset's own, instead of the other tileset's edge to its base ground. The hover on each
+terrain says which grounds it has borders against.
+
+The editor learns the pieces from the mod's maps: Learn from Maps… in the Tile palette's
+pieces view reads the borders as it reads the pieces, the map in front included, and says
+how many it found for each pair of grounds. It can read them only once it knows which
+tiles are copies of the other tilesets, so look for the borrowed terrain first; the more
+of the other tilesets it knows, the better it tells a copy from a drawn piece. A mod's
+terrain file can carry them instead, and a plugin can give them too; then nothing has to
+be learned.
+
+The border is laid when the stroke ends, as part of the same step. Each border cell gets
+the piece the maps lay in its place, chosen so that it joins its neighbours; where none
+joins, the cell is left as the plain edge: the borrowed ground's own tile on its side, the
+map's ground on the other. On the ground's side, the tile that was there stays wherever it
+already joins, so plain ground is not scattered with pieces. The status line counts the
+cells drawn, the cells left as the plain edge, and the border tiles that walk or build
+unlike either ground (a cliff piece usually does). Learning finds most shapes of a border,
+not all: a shape no map lays is left as the plain edge.
 
 What it does not do:
 
-- **Join it to the map's own ground.** Where borrowed ground meets the tileset's own, the
-  two simply touch. The status line after a stroke counts the joins that show; the Heal
-  brush softens them, and the Tile palette's pieces view lists the transition pieces the
-  mod's own maps use there.
+- **Join it where nothing is known.** Where no drawn border is known for a pair of grounds
+  (or Drawn borders is off), the two simply touch. The status line after a stroke counts
+  the joins that show; the Heal brush softens them, and the Tile palette's pieces view
+  lists the transition pieces the mod's own maps use there.
 - **Walk and build as the other tileset does.** Each tile walks, builds and stands at the
   height this tileset's copy says, and a mod often keeps its copies under other flags than
   the original (in one mod measured, only about half of Installation's tiles have a copy

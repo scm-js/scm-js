@@ -666,3 +666,16 @@ it; measured on Cosmonarchy's release copy: `c94acdf31982fa4b` both ways. **CLI*
 not `tableHash` of the mod's own `tileset\<id>.cv5`, else the game copy's; neither → a note); `mod unpack` writes the
 release's `terrain.json` as it was, else the one of the folder unpacked over (`modTarget` reads it before the folder is
 cleared, `earlierTerrain`). `mod pack` does not put it in the MPQ (it is not a game file).
+**Borders (2026-11-14, branch `borrowed-borders`):** a section may carry `borders: [{ source, terrain, ground, shapes:
+{ shape: [tile, …] } }]` — a drawn border between a borrowed terrain (`terrain`, the source's CV5 index) and the host's
+ground (`ground`), shapes named as `editor/borderLattice.ts` reads them (terrain.md "Drawn borders"). Read with the same
+never-throw rules (limits `borders` 2048 rows, 1024 shapes a row, 80 characters a shape, 64 tiles a shape; new drop reason
+`terrain` for an index outside 0–255; a second row for one pair is `duplicate`); `sectionAgainstTable` flags a row with a
+tile the table has no picture for; written one row per line after `borrow`, only when there are any (a file with none
+reads as before). Before this, `borders` was the example of an unknown key kept: `tests/terrain-file.test.ts` now keeps
+`shading` instead. **Save as a terrain file…** writes every pair's table the editor has (learned, the file's, a
+plugin's) — Cosmonarchy's Badlands after learning 404 maps: 74 borders, 984 shapes, the file 518,081 → 579,597 bytes.
+`mod info` counts borders and shapes per tileset; `mod check` warns on their rows like the others. In the editor the
+section goes into `providedBordersAtom` under `@dataset:<id>`, behind any plugin's (`beforeDataSet`). Measured: a data
+set added from a copy holding that file, nothing learned or scanned, draws the border on the first Substructure stroke
+(56 cells drawn, 2 hard).

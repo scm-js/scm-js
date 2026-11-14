@@ -34,6 +34,7 @@ import { peekUnitAssets } from "../formats/units/load";
 import { applySpriteChanges, removeSprites } from "../editor/sprites";
 import { encodePins, pinCells, PINS_MEMBER, pinsOf, resizePins, withPinsMember } from "../editor/pins";
 import { BORROW_MEMBERS, resizeBorrowMember, withMember } from "../editor/borrowLattice";
+import { BORDER_MEMBERS, resizeBorderRecord } from "../editor/borderRecord";
 import { ALL_PARTS, applyEntry, entryArea, entryParts, hasEdits, hasMembers, NO_PARTS, swapWholeState, takeWholeState, touchesDoodads, touchesGround, type CommitNotice, type HistoryEdit, type HistoryEntry, type WholeState } from "../editor/history";
 import { applyTables, followTables, rebaseAfterTables, rebaseStrings, rebaseTables, TABLES_BUDGET, tablesKind, tablesWeight, takeTablesEdit, type TablesEdit } from "../editor/tableHistory";
 import { applyLocationChanges, boundsOf, isInverted, LOCATION_MIRROR_PX, locationName, moveLocationsMirrored, placedLocations, removeLocations, scrambledLocations, usedLocations } from "../editor/locations";
@@ -341,6 +342,14 @@ export const resizeDocumentAtom = atom(null, (get, set, req: ResizeRequest): Res
     const member = get(archiveExtrasAtom).get(name);
     if (!member) continue;
     const after = resizeBorrowMember(member, sizeBefore, scn, era, result.dx, result.dy);
+    set(archiveExtrasAtom, withMember(get(archiveExtrasAtom), name, after));
+    members.push({ name, before: member, after });
+  }
+  // And the border records beside them (borderRecord.ts): the cells and diamonds move the same way.
+  for (const [era, name] of BORDER_MEMBERS.entries()) {
+    const member = get(archiveExtrasAtom).get(name);
+    if (!member) continue;
+    const after = resizeBorderRecord(member, sizeBefore, scn, era, result.dx, result.dy);
     set(archiveExtrasAtom, withMember(get(archiveExtrasAtom), name, after));
     members.push({ name, before: member, after });
   }

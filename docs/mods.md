@@ -176,6 +176,62 @@ the races of the `mod.json` in that folder or one folder down; a plugin can name
 and a map made with the data set carries them ([A map remembers its data
 set](game-data.md#a-map-remembers-its-data-set)).
 
+### Terrain a mod declares
+
+A mod's tilesets often hold ground the game's tables do not describe: flat ground with no
+terrain type, buildings and walls drawn across many tiles, another tileset's ground copied
+in. The editor can find some of it by itself (the Tile palette learns pieces from a folder
+of maps, the Isometric tab looks for another tileset's terrain), but every mapper has to
+do that again, and it takes a while. A `terrain.json` beside `mod.json` says it once, for
+everyone who adds the mod:
+
+```json
+{
+  "format": 1,
+  "tilesets": {
+    "badlands": {
+      "table": "1q2w3e4r5t6y",
+      "terrains": [{ "name": "Plating", "group": 2466 }],
+      "pieces": [{ "name": "Long ramp", "category": "Ramps", "cols": 2, "rows": 2, "tiles": [35010, 35011, -1, 35027] }],
+      "borrow": [{ "source": "install", "pairs": [[1234, 35010], [1235, 35011]] }]
+    }
+  }
+}
+```
+
+- `table` says which version of the tileset's tile table the numbers are for. A tileset
+  whose table is another (a new release of the mod renumbered it) does not use its
+  section, and the editor says so once.
+- `terrains` names flat ground for the Rect brush and the fills: each `group` is the even
+  group of a left and right pair.
+- `pieces` lists blocks of tiles under a name and a category, for the Tile palette's
+  pieces: `cols` × `rows` tile numbers, row by row, -1 for a gap.
+- `borrow` gives, for another of the game's tilesets, which tile of this one to lay for
+  each of its tiles, so the Isometric tab can lay that tileset's terrain here with no
+  search.
+
+It is found by `mod.json`'s rule: in the folder you name or one folder down, never in one
+of the game's folders, and it does not need a `mod.json` beside it. It is not one of the
+mod's files, so it leaves [the mod's hash](#the-mods-hash) as it was. A row the editor
+cannot use (a name too long, a tile number past the table, a gap where a block's size says
+a tile) is left out; keys the editor does not know are kept, so a later version of the
+file can add to it.
+
+The easiest way to make one is the editor's: open a map of the mod with the mod's data in
+use, learn its pieces and look for its borrowed terrain, then **Save as a terrain file…**
+in the Tile palette's pieces view. It writes the tileset in front's section from what the
+editor lists: the pieces (with the names a plugin or an earlier file gave), the terrains
+named for the Rect brush, and the borrowed-terrain tables. Choose an existing
+`terrain.json` and its other tilesets' sections are kept. In the editor, the file comes
+with the mod: a data set added from a folder (Help ▸ Game Data… ▸ Add a data set…) or a
+mod's folder chosen for a map reads it, and while that data set is in use its pieces are
+listed under the data set's name, its terrains are in the Rect tab, and its borrowed
+terrain is offered with no search. A plugin that declares the same thing is listed first.
+
+`mod info` says whether a mod has one and what it holds per tileset, `mod check` lists the
+rows that would be left out and a section made for another version of the tileset's table,
+and `mod unpack` keeps a folder's `terrain.json` when it unpacks a new release over it.
+
 ## The commands
 
 ### What a mod is

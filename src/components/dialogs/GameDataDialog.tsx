@@ -6,6 +6,7 @@ import { closeDialogAtom, pushToastAtom } from "../../atoms/uiAtoms";
 import { desktopBridge, type DesktopLocateResult } from "../../gamedata/desktop";
 import { isGameArchive } from "../../gamedata/archives";
 import { pickedDataSet } from "../../gamedata/modInput";
+import { applyDataSetTerrain, keepDataSetTerrain } from "../../services/dataSetTerrain";
 import { hostTerms } from "../../editor/platform";
 import {
   ARCHIVE_NAMES, BLIZZARD_ZIP_URL, installFromFiles, installFromRemastered, installFromZipUrl, isRemasteredFolder, pickArchives,
@@ -248,11 +249,14 @@ export function GameDataBody({ onReady }: { onReady?: (next: AssetSource) => voi
     if (!id) throw new Error(t("Give the data set a name first."));
     if (sets.some((p) => p.id === id)) throw new Error(t("There is already a data set called {name}.", { name }));
     // (The races the folder's mod.json names come with it, kept for the set's id.)
-    const { input, races } = await pickedDataSet(files);
+    const { input, races, terrain } = await pickedDataSet(files);
     // A mod's folder without the game's archives is laid over the copy in use (or the one that copy was laid over).
     const games = input.archives.filter((a) => isGameArchive(a.name)).length;
     const base = games >= ARCHIVE_NAMES.length ? undefined : source?.stored?.base ?? (source?.kind === "stored" || source?.kind === "bundled" ? source.profile.id : undefined);
+    // (and its terrain file, kept for the set's id before the set is in use; a set added again without one forgets the old)
+    await keepDataSetTerrain(id, terrain);
     const next = await installDataSetInto(store, { id, name, ...(races.length ? { races } : {}) }, { ...input, ...(base ? { base } : {}) }, progress);
+    void applyDataSetTerrain(store);
     setAdding(false);
     setNewName("");
     setMessage({ text: t("Installed {name}: {summary}.", { name, summary: next.stored ? summaryText(next.stored.summary) : next.label }) + kept(next.stored?.where ?? "opfs") });

@@ -2712,15 +2712,17 @@ FireGraft files it carries (kept, never run), a self-executing exe's archive, th
 is for, and [the mod's hash](mods.md#the-mods-hash) with the hash without its plugins
 beside it, the hash by the rule before 11 November 2026 where it was another
 (`Earlier hash`), the older hash of a mod that holds an operating system's files, the
-libraries of its code, and the races its `mod.json` [names](mods.md#races-a-mod-adds). It
-reads a folder (the game's paths at its root or in a folder under it), an `.mpq`, a
-self-executing `.exe` (MPQDraft's or FireGraft's patcher, read and never run) or a `.zip`.
-A copy of the game inside the folder, a folder that holds `StarDat.mpq`, is not the mod:
-its own archives and everything under its `Maps` folder are left out, and the command says
-so ([which files](mods.md#what-a-mod-is)). `--json` prints the same as data, the files
-left out as `gameCopy`, the earlier hash as `beforeCode`; each mod has `file` and `path`,
-the path as you typed it. Reading a large mod (an `.exe` or a `.zip` of hundreds of
-megabytes) takes several seconds, and a line on standard error says it is reading.
+libraries of its code, the races its `mod.json` [names](mods.md#races-a-mod-adds), and
+what its `terrain.json` [declares](mods.md#terrain-a-mod-declares) per tileset (named
+terrains, pieces, borrowed-terrain pairs). It reads a folder (the game's paths at its root
+or in a folder under it), an `.mpq`, a self-executing `.exe` (MPQDraft's or FireGraft's
+patcher, read and never run) or a `.zip`. A copy of the game inside the folder, a folder
+that holds `StarDat.mpq`, is not the mod: its own archives and everything under its `Maps`
+folder are left out, and the command says so ([which files](mods.md#what-a-mod-is)).
+`--json` prints the same as data, the files left out as `gameCopy`, the earlier hash as
+`beforeCode`; each mod has `file` and `path`, the path as you typed it. Reading a large
+mod (an `.exe` or a `.zip` of hundreds of megabytes) takes several seconds, and a line on
+standard error says it is reading.
 
 Something that holds none of the game's files is not a mod, and is said for what it is,
 with exit 2: a map (`scmjs map info` reads it), a replay (`scmjs replay info`), an empty
@@ -2774,11 +2776,16 @@ missing, a string past its table, a button set or requirement for something not 
 for what is probably a mistake (a weapon the mod added that no unit carries, a sound row
 with no file, units with one name). It exits 1 on an error. When the mod's files suggest
 races of its own and its `mod.json` names none, it says so in one line, which is a hint
-and fails nothing ([Races a mod adds](mods.md#races-a-mod-adds)). `mod diff` reads as a
-changelog, "Terran Marine: ground weapon damage 6 → 7", against your copy of the game when
-given one mod. With two mods it exits 1 when they differ and 0 when they are the same, as
-`map diff` does; with one, it exits 0. `mod build` checks, then packs, and stops on an
-error unless `--ignore-errors` (`--force` is its old name and still works).
+and fails nothing ([Races a mod adds](mods.md#races-a-mod-adds)). A `terrain.json` is
+checked too: each row the editor would leave out, a tileset section made for another
+version of that tileset's tile table than the mod's (or the game's, where the mod leaves
+the tileset as it is), and rows naming tiles the table has no picture for, all warnings.
+`mod unpack` keeps a folder's `terrain.json` when it unpacks a new release over it, as it
+keeps the races ([Terrain a mod declares](mods.md#terrain-a-mod-declares)). `mod diff`
+reads as a changelog, "Terran Marine: ground weapon damage 6 → 7", against your copy of
+the game when given one mod. With two mods it exits 1 when they differ and 0 when they are
+the same, as `map diff` does; with one, it exits 0. `mod build` checks, then packs, and
+stops on an error unless `--ignore-errors` (`--force` is its old name and still works).
 
 These commands read your copy of StarCraft when they find one, as the [commands that need
 StarCraft](#commands-that-need-starcraft) do, for the game's own files under the mod; they

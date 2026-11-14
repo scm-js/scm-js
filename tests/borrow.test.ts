@@ -561,7 +561,7 @@ if (modTileset("badlands") && haveInstall) {
 /* ── The scan's worker (no game data: the made pair) ── */
 
 import { borrowWorkerHandler, tilesetFromParts, tilesetParts, type BorrowWorkerRequest, type BorrowWorkerResponse } from "../src/editor/borrowWorker";
-import { isStopped, scanBorrowed, slicedTableMaker } from "../src/services/borrow";
+import { isStopped, refreshProvided, scanBorrowed, slicedTableMaker } from "../src/services/borrow";
 import { borrowWorkerStats, poolSize, resetBorrowWorkerClient, workerTableMaker } from "../src/services/borrowTableClient";
 import { memoryPieceStore } from "../src/services/pieceStore";
 
@@ -658,6 +658,16 @@ describe("the scan's worker", () => {
     const scan = scanBorrowed(store, 0, host, { db: memoryPieceStore(), source: async (e) => bySource.get(e) ?? null, tables: { table: (h, src, p, sig) => { controller.abort(); return slicedTableMaker(async () => {}).table(h, src, p, sig); } }, signal: controller.signal });
     await expect(scan).rejects.toSatisfy(isStopped);
     expect(store.get(borrowHostsAtom).size).toBe(0);
+  });
+
+  it("leaves a host nobody scanned unlisted when no table is provided, so the palette offers the scan", async () => {
+    const { host, bySource } = sources();
+    const store = createStore();
+    await refreshProvided(store, 0, host, { source: async (e) => bySource.get(e) ?? null });
+    expect(store.get(borrowHostsAtom).size).toBe(0);
+    await scanBorrowed(store, 0, host, { db: memoryPieceStore(), source: async (e) => bySource.get(e) ?? null, pause: async () => {} });
+    await refreshProvided(store, 0, host, { source: async (e) => bySource.get(e) ?? null });
+    expect([...store.get(borrowHostsAtom).values()][0].scanned).toBe(true);
   });
 
   it("gives this machine one or two workers", () => {

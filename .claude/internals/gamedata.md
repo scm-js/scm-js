@@ -558,3 +558,15 @@ The mods plan's slice M4 (`scm-sim` branch mods-plan, `docs/mods-plan.md`, "Tier
   installed before shows the labels' names until it is added again. The list rules (`nameList`: a line for every entry
   or not at all, `""` keeps the label; `statWithText`) are shared with `scmjs mod header` (`cli/src/mod/header.ts#modNames`
   now calls them; core exports them).
+
+**A data set's terrain file (2026-11-14).** `pickedDataSet` also answers the text of the folder's `terrain.json`
+(`terrain`, by `mod.json`'s rule); the Game Data dialog keeps it for the set's id before installing
+(`services/dataSetTerrain.ts#keepDataSetTerrain`, IndexedDB, the learned pieces' store under `terrain/<id>`, text — it
+can be half a MB, so not localStorage beside the races). The folder route (`drawFromModFolder`) does the same for
+`folderProfile(name).id` before attaching. `removeDataSet` forgets it; Clear all data clears the store and drops the
+file's rows. A plugin's `api.gameData.attach` carries none: the Mod Editor can call the three `provide*` functions for a
+live edit, so no profile field or `setTerrain` call was added. `watchDataSetTerrain` (App) follows
+`gameDataSourceAtom` and `gameDataRevisionAtom` and runs `applyDataSetTerrain` (terrain.md). Measured adding
+Cosmonarchy's release folder (a hard-linked copy, 7,797 files, 2.6 GB) as a data set in headless Chromium against the
+built bundle: with the 518 KB `terrain.json` 33.2 s and +228.30 MB of `navigator.storage.estimate()`, without it
+33.6 s and +228.09 MB — the file costs nothing measurable.

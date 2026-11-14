@@ -15,6 +15,7 @@ import { tilesetIndex } from "../../formats/chk/scenario";
 import { borrowContext, drawsFromGame, forgetBorrowed, hostKeyOf, isStopped, readKnownBorrowed, refreshProvided, scanBorrowed, stopBorrowScan } from "../../services/borrow";
 import type { LoadedTileset } from "../../formats/tileset/load";
 import { Button } from "../ui";
+import { isDataSetKey } from "../../editor/pieceList";
 import { TileThumb } from "./TileBrowser";
 import { t, translate } from "../../i18n";
 
@@ -37,7 +38,7 @@ export function BorrowedTerrains({ loaded }: { loaded: LoadedTileset | null }) {
   // What was found before for these files, and what the plugins' tables offer.
   useEffect(() => {
     if (!host || era < 0) return;
-    void readKnownBorrowed(store, era, host).then(() => (provided.length > 0 ? refreshProvided(store, era, host) : undefined));
+    void readKnownBorrowed(store, era, host).then(() => refreshProvided(store, era, host));
   }, [store, host, era, provided]);
 
   if (!host || era < 0 || (fromGame && !info?.sources.some((s) => s.provided))) return null;
@@ -69,7 +70,7 @@ export function BorrowedTerrains({ loaded }: { loaded: LoadedTileset | null }) {
   return (
     <div className="borrowed-terrains">
       <div className="borrowed-head">{t("From other tilesets")}</div>
-      {!info && !scanning && (
+      {!info?.scanned && !scanning && (
         <div className="hint" style={{ padding: "6px 10px", display: "grid", gap: 6, justifyItems: "start" }}>
           <span>{t("This tileset may hold copies of other tilesets' ground. Looking through the game's other seven tilesets finds the terrains whose every tile has a copy here, so the isometric brush can lay them with their own cliffs and edges. It runs in the background while you keep working, once; the result is kept.")}</span>
           <Button size="sm" onClick={() => void run(false)}>{t("Find terrain from other tilesets")}</Button>
@@ -82,7 +83,7 @@ export function BorrowedTerrains({ loaded }: { loaded: LoadedTileset | null }) {
           <span><Button size="sm" variant="ghost" onClick={() => stopBorrowScan()}>{t("Stop")}</Button></span>
         </div>
       )}
-      {info && !scanning && sources.length === 0 && (
+      {info?.scanned && !scanning && sources.length === 0 && (
         <div className="hint" style={{ padding: "6px 10px" }}>{t("No other tileset's terrain is whole in this tileset.")}</div>
       )}
       {sources.map((s) => (
@@ -94,7 +95,7 @@ export function BorrowedTerrains({ loaded }: { loaded: LoadedTileset | null }) {
                 key={b.id}
                 className={`item ${active === b.id ? "selected" : ""}`}
                 onClick={() => pick(b.id, b.sourceEra)}
-                title={hoverText(TILESETS[b.sourceEra].name, b.standIns, s.provided !== undefined)}
+                title={hoverText(TILESETS[b.sourceEra].name, b.standIns, s.provided === undefined ? null : isDataSetKey(s.provided) ? "dataset" : "plugin", source?.profile.name ?? "")}
               >
                 <TileThumb loaded={loaded} id={b.tile} size={18} className="swatch" />
                 <span>{translate(b.name)}</span>
@@ -103,7 +104,7 @@ export function BorrowedTerrains({ loaded }: { loaded: LoadedTileset | null }) {
           </div>
         </div>
       ))}
-      {info && !scanning && !fromGame && (
+      {info?.scanned && !scanning && !fromGame && (
         <div className="borrowed-again">
           <Button size="sm" variant="ghost" title={t("Look through the other tilesets again, as if for the first time")} onClick={() => void run(true)}>{t("Look again")}</Button>
         </div>
@@ -112,9 +113,11 @@ export function BorrowedTerrains({ loaded }: { loaded: LoadedTileset | null }) {
   );
 }
 
-function hoverText(source: string, standIns: number, provided: boolean): string {
+function hoverText(source: string, standIns: number, provided: "plugin" | "dataset" | null, dataSet: string): string {
   const lines = [
-    provided
+    provided === "dataset"
+      ? t("Laid by {tileset}'s isometric brush, each tile replaced with the tile {name}'s terrain file names for it.", { tileset: translate(source), name: dataSet })
+      : provided === "plugin"
       ? t("Laid by {tileset}'s isometric brush, each tile replaced with the tile a plugin named for it.", { tileset: translate(source) })
       : t("Laid by {tileset}'s isometric brush, each tile replaced with this tileset's copy of its picture.", { tileset: translate(source) }),
     t("It walks and builds as this tileset's copies say, which can differ from {tileset}'s own: View ▸ Walkability (from the Walkability plugin), the Elevation Overlay and the Buildability Overlay show where.", { tileset: translate(source) }),

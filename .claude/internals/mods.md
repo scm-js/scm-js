@@ -643,3 +643,26 @@ any hash line for them (a decision for all four repositories).
 - iscript header comments (images using an id) are not written; table comments are.
 - `docs/images/cli-overview.webp` predates the `mod` row (re-run `scripts/cli-screenshots.mjs`).
 - Writing a 1 GB MPQ holds every member and the output in memory (~2 GB for Cosmonarchy).
+
+## Terrain a mod declares (2026-11-14, branch `mod-terrain-file`)
+
+`terrain.json` beside `mod.json` (found by `mod.json`'s rule — `formats/mod/terrain.ts#isTerrainFilePath` mirrors
+`@scm-js/mod`'s `isModJsonPath`, which the package does not export for another name — and needing no `mod.json`): per
+tileset `{ table, terrains, pieces, borrow }`, what `provideTypes` / `providePieces` / `provideBorrowTable` take, so
+every user of the mod gets them without learning or scanning. **Core** `src/formats/mod/terrain.ts` (exported beside the
+races functions): `readTerrainFile` never throws (bad rows dropped with `{at, reason}`; limits `TERRAIN_LIMITS`; a
+`format` other than 1 uses nothing and keeps the whole; unknown keys kept per level, an unknown tileset name kept under
+the file's extra and written back), `writeTerrainFile` (fixed key order, one row per line: a 3,373-piece file diffs by
+row), `withTerrainSection`, `sectionAgainstTable` (rows the loaded table has no pictures for), `terrainFileCounts`.
+**Beyond the brief:** a borrow row carries `standIns` (source tiles whose tile is only the nearest picture). Without it a
+file offered more than the scan did (Ashworld's Dirt in Cosmonarchy's Badlands: its 21 stand-ins are past the tenth
+`borrowableTerrains` allows, but a provided table had no stand-ins to count); `providedTable(…, standIns)` marks them, and
+`BorrowTableSpec.standIns?` is the optional API twin. **Hash**: not one of the mod's files (top-level or one-down, not in a
+game folder: `@scm-js/mod` never reads it as a member); `tests/terrain-file.test.ts` pins `sourceHash` with and without
+it; measured on Cosmonarchy's release copy: `c94acdf31982fa4b` both ways. **CLI** (`cli/src/mod/terrain.ts`):
+`ModSource.terrain` (`describedSource` reads it from the tree beside the mod; `packFolder` from a mod folder's root);
+`mod info` `terrain: {path, tilesets: counts, dropped}` and a `Terrain` row per tileset; `mod check` warnings
+`terrain-file` (each dropped row, each row the table has no picture for) and `terrain-table` (a section whose `table` is
+not `tableHash` of the mod's own `tileset\<id>.cv5`, else the game copy's; neither → a note); `mod unpack` writes the
+release's `terrain.json` as it was, else the one of the folder unpacked over (`modTarget` reads it before the folder is
+cleared, `earlierTerrain`). `mod pack` does not put it in the MPQ (it is not a game file).

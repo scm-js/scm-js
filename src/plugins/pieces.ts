@@ -18,6 +18,7 @@ import { laidPieceAt } from "../editor/piecePick";
 import type { ListedPiece } from "../editor/pieceList";
 import { blockFromRect, HOLE, sheetRows, SHEET_COLUMNS, type TileBlock } from "../editor/tileSheet";
 import { piecesFromStore, sectionsFromStore } from "../services/pieces";
+import { beforeDataSet } from "../services/dataSetTerrain";
 import type { Disposable, PieceSetSpec, TerrainApi, TerrainPiece, TerrainTypeSpec } from "./api";
 
 type Store = ReturnType<typeof createStore>;
@@ -125,7 +126,7 @@ export function pieceCalls(store: Store, pluginId: string, bag: Bag): PieceCalls
       const key = `${pluginId}:${id}`;
       const others = store.get(providedPiecesAtom).filter((s) => s.key !== key);
       const set = { key, source: pluginId, label: String(spec.label || id), tileset, pieces };
-      store.set(providedPiecesAtom, [...others, set]);
+      store.set(providedPiecesAtom, beforeDataSet(others, set));
       // By the set itself, not its key: disposing an earlier handle must not take a later set of the same id away.
       return bag.add(() => store.set(providedPiecesAtom, store.get(providedPiecesAtom).filter((s) => s !== set)));
     },
@@ -139,7 +140,7 @@ export function pieceCalls(store: Store, pluginId: string, bag: Bag): PieceCalls
       const key = `${pluginId}:${id}`;
       const others = store.get(providedTypesAtom).filter((s) => s.key !== key);
       const set = { key, source: pluginId, tileset, types };
-      store.set(providedTypesAtom, [...others, set]);
+      store.set(providedTypesAtom, beforeDataSet(others, set));
       return bag.add(() => store.set(providedTypesAtom, store.get(providedTypesAtom).filter((s) => s !== set)));
     },
   };

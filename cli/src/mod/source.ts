@@ -18,6 +18,7 @@ import { MOD_MANIFEST, readManifest, type ModManifest } from "../../../src/forma
 import type { GameFiles } from "../gamefiles";
 import { modText, t } from "../i18n";
 import { CliError } from "../ui";
+import { readSourceTerrain, type SourceTerrain } from "./terrain";
 import { detectFormat } from "@scm-js/replay";
 
 export interface SourceFile {
@@ -60,6 +61,8 @@ export interface ModSource {
   manifest: ModManifest | null;
   /** The races the mod adds, as its `mod.json` declares them; empty when none are declared. */
   races: DataSetRace[];
+  /** The terrain the mod declares (`terrain.json` beside `mod.json`), read; null when it has none. */
+  terrain: SourceTerrain | null;
   /** Its makers' address, from its `mod.json`. */
   link: string | null;
   /** What `@scm-js/mod` read the mod as (null for the game's own files, `gameSource`), and the files it read it from. */
@@ -155,7 +158,7 @@ export async function gameSource(files: GameFiles, names: readonly string[]): Pr
 }
 
 export function emptySource(path: string, kind: SourceKind, name: string): ModSource {
-  return { path, kind, name, layers: [], files: new Map(), plugins: [], firegraft: [], code: [], manifest: null, races: [], link: null, description: null, tree: null, gameCopy: [], left: [], probed: [], unheld: [], said: [] };
+  return { path, kind, name, layers: [], files: new Map(), plugins: [], firegraft: [], code: [], manifest: null, races: [], terrain: null, link: null, description: null, tree: null, gameCopy: [], left: [], probed: [], unheld: [], said: [] };
 }
 
 /**
@@ -181,6 +184,7 @@ export async function describedSource(path: string, kind: SourceKind, tree: ModF
   source.description = d;
   source.tree = tree;
   source.races = d.races ?? [];
+  source.terrain = await readSourceTerrain(tree, top);
   source.link = d.link ?? null;
   source.layers = d.layers.map(layerName);
   const readOf = fileReaders(tree, d, { archives });

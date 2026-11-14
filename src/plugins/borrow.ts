@@ -17,11 +17,16 @@ import { peekTileset } from "../formats/tileset/load";
 import { borrowContext, drawsFromGame, hostKeyOf, peekBorrowContext, readKnownBorrowed, isStopped, refreshProvided, scanBorrowed } from "../services/borrow";
 import type { BorrowedTerrainInfo, BorrowTableSpec, Disposable, TerrainApi } from "./api";
 import { t } from "../i18n";
+import { beforeDataSet } from "../services/dataSetTerrain";
+import { isDataSetKey } from "../editor/pieceList";
 
 type Store = ReturnType<typeof createStore>;
 interface Bag { add(dispose: () => void): Disposable }
 
 type BorrowCalls = Pick<TerrainApi, "borrowed" | "provideBorrowTable">;
+
+/** Who gave a table, from its row's key: a plugin's id, or `@dataset:<id>` for a data set's terrain file. */
+const providerOf = (key: string) => (isDataSetKey(key) ? key.split(":").slice(0, 2).join(":") : key.slice(0, key.indexOf(":")));
 
 export function borrowCalls(store: Store, pluginId: string, bag: Bag): BorrowCalls {
   const front = () => {
@@ -36,14 +41,14 @@ export function borrowCalls(store: Store, pluginId: string, bag: Bag): BorrowCal
     borrowed: async (options) => {
       const f = front();
       if (!f) return [];
-      if (store.get(providedBorrowAtom).length > 0) await refreshProvided(store, f.era, f.host);
+      await refreshProvided(store, f.era, f.host);
       let info = await readKnownBorrowed(store, f.era, f.host);
       if ((!info || !info.sources.some((s) => !s.provided)) && options?.scan && !drawsFromGame(store.get(gameDataSourceAtom))) info = await scanBorrowed(store, f.era, f.host).catch((err) => { if (isStopped(err)) return info; throw err; });
       info = store.get(borrowHostsAtom).get(hostKeyOf(f.era, f.host)) ?? info;
       const out: BorrowedTerrainInfo[] = [];
       for (const s of info?.sources ?? []) {
         if (s.terrains.length === 0 || !(await borrowContext(store, f.era, f.host, s.sourceEra))) continue;
-        for (const b of s.terrains) out.push({ id: b.id, source: TILESETS[b.sourceEra].id, terrain: b.index, name: b.name, standIns: b.standIns, from: s.provided ? s.provided.slice(0, s.provided.indexOf(":")) : "scan" });
+        for (const b of s.terrains) out.push({ id: b.id, source: TILESETS[b.sourceEra].id, terrain: b.index, name: b.name, standIns: b.standIns, from: s.provided ? providerOf(s.provided) : "scan" });
       }
       return out;
     },
@@ -55,8 +60,9 @@ export function borrowCalls(store: Store, pluginId: string, bag: Bag): BorrowCal
       if (!Array.isArray(spec.pairs)) throw new Error("provideBorrowTable needs a list of [source tile, tile] pairs.");
       const pairs = spec.pairs.filter((p) => Array.isArray(p) && Number.isInteger(p[0]) && Number.isInteger(p[1]) && p[0] >= 0 && p[1] >= 0 && p[0] <= 0xffff && p[1] <= 0xffff).map((p) => [p[0], p[1]] as const);
       const key = `${pluginId}:${spec.id}`;
-      const row: ProvidedBorrow = { key, tileset, source, pairs };
-      store.set(providedBorrowAtom, [...store.get(providedBorrowAtom).filter((r) => r.key !== key), row]);
+      const standIns = Array.isArray(spec.standIns) ? spec.standIns.filter((x) => Number.isInteger(x) && x >= 0 && x <= 0xffff) : [];
+      const row: ProvidedBorrow = { key, tileset, source, pairs, ...(standIns.length ? { standIns } : {}) };
+      store.set(providedBorrowAtom, beforeDataSet(store.get(providedBorrowAtom).filter((r) => r.key !== key), row));
       const again = () => { const f = front(); if (f) void refreshProvided(store, f.era, f.host); };
       again();
       return bag.add(() => { store.set(providedBorrowAtom, store.get(providedBorrowAtom).filter((r) => r !== row)); again(); });

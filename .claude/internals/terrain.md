@@ -473,3 +473,32 @@ standard, secure scheme through `net.fetch` of the file, as for the transpile an
 not run in Electron. `tests/borrow.test.ts` "the scan's worker": the handler against `borrowTable`, the pool through an
 in-process fake `Worker`, the fallback without `Worker`, a failing worker, a stop.
 
+**A mod's terrain file in the editor (`services/dataSetTerrain.ts`, `editor/terrainFileSection.ts`,
+`services/terrainFileSave.ts`, 2026-11-14).** While a data set whose kept `terrain.json` (gamedata.md) is in use, its
+sections go into `providedPiecesAtom` / `providedTypesAtom` / `providedBorrowAtom` under the provider
+`@dataset:<id>` (`pieceList.ts#DATA_SET_KEY`; `@` cannot start a plugin id), so every reader that serves the plugins'
+declarations serves the file's: the Pieces view (a section headed with the data set's name), the Rect tab and fills
+(declared pair terrains), the Isometric tab's "From other tilesets" with no scan (`refreshProvided` → `providedTable`).
+*Precedence:* a plugin's row goes in ahead of the data set's (`beforeDataSet` in the three `provide*` writers), and every
+reader lets the first of a duplicate stand — `pieceSections` now drops a later set's piece whose tiles an earlier set
+listed (this also settles two plugins naming one piece: the first registered wins), `declaredTerrains` already did,
+`refreshProvided` keeps the first table per source. The file wins over learned and scanned (provided sets come before
+the cut; a provided source replaces the scanned one). *Fit:* a section is used only when its `table` equals `tableHash`
+of the tileset's groups in the data set in use (`loadTilesetGroups`, CV5 alone); otherwise a warn toast once per
+(set, tileset, table) and nothing of it is provided. *Lifecycle:* `applyDataSetTerrain` removes every `@dataset:` row
+then adds the current set's (a generation counter drops a stale apply); another data set or the game's own leaves none.
+Per data set, not per document: nothing in `parkRegisters`, and nothing is written to a map (shared maps unchanged).
+*Regression found on the way and fixed:* `BorrowedTerrains` now calls `refreshProvided` on every mount, and an unscanned
+host with no provided table got an empty `borrowHostsAtom` entry, so the palette said "No other tileset's terrain is
+whole" instead of offering the scan. `BorrowHostInfo.scanned` now separates "scanned, nothing found" from "only provided
+tables known"; an entry that is neither is not published (`tests/borrow.test.ts`).
+*Writing:* the Pieces view's **Save as a terrain file…** (`FileDown` icon beside Learn from Maps…) →
+`services/terrainFileSave.ts` (loaded on click): `terrainFileSection(tableHash, sectionsFromStore(...), declared types,
+tables of every known source via borrowContext)` — pieces as listed (provided first, cut entries folded, duplicates by
+block dropped), all of a table's choices as pairs, its stand-ins — merged into the chosen file through
+`mapIo.ts#saveComposed` (new: picks the place, reads what is there, then writes; a download starts from the data set in
+use's kept file, else empty). Measured on Butcher's Corner with Cosmonarchy's folder attached, built bundle: learn 404
+maps 26.5 s, scan 9.4 s, save → 518,081 bytes, 3,373 pieces, 7 borrow tables (9,627 Installation pairs, 9,714
+Jungle…); `readTerrainFile` 4–7 ms in Node. Added as a data set from a copy with the file: the Pieces view lists 3,414
+pieces under the set's name with nothing learned, the Isometric tab lists Installation and Jungle World with no scan
+(the same as the scan; the file without `standIns` had listed Ashworld too, see mods.md), a Roof stroke lays 208 tiles.

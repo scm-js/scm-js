@@ -146,3 +146,7 @@ set) is the editor's and not exported.
 `formats/tileset/kind.ts` (`kindKey`, re-exported by `heal.ts`) are behind the entry through `borrow.ts` as before.
 `editor/borrowWorker.ts` (the worker's handler) is not exported, and nothing behind the entry reaches the worker client:
 `main.tsx` hands it to `services/borrow.ts`, which is the editor's.
+
+2026-11-14 (terrain a mod declares): `formats/mod/terrain.ts` is exported in the Mods block; `decodeCv5`,
+`CV5_ENTRY_BYTES` and `Cv5Group` joined the tileset exports, because the CLI's `mod check` hashes a mod's CV5 and may
+import from the editor only what the entry exports.

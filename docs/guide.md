@@ -384,13 +384,16 @@ so the isometric brush cannot lay it from the tileset's own tables. It can lay i
 with its own tileset's brush, cliffs and edges included, and writes each tile as this
 tileset's copy of the same picture.
 
-The first time, the list is a button, **Find terrain from other tilesets**. It looks
-through the game's other seven tilesets for terrains whose every tile has a copy here, and
-the ground the brush lays them onto too. It runs in the background, so you can keep
-painting and editing meanwhile: about ten seconds for a mod's Badlands of 40,000 tiles,
-with a progress bar and a **Stop** button beside it. What it finds is kept in the browser:
-the next time a map on the same tileset files opens, the list is there at once, and a scan
-you stopped starts again from what it had already done. The copies are found by their
+A mod can ship the answer: when its terrain file gives a table for another tileset
+([Terrain a mod declares](mods.md#terrain-a-mod-declares)), that tileset's terrains are
+listed with no search, and their hover says the mod's file named the tiles. Otherwise, the
+first time, the list is a button, **Find terrain from other tilesets**. It looks through
+the game's other seven tilesets for terrains whose every tile has a copy here, and the
+ground the brush lays them onto too. It runs in the background, so you can keep painting
+and editing meanwhile: about ten seconds for a mod's Badlands of 40,000 tiles, with a
+progress bar and a **Stop** button beside it. What it finds is kept in the browser: the
+next time a map on the same tileset files opens, the list is there at once, and a scan you
+stopped starts again from what it had already done. The copies are found by their
 pictures. A mod's copies are rarely exact (they were redrawn into the tileset's own
 colours, and one picture can be there several times), so a tile counts as a copy when it
 looks the same up close, not only when its bytes do. Where one tile of an otherwise whole
@@ -485,7 +488,12 @@ What it does not do:
   version of a mod that changes a tileset starts that tileset afresh. Learning again
   replaces what was learned; *Forget* (the eraser beside the line) drops it, and so does
   **Preferences ▸ Storage ▸ Clear all data**. Maps laid with the Isometric and Rect
-  brushes lay no pieces, so on the game's own maps the list is empty. With pieces listed,
+  brushes lay no pieces, so on the game's own maps the list is empty. A mod's terrain file
+  lists its pieces under the data set's name, ahead of the learned ones and with nothing
+  to learn ([Terrain a mod declares](mods.md#terrain-a-mod-declares)), and a plugin's
+  named pieces come before both. **Save as a terrain file…** (the button with a down
+  arrow) writes what the view lists for the tileset in front, with the named terrains and
+  the borrowed terrain's tables, into such a file for a mod to ship. With pieces listed,
   Alt+click on the map in Tile mode picks the whole piece when the tile under the pointer
   is laid beside a neighbour from its piece, and the single tile otherwise.
 - **Blend** is for joins the cliff sets never had: dirt into a doodad's base, one edge set
@@ -543,6 +551,9 @@ Rect tab lists the rest it can stand behind, below the game's:
 - **A pair you pick.** In the Tile tab, right-click and choose **Paint This Tile's Pair
   with the Rect Brush** to lay any pair as ground, on a map that has none of it yet.
   Alt+click on such ground in the map picks it too.
+- **Ground the mod names.** A mod's terrain file can name its flat ground; with the mod's
+  data in use, those names are listed too ([Terrain a mod
+  declares](mods.md#terrain-a-mod-declares)), and so are the names a plugin gives.
 
 All of these paint, flood-fill and take part in **Tools ▸ Replace Terrain…** like the
 game's terrains — replacing Mud with *Mud (mid ground)* raises a mud flat without changing

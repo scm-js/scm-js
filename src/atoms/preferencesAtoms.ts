@@ -19,8 +19,9 @@ import { consoleHeightAtom, debugConsoleAtom } from "./logAtoms";
 import { clearHandles } from "../services/handleStore";
 import { browserPieceStore, browserStore } from "../services/pieceStore";
 import { BORROW_STORE } from "../services/handleStore";
-import { borrowHostsAtom } from "./borrowAtoms";
-import { learnedPiecesAtom } from "./pieceAtoms";
+import { borrowHostsAtom, providedBorrowAtom } from "./borrowAtoms";
+import { learnedPiecesAtom, providedPiecesAtom, providedTypesAtom } from "./pieceAtoms";
+import { isDataSetKey } from "../editor/pieceList";
 import { recentFilesAtom } from "./documentAtoms";
 import { gameDataProfileAtom, keptRacesAtom, refreshDataSetRacesAtom } from "./gameDataAtoms";
 import { resolveHotkeys } from "../editor/commands";
@@ -247,7 +248,7 @@ export const clearStoredKeysAtom = atom(null, (_get, set, keys: readonly string[
  * options of the Units and Doodads palettes, the panels and their widths, the recent files
  * (and the file handles behind them), the installed plugin list, the copies of plugin code
  * kept for the plugins marked *local*, the registries browsed and their cached lists,
- * whatever the plugins themselves stored, the pieces learned from maps and the tables of borrowed terrain. Every atom is reset whether or not it had a key,
+ * whatever the plugins themselves stored, the pieces learned from maps, the tables of borrowed terrain and the data sets' terrain files. Every atom is reset whether or not it had a key,
  * so the defaults come back live even for a setting that was never written.
  */
 export const clearStoredDataAtom = atom(null, (_get, set): number => {
@@ -256,6 +257,10 @@ export const clearStoredDataAtom = atom(null, (_get, set): number => {
   // The pieces learned from maps are in IndexedDB, not in the keys above: they go too.
   void browserPieceStore.clear();
   set(learnedPiecesAtom, {});
+  // (a data set's terrain file is kept in the same store: its rows go now too, not at the next switch)
+  set(providedPiecesAtom, (rows) => rows.filter((r) => !isDataSetKey(r.key)));
+  set(providedTypesAtom, (rows) => rows.filter((r) => !isDataSetKey(r.key)));
+  set(providedBorrowAtom, (rows) => rows.filter((r) => !isDataSetKey(r.key)));
   // So are the tables of borrowed terrain.
   void browserStore(BORROW_STORE).clear();
   set(borrowHostsAtom, new Map());

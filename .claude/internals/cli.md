@@ -2911,3 +2911,10 @@ heatmap's is (key: map scenario hash + replay hash + engine build + `--order`), 
 
 **Messages.** No "the runner is scm-sim's" in the game commands; runner-version errors read "The game engine at {dir}
 is from before …". Progress for trace/cost/rush/coverage/heatmap/balance goes to stderr (`note` in main.ts).
+
+**A mod's terrain file (2026-11-14):** `cli/src/mod/terrain.ts` — `readSourceTerrain` (from the tree, by `mod.json`'s
+rule, shown as a path inside the mod), `folderTerrain` (a mod folder's root), `terrainInfo`, `terrainFindings`. `mod info`
+and `mod_info` gained `terrain`; `mod check` / `mod_check` warnings `terrain-file` and `terrain-table` (mods.md "Terrain a
+mod declares"); `mod unpack` keeps a folder's file through `modTarget#earlierTerrain`. On Cosmonarchy's copy with the
+editor's file: `mod info` lists badlands' 3,373 pieces and seven borrow tables, `mod check` finds nothing in it; a copy
+with a wrong `table` and a bad piece gets both warnings.

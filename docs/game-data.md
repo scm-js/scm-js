@@ -219,7 +219,12 @@ copy of the game in the folder, beside which they lie with `StarDat.mpq`; a `pat
 anywhere else is the mod's own. The mod's files under `arr`, `unit`, `tileset`, `game`,
 `scripts` or `rez` are drawn with; its other files (its sounds, say) count for [its
 hash](#a-map-remembers-its-data-set). A folder whose name starts with a dot (`.git`) is
-never read, and read-mes beside the mod's files are not its.
+never read, and read-mes beside the mod's files are not its. A `terrain.json` beside
+`mod.json` (or in its place) is read with the folder and kept with the data set: its named
+pieces, flat ground and borrowed-terrain tables are in the Tile and Isometric palettes
+while the data set is in use ([Terrain a mod declares](mods.md#terrain-a-mod-declares)).
+Adding the mod again replaces it, and removing the data set forgets it. The same holds for
+a mod's folder chosen for a map whose terrain the data in use lacks.
 
 The data set is stored under its own name beside the game's copy, so removing one leaves
 the others alone. The *Data sets* list appears in Help ▸ Game Data… once there is a second

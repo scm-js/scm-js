@@ -737,3 +737,13 @@ headless host: a provided table, `borrowed()`, `tx.paintBorrowed`, one undo, the
 `borrowed({ scan: true })` scans through `services/borrow.ts#scanBorrowed`, so in the editor it uses the worker pool
 (terrain.md "The scan in a worker") and in the headless host the sliced path; a scan stopped from the palette resolves
 `borrowed()` with what was known.
+
+**A data set's terrain file beside the plugins' declarations (2026-11-14).** The three provided atoms also hold rows a
+data set's `terrain.json` declares (terrain.md "A mod's terrain file in the editor"): key and `source` start with
+`@dataset:<id>`. The `provide*` writers put a plugin's row ahead of them (`beforeDataSet`), so a plugin's declaration of
+the same piece, pair or source table wins. Additive, version 1: `TerrainPiece.source` and `BorrowedTerrainInfo.from` may
+be `@dataset:<id>`; `BorrowTableSpec.standIns?` (source tiles that are only the nearest picture) makes a plugin's table
+offer what a scan would. `borrowed()` now always refreshes the provided tables (so a table that went away goes); no new
+event (the palette follows the atoms). No `gameData` call was added: a plugin attaching a data set does not hand a
+terrain file, and the Mod Editor can show a live edit with the `provide*` calls.
+

@@ -589,6 +589,46 @@ jobs:
           node --input-type=module -e "import('./dist/index.mjs').then((m) => { if (typeof m.openMapBytes !== 'function') throw new Error('no openMapBytes'); console.log(Object.keys(m).length, 'exports'); })"
           npm publish
 
+  # `@scm-js/bot`, the JavaScript bot interface's types (bot/, docs/bots.md), on npm. Its version
+  # is its own (the major is the interface's, BOT_API), not the editor's: on a stable release it
+  # is published when npm does not have bot/package.json's version yet, and left alone when it
+  # does. Trusted publishing over OIDC, as `core` above; the trusted publisher on npmjs.com for
+  # @scm-js/bot names this repository and `build.yml`, with direct publishing allowed. The
+  # package's first version was published by hand (a trusted publisher is set on a package
+  # that exists).
+  bot:
+    name: Publish the bot types
+    needs: [channel, web]
+    if: needs.channel.outputs.channel == 'stable'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+      - run: |
+          npm install -g npm@latest
+          npm --version
+      - name: Publish
+        working-directory: bot
+        run: |
+          set -e
+          NAME="$(node -p "require('./package.json').name")"
+          VERSION="$(node -p "require('./package.json').version")"
+          if npm view "$NAME@$VERSION" version >/dev/null 2>&1; then
+            echo "::notice::$NAME $VERSION is already on npm; nothing to publish."
+            exit 0
+          fi
+          # (prepack builds dist/index.d.ts and refuses a major that is not BOT_API's)
+          npm publish
+
   pages:
     name: Deploy Pages
     needs: [channel, web]

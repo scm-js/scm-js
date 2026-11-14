@@ -285,8 +285,9 @@ describe.skipIf(!haveTypes)("the plugin guide", () => {
  * path belongs, and an atom or hook name belongs nowhere in them.
  */
 describe("the map files and game data guides", () => {
-  const GUIDES = ["docs/file-formats.md", "docs/game-data.md", "docs/triggers.md", "docs/chk-format.md", "docs/cli.md", "docs/core.md", "docs/mods.md"];
+  const GUIDES = ["docs/file-formats.md", "docs/game-data.md", "docs/triggers.md", "docs/chk-format.md", "docs/cli.md", "docs/core.md", "docs/mods.md", "docs/bots.md"];
   const MARKER = "## In the source";
+  const BOT_INTERFACE_NAMES = new Set(["useTech", "useMapSettings"]);
 
   it("end with the one section that names the source", () => {
     for (const file of GUIDES) {
@@ -303,7 +304,9 @@ describe("the map files and game data guides", () => {
       const prose = text.includes(MARKER) ? text.slice(0, text.indexOf(MARKER)) : text;
       const paths = [...prose.matchAll(/\bsrc\/[\w./-]+/g)].map((m) => m[0]);
       expect(paths, file).toEqual([]);
-      const names = [...text.matchAll(/\b(\w+Atom|use[A-Z]\w+|Jotai)\b/g)].map((m) => m[0]);
+      // Two members of the bot interface read like hooks and are not: a unit's `useTech` order
+      // and `init.useMapSettings`, which the bot guide has to name.
+      const names = [...text.matchAll(/\b(\w+Atom|use[A-Z]\w+|Jotai)\b/g)].map((m) => m[0]).filter((name) => !BOT_INTERFACE_NAMES.has(name));
       expect(names, file).toEqual([]);
     }
   });

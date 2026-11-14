@@ -1,7 +1,8 @@
 /**
- * `scmjs bot run <bot.scmbot> <map>`: a BWAPI bot plays a melee game against the game's own computers, with no page
- * and no editor. The game is scm-sim's lifted engine, fetched once and kept, and the player's own copy of the game
- * (`engine.ts`); the bot runner is run in a process of its own and speaks JSON lines — start, text, progress, end —
+ * `scmjs bot run <bot> <map>`: a bot plays a melee game against the game's own computers, with no page and no editor.
+ * The bot is a BWAPI bot's `.scmbot`, or a JavaScript bot's module (`.js`, `.mjs`, `.ts`: scm-sim's `BOT_API`, which
+ * the runner plays as BWAPI's client). The game is scm-sim's lifted engine, fetched once and kept, and the player's
+ * own copy of the game (`engine.ts`); the bot runner is run in a process of its own and speaks JSON lines — start, text, progress, end —
  * which this turns into the terminal's lines.
  *
  * `--mod` lays a mod over the game with its code (overlay version 2, `mod/overlay.ts`): its plugins and FireGraft
@@ -17,7 +18,7 @@ import { openMapBytes } from "../../src/editor/mapFile";
 import { looksLikeMpq } from "../../src/formats/mpq/scm";
 import { START_LOCATION } from "../../src/data/units";
 import { PlayerType } from "../../src/formats/chk/sections/players";
-import { kindOf } from "./files";
+import { isJsBot, kindOf, typeScriptBotProblem } from "./files";
 import { debug, plainRunnerError } from "./runnerwords";
 import { parseFrames, parseRaceWord, parseWhole, type RaceWord } from "./values";
 import { codeWords, ensureEngine, findGameCopy, fitWords, MOD_CODE, modArgs, modWords, runnerFor, startRunner, type BotFitReport, type RunnerCodeReport, type RunnerModReport } from "./engine";
@@ -233,7 +234,10 @@ export async function checkBotGame(bot: string, map: string, o: { opponents?: nu
     const built = (() => { try { return readdirSync(join(bot, "out")).filter((f) => f.endsWith(".scmbot")).map((f) => join(bot, "out", f)); } catch { return []; } })();
     throw new CliError(built.length === 1 ? t("{folder} is a folder: its built bot is {file}", { folder: bot, file: built[0] }) : t("{folder} is a folder, not a bot", { folder: bot }), built.length === 1 ? `scmjs bot run ${quoteArg(built[0])} ${quoteArg(map)}` : t("scmjs bot build writes out/<key>.scmbot in the bot's folder."), 2);
   }
-  const bk = kindOf(bot, b);
+  // A JavaScript bot's module (BOT_API), played as BWAPI's client: its extension says what it is.
+  const ts = typeScriptBotProblem(bot);
+  if (ts) throw new CliError(ts, null, 2);
+  const bk = isJsBot(bot) ? "bot" : kindOf(bot, b);
   if (bk !== "bot") {
     const m = await read(map);
     if (bk === "map" && m !== null && m !== "folder" && kindOf(map, m) === "bot") throw new CliError(t("{file} is a map, not a bot: the bot comes first.", { file: bot }), usage, 2);

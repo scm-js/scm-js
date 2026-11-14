@@ -539,6 +539,12 @@ for the names' rules. To try a bot on the mod without a page,
 with the mod's plugins, and `scmjs bot ladder … --mod` plays a ladder on the mod ([a bot
 on a mod](cli.md#a-bot-on-a-mod)).
 
+A bot written in JavaScript needs no header: in the mod's game it is told the mod's name
+and hash, and every unit is called by the mod's name, the same ones the header uses
+(`Terran_Mason`). `scmjs mod header … --js` writes them as a JavaScript module all the
+same, for an editor's completion ([the command](cli.md#a-bot-made-for-a-mod)). [Bots for
+mods](bots.md#bots-for-mods) in the bot guide has an example made for Cosmonarchy.
+
 ### For AI tools
 
 `scmjs mcp` has the mod commands as tools: `mod_info`, `mod_check`, `mod_diff`,

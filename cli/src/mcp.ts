@@ -689,21 +689,22 @@ export function createMcpServer(options: McpOptions = {}): { server: McpServer; 
 
   reg("mod_header", {
     title: "A mod's ids by name, for a bot",
-    description: "Write a mod's units, weapons, upgrades and techs by name for a BWAPI bot made for it (scmjs mod header): <Mod>.h, C++ for a bot built with scmbot (Cosmonarchy_BW::UnitTypes::Terran_Mason is a BWAPI::UnitType), and <Mod>.ids.json, the same ids for other languages, both carrying the mod's name and hash. With `bot`, `out` is a bot's folder (it has scmbot.json) and its scmbot.json gains the mod, which `scmjs bot build` (Docker) writes into the .scmbot file; the runners and the play page then say the bot was made for that mod. Overwrites the two files in `out`.",
+    description: "Write a mod's units, weapons, upgrades and techs by name for a BWAPI bot made for it (scmjs mod header): <Mod>.h, C++ for a bot built with scmbot (Cosmonarchy_BW::UnitTypes::Terran_Mason is a BWAPI::UnitType), and <Mod>.ids.json, the same ids for other languages, both carrying the mod's name and hash. With `bot`, `out` is a bot's folder (it has scmbot.json) and its scmbot.json gains the mod, which `scmjs bot build` (Docker) writes into the .scmbot file; the runners and the play page then say the bot was made for that mod. With `js`, <Mod>.mjs in place of the header: the same ids as a JavaScript module for a JavaScript bot (which is also given the mod's names, name and hash at run time). Overwrites the two files in `out`.",
     inputSchema: {
       path: modPath,
       out: z.string().optional().describe("the folder the files go in (the working directory by default); with `bot`, the bot's folder"),
       namespace: z.string().optional().describe("the C++ namespace and the files' name (the mod's name made an identifier by default)"),
       bot: z.boolean().optional().describe("`out` is a bot's folder: write the mod into its scmbot.json"),
+      js: z.boolean().optional().describe("for a JavaScript bot: <Mod>.mjs in place of the C++ header (not with `bot`)"),
       starcraft,
     },
     annotations: { destructiveHint: true },
-  }, tool(async ({ path: file, out: to, namespace, bot, starcraft: sc }) => {
+  }, tool(async ({ path: file, out: to, namespace, bot, js, starcraft: sc }) => {
     const base = await gameFilesOrNull(sc);
-    const r = await writeModHeader(await openMod(file, base), base, { out: to, namespace, bot });
+    const r = await writeModHeader(await openMod(file, base), base, { out: to, namespace, bot, js });
     return ok([
       `${r.mod.name}: ${r.counts.units} units, ${r.counts.weapons} weapons, ${r.counts.upgrades} upgrades, ${r.counts.techs} techs named · hash ${r.mod.hash}`,
-      `Header: ${shown(r.files.header)}`, `Ids: ${shown(r.files.ids)}`,
+      `${js ? "Module" : "Header"}: ${shown(r.files.header)}`, `Ids: ${shown(r.files.ids)}`,
       ...(r.files.scmbot ? [`Bot: ${shown(r.files.scmbot)} now names the mod: build the bot again (scmjs bot build)`] : []),
       ...(r.fromGame.length ? [`From the game: the names of ${r.fromGame.join(", ")} (the mod has not got them)`] : []),
     ], r);

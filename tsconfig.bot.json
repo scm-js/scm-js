@@ -1,0 +1,27 @@
+// `@scm-js/bot`, the bot interface's types (`bot/`): the two files copied from scm-sim and the
+// entry that re-exports them. Strict and with no ambient types, as the files are written in
+// scm-sim; a bot runs in a Web Worker or under Node, so neither the DOM nor Node is assumed.
+// `scripts/build-bot-types.mjs` bundles the declarations from this; `tsc -b` type-checks it.
+{
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.bot.tsbuildinfo",
+    "target": "es2023",
+    "lib": ["ES2023"],
+    "module": "esnext",
+    "types": [],
+    "skipLibCheck": true,
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "moduleDetection": "force",
+    "noEmit": true,
+    "declaration": true,
+    "stripInternal": true,
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "erasableSyntaxOnly": true,
+    "noFallthroughCasesInSwitch": true
+  },
+  "include": ["bot/src"]
+}

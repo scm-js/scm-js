@@ -52,6 +52,23 @@ export function looksLikeChk(bytes: Uint8Array): boolean {
   return true;
 }
 
+/**
+ * Whether a bot is a JavaScript bot's module (`.js`, `.mjs`, `.ts`): a bot written for the play page's own interface
+ * (scm-sim's `BOT_API`), which the runners play as BWAPI's client. A `.scmbot` is told by its first bytes instead.
+ */
+export const isJsBot = (name: string): boolean => /\.(m?js|ts)$/i.test(name);
+
+/** A JavaScript bot's name: its file's, without the extension. */
+export const jsBotName = (name: string): string => name.replace(/^.*[\\/]/, "").replace(/\.(m?js|ts)$/i, "");
+
+/**
+ * Why this Node cannot run a TypeScript bot as it is, or null: Node strips the types itself from 22.18 (and 23.6); an
+ * older one needs the bot compiled to JavaScript first.
+ */
+export function typeScriptBotProblem(name: string, features: { typescript?: unknown } = process.features as { typescript?: unknown }): string | null {
+  return /\.ts$/i.test(name) && !features.typescript ? t("Node {version} cannot run a TypeScript bot as it is (Node 22.18 or newer strips the types itself): use a newer Node, or compile {file} to JavaScript.", { version: process.versions.node, file: `${jsBotName(name)}.ts` }) : null;
+}
+
 /** What a file is, from its first bytes, then its extension. */
 export function kindOf(name: string, bytes: Uint8Array): FileKind | null {
   if (detectFormat(bytes)) return "replay";

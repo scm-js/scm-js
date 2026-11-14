@@ -1,7 +1,7 @@
 /**
  * What the documentation site is made of, and where every link in it points.
  *
- * The eleven guides are the repository's own `docs/*.md`, split into
+ * The guides are the repository's own `docs/*.md`, split into
  * pages by `markdown.mjs`. This module is the map from a source file and a heading to a
  * URL on the site, which is the whole reason the links in those documents keep working:
  * a `[the plugin guide](docs/plugins.md)` written for a GitHub blob page has to become a
@@ -71,6 +71,13 @@ export const SOURCES = [
     title: "Command line",
     blurb: "scmjs in a terminal: looking inside maps, making and changing them, maps in git and CI, a map's triggers run and tested in the game, replays, sharing, bots, plugins and AI tools, and every command on one page.",
     pageTitle: "StarCraft maps and replays on the command line",
+  },
+  {
+    id: "bots",
+    file: "docs/bots.md",
+    title: "Bots",
+    blurb: "A computer player written in JavaScript that plays on the game's own engine, on the play page or from the command line: a first bot, the short way, bots for mods, and the interface underneath.",
+    pageTitle: "StarCraft bots in JavaScript",
   },
   {
     id: "mods",

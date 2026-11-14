@@ -131,15 +131,16 @@ npm run build:cli         # the scmjs command → cli/dist/scmjs.mjs
 npm run build:cli-binary  # scmjs as one program, Node inside, for this OS → cli/dist/bin/ (Node 24)
 npm run cli -- map info a.scx     # the scmjs command, built and run (docs/cli.md)
 npm run build:core        # the @scm-js/core library → core/dist/index.mjs + index.d.ts (docs/core.md)
+npm run build:bot-types   # the @scm-js/bot types → bot/dist/index.d.ts (docs/bots.md)
 ```
 
 `npm run build` is the type-check: `tsc -b` covers the app, the scripts and the desktop
-main process, the command line and the library's entry (`tsconfig.app.json`,
-`tsconfig.node.json`, `tsconfig.desktop.json`, `tsconfig.cli.json`, `tsconfig.core.json`).
-The app config is strict: `noUnusedLocals`, `noUnusedParameters`, `verbatimModuleSyntax`
-(so `import type` for types) and `erasableSyntaxOnly` (so no enums and no constructor
-parameter properties). Lint, the tests and the build run on every pull request and every
-push to `main`.
+main process, the command line, the library's entry and the bot types
+(`tsconfig.app.json`, `tsconfig.node.json`, `tsconfig.desktop.json`, `tsconfig.cli.json`,
+`tsconfig.core.json`, `tsconfig.bot.json`). The app config is strict: `noUnusedLocals`,
+`noUnusedParameters`, `verbatimModuleSyntax` (so `import type` for types) and
+`erasableSyntaxOnly` (so no enums and no constructor parameter properties). Lint, the
+tests and the build run on every pull request and every push to `main`.
 
 ## Repository layout
 
@@ -180,6 +181,7 @@ src/
 desktop/        The Electron shell: main process, preload bridge, updater
 cli/            The scmjs command line, built from the editor's code into one file (docs/cli.md)
 core/           The @scm-js/core package: one entry file naming the editor's modules it exports (docs/core.md)
+bot/            The @scm-js/bot package: the bot interface's types, copied from the play page's engine (docs/bots.md)
 scripts/        Extraction, vendoring, the desktop and docs builds, plugin typings, screenshots
 tests/          vitest suites; tests/maps holds the maps they open, made by tests/support
 e2e/            Browser tests: Playwright specs that drive the built editor
@@ -709,7 +711,7 @@ ruleset.
 ## Docs site and screenshots
 
 [docs.scmjs.dev](https://docs.scmjs.dev) is built by `npm run build:docs`. The guides are
-the thirteen `docs/*.md` files, split at their `##` headings into pages, with the `###`
+the fifteen `docs/*.md` files, split at their `##` headings into pages, with the `###`
 beneath as each page's contents. The API reference is generated from the bundled plugin
 typings, so a doc comment in `src/plugins/api.ts` is a paragraph on the site.
 
@@ -782,7 +784,7 @@ util-linux's `script`, so that picture is taken on Linux.
 
 ## Contributing
 
-- **Keep the documents current.** The thirteen guides under `docs/` are the documentation
+- **Keep the documents current.** The fifteen guides under `docs/` are the documentation
   site and `README.md` is the repository's front page; a behaviour change that is not in
   them is undocumented. Write them for their readers, with `src/` paths only in a guide's
   closing *In the source* section. Keep the matching note in `.claude/internals/` in step

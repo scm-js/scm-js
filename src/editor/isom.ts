@@ -464,6 +464,8 @@ export interface IsomEdit {
   tiles: TileChange[];
   /** Changes to `scenario.isom`, indexed by u16. */
   isom: TileChange[];
+  /** The tiles the brush would have changed and did not, because they are pinned (editor/pins.ts). */
+  kept: number[];
 }
 
 interface Neighbours {
@@ -489,8 +491,12 @@ class IsomPass {
   private readonly isomBefore = new Map<number, number>();
   private readonly tileBefore = new Map<number, number>();
   private changed = { left: 0, top: 0, right: -1, bottom: -1 };
+  /** A byte per tile, non-zero where the tile is pinned: the lattice changes under it and the tile stays. */
+  private readonly pinned: Uint8Array | null;
+  private readonly keptAt = new Set<number>();
 
-  constructor(scn: Scenario & { isom: Uint16Array }, tileset: Tileset, tables: IsomTables, random: () => number) {
+  constructor(scn: Scenario & { isom: Uint16Array }, tileset: Tileset, tables: IsomTables, random: () => number, pinned: Uint8Array | null = null) {
+    this.pinned = pinned;
     this.scn = scn;
     this.tileset = tileset;
     this.tables = tables;
@@ -661,6 +667,10 @@ class IsomPass {
   private setTile(x: number, y: number, value: number) {
     if (x >= this.scn.width || y >= this.scn.height) return;
     const at = y * this.scn.width + x;
+    if (this.pinned?.[at]) {
+      if (this.scn.tiles[at] !== value) this.keptAt.add(at);
+      return;
+    }
     if (!this.tileBefore.has(at)) this.tileBefore.set(at, this.scn.tiles[at]);
     this.scn.tiles[at] = value;
   }
@@ -775,7 +785,7 @@ class IsomPass {
     }
     if (tiles.length > 0) markDirty(this.scn, "MTXM", "TILE");
     if (isom.length > 0) markDirty(this.scn, "ISOM");
-    return { tiles, isom };
+    return { tiles, isom, kept: [...this.keptAt] };
   }
 }
 
@@ -787,7 +797,9 @@ export function hasIsom(scn: Scenario | null): scn is Scenario & { isom: Uint16A
 /**
  * Paint `terrainType` (a CV5 index) with an `extent`-diamond brush centred on `d`.
  * Mutates `scn.tiles` and `scn.isom`; returns what changed, or null when the terrain is
- * not one the tileset paints isometrically or `d` is not a diamond.
+ * not one the tileset paints isometrically or `d` is not a diamond. Tiles marked in
+ * `pinned` (a byte per tile) are left as they are: the lattice still changes under them,
+ * so the ground around them is laid as if they had followed.
  */
 export function paintIsom(
   scn: Scenario & { isom: Uint16Array },
@@ -796,8 +808,9 @@ export function paintIsom(
   terrainType: number,
   extent: number,
   random: () => number = Math.random,
+  pinned: Uint8Array | null = null,
 ): IsomEdit | null {
-  const pass = new IsomPass(scn, tileset, isomTables(tileset, tilesetIndex(scn)), random);
+  const pass = new IsomPass(scn, tileset, isomTables(tileset, tilesetIndex(scn)), random, pinned);
   if (!pass.place(d, terrainType, extent)) return null;
   pass.updateTiles();
   const edit = pass.finish();
@@ -819,8 +832,9 @@ export function paintIsomDiamonds(
   diamonds: readonly Diamond[],
   terrainType: number,
   random: () => number = Math.random,
+  pinned: Uint8Array | null = null,
 ): IsomEdit | null {
-  const pass = new IsomPass(scn, tileset, isomTables(tileset, tilesetIndex(scn)), random);
+  const pass = new IsomPass(scn, tileset, isomTables(tileset, tilesetIndex(scn)), random, pinned);
   if (!pass.placeMany(diamonds, terrainType)) return null;
   pass.updateTiles();
   const edit = pass.finish();
@@ -883,6 +897,29 @@ export function isomReport(scn: Scenario, tileset: Tileset): IsomReport | null {
   // Clamped: a rebuild that made a rect worse is not a rect it recovers.
   const inherent = Math.min(check.mismatched, after.mismatched);
   return { ...check, inherent, stale: (check.mismatched - inherent) / check.rects > STALE_ISOM_SHARE };
+}
+
+/**
+ * A byte per tile, 1 where the tile is not one its lattice resolves to: ground laid by
+ * hand (a doodad placed as terrain, a blend, another editor's work). The tiles of a
+ * placed doodad are not counted; they are the doodad's, over ground that is.
+ */
+export function latticeMisses(scn: Scenario & { isom: Uint16Array }, tileset: Tileset): Uint8Array {
+  const pass = new IsomPass(scn, tileset, isomTables(tileset, tilesetIndex(scn)), Math.random);
+  const { groups } = tileset;
+  const out = new Uint8Array(scn.width * scn.height);
+  for (let y = 0; y < scn.height; y++) {
+    for (let x = 0; x < Math.floor(scn.width / 2); x++) {
+      const found = pass.groupsFor({ x, y });
+      const expected = found ? groups[found[0]].index : -1;
+      for (let half = 0; half < 2; half++) {
+        const at = y * scn.width + 2 * x + half;
+        if (scn.tiles[at] !== scn.editorTiles[at]) continue;
+        if ((groups[scn.tiles[at] >> 4]?.index ?? -1) !== expected) out[at] = 1;
+      }
+    }
+  }
+  return out;
 }
 
 /** How well the ISOM section describes the tiles that are actually on the map. */

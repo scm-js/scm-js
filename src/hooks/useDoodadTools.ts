@@ -3,7 +3,7 @@ import { useAtomValue, useSetAtom, useStore } from "jotai";
 import { activeDoodadAtom, doodadPlacementAtom, doodadPlacingAtom, selectedDoodadsAtom, symmetryAtom, symmetryOptionsAtom, unitOwnerAtom } from "../atoms/editorAtoms";
 import { mirroredOwner, mirrorMoves, mirrorTileRectImages, SAME_MOVE, withMirrorImages, type Linear, type Placed } from "../editor/symmetry";
 import type { TileChange } from "../editor/terrain";
-import { commitEditAtom, convertSelectedDoodadsAtom, deleteSelectedDoodadsAtom, scenarioAtom, tilesetFileNameAtom, type HistoryEntry } from "../atoms/documentAtoms";
+import { commitEditAtom, convertSelectedDoodadsAtom, pinCellsAtom, deleteSelectedDoodadsAtom, scenarioAtom, tilesetFileNameAtom, type HistoryEntry } from "../atoms/documentAtoms";
 import { statusMessageAtom } from "../atoms/uiAtoms";
 import {
   applyDoodadChanges, applySpriteChanges, checkDoodadPlacement, doodadAt, doodadFootprint, doodadsInBox, placeDoodad, placeDoodadAsTerrain, removeDoodads,
@@ -174,6 +174,8 @@ export function useDoodadTools() {
     const long = isStretched(ghost.def) ? ghost.def.stretched : null;
     const asTerrain = opts.asTerrain || long !== null;
     const tiles: TileChange[] = [], doodads: DoodadChange[] = [], sprites: SpriteChange[] = [];
+    /** The tiles laid as terrain, for the pin. */
+    const laid: number[] = [];
     let placed = 0;
     /** The twin a mirror image was placed as, and how many of its minitiles play otherwise than the doodad's mirrored. */
     let twin: { def: DoodadDef; unlike: number } | null = null;
@@ -188,6 +190,12 @@ export function useDoodadTools() {
         applySpriteChanges(scn, edit.sprites);
         tiles.push(...edit.tiles);
         sprites.push(...edit.sprites);
+        for (let r = 0; r < g.def.height; r++) {
+          for (let c = 0; c < g.def.width; c++) {
+            const x = g.x + c, y = g.y + r;
+            if (g.def.tiles[r * g.def.width + c] && x >= 0 && y >= 0 && x < scn.width && y < scn.height) laid.push(y * scn.width + x);
+          }
+        }
       } else {
         const edit = placeDoodad(scn, g.def, g.x, g.y, g.owner);
         apply(scn, edit);
@@ -199,8 +207,10 @@ export function useDoodadTools() {
     }
     setSelected([]);
     const label = placed === 1 ? t("Place {name}", { name: doodadLabel(ghost.def) }) : t("Place {n} × {name}", { n: placed, name: doodadLabel(ghost.def) });
-    commit(long ? { label: t("{label}, stretched", { label }), changes: tiles, sprites }
-      : asTerrain ? { label: t("{label} as terrain", { label }), changes: tiles, sprites } : entryFor(label, { tiles, doodads, sprites }));
+    // Terrain laid as a piece is pinned, so a brush stroke beside it does not take it apart.
+    const pins = asTerrain && opts.pin && laid.length > 0 ? store.set(pinCellsAtom, { cells: laid, on: true }) ?? undefined : undefined;
+    commit(long ? { label: t("{label}, stretched", { label }), changes: tiles, sprites, pins }
+      : asTerrain ? { label: t("{label} as terrain", { label }), changes: tiles, sprites, pins } : entryFor(label, { tiles, doodads, sprites }));
     const what = placed === 1 ? doodadLabel(ghost.def) : t("{n} × {name}", { n: placed, name: doodadLabel(ghost.def) });
     const where = { what, w: ghost.def.width, h: ghost.def.height, x: ghost.x, y: ghost.y };
     // Across the mirror stands the doodad's twin. Say so, and say when the game's two do not play alike.
@@ -212,6 +222,7 @@ export function useDoodadTools() {
       const base = t("Placed {what} stretched {arrow} by {n} ({w}×{h}) as terrain at tile {x}, {y}", { ...where, arrow: stretchArrow(long.axis, long.steps), n: steps });
       // What the tileset could not give: say it, since both are worth a look before the map is played.
       const notes: string[] = mirrorNote ? [mirrorNote] : [];
+      if (pins) notes.push(t("its tiles are pinned"));
       const spots = Math.round(long.plan.islandsPerStep * steps) * placed;
       if (spots > 0) notes.push(t("it leaves {n, plural, one {# small spot} other {# small spots}} units cannot walk on, which View ▸ Walkability shows", { n: spots }));
       const shown = Math.round(long.plan.shownPerStep * steps) * placed;

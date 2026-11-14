@@ -1,10 +1,11 @@
 import { useCallback, useMemo, useRef } from "react";
 import { useAtomValue, useSetAtom, useStore } from "jotai";
 import {
-  activeTerrainAtom, activeTileAtom, blendAnchorAtom, blendFollowAtom, brushSizeAtom, mapTilesetAtom,
+  activeTerrainAtom, activeTileAtom, blendAnchorAtom, blendFollowAtom, brushSizeAtom, mapTilesetAtom, pinBrushUnpinsAtom,
   rectVariationAtom, symmetryAtom, terrainModeAtom, type TerrainMode,
 } from "../atoms/editorAtoms";
-import { commitTerrainAtom, scenarioAtom, terrainRevisionAtom, tilesetFileNameAtom, type HistoryEntry } from "../atoms/documentAtoms";
+import { commitTerrainAtom, pinCellsAtom, pinnedTilesAtom, scenarioAtom, terrainRevisionAtom, tilesetFileNameAtom, type HistoryEntry } from "../atoms/documentAtoms";
+import { countPins, handLaidCells, withoutPinned } from "../editor/pins";
 import { statusMessageAtom } from "../atoms/uiAtoms";
 import {
   applyChanges, brushRect, floodRegion, laidPairAt, laidPairs, replaceTerrain, stampTerrain, stampTile,
@@ -44,7 +45,12 @@ export interface MapPoint {
  * the Blend brush places from its palette (see `blendAt`).
  */
 export function paintsTiles(mode: TerrainMode): boolean {
-  return mode === "rect" || mode === "tile" || mode === "heal";
+  return mode === "rect" || mode === "tile" || mode === "heal" || mode === "pin";
+}
+
+/** What a status line adds when pinned tiles stood in a brush's way. */
+function keptNote(kept: number): string {
+  return kept > 0 ? t(" — {n, plural, one {# pinned tile} other {# pinned tiles}} left as laid (the Pin tab unpins)", { n: kept }) : "";
 }
 
 /**
@@ -65,6 +71,10 @@ export function useTerrainTools() {
   /** The last diamond an isometric stroke painted; the brush fires once per diamond. */
   const lastDiamond = useRef<Diamond | null>(null);
   const strokeLabel = useRef(t("Paint terrain"));
+  /** The cells of pinned tiles the stroke would have changed. */
+  const strokeKept = useRef(new Set<number>());
+  /** A stroke of the Pin brush: the pins file before it and as it stands. */
+  const pinStroke = useRef<{ before: Uint8Array | null; after: Uint8Array | null } | null>(null);
 
   const info = TILESET_BY_ID[useAtomValue(mapTilesetAtom)];
   const loaded = peekTileset(useAtomValue(tilesetFileNameAtom));
@@ -119,6 +129,14 @@ export function useTerrainTools() {
     return mirrorRect(store.get(symmetryAtom), brushRect(x, y, store.get(brushSizeAtom), scn.width, scn.height), scn.width, scn.height);
   }, [store]);
 
+  /** A brush's changes less those to pinned tiles, which are counted for the stroke's status line. */
+  const unpinned = useCallback((changes: TileChange[]): TileChange[] => {
+    const pinned = store.get(pinnedTilesAtom);
+    if (!pinned) return changes;
+    for (const c of changes) if (pinned[c.at]) strokeKept.current.add(c.at);
+    return withoutPinned(changes, pinned).changes;
+  }, [store]);
+
   /** Changes one brush application at (x, y) would make, without applying them. */
   const stampAt = useCallback((x: number, y: number): TileChange[] | null => {
     const scn = store.get(scenarioAtom);
@@ -130,18 +148,19 @@ export function useTerrainTools() {
         setStatus(t("Rect painting needs the tileset graphics — Help ▸ Game Data…"));
         return null;
       }
-      return stampTerrain(scn, loaded.tileset, { group: terrain.group, variation: store.get(rectVariationAtom) }, footprint(scn, x, y));
+      return unpinned(stampTerrain(scn, loaded.tileset, { group: terrain.group, variation: store.get(rectVariationAtom) }, footprint(scn, x, y)));
     }
+    // The Tile brush is pointed at the tiles it sets, so a pin does not stop it.
     if (mode === "tile") return stampTile(scn, footprint(scn, x, y), store.get(activeTileAtom));
     if (mode === "heal") {
       if (!loaded) {
         setStatus(t("The Heal brush needs the tileset graphics — Help ▸ Game Data…"));
         return null;
       }
-      return healTiles(scn, loaded.tileset, footprint(scn, x, y));
+      return unpinned(healTiles(scn, loaded.tileset, footprint(scn, x, y)));
     }
     return null;
-  }, [store, loaded, currentTerrain, footprint, setStatus]);
+  }, [store, loaded, currentTerrain, footprint, unpinned, setStatus]);
 
   /**
    * One isometric brush application on the diamond under `p`, applied live — and, under a
@@ -164,8 +183,10 @@ export function useTerrainTools() {
     for (const q of mirrorPixel(store.get(symmetryAtom), p.px, p.py, scn.width, scn.height)) {
       const dq = diamondAt(q.x, q.y);
       if (!isDiamond(dq) || dq.x < 0 || dq.y < 0 || dq.x >= isomWidth(scn) || dq.y > scn.height) continue;
-      const edit = paintIsom(scn, loaded.tileset, dq, terrain, store.get(brushSizeAtom));
+      const pinned = store.get(pinnedTilesAtom);
+      const edit = paintIsom(scn, loaded.tileset, dq, terrain, store.get(brushSizeAtom), Math.random, pinned);
       if (!edit) continue;
+      for (const at of edit.kept) strokeKept.current.add(at);
       s.add(edit.tiles);
       is.add(edit.isom);
       if (edit.tiles.length > 0) changed = true;
@@ -181,20 +202,31 @@ export function useTerrainTools() {
       if (p) paintIsomAt(p);
       return;
     }
+    if (store.get(terrainModeAtom) === "pin") {
+      const part = store.set(pinCellsAtom, { cells: footprint(scn, x, y), on: !store.get(pinBrushUnpinsAtom) });
+      if (!part) return;
+      const stroke = pinStroke.current;
+      pinStroke.current = { before: stroke ? stroke.before : part.before, after: part.after };
+      bumpRevision((r) => r + 1);
+      return;
+    }
     const changes = stampAt(x, y);
     if (!changes || changes.length === 0) return;
     applyChanges(scn, changes);
     s.add(changes);
     bumpRevision((r) => r + 1);
-  }, [store, stampAt, paintIsomAt, bumpRevision]);
+  }, [store, stampAt, paintIsomAt, footprint, bumpRevision]);
 
   const beginStroke = useCallback((x: number, y: number, p?: MapPoint) => {
     const mode = store.get(terrainModeAtom);
     stroke.current = new Stroke();
     isomStroke.current = new Stroke();
     lastDiamond.current = null;
+    strokeKept.current = new Set();
+    pinStroke.current = null;
     strokeLabel.current =
-      mode === "rect" ? (currentTerrain() ? t("Paint {terrain}", { terrain: terrainLabel(currentTerrain()!) }) : t("Paint terrain"))
+      mode === "pin" ? (store.get(pinBrushUnpinsAtom) ? t("Unpin tiles") : t("Pin tiles"))
+      : mode === "rect" ? (currentTerrain() ? t("Paint {terrain}", { terrain: terrainLabel(currentTerrain()!) }) : t("Paint terrain"))
         : mode === "isom" ? t("Paint {terrain} (isometric)", { terrain: translate(terrainName(info, currentIsomTerrain() ?? -1)) })
           : mode === "heal" ? t("Heal seams")
             : t("Place tile {tile}", { tile: hexTile(store.get(activeTileAtom)) });
@@ -209,11 +241,21 @@ export function useTerrainTools() {
     isomStroke.current = null;
     lastDiamond.current = null;
     if (!s || !scn) return;
+    const pins = pinStroke.current;
+    pinStroke.current = null;
+    if (pins) {
+      commitTerrain(scn, { label: strokeLabel.current, changes: [], pins: { before: pins.before, after: pins.after } }, t("{label} — {n, plural, one {# tile is} other {# tiles are}} pinned now", { label: strokeLabel.current, n: countPins(store.get(pinnedTilesAtom)) }));
+      return;
+    }
     const changes = s.finish();
     const isom = is?.finish() ?? [];
-    if (changes.length === 0 && isom.length === 0) return;
-    commitTerrain(scn, { label: strokeLabel.current, changes, isom: isom.length > 0 ? isom : undefined }, t("{label} — {n, plural, one {# tile} other {# tiles}}", { label: strokeLabel.current, n: changes.length }));
-  }, [store, commitTerrain]);
+    const kept = strokeKept.current.size;
+    if (changes.length === 0 && isom.length === 0) {
+      if (kept > 0) setStatus(t("Nothing painted: the tiles here are pinned (the Pin tab unpins)"));
+      return;
+    }
+    commitTerrain(scn, { label: strokeLabel.current, changes, isom: isom.length > 0 ? isom : undefined }, t("{label} — {n, plural, one {# tile} other {# tiles}}", { label: strokeLabel.current, n: changes.length }) + keptNote(kept));
+  }, [store, commitTerrain, setStatus]);
 
   const isStroking = useCallback(() => stroke.current !== null, []);
 
@@ -226,7 +268,7 @@ export function useTerrainTools() {
     const scn = store.get(scenarioAtom);
     if (!scn) return;
     const mode = store.get(terrainModeAtom);
-    if (!paintsTiles(mode) || mode === "heal") return;
+    if (mode !== "rect" && mode !== "tile") return;
     const seed = scn.tiles[y * scn.width + x];
     let changes: TileChange[] = [];
     let label = t("Fill area");
@@ -249,10 +291,16 @@ export function useTerrainTools() {
       changes = stampTile(scn, region, tile);
       label = t("Fill with {tile}", { tile: hexTile(tile) });
     }
+    // A fill lays an area by rule, whichever brush it borrows its tile from: pinned tiles stay.
+    const spared = withoutPinned(changes, store.get(pinnedTilesAtom));
+    changes = spared.changes;
 
-    if (changes.length === 0) return;
+    if (changes.length === 0) {
+      if (spared.kept > 0) setStatus(t("Nothing filled: the tiles here are pinned (the Pin tab unpins)"));
+      return;
+    }
     applyChanges(scn, changes);
-    commitTerrain(scn, { label, changes }, t("{label} — {n, plural, one {# tile} other {# tiles}}", { label, n: changes.length }));
+    commitTerrain(scn, { label, changes }, t("{label} — {n, plural, one {# tile} other {# tiles}}", { label, n: changes.length }) + keptNote(spared.kept));
   }, [store, loaded, currentTerrain, commitTerrain, setStatus]);
 
   /**
@@ -267,9 +315,15 @@ export function useTerrainTools() {
     const changes: TileChange[] = [];
     let isom: TileChange[] | undefined;
     let label: string;
+    const pinned = store.get(pinnedTilesAtom);
+    let kept = 0;
     if (store.get(terrainModeAtom) === "tile") {
       const tile = store.get(activeTileAtom);
-      for (let at = 0; at < scn.tiles.length; at++) if (scn.tiles[at] !== tile) changes.push({ at, before: scn.tiles[at], after: tile });
+      for (let at = 0; at < scn.tiles.length; at++) {
+        if (scn.tiles[at] === tile) continue;
+        if (pinned?.[at]) kept++;
+        else changes.push({ at, before: scn.tiles[at], after: tile });
+      }
       label = t("Fill map with {tile}", { tile: hexTile(tile) });
     } else {
       const terrain = currentTerrain();
@@ -278,7 +332,11 @@ export function useTerrainTools() {
         return;
       }
       const flat = flatTerrain(scn.width, scn.height, { id: terrain.id, group: terrain.group }, loaded.tileset, Math.random, tilesetIndex(scn));
-      for (let at = 0; at < flat.tiles.length; at++) if (scn.tiles[at] !== flat.tiles[at]) changes.push({ at, before: scn.tiles[at], after: flat.tiles[at] });
+      for (let at = 0; at < flat.tiles.length; at++) {
+        if (scn.tiles[at] === flat.tiles[at]) continue;
+        if (pinned?.[at]) kept++;
+        else changes.push({ at, before: scn.tiles[at], after: flat.tiles[at] });
+      }
       // A pair the tileset does not type has no ISOM value: its tiles are laid and the lattice is left as it was.
       if (hasIsom(scn) && scn.isom.length === flat.isom.length && !isPairTerrain(terrain.id)) {
         isom = [];
@@ -292,7 +350,7 @@ export function useTerrainTools() {
     }
     applyChanges(scn, changes);
     if (isom && isom.length > 0) applyIsomChanges(scn, isom);
-    commitTerrain(scn, { label, changes, isom: isom && isom.length > 0 ? isom : undefined }, t("{label} — {n, plural, one {# tile} other {# tiles}}", { label, n: changes.length }));
+    commitTerrain(scn, { label, changes, isom: isom && isom.length > 0 ? isom : undefined }, t("{label} — {n, plural, one {# tile} other {# tiles}}", { label, n: changes.length }) + keptNote(kept));
   }, [store, loaded, currentTerrain, commitTerrain, setStatus]);
 
   /**
@@ -307,9 +365,10 @@ export function useTerrainTools() {
       setStatus(t("Replace Terrain needs the tileset graphics — Help ▸ Game Data…"));
       return 0;
     }
-    const changes = replaceTerrain(scn, loaded?.tileset ?? null, from, to, rect);
+    const spared = withoutPinned(replaceTerrain(scn, loaded?.tileset ?? null, from, to, rect), store.get(pinnedTilesAtom));
+    const changes = spared.changes;
     if (changes.length === 0) {
-      setStatus(t("Nothing to replace — no tile matches, or the replacement is what is there already."));
+      setStatus(spared.kept > 0 ? t("Nothing replaced: the tiles that match are pinned (the Pin tab unpins)") : t("Nothing to replace — no tile matches, or the replacement is what is there already."));
       return 0;
     }
     const name = (p: TerrainPick) => {
@@ -319,7 +378,7 @@ export function useTerrainTools() {
     };
     const label = t("Replace {from} with {to}", { from: name(from), to: name(to) });
     applyChanges(scn, changes);
-    commitTerrain(scn, { label, changes }, rect ? t("{label} — {n, plural, one {# tile} other {# tiles}} in the marked area", { label, n: changes.length }) : t("{label} — {n, plural, one {# tile} other {# tiles}}", { label, n: changes.length }));
+    commitTerrain(scn, { label, changes }, (rect ? t("{label} — {n, plural, one {# tile} other {# tiles}} in the marked area", { label, n: changes.length }) : t("{label} — {n, plural, one {# tile} other {# tiles}}", { label, n: changes.length })) + keptNote(spared.kept));
     return changes.length;
   }, [store, loaded, terrainOf, commitTerrain, setStatus]);
 
@@ -338,7 +397,7 @@ export function useTerrainTools() {
     const cells: number[] = [];
     for (let y = Math.max(0, area.y0); y < Math.min(scn.height, area.y1); y++) for (let x = Math.max(0, area.x0); x < Math.min(scn.width, area.x1); x++) cells.push(y * scn.width + x);
     const before = shownSeams(scn, loaded.tileset, cells);
-    const changes = healTiles(scn, loaded.tileset, cells);
+    const changes = withoutPinned(healTiles(scn, loaded.tileset, cells), store.get(pinnedTilesAtom)).changes;
     if (changes.length === 0) {
       setStatus(before === 0 ? t("No join shows here — nothing to heal.") : t("{n, plural, one {# join shows} other {# joins show}} here, and the tileset has no tile that would mend one and play the same.", { n: before }));
       return 0;
@@ -348,6 +407,41 @@ export function useTerrainTools() {
     const label = t("Heal seams");
     commitTerrain(scn, { label, changes }, t("Healed {n, plural, one {# tile} other {# tiles}}: {before} joins showed, {after} still do", { n: changes.length, before, after }));
     return changes.length;
+  }, [store, loaded, commitTerrain, setStatus]);
+
+  /**
+   * The Pin tab's buttons: pin or unpin every tile of a rect or of the whole map, or pin
+   * the tiles laid by hand there (`handLaidCells`). One undo step. Returns how many tiles'
+   * pins changed.
+   */
+  const pinArea = useCallback((what: "all" | "handLaid", on: boolean, rect?: Rect): number => {
+    const scn = store.get(scenarioAtom);
+    if (!scn) return 0;
+    let cells: number[];
+    if (what === "handLaid") {
+      if (!loaded || !hasIsom(scn)) {
+        setStatus(t("Finding the tiles laid by hand needs the tileset graphics and a map with isometric data."));
+        return 0;
+      }
+      cells = handLaidCells(scn, loaded.tileset, rect);
+    } else {
+      const area = rect ?? { x0: 0, y0: 0, x1: scn.width, y1: scn.height };
+      cells = [];
+      for (let y = Math.max(0, area.y0); y < Math.min(scn.height, area.y1); y++) for (let x = Math.max(0, area.x0); x < Math.min(scn.width, area.x1); x++) cells.push(y * scn.width + x);
+    }
+    const before = countPins(store.get(pinnedTilesAtom));
+    const part = store.set(pinCellsAtom, { cells, on });
+    if (!part) {
+      setStatus(what === "handLaid" ? (cells.length === 0 ? t("No tile here was laid by hand: the isometric data accounts for all of them.") : t("The tiles laid by hand here are pinned already.")) : on ? t("Every tile here is pinned already.") : t("No tile here is pinned."));
+      return 0;
+    }
+    const now = countPins(store.get(pinnedTilesAtom));
+    const n = Math.abs(now - before);
+    const label = on ? t("Pin tiles") : t("Unpin tiles");
+    commitTerrain(scn, { label, changes: [], pins: part }, on
+      ? t("Pinned {n, plural, one {# tile} other {# tiles}}; {total} pinned in all", { n, total: now })
+      : t("Unpinned {n, plural, one {# tile} other {# tiles}}; {total} still pinned", { n, total: now }));
+    return n;
   }, [store, loaded, commitTerrain, setStatus]);
 
   /**
@@ -464,8 +558,8 @@ export function useTerrainTools() {
   }, [store]);
 
   return useMemo(
-    () => ({ types, terrainOf, isomTypes, isomReady, loaded, beginStroke, paintAt, endStroke, isStroking, fillAt, fillMap, replace, heal, pickAt, blendAt, ghostAt, ghostDiamondsAt }),
-    [types, terrainOf, isomTypes, isomReady, loaded, beginStroke, paintAt, endStroke, isStroking, fillAt, fillMap, replace, heal, pickAt, blendAt, ghostAt, ghostDiamondsAt],
+    () => ({ types, terrainOf, isomTypes, isomReady, loaded, beginStroke, paintAt, endStroke, isStroking, fillAt, fillMap, replace, heal, pinArea, pickAt, blendAt, ghostAt, ghostDiamondsAt }),
+    [types, terrainOf, isomTypes, isomReady, loaded, beginStroke, paintAt, endStroke, isStroking, fillAt, fillMap, replace, heal, pinArea, pickAt, blendAt, ghostAt, ghostDiamondsAt],
   );
 }
 

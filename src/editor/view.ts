@@ -15,7 +15,7 @@ export type EditorLayer =
   | "fog"
   | "clipboard";
 
-export type TerrainMode = "isom" | "rect" | "tile" | "blend" | "heal";
+export type TerrainMode = "isom" | "rect" | "tile" | "blend" | "heal" | "pin";
 
 export interface ViewFlags {
   grid: boolean;
@@ -32,6 +32,8 @@ export interface ViewFlags {
   buildability: boolean;
   /** The joins between tiles that show: a line along each, stronger the more of a step it is. */
   seams: boolean;
+  /** The pinned tiles (editor/pins.ts), a mark on each; the Pin brush shows them whatever this says. */
+  pins: boolean;
   startLocations: boolean;
   /** Cycle the palette so water and lava animate as they do in game. */
   animateWater: boolean;

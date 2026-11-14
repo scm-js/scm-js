@@ -56,6 +56,13 @@ export interface HistoryEdit {
    */
   createdMask?: Uint8Array;
   /**
+   * A change to the pinned tiles (editor/pins.ts): the pins file of the map's archive as it
+   * was and as the edit left it, null for none. Not part of the scenario, so `applyEntry`
+   * leaves it alone and the commit, undo and redo atoms put it in force; it may come alone
+   * (a stroke of the Pin brush) or with the tiles it pins (a doodad placed as terrain).
+   */
+  pins?: { before: Uint8Array | null; after: Uint8Array | null };
+  /**
    * What a dialog wrote — settings, triggers, the briefing, strings (editor/tableHistory.ts).
    * An entry with this part has no other: `applyEntry` leaves it alone, and the undo and
    * redo atoms apply it with `applyTables`.

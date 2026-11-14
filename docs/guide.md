@@ -342,7 +342,8 @@ what is in a different place, and what to check before you move a map you care a
 
 ## Terrain
 
-Terrain is painted with five brushes, each a tab in the palette:
+Terrain is painted with five brushes, each a tab in the palette, and a sixth tab keeps
+what they have laid:
 
 | Brush | Paints |
 | --- | --- |
@@ -397,6 +398,23 @@ editor's work.
   showed before and after. On the game's own maps that removes about half of the lines and
   changes one tile in a hundred. A stretched ramp gains less, since few tiles play the
   same as a ramp's.
+
+- **Pin** keeps ground as you laid it. The isometric brush works out every tile around the
+  diamonds it changes, so a stroke beside a ramp you built tile by tile takes part of the
+  ramp with it. Drag the Pin brush over tiles to pin them. A pinned tile is left alone by
+  the brushes that lay terrain by rule: Isometric, Rect and Heal, both fills and Replace
+  Terrain. The isometric brush still changes its own record of the ground under a pinned
+  tile, so the cliffs around it are drawn as if the tile had followed, and only the pinned
+  picture stays. What you point at a tile still writes it: the Tile brush, Blend, a paste,
+  a doodad. The status bar says when a stroke left pinned tiles alone.
+
+  The tab's *Unpin* choice turns the brush round. **Pin All Hand-Laid Tiles** pins every
+  tile the map's isometric data does not account for, which on a map from another editor
+  is the ramps, blends and stray tiles its maker set by hand; with an area marked it and
+  the other buttons work inside the area. Pinned tiles carry a mark in their corner while
+  the tab is open, and **View ▸ Pinned Tiles** keeps the marks on elsewhere. Pins are
+  saved in the map file. The game does not read them, and another editor will not keep
+  them. Resizing the map moves each pin with its tile.
 
 These four leave the isometric record alone.
 
@@ -536,7 +554,10 @@ such as a ramp to touch up piece by piece or a cliff edge to paint into, right-c
 and choose *Convert Doodad to Terrain* (the Properties panel has the same button). The
 tiles stay, the doodad goes, and an overlay stays on as an ordinary sprite. From then on
 the Terrain layer treats the cells as ground. *Place as terrain* in the palette does the
-same at placement, for ramps and cliff pieces you mean to work over by hand.
+same at placement, for ramps and cliff pieces you mean to work over by hand. With *Pin
+terrain doodads* ticked, as it is to begin with, the tiles laid that way are pinned (see
+the Pin tab of the Terrain layer), so a later stroke of the isometric brush beside them
+does not take them apart.
 
 ### Stretching a ramp or a bridge
 
@@ -568,7 +589,9 @@ finds a neighbour, and repeats the tiles that join each other best.
 - **It is placed as terrain.** A map's doodad list can only name a doodad as the game
   ships it, so a stretched one goes down as tiles, the same as *Place as terrain*. It
   cannot be selected or moved afterwards. Undo takes the whole stretch back in one step. A
-  doodad with a sprite drawn over it keeps the one sprite.
+  doodad with a sprite drawn over it keeps the one sprite. Its tiles are pinned unless
+  *Pin terrain doodads* is unticked, so the isometric brush leaves the ramp whole when you
+  paint beside it.
 - **How clean the result is depends on the tileset.** The bridges of Badlands, Space
   Platform and Jungle are drawn to repeat and stretch without a visible join. Cliff ramps
   repeat with a faint join every two tiles, as the long ramps of hand-made maps do. The

@@ -27,6 +27,20 @@ arms the clipboard layer and the viewport's `onDown` calls `pasteAt(tile)` while
 replace/merge, stranding, edge clipping, the full undo/redo round trip and a fixture-map copy
 into a blank map.
 
+**A stretched paste (2026-11-13).** A press while a clip is armed is now a gesture (`beginPasteGesture`),
+not an immediate `pasteAt`: a click pastes as before; a drag calls `clipTools.stretchTo`, and the
+release pastes what `clipTools.ghostAt(tile)` holds — `stretchClip(tileset, clip, parts, axis, steps)`
+from clipboard.ts, the engine of the doodad stretch (`stretch.ts`, notes in `objects.md`) run over the
+clip's *picture* (`clipPicture`: MTXM with Doodads ticked, TILE without). The result is a terrain-only
+`Clip` whose `tiles` and `ground` are the same stretched array, pasted with `STRETCHED_CLIP_PARTS`, so
+`pasteClip` writes it into both sections like *Place as terrain* and needs no change. Objects and fog
+are dropped on purpose: a DD2 record cannot name a doodad cut in two, and nothing says which end a unit
+belongs to. The plan is cached on the picture array, which a clip keeps for its life, so a drag plans
+once per axis. `soundAxes` gets no `ramp` flag and no `required` (a clip has neither), so a hand-made
+ramp is offered where the added joins keep wall against floor, not by its cliff; Shift offers all four.
+Right-click drops the gesture and the stretch. Not done: stretching under a symmetry mode (pasting is
+not mirrored at all), and the plugin API.
+
 ### Dialog undo (`src/editor/tableHistory.ts`, `recordTables` / `stepTables` in `documentAtoms.ts`)
 
 Added 2026-10-05. A dialog writes its tables and calls `commitSettingsAtom` / `commitTriggersAtom`

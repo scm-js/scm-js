@@ -57,9 +57,11 @@ export interface DoodadPlacementOptions {
   snapToGrid: boolean;
   /** Place as plain terrain: the tiles (both sections) and any overlay sprite, no DD2 record — a placement and a conversion in one. */
   asTerrain: boolean;
+  /** Pin the tiles of a doodad that goes down as terrain (a stretched one always does), so the brushes that lay terrain by rule leave it (editor/pins.ts). */
+  pin: boolean;
 }
 
-export const DEFAULT_DOODAD_PLACEMENT: DoodadPlacementOptions = { placeAnywhere: false, snapToGrid: true, asTerrain: false };
+export const DEFAULT_DOODAD_PLACEMENT: DoodadPlacementOptions = { placeAnywhere: false, snapToGrid: true, asTerrain: false, pin: true };
 
 export interface TileRect {
   x0: number;

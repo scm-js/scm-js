@@ -6,8 +6,9 @@ import {
   activeTerrainAtom, activeTileAtom, blendAnchorAtom, blendFollowAtom, brushSizeAtom, mapTilesetAtom, placementOptionsAtom,
   rectVariationAtom, symmetryAtom, terrainModeAtom, type TerrainMode,
 } from "../../atoms/editorAtoms";
-import { activeLayerAtom, clipSelectionAtom } from "../../atoms/editorAtoms";
-import { scenarioAtom, terrainRevisionAtom } from "../../atoms/documentAtoms";
+import { activeLayerAtom, clipSelectionAtom, pinBrushUnpinsAtom, viewFlagsAtom } from "../../atoms/editorAtoms";
+import { pinnedTilesAtom, scenarioAtom, terrainRevisionAtom } from "../../atoms/documentAtoms";
+import { countPins } from "../../editor/pins";
 import { pluginContextItemsAtom } from "../../atoms/pluginAtoms";
 import { openDialogAtom } from "../../atoms/uiAtoms";
 import { pluginContextRows } from "../../plugins/contextMenu";
@@ -392,6 +393,55 @@ function BlendSide({ side, list, loaded, onPick }: { side: Side; list: BlendCand
   );
 }
 
+/**
+ * The Heal brush's tab: nothing to pick, so it says what the brush does and offers the
+ * same over the marked area or the whole map.
+ */
+function HealTab() {
+  const scenario = useAtomValue(scenarioAtom);
+  const { loaded } = useTileset();
+  const markedArea = useAtomValue(clipSelectionAtom);
+  const [flags, setFlags] = useAtom(viewFlagsAtom);
+  const tools = useTerrainTools();
+  return (
+    <div className="hint" style={{ padding: "10px 12px", display: "grid", gap: 10, justifyItems: "start" }}>
+      <div>{t("Drag over joins that show. Where the tileset has a tile that joins its neighbours better and is the same tile to the game (it walks, builds and blocks sight alike, at the same height, and is the same kind of ground), that tile is laid instead. Ground that already joins is left as it is, and so are placed doodads.")}</div>
+      <Check label={t("Show the joins (View ▸ Seam Overlay)")} checked={flags.seams} onChange={(e) => setFlags({ ...flags, seams: e.target.checked })} />
+      <Button size="sm" disabled={!scenario || !loaded} onClick={() => tools.heal(markedArea ?? undefined)}>
+        {markedArea ? t("Heal the Marked Area") : t("Heal the Whole Map")}
+      </Button>
+    </div>
+  );
+}
+
+function PinTab() {
+  const scenario = useAtomValue(scenarioAtom);
+  const { loaded } = useTileset();
+  const markedArea = useAtomValue(clipSelectionAtom);
+  const [flags, setFlags] = useAtom(viewFlagsAtom);
+  const [unpins, setUnpins] = useAtom(pinBrushUnpinsAtom);
+  const pinned = useAtomValue(pinnedTilesAtom);
+  const count = useMemo(() => countPins(pinned), [pinned]);
+  const tools = useTerrainTools();
+  const area = markedArea ?? undefined;
+  return (
+    <div className="hint" style={{ padding: "10px 12px", display: "grid", gridTemplateColumns: "minmax(0, 1fr)", gap: 10, justifyItems: "start" }}>
+      <div>{t("Drag over tiles to pin them. The Isometric, Rect and Heal brushes, the fills and Replace Terrain leave a pinned tile as it is, so a stroke beside a ramp you laid by hand does not undo it. The Tile brush, Blend, a paste and a doodad still write where you point them. Pins are saved with the map.")}</div>
+      <div className="row" style={{ gap: 12 }}>
+        <Check radio label={t("Pin")} checked={!unpins} onChange={() => setUnpins(false)} />
+        <Check radio label={t("Unpin")} checked={unpins} onChange={() => setUnpins(true)} />
+      </div>
+      <div>{count === 0 ? t("No tile is pinned.") : t("{n, plural, one {# tile is} other {# tiles are}} pinned.", { n: count })}</div>
+      <Check label={t("Always show (View ▸ Pinned Tiles)")} checked={flags.pins} onChange={(e) => setFlags({ ...flags, pins: e.target.checked })} />
+      <Button size="sm" disabled={!scenario || !loaded} title={t("Pin every tile the map's isometric data does not account for: doodads placed as terrain, stretched ramps, blends set tile by tile, ground from another editor.")} onClick={() => tools.pinArea("handLaid", true, area)}>
+        {markedArea ? t("Pin Hand-Laid Tiles in the Marked Area") : t("Pin All Hand-Laid Tiles")}
+      </Button>
+      <Button size="sm" disabled={!scenario || !markedArea} onClick={() => tools.pinArea("all", true, area)}>{t("Pin the Marked Area")}</Button>
+      <Button size="sm" disabled={!scenario || count === 0} onClick={() => tools.pinArea("all", false, area)}>{markedArea ? t("Unpin the Marked Area") : t("Unpin Everything")}</Button>
+    </div>
+  );
+}
+
 function BlendTab() {
   const info = TILESET_BY_ID[useAtomValue(mapTilesetAtom)];
   const { loaded, error } = useTileset();
@@ -479,7 +529,7 @@ export default function TerrainPalette() {
 
   // The palette's own menu, then whatever plugins registered for the "terrainPalette" surface.
   const rows: { label: string; disabled?: boolean; onSelect?: () => void; sep?: boolean }[] = [
-    { label: mode === "tile" ? t("Fill Map with This Tile") : t("Fill Map with This Terrain"), disabled: !scenario || mode === "blend", onSelect: tools.fillMap },
+    { label: mode === "tile" ? t("Fill Map with This Tile") : t("Fill Map with This Terrain"), disabled: !scenario || mode === "blend" || mode === "heal" || mode === "pin", onSelect: tools.fillMap },
   ];
   if (mode === "tile") {
     rows.push({
@@ -512,6 +562,8 @@ export default function TerrainPalette() {
           { value: "rect", label: t("Rect"), content: <RectTab /> },
           { value: "tile", label: t("Tile"), content: <TileTab /> },
           { value: "blend", label: t("Blend"), content: <BlendTab /> },
+          { value: "heal", label: t("Heal"), content: <HealTab /> },
+          { value: "pin", label: t("Pin"), content: <PinTab /> },
         ]}
       />
         </div>

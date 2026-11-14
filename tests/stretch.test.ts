@@ -11,6 +11,10 @@ import { baseTerrain, flatTerrain } from "../src/formats/tileset/terrain";
 import { paintIsom } from "../src/editor/isom";
 import { checkDoodadPlacement, DEFAULT_DOODAD_PLACEMENT } from "../src/editor/doodads";
 import { SEAM_SHOWS, seamStep } from "../src/editor/blend";
+import { clipPicture, DEFAULT_CLIP_PARTS, pasteClip, STRETCHED_CLIP_PARTS, stretchClip, type Clip } from "../src/editor/clipboard";
+import { createScenario } from "../src/formats/chk/create";
+import { doodadTwin } from "../src/editor/doodadTwin";
+import { NO_DOODADS } from "../src/formats/tileset/doodads";
 import {
   isStretched, soundAxes, STRETCH_AXES, STRETCH_STEP, stretchDoodad, stretchFromDrag, stretchPiece, stretchPlan, VISIBLE_SEAM, type TilePiece,
 } from "../src/editor/stretch";
@@ -105,6 +109,9 @@ describe("the cut", () => {
     const plan = stretchPlan(ts, piece(1, 2, [RG_V, GB_V]), "s");
     expect(plan.seam).toBeGreaterThan(VISIBLE_SEAM);
     expect(plan.seamsPerStep).toBe(1);
+    // And it is one the Seam Overlay draws; a piece that joins itself has none.
+    expect(plan.shownPerStep).toBe(1);
+    expect(stretchPlan(ts, piece(1, 3, [RG_V, G, GB_V]), "s").shownPerStep).toBe(0);
   });
 
   it("is worked out once for a piece and an axis", () => {
@@ -244,6 +251,50 @@ describe("a stretched piece", () => {
   });
 });
 
+describe("a clip stretched", () => {
+  const record = { doodadId: 1, x: 16, y: 16, owner: 0, disabled: 0 };
+  const clip: Clip = {
+    width: 1, height: 3, era: 0,
+    tiles: Uint16Array.from([RG_V, G, GB_V]), ground: Uint16Array.from([R, G, B]),
+    doodads: [record], units: [], sprites: [], locations: [], fog: new Uint8Array(3),
+  };
+
+  it("is its picture with the middle laid again, as terrain and nothing else", () => {
+    const long = stretchClip(ts, clip, { ...DEFAULT_CLIP_PARTS, doodads: true }, "s", 2)!;
+    expect([long.clip.width, long.clip.height]).toEqual([1, 5]);
+    expect([...long.clip.tiles!]).toEqual([RG_V, G, G, G, GB_V]);
+    // The picture goes into both tile sections, and the objects and the fog stay behind.
+    expect(long.clip.ground).toBe(long.clip.tiles);
+    expect(long.clip.doodads).toEqual([]);
+    expect(long.clip.fog).toBeNull();
+    expect(long.offset).toEqual({ x: 0, y: 0 });
+    expect(stretchClip(ts, clip, { ...DEFAULT_CLIP_PARTS, doodads: true }, "s", -2)!.offset).toEqual({ x: 0, y: -2 });
+  });
+
+  it("is the ground under the doodads when the doodads are not being pasted", () => {
+    expect(clipPicture(clip, { ...DEFAULT_CLIP_PARTS, doodads: false })).toBe(clip.ground);
+    const long = stretchClip(ts, clip, { ...DEFAULT_CLIP_PARTS, doodads: false }, "s", 1)!;
+    expect([...long.clip.tiles!]).toEqual([R, G, G, B]);
+  });
+
+  it("is nothing for a clip pasted without its terrain", () => {
+    expect(stretchClip(ts, clip, { ...DEFAULT_CLIP_PARTS, terrain: false }, "s", 2)).toBeNull();
+    expect(stretchClip(ts, { ...clip, tiles: null, ground: null }, DEFAULT_CLIP_PARTS, "s", 2)).toBeNull();
+  });
+
+  it("pastes like any clip: its tiles into both sections, one undo step", () => {
+    const scn = createScenario({ name: "t", description: "", width: 4, height: 8, era: 0, tiles: new Uint16Array(32).fill(R) });
+    const long = stretchClip(ts, clip, { ...DEFAULT_CLIP_PARTS, doodads: true }, "s", 2)!;
+    const result = pasteClip(scn, long.clip, 1, 1, { parts: STRETCHED_CLIP_PARTS, mode: "merge", catalogue: NO_DOODADS, tileset: ts });
+    expect(result.counts.tiles).toBe(5);
+    for (const [row, tile] of [RG_V, G, G, G, GB_V].entries()) {
+      expect(scn.tiles[(1 + row) * 4 + 1]).toBe(tile);
+      expect(scn.editorTiles[(1 + row) * 4 + 1]).toBe(tile);
+    }
+    expect(scn.doodads).toEqual([]);
+  });
+});
+
 describe("the stretch a drag asks for", () => {
   it("takes the axis the drag lies along and a step for each step's length", () => {
     expect(stretchFromDrag(64 * 3, 32 * 3)).toEqual({ axis: "se", steps: 3 });
@@ -335,6 +386,54 @@ describe.skipIf(installed.length === 0)("stretching the game's doodads", () => {
         expect(plan.islandsPerStep, `${name} #${def.id}`).toBe(0);
       }
     }
+  });
+
+  it("counts the joins a stretch adds as the Seam Overlay draws them", () => {
+    for (const name of installed) {
+      const { tileset, catalogue } = real(name);
+      for (const def of catalogue.doodads.filter((d) => d.ramp || d.category === "Bridges")) {
+        // The joins the doodad ships with, which a stretch is not charged for.
+        const shipped = new Set<string>();
+        for (let r = 0; r < def.height; r++) {
+          for (let c = 0; c < def.width; c++) {
+            const a = def.tiles[r * def.width + c];
+            if (c + 1 < def.width) shipped.add(`${a},${def.tiles[r * def.width + c + 1]},h`);
+            if (r + 1 < def.height) shipped.add(`${a},${def.tiles[(r + 1) * def.width + c]},v`);
+          }
+        }
+        for (const axis of soundAxes(tileset, def)) {
+          const plan = stretchPlan(tileset, def, axis);
+          const g = stretchPiece(def, plan, 3);
+          let shown = 0;
+          for (let r = 0; r < g.height; r++) {
+            for (let c = 0; c < g.width; c++) {
+              const a = g.tiles[r * g.width + c];
+              if (!a) continue;
+              const right = c + 1 < g.width ? g.tiles[r * g.width + c + 1] : 0, below = r + 1 < g.height ? g.tiles[(r + 1) * g.width + c] : 0;
+              if (right && !shipped.has(`${a},${right},h`) && seamStep(tileset, megatileForTile(tileset, a), "right", megatileForTile(tileset, right)) > SEAM_SHOWS) shown++;
+              if (below && !shipped.has(`${a},${below},v`) && seamStep(tileset, megatileForTile(tileset, a), "bottom", megatileForTile(tileset, below)) > SEAM_SHOWS) shown++;
+            }
+          }
+          expect(plan.shownPerStep * 3, `${name} #${def.id} ${axis}`).toBeCloseTo(shown, 6);
+        }
+      }
+    }
+  }, 60_000);
+
+  it("offers the two Twilight ramps of a pair alike", () => {
+    // By the edge difference alone one ramp of each Basilica pair got a cut that left a
+    // lamp post on the slope and was not offered; its mirror image was.
+    if (!installed.includes("twilight")) return;
+    const { tileset, catalogue } = real("twilight");
+    const mirrored = { se: "ne", ne: "se", e: "e", s: "s" } as const;
+    let pairs = 0;
+    for (const def of catalogue.doodads.filter((d) => d.ramp)) {
+      const twin = doodadTwin(tileset, catalogue, def);
+      if (!twin || twin === def) continue;
+      pairs++;
+      expect(soundAxes(tileset, twin), `#${def.id} and #${twin.id}`).toEqual(soundAxes(tileset, def).map((axis) => mirrored[axis]));
+    }
+    expect(pairs).toBeGreaterThan(0);
   });
 
   it.skipIf(!haveNames)("lengthens a bridge along its deck without a seam the eye finds", () => {

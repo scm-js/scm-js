@@ -28,7 +28,9 @@ export type { EditorLayer, TerrainMode, ViewFlags } from "../editor/view";
 export const activeLayerAtom = atom<EditorLayer>("terrain");
 
 /** Terrain sub-mode inside the Terrain palette. */
-export const TERRAIN_MODES: readonly TerrainMode[] = ["isom", "rect", "tile", "blend"];
+export const TERRAIN_MODES: readonly TerrainMode[] = ["isom", "rect", "tile", "blend", "heal", "pin"];
+/** Whether the Pin brush takes pins off instead of putting them on. */
+export const pinBrushUnpinsAtom = atom(false);
 export const terrainModeAtom = atom<TerrainMode>("isom");
 
 export const brushSizeAtom = atom<number>(1);
@@ -201,6 +203,8 @@ export const viewFlagsAtom = atom<ViewFlags>({
   elevation: false,
   buildability: false,
   seams: false,
+  pins: false,
+  asymmetry: false,
   startLocations: true,
   animateWater: true,
   animateUnits: true,

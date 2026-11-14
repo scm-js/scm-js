@@ -41,6 +41,23 @@ plugin API, Ctrl+A) are not expanded. `symmetryAtom` is a derived atom that reco
 mode for `toggleSymmetryAtom` (M, `tools.symmetry`; the toolbar's `SymmetryControl`).
 `tests/symmetry.test.ts`.
 
+**The fairness report (`src/editor/fairness.ts`, `useFairness`, 2026-11-13).** `fairnessReport(scn,
+tileset, mode)` holds the map against its own image under a symmetry mode at minitile resolution
+(`symmetryImages` on a `4w × 4h` grid; a square and its images are one group, judged where its lowest
+index is, so every difference is counted once and `places` lie on the top-left side): walkable bit,
+height (VF4 mid/high), and the CV5 buildable bit of the tile; plus minerals (176–178 as one kind),
+geysers and start locations by `mirror` of their pixel, within 16 px, equal `resourceAmount`. It reads
+MTXM. `mask` (a byte per minitile, set on both sides) is what View ▸ Symmetry Differences draws
+(`paint/ground.ts`, red for walk/height, amber for build only). `symmetryShares` runs every mode that
+fits the map's shape and `likelySymmetry` names the one it was made with (`SYMMETRIC_SHARE` 0.9, a
+four-way mode preferred when it holds within 2% of the best): sixteen Blizzard maps drawn freehand
+measure 0.05–0.85 under every mode, the one mirrored map 0.989 under `h`. Cost on 256 × 128: all modes
+≤ 175 ms, one report ≤ 50 ms; the hook measures only while the overlay or the Symmetry dialog asks, and
+keeps the shares apart from the report so picking another mode in the dialog does not re-measure all.
+Not counted: the blocks-view and ramp bits (`twinDifference` counts whole flag words, which is why it
+says 83 for the Desert cliff ramps where this says 69). The CLI's `map analyze` is the other half of
+fairness (distances, bases); this is the tile-level half and is not in the CLI.
+
 Replace Terrain (`terrain.ts#replaceTerrain` / `matchingTiles`, `useTerrainTools.replace`,
 `ReplaceTerrainDialog` in `dialogs/TerrainDialogs.tsx`) swaps a `TerrainPick` — a flat terrain by
 ISOM id (matched by CV5 group index like the Rect fill) or one exact tile — for another over the
@@ -136,8 +153,57 @@ once because the slope is smooth. Against the grain, at `SEAM_SHOWS` 8: 0.2–2%
 `overlay`, each tile its own half of the line inside its own pixels (a tile is redrawn alone when it
 cycles or a scroll uncovers it, so nothing may spill onto a neighbour); any terrain edit redraws the
 layer, so a line never outlives the join. It reads the classic VR4 pixels whatever is drawn, like the
-Blend brush. Not done with it: the stretch still chooses and reports by the plain distance
-(`VISIBLE_SEAM`), and a Heal brush that swaps a marked tile for one that joins.
+Blend brush. The stretch searches its cut by this measure as well as the plain distance (objects.md).
+
+**The Heal brush (`src/editor/heal.ts`, terrain mode `"heal"`, 2026-11-13).** `healTiles(scn, tileset,
+cells)` trades a tile for another of the same *kind* that joins its four neighbours better by `seamStep`.
+Kind is the CV5 group's whole flag word plus the megatile's sixteen VF4 words, compared as a string key
+(`healTables`, per tileset: tiles by kind from `drawableTiles`, and each megatile's mean colour), so
+nothing the game reads changes; `HEAL_SAME_GROUND` (mean colour within 14 a channel) keeps dirt from
+becoming grass that happens to end on the right pixels. **It only touches a cell with at least one join
+over `SEAM_SHOWS`**, and takes a candidate that leaves fewer such joins, or as many and `HEAL_GAIN` less
+step in all. The first cut took any improvement and was a lesson in what a "heal" must not do: over a
+whole Blizzard Badlands map it changed 19% of the tiles (one variation of dirt for another) for 6% fewer
+lines. As it is, over sixteen Blizzard maps a whole-map heal changes 0.1–3.3% of the tiles and removes
+30–60% of the lines (Ashworld Hunters 568 → 24), in ≤ 180 ms; on a ramp stretched along its cliff,
+Badlands 21 → 13, Twilight 7 → 3, Ice 25 → 21 — little, because few tiles have a ramp tile's flags, and
+the stripe along a Badlands ramp's lower edge stays. Cells where `tiles[at] !== editorTiles[at]` (a
+placed doodad's) are skipped: a stroke that changes one would strand the doodad. Cells are processed in
+order against the neighbours as already changed, twice. The brush goes through `stampAt` like Rect and
+Tile (`paintsTiles`), so symmetry, the stroke's undo entry and `commitTerrain` are theirs; `tools.heal(rect?)`
+is the tab's button (marked area or whole map, `shownSeams` before and after in the status line).
+ISOM is untouched. `tests/heal.test.ts`.
+
+**Pinned tiles (`src/editor/pins.ts`, terrain mode `"pin"`, 2026-11-13).** A pinned tile is skipped by
+the brushes that lay terrain by rule — `paintIsom` / `paintIsomDiamonds` (`IsomPass.setTile` returns
+early; the pass's `kept` lists the cells), Rect and Heal strokes (`stampAt` → `unpinned`), both fills,
+`fillMap`, Replace Terrain, the Heal button — and written by what is pointed at it (Tile, Blend, paste,
+doodads). **The lattice still changes under a pinned tile**: only the picture stays, so the ground around
+is laid exactly as without the pin (`tests/pins.test.ts` compares the two lattices). That is the point:
+the alternative, stopping propagation at a pin, leaves cliffs open.
+*Where the pins live:* a member of the map's archive, `scmjs\pins.bin` ("PIN1", width and height u16,
+a bit per tile), read through `pinnedTilesAtom` (decoded once per member, `pinsOf`). Not a Scenario
+field and not a new atom, because the archive's files already are per-document (parked with the map),
+saved, and sent on a shared map by the `store.sub` on the extras atom; `scmjs\dataset.json` is the
+precedent for an editor-owned member. A member for another map size reads as no pins.
+*History:* `HistoryEdit.pins = { before, after }` (the member's bytes, null for none), not
+`tables.extras`: that swaps the whole extras map, and a tables entry can hold nothing else, while a
+doodad placed as terrain must pin in the same undo step as its tiles. `pinCellsAtom` writes the member
+and answers the part; `commitEditAtom` records an entry that has only pins; undo / redo / rollback call
+`stepPins`, and on a shared map the pins are copied onto the entry `tap.step` answers. `hasEdits` does
+**not** count pins (it decides whether an op goes over the wire, and a pins-only entry has none).
+Resize: `resizeDocumentAtom` moves the pins with `resizePins`; undoing the resize does not bring back
+pins it cut off. Auto-pin: `DoodadPlacementOptions.pin` (default on) pins every cell of a doodad that
+goes down as terrain, stretched ones included; pastes are not pinned.
+*What "hand-laid" means:* `isom.ts#latticeMisses` — a tile whose group's CV5 index is not the one its
+rect's lattice resolves to, skipping a placed doodad's cells (`tiles !== editorTiles`). **This is offered
+as a button (`handLaidCells`, "Pin All Hand-Laid Tiles"), not applied automatically by the brush**, which
+was the first design and is wrong: ground laid with the Rect brush does not match the lattice either
+(Rect never writes ISOM), so a brush that protected every mismatch could not paint a plateau over
+Rect-laid dirt, and protecting only what it reached by propagation left the plateau without its cliff
+edge. An explicit, visible set is the only version that does not break mixed Rect/isometric work.
+Overlay: `paint/ground.ts` draws a wash and a corner tab per pinned tile when `viewFlags.pins` or the
+Pin tab is open.
 
 Tile values as the game reads them (2026-10-17 audit, PR 3): MTXM bit 15 is a creep flag — the
 group is `(id >> 4) & 0x7FF` (`tileGroupOf`, `TILE_CREEP_FLAG` in tileset/decode.ts; run T01:

@@ -342,7 +342,8 @@ what is in a different place, and what to check before you move a map you care a
 
 ## Terrain
 
-Terrain is painted with four brushes, each a tab in the palette:
+Terrain is painted with five brushes, each a tab in the palette, and a sixth tab keeps
+what they have laid:
 
 | Brush | Paints |
 | --- | --- |
@@ -350,6 +351,7 @@ Terrain is painted with four brushes, each a tab in the palette:
 | Rect | Flat ground of one terrain type, with StarEdit's random variation. No cliffs, no edges. |
 | Tile | Any single tile by number: cliff pieces, doodad tiles, anything the tileset has. |
 | Blend | One tile next to a tile you picked, chosen from those whose facing edge continues it. |
+| Heal | Nothing of its own: it trades a tile that joins its neighbours visibly for one that joins them and plays the same. |
 
 ![Cliffs and a shore laid by the isometric brush, with a 3×3 brush ghost](images/terrain-isometric.webp)
 
@@ -385,7 +387,36 @@ editor's work.
   into another, a hand-laid shoreline. Click a tile to make it the anchor, and the palette
   lists for each side the tiles whose opposite edge continues it, best seam first.
 
-These three leave the isometric record alone.
+- **Heal** mends what **View ▸ Seam Overlay** marks. Drag over a join that shows, and
+  where the tileset has another tile that meets the neighbours better, that tile is laid
+  instead. It only takes a tile that is the same to the game: it walks, builds and blocks
+  sight exactly as the old one does, at the same height, and is the same kind of ground.
+  So a stroke changes how the map looks and nothing about how it plays. Ground that
+  already joins is left as it was laid, and a placed doodad is left whole (convert it to
+  terrain first if its tiles are what needs mending). The tab's button does the same over
+  the marked area, or over the whole map when nothing is marked, and says how many joins
+  showed before and after. On the game's own maps that removes about half of the lines and
+  changes one tile in a hundred. A stretched ramp gains less, since few tiles play the
+  same as a ramp's.
+
+- **Pin** keeps ground as you laid it. The isometric brush works out every tile around the
+  diamonds it changes, so a stroke beside a ramp you built tile by tile takes part of the
+  ramp with it. Drag the Pin brush over tiles to pin them. A pinned tile is left alone by
+  the brushes that lay terrain by rule: Isometric, Rect and Heal, both fills and Replace
+  Terrain. The isometric brush still changes its own record of the ground under a pinned
+  tile, so the cliffs around it are drawn as if the tile had followed, and only the pinned
+  picture stays. What you point at a tile still writes it: the Tile brush, Blend, a paste,
+  a doodad. The status bar says when a stroke left pinned tiles alone.
+
+  The tab's *Unpin* choice turns the brush round. **Pin All Hand-Laid Tiles** pins every
+  tile the map's isometric data does not account for, which on a map from another editor
+  is the ramps, blends and stray tiles its maker set by hand; with an area marked it and
+  the other buttons work inside the area. Pinned tiles carry a mark in their corner while
+  the tab is open, and **View ▸ Pinned Tiles** keeps the marks on elsewhere. Pins are
+  saved in the map file. The game does not read them, and another editor will not keep
+  them. Resizing the map moves each pin with its tile.
+
+These four leave the isometric record alone.
 
 ### Ground a mod adds
 
@@ -462,6 +493,17 @@ where the copies will land.
   goes to its own player: P1's start location gives P2's under the two-way modes, and
   P2's, P3's and P4's under the four-way ones. Neutral units and resources stay neutral. A
   doodad that would have to turn is skipped.
+- A doodad cannot be flipped, so across a left-right mirror its image is its *twin*: the
+  doodad the tileset drew as its mirror image. A ramp for a cliff running down to the
+  right gives the ramp for the cliff running up to the right, a bridge gives the bridge
+  running the other way, and a stretched one gives its twin stretched the same. Every ramp
+  and bridge of the game's eight tilesets has a twin. The status bar names it, and says
+  when the game's two do not play alike: the two Desert cliff ramps differ in 83 small
+  squares of height and ramp, the Ice ones in 16, and in Badlands, Jungle, Ashworld and
+  Twilight the cliff ramps are exact images. Across a top-bottom mirror or a half turn a
+  doodad has no twin (nobody drew a ramp facing up the screen), and the same doodad is
+  tried there as before. Selecting a doodad selects its twin across the mirror too, so the
+  two move together.
 - Selecting something also selects whatever stands at its images. Dragging then moves them
   all as mirror images, resizing a location resizes its copies, and Delete removes them
   all. A map made symmetric by hand works the same way.
@@ -470,6 +512,26 @@ Each change is one undo step. **Tools ▸ Symmetry…** describes each mode and 
 to keep copies for the same player instead.
 
 ![The Symmetry dialog](images/symmetry.webp)
+
+#### Is the map the same on every side?
+
+The dialog also measures the map as it stands. Beside each mode is how much of the ground
+plays alike on every side under it, so a map opened from somewhere else shows which
+symmetry it was made with: a mirrored map reads 98% or more under its own mode and far
+less under the others, and a map drawn freehand reads low under all of them.
+
+Under the mode you pick, *The map as it is* says how many small squares (a quarter of a
+tile each way, the size the game decides walking and height at) do not match their images,
+split into walking, height and building, and lists the largest places as buttons. A button
+applies the mode, goes to the place and turns on **View ▸ Symmetry Differences**, which
+paints each such square red, or amber where only building differs, on both sides. Mineral
+fields, geysers and start locations are checked too: each wants one of its kind at every
+image of its spot, holding the same amount.
+
+Some differences are the game's, not yours. A tile cannot be flipped, so the far side of a
+mirrored map is built from other tiles, and the game's own ramp pairs do not carry quite
+the same flags: mirror a Desert cliff ramp and 69 small squares stand at another height on
+one side. The report is how you find out, before a player does.
 
 The Terrain palette's *Remove stranded units* tick deletes the ground units a stroke has
 just left where they cannot walk, which the game would remove at the start, as part of the
@@ -512,7 +574,10 @@ such as a ramp to touch up piece by piece or a cliff edge to paint into, right-c
 and choose *Convert Doodad to Terrain* (the Properties panel has the same button). The
 tiles stay, the doodad goes, and an overlay stays on as an ordinary sprite. From then on
 the Terrain layer treats the cells as ground. *Place as terrain* in the palette does the
-same at placement, for ramps and cliff pieces you mean to work over by hand.
+same at placement, for ramps and cliff pieces you mean to work over by hand. With *Pin
+terrain doodads* ticked, as it is to begin with, the tiles laid that way are pinned (see
+the Pin tab of the Terrain layer), so a later stroke of the isometric brush beside them
+does not take them apart.
 
 ### Stretching a ramp or a bridge
 
@@ -544,12 +609,14 @@ finds a neighbour, and repeats the tiles that join each other best.
 - **It is placed as terrain.** A map's doodad list can only name a doodad as the game
   ships it, so a stretched one goes down as tiles, the same as *Place as terrain*. It
   cannot be selected or moved afterwards. Undo takes the whole stretch back in one step. A
-  doodad with a sprite drawn over it keeps the one sprite.
+  doodad with a sprite drawn over it keeps the one sprite. Its tiles are pinned unless
+  *Pin terrain doodads* is unticked, so the isometric brush leaves the ramp whole when you
+  paint beside it.
 - **How clean the result is depends on the tileset.** The bridges of Badlands, Space
   Platform and Jungle are drawn to repeat and stretch without a visible join. Cliff ramps
   repeat with a faint join every two tiles, as the long ramps of hand-made maps do. The
-  status bar says when the joins will show; the Tile and Blend brushes are there to touch
-  them up.
+  status bar counts the joins that show and **View ▸ Seam Overlay** marks them; the Heal,
+  Tile and Blend brushes are there to touch them up.
 - **Some ramps do not stretch.** A ramp built into a wall, such as the Badlands Structure
   ramp, is two tiles wide with a side wall in each. It has no middle, and stretched it is
   a row of half ramps with wedges of wall between them. The drag does nothing for such a
@@ -722,6 +789,16 @@ units, sprites and doodads under the clip first, though never locations. Terrain
 different tileset is refused, since tile numbers mean something else there, while the
 objects still paste. The clip survives File ▸ Open, which is how a base moves between
 maps.
+
+A clip stretches as a doodad does (see [Stretching a ramp or a
+bridge](#stretching-a-ramp-or-a-bridge)), which is how a ramp or a wall made by hand, or
+copied from another map, is made longer. Press where the clip's corner should go and drag
+instead of clicking: its picture is pulled out along the drag, the ends moved apart and
+the middle laid again, and releasing pastes it. Mark the piece with both its ends in the
+area, since the ends are what stay as they are. A stretched clip pastes its terrain only,
+into the ground itself: a doodad's record cannot name half a doodad, so the picture goes
+down as tiles, and units, sprites, locations and fog stay behind. The drag snaps to the
+ways the piece has a middle to repeat, and Shift offers all four.
 
 A piece worth keeping for other maps, such as a ramp, a bridge or a cliff corner, can be
 saved as a *stamp* (Edit ▸ Save as Stamp…, or the right-click menu on the marked area) and

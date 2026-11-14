@@ -30,6 +30,7 @@ import {
 import type { Tileset } from "../formats/tileset/decode";
 import { doodadOrigin, type DoodadCatalogue } from "../formats/tileset/doodads";
 import { applyChanges, type Rect, type TileChange } from "./terrain";
+import { stretchPiece, stretchPlan, type StretchAxis, type StretchPlan } from "./stretch";
 import { applyUnitChanges, nextSerial, removeUnits, TILE_PX, type UnitChange } from "./units";
 import { applySpriteChanges, removeSprites, type SpriteChange } from "./sprites";
 import {
@@ -519,3 +520,32 @@ function strandedByPaste(scn: Scenario, catalogue: DoodadCatalogue, final: Map<n
 export function clipLocationBounds(l: ClipLocation, tx: number, ty: number): LocationRecord {
   return { left: l.left + tx * TILE_PX, top: l.top + ty * TILE_PX, right: l.right + tx * TILE_PX, bottom: l.bottom + ty * TILE_PX, nameIndex: 0, elevationFlags: l.elevationFlags };
 }
+
+/* ── Stretching a clip ───────────────────────────────────── */
+
+/** The picture a clip shows for the parts chosen: with its doodads on it, or the ground under them. */
+export function clipPicture(clip: Clip, parts: ClipParts): Uint16Array | null {
+  return parts.terrain ? (parts.doodads ? clip.tiles : clip.ground) : null;
+}
+
+/**
+ * `clip` stretched along `axis` (see stretch.ts): its picture with the ends moved apart
+ * and the middle laid again, as terrain and nothing else. A doodad's record cannot name
+ * half a doodad and a unit has no middle, so the objects stay behind; what is pasted is
+ * the picture, into both tile sections, the way a stretched doodad goes down. Null for a
+ * clip with no terrain in it.
+ */
+export function stretchClip(tileset: Tileset, clip: Clip, parts: ClipParts, axis: StretchAxis, steps: number): { clip: Clip; offset: { x: number; y: number }; plan: StretchPlan } | null {
+  const picture = clipPicture(clip, parts);
+  if (!picture) return null;
+  const plan = stretchPlan(tileset, { width: clip.width, height: clip.height, tiles: picture }, axis);
+  const g = stretchPiece({ width: clip.width, height: clip.height, tiles: picture }, plan, steps);
+  return {
+    clip: { width: g.width, height: g.height, era: clip.era, tiles: g.tiles, ground: g.tiles, doodads: [], units: [], sprites: [], locations: [], fog: null },
+    offset: g.offset,
+    plan,
+  };
+}
+
+/** The parts a stretched clip is pasted with: its terrain. */
+export const STRETCHED_CLIP_PARTS: ClipParts = { terrain: true, doodads: false, units: false, sprites: false, locations: false, fog: false };

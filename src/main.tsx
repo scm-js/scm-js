@@ -15,12 +15,14 @@ import { ErrorBoundary, rootErrorHandlers } from "./components/ui/ErrorBoundary"
 import { storedPreference } from "./atoms/preferencesAtoms";
 import { resolveLocale, setLocale } from "./i18n";
 import { setBorrowTableMaker } from "./services/borrow";
-import { workerTableMaker } from "./services/borrowTableClient";
+import { workerCopyScan, workerTableMaker } from "./services/borrowTableClient";
+import { setCopyScanMaker } from "./services/terrainCopies";
 import "./index.css";
 
 // The borrowed-terrain scan works its tables out in a worker here; the command line and the
 // headless plugin host, which never load this file, keep it on their own thread.
 setBorrowTableMaker(workerTableMaker);
+setCopyScanMaker(workerCopyScan);
 
 // Before the first render, so the first paint is already in the user's language: the
 // preference straight from storage (`useApplyPreferences` keeps it current afterwards).

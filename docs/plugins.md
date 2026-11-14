@@ -2629,6 +2629,20 @@ if (roof) api.document.edit("Roof", (tx) => { tx.paintBorrowed(api.terrain.diamo
 // roof.borders: [{ ground: 2, from: "maps" }] — a drawn border against Dirt, learned from maps
 ```
 
+Copied terrain (the Isometric tab's "Copied terrain", [in the
+guide](guide.md#copied-terrain)): `copies()` resolves to the terrains the open map's
+tileset holds again at another height with their edge pieces, each with an `id` for
+`setActive({ terrain })` and `tx.paintCopy(diamonds, id)`, whether it is `complete` (else
+how many shapes are `missing`), and the blocks of tiles it can be laid with and the ground
+each is drawn for. `provideCopies` hands the editor one such block, which takes the place
+of what the editor found for that terrain and height; a mod's terrain file can carry the
+same (`copies`).
+
+```js
+const mud = (await api.terrain.copies()).find((c) => c.complete && c.height === 1);
+if (mud) api.document.edit("Mud", (tx) => { tx.paintCopy(api.terrain.diamondsIn({ x0: 20, y0: 20, x1: 36, y1: 30 }), mud.id); });
+```
+
 `checkIsom()` measures how well the ISOM lattice matches the tiles. Offer a rebuild when
 it reports `stale`, not merely `mismatched`: some mismatch (hand-placed tiles, blends)
 never goes away.

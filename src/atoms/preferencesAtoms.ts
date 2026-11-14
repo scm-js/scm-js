@@ -19,6 +19,7 @@ import { consoleHeightAtom, debugConsoleAtom } from "./logAtoms";
 import { clearHandles } from "../services/handleStore";
 import { browserPieceStore, browserStore } from "../services/pieceStore";
 import { BORROW_STORE } from "../services/handleStore";
+import { copyHostsAtom, providedCopiesAtom } from "./copyAtoms";
 import { borrowHostsAtom, providedBorrowAtom } from "./borrowAtoms";
 import { drawnBordersAtom, learnedBordersAtom, providedBordersAtom } from "./borderAtoms";
 import { learnedPiecesAtom, providedPiecesAtom, providedTypesAtom } from "./pieceAtoms";
@@ -251,7 +252,7 @@ export const clearStoredKeysAtom = atom(null, (_get, set, keys: readonly string[
  * options of the Units and Doodads palettes, the panels and their widths, the recent files
  * (and the file handles behind them), the installed plugin list, the copies of plugin code
  * kept for the plugins marked *local*, the registries browsed and their cached lists,
- * whatever the plugins themselves stored, the pieces and drawn borders learned from maps, the tables of borrowed terrain and the data sets' terrain files. Every atom is reset whether or not it had a key,
+ * whatever the plugins themselves stored, the pieces and drawn borders learned from maps, the tables of borrowed terrain, what was found of copied terrain and the data sets' terrain files. Every atom is reset whether or not it had a key,
  * so the defaults come back live even for a setting that was never written.
  */
 export const clearStoredDataAtom = atom(null, (_get, set): number => {
@@ -269,5 +270,8 @@ export const clearStoredDataAtom = atom(null, (_get, set): number => {
   // So are the tables of borrowed terrain.
   void browserStore(BORROW_STORE).clear();
   set(borrowHostsAtom, new Map());
+  // and what was found of copied terrain, kept beside them (services/terrainCopies.ts)
+  set(copyHostsAtom, new Map());
+  set(providedCopiesAtom, (rows) => rows.filter((r) => !isDataSetKey(r.key)));
   return before;
 });

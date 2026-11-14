@@ -950,6 +950,19 @@ export interface EditTransaction {
    */
   paintBorrowed(diamonds: readonly Diamond[], terrainId: number): boolean;
   /**
+   * A copied terrain (`terrain.copies()`) painted on `diamonds` by the isometric brush — what the Isometric tab's
+   * "Copied terrain" list paints: the tileset's own brush lays the terrain, and each tile is written as the tile the
+   * tileset holds for it at the copy's height. The block laid is the one that joins the ground under the diamonds best;
+   * where its pieces are drawn to meet a terrain of the tileset, that terrain is laid under the diamonds first. The
+   * diamonds are set at once, as one stroke; pinned tiles are left as they are. False, with a note, when the terrain is
+   * not one `copies()` listed, or `copies()` was not awaited first.
+   *
+   * @example
+   * const [mud] = (await api.terrain.copies()).filter((c) => c.complete);
+   * await api.document.edit("Mud", (tx) => tx.paintCopy(api.terrain.diamondsIn({ x0: 8, y0: 8, x1: 24, y1: 20 }), mud.id));
+   */
+  paintCopy(diamonds: readonly Diamond[], terrainId: number): boolean;
+  /**
    * Reconstruct the ISOM section from the tiles — for a map that arrived without one, or
    * whose lattice no longer matches after Rect / Tile edits: exact for terrain that was
    * laid down isometrically, a best guess under doodads and for hand-placed tiles. A
@@ -2609,6 +2622,40 @@ export interface BorrowedTerrainInfo {
   borders?: { ground: number; from: string }[];
 }
 
+/**
+ * A copied terrain the open map's tileset can lay with the isometric brush (`terrain.copies`): one of its own terrains
+ * held again at another height (the Rect tab's "Mud (mid ground)") together with the edge pieces it holds for it there.
+ */
+export interface CopiedTerrainInfo {
+  /** The id the palette selects (`setActive({ terrain })`) and `tx.paintCopy` takes. Never written to a map. */
+  id: number;
+  /** The terrain copied: its terrain id in the tileset (what `isomTypes()` lists). */
+  terrain: number;
+  /** The copy's height: 0 low, 1 mid, 2 high. */
+  height: number;
+  /** The copy's flat pair, as the Rect tab lists it (`types()` with the pair's id). */
+  group: number;
+  /** Whether the tileset has a tile for every edge shape the brush asks for; when not, how many it lacks. */
+  complete: boolean;
+  missing: number;
+  /** The blocks of tiles it can be laid with (the brush picks the one that joins the ground under a stroke best). */
+  blocks: { ground: { terrain: number } | { pair: number }; complete: boolean; from: string }[];
+}
+
+/** What `terrain.provideCopies` takes: one block of tiles standing for a terrain's edge set at a copy's height. */
+export interface CopyBlockSpec {
+  /** Names the block among the plugin's; the same id again replaces it. */
+  id: string;
+  tileset: TilesetId;
+  /** The terrain copied (its terrain id) and the copy's height (0 low, 1 mid, 2 high): the tileset must hold such a copy. */
+  terrain: number;
+  height: number;
+  /** The ground the pieces are drawn to meet: a terrain id of the tileset, or an untyped flat pair by its even group. */
+  ground: { terrain: number } | { pair: number };
+  /** A piece of the terrain's edge set (`group << 4 | slot`) → the tile standing for it. */
+  pieces: readonly (readonly [piece: number, tile: number])[];
+}
+
 /** What `terrain.provideBorderTable` takes. */
 export interface BorderTableSpec {
   /** Names the table among the plugin's; the same id again replaces it. */
@@ -2891,6 +2938,26 @@ export interface TerrainApi {
    * api.terrain.provideBorderTable({ id: "floor-dirt", tileset: "badlands", source: "install", terrain: 3, ground: 2, shapes: { "A,A,B,h53|L": [0x9b20] } });
    */
   provideBorderTable(spec: BorderTableSpec): Disposable;
+  /**
+   * The open map's tileset's copied terrains (its Isometric tab's "Copied terrain"): a terrain held again at another
+   * height whose edge pieces the tileset holds there too. Found by the editor from the tileset's files (once per files,
+   * by itself when the tileset holds a copy), or given (`provideCopies`, a mod's terrain file). Resolves after what was
+   * found is known, so `tx.paintCopy` can run; with `scan: true` works it out first where it never was. Lists only
+   * terrains whose pieces walk and build as the terrain does at the copy's height.
+   *
+   * @example
+   * for (const c of await api.terrain.copies({ scan: true })) api.log(c.terrain, c.height, c.complete ? "complete" : `${c.missing} shapes missing`);
+   */
+  copies(options?: { scan?: boolean }): Promise<CopiedTerrainInfo[]>;
+  /**
+   * Hand the editor a block of tiles for a copied terrain: which tile stands for each piece of the terrain's edge set at
+   * the copy's height, and which ground the pieces are drawn to meet. It takes the place of what the editor found for
+   * that terrain and height. Taken back with the plugin, or by disposing.
+   *
+   * @example
+   * api.terrain.provideCopies({ id: "mud-mid", tileset: "jungle", terrain: 4, height: 1, ground: { terrain: 3 }, pieces: [[0x2400, 0x9950], [0x2410, 0x9951]] });
+   */
+  provideCopies(spec: CopyBlockSpec): Disposable;
 }
 
 export interface TilesetApi {

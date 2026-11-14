@@ -35,6 +35,7 @@ import { applySpriteChanges, removeSprites } from "../editor/sprites";
 import { encodePins, pinCells, PINS_MEMBER, pinsOf, resizePins, withPinsMember } from "../editor/pins";
 import { BORROW_MEMBERS, resizeBorrowMember, withMember } from "../editor/borrowLattice";
 import { BORDER_MEMBERS, resizeBorderRecord } from "../editor/borderRecord";
+import { COPY_MEMBER, resizeCopyMember } from "../editor/terrainCopyLattice";
 import { ALL_PARTS, applyEntry, entryArea, entryParts, hasEdits, hasMembers, NO_PARTS, swapWholeState, takeWholeState, touchesDoodads, touchesGround, type CommitNotice, type HistoryEdit, type HistoryEntry, type WholeState } from "../editor/history";
 import { applyTables, followTables, rebaseAfterTables, rebaseStrings, rebaseTables, TABLES_BUDGET, tablesKind, tablesWeight, takeTablesEdit, type TablesEdit } from "../editor/tableHistory";
 import { applyLocationChanges, boundsOf, isInverted, LOCATION_MIRROR_PX, locationName, moveLocationsMirrored, placedLocations, removeLocations, scrambledLocations, usedLocations } from "../editor/locations";
@@ -352,6 +353,15 @@ export const resizeDocumentAtom = atom(null, (get, set, req: ResizeRequest): Res
     const after = resizeBorderRecord(member, sizeBefore, scn, era, result.dx, result.dy);
     set(archiveExtrasAtom, withMember(get(archiveExtrasAtom), name, after));
     members.push({ name, before: member, after });
+  }
+  // And the copied terrains' footprints (terrainCopyLattice.ts), by whole rects as the lattices.
+  {
+    const member = get(archiveExtrasAtom).get(COPY_MEMBER);
+    if (member) {
+      const after = resizeCopyMember(member, sizeBefore, scn, tilesetIndex(scn), result.dx, result.dy);
+      set(archiveExtrasAtom, withMember(get(archiveExtrasAtom), COPY_MEMBER, after));
+      members.push({ name: COPY_MEMBER, before: member, after });
+    }
   }
   set(mapWidthAtom, scn.width);
   set(mapHeightAtom, scn.height);

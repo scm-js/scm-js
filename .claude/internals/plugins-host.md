@@ -749,6 +749,20 @@ headless host: a provided table, `borrowed()`, `tx.paintBorrowed`, one undo, the
 (terrain.md "The scan in a worker") and in the headless host the sliced path; a scan stopped from the palette resolves
 `borrowed()` with what was known.
 
+**Copied terrain on the API (2026-11-14)**, additive, version 1: types `CopiedTerrainInfo` (id, terrain, height, group,
+complete, missing, blocks with their ground and `from`) and `CopyBlockSpec`; `api.terrain.copies(options?)` and
+`provideCopies(spec)` are `plugins/copies.ts#copyCalls`, spread beside `borrowCalls`; `tx.paintCopy(diamonds, id)` is
+`paintCopyIn`. `copies()` is async for the same reason as `borrowed()`: it awaits `scanCopies` (read back from IndexedDB, or
+worked out: sliced in the headless host) so the transaction finds the terrain synchronously. `paintCopyIn` picks the block as
+the brush does (continuing a patch the first diamond touches, else `chooseBlock` on `groundUnder`), runs one `CopyStroke`
+over all the diamonds; the outer ground the game's brush lays first is already applied, so it is recorded with
+`tiles.add`/`isom.add` (the `recordApplied` callback), the translated cells go through `applyTiles`, and the member
+(`COPY_MEMBER`) is recorded in `membersBefore` as `paintBorrowed`'s is. A refused diamond (pair ground not under it) is a
+note. `provideCopies` rows go to `providedCopiesAtom` (`beforeDataSet`); `services/terrainCopies.ts#republish` puts a
+provided block in place of the scan's for its (terrain, height); `watchCopiesInFront` republishes when the atom changes. The
+re-lay after other strokes is the editor's (`useTerrainTools.endStroke`); a transaction's `paintIsom` does not re-lay (left
+open: a plugin painting next to a patch cuts it as the game's brush would).
+
 **A data set's terrain file beside the plugins' declarations (2026-11-14).** The three provided atoms also hold rows a
 data set's `terrain.json` declares (terrain.md "A mod's terrain file in the editor"): key and `source` start with
 `@dataset:<id>`. The `provide*` writers put a plugin's row ahead of them (`beforeDataSet`), so a plugin's declaration of

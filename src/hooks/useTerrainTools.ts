@@ -10,6 +10,9 @@ import { borrowedParts, isBorrowedTerrain, isTakeBack, TAKE_BACK, type BorrowedT
 import { BorrowStroke, borrowMember, withMember, type BorrowStrokeResult } from "../editor/borrowLattice";
 import { borrowContext, hostKeyOf, peekBorrowContext } from "../services/borrow";
 import { bordersMember } from "../editor/borderRecord";
+import { copyHostsAtom, type CopyTerrainInfo } from "../atoms/copyAtoms";
+import { copiedParts, CopyStroke, COPY_MEMBER, decodeCopyMember, groundUnder, isCopiedTerrain, patchAt, relayCopies, type CopyStrokeResult } from "../editor/terrainCopyLattice";
+import { chooseBlock, copyHostKey, patchTable, tableFor } from "../services/terrainCopies";
 import { peekBorderSetup } from "../services/borders";
 import { countPins, handLaidCells, withoutPinned } from "../editor/pins";
 import { statusMessageAtom } from "../atoms/uiAtoms";
@@ -100,6 +103,22 @@ export function borrowedIdLabel(id: number): string {
   return borrowedLabel({ name: terrainName(TILESETS[sourceEra], index), sourceEra });
 }
 
+/** What a copied-terrain stroke's status line adds. */
+function copyNote(r: CopyStrokeResult, ground: string): string {
+  let out = "";
+  if (r.missing > 0) out += t(" — {n, plural, one {# cell has} other {# cells have}} no piece drawn for its shape in this tileset (the nearest-joining tile was laid)", { n: r.missing });
+  if (r.refused > 0) out += t(" — {n, plural, one {# diamond was} other {# diamonds were}} left: its pieces are drawn to meet {ground}, which is not under it", { n: r.refused, ground });
+  return out;
+}
+
+/** What re-laying copied terrain after another stroke adds to its status line. */
+function relayNote(dropped: number, hard: number): string {
+  let out = "";
+  if (dropped > 0) out += t(" — copied terrain it reached was laid again ({n, plural, one {# diamond} other {# diamonds}} given up)", { n: dropped });
+  if (hard > 0) out += t(" ({n, plural, one {# join shows} other {# joins show}} where it was cut)", { n: hard });
+  return out;
+}
+
 function keptNote(kept: number): string {
   return kept > 0 ? t(" — {n, plural, one {# pinned tile} other {# pinned tiles}} left as laid (the Pin tab unpins)", { n: kept }) : "";
 }
@@ -121,6 +140,8 @@ export function useTerrainTools() {
   const isomStroke = useRef<Stroke | null>(null);
   /** A stroke of a borrowed terrain: the source's lattice behind it (editor/borrowLattice.ts). */
   const borrowStroke = useRef<BorrowStroke | null>(null);
+  /** A stroke of a copied terrain (editor/terrainCopyLattice.ts), and the ground its block was chosen for. */
+  const copyStroke = useRef<{ stroke: CopyStroke; ground: string } | null>(null);
   /** The last diamond an isometric stroke painted; the brush fires once per diamond. */
   const lastDiamond = useRef<Diamond | null>(null);
   const strokeLabel = useRef(t("Paint terrain"));
@@ -159,6 +180,12 @@ export function useTerrainTools() {
   /** True when the open map and tileset let the isometric brush run at all. */
   const isomReady = hasIsom(scenarioForTables) && loaded !== null && isomTypes.length > 0;
   const borrowHosts = useAtomValue(borrowHostsAtom);
+  const copyHosts = useAtomValue(copyHostsAtom);
+  /** This tileset's copied terrains with their edges (services/terrainCopies.ts), once the scan found them. */
+  const copies = useMemo((): CopyTerrainInfo[] => {
+    if (!loaded || !scenarioForTables) return [];
+    return copyHosts.get(copyHostKey(tilesetIndex(scenarioForTables), loaded.tileset))?.terrains ?? [];
+  }, [loaded, scenarioForTables, copyHosts]);
   /** Terrains of other tilesets this one can lay (editor/borrow.ts), once a scan or a plugin found them. */
   const borrowed = useMemo((): BorrowedTerrain[] => {
     if (!loaded || !scenarioForTables || borrowHosts.size === 0) return [];
@@ -182,15 +209,20 @@ export function useTerrainTools() {
   const currentIsomTerrain = useCallback((): number | null => {
     const id = store.get(activeTerrainAtom);
     if (isBorrowedTerrain(id) && borrowed.some((b) => b.id === id || (isTakeBack(id) && b.sourceEra === borrowedParts(id).sourceEra))) return id;
+    if (isCopiedTerrain(id) && copies.some((c) => c.id === id)) return id;
     return isomTypes.includes(id) ? id : isomTypes[0] ?? null;
-  }, [store, isomTypes, borrowed]);
+  }, [store, isomTypes, borrowed, copies]);
 
   /** The isometric brush's terrain as the status line and the history name it. */
   const isomLabel = useCallback((id: number | null): string => {
     if (id !== null && isTakeBack(id)) return borrowedIdLabel(id);
     const b = id !== null && isBorrowedTerrain(id) ? borrowed.find((x) => x.id === id) : undefined;
-    return b ? borrowedLabel(b) : translate(terrainName(info, id ?? -1));
-  }, [borrowed, info]);
+    if (b) return borrowedLabel(b);
+    const c = id !== null && isCopiedTerrain(id) ? copies.find((x) => x.id === id) : undefined;
+    const pair = c && loaded ? pairTerrain(loaded.tileset, info.terrain, c.flat) : null;
+    if (pair) return terrainLabel(pair);
+    return translate(terrainName(info, id ?? -1));
+  }, [borrowed, copies, loaded, info]);
 
   /**
    * The cells one brush application at (x, y) covers: its footprint and, under a symmetry
@@ -245,14 +277,49 @@ export function useTerrainTools() {
     const is = isomStroke.current;
     const terrain = currentIsomTerrain();
     if (!scn || !loaded || !s || !is || terrain === null) return;
-    // A borrowed terrain lays on its own lattice beside the map, so the map's ISOM is not needed.
+    // A borrowed terrain lays on its own lattice beside the map, so the map's ISOM is not needed; nor does a copied one.
     const borrowing = isBorrowedTerrain(terrain);
-    if (!borrowing && !hasIsom(scn)) return;
+    const copying = isCopiedTerrain(terrain);
+    if (!borrowing && !copying && !hasIsom(scn)) return;
     const d = diamondAt(p.px, p.py);
     const last = lastDiamond.current;
     if (last && last.x === d.x && last.y === d.y) return;
     if (!isDiamond(d) || d.x >= isomWidth(scn) || d.y > scn.height) return;
     lastDiamond.current = d;
+    if (copying) {
+      const era = tilesetIndex(scn);
+      const diamonds: Diamond[] = [];
+      for (const q of mirrorPixel(store.get(symmetryAtom), p.px, p.py, scn.width, scn.height)) {
+        const dq = diamondAt(q.x, q.y);
+        if (isDiamond(dq)) diamonds.push(...brushDiamonds(scn, dq, store.get(brushSizeAtom)));
+      }
+      let cs = copyStroke.current;
+      if (!cs) {
+        const terrainInfo = copies.find((c) => c.id === terrain);
+        if (!terrainInfo) return;
+        const member = store.get(archiveExtrasAtom).get(COPY_MEMBER) ?? null;
+        // A stroke starting on a patch of the same terrain continues it with its block; else the block that joins the ground under it best.
+        const { source, height } = copiedParts(terrain);
+        const on = patchAt(member, scn, era, source, height, d);
+        const onTable = on ? patchTable(store, era, loaded.tileset, on) : null;
+        let table = onTable;
+        if (!table) {
+          const pick = chooseBlock(loaded.tileset, era, terrainInfo, groundUnder(scn, loaded.tileset, era, diamonds));
+          if (!pick) return;
+          table = tableFor(loaded.tileset, era, pick.block, pick.ground);
+        }
+        const groundName = table.outer.kind === "typed" ? translate(terrainName(info, table.outer.index)) : t("its own ground");
+        cs = copyStroke.current = { stroke: new CopyStroke(scn, table, member, store.get(pinnedTilesAtom)), ground: groundName };
+      }
+      const r = cs.stroke.paint(diamonds);
+      if (r.applied.length === 0 && r.changes.length === 0) return;
+      s.add(r.applied);
+      is.add(r.isom);
+      applyChanges(scn, r.changes);
+      s.add(r.changes);
+      bumpRevision((x) => x + 1);
+      return;
+    }
     if (borrowing) {
       const { sourceEra, index } = borrowedParts(terrain);
       const era = tilesetIndex(scn);
@@ -296,7 +363,7 @@ export function useTerrainTools() {
       if (edit.tiles.length > 0) changed = true;
     }
     if (changed) bumpRevision((r) => r + 1);
-  }, [store, loaded, currentIsomTerrain, bumpRevision, setStatus]);
+  }, [store, loaded, info, copies, currentIsomTerrain, bumpRevision, setStatus]);
 
   const paintAt = useCallback((x: number, y: number, p?: MapPoint) => {
     const scn = store.get(scenarioAtom);
@@ -336,6 +403,7 @@ export function useTerrainTools() {
     stroke.current = new Stroke();
     isomStroke.current = new Stroke();
     borrowStroke.current = null;
+    copyStroke.current = null;
     lastDiamond.current = null;
     strokeKept.current = new Set();
     pinStroke.current = null;
@@ -367,6 +435,39 @@ export function useTerrainTools() {
       commitTerrain(scn, { label: strokeLabel.current, changes: [], pins: { before: pins.before, after: pins.after } }, t("{label} — {n, plural, one {# tile is} other {# tiles are}} pinned now", { label: strokeLabel.current, n: countPins(store.get(pinnedTilesAtom)) }));
       return;
     }
+    /**
+     * Copied terrain the stroke came near is laid again from what of its footprint the lattice still holds as its
+     * ground (editor/terrainCopyLattice.ts#relayCopies): in the same step, the member's change carried with it.
+     */
+    const relay = (): { dropped: number; hard: number; member: { name: string; before: Uint8Array | null; after: Uint8Array | null } | null } => {
+      const member = store.get(archiveExtrasAtom).get(COPY_MEMBER) ?? null;
+      if (!member || !loaded) return { dropped: 0, hard: 0, member: null };
+      const era = tilesetIndex(scn);
+      const touched = s.finish().map((c) => c.at);
+      if (touched.length === 0) return { dropped: 0, hard: 0, member: null };
+      const r = relayCopies(scn, member, era, (patch) => patchTable(store, era, loaded.tileset, patch), { pinned: store.get(pinnedTilesAtom), touched });
+      if (r.changes.length > 0) { applyChanges(scn, r.changes); s.add(r.changes); }
+      if (r.after === member) return { dropped: r.dropped, hard: r.hard, member: null };
+      store.set(archiveExtrasAtom, withMember(store.get(archiveExtrasAtom), COPY_MEMBER, r.after));
+      return { dropped: r.dropped, hard: r.hard, member: { name: COPY_MEMBER, before: member, after: r.after } };
+    };
+    const cs = copyStroke.current;
+    copyStroke.current = null;
+    if (cs) {
+      const r = cs.stroke.finish();
+      for (const at of r.kept) strokeKept.current.add(at);
+      const changes = s.finish();
+      const isom = is?.finish() ?? [];
+      const members = sameMember(r.before, r.after) ? [] : [{ name: COPY_MEMBER, before: r.before, after: r.after }];
+      if (changes.length === 0 && members.length === 0) {
+        setStatus(r.refused > 0 ? t("Nothing painted") + copyNote(r, cs.ground) : strokeKept.current.size > 0 ? t("Nothing painted: the tiles here are pinned (the Pin tab unpins)") : t("Nothing painted"));
+        return;
+      }
+      if (members.length > 0) store.set(archiveExtrasAtom, withMember(store.get(archiveExtrasAtom), COPY_MEMBER, r.after));
+      commitTerrain(scn, { label: strokeLabel.current, changes, isom: isom.length > 0 ? isom : undefined, members: members.length > 0 ? members : undefined },
+        t("{label} — {n, plural, one {# tile} other {# tiles}}", { label: strokeLabel.current, n: changes.length }) + copyNote(r, cs.ground) + keptNote(strokeKept.current.size));
+      return;
+    }
     const bs = borrowStroke.current;
     borrowStroke.current = null;
     if (bs) {
@@ -377,11 +478,13 @@ export function useTerrainTools() {
         s.add(r.changes);
       }
       for (const at of r.kept) strokeKept.current.add(at);
+      const relaid = relay();
       const changes = s.finish();
       const name = borrowMember(bs.ctx.sourceEra), recordName = bordersMember(bs.ctx.sourceEra);
       const members: { name: string; before: Uint8Array | null; after: Uint8Array | null }[] = [];
       if (!sameMember(r.before, r.after)) members.push({ name, before: r.before, after: r.after });
       if (!sameMember(r.recordBefore, r.recordAfter)) members.push({ name: recordName, before: r.recordBefore, after: r.recordAfter });
+      if (relaid.member) members.push(relaid.member);
       if (changes.length === 0 && members.length === 0) {
         if (strokeKept.current.size > 0) setStatus(t("Nothing painted: the tiles here are pinned (the Pin tab unpins)"));
         return;
@@ -391,9 +494,11 @@ export function useTerrainTools() {
       for (const m of members) extras = withMember(extras, m.name, m.after);
       if (members.length > 0) store.set(archiveExtrasAtom, extras);
       commitTerrain(scn, { label: strokeLabel.current, changes, members: members.length > 0 ? members : undefined },
-        t("{label} — {n, plural, one {# tile} other {# tiles}}", { label: strokeLabel.current, n: changes.length }) + borrowNote(r) + keptNote(strokeKept.current.size));
+        t("{label} — {n, plural, one {# tile} other {# tiles}}", { label: strokeLabel.current, n: changes.length }) + borrowNote(r) + relayNote(relaid.dropped, relaid.hard) + keptNote(strokeKept.current.size));
       return;
     }
+    // An isometric stroke of the game's own brush may cut into copied terrain: laid again in the same step.
+    const relaid = store.get(terrainModeAtom) === "isom" ? relay() : { dropped: 0, hard: 0, member: null };
     const changes = s.finish();
     const isom = is?.finish() ?? [];
     const kept = strokeKept.current.size;
@@ -401,8 +506,9 @@ export function useTerrainTools() {
       if (kept > 0) setStatus(t("Nothing painted: the tiles here are pinned (the Pin tab unpins)"));
       return;
     }
-    commitTerrain(scn, { label: strokeLabel.current, changes, isom: isom.length > 0 ? isom : undefined }, t("{label} — {n, plural, one {# tile} other {# tiles}}", { label: strokeLabel.current, n: changes.length }) + keptNote(kept));
-  }, [store, commitTerrain, setStatus]);
+    if (relaid.member) store.set(archiveExtrasAtom, withMember(store.get(archiveExtrasAtom), COPY_MEMBER, relaid.member.after));
+    commitTerrain(scn, { label: strokeLabel.current, changes, isom: isom.length > 0 ? isom : undefined, members: relaid.member ? [relaid.member] : undefined }, t("{label} — {n, plural, one {# tile} other {# tiles}}", { label: strokeLabel.current, n: changes.length }) + relayNote(relaid.dropped, relaid.hard) + keptNote(kept));
+  }, [store, loaded, commitTerrain, setStatus]);
 
   const isStroking = useCallback(() => stroke.current !== null, []);
 
@@ -625,6 +731,18 @@ export function useTerrainTools() {
       setStatus(t("Blend from tile {hexTile} at {x}, {y} — pick a match in the palette", { hexTile: hexTile(id), x, y }));
       return;
     }
+    if (mode === "isom" && p && loaded) {
+      // A cell of copied terrain picks the copied terrain (its footprint in the member).
+      const d = diamondAt(p.px, p.py);
+      const era = tilesetIndex(scn);
+      for (const patch of decodeCopyMember(store.get(archiveExtrasAtom).get(COPY_MEMBER), scn, era)) {
+        const c = copies.find((x) => x.source === patch.source && x.height === patch.height);
+        if (!c || !patchAt(store.get(archiveExtrasAtom).get(COPY_MEMBER) ?? null, scn, era, patch.source, patch.height, d)) continue;
+        setActiveTerrain(c.id);
+        setStatus(t("Picked {terrainName}", { terrainName: isomLabel(c.id) }));
+        return;
+      }
+    }
     if (mode === "isom" && p && hasIsom(scn) && loaded) {
       const d = diamondAt(p.px, p.py);
       const w = isomWidth(scn);
@@ -663,7 +781,7 @@ export function useTerrainTools() {
     store.set(tileBlockAtom, null);
     setActiveTile(id);
     setStatus(t("Picked tile {tile} (group {group}, slot {slot})", { tile: hexTile(id), group: id >> 4, slot: id & 15 }));
-  }, [store, loaded, info, types, isomTypes, setActiveTerrain, setActiveTile, setMode, setBlendAnchor, setStatus]);
+  }, [store, loaded, info, types, isomTypes, copies, isomLabel, setActiveTerrain, setActiveTile, setMode, setBlendAnchor, setStatus]);
 
   /**
    * Blend brush: put `id` (a candidate from the palette) on the `side` neighbour of the
@@ -735,8 +853,8 @@ export function useTerrainTools() {
   }, [store]);
 
   return useMemo(
-    () => ({ types, terrainOf, isomTypes, isomReady, borrowed, loaded, beginStroke, paintAt, endStroke, isStroking, fillAt, fillMap, replace, heal, pinArea, pickAt, blendAt, ghostAt, ghostDiamondsAt }),
-    [types, terrainOf, isomTypes, isomReady, borrowed, loaded, beginStroke, paintAt, endStroke, isStroking, fillAt, fillMap, replace, heal, pinArea, pickAt, blendAt, ghostAt, ghostDiamondsAt],
+    () => ({ types, terrainOf, isomTypes, isomReady, borrowed, copies, loaded, beginStroke, paintAt, endStroke, isStroking, fillAt, fillMap, replace, heal, pinArea, pickAt, blendAt, ghostAt, ghostDiamondsAt }),
+    [types, terrainOf, isomTypes, isomReady, borrowed, copies, loaded, beginStroke, paintAt, endStroke, isStroking, fillAt, fillMap, replace, heal, pinArea, pickAt, blendAt, ghostAt, ghostDiamondsAt],
   );
 }
 

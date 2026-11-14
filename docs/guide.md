@@ -375,6 +375,50 @@ elsewhere. The Isometric tab warns when the record and the ground disagree, and 
 of the map is ground the brush cannot join up with, such as hand-placed tiles or another
 editor's work.
 
+### Copied terrain
+
+A tileset made for a mod sometimes holds one of its own terrains again at another height:
+the same Mud, say, on mid and on high ground. The Rect tab already offers such a copy
+("Mud (mid ground)"). Often the mod also drew that terrain's edges again at that height:
+the pieces that join Mud to the ground around it, Mud kept as it was and the other side
+repainted as the ground the copy is meant to sit on. The isometric brush cannot use those
+pieces from the tileset's tables, because they have no terrain type.
+
+When a tileset holds a copy, the editor looks through it once, by itself, for such pieces:
+the Isometric tab says so in a quiet line while it does, and lists what it found under
+**Copied terrain**, named as the Rect tab names the copy. It finds them by their pictures
+(each keeps the original edge piece's picture where that piece shows the terrain), their
+flags (raised as the copy is) and the way the pieces are laid out in the tileset, never by
+where a particular mod put them. What it found is kept in the browser, so the next time a
+map on the same tileset files opens, the list is there at once.
+
+Painting a copied terrain works as the isometric brush does: the brush size, symmetry and
+pinned tiles apply, and a stroke is one step to undo. The terrain is laid by the tileset's
+own brush and each tile is written as the tile the mod drew for it. A tileset may hold the
+same pieces several times, each set drawn to sit on a different ground (Mud against High
+Dirt, Mud against Raised Jungle); the stroke takes the set that joins the ground under it
+best. Where that ground is one of the tileset's terrains, the brush lays it under the
+stroke first, so a copy painted elsewhere gets its own ground and that ground's usual
+cliffs or edges around it. Where the pieces are drawn for ground the tileset has no
+terrain type for, the stroke lays only where that ground already is, and the status line
+says how many diamonds it left.
+
+The editor keeps where copied terrain was painted as a small file inside the map
+(`scmjs\copies.bin`), saved with it, moved by Resize, undone with the stroke and shared on
+a shared map; the game never reads it. When another isometric stroke cuts into a patch,
+the patch is laid again in the same step: the part the ground still holds stays with its
+edges, and what the other stroke took is given to that stroke's ground. A few joins can
+still show where the patch was cut, and a small patch close to the cut can be given up
+entirely; the status line says how many diamonds were given up and how many joins show. A
+tile laid by hand over a patch is left where it is.
+
+A terrain is listed only when its pieces walk and build as the original terrain does at
+the copy's height. One whose tileset lacks some of the edge's shapes is listed after the
+complete ones, marked **incomplete**, with a hover that says how many shapes are missing;
+the brush lays the tile that joins best in those places, and the status line counts those
+cells. Cliffs are not offered this way: their faces carry heights of their own that a copy
+does not raise the same way.
+
 ### Terrain from other tilesets
 
 A tileset made for a mod often holds another tileset's ground copied in: Installation's

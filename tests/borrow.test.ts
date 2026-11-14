@@ -436,6 +436,7 @@ describe.skipIf(!haveInstall)("the borrowed brush (Installation in a host made f
 /* ── The lattice member in the document: history, resize, other maps, save ── */
 
 import { createStore } from "jotai";
+import { borrowHostsAtom } from "../src/atoms/borrowAtoms";
 import {
   activateDocumentAtom, activeDocumentIdAtom, archiveExtrasAtom, commitEditAtom, loadDocumentAtom, redoAtom, resizeDocumentAtom, scenarioAtom, undoAtom,
 } from "../src/atoms/documentAtoms";
@@ -556,3 +557,113 @@ if (modTileset("badlands") && haveInstall) {
     }, 120_000);
   });
 }
+
+/* ── The scan's worker (no game data: the made pair) ── */
+
+import { borrowWorkerHandler, tilesetFromParts, tilesetParts, type BorrowWorkerRequest, type BorrowWorkerResponse } from "../src/editor/borrowWorker";
+import { isStopped, scanBorrowed, slicedTableMaker } from "../src/services/borrow";
+import { borrowWorkerStats, poolSize, resetBorrowWorkerClient, workerTableMaker } from "../src/services/borrowTableClient";
+import { memoryPieceStore } from "../src/services/pieceStore";
+
+describe("the scan's worker", () => {
+  const sources = () => {
+    const { source, host } = madePair();
+    // A second source: the same pictures, other group flags (another table).
+    const other = { ...source, groups: source.groups.map((g) => ({ ...g, flags: g.flags ^ 0x40 })) };
+    return { host, bySource: new Map<number, Tileset>([[2, source], [5, other]]) };
+  };
+
+  it("answers with the same table as borrowTable on this thread", async () => {
+    const { source, host } = madePair();
+    const out: BorrowWorkerResponse[] = [];
+    const handle = borrowWorkerHandler((m) => out.push(m));
+    await handle({ kind: "table", id: 1, source: tilesetParts(source) });
+    expect(out[0]).toMatchObject({ kind: "error", id: 1 }); // no host yet
+    await handle({ kind: "host", host: tilesetParts(host) });
+    await handle({ kind: "table", id: 2, source: tilesetParts(source) });
+    const answer = out.find((m) => m.kind === "table" && m.id === 2) as Extract<BorrowWorkerResponse, { kind: "table" }>;
+    expect([...answer.table]).toEqual([...encodeBorrowTable(await borrowTable(host, source))]);
+    // The parts carry what the table reads.
+    const back = tilesetFromParts(tilesetParts(source));
+    expect(back.groups.map((g) => [g.index, g.flags, [...g.megatiles]])).toEqual(source.groups.map((g) => [g.index, g.flags, [...g.megatiles]]));
+  });
+
+  it("is used through a pool when there is a Worker, the host given to each worker once", async () => {
+    resetBorrowWorkerClient();
+    const { host, bySource } = sources();
+    const was = (globalThis as { Worker?: unknown }).Worker;
+    // A Worker that runs the real handler in this process, answering on the next turn.
+    class InProcess {
+      onmessage: ((e: { data: BorrowWorkerResponse }) => void) | null = null;
+      onerror: ((e: unknown) => void) | null = null;
+      private handle = borrowWorkerHandler((m) => setTimeout(() => this.onmessage?.({ data: m }), 0));
+      postMessage(m: BorrowWorkerRequest) { void this.handle(m); }
+      terminate() {}
+    }
+    (globalThis as { Worker?: unknown }).Worker = InProcess;
+    try {
+      const db = memoryPieceStore();
+      // The maker without its `stats`, which the scan would read (and reset) for its log line.
+      await scanBorrowed(createStore(), 0, host, { db, source: async (e) => bySource.get(e) ?? null, tables: { table: workerTableMaker.table } });
+      expect(borrowWorkerStats.tables).toHaveLength(2);
+      expect(borrowWorkerStats.hostPosts).toBe(Math.min(2, poolSize()));
+      for (const [era, source] of bySource) {
+        const kept = [...db.data].find(([k]) => k.endsWith(`/${tilesetHash(source)}`))![1] as Int32Array;
+        expect([...kept], `source ${era}`).toEqual([...encodeBorrowTable(await borrowTable(host, source))]);
+      }
+    } finally {
+      (globalThis as { Worker?: unknown }).Worker = was;
+      resetBorrowWorkerClient();
+    }
+  });
+
+  it("falls back to this thread when there is no Worker", async () => {
+    resetBorrowWorkerClient();
+    expect(typeof (globalThis as { Worker?: unknown }).Worker).toBe("undefined");
+    const { host, bySource } = sources();
+    await expect(workerTableMaker.table(host, bySource.get(2)!, () => {})).rejects.toThrow(/unavailable/);
+    const db = memoryPieceStore();
+    const found = await scanBorrowed(createStore(), 0, host, { db, source: async (e) => bySource.get(e) ?? null, tables: workerTableMaker, pause: async () => {} });
+    expect(found.sources.map((s) => s.sourceEra)).toEqual([2, 5]);
+    expect(db.data.size).toBe(3); // two tables and the index
+  });
+
+  it("finishes the scan on this thread when the worker fails", async () => {
+    resetBorrowWorkerClient();
+    const was = (globalThis as { Worker?: unknown }).Worker;
+    class Failing {
+      onmessage: unknown = null;
+      onerror: ((e: unknown) => void) | null = null;
+      postMessage() { setTimeout(() => this.onerror?.({ message: "the script did not load", preventDefault() {} }), 0); }
+      terminate() {}
+    }
+    (globalThis as { Worker?: unknown }).Worker = Failing;
+    try {
+      const { host, bySource } = sources();
+      const db = memoryPieceStore();
+      const found = await scanBorrowed(createStore(), 0, host, { db, source: async (e) => bySource.get(e) ?? null, tables: workerTableMaker, pause: async () => {} });
+      expect(found.sources).toHaveLength(2);
+      const kept = [...db.data].find(([k]) => k.endsWith(`/${tilesetHash(bySource.get(2)!)}`))![1] as Int32Array;
+      expect([...kept]).toEqual([...encodeBorrowTable(await borrowTable(host, bySource.get(2)!))]);
+    } finally {
+      (globalThis as { Worker?: unknown }).Worker = was;
+      resetBorrowWorkerClient();
+    }
+  });
+
+  it("stops: the scan rejects as stopped and publishes nothing", async () => {
+    const { host, bySource } = sources();
+    const controller = new AbortController();
+    const store = createStore();
+    const scan = scanBorrowed(store, 0, host, { db: memoryPieceStore(), source: async (e) => bySource.get(e) ?? null, tables: { table: (h, src, p, sig) => { controller.abort(); return slicedTableMaker(async () => {}).table(h, src, p, sig); } }, signal: controller.signal });
+    await expect(scan).rejects.toSatisfy(isStopped);
+    expect(store.get(borrowHostsAtom).size).toBe(0);
+  });
+
+  it("gives this machine one or two workers", () => {
+    expect(poolSize(1)).toBe(1);
+    expect(poolSize(2)).toBe(1);
+    expect(poolSize(3)).toBe(2);
+    expect(poolSize(24)).toBe(2);
+  });
+});

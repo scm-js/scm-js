@@ -734,3 +734,6 @@ calls (they are part of `createPluginApi`'s terrain group); `borrowed()` there r
 asset source and IndexedDB stand-in (memory) as the editor; with the game's own data in use (or none, as there) a game
 tileset already loaded is taken as the source (`gameOwnTileset`). `tests/borrow.test.ts` "is on the plugin API" drives the
 headless host: a provided table, `borrowed()`, `tx.paintBorrowed`, one undo, the note for a wrong id, dispose.
+`borrowed({ scan: true })` scans through `services/borrow.ts#scanBorrowed`, so in the editor it uses the worker pool
+(terrain.md "The scan in a worker") and in the headless host the sliced path; a scan stopped from the palette resolves
+`borrowed()` with what was known.

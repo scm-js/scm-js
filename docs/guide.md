@@ -386,15 +386,17 @@ tileset's copy of the same picture.
 
 The first time, the list is a button, **Find terrain from other tilesets**. It looks
 through the game's other seven tilesets for terrains whose every tile has a copy here, and
-the ground the brush lays them onto too. It takes some seconds (about 25 for a mod's
-Badlands of 40,000 tiles, with a progress bar), and what it finds is kept in the browser:
-the next time a map on the same tileset files opens, the list is there at once. The copies
-are found by their pictures. A mod's copies are rarely exact (they were redrawn into the
-tileset's own colours, and one picture can be there several times), so a tile counts as a
-copy when it looks the same up close, not only when its bytes do. Where one tile of an
-otherwise whole terrain has no copy, the nearest picture stands in for it, and the
-terrain's hover says how many do. With the game's own data in use nothing is listed:
-nothing in the game's tilesets is borrowed.
+the ground the brush lays them onto too. It runs in the background, so you can keep
+painting and editing meanwhile: about ten seconds for a mod's Badlands of 40,000 tiles,
+with a progress bar and a **Stop** button beside it. What it finds is kept in the browser:
+the next time a map on the same tileset files opens, the list is there at once, and a scan
+you stopped starts again from what it had already done. The copies are found by their
+pictures. A mod's copies are rarely exact (they were redrawn into the tileset's own
+colours, and one picture can be there several times), so a tile counts as a copy when it
+looks the same up close, not only when its bytes do. Where one tile of an otherwise whole
+terrain has no copy, the nearest picture stands in for it, and the terrain's hover says
+how many do. With the game's own data in use nothing is listed: nothing in the game's
+tilesets is borrowed.
 
 Painting one works as the isometric brush does: the brush size, symmetry and pinned tiles
 apply, and a stroke is one step to undo. A stroke meets ground no borrowed stroke has

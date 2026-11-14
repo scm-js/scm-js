@@ -14,7 +14,7 @@ import type { Diamond } from "../editor/isom";
 import type { TileChange } from "../editor/terrain";
 import { tilesetIndex, type Scenario } from "../formats/chk/scenario";
 import { peekTileset } from "../formats/tileset/load";
-import { borrowContext, drawsFromGame, hostKeyOf, peekBorrowContext, readKnownBorrowed, refreshProvided, scanBorrowed } from "../services/borrow";
+import { borrowContext, drawsFromGame, hostKeyOf, peekBorrowContext, readKnownBorrowed, isStopped, refreshProvided, scanBorrowed } from "../services/borrow";
 import type { BorrowedTerrainInfo, BorrowTableSpec, Disposable, TerrainApi } from "./api";
 import { t } from "../i18n";
 
@@ -38,7 +38,7 @@ export function borrowCalls(store: Store, pluginId: string, bag: Bag): BorrowCal
       if (!f) return [];
       if (store.get(providedBorrowAtom).length > 0) await refreshProvided(store, f.era, f.host);
       let info = await readKnownBorrowed(store, f.era, f.host);
-      if ((!info || !info.sources.some((s) => !s.provided)) && options?.scan && !drawsFromGame(store.get(gameDataSourceAtom))) info = await scanBorrowed(store, f.era, f.host);
+      if ((!info || !info.sources.some((s) => !s.provided)) && options?.scan && !drawsFromGame(store.get(gameDataSourceAtom))) info = await scanBorrowed(store, f.era, f.host).catch((err) => { if (isStopped(err)) return info; throw err; });
       info = store.get(borrowHostsAtom).get(hostKeyOf(f.era, f.host)) ?? info;
       const out: BorrowedTerrainInfo[] = [];
       for (const s of info?.sources ?? []) {

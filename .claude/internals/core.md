@@ -141,3 +141,8 @@ Done 2026-11-14 (borrowed terrain): `editor/borrow.ts` (the copy test, the table
 `data/tilesets.ts#TILESETS` ids, not `formats/tileset/load.ts#TILESET_FILENAMES` (the same strings): `load.ts` reaches
 `src/gamedata/`, which the layering test refuses. `services/borrow.ts` (scan, IndexedDB, the game's own files under the data
 set) is the editor's and not exported.
+
+2026-11-14 (the scan in a worker): `editor/borrowTable.ts` (the table half of `borrow.ts`, re-exported by it) and
+`formats/tileset/kind.ts` (`kindKey`, re-exported by `heal.ts`) are behind the entry through `borrow.ts` as before.
+`editor/borrowWorker.ts` (the worker's handler) is not exported, and nothing behind the entry reaches the worker client:
+`main.tsx` hands it to `services/borrow.ts`, which is the editor's.

@@ -369,7 +369,7 @@ tile with the same picture. The spike behind it (`~/mods-under-test/_notes/borro
   on the overall mean and a coarse 8 × 8 pass at the same bound drop nothing. Per megatile only the 64 block sums are kept
   (`picturesOf`, 384 B: 15 MB for 40k megatiles, not the spike's 122 MB of pixels); pixels are read from the VR4 when a
   candidate gets that far. Installation → mod Badlands: 360 ms (Node), the host summary 164 ms once; all seven sources into
-  the mod's Badlands 16 s in Node, 20–25 s in headless Chromium in slices (`Slicing`, a `setTimeout(0)` every ~12 ms), JS
+  the mod's Badlands 16 s in Node, 20–25 s in headless Chromium in slices on the page (`Slicing`, a `setTimeout(0)` every ~12 ms) — since moved to workers, see "The scan in a worker" below — JS
   heap 135 → 220 MB peak → 174 MB after.
 - *Translation* (`borrowTable`): per source tile (typed groups, used slots) the host tiles showing a copy, preferring the
   same sixteen VF4 words and group flag word, then the same VF4, then any; kept only those of the first one's kind
@@ -423,3 +423,53 @@ ones one-way; not a rule the files give); no rebuild of a lattice for borrowed g
 editor, the mod's own maps: they start from base ground); walkability is the copies' (462 of 891 Installation megatiles
 have a copy that walks the same in the mod's Badlands); the eyedropper does not pick a borrowed terrain; one source per
 stroke.
+
+**The scan in a worker (`services/borrowTableClient.ts`, `services/borrowTable.worker.ts`, `editor/borrowWorker.ts`,
+2026-11-14).** The tables are worked out in a pool of module workers; the page reads the sources, hashes them, reads kept
+tables from IndexedDB, lists the terrains and stores what lands — short steps — and nothing else.
+*Shape.* `editor/borrowWorker.ts#borrowWorkerHandler` is the whole worker as a function (a Node test drives it); the worker
+module only wires it to `self`. A worker is given the host once (`{kind:"host"}`), then one source at a time (`{kind:
+"table", id}`), so `picturesOf(host)` (WeakMap per Tileset object, rebuilt from the parts once) runs once per worker per
+scan; it answers `progress` (at most every 100 ms) and the `encodeBorrowTable` Int32Array, its buffer transferred. Tilesets
+travel as `TilesetParts`: palette, VR4, VX4 refs, VF4 and the groups packed 18 words a group (index, flag word, sixteen
+megatiles) — not 4,094 `Cv5Group` objects; the arrays are the editor's own, so they are *copied* by the clone, never
+transferred (that would detach the open map's tileset). For the worker to stay small the table half of `borrow.ts` is its
+own module, `editor/borrowTable.ts` (`borrow.ts` re-exports it, so nothing that imported `borrow.ts` changed), and
+`heal.ts#kindKey` moved to `formats/tileset/kind.ts` (re-exported by `heal.ts`): through `isom.ts` and `data/tilesets.ts`
+the worker would otherwise carry the CHK scenario module and the i18n catalogue. The worker chunk is 5.3 kB.
+*Who uses it.* `services/borrow.ts` takes a `BorrowTableMaker` (`ScanDeps.tables`, default `setBorrowTableMaker`'s, else
+`slicedTableMaker`, today's path). `main.tsx` sets the worker client, so the command line, `@scm-js/core` and the headless
+plugin host (none of which load `main.tsx`) never reach `new Worker(new URL(...))` and keep the sliced path — unlike
+`extract.worker`, whose construction the SSR build leaves in the CLI bundle where it only fails at run time. The scan asks
+for every missing table at once; the client queues them over the pool; a `WorkerUnavailableError` (no `Worker`, a worker
+that would not start or failed: `onerror` rejects everything it and the queue held and marks the client broken) sends that
+table to the sliced maker, which runs one table at a time. Workers are terminated when the queue empties (each holds a copy
+of the host and its summary). `api.terrain.borrowed({ scan: true })` in the editor gets the workers for free.
+*Stop.* `stopBorrowScan()` aborts the scan's `AbortController`: the client terminates the workers, the sliced maker checks
+the signal before a table and at each pause, the scan checks it before publishing; it rejects with an `AbortError`
+(`isStopped`) and publishes nothing. Each table is stored as it lands, so a stopped scan's finished tables are read back
+next time (measured: a second scan after a Stop at 4 s took 5.4 s). The palette shows **Stop** beside the progress.
+*Measured* in the built bundle (`vite preview`, headless Chromium, Butcher's Corner, the mod's folder attached, all seven
+sources worked out; page busy = the sum of the gaps in a MessageChannel heartbeat; RSS = the whole browser process tree;
+a High Dirt stroke painted 4 s into the scan, press to status line):
+
+| path | wall | page busy | longest page task | stroke | RSS peak over before |
+| --- | --- | --- | --- | --- | --- |
+| page, sliced (no `Worker`) | 22.9–23.5 s | 17.6 s (75%) | 67–69 ms | 195–203 ms | +99–126 MB |
+| 1 worker | 15.5 s | 1.65 s (11%) | 23 ms | 108 ms | +155 MB |
+| 2 workers (chosen) | 9.3–10.1 s | 1.25 s (12–13%) | 25–26 ms | 120 ms | +243–267 MB |
+| 3 workers | 7.0–8.0 s | 1.05 s (13%) | 40–54 ms | 111–124 ms | +339–422 MB |
+
+Each worker costs about 90 MB of the process tree at peak (freed when it ends). The clone: 45.6 MB in 32 ms of
+`postMessage` for two workers (two host copies of ~17.8 MB and seven sources), 29.4 MB / 21 ms for one, 61.7 MB / 45–59 ms
+for three — back-to-back host clones are what the longest page task grows with. Worker time summed 15.7–17.7 s, the
+longest single table 3.3–3.7 s (Jungle into Badlands), which bounds what more workers can win. So `POOL` is 2, bounded by
+`navigator.hardwareConcurrency - 1`: one to two halves the wait for ~90 MB; two to three saves 2 s more for ~90 MB and a
+longer stall. All seven tables are byte-identical to the page path's (an FNV checksum of every stored Int32Array,
+Installation's among them). The scan's one log line (always on, counts only) gives `ms`, `onPage` (tables that fell back),
+`workers`, `hostPosts`, `postMs`, `clonedMB`, `workerMsMax`, `workerMsSum`. Another map in front mid-scan (on Ice) broke
+nothing: the result is published by host key and was there on coming back. The desktop app serves `app://scmjs/` as a
+standard, secure scheme through `net.fetch` of the file, as for the transpile and extraction workers built the same way;
+not run in Electron. `tests/borrow.test.ts` "the scan's worker": the handler against `borrowTable`, the pool through an
+in-process fake `Worker`, the fallback without `Worker`, a failing worker, a stop.
+

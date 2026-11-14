@@ -671,3 +671,18 @@ the picker for it is a decision nobody has taken. Tests: `tests/fileTypes.test.t
 whose `File`s differ, so a handed file says which route read it).
 Also `graphics.grpImage(bytes, frame, { palette, teamColor, flipped, shadow })` → `Promise<PluginImage | null>`
 (`graphics.ts`; throws on a palette that is no tileset file name; `tests/grp-picture.test.ts`) — see `gamedata.md`.
+
+**The terrain tools of 2026-11-13 on the API**, all additive: `tx.placeStretchedDoodad(id, tx, ty, axis,
+steps, owner?)` (as terrain, like the editor's stretch; `(tx, ty)` is where the doodad would stand
+unstretched, so the footprint's corner is that plus `stretched.offset`; answers the cells it covers, empty
+when it does not fit; no ground check; at most `MAX_STRETCH_STEPS` 128), `tx.heal(cells)`, `tx.pin(cells,
+on?)`, `terrain.seamStep` / `seams` / `pinned` / `handLaid` / `symmetryShares` / `fairness`,
+`palette.stretchAxes` / `doodadTwin`; types `StretchAxis`, `FairnessReport`, `FairnessPlace`,
+`UnmatchedResource`. **A transaction's rule-based writes skip pinned tiles** (`applyRuled` in `runEdit`:
+`stampTerrain`, `fillFlat`, `fillArea`, `replaceTerrain`, `heal`; `paintIsom` and `tilesFromIsom` pass
+the pins to the pass), because a pin that only the built-in brushes honoured would be undone by the
+first generator plugin; `setTile(s)`, `placeBlend`, `paste` and the doodad calls write through, as the
+Tile brush does. Pins did not exist before, so no existing plugin's result changes. `tx.pin` writes the
+pins file at once (`pinCellsAtom`) and the entry gets `pins = { before the first change, as it stands }`;
+a transaction that only pins is recorded (`hasEdits(entry) || entry.pins`), and a builder that throws
+has them rolled back by `rollbackEntryAtom`. `tests/plugin-terrain-tools.test.ts`.

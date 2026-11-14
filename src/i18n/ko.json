@@ -3194,6 +3194,7 @@
   "doodad {doodadId} is not in this tileset": "장식물 {doodadId}은(는) 이 타일셋에 없습니다",
   "replacing a terrain type needs the tileset graphics": "지형 종류 바꾸기에는 타일셋 그래픽이 필요합니다",
   "a terrain fill needs the tileset graphics": "지형 채우기에는 타일셋 그래픽이 필요합니다",
+  "healing seams needs the tileset graphics": "이음새 보정에는 타일셋 그래픽이 필요합니다",
   "regenerating the tiles needs ISOM and the tileset graphics": "타일 다시 만들기에는 ISOM과 타일셋 그래픽이 필요합니다",
   "no room for {n, plural, one {# start location} other {# start locations}}": "시작 위치 {n, plural, other {#개}}를 놓을 자리가 없음",
   "removed {n, plural, one {# stranded unit} other {# stranded units}}": "고립된 유닛 {n, plural, other {#기}} 제거",

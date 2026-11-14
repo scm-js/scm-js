@@ -184,7 +184,8 @@ measured on the outermost row of pixels does not see which way a texture runs. T
 Badlands ramp's low edge is the shadow of its left wall in the one tile that line has, and no tile in
 the tileset is that edge without the shadow. Do not retry this with the same measure; it would take a
 measure of direction (a few rows deep, not one) or drawn tiles.
-Not done: the plugin API. `tests/stretch.test.ts`.
+On the plugin API as `tx.placeStretchedDoodad`, `palette.stretchAxes` and `palette.doodadTwin`
+(plugins-host.md). `tests/stretch.test.ts`.
 
 The palette's preview size (`doodadThumbSizeAtom`, `scmjs.doodadThumbSize`, small / medium / large)
 sets `DoodadThumb`'s box and, through `--doodad-thumb-w` / `-h` on `.doodad-grid`, the cell width the

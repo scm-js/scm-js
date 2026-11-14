@@ -1058,8 +1058,8 @@ export function rebuildIsomFromTiles(scn: Scenario, tileset: Tileset): IsomRebui
  * Regenerate every tile from the ISOM section — what StarEdit does after any isometric
  * edit, applied to the whole map. Used to validate the port against real maps.
  */
-export function tilesFromIsom(scn: Scenario & { isom: Uint16Array }, tileset: Tileset, random: () => number = Math.random): IsomEdit {
-  const pass = new IsomPass(scn, tileset, isomTables(tileset, tilesetIndex(scn)), random);
+export function tilesFromIsom(scn: Scenario & { isom: Uint16Array }, tileset: Tileset, random: () => number = Math.random, pinned: Uint8Array | null = null): IsomEdit {
+  const pass = new IsomPass(scn, tileset, isomTables(tileset, tilesetIndex(scn)), random, pinned);
   const w = isomWidth(scn), h = isomHeight(scn);
   for (let y = 0; y + 1 < h; y++) for (let x = 0; x + 1 < w; x++) pass.updateTile({ x, y });
   return pass.finish();

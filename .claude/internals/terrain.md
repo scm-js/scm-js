@@ -619,3 +619,97 @@ as `debugConsoleAtom`). The panel shows it unchecked and disabled where no borde
 all data now also empties `learnedBordersAtom` and the data set's rows of `providedBordersAtom` live (their store was
 already cleared). The status line's count is walkability only: a drawn tile counts when its walkable minitiles
 (none / some / all) differ from both the patch's tile and the ground's.
+
+**Copied terrain (`editor/terrainCopyTable.ts`, `editor/terrainCopyLattice.ts`, `services/terrainCopies.ts`, `atoms/copyAtoms.ts`,
+`plugins/copies.ts`, `components/panels/CopiedTerrains.tsx`, 2026-11-14).** A mod's tileset holds one of its own typed
+terrains S again under other flags (`terrainCopies`: the untyped pair S′, "Mud (mid ground)") and, often, S's edge set E
+again beside it: untyped tiles keeping each E piece's picture where the piece shows S, the other side repainted as the
+ground G the copy is meant to sit on (Cosmonarchy's Jungle: Mud mid/high × 3 grounds each). Two spike rounds
+(`~/mods-under-test/_notes/repointed-isom-findings.md`, code in the `scm-js-repointed-spike` worktree's `spikes/repointed/`;
+"re-pointed" was the spike's word, the code says *copied*) found the method; this is it.
+*The rule* (`findCopyBlocks`, pure, worker-safe: no scenario, no i18n). Per copy S′, per **flat/flat** set E naming S (cliff
+sets are left out — their faces' walk/height bits are drawn by hand: 40% of the cliff pieces failed the flags test,
+synthetic cliffs recovered 63% with 7% wrong): candidates are megatiles of untyped groups no typed group uses (S′ left
+out); a pair (m, e) shares a whole 8 × 8 minitile at the same place (index), keeps ≥ `KEPT_BLOCKS` (2) whole 4 × 4 blocks of
+e (chance does not make those: against another tileset's art the best kept share is ≤ 30% of pixels and no whole blocks),
+and the minitiles it keeps whole stand higher by the copy's raise (majority) — else it is another copy's piece. A tile's
+best pieces are those within `TIE_PX` (16 px) of its best. *Blocks*: the groups holding candidates, cut where more than
+`CLUSTER_GAP` (3) groups hold none, each judged alone (a mod holds the same pieces several times for other grounds). *Layout
+found, not assumed*: each E half's row and each variant's slot by side, believed with `LAYOUT_AGREE` (0.6) of the votes,
+places the pieces that keep too little S for pixels (mostly-O corners) and breaks ties between variants; a shuffled block
+has none (synthetic shuffled: 53% recovered against 76–78% laid out). Pieces whose picture is S alone map to S′'s tile.
+Reported when ≥ `MIN_SHAPES` (4) halves and ≥ `MIN_SHARE` (0.5) of them have a piece by pixels — false blocks/sets measured
+max 0.42 (p90 0.38) on the synthetic mods, true median 0.58. *One set per block*: each block megatile votes for the set one
+of whose pieces it keeps most of (a share of shapes was tried first and favoured small sets: Ice's Snow/Dirt block lost to
+Snow/Rocky Snow). *Block key* = two hashes of its tiles' pictures, so a mod update that moves groups finds it again.
+*The gate* (`gateBlock`, then on the page `GATE_JOINS`): **askable** halves = E halves that are first in the tileset for their rect's link hash (what
+`IsomPass.updateTile` takes; for every set found that is all halves) — each needs a tile (any slot: the game picks any
+variation); and the drawn pieces walk as their source pieces with heights raised by the copy's raise on ≥ `GATE_FLAGS`
+(0.99) of minitiles, their buildable bit changing as the copy's on ≥ 0.99 of pieces. "rejected" (not listed), "incomplete"
+(listed after, marked), "complete". On the page a block that passes is also refused when, on its own outer ground, it
+shows more than `GATE_JOINS` (30) joins per 100 border cells beyond what the game's own set shows on the same strokes (S over
+O): on Cosmonarchy the blocks that lay well are 0–22 above, the fragments 70–95 above. Measured: every complete clean block 100.0%/100%; the highest failing complete block
+96.5% (a Desert block that showed 53.6 joins/100 on its ground); complete cliff sets 88.6–89.8%. Synthetic: none left out →
+complete 5/5; half the pieces left out → incomplete 4/5 (the fifth kept a same-picture tile in every half).
+*Controls* (spike): the game's eight tilesets yield no copies and no blocks (CI-gated test); synthetic mods 3 layouts × 5
+tilesets: recovered 53–78%, wrong 5–9%, a left-out piece never given a wrong tile; Blizzard's twins (High Sand Dunes' sets
+made anonymous) found as re-pointed Sand Dunes sets, 3,144 right / 90 wrong over 22 twins; the hand-made Jungle Mud
+correspondence 113/120 same tile, 7 same picture.
+*The outer ground* (`rankGrounds` + `paintCount` + `chooseOuter`): candidates = top `GROUND_CANDIDATES` (8) grounds (typed flat
+terrains, loose pairs outside the block) by mean `seamStep` across the pieces' O-facing sides; each counted by painting the
+fixed strokes (`countStrokes`: a diamond, blobs 2–5, lines, an L, a ring, a blob with a hole, four walks) on a 48² map of it,
+joins showing per 100 border cells; lowest count, ties within `COUNT_MARGIN` (1 join/100) by the repainted minitiles' VF4
+words, typed first. Measured: game sets 88 right + 17 twin of 112 (old mean-step 88 + 16), twins 14/16 (13), the hand-checked
+high Mud block's ground right (pair 3672, 7.7 vs next 14.0; the mean step had picked another pair).
+*At stroke time* (`chooseBlock`): of the terrain's blocks (complete ones, else the incomplete), the one whose count on the
+ground under the stroke (`groundUnder`: the commonest ground round its first diamonds) is lowest; laid against that ground
+when its count is within `COUNT_MARGIN` of the block's own outer ground's, else against its own. The palette lists one entry
+per source terrain and height (`copiedTerrainId` = `COPIED_TERRAIN` 0x48000 + height << 8 + index, never written).
+*The stroke* (`CopyStroke`): a shadow scenario of the tileset's own numbering filled with O, S painted with
+`paintIsomDiamonds`; cells the shadow makes S or an E piece are written translated (S → S′ by slot; a piece → its tile, else
+another slot of its half, else — incomplete — the pool's best `seamStep` join, counted in `missing`). When G is typed and the
+map has ISOM, G is first painted with the game's brush on the real lattice over the footprint and its ring (`applied`/`isom`:
+already applied, recorded in the stroke for undo), so the lattice says G under the patch and the game borders it as G. When G
+is a loose pair the lattice cannot hold it: a diamond whose rects (and ring) are not already G (or the patch) is refused and
+counted ("left: drawn for X which is not under it"). Pins are kept. Symmetry as the isometric brush (`mirrorPixel`).
+*The member* `scmjs\copies.bin` "CPY1": w, h, ERA, patch count; per patch S, height, block key, ground id (`t<n>`/`p<group>`),
+diamonds (u32, `y * (isomWidth + 1) + x`). One per map. Rides `HistoryEdit.members` (stroke, re-lay), Resize
+(`resizeCopyMember`, whole rects; an odd column shift drops it), save, parking and shared maps as the borrowed lattice. A
+member for another ERA reads as empty: after Change Tileset it is ignored (not deleted: changing back finds it again,
+and the whole-map entry needs no member). A patch whose block key or ground is not known (another version of the mod's
+art) is left as laid and never re-laid.
+*Re-lay* (`relayCopies`, in `useTerrainTools.endStroke` after every game isometric and borrowed stroke, same entry; only
+patches the stroke came within two diamonds of): keep the footprint diamonds the real lattice holds as G with their four
+neighbours, and whose rects hold only tiles the patch could lay; then **shrink** until every cell the shadow names lies on
+rects of G alone; rewrite the shadow's cells; a cell the patch held that it no longer does takes the tile the real lattice
+lays (`tilesFromIsom` on a scratch copy). **A tile that is neither the patch's nor its ground's is never written over**,
+in the shadow or out of it: someone laid it over the patch since (the Rect or Tile brush, a borrowed stroke), and a re-lay
+set off by a stroke two diamonds away must not take it back (review, 2026-11-14: before, a kept neighbour's edge ring
+re-laid such a cell, and a cell the patch gave up went to the lattice's tile whatever it held). Measured on the mod's Jungle (mid Mud on Jungle, G laid first, the game's Jungle
+painted 2–3 diamonds away from four sides; joins showing in a 32 × 24 window, the patch alone 16): no re-lay 23–26; re-lay
+without the shrink 17–23 (hard cuts left); with it 5–12, cut joins 1–5. A 3-diamond patch that close is given up entirely
+(its remaining G cannot hold a diamond with its ring). Heal and Blend rewriting patch cells are not re-laid; a later copy
+stroke's check drops diamonds whose rects hold foreign tiles.
+*The scan* (`services/terrainCopies.ts`): by itself when the map in front's tileset has a copy (`watchCopiesInFront`, from
+App; polls `peekTileset` while it loads); the pixel part in the borrow worker (`{kind:"copies"}`, its own worker started and
+ended for it, `borrowTableClient.ts#workerCopyScan`, set in `main.tsx`; `TilesetParts` now carries `links` so the worker sees
+edges and stacks), else sliced on the page (CLI, core, headless host); then counts on the page with a pause between grounds.
+Kept in `BORROW_STORE` under `copies/{tilesetHash}` (`KEPT_VERSION`), cleared by Clear all data (which empties
+`copyHostsAtom`; the next tileset change scans again). Measured on Cosmonarchy's eight (Node): the rule 1–650 ms a tileset; the
+whole scan as the editor runs it (rule, the counts of every offered block, the gate) 0.01–6.9 s (Twilight, 30 blocks), the
+counts dominating: each ground's count is ~50–80 ms, one slice on the page. Moving the counts into the worker would need
+`isom.ts` there (with the scenario and i18n modules it imports): left open. In headless Chromium (dev server, Jungle) the list
+was there by the time the mod's folder was attached; not timed further.
+*Tiers*: plugin `provideCopies` > data set's `terrain.json` `copies` (`@dataset:` rows) > the scan, per (source, height).
+The spike's "maps' commonest neighbour" tier is **not built**: the learned collection keeps sheet joins, not neighbours;
+the stroke-time choice reads the map's own ground instead, which agreed with the maps on 10 of the 12 offered blocks.
+*Dead ends* (both rounds): "explained pixels" (repaint = G's pictures at the same place: 70% of the worked example's
+repainted minitiles exist nowhere else); a colour-histogram ground choice; the share-of-shapes winner; growing the stroke to
+avoid missing shapes (4 rounds add 500–2,800 diamonds, the missing share barely moves); the source piece as fallback (2–10×
+the seams of the seam/flat fallbacks); mean seam step alone for the ground (wrong on the hold-out); reading the mod's maps'
+lattice to compare (the maps lay these blocks freehand: 10–55% shape agreement).
+*Left open:* cliff sets; a layout-free fallback for the mostly-O pieces of a shuffled block; Heal/Blend inside a patch;
+the maps tier; one terrain per stroke (no take-back).
+`tests/terrain-copies.test.ts` (a made tileset in `tests/support/copyWorld.ts`: three layouts, incomplete, rejected, key across
+layouts, ground, stroke, pins, pair ground refused, member round trip/resize/save, undo, re-lay; gated: the game's eight,
+Blizzard's twins; `SCMJS_COSMONARCHY`: offered blocks complete with flags ≥ 0.99).

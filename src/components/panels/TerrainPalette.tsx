@@ -34,6 +34,7 @@ import { Button, Check, NumberInput, Tabs, Tip } from "../ui";
 import { TileBrowser, TileGrid, TileSheet, TileThumb } from "./TileBrowser";
 import { TilePieces } from "./TilePieces";
 import { BorrowedTerrains } from "./BorrowedTerrains";
+import { CopiedTerrains } from "./CopiedTerrains";
 import { sameTileKey, uniqueTiles } from "../../editor/tileCopies";
 import { useLearnedPieces } from "../../hooks/usePieces";
 import { msg, t, translate } from "../../i18n";
@@ -134,6 +135,7 @@ function IsomTab() {
             </div>
           ))}
         </div>
+        <CopiedTerrains loaded={loaded} />
         <BorrowedTerrains loaded={loaded} />
         {status.kind === "loading" && <div className="hint" style={{ padding: "8px 10px" }}>{t("Loading tileset…")}</div>}
         {status.kind === "no-tileset" && (

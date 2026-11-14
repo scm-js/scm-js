@@ -679,3 +679,11 @@ plugin's) — Cosmonarchy's Badlands after learning 404 maps: 74 borders, 984 sh
 section goes into `providedBordersAtom` under `@dataset:<id>`, behind any plugin's (`beforeDataSet`). Measured: a data
 set added from a copy holding that file, nothing learned or scanned, draws the border on the first Substructure stroke
 (56 cells drawn, 2 hard).
+
+**`terrain.json`'s `copies` section (2026-11-14):** rows `{ terrain, height, ground: {terrain}|{pair}, pieces: [[piece, tile]…] }`
+(`formats/mod/terrain.ts#TerrainFileCopy`, at most `TERRAIN_LIMITS.copies` 256 a tileset, dropped as `terrain` / `pair` /
+`empty`); written only when non-empty, so older files and older editors are unchanged (an older editor keeps it as an unknown
+key). `mod info` counts the blocks per tileset, `mod check` lists rows whose tiles are past the table or pictureless
+(`sectionAgainstTable`), `mod unpack` keeps the file as it was. In the editor, `applyDataSetTerrain` turns them into
+`providedCopiesAtom` rows under `@dataset:`; **Save as a terrain file…** writes every offered block with the ground it is
+drawn for. See terrain.md "Copied terrain".

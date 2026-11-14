@@ -10,6 +10,7 @@ import { groupBuildable, megatileForTile, megatileHeight, minitileHeight, tileGr
 import { HD_TILE_PX, hdSource, type HdEffects } from "../../../formats/tileset/hd";
 import { isLackedTile } from "../../../data/remasteredTiles";
 import { SEAM_GLARES, SEAM_SHOWS, seamStep, SIDES } from "../../../editor/blend";
+import { UNLIKE_HEIGHT, UNLIKE_WALK } from "../../../editor/fairness";
 import type { EffectPass } from "../effectPass";
 import { missingTilePattern } from "../missingTile";
 import { hashNoise } from "../noise";
@@ -34,6 +35,7 @@ export interface GroundLayer {
   buildability: boolean;
   seams: boolean;
   pins: Uint8Array | null;
+  unlike: Uint8Array | null;
   /** The water-cycle step the layer's cycling tiles show. */
   step: number;
   /** Whether any visible tile cycles — what decides if a step repaints. */
@@ -83,6 +85,8 @@ export interface Ground {
   seams: boolean;
   /** The pinned tiles to mark (editor/pins.ts), a byte per tile, or null to mark none. */
   pins: Uint8Array | null;
+  /** View ▸ Symmetry Differences: a `FairnessReport.mask`, a byte per small square, or null. */
+  unlike: Uint8Array | null;
   /** Set while View ▸ Animate Water is on; the 2x terrain's water and lava then move. */
   motion: GroundMotion | null;
   /**
@@ -99,6 +103,8 @@ const MID = "rgba(230,185,92,0.30)";
 const HIGH = "rgba(240,90,90,0.32)";
 const UNBUILDABLE = "rgba(80,140,240,0.26)";
 const PINNED = "rgba(60,220,200,0.12)";
+const UNLIKE_PLAY = "rgba(255,60,60,0.6)";
+const UNLIKE_ROOM = "rgba(255,180,40,0.45)";
 const PIN_TAB = "rgba(60,220,200,0.9)";
 const HATCH = "rgba(80,140,240,0.55)";
 
@@ -154,7 +160,7 @@ export function paintGround(v: PaintView, cache: { current: GroundLayer | null }
   const sameGround = layer !== null && layer.scenario === g.scenario && layer.tiles === tiles && layer.assets === g.assets && layer.effects === effects &&
     layer.w === v.w && layer.h === v.h && layer.dpr === dpr && layer.tilePx === tilePx &&
     layer.terrainRevision === g.terrainRevision && layer.doodadsRevision === g.doodadsRevision &&
-    layer.elevation === g.elevation && layer.buildability === g.buildability && layer.seams === g.seams && layer.pins === g.pins;
+    layer.elevation === g.elevation && layer.buildability === g.buildability && layer.seams === g.seams && layer.pins === g.pins && layer.unlike === g.unlike;
   // The layer sits at the scroll position rounded to a device pixel, and every tile at
   // its own place on the map rounded likewise. A tile's pixels then depend on the tile
   // alone, not on the scroll, so a scroll moves the picture by a whole number of
@@ -194,7 +200,7 @@ export function paintGround(v: PaintView, cache: { current: GroundLayer | null }
     }
     layer = {
       canvas, scenario: g.scenario, tiles, assets: g.assets, ox, oy, w: v.w, h: v.h, dpr, tilePx,
-      terrainRevision: g.terrainRevision, doodadsRevision: g.doodadsRevision, elevation: g.elevation, buildability: g.buildability, seams: g.seams, pins: g.pins,
+      terrainRevision: g.terrainRevision, doodadsRevision: g.doodadsRevision, elevation: g.elevation, buildability: g.buildability, seams: g.seams, pins: g.pins, unlike: g.unlike,
       step, animated: false, effects, mask, version: (layer?.version ?? 0) + 1, moving: false,
     };
     cache.current = layer;
@@ -263,6 +269,17 @@ export function paintGround(v: PaintView, cache: { current: GroundLayer | null }
           if (hatched) lc.drawImage(hatchStamp(pw, ph, dpr), px, py);
         }
       }
+      if (g.unlike) {
+        // Per small square: red where a unit walks or stands at another height on the other side, amber where only building differs.
+        for (let m = 0; m < 16; m++) {
+          const col = m & 3, row = m >> 2;
+          const bits = g.unlike[(ty * 4 + row) * mapW * 4 + tx * 4 + col];
+          if (!bits) continue;
+          const mx = px + Math.round((col * pw) / 4), my = py + Math.round((row * ph) / 4);
+          lc.fillStyle = bits & (UNLIKE_WALK | UNLIKE_HEIGHT) ? UNLIKE_PLAY : UNLIKE_ROOM;
+          lc.fillRect(mx, my, px + Math.round(((col + 1) * pw) / 4) - mx, py + Math.round(((row + 1) * ph) / 4) - my);
+        }
+      }
       if (g.pins?.[ty * mapW + tx]) {
         // A wash over the tile and a tab in its corner, which still reads when the wash is lost on bright ground.
         lc.fillStyle = PINNED;
@@ -290,7 +307,7 @@ export function paintGround(v: PaintView, cache: { current: GroundLayer | null }
         }
       }
     };
-    const overlays = !flat && (g.elevation || g.buildability || g.seams || g.pins !== null);
+    const overlays = !flat && (g.elevation || g.buildability || g.seams || g.pins !== null || g.unlike !== null);
     // Laid from the map's corner, so a strip a scroll uncovers continues the lines beside it.
     const marker = lacks ? missingTilePattern(lc, dpr, -ox, -oy) : null;
     /** Blit the tiles of a block of the map — all of them, or only the ones that cycle — and say whether any cycles. */

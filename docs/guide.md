@@ -513,6 +513,26 @@ to keep copies for the same player instead.
 
 ![The Symmetry dialog](images/symmetry.webp)
 
+#### Is the map the same on every side?
+
+The dialog also measures the map as it stands. Beside each mode is how much of the ground
+plays alike on every side under it, so a map opened from somewhere else shows which
+symmetry it was made with: a mirrored map reads 98% or more under its own mode and far
+less under the others, and a map drawn freehand reads low under all of them.
+
+Under the mode you pick, *The map as it is* says how many small squares (a quarter of a
+tile each way, the size the game decides walking and height at) do not match their images,
+split into walking, height and building, and lists the largest places as buttons. A button
+applies the mode, goes to the place and turns on **View ▸ Symmetry Differences**, which
+paints each such square red, or amber where only building differs, on both sides. Mineral
+fields, geysers and start locations are checked too: each wants one of its kind at every
+image of its spot, holding the same amount.
+
+Some differences are the game's, not yours. A tile cannot be flipped, so the far side of a
+mirrored map is built from other tiles, and the game's own ramp pairs do not carry quite
+the same flags: mirror a Desert cliff ramp and 69 small squares stand at another height on
+one side. The report is how you find out, before a player does.
+
 The Terrain palette's *Remove stranded units* tick deletes the ground units a stroke has
 just left where they cannot walk, which the game would remove at the start, as part of the
 same undo step. Buildings stay where they are: the game makes them on any ground.

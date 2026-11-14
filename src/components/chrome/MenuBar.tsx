@@ -414,6 +414,7 @@ function useMenus(): Menu[] {
         flag("buildability", msg("Buildability Overlay")),
         flag("seams", msg("Seam Overlay")),
         flag("pins", msg("Pinned Tiles")),
+        flag("asymmetry", msg("Symmetry Differences")),
         // Plugin overlays (`api.ui.overlay`), each a tick like the built-in ones.
         ...overlays.map((o): Item => ({ kind: "check", label: o.spec.name, pluginId: o.plugin.id, checked: o.visible, disabled: !overlayOffered(mode, o), onChange: (v) => { setOverlayVisible(o.key, v); } })),
         sep,

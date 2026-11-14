@@ -34,6 +34,8 @@ export interface ViewFlags {
   seams: boolean;
   /** The pinned tiles (editor/pins.ts), a mark on each; the Pin brush shows them whatever this says. */
   pins: boolean;
+  /** Where the map does not play as its image under the symmetry does (editor/fairness.ts), per small square. */
+  asymmetry: boolean;
   startLocations: boolean;
   /** Cycle the palette so water and lava animate as they do in game. */
   animateWater: boolean;

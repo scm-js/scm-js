@@ -41,6 +41,23 @@ plugin API, Ctrl+A) are not expanded. `symmetryAtom` is a derived atom that reco
 mode for `toggleSymmetryAtom` (M, `tools.symmetry`; the toolbar's `SymmetryControl`).
 `tests/symmetry.test.ts`.
 
+**The fairness report (`src/editor/fairness.ts`, `useFairness`, 2026-11-13).** `fairnessReport(scn,
+tileset, mode)` holds the map against its own image under a symmetry mode at minitile resolution
+(`symmetryImages` on a `4w × 4h` grid; a square and its images are one group, judged where its lowest
+index is, so every difference is counted once and `places` lie on the top-left side): walkable bit,
+height (VF4 mid/high), and the CV5 buildable bit of the tile; plus minerals (176–178 as one kind),
+geysers and start locations by `mirror` of their pixel, within 16 px, equal `resourceAmount`. It reads
+MTXM. `mask` (a byte per minitile, set on both sides) is what View ▸ Symmetry Differences draws
+(`paint/ground.ts`, red for walk/height, amber for build only). `symmetryShares` runs every mode that
+fits the map's shape and `likelySymmetry` names the one it was made with (`SYMMETRIC_SHARE` 0.9, a
+four-way mode preferred when it holds within 2% of the best): sixteen Blizzard maps drawn freehand
+measure 0.05–0.85 under every mode, the one mirrored map 0.989 under `h`. Cost on 256 × 128: all modes
+≤ 175 ms, one report ≤ 50 ms; the hook measures only while the overlay or the Symmetry dialog asks, and
+keeps the shares apart from the report so picking another mode in the dialog does not re-measure all.
+Not counted: the blocks-view and ramp bits (`twinDifference` counts whole flag words, which is why it
+says 83 for the Desert cliff ramps where this says 69). The CLI's `map analyze` is the other half of
+fairness (distances, bases); this is the tile-level half and is not in the CLI.
+
 Replace Terrain (`terrain.ts#replaceTerrain` / `matchingTiles`, `useTerrainTools.replace`,
 `ReplaceTerrainDialog` in `dialogs/TerrainDialogs.tsx`) swaps a `TerrainPick` — a flat terrain by
 ISOM id (matched by CV5 group index like the Rect fill) or one exact tile — for another over the

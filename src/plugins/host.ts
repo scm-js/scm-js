@@ -22,6 +22,10 @@ import {
   undoAtom, undoStackAtom, unitsRevisionAtom, viewOnlyAtom, viewOnlyMessage, type HistoryEntry,
 } from "../atoms/documentAtoms";
 import { closeDialogAtom, dialogStackAtom, openDialogAtom, pushToastAtom, statusMessageAtom } from "../atoms/uiAtoms";
+import { tileBlockAtom } from "../atoms/tileBlockAtoms";
+import { learnedPiecesAtom, providedPiecesAtom } from "../atoms/pieceAtoms";
+import { layBlock, layPattern } from "../editor/tileSheet";
+import { checkedBlock, copyBlock, pieceCalls } from "./pieces";
 import { claimBadge, locateClaims } from "./claims";
 import { cameraOfMap, mapLookAt, mapViewSwitch, offerMapView, pruneMapViews, showMapView, wheelStep } from "./mapViews";
 import { zoomToAtom } from "../atoms/zoomAtoms";
@@ -537,6 +541,8 @@ export function runTransaction(store: Store, label: string, build: (tx: EditTran
       applyTiles(ch);
       return true;
     },
+    placeBlock: (block, x, y) => applyTiles(layBlock(scn, checkedBlock(block, "placeBlock"), x, y)),
+    fillPattern: (cells, block, origin = { x: 0, y: 0 }) => applyTiles(layPattern(scn, checkedBlock(block, "fillPattern"), origin, cellsOf(cells))),
     heal: (cells) => {
       if (!loaded) { notes.push(t("healing seams needs the tileset graphics")); return 0; }
       return applyRuled(healTiles(scn, loaded.tileset, cellsOf(cells)));
@@ -1914,7 +1920,7 @@ const EVENT_ATOMS = {
   modified: [mapModifiedAtom],
   palette: [
     terrainModeAtom, activeTerrainAtom, activeTileAtom, rectVariationAtom, brushSizeAtom, activeUnitAtom, unitOwnerAtom, activeSpriteKindAtom, activeSpriteAtom,
-    activeUnitSpriteAtom, spritePlaceOptionsAtom, activeDoodadAtom, fogPlayersAtom, fogModeAtom,
+    activeUnitSpriteAtom, spritePlaceOptionsAtom, activeDoodadAtom, fogPlayersAtom, fogModeAtom, tileBlockAtom,
   ],
   options: [symmetryAtom, placementOptionsAtom, doodadPlacementAtom, locationSnapAtom, fogViewPlayerAtom, clipPartsAtom, clipPasteModeAtom, clipPastingAtom, lockedLayersAtom, gridLookAtom, preferencesAtom],
   file: [mapFilePathAtom, mapFileHandleAtom, saveOptionsAtom, archiveExtrasAtom, recentFilesAtom],
@@ -1922,6 +1928,7 @@ const EVENT_ATOMS = {
   services: [pluginServicesAtom],
   dialogs: [dialogStackAtom],
   gameData: [gameDataSourceAtom, gameDataRevisionAtom],
+  pieces: [learnedPiecesAtom, providedPiecesAtom],
 } as const;
 
 /**
@@ -2409,14 +2416,20 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
         }
         return out;
       },
-      active: () => ({ mode: store.get(terrainModeAtom), terrain: store.get(activeTerrainAtom), tile: store.get(activeTileAtom), brushSize: store.get(brushSizeAtom), variation: store.get(rectVariationAtom) }),
+      active: () => {
+        const block = store.get(tileBlockAtom);
+        return { mode: store.get(terrainModeAtom), terrain: store.get(activeTerrainAtom), tile: store.get(activeTileAtom), brushSize: store.get(brushSizeAtom), variation: store.get(rectVariationAtom), block: block ? copyBlock(block) : null };
+      },
       setActive: (brush) => {
         if (brush.mode !== undefined) store.set(terrainModeAtom, brush.mode);
         if (brush.terrain !== undefined) store.set(activeTerrainAtom, brush.terrain);
         if (brush.tile !== undefined) store.set(activeTileAtom, brush.tile);
         if (brush.brushSize !== undefined) store.set(brushSizeAtom, brush.brushSize);
         if (brush.variation !== undefined) store.set(rectVariationAtom, brush.variation);
+        // After the tile, so a block given with one wins (arming it sets the tile to its first).
+        if (brush.block !== undefined) store.set(tileBlockAtom, brush.block === null ? null : checkedBlock(brush.block, "setActive"));
       },
+      ...pieceCalls(store, info.id, bag),
       floodRegion: (x, y, match = "terrain") => {
         const scn = scenario();
         if (!scn || x < 0 || y < 0 || x >= scn.width || y >= scn.height) return [];

@@ -127,3 +127,11 @@ Done 2026-11-10 (races a mod adds, `mods.md`): `normalizeRaces`, `sameRaces`, `r
 `GAME_NETWORK_TBL_ENTRIES`, `DataSetRace`, `RaceCandidates` from `formats/mod/races.ts` (imports `data/players`,
 `dat/tbl`, `mod/sources`: no new edge for the walk). `ModManifest.races?`. The editor's `data/races.ts` (installed table,
 translated text) is not exported.
+
+Done 2026-11-14 (the Tile palette's sheet and pieces, for the command line and plugins to mine maps without the editor):
+`editor/tileSheet.ts` (sheet rows, blocks, laying, the pattern stroke), `editor/pieces.ts` (evidence, the cut, its stored
+form), `editor/pieceLearn.ts` (`learnFromMaps` over `openMapBytes`, `tableHash`), `editor/tileCopies.ts` (the same tile
+twice, `collapsePieces`), `editor/piecePick.ts`, `editor/pieceList.ts` (provided sets beside the cut, declared ground),
+`heal.ts#kindKey`, `remasteredTiles.ts#addedGroupsFrom`. All pure; the walk stayed clean (`pieceList.ts` reaches
+`palette.ts` and `data/tilesets.ts`, already behind the entry). The services (`pieceStore.ts`, `pieces.ts`, the learning)
+are the editor's and not exported.

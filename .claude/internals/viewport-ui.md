@@ -221,6 +221,32 @@ read in the first effect pass is still null.
   `api.terrain.color` (a plugin asks for a tile id's picture or colour of the loaded tileset; null/another tile as
   before — changing what a plugin gets is a contract change, not taken here). `useMissingTerrain`, mounted here
   with `useTileset`'s `loaded`, is the notice — see `gamedata.md` "Terrain the data set lacks".
+- **The Tile tab's sheet** (2026-11-13, `panels/TileBrowser.tsx#TileSheet`, model and reasons in `terrain.md`). A third
+  `TileView` beside grouped rows and the grid: one canvas per visible row (16 slots, `drawTile`, blank rows `drawVoid`),
+  windowed by binary search over a `tops` array (rows touch; a run break adds `SHEET_BREAK` 7 px), so 4,000 rows cost
+  ~100 canvases. Group numbers sit in a 34 px column (9 px mono), every row while tiles are ≥ 14 px, else every fourth
+  group and each run's first. Tile size fits the panel — the left dock is 220–480 px (`useDockResize`), so 8–26 px — or,
+  with the full-size toggle, the atlas' 32 px with sideways scroll. Pointer capture on the content div: a click picks a
+  tile, a drag a block clamped to its start's run; a wheel mid-drag re-reads the last pointer. The outline is one div
+  (the drag, else the block via `blockRect`, else the tile). The view, filter and size are `useState` (reset when the
+  palette remounts, like the other two views). The filter's *Added by {name}* option is `TileFilter = "added"`.
+  The brush-size controls (palette, toolbar, Properties) show the block's size while one is active.
+  Checked in headless Chromium (2026-11-13): Badlands doodad picked whole and laid, a 4-copy pattern drag = one undo
+  entry; Cosmonarchy's Badlands through the mod-folder notice (folder handed over in 1.7 s), its added groups as the
+  sheet, a 12×10 building and a 4×9 wall pattern laid; no console errors.
+- **The Tile tab's Pieces view** (2026-11-13, `panels/TilePieces.tsx`, rule and numbers in `terrain.md` "Pieces"). The
+  fourth `TileView`. Entries (`collapsePieces`) laid out in shelves by `editor/pieceShelves.ts#shelfLayout` at 16 px a tile,
+  a piece wider than the panel scaled to the largest whole pixel size that fits; windowed by `shelvesIn` over the shelf
+  tops with 400 px to spare, one canvas per piece drawn in its own outline (holes left transparent). 3,372 entries on the
+  mod's Badlands scroll without a hitch in headless Chromium. Filter and search apply by any member's first group (the
+  "Added by" filter: no member below the added range). The head is **one line** (round 3): where the pieces come from (the
+  full text in its title when the panel cuts it short — at 420 px "…and 32 learned maps" is cut), Forget as an eraser
+  icon, Learn from Maps…, *Most laid first* as an icon; while learning the source text gives way to the progress bar
+  (`.progress-track`). The learn's outcome is said once, in the status line and a toast; slice 2 kept it in the palette,
+  where it took a third of the panel. Provided sets (`api.terrain.providePieces`) come first, each under a heading line
+  (`.pieces-heading`, 20 px), laid out as their own shelves and stacked with the cut ones into one windowed layout; the
+  search box also matches a provided piece's name and category. A click is `tileBlockAtom ←
+  pieceBlock`, so laying, ghost, pattern and fills are the block's; the Sheet view outlines it through `blockRect`.
 - **Toasts with several buttons** (`Toast.actions`, 2026-11-09): a row under the text (`.toast-actions`, wraps),
   each `{ label, run, keep? }`; pressing one dismisses the toast unless `keep` (the terrain notice's folder button:
   the picker can be backed out of, and the notice should still be there). `Toast.action` (one button beside the

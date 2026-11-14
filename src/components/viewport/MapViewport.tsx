@@ -1,3 +1,4 @@
+import { tileBlockAtom } from "../../atoms/tileBlockAtoms";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useAtomValue, useSetAtom, useStore, type Atom } from "jotai";
 import { ContextMenu } from "radix-ui";
@@ -160,7 +161,7 @@ const fmtTiles = (px: number) => (Number.isInteger(px / TILE) ? String(px / TILE
  * rendering for it.
  */
 const REPAINT_ATOMS: readonly Atom<unknown>[] = [
-  activeTileAtom, activeTerrainAtom, rectVariationAtom,
+  activeTileAtom, activeTerrainAtom, rectVariationAtom, tileBlockAtom,
   unitsRevisionAtom, activeUnitAtom, unitOwnerAtom,
   activeDoodadAtom, doodadPlacementAtom,
   activeSpriteKindAtom, activeSpriteAtom, activeUnitSpriteAtom, spritePlaceOptionsAtom,
@@ -544,7 +545,10 @@ export default function MapViewport() {
       if (painting && tilesetAssets && tilePx >= 4 && gesture?.kind !== "stroke") {
         // A preview of what the terrain brush would leave behind.
         if (drawTileGhost(v, tilesetAssets, tools.ghostAt(hv.x, hv.y))) animatedInView = true;
-        drawBrushSquare(v, hv, side, null);
+        // A block on the Tile brush stands with its top-left under the pointer, as a paste does.
+        const block = terrainMode === "tile" ? store.get(tileBlockAtom) : null;
+        if (block && layer === "terrain") strokeTileRect(v, { x0: hv.x, y0: hv.y, x1: hv.x + block.cols, y1: hv.y + block.rows }, INK.gold);
+        else drawBrushSquare(v, hv, side, null);
       } else {
         // On the fog layer the brush previews its effect: black lays fog, light lifts it.
         drawBrushSquare(v, hv, side, fogPainting ? (fogMode === "fog" ? "rgba(0,0,0,0.6)" : "rgba(255,255,255,0.22)") : "rgba(230,185,92,0.12)");
@@ -573,7 +577,7 @@ export default function MapViewport() {
       lastViewportRect.current = rect;
       setViewportRect(rect);
     }
-  }, [size, tilePx, zoom, mapW, mapH, worldW, worldH, tileset, flags, gridSize, gridLook, layer, brush, setViewportRect, scenario, tilesetAssets, terrainRevision, pinned, fairness, locations, startLocations, terrainMode, painting, blending, blendAnchor, tools, tilesetLoading, unitsEditing, unitPlacing, unitTools, unitAssets, animator, selectedUnits, showFog, fogViewPlayer, fogPainting, fogMode, doodadsEditing, doodadPlacing, doodadTools, doodadsRevision, selectedDoodads, clipEditing, clipPasting, clip, clipParts, clipSelection, clipTools, picking, mapPick, tooling, mapTool, overlays, spritesEditing, spritePlacing, spriteTools, selectedSprites, locationsEditing, locationTools, selectedLocations, symmetry, flashes, waterSpeed, effectTune, effectPass]);
+  }, [size, tilePx, zoom, mapW, mapH, worldW, worldH, tileset, flags, gridSize, gridLook, layer, brush, setViewportRect, scenario, tilesetAssets, terrainRevision, pinned, fairness, locations, startLocations, terrainMode, painting, blending, blendAnchor, tools, tilesetLoading, unitsEditing, unitPlacing, unitTools, unitAssets, animator, selectedUnits, showFog, fogViewPlayer, fogPainting, fogMode, doodadsEditing, doodadPlacing, doodadTools, doodadsRevision, selectedDoodads, clipEditing, clipPasting, clip, clipParts, clipSelection, clipTools, picking, mapPick, tooling, mapTool, overlays, spritesEditing, spritePlacing, spriteTools, selectedSprites, locationsEditing, locationTools, selectedLocations, symmetry, flashes, waterSpeed, effectTune, effectPass, store]);
 
   /**
    * Every repaint request — a pointer move, a scroll, a render that changed what is drawn —

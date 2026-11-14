@@ -130,6 +130,131 @@ stays English, `label` is the localized composition, shown through `terrainLabel
 A real isometric brush for such ground needs a table nobody ships (type rows, adjacency, and links for groups laid
 out in the mod's own compact blocks, not StarEdit's fourteen shapes) — not attempted.
 
+**The Tile palette's sheet and blocks (`src/editor/tileSheet.ts`, `atoms/tileBlockAtoms.ts`, 2026-11-13).** Why: a
+mod's tileset adds thousands of groups (Cosmonarchy's Badlands 1,665 → 4,094, every added one CV5 index 0, no links),
+and laid 16 megatiles wide in group order they form the artist's sheet — ruins, buildings, walls, road diagonals, a
+picture spanning slots *and* groups, neighbours in the sheet designed neighbours on the map. The game's doodads are laid
+the same way (`DoodadDef`: row r = group + r, column c = slot c). 375 of the mod's 404 maps lay this ground by hand, and
+the old Tile tab (8×2 blocks with gaps, or a grid whose width follows the panel) could neither show such a picture nor
+lay it in one go.
+*Model.* `sheetRows(listed, isEmpty)` → one `SheetRow { group, run, blank }` per listed group in order; consecutive groups
+share a `run`; a gap of ≤ `SHEET_BRIDGE` (16) groups that are **all empty** (no slot with a megatile, the groups
+`tileGroups` leaves out) is filled with `blank` rows of the same run, any other gap starts a run (the palette draws a
+dashed break). Measured before choosing the bridge: the mod's Badlands has 220 empty groups, 36 single ones inside its
+pictures and runs of 2–64; its added groups (2,385 listed) become 2,429 rows in **one** run. The game's eight tilesets
+have one empty stretch of hundreds of groups (between terrain and doodads) and a few of 5–64, which stay breaks.
+`blockFromRect(rows, rect, isVoid)` → `TileBlock { cols, rows, ids, origin }`, row-major, `HOLE` (-1) for a void slot
+(null megatile, as `drawTile` draws it) or a blank row; null across a run, off the sheet, or all holes. `blockRect`
+finds the block's outline again while its rows are listed. Laying: `blockCells` / `layBlock` (holes and off-map cells
+skipped, unchanged cells dropped), `patternOrigin` / `patternTileAt` / `layPattern` (floor division, so a drag up or left
+of the press steps back whole blocks), and `PatternStroke` — the press is the origin, each copy the pointer's cell
+falls in is laid once. `tests/tile-sheet.test.ts`, including every Badlands doodad picked from the sheet equals its
+`DoodadDef.tiles` (gated on `public/tileset`), and the mod's Badlands as one run (gated on `SCMJS_COSMONARCHY`).
+*Brush.* `useTerrainTools`: `beginStroke` in Tile mode with a block makes a `PatternStroke`; `paintAt` feeds it before
+anything else, through the same `Stroke`, `applyChanges`, revision bump and `commitTerrain` — one undo entry per drag,
+shared maps and dirty sections as any stroke. Not mirrored under symmetry (a block's pictures cannot be), like a paste;
+writes over pins, like Tile and paste; ISOM untouched. Anchor = top-left on the pointer's tile, as `useClipboardTools`'
+paste. **Fill Area / Fill Map tile the pattern** (chosen over "the block's first tile"): flood from the clicked cell
+lined up on it (not mirrored either), Fill Map lined up on (0, 0); both skip pins. `ghostAt` answers the block's cells;
+the viewport draws a `cols × rows` outline instead of the brush square (`tileBlockAtom` is in `REPAINT_ATOMS`).
+*State.* `tileBlockAtom` is a palette pick like `activeTileAtom` (global, not in `parkRegisters`), but reads as null
+unless the map in front (`scenarioAtom` identity), `tilesetFileNameAtom`, `gameDataRevisionAtom` and `activeTileAtom`
+are what they were when it was picked. Writing a block sets `activeTileAtom` to its first tile, so every way of picking
+a single tile (palette, eyedropper, Tile # box, Blend, a plugin's `setBrush`) drops it without knowing it exists. The
+consequence of a derived read rather than a write: a block picked on map A is hidden while B is in front and **shows
+again when A comes back** (with the same active tile). A different tileset or data set never sees it.
+*What the data set adds* (`remasteredTiles.ts#addedGroupsFrom`): shown only when the table is longer than Remastered's
+(no game table is), from the 1.16 table's end — Cosmonarchy's tables go on from there. A mod built over Remastered's
+table would show Remastered's own additions among "added"; nothing in the files tells the two apart. Labelled with the
+data set's profile name (a folder attached with `drawFromModFolder` is named after the folder: "Added by Release").
+*Left open:* no auto-scroll while dragging a block past the sheet's edge (the wheel works mid-drag); cutting the
+sheet into named pieces listed like doodads; anything isometric for the added ground; no plugin API for blocks.
+
+**Pieces: the parts of the sheet maps lay whole (`src/editor/pieces.ts`, 2026-11-13).** *The rule's record.* A tileset is
+a sheet 16 wide; maps are counted a **join** of the sheet at a time (`gatherEvidence`: how often a tile is laid, and how
+often it has its sheet's right / lower neighbour beside / below it). `cutPieces` keeps a join when the two tiles are laid
+together at least half the times the rarer of them is laid (`DEFAULT_CUT.share` 0.5); a piece is a connected run.
+Doodad groups and void slots are left out. Measured:
+- Cosmonarchy's Badlands, 57 maps: 3,525 pieces, the largest 92 tiles, covering 62% of the added tiles those maps lay
+  (Jungle, 86 maps: 70%). One map alone (Butcher's Corner): 355 pieces.
+- Maps laid with the game's brushes give none, by construction: neighbouring columns take a pair's left and right
+  group, so no two neighbours share a group. All 16 Blizzard fixture maps and the committed test maps: zero (pinned by
+  `tests/pieces.test.ts`, and the learn loop over the committed maps in `tests/pieces-view.test.ts`).
+- Counting whole laid shapes instead was tried and fails: a piece laid cut short or overlapped is another shape each time
+  (Badlands: 5,946 distinct shapes; the share of a shape's tiles laid inside that exact shape is bimodal with a wide
+  middle; shapes of 9+ tiles mostly under 10%). Per join, the cut-short lays add up.
+- Cutting by the sheet's pixels was not attempted: objects sit on continuous ground and seam distance does not separate
+  them ("Pair terrains" above). Pictures: `~/mods-under-test/_notes/terrain/badlands-pieces-{sample,largest}.png`.
+
+- Pieces that repeat a doodad's pictures (doodad groups are left out, but a mod may copy a doodad's pictures into
+  untyped groups) are too few to need a rule: Badlands 12 of 3,525, Jungle 21 of 3,077, nearly all two tiles.
+
+*Where the evidence comes from.* `services/pieces.ts#piecesInFront` (React-free, so the plugin host can use it; the hook
+module re-exports it): the map in front's own (one pass over its tiles) merged with the **learned collection** for the
+tileset's table, cut, kept for the last (map, terrain revision, tileset, collection) so the view, Alt+click and the
+plugin API share one cut. The view re-cuts only while it shows, and
+only once the revision has stood still `RECUT_MS` (300): a stroke bumps it every cell. Learning
+(`editor/pieceLearn.ts#learnFromMaps`, pure, files and tables injected; `services/pieceLearning.ts`, imported only when
+the button is pressed, since it brings `plugins/host.ts#pickFolder` and the map reader): every `.scx`/`.scm` of the
+picked folder, opened with `openMapBytes`, counted against `formats/tileset/load.ts#loadTilesetGroups` (the CV5 alone
+from the data set in use, no atlas); a map with a tile `lackedGroups` refuses is skipped as `notOurs`, one that throws as
+`unreadable`; a `setTimeout(0)` between maps; progress in `pieceLearningAtom` (the view's one-line header shows it in
+place of the source line); the end said once, in the status line and a toast, as a finished job is (round 3: the report
+used to stay in the palette and took a third of it). Measured in headless Chromium: Cosmonarchy's 404 maps (441 files) in 30 s, all read, Badlands 3,525 pieces,
+Platform 1,993, Installation 9, Ashworld 1,599, Jungle 3,077, Desert 1,628, Ice 2,291, Twilight 1,631. Kept by
+`services/pieceStore.ts` in `handleStore.ts`' database, a store of its own (`PIECES_STORE`, the database's version 4),
+one `Int32Array` of `encodeEvidence` per **`{tileset}/{tableHash}`** (`pieceLearn.ts#tableHash`: two 32-bit hashes of
+the CV5's 26 words a record, from the decoded groups, which keep them all). Why the table and not the data set's id:
+evidence is about one `.cv5`'s tile ids. Keyed by profile id (slice 2), the mod attached from its folder (id `release`
+here, the folder's name) and the same mod installed under its own id kept two collections, so what was learned under
+`release` was shown to nobody else; and a mod update that renumbers a table would have shown pieces cut for other tiles.
+Learning writes under the tables of the data set in use (`loadTilesetGroups` for all eight) after deleting those eight
+keys; *Forget* deletes the same eight; Preferences ▸ Storage ▸ Clear all data (`clearStoredDataAtom`) clears the whole
+store and `learnedPiecesAtom`. `learnedPiecesAtom` holds what was read, by key; the Tile tab reads it on mount so
+Alt+click can use it before the view has been opened, and the plugin host asks for it on first use.
+*Alt+click* (`editor/piecePick.ts#laidPieceAt`, in `useTerrainTools.pickAt`, Tile mode only, before the single-tile
+pick): the cell's tile is a piece's and at least one of its four sheet neighbours from the same piece is laid beside it;
+the precedent is `laidPairAt`. A piece's corner tile laid alone stays a single-tile pick.
+
+**The same tile twice (`src/editor/tileCopies.ts`, 2026-11-13).** A mod's tileset repeats the game's pictures and its
+own. "The same tile" = the same picture *and* the same flags, the flags being `heal.ts#kindKey` (exported for this; the
+group's flag word and the megatile's sixteen VF4 words). The same picture under other flags is another tile and stays.
+*Grid view*: one entry per exact picture and flags (`uniqueTiles`, the lowest id kept, so the game's tile where a mod
+repeats it; with *Added by*, a tile whose key the game's part has is left out). Picture = two 32-bit hashes of the
+megatile's 1,024 palette indices with the minitile flips applied, cached per tileset; keys cached per tile. The Grid was
+never `drawableTiles` (it listed every slot of the listed groups, a megatile repeated in two slots included);
+`drawableTiles` is unchanged (Blend and Heal want one id per megatile and keep their own flag checks). Measured on
+Cosmonarchy's Badlands: of 38,328 ground megatiles 12,089 repeat another's picture, 6,923 with the same flags; 1,982 added
+megatiles are byte-identical to one of the game's. The Grid's *All groups* goes 41,354 → 32,860 tiles (212 ms the first
+time, hashing included), *Added by* 29,848 → 24,235. *Sheet and Groups views hide nothing*: there a tile's place is the
+point. *Pieces view* (`collapsePieces`): pieces of one outline whose every cell is the same tile — exact picture, or a
+re-dithered copy — are one entry, the most laid kept (ties: lowest first tile), the hover counting the copies. The copy
+test is `COPY_BLOCK_MEAN` 2.5 (every 4 × 4 pixel block's mean colour, a channel) and `COPY_CELL_MEAN` 10 (the cell's mean
+pixel difference): the isometric spike calibrated it on re-dithered copies and it passed none of the negative controls; a
+plain mean over the whole piece is not safe, a small detail such as a console on a wall disappears in it
+(`tests/tile-copies.test.ts` pins both sides). A piece that is another entry's picture under other flags is an entry of
+its own, placed right after it, its hover naming what differs (height, walkable, buildable — `megatileHeight`, the VF4
+walkable bits, the CV5 buildable bit). Measured on the 57 maps' 3,525 Badlands pieces: 238 are an exact picture copy of
+another of the same outline (95 with the same flags too); by the copy test 542 have a copy (248 with the same flags);
+`collapsePieces` folds 153 and lists 148 as the same picture under other flags: 3,372 entries, ~0.7 s once per cut
+(cached with the cut). The coordinator's looser test (a mean 3/255 a pixel) counted 711 / 514; the spike's test is the one
+used. With *Added by*, an entry with any member in the game's part is left out (2,691 entries there).
+*Left open:* the cut pieces are not named or grouped like doodads (a plugin can name its own, below); a big collection
+costs one `mergeEvidence` copy per cut.
+
+**Fill Area with a block (round 3)** floods what the Rect fill reads, `terrainKeyOfTile` (the CV5 index, or the pair for
+an untyped group), not the same exact tile: on a mod's varied ground the exact-tile region was one tile (measured on
+Scrap Yard in slice 2). The single-tile fill keeps the exact-tile rule.
+
+**Blocks and pieces on the plugin API (round 3)**: `plugins-host.md` has the host side. Here: `editor/pieceList.ts`
+(pure) composes what the Pieces view and `api.terrain.pieces()` list — each provided set whose pieces fit the loaded
+table (`blockFits`: every non-hole tile inside the table with a picture), in registration order, then the cut entries
+less any whose member has the same tile set as a provided piece (the named one wins). `declaredTerrains` makes a plugin's
+declared ground `pairTerrain` with the plugin's name; `useTerrainTools.types` appends them for the tileset in front, so the
+Rect tab, Replace Terrain, the fills and the status lines name them, and `terrainOf` resolves them before the generic
+pair. `api.terrain.types()` still lists the game's types alone.
+
+
 The Blend brush (`src/editor/blend.ts`) is pixel-based: `edgeTable` lifts every megatile's four
 outermost pixel strips straight from the VR4 (cached per `Tileset` in a WeakMap, ~40 ms once), and
 `blendCandidates(tileset, anchorId, side)` ranks `drawableTiles` (one id per megatile) by

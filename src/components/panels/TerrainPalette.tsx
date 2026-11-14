@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { ContextMenu } from "radix-ui";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
-import { LayoutGrid, Rows3, Search, Shuffle, X } from "lucide-react";
+import { Grid3x3, LayoutGrid, Maximize2, Puzzle, Rows3, Search, Shuffle, X } from "lucide-react";
 import {
   activeTerrainAtom, activeTileAtom, blendAnchorAtom, blendFollowAtom, brushSizeAtom, mapTilesetAtom, placementOptionsAtom,
   rectVariationAtom, symmetryAtom, terrainModeAtom, type TerrainMode,
@@ -12,7 +12,13 @@ import { countPins } from "../../editor/pins";
 import { pluginContextItemsAtom } from "../../atoms/pluginAtoms";
 import { openDialogAtom } from "../../atoms/uiAtoms";
 import { pluginContextRows } from "../../plugins/contextMenu";
-import { TILESET_BY_ID } from "../../data/tilesets";
+import { TILESET_BY_ID, TILESETS } from "../../data/tilesets";
+import { addedGroupsFrom } from "../../data/remasteredTiles";
+import { gameDataSourceAtom } from "../../atoms/gameDataAtoms";
+import { tileBlockAtom } from "../../atoms/tileBlockAtoms";
+import { blockLabel } from "../../hooks/useTerrainTools";
+import type { TileBlock } from "../../editor/tileSheet";
+import { statusMessageAtom } from "../../atoms/uiAtoms";
 import { useTileset } from "../../hooks/useTileset";
 import { useIsomStatus } from "../../hooks/useIsom";
 import { useRectTerrains, useTerrainTools } from "../../hooks/useTerrainTools";
@@ -25,7 +31,10 @@ import { tileGroupOf } from "../../formats/tileset/decode";
 import { blendSides, DEFAULT_BLEND_OPTIONS, inMap, SIDES, type BlendCandidate, type Side } from "../../editor/blend";
 import { symmetryAvailable, symmetryLabel } from "../../editor/symmetry";
 import { Button, Check, NumberInput, Tabs, Tip } from "../ui";
-import { TileBrowser, TileGrid, TileThumb } from "./TileBrowser";
+import { TileBrowser, TileGrid, TileSheet, TileThumb } from "./TileBrowser";
+import { TilePieces } from "./TilePieces";
+import { sameTileKey, uniqueTiles } from "../../editor/tileCopies";
+import { useLearnedPieces } from "../../hooks/usePieces";
 import { msg, t, translate } from "../../i18n";
 
 const BRUSH_SIZES = [1, 2, 3, 4, 5, 6, 7];
@@ -61,6 +70,13 @@ function SymmetryNote({ applies }: { applies: boolean }) {
       ? t("Symmetry: {mode} — every stroke is mirrored.", { mode: symmetryLabel(mode) })
       : t("Symmetry ({mode}) does not apply to the Blend brush — it places from the tile you picked.", { mode: symmetryLabel(mode) });
   return <div className={`palette-footer sub ${ok && applies ? "" : "warn"}`} title={t("Tools ▸ Symmetry…")}><span>{text}</span></div>;
+}
+
+/** With a block on the Tile brush, symmetry has nothing to mirror: a block's pictures face one way. */
+function BlockSymmetryNote() {
+  const mode = useAtomValue(symmetryAtom);
+  if (mode === "none") return null;
+  return <div className="palette-footer sub warn" title={t("Tools ▸ Symmetry…")}><span>{t("Symmetry ({mode}) does not apply to a block — it is laid under the pointer only.", { mode: symmetryLabel(mode) })}</span></div>;
 }
 
 export function BrushSelect({ bare }: { bare?: boolean } = {}) {
@@ -253,10 +269,18 @@ function searchGroups(groups: ShownGroup[], query: string): ShownGroup[] {
   return groups.filter((g) => g.label.toLowerCase().includes(q) || g.english.toLowerCase().includes(q));
 }
 
-function SelectedTileFooter({ id }: { id: number }) {
+function SelectedTileFooter({ id, block }: { id: number; block: TileBlock | null }) {
   const info = TILESET_BY_ID[useAtomValue(mapTilesetAtom)];
   const { loaded } = useTileset();
   const ti = loaded ? tileInfo(loaded.tileset, info.terrain, id) : null;
+  if (block) {
+    return (
+      <div className="palette-footer">
+        <span>{t("Block of {cols}×{rows} tiles", { cols: block.cols, rows: block.rows })}</span>
+        <span className="mono">{block.origin ? t("from g{group} s{slot}", { group: block.origin.group, slot: block.origin.slot }) : ""}</span>
+      </div>
+    );
+  }
   return (
     <div className="palette-footer">
       <span className="mono">{id} · {hexTile(id)}</span>
@@ -265,30 +289,60 @@ function SelectedTileFooter({ id }: { id: number }) {
   );
 }
 
-/** Grouped rows (label per CV5 group) or one dense wall of tiles. */
-type TileView = "groups" | "grid";
+/** Grouped rows (label per CV5 group), one dense wall of tiles, or the sheet (a group a row, rows touching). */
+type TileView = "groups" | "grid" | "sheet" | "pieces";
+/** The Tile tab's group filter: a kind of group, or the groups the data set adds to the game's. */
+type TileFilter = GroupKind | "all" | "added";
 
 function TileTab() {
   const info = TILESET_BY_ID[useAtomValue(mapTilesetAtom)];
   const { loaded, error } = useTileset();
   const [active, setActive] = useAtom(activeTileAtom);
-  const [kind, setKind] = useState<GroupKind | "all">("all");
+  const [block, setBlock] = useAtom(tileBlockAtom);
+  // The learned pieces are read while the tab is open, so an Alt+click on the map can pick one.
+  useLearnedPieces(loaded?.tileset ?? null);
+  const setStatus = useSetAtom(statusMessageAtom);
+  const [filter, setFilter] = useState<TileFilter>("all");
   const [query, setQuery] = useState("");
   const [view, setView] = useState<TileView>("groups");
+  const [large, setLarge] = useState(false);
   const [text, setText] = useState<string | null>(null);
+  const setName = useAtomValue(gameDataSourceAtom)?.profile.name ?? "";
 
   const all = useMemo((): ShownGroup[] => (loaded ? tileGroups(loaded.tileset, info.terrain).map((g) => ({ ...g, english: g.label, label: tileGroupLabel(loaded.tileset, info.terrain, g.group, true) })) : []), [loaded, info]);
+  // The groups past the game's table, when the data set's tileset has any: a mod's own ground and pictures.
+  const addedFrom = loaded ? addedGroupsFrom(TILESETS.indexOf(info), loaded.tileset.groups.length) : null;
+  const kind = filter === "added" && addedFrom === null ? "all" : filter;
   const groups = useMemo(
-    () => searchGroups(kind === "all" ? all : all.filter((g) => g.kind === kind), query),
-    [all, kind, query],
+    () => searchGroups(kind === "all" ? all : kind === "added" ? all.filter((g) => g.group >= (addedFrom ?? Infinity)) : all.filter((g) => g.kind === kind), query),
+    [all, kind, query, addedFrom],
   );
-  const tiles = useMemo(() => groups.flatMap((g) => g.slots.map((s) => (g.group << 4) | s)), [groups]);
+  const listed = useMemo(() => groups.map((g) => g.group), [groups]);
+  // The Pieces view goes by each piece's first group: every piece while nothing narrows the list.
+  const listedSet = useMemo(() => (kind === "all" && query.trim() === "" ? null : new Set(listed)), [kind, query, listed]);
+  const [pieceCount, setPieceCount] = useState(0);
+  /** One tile picked here: the block, if any, goes. */
+  const pickTile = (id: number) => { setBlock(null); setActive(id); };
+  const pickBlock = (b: TileBlock) => {
+    setBlock(b);
+    setStatus(t("{label} — click the map to lay the block, drag to repeat it", { label: blockLabel(b) }));
+  };
+  // The Grid view lists a picture with its flags once (a mod repeats the game's tiles and its own), the lowest id
+  // kept; with "Added by", a tile the game's part already has is left out. Worked out only for that view.
+  const tiles = useMemo(() => {
+    if (view !== "grid" || !loaded) return [];
+    const ids = groups.flatMap((g) => g.slots.map((s) => (g.group << 4) | s));
+    const game = kind === "added" && addedFrom !== null
+      ? new Set(all.filter((g) => g.group < addedFrom).flatMap((g) => g.slots.map((s) => sameTileKey(loaded.tileset, (g.group << 4) | s))))
+      : undefined;
+    return uniqueTiles(loaded.tileset, ids, game);
+  }, [view, loaded, groups, kind, addedFrom, all]);
   const ti = loaded ? tileInfo(loaded.tileset, info.terrain, active) : null;
 
   const commitText = () => {
     if (text === null) return;
     const id = parseTileId(text);
-    if (id !== null) setActive(id);
+    if (id !== null) pickTile(id);
     setText(null);
   };
 
@@ -310,9 +364,14 @@ function TileTab() {
       <div className="tile-info">
         <TileThumb loaded={loaded} id={active} size={64} className="preview" />
         <div className="props" style={{ gridTemplateColumns: "56px 1fr" }}>
-          <span className="k">{t("Group")}</span><span><NumberInput value={active >> 4} onChange={(g) => setActive((g << 4) | (active & 15))} min={0} max={4095} width={84} /></span>
-          <span className="k">{t("Slot")}</span><span><NumberInput value={active & 15} onChange={(s) => setActive((active & ~15) | s)} min={0} max={15} width={84} /></span>
-          <span className="k">{t("Brush")}</span><span><BrushSelect bare /></span>
+          <span className="k">{t("Group")}</span><span><NumberInput value={active >> 4} onChange={(g) => pickTile((g << 4) | (active & 15))} min={0} max={4095} width={84} /></span>
+          <span className="k">{t("Slot")}</span><span><NumberInput value={active & 15} onChange={(s) => pickTile((active & ~15) | s)} min={0} max={15} width={84} /></span>
+          <span className="k">{t("Brush")}</span>
+          <span>
+            {block
+              ? <span className="row" style={{ gap: 6 }}><span className="mono">{block.cols}×{block.rows}</span><Button size="sm" onClick={() => setBlock(null)} title={t("Lay one tile again, at the brush size")}>{t("Single tile")}</Button></span>
+              : <BrushSelect bare />}
+          </span>
           <span className="k">{t("MegaTile")}</span><span className="mono">{ti ? (ti.megatile >= 0 ? ti.megatile : "none") : "—"}</span>
           <span className="k">{t("Ground")}</span><span>{ti ? `${heightLabel(ti.height)} · ${ti.buildable ? t("buildable") : t("unbuildable")}` : "—"}</span>
           <span className="k">{t("Walkable")}</span><span>{ti ? `${ti.walkable} / 16` : "—"}</span>
@@ -331,8 +390,9 @@ function TileTab() {
           />
           {query !== "" && <button className="clear" onClick={() => setQuery("")} aria-label={t("Clear search")}><X size={11} /></button>}
         </div>
-        <select className="select grow" value={kind} onChange={(e) => setKind(e.target.value as GroupKind | "all")} aria-label={t("Group filter")}>
+        <select className="select grow" value={kind} onChange={(e) => setFilter(e.target.value as TileFilter)} aria-label={t("Group filter")}>
           {KIND_FILTERS.map((f) => <option key={f.value} value={f.value}>{translate(f.label)}</option>)}
+          {addedFrom !== null && <option value="added">{setName ? t("Added by {name}", { name: setName }) : t("Added tiles")}</option>}
         </select>
         <Tip label={t("Grouped rows")}>
           <Button icon size="sm" active={view === "groups"} onClick={() => setView("groups")} aria-label={t("Grouped rows")}><Rows3 size={13} /></Button>
@@ -340,24 +400,39 @@ function TileTab() {
         <Tip label={t("All tiles in one grid")}>
           <Button icon size="sm" active={view === "grid"} onClick={() => setView("grid")} aria-label={t("All tiles in one grid")}><LayoutGrid size={13} /></Button>
         </Tip>
+        <Tip label={t("Sheet: a group a row, rows touching — drag to pick a block")}>
+          <Button icon size="sm" active={view === "sheet"} onClick={() => setView("sheet")} aria-label={t("Sheet")}><Grid3x3 size={13} /></Button>
+        </Tip>
+        <Tip label={t("Pieces: the parts of the sheet maps lay whole")}>
+          <Button icon size="sm" active={view === "pieces"} onClick={() => setView("pieces")} aria-label={t("Pieces")}><Puzzle size={13} /></Button>
+        </Tip>
+        {view === "sheet" && (
+          <Tip label={large ? t("Fit the tiles to the panel") : t("Tiles at full size (scrolls sideways)")}>
+            <Button icon size="sm" active={large} onClick={() => setLarge(!large)} aria-label={t("Tiles at full size")}><Maximize2 size={13} /></Button>
+          </Tip>
+        )}
       </div>
       {loaded ? (
         view === "grid"
-          ? <TileGrid loaded={loaded} tiles={tiles} selected={active} onSelect={setActive} />
-          : <TileBrowser loaded={loaded} groups={groups} selected={active} onSelect={setActive} />
+          ? <TileGrid loaded={loaded} tiles={tiles} selected={active} onSelect={pickTile} />
+          : view === "pieces"
+            ? <TilePieces loaded={loaded} listed={listedSet} query={query} addedFrom={kind === "added" ? addedFrom : null} block={block} onBlock={pickBlock} onCount={setPieceCount} />
+          : view === "sheet"
+            ? <TileSheet loaded={loaded} groups={listed} selected={active} block={block} large={large} onSelect={pickTile} onBlock={pickBlock} />
+            : <TileBrowser loaded={loaded} groups={groups} selected={active} onSelect={pickTile} />
       ) : (
         <div className="palette-scroll">
           <NoTileset loading={!error} what={t("nothing to browse. Ids still paint; the map shows flat colour until they are installed.")} />
         </div>
       )}
-      <SelectedTileFooter id={active} />
+      <SelectedTileFooter id={active} block={block} />
       {loaded && (
         <div className="palette-footer sub">
-          <span>{view === "grid" ? t("{length} tiles", { length: tiles.length }) : t("{length} / {length2} groups", { length: groups.length, length2: all.length })}</span>
-          <span>{t("Alt+click map picks")}</span>
+          <span>{view === "grid" ? t("{length} tiles", { length: tiles.length }) : view === "pieces" ? t("{n, plural, one {# piece} other {# pieces}}", { n: pieceCount }) : t("{length} / {length2} groups", { length: groups.length, length2: all.length })}</span>
+          <span>{view === "sheet" ? t("Drag picks a block · Alt+click map picks") : view === "pieces" ? t("Click picks a piece · Alt+click map picks") : t("Alt+click map picks")}</span>
         </div>
       )}
-      <SymmetryNote applies />
+      {block ? <BlockSymmetryNote /> : <SymmetryNote applies />}
     </>
   );
 }
@@ -520,6 +595,7 @@ export default function TerrainPalette() {
   const pluginItems = useAtomValue(pluginContextItemsAtom);
   const tools = useTerrainTools();
   const activeTile = useAtomValue(activeTileAtom);
+  const tileBlock = useAtomValue(tileBlockAtom);
   const setActiveTerrain = useSetAtom(activeTerrainAtom);
   // The Tile brush's tile as ground for the Rect brush: one of the listed terrains, or any untyped pair of the tileset.
   const tilePair = tools.loaded ? tileGroupOf(activeTile, tools.loaded.tileset.groups.length) & ~1 : -1;
@@ -529,7 +605,7 @@ export default function TerrainPalette() {
 
   // The palette's own menu, then whatever plugins registered for the "terrainPalette" surface.
   const rows: { label: string; disabled?: boolean; onSelect?: () => void; sep?: boolean }[] = [
-    { label: mode === "tile" ? t("Fill Map with This Tile") : t("Fill Map with This Terrain"), disabled: !scenario || mode === "blend" || mode === "heal" || mode === "pin", onSelect: tools.fillMap },
+    { label: mode === "tile" ? (tileBlock ? t("Fill Map with This Block") : t("Fill Map with This Tile")) : t("Fill Map with This Terrain"), disabled: !scenario || mode === "blend" || mode === "heal" || mode === "pin", onSelect: tools.fillMap },
   ];
   if (mode === "tile") {
     rows.push({

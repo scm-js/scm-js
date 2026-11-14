@@ -87,6 +87,16 @@ export { DEFAULT_PLACEMENT, type PlacementOptions } from "../../src/editor/place
 // Terrain and doodads as the editor lays them: the isometric brush (it needs the tileset's CV5 to say which tile joins
 // which), a doodad checked against StarEdit's rule and placed, and the symmetry modes' maps (`scmjs map generate`).
 export { paintIsom, paintIsomDiamonds, checkIsom, hasIsom, isomTables, diamondAt, type Diamond, type IsomEdit } from "../../src/editor/isom";
+// Borrowed terrain: another tileset's isometric brush laying its ground in a tileset that holds copies of its pictures.
+export {
+  borrowTable, borrowableTerrains, borrowBase, copiesOf, picturesOf, providedTable, tableCounts, tilesetHash, sourceTiles,
+  encodeBorrowTable, decodeBorrowTable, borrowedTerrainId, isBorrowedTerrain, borrowedParts, BORROWED_TERRAIN, BORROW_BLOCK, BORROW_PIXEL,
+  type BorrowTable, type BorrowKind, type BorrowedTerrain, type Copy, type Pictures, type Slicing,
+} from "../../src/editor/borrow";
+export {
+  BorrowStroke, borrowMember, BORROW_MEMBERS, encodeBorrowLattice, decodeBorrowLattice, latticeOf, baseLattice, resizeBorrowMember, borrowedCells,
+  type BorrowContext, type BorrowStrokeResult,
+} from "../../src/editor/borrowLattice";
 export { applyChanges, type TileChange } from "../../src/editor/terrain";
 export { checkDoodadPlacement, placeDoodad, applyDoodadChanges, DEFAULT_DOODAD_PLACEMENT, type DoodadPlacementOptions, type DoodadEdit } from "../../src/editor/doodads";
 export { symmetryImages, mirroredOwner, type SymmetryMode, type SymmetryImage } from "../../src/editor/symmetry";

@@ -32,30 +32,35 @@ export function memoryPieceStore(): PieceStore & { data: Map<string, unknown> } 
   };
 }
 
-const memory = memoryPieceStore();
 const hasIdb = () => typeof indexedDB !== "undefined";
 
-/** The editor's store: IndexedDB, or memory where the browser keeps none (then learning lasts the session). */
-export const browserPieceStore: PieceStore = {
-  async get(key) {
-    if (!hasIdb()) return memory.get(key);
-    try { return await idbRequest(PIECES_STORE, "readonly", (s) => s.get(key)); } catch { return memory.get(key); }
-  },
-  async put(key, value) {
-    if (!hasIdb()) return memory.put(key, value);
-    try { await idbRequest(PIECES_STORE, "readwrite", (s) => s.put(value, key)); } catch { await memory.put(key, value); }
-  },
-  async delete(key) {
-    await memory.delete(key);
-    if (!hasIdb()) return;
-    try { await idbRequest(PIECES_STORE, "readwrite", (s) => s.delete(key)); } catch { /* stays until the site data is cleared */ }
-  },
-  async clear() {
-    await memory.clear();
-    if (!hasIdb()) return;
-    try { await idbRequest(PIECES_STORE, "readwrite", (s) => s.clear()); } catch { /* as above */ }
-  },
-};
+/** One of the database's stores behind `PieceStore`: IndexedDB, or memory where the browser keeps none (then it lasts the session). */
+export function browserStore(name: string): PieceStore {
+  const memory = memoryPieceStore();
+  return {
+    async get(key) {
+      if (!hasIdb()) return memory.get(key);
+      try { return await idbRequest(name, "readonly", (s) => s.get(key)); } catch { return memory.get(key); }
+    },
+    async put(key, value) {
+      if (!hasIdb()) return memory.put(key, value);
+      try { await idbRequest(name, "readwrite", (s) => s.put(value, key)); } catch { await memory.put(key, value); }
+    },
+    async delete(key) {
+      await memory.delete(key);
+      if (!hasIdb()) return;
+      try { await idbRequest(name, "readwrite", (s) => s.delete(key)); } catch { /* stays until the site data is cleared */ }
+    },
+    async clear() {
+      await memory.clear();
+      if (!hasIdb()) return;
+      try { await idbRequest(name, "readwrite", (s) => s.clear()); } catch { /* as above */ }
+    },
+  };
+}
+
+/** The editor's store of learned pieces. */
+export const browserPieceStore: PieceStore = browserStore(PIECES_STORE);
 
 /** The record's key: the tileset's file name and its table's hash. */
 export const piecesKey = (era: number, groups: readonly Cv5Group[]) => `${TILESET_FILENAMES[era & 7]}/${tableHash(groups)}`;

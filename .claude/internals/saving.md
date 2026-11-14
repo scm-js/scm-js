@@ -268,3 +268,11 @@ The Save dialog's preview bytes are built from the atom's extras; Save stamps fi
 headless: Diplomacy (no member in the original) exported and Test-Mapped with `{ cosmonarchy-bw, ac3f86533e4b5a31 }`.
 Test Map's hint: `testTargets.ts#dropsDataSet` (StarCraft always; plugin `scm-sim` before 0.16.0) and
 `droppedDataSetHint` — a line in `TestMapDialog`, a warn toast when a plugin target that drops it is started.
+
+**Editor-owned archive members (2026-11-14).** Three now: `scmjs\pins.bin` (terrain.md "Pinned tiles"),
+`scmjs\dataset.json` (gamedata.md) and one `scmjs\borrowed-<tileset>.bin` per tileset a map borrows terrain from
+(terrain.md "Borrowed terrain"). All ride `archiveExtrasAtom`, so Save keeps them like any other file (`keptExtras`, kind
+"file"; *Smallest that plays* keeps them too: it strips editor sections of the CHK, not archive files), they are parked with their map and a shared map sends a
+changed one whole. The game and other editors ignore them. The pins and the borrowed lattices are size-checked against
+the map when read, so a member left at another size reads as none; Resize moves both and its history entry now carries
+them (`entry.pins`, `entry.members`).

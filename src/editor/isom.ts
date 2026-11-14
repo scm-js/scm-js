@@ -1055,6 +1055,37 @@ export function rebuildIsomFromTiles(scn: Scenario, tileset: Tileset): IsomRebui
 }
 
 /**
+ * The value of diamond `d` on a lattice of `w × h` rects (`isomWidth` × `isomHeight`): the row
+ * its first in-bounds quadrant holds, or -1 when none of its rects is on the lattice. A diamond
+ * holds one value in all four of its rects, as the brush and a rebuild write it.
+ */
+export function diamondValue(isom: Uint16Array, w: number, h: number, d: Diamond): number {
+  for (const q of QUADRANTS) {
+    const r = rectOf(d, q);
+    if (r.x < 0 || r.y < 0 || r.x >= w || r.y >= h) continue;
+    return isom[(r.y * w + r.x) * 4 + PROJECTED[q].sides[0]] >> 4;
+  }
+  return -1;
+}
+
+/** Set diamond `d` to `value` in every rect it reaches, with each quadrant's flags, as the brush does. */
+export function setDiamondValue(isom: Uint16Array, w: number, h: number, d: Diamond, value: number): void {
+  for (const q of QUADRANTS) {
+    const r = rectOf(d, q);
+    if (r.x < 0 || r.y < 0 || r.x >= w || r.y >= h) continue;
+    const { sides, flags } = PROJECTED[q];
+    const base = (r.y * w + r.x) * 4;
+    isom[base + sides[0]] = ((value << 4) | flags[0]) & 0xffff;
+    isom[base + sides[1]] = ((value << 4) | flags[1]) & 0xffff;
+  }
+}
+
+/** The two diamonds whose quadrants make up rect (x, y): its own and the one below right when x + y is even, else the other two. */
+export function diamondsOfRect(x: number, y: number): [Diamond, Diamond] {
+  return (x + y) % 2 === 0 ? [{ x, y }, { x: x + 1, y: y + 1 }] : [{ x, y: y + 1 }, { x: x + 1, y }];
+}
+
+/**
  * Regenerate every tile from the ISOM section — what StarEdit does after any isometric
  * edit, applied to the whole map. Used to validate the port against real maps.
  */

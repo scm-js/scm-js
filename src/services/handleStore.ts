@@ -22,9 +22,11 @@ export const RECOVERY_STORE = "recovery";
 export const PREVIOUS_STORE = "previous";
 /** The pieces learned from folders of maps, per data set and tileset (`services/pieceStore.ts`). */
 export const PIECES_STORE = "pieces";
-// 2 added the recovery store, 3 the previous versions, 4 the learned pieces. The upgrade only ever adds a store that is missing.
-const VERSION = 4;
-const STORES = [STORE, RECOVERY_STORE, PREVIOUS_STORE, PIECES_STORE];
+/** The tables of borrowed terrain, per pair of tilesets' contents (`services/borrow.ts`). */
+export const BORROW_STORE = "borrow";
+// 2 added the recovery store, 3 the previous versions, 4 the learned pieces, 5 the borrowed terrain. The upgrade only ever adds a store that is missing.
+const VERSION = 5;
+const STORES = [STORE, RECOVERY_STORE, PREVIOUS_STORE, PIECES_STORE, BORROW_STORE];
 
 /** The part of a handle every caller relies on; the DOM lib lacks the permission methods. */
 export interface StoredHandle {

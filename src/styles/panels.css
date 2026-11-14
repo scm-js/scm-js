@@ -1004,3 +1004,9 @@ body.dock-resizing iframe {
 .bottom-dock-resizer:hover {
   background: rgba(79, 209, 197, 0.25);
 }
+
+/* The Isometric tab's terrains from other tilesets (BorrowedTerrains.tsx) */
+.borrowed-terrains { border-top: 1px solid var(--border); margin-top: 4px; }
+.borrowed-head { padding: 6px 10px 2px; font-weight: 600; color: var(--text-dim); font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
+.borrowed-source { padding: 4px 10px 0; color: var(--text-dim); font-size: 11px; }
+.borrowed-again { padding: 4px 10px 8px; }

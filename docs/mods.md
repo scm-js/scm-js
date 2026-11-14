@@ -44,8 +44,11 @@ as a block, and the Tile brush lays it whole, or repeats it along a drag. Its pi
 learns from a folder of the mod's maps which parts of the sheet they lay whole, and lists
 them as pieces to pick, each picture once however often the tileset repeats it. The Rect
 brush lists the game's terrains the mod repeats at another height, and the pairs the open
-map lays as ground ([Ground a mod adds](guide.md#ground-a-mod-adds)). The isometric brush
-stays with the game's terrain types.
+map lays as ground ([Ground a mod adds](guide.md#ground-a-mod-adds)). Where a mod's
+tileset holds another tileset's ground copied in, the Isometric tab can lay that ground
+with the other tileset's own brush, cliffs and edges included ([Terrain from other
+tilesets](guide.md#terrain-from-other-tilesets)); a plugin can hand the editor the exact
+pairs of tiles the mod meant ([`provideBorrowTable`](plugins.md#api-terrain)).
 
 To only look at a map made for a mod, nothing needs installing. Opened without the mod,
 the map has the terrain the data set in use lacks drawn hatched, and a notice that offers

@@ -17,7 +17,9 @@ import { doodadPlacementAtom, doodadThumbSizeAtom, gridSizeAtom, locationSnapAto
 import { dockWidthsAtom, panelsAtom, whatsNewSeenAtom } from "./uiAtoms";
 import { consoleHeightAtom, debugConsoleAtom } from "./logAtoms";
 import { clearHandles } from "../services/handleStore";
-import { browserPieceStore } from "../services/pieceStore";
+import { browserPieceStore, browserStore } from "../services/pieceStore";
+import { BORROW_STORE } from "../services/handleStore";
+import { borrowHostsAtom } from "./borrowAtoms";
 import { learnedPiecesAtom } from "./pieceAtoms";
 import { recentFilesAtom } from "./documentAtoms";
 import { gameDataProfileAtom, keptRacesAtom, refreshDataSetRacesAtom } from "./gameDataAtoms";
@@ -245,7 +247,7 @@ export const clearStoredKeysAtom = atom(null, (_get, set, keys: readonly string[
  * options of the Units and Doodads palettes, the panels and their widths, the recent files
  * (and the file handles behind them), the installed plugin list, the copies of plugin code
  * kept for the plugins marked *local*, the registries browsed and their cached lists,
- * whatever the plugins themselves stored, and the pieces learned from maps. Every atom is reset whether or not it had a key,
+ * whatever the plugins themselves stored, the pieces learned from maps and the tables of borrowed terrain. Every atom is reset whether or not it had a key,
  * so the defaults come back live even for a setting that was never written.
  */
 export const clearStoredDataAtom = atom(null, (_get, set): number => {
@@ -254,5 +256,8 @@ export const clearStoredDataAtom = atom(null, (_get, set): number => {
   // The pieces learned from maps are in IndexedDB, not in the keys above: they go too.
   void browserPieceStore.clear();
   set(learnedPiecesAtom, {});
+  // So are the tables of borrowed terrain.
+  void browserStore(BORROW_STORE).clear();
+  set(borrowHostsAtom, new Map());
   return before;
 });

@@ -715,3 +715,22 @@ there: the transaction calls and reads with a primed or loaded tileset, the prov
 and `pieces()` lists them (`tests/plugin-pieces.test.ts` "the host without the editor"); the Pieces view and the Rect
 list are the only readers that need a page. `@scm-js/core` exports the pure half (`core.md`).
 
+
+**Borrowed terrain on the API (2026-11-14)**, additive, version 1: types `BorrowedTerrainInfo` (id, source, terrain, name,
+standIns, from — `"scan"` or the plugin id) and `BorrowTableSpec`. `api.terrain.borrowed(options?)` and
+`provideBorrowTable(spec)` are `plugins/borrow.ts#borrowCalls`, spread into the terrain group beside `pieceCalls`.
+**`borrowed()` is async** (a departure from the read calls' style, on purpose): `tx.paintBorrowed` runs inside a
+synchronous transaction and needs the source tileset's four files and the table, which are read from the game data and
+IndexedDB, so `borrowed()` reads what was found before (`readKnownBorrowed`), with `{ scan: true }` scans where nothing
+was found, then loads every listed source's context (`borrowContext`) before it resolves; `tx.paintBorrowed(diamonds, id)`
+(`paintBorrowedIn`) then finds it with `peekBorrowContext`, else adds a note and answers false. It runs one `BorrowStroke`
+per call over all the diamonds, applies through the transaction's `applyTiles`, writes the member at once and records it
+before its first change (`membersBefore`), so `finishEntry` sets `entry.members` and a builder that throws rolls the member
+back through `rollbackEntryAtom` → `stepPins`. `provideBorrowTable` keeps `{key, tileset, source, pairs}` in
+`providedBorrowAtom` (global, per tileset like the provided pieces), returned as `bag.add(remove)`; `refreshProvided`
+turns each row into a `providedTable` and its terrains, and the provided source takes the scan's place for that source
+(listing and painting). No event of its own: the palette re-reads on `providedBorrowAtom`. The headless host gets both
+calls (they are part of `createPluginApi`'s terrain group); `borrowed()` there reads the game's files through the same
+asset source and IndexedDB stand-in (memory) as the editor; with the game's own data in use (or none, as there) a game
+tileset already loaded is taken as the source (`gameOwnTileset`). `tests/borrow.test.ts` "is on the plugin API" drives the
+headless host: a provided table, `borrowed()`, `tx.paintBorrowed`, one undo, the note for a wrong id, dispose.

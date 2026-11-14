@@ -33,6 +33,7 @@ import { symmetryAvailable, symmetryLabel } from "../../editor/symmetry";
 import { Button, Check, NumberInput, Tabs, Tip } from "../ui";
 import { TileBrowser, TileGrid, TileSheet, TileThumb } from "./TileBrowser";
 import { TilePieces } from "./TilePieces";
+import { BorrowedTerrains } from "./BorrowedTerrains";
 import { sameTileKey, uniqueTiles } from "../../editor/tileCopies";
 import { useLearnedPieces } from "../../hooks/usePieces";
 import { msg, t, translate } from "../../i18n";
@@ -133,6 +134,7 @@ function IsomTab() {
             </div>
           ))}
         </div>
+        <BorrowedTerrains loaded={loaded} />
         {status.kind === "loading" && <div className="hint" style={{ padding: "8px 10px" }}>{t("Loading tileset…")}</div>}
         {status.kind === "no-tileset" && (
           <div className="hint" style={{ padding: "8px 10px" }}>

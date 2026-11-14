@@ -26,6 +26,7 @@ import { tileBlockAtom } from "../atoms/tileBlockAtoms";
 import { learnedPiecesAtom, providedPiecesAtom } from "../atoms/pieceAtoms";
 import { layBlock, layPattern } from "../editor/tileSheet";
 import { checkedBlock, copyBlock, pieceCalls } from "./pieces";
+import { borrowCalls, paintBorrowedIn } from "./borrow";
 import { claimBadge, locateClaims } from "./claims";
 import { cameraOfMap, mapLookAt, mapViewSwitch, offerMapView, pruneMapViews, showMapView, wheelStep } from "./mapViews";
 import { zoomToAtom } from "../atoms/zoomAtoms";
@@ -113,7 +114,7 @@ import { attachTooltip } from "./tooltip";
 import {
   applyIsomChanges, diamondAt, hasIsom, isDiamond, isomHeight, isomReport, isomTables, isomTerrainAt, isomTerrains, isomWidth, paintIsom, rebuildIsomFromTiles, type Diamond,
 } from "../editor/isom";
-import { hasEdits, NO_PARTS } from "../editor/history";
+import { hasEdits, hasMembers, NO_PARTS } from "../editor/history";
 import { addUnits, applyUnitChanges, DEFAULT_GAS, DEFAULT_MINERALS, isResource, makeUnit, MINERAL_FIELD_IDS, nextSerial, removeUnits, snapPlacement, TILE_PX, unitAt, unitBox, unitGeometry, updateUnits, VESPENE_GEYSER, type UnitChange } from "../editor/units";
 import {
   addSprites, applySpriteChanges, clampSprite, FALLBACK_SIZE, makeSprite, removeSprites, spriteAt, spriteKind, spritesInBox, type SpriteChange, type SpriteSize,
@@ -317,6 +318,8 @@ export function runTransaction(store: Store, label: string, build: (tx: EditTran
   const applyRuled = (changes: TileChange[]) => applyTiles(withoutPinned(changes, pinned()).changes);
   /** The pins file before the transaction's first change to it; undefined while it has made none. */
   let pinsBefore: Uint8Array | null | undefined;
+  /** Each borrowed lattice (editor/borrowLattice.ts) as it was before the transaction first changed it. */
+  const membersBefore = new Map<string, Uint8Array | null>();
   const tables = () => peekUnitAssets()?.units ?? null;
 
   const tx: EditTransaction = {
@@ -364,6 +367,7 @@ export function runTransaction(store: Store, label: string, build: (tx: EditTran
       isom.add(edit.isom);
       return true;
     },
+    paintBorrowed: (diamonds, terrainId) => paintBorrowedIn(store, scn, diamonds ?? [], terrainId, pinned(), applyTiles, membersBefore, notes),
     rebuildIsom: () => {
       if (!loaded) { notes.push(t("rebuilding the ISOM needs the tileset graphics")); return null; }
       const rebuilt = rebuildIsomFromTiles(scn, loaded.tileset);
@@ -643,6 +647,7 @@ export function runTransaction(store: Store, label: string, build: (tx: EditTran
     if (createdIsom) { entry.createdIsom = createdIsom; delete entry.isom; }
     else if (rebuiltIsom) entry.rebuiltIsom = true;
     if (pinsBefore !== undefined) entry.pins = { before: pinsBefore, after: store.get(archiveExtrasAtom).get(PINS_MEMBER) ?? null };
+    if (membersBefore.size > 0) entry.members = [...membersBefore].map(([name, before]) => ({ name, before, after: store.get(archiveExtrasAtom).get(name) ?? null }));
     return entry;
   };
 
@@ -656,14 +661,14 @@ export function runTransaction(store: Store, label: string, build: (tx: EditTran
   } catch (err) {
     closed = true;
     const entry = finishEntry();
-    if (hasEdits(entry) || entry.pins) store.set(rollbackEntryAtom, entry);
+    if (hasEdits(entry) || hasMembers(entry)) store.set(rollbackEntryAtom, entry);
     throw err;
   }
   closed = true;
   checkSyncBuilder("document.edit", returned, notes);
 
   const entry = finishEntry();
-  if (!hasEdits(entry) && !entry.pins) return { ...EMPTY_RESULT, notes };
+  if (!hasEdits(entry) && !hasMembers(entry)) return { ...EMPTY_RESULT, notes };
   // The commit's stranded-doodad / stranded-unit pass may append to the entry's lists, so the counts come after it.
   store.set(commitTerrainAtom, { entry, summary: notes.length > 0 ? `${label} — ${notes.join(", ")}` : label });
   const strandedUnits = (entry.units?.length ?? 0) - units.length;
@@ -2430,6 +2435,7 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
         if (brush.block !== undefined) store.set(tileBlockAtom, brush.block === null ? null : checkedBlock(brush.block, "setActive"));
       },
       ...pieceCalls(store, info.id, bag),
+      ...borrowCalls(store, info.id, bag),
       floodRegion: (x, y, match = "terrain") => {
         const scn = scenario();
         if (!scn || x < 0 || y < 0 || x >= scn.width || y >= scn.height) return [];

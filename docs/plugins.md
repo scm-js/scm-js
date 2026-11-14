@@ -2606,6 +2606,19 @@ Pieces view, and `provideTypes` names flat ground the tileset does not type, for
 brush. `active().block` is the block the Tile brush lays, and `setActive({ block })` arms
 it. [Named pieces for a tileset](#named-pieces-for-a-tileset) puts these together.
 
+Terrain borrowed from another tileset (the Isometric tab's "From other tilesets"):
+`borrowed()` resolves to what the open map's tileset can lay that way, each with an `id`
+for `setActive({ terrain })` and `tx.paintBorrowed(diamonds, id)`, which paints it with
+the other tileset's own brush and writes the copies. Await it before painting: it reads
+the other tileset's files; `{ scan: true }` works the copies out first where nobody has.
+`provideBorrowTable` hands the editor the pairs of tiles a mod meant for a pair of
+tilesets, instead of its own match by pictures.
+
+```ts
+const roof = (await api.terrain.borrowed()).find((b) => b.source === "install" && b.name === "Roof");
+if (roof) api.document.edit("Roof", (tx) => { tx.paintBorrowed(api.terrain.diamondsIn({ x0: 20, y0: 20, x1: 36, y1: 30 }), roof.id); });
+```
+
 `checkIsom()` measures how well the ISOM lattice matches the tiles. Offer a rebuild when
 it reports `stale`, not merely `mismatched`: some mismatch (hand-placed tiles, blends)
 never goes away.

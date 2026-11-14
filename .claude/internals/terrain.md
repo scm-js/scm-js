@@ -348,3 +348,78 @@ writes as tile 0 (black); fill such a diamond first (the generator's `squeezed`,
 axes). A water diamond needs four steps to high ground (shore, ground, cliff). And every ramp doodad in every tileset
 fits only a south-west or south-east cliff edge; Remastered's CV5 adds cliff pieces with the VF4 ramp bit that StarEdit's
 placement rule accepts at a ramp's place but that do not walk.
+
+**Borrowed terrain (`editor/borrow.ts`, `editor/borrowLattice.ts`, `services/borrow.ts`, 2026-11-14).** A mod's tileset
+holds another game tileset's ground copied in (Cosmonarchy's Badlands: all of Installation's typed groups but two tiles).
+The isometric brush lays it by running **on the source tileset's own tables** and translating each tile it lays to a host
+tile with the same picture. The spike behind it (`~/mods-under-test/_notes/borrowed-isom-findings.md`, code in the
+`scm-js-borrowed-isom` worktree's `spikes/borrowed-isom/`) measured what the design rests on:
+- *The copies are dithered, not index-remapped.* A nearest-colour palette map makes 28 of 893 Installation megatiles exact
+  in the mod's Badlands, an empirical one 0; inside one picture the same source index lands on different host indices
+  (function for 58 of 893), the host colour is among the 3 nearest 96.6% of the time, and the error falls with block size
+  (2.11 a pixel → 1.34 at 8×8). And one source picture has several differently dithered copies (median 4 host megatiles,
+  3 distinct pictures). So there is no exact table: matching is by pixels.
+- *The copy test* (`BORROW_BLOCK` 2.5, `BORROW_PIXEL` 10): the **mean over the 64 blocks** of the 4 × 4-pixel block means'
+  difference, a channel, and the mean pixel difference. Calibrated against a negative control, the same sources into the
+  *game's* Badlands (none of their art): at 2.5, Installation → mod Badlands 891 of 893, Installation and Twilight → game
+  Badlands 0, Ashworld → game Badlands 30 (not inspected). A per-pixel ≤ 10 rule alone admits look-alikes (45 / 189).
+  **Not the same test as `tileCopies.ts#samePicture`**, which requires *every* block within 2.5 (a max, stricter than what
+  was calibrated); left as it is, noted for whoever owns it.
+- *Lossless prefilters.* The overall mean and the 8 × 8 means can never differ more than the 4 × 4 mean does, so a window
+  on the overall mean and a coarse 8 × 8 pass at the same bound drop nothing. Per megatile only the 64 block sums are kept
+  (`picturesOf`, 384 B: 15 MB for 40k megatiles, not the spike's 122 MB of pixels); pixels are read from the VR4 when a
+  candidate gets that far. Installation → mod Badlands: 360 ms (Node), the host summary 164 ms once; all seven sources into
+  the mod's Badlands 16 s in Node, 20–25 s in headless Chromium in slices (`Slicing`, a `setTimeout(0)` every ~12 ms), JS
+  heap 135 → 220 MB peak → 174 MB after.
+- *Translation* (`borrowTable`): per source tile (typed groups, used slots) the host tiles showing a copy, preferring the
+  same sixteen VF4 words and group flag word, then the same VF4, then any; kept only those of the first one's kind
+  (`heal.ts#kindKey`), up to 8. The brush picks among them per cell by `seamStep` against the neighbours (two passes, as
+  Heal), because neighbours from separately dithered copies raised the patch's internal seams 283 → 385 in the spike and a
+  Heal-like choice took it to 254. Installation → mod Badlands: 1,824 tiles, identical flags 160, same VF4 849, picture
+  only 813, stand-ins 2 (the spike's numbers exactly). A source picture with no copy gets the nearest within
+  `STAND_IN_BLOCK` 6 / `STAND_IN_PIXEL` 12 as a stand-in (the two Substructure / Floor edge tiles: 5.2 / 7.5).
+- *What is offered* (`borrowableTerrains`): a source terrain whose groups and every type on the brush's path to the
+  source's base ground (`terrainTypeMap` hops: edge sets and terrains between) are whole, stand-ins at most
+  `STAND_IN_SHARE` (a tenth) of a type's tiles — added after the first cut offered "Floor" in five hosts where both of
+  Installation's Floor tiles were look-alike stand-ins; and not the host's own ground (every tile with a copy in a typed
+  host group — the first cut offered Jungle's Dirt in Badlands). Over Cosmonarchy's eight: Badlands ← Installation (all
+  seven) and Jungle (Jungle, Raised Jungle); Platform ← Badlands (Dirt, Rocky Ground); Jungle ← Badlands (Grass, Asphalt);
+  Ice ← Badlands (Dirt, Asphalt); Installation, Ashworld, Desert, Twilight nothing. The host's own tileset is never a source.
+*The lattice* is the source's ISOM, kept as an archive member per source (`borrowMember`, `scmjs\borrowed-<id>.bin`:
+"BOR1", width, height, ERA, then (diamond index u32, value u16) for every diamond **not** the source's base ground). Base
+ground = `TILESETS[era].defaultIsom` (what StarEdit fills a new map of that tileset with; Installation: Floor), chosen so a
+first stroke lays what it would on a fresh source map. The member is sparse because it rides the history entry
+(`HistoryEdit.members`, before/after bytes, stepped beside the pins in `stepPins`) and goes whole over a shared map
+(`diffExtras` sends changed members): two Roof strokes = 54 diamonds = 336 bytes; a whole 256 × 256 map borrowed ≈ 100 KB.
+Not a Scenario field and not a new atom: archive members are already per document, saved, parked and shared (the pins'
+precedent). **Resize** moves it by whole rects (`resizeBorrowMember`; an odd column shift drops it) and the resize entry
+now carries the moved members *and the pins* (`entry.members`, `entry.pins`), stepped in `stepWhole` — before, undoing a
+resize left the pins file of the new size, which then read as no pins.
+*The stroke* (`BorrowStroke`): a shadow scenario in the source's numbering — the lattice, and the source tiles it lays
+(`tilesFromIsom`, cached per member object) where it is borrowed, `NO_TILE` (0xFFFF, a group past the table) elsewhere.
+The sentinel matters: `IsomPass` reports only cells whose tile *changed*, and a base tile that happened to equal the newly
+laid one was never translated (caught by the test comparing with the source's own map). `paintIsomDiamonds` on the shadow;
+its tile changes are translated and returned as the host's changes, so **only cells the stroke changes are written**.
+Pinned cells: the shadow pass skips them (`kept`). *The check* before a stroke: a borrowed rect whose map tiles
+(`editorTiles`, the ground under a doodad) are not a copy of **any slot of the group** the lattice lays there goes back to
+base ground (counted in the status line). By group, not exact megatile: a reopened map's shadow is laid afresh with other
+variation slots than were painted — the first cut compared megatiles and reported 26 diamonds "written over" on a map
+saved and reopened untouched (headless run; pinned by the test that starts the second stroke from a copy of the member).
+A cell whose source tile has no host tile (a null rect) is left as it was and counted.
+*Where it shows:* the Isometric tab's "From other tilesets" (`BorrowedTerrains.tsx`): a button the first time (scan in
+`services/borrow.ts#scanBorrowed`, progress in `borrowScanAtom`), then per source the terrains, kept in IndexedDB
+(`BORROW_STORE`, the database's version 5): `table/{host hash}/{source hash}` and `index/{host key}`, keys from
+`tilesetHash` (all five files' content, not the CV5 alone: the pictures are what the table is about). Sources are the
+game's own tilesets *beneath* the data set (`gameOwnTileset`: a reader's base, else the bundled files, else the stored
+copy); with the game's own (or Remastered) data in use nothing is offered (`drawsFromGame`). Terrain ids
+`BORROWED_TERRAIN` (0x40000) + era << 8 + index, never written; `isPairTerrain` now stops below them. `useTerrainTools`
+paints one when it is the active terrain (map ISOM not required); the first stroke after picking waits for
+`borrowContext` (the palette starts it on the click), else says so. Status line: tiles, joins to the map's own ground over
+`SEAM_SHOWS`, untranslated, stand-ins, reset diamonds. Measured in headless Chromium on Butcher's Corner with the mod's
+folder attached: scan 20–25 s; two joining Roof strokes 176 + 110 tiles (18 / 26 joins showing); undo, redo; Save As,
+reopen, a third stroke joined with no reset; Walkability overlay over it; no page errors.
+*Left open:* nothing at the borders (the spike's mappers use ~376 purpose-drawn transition pieces, half of the frequent
+ones one-way; not a rule the files give); no rebuild of a lattice for borrowed ground laid without the member (another
+editor, the mod's own maps: they start from base ground); walkability is the copies' (462 of 891 Installation megatiles
+have a copy that walks the same in the mod's Badlands); the eyedropper does not pick a borrowed terrain; one source per
+stroke.

@@ -936,6 +936,19 @@ export interface EditTransaction {
    */
   paintIsom(d: Diamond, terrainId: number, extent?: number): boolean;
   /**
+   * A terrain of another tileset (`terrain.borrowed()`) painted on `diamonds` by that tileset's own
+   * isometric brush, each tile written as this tileset's copy of its picture — what the Isometric
+   * tab's "From other tilesets" list paints. The diamonds are set at once, as one stroke. Only the
+   * cells the stroke changes are written; pinned tiles are left as they are. False, with a note,
+   * when the terrain is not one `borrowed()` listed, or `borrowed()` was not awaited first (the
+   * other tileset's files are read there).
+   *
+   * @example
+   * const [floor] = (await api.terrain.borrowed()).filter((b) => b.name === "Floor");
+   * await api.document.edit("Floor room", (tx) => tx.paintBorrowed(api.terrain.diamondsIn({ x0: 8, y0: 8, x1: 24, y1: 20 }), floor.id));
+   */
+  paintBorrowed(diamonds: readonly Diamond[], terrainId: number): boolean;
+  /**
    * Reconstruct the ISOM section from the tiles — for a map that arrived without one, or
    * whose lattice no longer matches after Rect / Tile edits: exact for terrain that was
    * laid down isometrically, a best guess under doodads and for hand-placed tiles. A
@@ -2572,6 +2585,34 @@ export interface PieceSetSpec {
   pieces: { name?: string; category?: string; block: TileBlock }[];
 }
 
+/** A terrain of another tileset the open map's tileset can lay with that tileset's own isometric brush (`terrain.borrowed`). */
+export interface BorrowedTerrainInfo {
+  /** The id the palette selects (`setActive({ terrain })`) and `tx.paintBorrowed` takes. Never written to a map. */
+  id: number;
+  /** The tileset it is borrowed from. */
+  source: TilesetId;
+  /** Its terrain id in that tileset (what `isomTypes()` lists on a map of it). */
+  terrain: number;
+  /** That tileset's name for it. */
+  name: string;
+  /** Tiles laid with the nearest picture this tileset has, where it holds no copy. */
+  standIns: number;
+  /** `"scan"` when the editor matched the pictures, else the id of the plugin whose table it is. */
+  from: string;
+}
+
+/** What `terrain.provideBorrowTable` takes. */
+export interface BorrowTableSpec {
+  /** Names the table among the plugin's; the same id again replaces it. */
+  id: string;
+  /** The tileset whose tiles are written (the map's). */
+  tileset: TilesetId;
+  /** The tileset whose isometric brush lays the terrain. */
+  source: TilesetId;
+  /** Source tile id → the tile of `tileset` to write for it. A source tile with no pair is not laid. */
+  pairs: readonly (readonly [sourceTile: number, tile: number])[];
+}
+
 /** What `terrain.provideTypes` takes. */
 export interface TerrainTypeSpec {
   /** Names the declaration among the plugin's; the same id again replaces it. */
@@ -2785,6 +2826,29 @@ export interface TerrainApi {
    * api.terrain.provideTypes({ id: "ground", tileset: "jungle", types: [{ name: "Swamp", group: 2466 }] });
    */
   provideTypes(spec: TerrainTypeSpec): Disposable;
+  /**
+   * The terrains of other tilesets the open map's tileset can lay (its Isometric tab's "From other
+   * tilesets"): those whose every tile, and every tile of the ground the brush lays them onto, has
+   * a copy here. Found by matching pictures, once per pair of tilesets' files, or given by a
+   * plugin (`provideBorrowTable`). Resolves after reading what was found before and the other
+   * tilesets' files, so `tx.paintBorrowed` can run; with `scan: true`, works it out first where it
+   * never was (seconds, once). Empty without the graphics, and when the editor draws from the
+   * game's own data (nothing there is borrowed).
+   *
+   * @example
+   * for (const b of await api.terrain.borrowed({ scan: true })) api.log(b.source, b.name, b.id);
+   */
+  borrowed(options?: { scan?: boolean }): Promise<BorrowedTerrainInfo[]>;
+  /**
+   * Hand the editor the table for a pair of tilesets: which tile of `tileset` to write for each
+   * tile of `source`. The editor's own picture match is then not used for that pair: a mod's
+   * author knows which copy is meant, under which flags. `borrowed()` lists what the table
+   * makes paintable. Taken back with the plugin, or by disposing.
+   *
+   * @example
+   * api.terrain.provideBorrowTable({ id: "install", tileset: "badlands", source: "install", pairs: [[0x30, 0x9a40], [0x31, 0x9a41]] });
+   */
+  provideBorrowTable(spec: BorrowTableSpec): Disposable;
 }
 
 export interface TilesetApi {

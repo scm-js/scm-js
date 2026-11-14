@@ -63,6 +63,12 @@ export interface HistoryEdit {
    */
   pins?: { before: Uint8Array | null; after: Uint8Array | null };
   /**
+   * Other editor-owned files of the map's archive the edit changed — a borrowed terrain's lattice
+   * (editor/borrowLattice.ts) — each as it was and as the edit left it, null for none. Put in
+   * force like `pins`, beside them.
+   */
+  members?: { name: string; before: Uint8Array | null; after: Uint8Array | null }[];
+  /**
    * What a dialog wrote — settings, triggers, the briefing, strings (editor/tableHistory.ts).
    * An entry with this part has no other: `applyEntry` leaves it alone, and the undo and
    * redo atoms apply it with `applyTables`.
@@ -178,6 +184,9 @@ export const touchesDoodads = (entry: HistoryEdit) =>
 export const touchesGround = (entry: HistoryEdit) =>
   entry.changes.length > 0 || (entry.isom?.length ?? 0) > 0 || entry.createdIsom !== undefined || entry.rebuiltIsom === true
   || (entry.doodadTiles?.length ?? 0) > 0 || (entry.fog?.length ?? 0) > 0 || entry.createdMask !== undefined;
+
+/** Whether the entry changes files of the archive the editor keeps (the pins, a borrowed lattice). */
+export const hasMembers = (entry: HistoryEdit): boolean => entry.pins !== undefined || (entry.members?.length ?? 0) > 0;
 
 export const hasEdits = (entry: HistoryEdit) =>
   entry.changes.length > 0 || (entry.isom?.length ?? 0) > 0 || entry.createdIsom !== undefined || (entry.units?.length ?? 0) > 0

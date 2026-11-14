@@ -369,15 +369,32 @@ body.dock-resizing iframe {
   background: var(--gold);
 }
 .pieces-head {
-  display: grid;
+  display: flex;
+  align-items: center;
   gap: 6px;
   padding: 6px 8px;
   border-bottom: 1px solid var(--border);
   font-size: var(--fs-sm);
   flex: none;
+  min-width: 0;
 }
-.pieces-head .hint {
+.pieces-head .grow {
+  min-width: 0;
+}
+.pieces-source {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pieces-heading {
+  position: absolute;
+  left: 0;
+  right: 0;
   font-size: var(--fs-xs);
+  color: var(--gold-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .piece-thumb {
   position: absolute;

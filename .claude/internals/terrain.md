@@ -186,23 +186,32 @@ Doodad groups and void slots are left out. Measured:
 - Cutting by the sheet's pixels was not attempted: objects sit on continuous ground and seam distance does not separate
   them ("Pair terrains" above). Pictures: `~/mods-under-test/_notes/terrain/badlands-pieces-{sample,largest}.png`.
 
-*Where the evidence comes from.* `hooks/usePieces.ts#piecesInFront`: the map in front's own (one pass over its tiles)
-merged with the **learned collection** for the data set in use (profile id) and the tileset, cut, kept for the last (map,
-terrain revision, tileset, collection) so the view and Alt+click share one cut. The view re-cuts only while it shows, and
+- Pieces that repeat a doodad's pictures (doodad groups are left out, but a mod may copy a doodad's pictures into
+  untyped groups) are too few to need a rule: Badlands 12 of 3,525, Jungle 21 of 3,077, nearly all two tiles.
+
+*Where the evidence comes from.* `services/pieces.ts#piecesInFront` (React-free, so the plugin host can use it; the hook
+module re-exports it): the map in front's own (one pass over its tiles) merged with the **learned collection** for the
+tileset's table, cut, kept for the last (map, terrain revision, tileset, collection) so the view, Alt+click and the
+plugin API share one cut. The view re-cuts only while it shows, and
 only once the revision has stood still `RECUT_MS` (300): a stroke bumps it every cell. Learning
 (`editor/pieceLearn.ts#learnFromMaps`, pure, files and tables injected; `services/pieceLearning.ts`, imported only when
 the button is pressed, since it brings `plugins/host.ts#pickFolder` and the map reader): every `.scx`/`.scm` of the
 picked folder, opened with `openMapBytes`, counted against `formats/tileset/load.ts#loadTilesetGroups` (the CV5 alone
 from the data set in use, no atlas); a map with a tile `lackedGroups` refuses is skipped as `notOurs`, one that throws as
-`unreadable`; a `setTimeout(0)` between maps; progress in `pieceLearningAtom`, the end in `pieceLearnReportAtom` and the
-status line. Measured in headless Chromium: Cosmonarchy's 404 maps (441 files) in 30 s, all read, Badlands 3,525 pieces,
+`unreadable`; a `setTimeout(0)` between maps; progress in `pieceLearningAtom` (the view's one-line header shows it in
+place of the source line); the end said once, in the status line and a toast, as a finished job is (round 3: the report
+used to stay in the palette and took a third of it). Measured in headless Chromium: Cosmonarchy's 404 maps (441 files) in 30 s, all read, Badlands 3,525 pieces,
 Platform 1,993, Installation 9, Ashworld 1,599, Jungle 3,077, Desert 1,628, Ice 2,291, Twilight 1,631. Kept by
 `services/pieceStore.ts` in `handleStore.ts`' database, a store of its own (`PIECES_STORE`, the database's version 4),
-one `Int32Array` of `encodeEvidence` per `{setId}/{tileset}`; learning again deletes the set's eight keys first; *Forget*
-deletes them. A folder attached through the mod-folder notice is id `release` here (the folder's name), so it and an
-installed set of the same id share the collection; a set of another id does not. Not cleared by Preferences ▸ Clear
-browser data (open). `learnedPiecesAtom` holds what was read, by key; the Tile tab reads it on mount so Alt+click can use
-it before the view has been opened.
+one `Int32Array` of `encodeEvidence` per **`{tileset}/{tableHash}`** (`pieceLearn.ts#tableHash`: two 32-bit hashes of
+the CV5's 26 words a record, from the decoded groups, which keep them all). Why the table and not the data set's id:
+evidence is about one `.cv5`'s tile ids. Keyed by profile id (slice 2), the mod attached from its folder (id `release`
+here, the folder's name) and the same mod installed under its own id kept two collections, so what was learned under
+`release` was shown to nobody else; and a mod update that renumbers a table would have shown pieces cut for other tiles.
+Learning writes under the tables of the data set in use (`loadTilesetGroups` for all eight) after deleting those eight
+keys; *Forget* deletes the same eight; Preferences ▸ Storage ▸ Clear all data (`clearStoredDataAtom`) clears the whole
+store and `learnedPiecesAtom`. `learnedPiecesAtom` holds what was read, by key; the Tile tab reads it on mount so
+Alt+click can use it before the view has been opened, and the plugin host asks for it on first use.
 *Alt+click* (`editor/piecePick.ts#laidPieceAt`, in `useTerrainTools.pickAt`, Tile mode only, before the single-tile
 pick): the cell's tile is a piece's and at least one of its four sheet neighbours from the same piece is laid beside it;
 the precedent is `laidPairAt`. A piece's corner tile laid alone stays a single-tile pick.
@@ -230,8 +239,21 @@ another of the same outline (95 with the same flags too); by the copy test 542 h
 `collapsePieces` folds 153 and lists 148 as the same picture under other flags: 3,372 entries, ~0.7 s once per cut
 (cached with the cut). The coordinator's looser test (a mean 3/255 a pixel) counted 711 / 514; the spike's test is the one
 used. With *Added by*, an entry with any member in the game's part is left out (2,691 entries there).
-*Left open:* the pieces are not named or grouped like doodads; a big collection costs one `mergeEvidence` copy per cut;
-no plugin API.
+*Left open:* the cut pieces are not named or grouped like doodads (a plugin can name its own, below); a big collection
+costs one `mergeEvidence` copy per cut.
+
+**Fill Area with a block (round 3)** floods what the Rect fill reads, `terrainKeyOfTile` (the CV5 index, or the pair for
+an untyped group), not the same exact tile: on a mod's varied ground the exact-tile region was one tile (measured on
+Scrap Yard in slice 2). The single-tile fill keeps the exact-tile rule.
+
+**Blocks and pieces on the plugin API (round 3)**: `plugins-host.md` has the host side. Here: `editor/pieceList.ts`
+(pure) composes what the Pieces view and `api.terrain.pieces()` list — each provided set whose pieces fit the loaded
+table (`blockFits`: every non-hole tile inside the table with a picture), in registration order, then the cut entries
+less any whose member has the same tile set as a provided piece (the named one wins). `declaredTerrains` makes a plugin's
+declared ground `pairTerrain` with the plugin's name; `useTerrainTools.types` appends them for the tileset in front, so the
+Rect tab, Replace Terrain, the fills and the status lines name them, and `terrainOf` resolves them before the generic
+pair. `api.terrain.types()` still lists the game's types alone.
+
 
 The Blend brush (`src/editor/blend.ts`) is pixel-based: `edgeTable` lifts every megatile's four
 outermost pixel strips straight from the VR4 (cached per `Tileset` in a WeakMap, ~40 ms once), and

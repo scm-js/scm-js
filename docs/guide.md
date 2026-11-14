@@ -408,12 +408,13 @@ editor's work.
   next to the last, so a piece of wall or floor runs on without a seam. The whole drag is
   one step to undo. Fill Area and **Fill Map with This Block** tile the block the same
   way, lined up on the tile you clicked or on the map's corner, and leave pinned tiles
-  alone like the other fills. While a block is picked the brush size shows the block's
-  size; picking a single tile again (a click in any view, the Tile # box, Alt+click on the
-  map, or *Single tile*) goes back to the brush. A block belongs to the map and tileset it
-  was picked on: with another map in front, the Tile brush lays single tiles. Symmetry
-  does not mirror a block: a block's pictures face one way, so it is laid under the
-  pointer only, as a paste is.
+  alone like the other fills. With a block, Fill Area covers the ground the Rect fill
+  would, the same terrain around the tile you clicked, not only the same exact tile. While
+  a block is picked the brush size shows the block's size; picking a single tile again (a
+  click in any view, the Tile # box, Alt+click on the map, or *Single tile*) goes back to
+  the brush. A block belongs to the map and tileset it was picked on: with another map in
+  front, the Tile brush lays single tiles. Symmetry does not mirror a block: a block's
+  pictures face one way, so it is laid under the pointer only, as a paste is.
 
   The **pieces** view lists the parts of the sheet that maps lay whole: a wall, a ramp, a
   ruin, its tiles side by side as they are drawn. Nothing in a tileset says where one
@@ -425,17 +426,22 @@ editor's work.
   laid first* puts the pieces maps use most at the top. Where a tileset holds one picture
   several times over, exactly or redrawn with slightly different dots, it is one entry,
   and the pointer says how many copies it stands for; one under other flags is listed
-  right after it and says what differs.
+  right after it and says what differs. A plugin can add named pieces of its own: they are
+  listed under its heading ahead of the others, and the search box finds them by name.
 
   At first the pieces come from the map in front. **Learn from Maps…** reads every map in
-  a folder you choose (the mod's own maps, say) and keeps what they lay, for the data set
-  in use, in the browser for later sessions; the view then says how many maps it learned
-  from. A map made for other tiles than the data set's, or one that does not open, is
-  skipped and counted. Learning again replaces what was learned; *Forget* drops it. Maps
-  laid with the Isometric and Rect brushes lay no pieces, so on the game's own maps the
-  list is empty. With pieces listed, Alt+click on the map in Tile mode picks the whole
-  piece when the tile under the pointer is laid beside a neighbour from its piece, and the
-  single tile otherwise.
+  a folder you choose (the mod's own maps, say) and keeps what they lay in the browser for
+  later sessions; the view then says how many maps it learned from. When it is done, the
+  status bar and a notice say how many maps it read and skipped, and how many pieces each
+  tileset now has. A map made for other tiles than the data set's, or one that does not
+  open, is skipped and counted. What is learned belongs to the tilesets' tables, not to a
+  data set's name: the same mod drawn from its folder or installed shares it, and a new
+  version of a mod that changes a tileset starts that tileset afresh. Learning again
+  replaces what was learned; *Forget* (the eraser beside the line) drops it, and so does
+  **Preferences ▸ Storage ▸ Clear all data**. Maps laid with the Isometric and Rect
+  brushes lay no pieces, so on the game's own maps the list is empty. With pieces listed,
+  Alt+click on the map in Tile mode picks the whole piece when the tile under the pointer
+  is laid beside a neighbour from its piece, and the single tile otherwise.
 - **Blend** is for joins the cliff sets never had: dirt into a doodad's base, one edge set
   into another, a hand-laid shoreline. Click a tile to make it the anchor, and the palette
   lists for each side the tiles whose opposite edge continues it, best seam first.
@@ -2119,11 +2125,11 @@ and each plugin's own settings page.
 
 **Storage**: where the game data comes from, and everything the editor keeps in the
 browser, one row per setting or cache, with a plugin's own data under its name. Each row
-can be cleared on its own, or **Clear all data** throws the lot away. Maps are not part of
-that list and are not touched by it. The recovery copies and the previous versions of
-saved files have their own lines. **Export** writes the settings, the plugins' included,
-to one file, and **Import** reads such a file into another browser or machine; caches and
-the recent files stay behind.
+can be cleared on its own, or **Clear all data** throws the lot away, the pieces learned
+from maps included. Maps are not part of that list and are not touched by it. The recovery
+copies and the previous versions of saved files have their own lines. **Export** writes
+the settings, the plugins' included, to one file, and **Import** reads such a file into
+another browser or machine; caches and the recent files stay behind.
 
 **Hotkeys**: every command and its keys.
 

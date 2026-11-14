@@ -1077,6 +1077,28 @@ export interface EditTransaction {
    */
   placeBlend(x: number, y: number, side: Side, id: number): boolean;
   /**
+   * Lay a block (`terrain.blockFrom`, `terrain.blockOf`, or one you made) with its top-left at
+   * tile (x, y), as the Tile brush lays a block: holes and cells off the map are skipped, a
+   * pinned tile is written as `setTile` writes it, ISOM is untouched. Returns tiles changed.
+   *
+   * @example
+   * const [piece] = api.terrain.pieces();
+   * if (piece) api.document.edit("Lay a piece", (tx) => { tx.placeBlock(api.terrain.blockOf(piece), 12, 8); });
+   */
+  placeBlock(block: TileBlock, x: number, y: number): number;
+  /**
+   * Repeat a block over `cells` as a pattern, its copies lined up on `origin` (the map's corner
+   * when omitted), as Fill Map does with a block: each cell takes the block's tile for its place
+   * in the pattern, a hole leaves it alone. Same rules as `placeBlock`. Returns tiles changed.
+   *
+   * @example
+   * // A strip of wall along the top of the marked area.
+   * const area = api.selection.markedArea();
+   * const wall = api.terrain.blockFrom({ group: 2314, slot: 0, cols: 4, rows: 9 });
+   * if (area && wall) api.document.edit("Wall", (tx) => { tx.fillPattern({ ...area, y1: area.y0 + 9 }, wall, { x: area.x0, y: area.y0 }); });
+   */
+  fillPattern(cells: Cells, block: TileBlock, origin?: { x: number; y: number }): number;
+  /**
    * The Heal brush over `cells`: where a tile joins a neighbour visibly (`terrain.seamStep`
    * over 8, what View ▸ Seam Overlay draws) and the tileset has a tile that joins better
    * and is the same to the game (the same flags bit for bit, the same kind of ground),
@@ -2478,6 +2500,85 @@ export interface ActiveBrush {
   brushSize: number;
   /** The Rect brush's variation slot, or -1 for a random one per pair. */
   variation: number;
+  /**
+   * The block the Tile brush lays instead of one tile, or null. Setting one arms the brush
+   * with it (its first tile becomes `tile`); setting `tile`, or null here, goes back to single
+   * tiles. The editor drops a block when another map or tileset comes in front.
+   */
+  block: TileBlock | null;
+}
+
+/**
+ * A rectangle of tiles laid as one: what the Tile palette's sheet picks with a drag, what a
+ * piece is laid as, and what `tx.placeBlock` and `tx.fillPattern` take. `ids` are MTXM tile
+ * ids row by row, `cols × rows` of them; -1 is a hole, a cell the block leaves as the map has
+ * it. `origin` is where its top-left came from in the tileset's sheet, when it came from one
+ * (the Sheet view outlines it there).
+ *
+ * @example
+ * // A 2 × 2 block from the sheet's groups 2900–2901, slots 4–5, with its lower-right cell left out.
+ * const block = { cols: 2, rows: 2, ids: [2900 * 16 + 4, 2900 * 16 + 5, 2901 * 16 + 4, -1] };
+ */
+export interface TileBlock {
+  cols: number;
+  rows: number;
+  ids: number[];
+  origin?: { group: number; slot: number };
+}
+
+/**
+ * A piece of the tileset: a part of its sheet that maps lay whole (a wall, a ramp, a ruin),
+ * or a named one a plugin provides. `tiles` are its tile ids, ascending; `group`, `slot`,
+ * `cols` and `rows` its rectangle in the sheet. `laid` counts how often its tiles are laid in
+ * the maps it was cut from (0 for a provided piece). `copies` is how many other pieces, the
+ * same tiles elsewhere in the tileset, it stands for. `source` is `"maps"` for a piece cut
+ * from maps, else the providing plugin's id.
+ */
+export interface TerrainPiece {
+  tiles: number[];
+  slot: number;
+  group: number;
+  cols: number;
+  rows: number;
+  laid: number;
+  name?: string;
+  category?: string;
+  copies: number;
+  source: string;
+}
+
+/** The tileset's sheet: 16 slots wide, a group a row. `addedFrom` is where the groups a data set adds begin, or null. */
+export interface TileSheetInfo {
+  columns: 16;
+  groups: number;
+  addedFrom: number | null;
+}
+
+/** A map's tiles for `terrain.cutPieces`: MTXM ids row by row, as `ReadonlyScenario.tiles` holds them. */
+export interface PieceMap {
+  tiles: ArrayLike<number>;
+  width: number;
+  height: number;
+}
+
+/** What `terrain.providePieces` takes. */
+export interface PieceSetSpec {
+  /** Names the set among the plugin's; the same id again replaces it. */
+  id: string;
+  /** The heading the Pieces view lists the set under. */
+  label: string;
+  /** The tileset the tiles are of: the set is listed while a map on it is in front. */
+  tileset: TilesetId;
+  pieces: { name?: string; category?: string; block: TileBlock }[];
+}
+
+/** What `terrain.provideTypes` takes. */
+export interface TerrainTypeSpec {
+  /** Names the declaration among the plugin's; the same id again replaces it. */
+  id: string;
+  tileset: TilesetId;
+  /** Each a name and the even group of a left/right pair of flat ground. */
+  types: { name: string; group: number }[];
 }
 
 export interface TerrainApi {
@@ -2598,7 +2699,92 @@ export interface TerrainApi {
   /** A map pixel and its images under the symmetry mode, the original first. */
   mirrorPoint(px: number, py: number): { x: number; y: number }[];
   active(): ActiveBrush;
+  /**
+   * @example
+   * // Arm the Tile brush with a piece the maps lay, as a click in the Pieces view does.
+   * const [piece] = api.terrain.pieces();
+   * if (piece) api.terrain.setActive({ mode: "tile", block: api.terrain.blockOf(piece) });
+   */
   setActive(brush: Partial<ActiveBrush>): void;
+
+  /**
+   * The tileset's sheet as the Tile palette lays it out: 16 slots a row, a group a row, and
+   * where the groups the data set in use adds to the game's begin (null when it adds none).
+   * Null without the tileset graphics.
+   */
+  sheet(): TileSheetInfo | null;
+  /**
+   * A rectangle of the sheet as a block: `cols` slots from `slot` across `rows` groups from
+   * `group`, a slot with no picture a hole. Null when the rectangle runs off the table, when
+   * it holds no tile, or without the graphics.
+   *
+   * @example
+   * const block = api.terrain.blockFrom({ group: 2900, slot: 0, cols: 4, rows: 3 });
+   * if (block) api.document.edit("Lay it", (tx) => { tx.placeBlock(block, 10, 10); });
+   */
+  blockFrom(rect: { group: number; slot: number; cols: number; rows: number }): TileBlock | null;
+  /**
+   * The list the Tile palette's Pieces view shows for the map in front, unfiltered: the sets
+   * plugins provide for its tileset first, then the pieces cut from the map and from what was
+   * learned from folders of maps, the same tiles listed once. A cut piece with the same tiles as
+   * a provided one is left out. The learned part is read the first time it is asked for, and the
+   * `"pieces"` event fires when it arrives. Empty without a map or the graphics.
+   *
+   * @example
+   * const walls = api.terrain.pieces().filter((p) => p.category === "Walls");
+   * api.log(`${walls.length} walls, ${api.terrain.pieces().length} pieces in all`);
+   */
+  pieces(): TerrainPiece[];
+  /**
+   * The piece the map lays at a tile, by the Pieces view's Alt+click rule: the tile is one of a
+   * cut piece's, and a neighbour from the same piece is laid beside it as in the sheet. Null
+   * otherwise.
+   */
+  pieceAt(x: number, y: number): TerrainPiece | null;
+  /** A piece as the block that lays it: its rectangle in the sheet, a hole where it has no tile. */
+  blockOf(piece: TerrainPiece): TileBlock;
+  /**
+   * The pieces the rule cuts from maps of your own (each `{ tiles, width, height }`), read
+   * against the tileset of the map in front — to mine a folder and keep the result where you
+   * like. The same tiles are folded into one piece when the graphics are loaded. Nothing is
+   * kept by the editor.
+   *
+   * @example
+   * // Maps read with @scm-js/core's openMapBytes, bundled into the plugin.
+   * import { openMapBytes } from "@scm-js/core";
+   * const files = await api.ui.pickFiles({ directory: true });
+   * const maps = [];
+   * for (const f of files.filter((f) => /\.sc[mx]$/i.test(f.path))) {
+   *   const opened = await openMapBytes(new Uint8Array(await f.file.arrayBuffer()), f.path).catch(() => null);
+   *   if (opened) maps.push(opened.scenario);
+   * }
+   * api.log(api.terrain.cutPieces(maps).length, "pieces");
+   */
+  cutPieces(maps: readonly PieceMap[]): TerrainPiece[];
+  /**
+   * Named pieces for the Pieces view: listed under `label`, ahead of the pieces cut from maps,
+   * while a map on `tileset` is in front. A piece with a tile the loaded table lacks is not
+   * listed; a cut piece with the same tiles as one of yours is not listed again. The search box
+   * finds yours by name and category. Taken back with the plugin, or by disposing.
+   *
+   * @example
+   * api.terrain.providePieces({
+   *   id: "walls", label: "Ruined walls", tileset: "badlands",
+   *   pieces: [{ name: "Wall, long", category: "Walls", block: api.terrain.blockFrom({ group: 2900, slot: 0, cols: 6, rows: 3 })! }],
+   * });
+   */
+  providePieces(spec: PieceSetSpec): Disposable;
+  /**
+   * Declare flat ground the tileset does not type, for the Rect brush: each `group` is the even
+   * group of a left/right pair, listed under `name` in the Rect tab and Replace Terrain, laid,
+   * filled and replaced as the Rect brush lays any pair. A group that is not such a pair in the
+   * loaded table is skipped. `types()` still lists the game's types alone. Taken back with the
+   * plugin, or by disposing.
+   *
+   * @example
+   * api.terrain.provideTypes({ id: "ground", tileset: "jungle", types: [{ name: "Swamp", group: 2466 }] });
+   */
+  provideTypes(spec: TerrainTypeSpec): Disposable;
 }
 
 export interface TilesetApi {
@@ -4609,7 +4795,9 @@ export type PluginEvent =
   /** A dialog opened or closed — `ui.openDialogs()` says which are open. */
   | "dialogs"
   /** The game data source changed: installed, switched to another data set, or a copy removed. `gameData.source()` says what it is now. */
-  | "gameData";
+  | "gameData"
+  /** `terrain.pieces()` may answer differently: pieces were learned or forgotten, or a plugin provided or withdrew a set. The map's own part follows its ground, which the `"terrain"` event tells. */
+  | "pieces";
 
 /**
  * What the `"commit"` event hands its listeners: one change to the map in front, after it

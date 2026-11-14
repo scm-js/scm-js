@@ -90,6 +90,29 @@ export { paintIsom, paintIsomDiamonds, checkIsom, hasIsom, isomTables, diamondAt
 export { applyChanges, type TileChange } from "../../src/editor/terrain";
 export { checkDoodadPlacement, placeDoodad, applyDoodadChanges, DEFAULT_DOODAD_PLACEMENT, type DoodadPlacementOptions, type DoodadEdit } from "../../src/editor/doodads";
 export { symmetryImages, mirroredOwner, type SymmetryMode, type SymmetryImage } from "../../src/editor/symmetry";
+// A tileset as its sheet (a group a row, 16 slots wide): blocks picked from it and laid, once or as a pattern; the pieces
+// maps lay whole, cut from the maps' evidence a join of the sheet at a time; the same tile twice (picture and flags) and
+// pieces folded by it; learning from a folder of maps; the plugins' named pieces and declared ground beside the cut.
+export {
+  sheetRows, runBounds, blockFromRect, blockRect, blockCells, layBlock, layPattern, patternOrigin, patternTileAt, firstTile, PatternStroke,
+  HOLE, SHEET_COLUMNS, SHEET_BRIDGE, type SheetRow, type SheetRect, type TileBlock,
+} from "../../src/editor/tileSheet";
+export {
+  gatherEvidence, mergeEvidence, cutPieces, pieceBlock, pieceIndex, emptyEvidence, encodeEvidence, decodeEvidence, DEFAULT_CUT,
+  type PieceEvidence, type Piece, type CutOptions,
+} from "../../src/editor/pieces";
+export { learnFromMaps, piecesPerTileset, tableHash, isMapName, type LearnFile, type LearnResult, type LearnDeps, type SkipReason } from "../../src/editor/pieceLearn";
+export {
+  collapsePieces, entryPieces, uniqueTiles, sameTileKey, pictureKey, samePicture, COPY_BLOCK_MEAN, COPY_CELL_MEAN,
+  type PieceEntry, type FlagDifference,
+} from "../../src/editor/tileCopies";
+export { laidPieceAt, sheetTile } from "../../src/editor/piecePick";
+export {
+  pieceSections, declaredTerrains, blockTiles, blockFits,
+  type ProvidedPiece, type ProvidedPieceSet, type DeclaredTerrain, type ListedPiece, type PieceSection,
+} from "../../src/editor/pieceList";
+export { kindKey } from "../../src/editor/heal";
+export { addedGroupsFrom } from "../../src/data/remasteredTiles";
 // The flat ground a new map is filled with: the tileset's own tiles when it is loaded, the base-ground ids without it (as the editor does without game data).
 export { baseTerrain, flatTerrain, DIRT, type BaseTerrain, type TerrainFill } from "../../src/formats/tileset/terrain";
 

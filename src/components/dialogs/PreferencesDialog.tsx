@@ -896,7 +896,7 @@ function StorageSection({ onCleared }: { onCleared: (keys: string[]) => void }) 
       <div className="row">
         {asking ? (
           <>
-            <span className="hint">{asking.keys ? t("Clear {what}?", { what: asking.what }) : t("Clear the preferences, grid settings, installed plugins and plugin data?")}</span>
+            <span className="hint">{asking.keys ? t("Clear {what}?", { what: asking.what }) : t("Clear the preferences, grid settings, installed plugins, plugin data and the pieces learned from maps?")}</span>
             <span className="grow" />
             <Button size="sm" onClick={() => setAsking(null)}>{t("Cancel")}</Button>
             <Button size="sm" variant="danger" onClick={doClear}><Trash2 size={11} /> {" "}{t("Clear")}</Button>

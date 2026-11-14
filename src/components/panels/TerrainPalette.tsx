@@ -300,7 +300,7 @@ function TileTab() {
   const [active, setActive] = useAtom(activeTileAtom);
   const [block, setBlock] = useAtom(tileBlockAtom);
   // The learned pieces are read while the tab is open, so an Alt+click on the map can pick one.
-  useLearnedPieces();
+  useLearnedPieces(loaded?.tileset ?? null);
   const setStatus = useSetAtom(statusMessageAtom);
   const [filter, setFilter] = useState<TileFilter>("all");
   const [query, setQuery] = useState("");
@@ -416,7 +416,7 @@ function TileTab() {
         view === "grid"
           ? <TileGrid loaded={loaded} tiles={tiles} selected={active} onSelect={pickTile} />
           : view === "pieces"
-            ? <TilePieces loaded={loaded} listed={listedSet} addedFrom={kind === "added" ? addedFrom : null} block={block} onBlock={pickBlock} onCount={setPieceCount} />
+            ? <TilePieces loaded={loaded} listed={listedSet} query={query} addedFrom={kind === "added" ? addedFrom : null} block={block} onBlock={pickBlock} onCount={setPieceCount} />
           : view === "sheet"
             ? <TileSheet loaded={loaded} groups={listed} selected={active} block={block} large={large} onSelect={pickTile} onBlock={pickBlock} />
             : <TileBrowser loaded={loaded} groups={groups} selected={active} onSelect={pickTile} />

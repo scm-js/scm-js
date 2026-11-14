@@ -239,8 +239,13 @@ read in the first effect pass is still null.
   a piece wider than the panel scaled to the largest whole pixel size that fits; windowed by `shelvesIn` over the shelf
   tops with 400 px to spare, one canvas per piece drawn in its own outline (holes left transparent). 3,372 entries on the
   mod's Badlands scroll without a hitch in headless Chromium. Filter and search apply by any member's first group (the
-  "Added by" filter: no member below the added range). The head line says where the pieces come from, holds Learn from
-  Maps… / Forget, the progress bar (`.progress-track`) and the last learn's report. A click is `tileBlockAtom ←
+  "Added by" filter: no member below the added range). The head is **one line** (round 3): where the pieces come from (the
+  full text in its title when the panel cuts it short — at 420 px "…and 32 learned maps" is cut), Forget as an eraser
+  icon, Learn from Maps…, *Most laid first* as an icon; while learning the source text gives way to the progress bar
+  (`.progress-track`). The learn's outcome is said once, in the status line and a toast; slice 2 kept it in the palette,
+  where it took a third of the panel. Provided sets (`api.terrain.providePieces`) come first, each under a heading line
+  (`.pieces-heading`, 20 px), laid out as their own shelves and stacked with the cut ones into one windowed layout; the
+  search box also matches a provided piece's name and category. A click is `tileBlockAtom ←
   pieceBlock`, so laying, ghost, pattern and fills are the block's; the Sheet view outlines it through `blockRect`.
 - **Toasts with several buttons** (`Toast.actions`, 2026-11-09): a row under the text (`.toast-actions`, wraps),
   each `{ label, run, keep? }`; pressing one dismisses the toast unless `keep` (the terrain notice's folder button:

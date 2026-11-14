@@ -686,3 +686,32 @@ Tile brush does. Pins did not exist before, so no existing plugin's result chang
 pins file at once (`pinCellsAtom`) and the entry gets `pins = { before the first change, as it stands }`;
 a transaction that only pins is recorded (`hasEdits(entry) || entry.pins`), and a builder that throws
 has them rolled back by `rollbackEntryAtom`. `tests/plugin-terrain-tools.test.ts`.
+
+**Blocks and pieces on the API (2026-11-14)**, additive, version 1: types `TileBlock` (cols, rows, ids row by row with
+-1 for a hole, optional `origin`), `TerrainPiece` (tiles, slot, group, cols, rows, laid, name?, category?, copies — a
+*count* of the pieces it stands for, not the list — and source, `"maps"` or the plugin id), `TileSheetInfo`, `PieceMap`,
+`PieceSetSpec`, `TerrainTypeSpec`. `tx.placeBlock(block, x, y)` / `tx.fillPattern(cells, block, origin?)` are
+`tileSheet.ts#layBlock` / `layPattern` through `applyTiles` (written over pins, as `setTile`), the block checked by
+`plugins/pieces.ts#checkedBlock` (throws in words, so the builder throws and the transaction rolls back).
+`api.terrain.sheet` / `blockFrom` / `pieces` / `pieceAt` / `blockOf` / `cutPieces` / `providePieces` / `provideTypes` are
+`plugins/pieces.ts#pieceCalls`, spread into the terrain group. `pieces()` is `services/pieces.ts#sectionsFromStore`
+flattened (provided first, the cut with copies folded); the learned part is asked for on first use, and the new
+**`"pieces"` event** (`EVENT_ATOMS.pieces = [learnedPiecesAtom, providedPiecesAtom]`) fires when it lands or a set comes
+or goes — the map's own part follows the `"terrain"` event, which is why the new event does not listen to the revision.
+`blockOf` hands back the block a listed piece was made from (a `WeakMap` from the object handed out, so a provided
+piece keeps its own shape, which need not be a sheet rectangle), else builds the rectangle from `tiles`/`group`/`slot`.
+`cutPieces` needs the loaded tileset (the CV5 for the cut, the graphics to fold copies); without it, `[]`.
+`providePieces` / `provideTypes` keep `{key: plugin:id, …}` rows in `providedPiecesAtom` / `providedTypesAtom`
+(`atoms/pieceAtoms.ts`; global, not per document: they are per tileset), the same id replacing, returned as
+`bag.add(remove)` so they go with the plugin or a scope. `active()` gains `block` (a copy), `setActive({ block })` writes
+`tileBlockAtom` after the tile so a block given with a tile wins; `tileBlockAtom` joined the `"palette"` event's atoms.
+**Departures from the coordinator's contract:** `copies` is a number (the contract's "copies it stands for" read as the
+count; the list would hand out other pieces' tiles nobody asked for); `TileSheetInfo.groups` is the table's length;
+`sheet()`, `blockFrom` and the reads answer null / `[]` without the graphics rather than throwing; a provided piece with
+a tile whose slot has no picture counts as "a tile the loaded table lacks" (laying it would write a black tile), so
+`blockFrom` (holes for empty slots) is the way to build one; `pieceAt` answers cut pieces only (the Alt+click rule needs
+a sheet neighbour, which a provided block need not have). The headless host is `createPluginApi`, so all of it works
+there: the transaction calls and reads with a primed or loaded tileset, the provide calls register into the store's atoms
+and `pieces()` lists them (`tests/plugin-pieces.test.ts` "the host without the editor"); the Pieces view and the Rect
+list are the only readers that need a page. `@scm-js/core` exports the pure half (`core.md`).
+

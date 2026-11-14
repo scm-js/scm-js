@@ -1,4 +1,6 @@
 import { tileBlockAtom } from "../../atoms/tileBlockAtoms";
+import { providedTypesAtom } from "../../atoms/pieceAtoms";
+import { declaredTerrains } from "../../editor/pieceList";
 import { useState } from "react";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { Crosshair, MousePointer2, SquareDashed, Trash2 } from "lucide-react";
@@ -68,7 +70,11 @@ function TerrainProps() {
   const underId = scenario && cursor.x < scenario.width && cursor.y < scenario.height ? scenario.tiles[cursor.y * scenario.width + cursor.x] : null;
   const under = loaded && underId !== null ? tileInfo(loaded.tileset, info.terrain, underId) : null;
   // A pair terrain (a mod's added ground) has no name in the tileset's table; the Rect brush's is asked of the files.
-  const brushTerrain = isPairTerrain(terrain) && mode === "rect" ? terrainOf(loaded?.tileset ?? null, info.terrain, terrain) : null;
+  const declared = useAtomValue(providedTypesAtom);
+  // A pair a plugin named (`api.terrain.provideTypes`) by that name, else as the files say.
+  const brushTerrain = isPairTerrain(terrain) && mode === "rect"
+    ? (loaded ? declaredTerrains(loaded.tileset, info.terrain, declared.filter((d) => d.tileset === info.id).flatMap((d) => d.types)).find((d) => d.id === terrain) : undefined) ?? terrainOf(loaded?.tileset ?? null, info.terrain, terrain)
+    : null;
   const dash = <span className="faint">—</span>;
 
   return (

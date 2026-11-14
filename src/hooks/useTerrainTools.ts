@@ -16,7 +16,9 @@ import { tileBlockAtom } from "../atoms/tileBlockAtoms";
 import { blockCells, layPattern, PatternStroke, type TileBlock } from "../editor/tileSheet";
 import { pieceBlock } from "../editor/pieces";
 import { laidPieceAt } from "../editor/piecePick";
-import { piecesFromStore } from "./usePieces";
+import { piecesFromStore } from "../services/pieces";
+import { providedTypesAtom } from "../atoms/pieceAtoms";
+import { declaredTerrains } from "../editor/pieceList";
 import { mirrorIndices, mirrorPixel, mirrorRect } from "../editor/symmetry";
 import {
   applyIsomChanges, brushDiamonds, diamondAt, hasIsom, isDiamond, isomTables, isomTerrains, isomWidth, paintIsom, type Diamond,
@@ -96,10 +98,13 @@ export function useTerrainTools() {
    * own ground under other flags (a mod's Mud on high ground). `useRectTerrains` adds what the
    * open map lays.
    */
-  const types = useMemo(
-    () => [...terrainTypes(loaded?.tileset ?? null, info.terrain), ...copiedTerrains(loaded?.tileset ?? null, info.terrain)],
-    [loaded, info],
-  );
+  const declared = useAtomValue(providedTypesAtom);
+  const types = useMemo(() => {
+    const base = [...terrainTypes(loaded?.tileset ?? null, info.terrain), ...copiedTerrains(loaded?.tileset ?? null, info.terrain)];
+    // Flat ground plugins declare on this tileset (`api.terrain.provideTypes`), as named pair terrains.
+    const mine = loaded ? declared.filter((d) => d.tileset === info.id).flatMap((d) => d.types) : [];
+    return mine.length > 0 && loaded ? [...base, ...declaredTerrains(loaded.tileset, info.terrain, mine).filter((d) => !base.some((b) => b.id === d.id))] : base;
+  }, [loaded, info, declared]);
   /** The terrain an id names: one of `types`, or any other pair of the tileset by its pair id. */
   const terrainOf = useCallback(
     (id: number): TerrainType | null => types.find((t) => t.id === id) ?? (isPairTerrain(id) ? terrainOfTileset(loaded?.tileset ?? null, info.terrain, id) : null),
@@ -312,9 +317,12 @@ export function useTerrainTools() {
       changes = stampTerrain(scn, loaded.tileset, { group: terrain.group, variation: store.get(rectVariationAtom) }, region);
       label = t("Fill {terrain}", { terrain: terrainLabel(terrain) });
     } else if (store.get(tileBlockAtom)) {
-      // A block fills as its pattern, lined up on the cell clicked; not mirrored, since its pictures cannot be.
+      // A block fills as its pattern, lined up on the cell clicked; not mirrored, since its pictures cannot be. The
+      // area is the Rect fill's (the same terrain): on a mod's varied ground the same exact tile is one tile.
       const block = store.get(tileBlockAtom)!;
-      changes = layPattern(scn, block, { x, y }, floodRegion(scn, x, y, (id) => id === seed));
+      const typeOf = (id: number) => (loaded ? terrainKeyOfTile(loaded.tileset, id) : id);
+      const seedType = typeOf(seed);
+      changes = layPattern(scn, block, { x, y }, floodRegion(scn, x, y, (id) => typeOf(id) === seedType));
       label = t("Fill with {cols}×{rows} tiles", { cols: block.cols, rows: block.rows });
     } else {
       const tile = store.get(activeTileAtom);

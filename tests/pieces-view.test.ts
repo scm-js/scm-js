@@ -8,7 +8,7 @@ import { applyChanges } from "../src/editor/terrain";
 import { layBlock } from "../src/editor/tileSheet";
 import { cutPieces, emptyEvidence, gatherEvidence, pieceBlock, pieceIndex } from "../src/editor/pieces";
 import { shelfLayout, shelvesIn } from "../src/editor/pieceShelves";
-import { isMapName, learnFromMaps, piecesPerTileset, type LearnFile } from "../src/editor/pieceLearn";
+import { isMapName, learnFromMaps, piecesPerTileset, tableHash, type LearnFile } from "../src/editor/pieceLearn";
 import { laidPieceAt } from "../src/editor/piecePick";
 import { forgetLearned, memoryPieceStore, piecesKey, readLearned, writeLearned } from "../src/services/pieceStore";
 import { testMapFiles } from "./support/maps";
@@ -59,22 +59,35 @@ describe("the Pieces view's shelves", () => {
 });
 
 describe("the learned collection", () => {
-  it("keeps evidence per data set and tileset, replaces it on learning again, and forgets it", async () => {
+  it("is kept by tileset table, replaced for the tables in use on learning again, and forgotten", async () => {
     const store = memoryPieceStore();
     const tiles = new Uint16Array(16 * 16);
-    const scn = { width: 16, height: 16, tiles };
     PICTURE.ids.forEach((t, i) => { tiles[(2 + Math.floor(i / 3)) * 16 + 3 + (i % 3)] = t; });
-    const e = gatherEvidence(emptyEvidence(), scn.tiles, 16, 16, { groups: sheet(64) });
-    await writeLearned(store, "mod", new Map([[0, e], [4, e]]));
-    expect(store.data.has(piecesKey("mod", 0))).toBe(true);
-    expect(cutPieces((await readLearned(store, "mod", 4))!)).toEqual(cutPieces(e));
-    expect(await readLearned(store, "other", 0)).toBeNull();
-    await writeLearned(store, "mod", new Map([[0, e]]));
-    expect(await readLearned(store, "mod", 4)).toBeNull();
-    await forgetLearned(store, "mod");
+    const table = sheet(64);
+    const e = gatherEvidence(emptyEvidence(), tiles, 16, 16, { groups: table });
+    const a = piecesKey(0, table), b = piecesKey(4, table);
+    expect(a).toMatch(/^badlands\/[0-9a-f]{16}$/);
+    await writeLearned(store, [a, b], new Map([[a, e], [b, e]]));
+    expect(cutPieces((await readLearned(store, b))!)).toEqual(cutPieces(e));
+    // The same table reached another way (another data set's copy of it) shares the key; another table does not.
+    expect(piecesKey(0, sheet(64))).toBe(a);
+    expect(piecesKey(0, sheet(65))).not.toBe(a);
+    expect(await readLearned(store, piecesKey(0, sheet(65)))).toBeNull();
+    await writeLearned(store, [a, b], new Map([[a, e]]));
+    expect(await readLearned(store, b)).toBeNull();
+    await forgetLearned(store, [a, b]);
     expect(store.data.size).toBe(0);
-    await store.put(piecesKey("mod", 0), "not evidence");
-    expect(await readLearned(store, "mod", 0)).toBeNull();
+    await store.put(a, "not evidence");
+    expect(await readLearned(store, a)).toBeNull();
+    await store.clear();
+    expect(store.data.size).toBe(0);
+  });
+
+  it("tells one table from another by any word of a record", () => {
+    const one = sheet(8), two = sheet(8);
+    (two[3] as { megatiles: Uint16Array }).megatiles = Uint16Array.from(two[3].megatiles, (m, i) => (i === 5 ? m + 1 : m));
+    expect(tableHash(one)).toBe(tableHash(sheet(8)));
+    expect(tableHash(two)).not.toBe(tableHash(one));
   });
 });
 

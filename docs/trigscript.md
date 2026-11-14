@@ -381,9 +381,9 @@ language](trigscript-language.md) guide covers each part in full. In short:
 - **Text and sound**: texts with values, lines of JSX, and sounds the script makes
   ([Text](trigscript-language.md#text), [Sounds and imported
   files](trigscript-language.md#sounds-and-imported-files)).
-- **Libraries**: nine modules that come with TrigScript, such as `trigscript/ui` for menus
-  and `trigscript/cutscene` for scenes, and libraries other plugins provide ([TrigScript
-  library](trigscript-library.md)).
+- **Libraries**: twelve modules that come with TrigScript, such as `trigscript/ui` for
+  menus and `trigscript/cutscene` for scenes, and libraries other plugins provide
+  ([TrigScript library](trigscript-library.md)).
 
 A few of these together: a wave every thirty seconds, each bigger than the last, until
 Player 1 has lost ten Marines.
@@ -1321,15 +1321,15 @@ it.
 | `unitsAt(location, filter?)`, `unitsOf(player, filter?)`, `allUnits(filter?)` | The units a `for…of` runs over. [Units](trigscript-language.md#units) |
 | `first(filter?)`, `nearest(type, location, filter?)`, `randomUnit(filter?)` | One unit, or `null`. |
 | `u.hp`, `u.shields`, `u.energy`, `u.kills`, `u.cooldown`, `u.buildTime`, `u.stim` …, `u.invincible` | Read and written. `u.hp = 0` kills. [A unit's fields](trigscript-language.md#a-units-fields) |
-| `u.maxHp`, `u.owner`, `u.type`, `u.x`, `u.y`, `u.speed`, `u.burrowed`, `u.cloaked`, `u.underAttack`, `u.inTransport` | Read only. |
-| `u.order(kind, location)`, `u.give(player)`, `u.kill()`, `u.remove()`, `u.damage(n)`, `u.heal(n)`, `u.locate(location)` | What a unit can be told. `damage` and `heal` also take `{ percent }`. |
+| `u.maxHp`, `u.owner`, `u.type`, `u.x`, `u.y`, `u.speed`, `u.burrowed`, `u.cloaked`, `u.underAttack`, `u.inTransport`, `u.orderTarget`, `u.orderTargetX`, `u.orderTargetY` | Read only. |
+| `u.order(kind, location)`, `u.gather(target)`, `u.give(player)`, `u.kill()`, `u.remove()`, `u.damage(n)`, `u.heal(n)`, `u.locate(location)` | What a unit can be told. `damage` and `heal` also take `{ percent }`. |
 | `on.created`, `on.died`, `on.killed`, `on.morphed`, `on.order` | A function run each time something happens to a unit. [Events](trigscript-language.md#events) |
 | `stats(unitType)`, `stats(weapon)`, `stats(upgrade)`, `stats(tech)`, `stats(player)` | The game's tables. [The game's tables](trigscript-language.md#the-games-tables-and-memory) |
 | `memory.game.frame`, `memory.map.width`, `memory.vision.countdown` | Other values of the game. |
 | `keyPressed(p, key)`, `keyHeld(p, key)`, `clicked(p, button)`, `on.key(key, fn)` | Keys and mouse buttons. [Keys](trigscript-language.md#keys-and-buttons) |
 | `mouse(p)`, `underMouse(p, filter?)`, `centerLocation(location, x, y)`, `bounds(location)` | The cursor's place on the map; the unit nearest it, or `null`; a location moved onto a point; where a location is now. |
 | `chatted(p, pattern)`, `on.chat(pattern, fn)` | `null`, or the values read out of a typed line. [Chat](trigscript-language.md#chat) |
-| `local.player`, `local.camera`, `local.selected`, `await sync(p, value)` | What only this computer knows, and sending it to every computer. [Local values](trigscript-language.md#what-only-one-computer-knows) |
+| `local.player`, `local.camera`, `local.mouse`, `local.selected`, `local.card`, `local.screen`, `await sync(p, value)` | What only this computer knows, and sending it to every computer. [Local values](trigscript-language.md#what-only-one-computer-knows) |
 | `` displayText(`… ${n} …`) ``, `name(p)`, `color(p)` | A text with numbers, a player's name and colour in it, for the current player. [Text](trigscript-language.md#text) |
 | `print(text, { to?, position? })` | The same for others, in the `"chat"` area or on the `"center"` line. |
 | `<line>`, `<bar>`, `<cell>`, `ui.lines(p, () => …)` | Lines of JSX, in a `.tsx` file. [Lines of JSX](trigscript-language.md#lines-of-jsx) |

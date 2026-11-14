@@ -32,7 +32,7 @@ what each part does, and what to write instead of the few parts that are not the
 | [Keys, the mouse and chat](#keys-the-mouse-and-chat) | Presses, clicks, the cursor, typed lines; `local` and `sync()` |
 | [Text](#text) | Texts with values, `string` variables and their methods, lines of JSX |
 | [Sounds and imported files](#sounds-and-imported-files) | Clips made when the script is built; videos, pictures, sounds and MIDI the script imports |
-| [Libraries](#libraries) | The standard library's nine modules, and libraries other plugins provide |
+| [Libraries](#libraries) | The standard library's twelve modules, and libraries other plugins provide |
 | [What a program does not have](#what-a-program-does-not-have) | What is refused, and what to write instead |
 
 Every example on these pages compiles as it is written. A line that ends with a comment
@@ -1013,9 +1013,11 @@ These can be **read and written**: `hp`, `shields` and `energy` in whole points;
 These can **only be read**: `maxHp` and `maxShields`, `owner`, `type`, `x`, `y`,
 `orderId`, `speed` (how fast it is moving now), `cloaked`, `burrowed`, `underAttack` (the
 game raised its under-attack alert for the unit within the last second or so, which it
-does for a hit out of the player's view), `hasTarget` (its order is aimed at a unit) and
-`inTransport`. The game keeps these to itself: writing a position ends the game with "EUD
-not supported", and a cloak write shows nothing. The editor marks such a write as you
+does for a hit out of the player's view), `hasTarget` (its order is aimed at a unit),
+`orderTarget` (the unit its order is aimed at, such as the one it follows, attacks or
+mines, or `null`), `orderTargetX` and `orderTargetY` (where its order is aimed, in pixels)
+and `inTransport`. The game keeps these to itself: writing a position ends the game with
+"EUD not supported", and a cloak write shows nothing. The editor marks such a write as you
 type.
 
 A building finished early by writing `buildTime` keeps the hit points it had reached, and
@@ -1025,6 +1027,9 @@ a Terran building under a third burns, so heal it after.
 
 - `order("move" | "patrol" | "attack", location)`, the game's own Order, reaching this
   unit alone;
+- `gather(target)`, the order a right-click gives a worker: an SCV, Probe or Drone mines a
+  mineral field, or gathers from a Refinery, Extractor or Assimilator. Any other unit, or
+  any other target, is left as it is;
 - `give(player)`, `kill()`, `remove()`;
 - `damage(n)` and `heal(n)`, or `{ percent: 50 }` of the type's maximum;
 - `locate(location)`, which centres a location on the unit so that `createUnit` and the
@@ -1268,7 +1273,20 @@ keys, so there they read as nothing; a [test](trigscript.md#tests) can press the
 
 `local` is what this computer alone knows: `local.player` (the player at this computer),
 `local.camera.x` and `.y` (where its screen is on the map), `local.mouse.x` and `.y` (the
-cursor on the screen), `local.selected` and `local.selectionCount`.
+cursor on the screen), `local.selected` and `local.selectionCount`. Three more are for
+reading the screen itself:
+
+- `local.mouse.buttons`, which mouse buttons are down now, as bits: 2 the left, 8 the
+  right. `clicked(p, "right")` is the same press sent to every computer frames later; this
+  is the moment it happened, while the cursor is still where it was pressed.
+- `local.card.buttonSet`, which buttons the command card shows, by the button set's
+  number. One unit type selected, alone or several of it, shows that type's own set (a
+  Medic's is 34); units of several types show 244; 229 is the Cancel card a targeting
+  cursor brings up.
+- `local.screen.width`, how wide the game is drawn in Remastered graphics, in the game's
+  pixels: it follows the shape of the display (853 at 16:9, 640 at 4:3). Classic graphics
+  always draws 640 wide, but this still reads the display's width, so it does not tell the
+  two graphics apart.
 
 A local value may choose what is shown on this computer. It may not change the game, since
 every computer would change it differently and the game would split, and the editor
@@ -1465,7 +1483,7 @@ way.
 
 ### The standard library
 
-TrigScript comes with nine modules written for programs, imported as
+TrigScript comes with twelve modules written for programs, imported as
 `"trigscript/<name>"`. The [TrigScript library](trigscript-library.md) guide has a page
 for each, with an example and everything it holds.
 
@@ -1480,10 +1498,13 @@ for each, with an example and everything it holds.
 | [`trigscript/fog`](trigscript-library.md#fog) | Pictures and videos drawn in the fog of war |
 | [`trigscript/screen`](trigscript-library.md#screen) | A grid of pixels on the map and the minimap |
 | [`trigscript/music`](trigscript-library.md#music) | Instruments, patterns and songs |
+| [`trigscript/workers`](trigscript-library.md#workers) | New workers rallied to minerals or gas start gathering |
+| [`trigscript/spells`](trigscript-library.md#spells) | Medics that cast Restoration on their own |
+| [`trigscript/card`](trigscript-library.md#command-card) | A right-click on a command card button, for single-player maps |
 
-`fog`, `screen` and `cutscene` each take one of the map's first 63 locations that the map
-does not use, with `reserveLocation(why)`. A script of your own can call it too: the
-location is chosen when the script is built, and the reason shows with the map's
+`fog`, `screen`, `cutscene` and `card` each take one of the map's first 63 locations that
+the map does not use, with `reserveLocation(why)`. A script of your own can call it too:
+the location is chosen when the script is built, and the reason shows with the map's
 requirements.
 
 ### Libraries from other plugins

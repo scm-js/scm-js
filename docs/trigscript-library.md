@@ -1,8 +1,10 @@
 # The TrigScript library
 
-TrigScript comes with nine modules written for programs: motion and maths, chance, timers,
-events of your own, menus and dialogs in the text area, cutscenes, pictures drawn in the
-fog of war, pixel screens on the minimap, and music. A script imports what it needs:
+TrigScript comes with twelve modules written for programs: motion and maths, chance,
+timers, events of your own, menus and dialogs in the text area, cutscenes, pictures drawn
+in the fog of war, pixel screens on the minimap, music, workers that go to work on their
+own, Medics that restore on their own, and right-clicks on the command card. A script
+imports what it needs:
 
 ```ts
 import { chance, range } from "trigscript/random";
@@ -34,14 +36,18 @@ language](trigscript-language.md) guide.
 | [`trigscript/fog`](#fog) | The fog of war as a picture: discs, rectangles, pictures, columns, videos |
 | [`trigscript/screen`](#screen) | A grid of pixels shown on the map and the minimap as units |
 | [`trigscript/music`](#music) | Instruments, patterns and songs, played note by note or mixed when the script is built |
+| [`trigscript/workers`](#workers) | New workers rallied to minerals or gas start gathering as they come out |
+| [`trigscript/spells`](#spells) | Medics that cast Restoration on their own |
+| [`trigscript/card`](#command-card) | A right-click on a command card button, for single-player maps |
 
 Other plugins can provide libraries of their own; see [Libraries from other
 plugins](#libraries-from-other-plugins).
 
-Some modules need something from the map, and they say so on their pages. `fog`, `screen`
-and `cutscene` each take one of the map's first 63 locations that the map does not use.
-The reason each location was taken shows with the map's requirements. `fog` uses eleven
-flying hero unit types as its brushes, and `screen` needs players set up for its colours.
+Some modules need something from the map, and they say so on their pages. `fog`, `screen`,
+`cutscene` and `card` each take one of the map's first 63 locations that the map does not
+use. The reason each location was taken shows with the map's requirements. `fog` uses
+eleven flying hero unit types as its brushes, and `screen` needs players set up for its
+colours.
 
 **With a mod.** While the editor draws from a mod's data set, the examples' unit names are
 the mod's: `units.Terran_Mason` rather than `units.TerranSCV` (see [With a
@@ -672,6 +678,193 @@ script plays reach the map, mixed into the sounds it makes.
 | `render(song, options?)` | A song or a performance mixed into one sound when the script is built. Options: `reverb`, `master`, `limit`, `loudness`, `parts`. |
 | `play(song)`, `loop(song)` | Play a song note by note, once or again and again. |
 | `stems(song, options)`, `new Band()`, `conduct(stems, band)` | Music that follows the game: `band.go`, `queue`, `mute`, `unmute`, `sting`, `stop`. |
+
+## Workers
+
+`trigscript/workers` puts new workers to work. A worker rallied to a mineral field
+normally walks to it and stands there; with this module it starts mining as soon as it
+comes out.
+
+```ts
+import { buildAutoMiningProgram } from "trigscript/workers";
+
+buildAutoMiningProgram();   // at the top of the script: on for the whole game
+```
+
+For every human player, a newly trained SCV or Probe, or a Drone hatched from a Larva,
+looks at where its producer's rally point is:
+
+- On a mineral field, it mines that field.
+- On a finished Refinery, Extractor or Assimilator of its own player, it gathers gas from
+  it.
+- Anywhere else, it walks to the rally point as it always has: the ground, a bare geyser,
+  a gas building still being made, or another player's.
+
+It acts once, as the worker comes out, so an order the player gives afterward stands.
+Computer players' workers and units made by Create Unit are left alone. A field or a gas
+building that is already busy is the game's to sort out, as it is when the player
+right-clicks it.
+
+**Where the call goes.** `buildAutoMiningProgram()` makes a program, and programs are made
+when the map is built, so the call goes at the top of a script, outside `program()`.
+Inside `program()` or a listener, the script does not build. Once is enough: a second
+call, in the same file or another, adds nothing.
+
+The order it gives is `u.gather(target)`, which a program of your own can give too ([What
+a unit can be told](trigscript-language.md#what-a-unit-can-be-told)).
+
+| Name | What it does |
+| --- | --- |
+| `buildAutoMiningProgram()` | Turn auto-mining on for the whole game. At the top of a script only. |
+
+## Spells
+
+`trigscript/spells` lets a Medic cast Restoration on its own. A unit hit by Lockdown or
+Plague near an idle Medic is restored without the player clicking anything.
+
+```ts
+import { buildAutoRestoreProgram } from "trigscript/spells";
+
+buildAutoRestoreProgram({ keepEnergy: 25 });   // at the top of the script: on for the whole game
+```
+
+A human player's Medic that stands idle, or is healing on its own after standing idle,
+casts Restoration on a unit within the spell's range that has Lockdown, Irradiate, Plague,
+Ensnare, Maelstrom, Acid Spores or Optical Flare. The unit is its owner's or belongs to a
+player its owner is allied with.
+
+- **It is a real cast.** The owner must have researched Restoration, and the Medic must
+  have the spell's energy, plus `keepEnergy` more when that is given. The cast looks and
+  costs what a player's does.
+- **One Medic to a unit.** The nearest Medic goes to the nearest afflicted unit. A Medic
+  never walks to reach one: if the unit moves out of range before the cast starts, the
+  Medic stops.
+- **The player's orders come first.** A Medic that is moving, attack-moving, holding,
+  patrolling or casting because the player told it to is never used.
+- **Left alone:** a unit with only Parasite, a unit in stasis or invincible, a
+  hallucination (Restoration would kill it), and the Medic itself. Computer players'
+  Medics are left to the computer, which casts Restoration itself.
+
+**Tied to a switch.** With `switch`, auto-restore runs only while that switch of the map
+is set, so a campaign map can give it to the player partway through:
+
+```ts
+import { buildAutoRestoreProgram } from "trigscript/spells";
+
+buildAutoRestoreProgram({ switch: "Switch 1" });
+```
+
+**Letting the player turn it off.** With `allowPlayersToTurnOffAutoCast: true`, the player
+turns auto-restore off and on again by right-clicking the Restore button on a Medic's
+command card, as auto-cast works in StarCraft II. The player is told "Auto-restore off" or
+"Auto-restore on". It starts on, and one setting covers all of that player's Medics,
+including ones trained later. While the map's switch is cleared, a right-click on Restore
+does nothing and the setting is kept for when the switch is set again.
+
+```ts
+import { buildAutoRestoreProgram } from "trigscript/spells";
+
+buildAutoRestoreProgram({ switch: "Switch 1", allowPlayersToTurnOffAutoCast: true });
+```
+
+This option is for single-player maps. The right-click is read with
+[`trigscript/card`](#command-card), so what that module asks of the map applies: it takes
+one of the map's free locations, and the view moves to the middle of the map and back once
+in the first second of the game.
+
+**Where the call goes.** `buildAutoRestoreProgram()` makes a program, and programs are
+made when the map is built, so the call goes at the top of a script, outside `program()`.
+Once is enough: a second call, in the same file or another, adds nothing.
+
+| Name | What it does |
+| --- | --- |
+| `buildAutoRestoreProgram(options?)` | Turn auto-restore on. Options: `switch` (a switch's name; it runs only while that switch is set), `keepEnergy` (energy a Medic keeps after casting, 0 when left out) and `allowPlayersToTurnOffAutoCast` (a single-player map's player turns it off and on by right-clicking Restore). At the top of a script only. |
+
+## Command card
+
+`trigscript/card` tells a program when the player right-clicks a button on the command
+card. In the game, a right-click on a card button does nothing, so a map can give it a
+meaning of its own, such as turning an ability's auto-cast off and on.
+
+```ts
+import { CardButton, cardSlots } from "trigscript/card";
+
+program(async () => {
+  if (!isHuman(CurrentPlayer)) return;
+  const restore = new CardButton(techs.Restoration, cardSlots.Restoration);
+  await restore.begin();
+  let on = true;
+  while (true) {
+    if (await restore.rightClicked()) {
+      on = !on;
+      print(on ? "Restore: on" : "Restore: off", { to: CurrentPlayer });
+    }
+    await nextFrame();
+  }
+}, { owner: AllPlayers });
+```
+
+**Single-player maps only.** Make the button in a program run for the human player, as
+above. Call `begin()` once before the program's loop, and `rightClicked()` once on every
+pass of it. `rightClicked()` is true on one pass for each right-click on the button.
+
+**What counts as a right-click on the button.** The game keeps no record of which button a
+right-click landed on, so the module checks where the mouse was when the right button went
+down against where the button is drawn. It counts only while the card shows the buttons of
+the units that have the ability: for Restoration, one Medic or several Medics selected on
+their own. With a Marine in the selection the card shows another set of buttons, and while
+a targeting cursor is up it shows Cancel, so a right-click then does not count.
+
+The ability says which card to look for and the slot says where its button is. `cardSlots`
+names the nine places on the card, `topLeft` to `bottomRight`, and each ability's own
+place: `cardSlots.Restoration` is `bottomMiddle`. Restoration is the only ability the
+module knows the card for so far; a button made for any other never counts.
+
+**Classic or Remastered graphics.** The card sits against the right edge of the game
+screen, and where that edge is depends on the graphics. Classic graphics draws the game
+640 pixels wide; Remastered graphics draws it as wide as the shape of the display. No
+value in the game says which graphics are on, so `begin()` finds out by moving the view:
+at the start of the game the view centers on the middle of the map, the module reads where
+the camera stopped, and the view goes back to where it was. The player sees this as a
+quick move to the middle of the map and back. Nothing else should move the view while it
+happens. After that, a click on the minimap and the camera going further right than
+Remastered graphics allows keep it current when the player changes graphics in the middle
+of a game. On a map smaller than 32 × 32 tiles the view is not moved and the graphics stay
+unknown. While they are unknown, a right-click on the button's place in either layout
+counts.
+
+**An opening scene.** `cardSetup` goes at the top of the script, before any `CardButton`
+is made. With `afterCalibration`, the view is not sent back once the measuring is done:
+the function runs instead, which is where an opening cinematic can start.
+`showMeasurements: true` prints each step of the measuring, and each right-click the
+button checks, as numbered `#1 card: …` lines, for finding out why a click did not count.
+
+```ts
+import { CardButton, cardSetup, cardSlots } from "trigscript/card";
+
+cardSetup({ afterCalibration: () => print("The briefing starts here."), showMeasurements: true });
+
+program(async () => {
+  if (!isHuman(CurrentPlayer)) return;
+  const restore = new CardButton(techs.Restoration, cardSlots.Restoration);
+  await restore.begin();
+  while (true) {
+    if (await restore.rightClicked()) print("Restore was right-clicked.", { to: CurrentPlayer });
+    await nextFrame();
+  }
+}, { owner: AllPlayers });
+```
+
+**What the map needs.** The module takes one of the map's first 63 locations that the map
+does not use, to center the view on.
+
+| Name | What it does |
+| --- | --- |
+| `new CardButton(tech, slot)` | A button of the command card, watched for a right-click: the ability whose card it is on, and its place on the card. |
+| `await button.begin()` | Before the program's loop: records where the view starts and begins measuring the screen. |
+| `await button.rightClicked()` | On every pass of the loop: whether the player right-clicked the button since the last time it said so. |
+| `cardSlots` | The nine places on the card (`topLeft`, `topMiddle`, `topRight`, `middleLeft`, `center`, `middleRight`, `bottomLeft`, `bottomMiddle`, `bottomRight`), and `Restoration`, Restore's own place. |
+| `cardSetup(options)` | At the top of the script: `afterCalibration` runs once the measuring is done, in place of sending the view back; `showMeasurements` prints each step. |
 
 ## Libraries from other plugins
 

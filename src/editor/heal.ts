@@ -16,7 +16,8 @@
  * Pure and canvas-free; `tests/heal.test.ts`.
  */
 import type { Scenario } from "../formats/chk/scenario";
-import { megatileForTile, tileGroupOf, type Tileset } from "../formats/tileset/decode";
+import { megatileForTile, type Tileset } from "../formats/tileset/decode";
+import { kindKey } from "../formats/tileset/kind";
 import { drawableTiles, SEAM_SHOWS, seamStep, SIDES, type Side } from "./blend";
 import type { TileChange } from "./terrain";
 
@@ -40,18 +41,8 @@ interface HealTables {
 
 const tables = new WeakMap<Tileset, HealTables>();
 
-/**
- * What a tile is to the game, as a string: its CV5 group's flag word and its megatile's sixteen
- * VF4 words. Two tiles with the same key walk, build, block sight and stand at the same height
- * alike; the Tile palette's lists also take it as half of "the same tile" (`tileCopies.ts`).
- */
-export function kindKey(tileset: Tileset, tile: number): string {
-  const group = tileset.groups[tileGroupOf(tile, tileset.groups.length)];
-  const base = megatileForTile(tileset, tile) * 16;
-  let key = String(group?.flags ?? 0);
-  for (let m = 0; m < 16; m++) key += `,${tileset.megatileFlags[base + m] ?? 0}`;
-  return key;
-}
+// What a tile is to the game: in formats/tileset/kind.ts (the borrowed-terrain worker uses it too), here as before.
+export { kindKey };
 
 function healTables(tileset: Tileset): HealTables {
   const cached = tables.get(tileset);

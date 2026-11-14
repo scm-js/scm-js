@@ -27,6 +27,7 @@ import { DEFAULT_PROFILE, isDefaultProfile, REMASTERED_PROFILE } from "../gameda
 import { readFrom, type AssetSource } from "../gamedata/source";
 import { readStored } from "../gamedata/store";
 import { BORROW_STORE } from "./handleStore";
+import { logInfo, type LogData } from "../editor/log";
 import { browserStore, type PieceStore } from "./pieceStore";
 
 type Store = ReturnType<typeof getDefaultStore>;
@@ -116,49 +117,142 @@ export async function readKnownBorrowed(store: Store, era: number, host: Tileset
 
 /* ── The scan ───────────────────────────────────────────── */
 
-export interface ScanDeps {
-  db?: PieceStore;
-  /** Awaited between slices; the default gives the page a frame. */
-  pause?(): Promise<void>;
-  /** The game's own tileset of an ERA; the default reads it beneath the data set in use. */
-  source?(era: number): Promise<Tileset | null>;
+/**
+ * What works a table out: the table from `source` into `host`, telling `progress` how far it is
+ * (0–1). The editor hands the scan its worker client (`borrowTableClient.ts`, from `main.tsx`);
+ * without one, and for any table a worker could not do, the table is worked out on this thread in
+ * slices (`slicedTableMaker`).
+ */
+export interface BorrowTableMaker {
+  table(host: Tileset, source: Tileset, progress: (share: number) => void, signal?: AbortSignal): Promise<BorrowTable>;
+  /** Counts for the scan's log line since the last call (the worker client: workers, what was cloned). */
+  stats?(): LogData;
+}
+
+let preferredMaker: BorrowTableMaker | null = null;
+
+/** The table maker scans use by default (the editor's worker client); null for the sliced path alone. */
+export function setBorrowTableMaker(maker: BorrowTableMaker | null): void {
+  preferredMaker = maker;
 }
 
 const framePause = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
+const stopped = () => Object.assign(new Error("stopped"), { name: "AbortError" });
+/** Whether an error is a stop (the palette's Stop, or a signal), not a failure. */
+export const isStopped = (err: unknown): boolean => err instanceof Error && err.name === "AbortError";
+
+/** The table on this thread, in slices with a pause between them; one table at a time. */
+export function slicedTableMaker(pause: () => Promise<void> = framePause): BorrowTableMaker {
+  let turn: Promise<unknown> = Promise.resolve();
+  return {
+    table(host, source, progress, signal) {
+      const run = turn.then(() => {
+        if (signal?.aborted) throw stopped();
+        return borrowTable(host, source, {
+          pause: async () => { if (signal?.aborted) throw stopped(); await pause(); },
+          progress: (done, total) => progress(done / Math.max(1, total)),
+        });
+      });
+      turn = run.catch(() => undefined);
+      return run;
+    },
+  };
+}
+
+export interface ScanDeps {
+  db?: PieceStore;
+  /** Awaited between slices on the sliced path; the default gives the page a frame. */
+  pause?(): Promise<void>;
+  /** The game's own tileset of an ERA; the default reads it beneath the data set in use. */
+  source?(era: number): Promise<Tileset | null>;
+  /** What works the tables out; the default is the one `setBorrowTableMaker` set, else the sliced path. */
+  tables?: BorrowTableMaker;
+  /** Stops the scan: it rejects with an error `isStopped` knows, and publishes nothing. */
+  signal?: AbortSignal;
+}
+
+let running: AbortController | null = null;
+
+/** Stop the scan under way, if there is one (the palette's Stop). Tables already worked out are kept. */
+export function stopBorrowScan(): boolean {
+  if (!running) return false;
+  running.abort();
+  return true;
+}
 
 /**
  * Work out, or read back, the table from each of the game's other tilesets into `host`, and the
- * terrains each offers; publish them in `borrowHostsAtom` and keep them. Progress in
- * `borrowScanAtom`. A source that is the host's own files (the same hash) is skipped.
+ * terrains each offers; publish them in `borrowHostsAtom` and keep them. The tables still to be
+ * worked out go to the table maker together (a pool of workers takes them in turn); each is kept
+ * as it lands, so a stopped scan loses none of them. Progress in `borrowScanAtom`. A source that
+ * is the host's own files (the same hash) is skipped.
  */
 export async function scanBorrowed(store: Store, era: number, host: Tileset, deps: ScanDeps = {}): Promise<BorrowHostInfo> {
   const db = deps.db ?? browserBorrowStore;
-  const pause = deps.pause ?? framePause;
+  const sliced = slicedTableMaker(deps.pause ?? framePause);
+  const maker = deps.tables ?? preferredMaker ?? sliced;
   const sourceOf = deps.source ?? ((e: number) => gameOwnTileset(store, e));
+  const controller = new AbortController();
+  deps.signal?.addEventListener("abort", () => controller.abort(), { once: true });
+  running?.abort();
+  running = controller;
+  const signal = controller.signal;
   const hostKey = hostKeyOf(era, host);
   const hostHash = tilesetHash(host);
   const eras = TILESETS.map((_, e) => e).filter((e) => e !== (era & 7));
-  const sources: BorrowSourceInfo[] = [];
+  const share = new Map<number, number>(eras.map((e) => [e, 0]));
+  const tell = () => {
+    const next = eras.find((e) => share.get(e)! < 1) ?? eras[eras.length - 1];
+    store.set(borrowScanAtom, { hostKey, sourceEra: next, share: [...share.values()].reduce((a, b) => a + b, 0) / eras.length });
+  };
+  const found: { sourceEra: number; source: Tileset; sourceHash: string; table: BorrowTable | null }[] = [];
+  const started = performance.now();
+  let fellBack = 0, kept = 0;
+  maker.stats?.();
   try {
-    for (const [k, sourceEra] of eras.entries()) {
-      store.set(borrowScanAtom, { hostKey, sourceEra, share: k / eras.length });
+    // The sources, and the tables already kept: on this thread, short steps.
+    for (const sourceEra of eras) {
+      tell();
+      if (signal.aborted) throw stopped();
       const source = await sourceOf(sourceEra);
-      if (!source) continue;
-      const sourceHash = tilesetHash(source);
-      if (sourceHash === hostHash) continue;
-      let table = await readTable(db, host, sourceHash);
-      if (!table) {
-        table = await borrowTable(host, source, { pause, progress: (done, total) => store.set(borrowScanAtom, { hostKey, sourceEra, share: (k + done / Math.max(1, total)) / eras.length }) });
-        await db.put(tableKey(host, sourceHash), encodeBorrowTable(table)).catch(() => undefined);
-      }
-      sources.push({ sourceEra, sourceHash, terrains: borrowableTerrains(host, era, source, sourceEra, table), counts: tableCounts(source, table) });
-      keep(`${hostKey}|${sourceEra}`, { host, source, sourceEra, table });
+      const sourceHash = source ? tilesetHash(source) : "";
+      if (!source || sourceHash === hostHash) { share.set(sourceEra, 1); continue; }
+      const table = await readTable(db, host, sourceHash);
+      if (table) { share.set(sourceEra, 1); kept++; }
+      found.push({ sourceEra, source, sourceHash, table });
     }
+    tell();
+    // The rest, together: a worker pool takes them in turn; what a worker cannot do comes back here.
+    await Promise.all(found.filter((f) => !f.table).map(async (f) => {
+      const progress = (s: number) => { share.set(f.sourceEra, Math.min(0.99, s)); tell(); };
+      try {
+        f.table = await maker.table(host, f.source, progress, signal);
+      } catch (err) {
+        if (isStopped(err) || signal.aborted || maker === sliced) throw err;
+        fellBack++;
+        f.table = await sliced.table(host, f.source, progress, signal);
+      }
+      share.set(f.sourceEra, 1);
+      tell();
+      await db.put(tableKey(host, f.sourceHash), encodeBorrowTable(f.table)).catch(() => undefined);
+    }));
+    if (signal.aborted) throw stopped();
   } finally {
+    if (running === controller) running = null;
     store.set(borrowScanAtom, null);
+  }
+  const sources: BorrowSourceInfo[] = [];
+  for (const f of found) {
+    const table = f.table!;
+    sources.push({ sourceEra: f.sourceEra, sourceHash: f.sourceHash, terrains: borrowableTerrains(host, era, f.source, f.sourceEra, table), counts: tableCounts(f.source, table) });
+    keep(`${hostKey}|${f.sourceEra}`, { host, source: f.source, sourceEra: f.sourceEra, table });
   }
   await db.put(indexKey(hostKey), JSON.stringify({ sources })).catch(() => undefined);
   publish(store, hostKey, withProvided(store, era, sources));
+  logInfo("terrain", "Looked through the other tilesets for borrowed terrain", {
+    tileset: TILESET_FILENAMES[era & 7], sources: found.length, kept, ms: Math.round(performance.now() - started),
+    onPage: maker === sliced ? found.length : fellBack, ...maker.stats?.(),
+  });
   return store.get(borrowHostsAtom).get(hostKey)!;
 }
 

@@ -12,7 +12,7 @@ import { gameDataSourceAtom } from "../../atoms/gameDataAtoms";
 import { pushToastAtom, statusMessageAtom } from "../../atoms/uiAtoms";
 import { TILESETS } from "../../data/tilesets";
 import { tilesetIndex } from "../../formats/chk/scenario";
-import { borrowContext, drawsFromGame, forgetBorrowed, hostKeyOf, readKnownBorrowed, refreshProvided, scanBorrowed } from "../../services/borrow";
+import { borrowContext, drawsFromGame, forgetBorrowed, hostKeyOf, isStopped, readKnownBorrowed, refreshProvided, scanBorrowed, stopBorrowScan } from "../../services/borrow";
 import type { LoadedTileset } from "../../formats/tileset/load";
 import { Button } from "../ui";
 import { TileThumb } from "./TileBrowser";
@@ -53,6 +53,7 @@ export function BorrowedTerrains({ loaded }: { loaded: LoadedTileset | null }) {
       setStatus(t("{title} ({seconds} s)", { title, seconds }));
       toast({ kind: n > 0 ? "ok" : "info", title });
     } catch (err) {
+      if (isStopped(err)) { setStatus(t("Stopped looking through the other tilesets; what was found so far is kept for next time")); return; }
       toast({ kind: "error", title: t("Could not look through the other tilesets"), detail: err instanceof Error ? err.message : String(err) });
     }
   };
@@ -70,7 +71,7 @@ export function BorrowedTerrains({ loaded }: { loaded: LoadedTileset | null }) {
       <div className="borrowed-head">{t("From other tilesets")}</div>
       {!info && !scanning && (
         <div className="hint" style={{ padding: "6px 10px", display: "grid", gap: 6, justifyItems: "start" }}>
-          <span>{t("This tileset may hold copies of other tilesets' ground. Looking through the game's other seven tilesets finds the terrains whose every tile has a copy here, so the isometric brush can lay them with their own cliffs and edges. It takes a few seconds, once; the result is kept.")}</span>
+          <span>{t("This tileset may hold copies of other tilesets' ground. Looking through the game's other seven tilesets finds the terrains whose every tile has a copy here, so the isometric brush can lay them with their own cliffs and edges. It runs in the background while you keep working, once; the result is kept.")}</span>
           <Button size="sm" onClick={() => void run(false)}>{t("Find terrain from other tilesets")}</Button>
         </div>
       )}
@@ -78,6 +79,7 @@ export function BorrowedTerrains({ loaded }: { loaded: LoadedTileset | null }) {
         <div className="hint" style={{ padding: "6px 10px", display: "grid", gap: 4 }}>
           <span>{t("Looking through {tileset}…", { tileset: translate(TILESETS[scanning.sourceEra].name) })}</span>
           <span className="progress-track"><i style={{ width: `${Math.round(100 * scanning.share)}%` }} /></span>
+          <span><Button size="sm" variant="ghost" onClick={() => stopBorrowScan()}>{t("Stop")}</Button></span>
         </div>
       )}
       {info && !scanning && sources.length === 0 && (

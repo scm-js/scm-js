@@ -22,46 +22,56 @@ for a bot that wants to keep its own books. The short way is written on it.
 
 ## A first bot
 
-Save this as `starter.mjs`. It is Starter, one of the play page's own bots: it plays all
-three races, and against the game's own computer it wins more games than it loses.
+[Download
+`starter.mjs`](https://github.com/scm-js/scmbot/blob/main/examples/starter/starter.mjs)
+(from the scmbot repository's examples), or save the code below under that name. It is
+Starter, one of the play page's own bots: it plays all three races, and against the game's
+own computer it wins more games than it loses.
 
 ```js
+/** Each race's first fighting building and the unit it makes. The game's names are forgiving: "Marine" will do. */
 const ARMY = {
   Terran: { building: "Barracks", unit: "Marine" },
   Protoss: { building: "Gateway", unit: "Zealot" },
   Zerg: { building: "Spawning_Pool", unit: "Zergling" },
 };
 
+/** How many fighters go out together. */
+const WAVE = 12;
+
 /** @type {import("@scm-js/bot").EasyBot} */
 export default {
   name: "Starter",
+  version: "2",
+
   onFrame(game) {
     const { building, unit } = ARMY[game.race.name];
     const zerg = game.race.name === "Zerg";
 
-    // 1. The economy: idle workers to the minerals, supply before it runs out, 18 workers.
+    // 1. The economy. Idle workers go to the minerals, a supply building (or overlord) goes up before supply runs
+    // out, and workers are trained up to 18. `want` counts what is already on its way, so it is safe every frame.
     game.mine();
     game.keepSupply();
     game.want(game.race.worker, 18);
 
-    // 2. Production: two of the race's first fighting building (one pool for zerg).
+    // 2. Production: two of the fighting building (a zerg needs one pool; its units come from larvae).
     game.want(building, zerg ? 1 : 2);
 
-    // 3. Growth: a new base before the minerals run low (for zerg, also when money piles
-    // up, for the larvae); otherwise more production when money piles up, up to six.
+    // 3. Growth. A new base before the minerals at ours run out — for zerg also whenever money piles up, since each
+    // hatchery brings more larvae. For the others, piling money means one more production building, up to six.
     const mineralsLeft = game.ownBases.reduce((sum, base) => sum + game.mineralsLeft(base), 0);
     const ready = game.done(building).length > 0;
     if (game.planned(game.race.hall) === 0 && (mineralsLeft < 4000 || (zerg && ready && game.minerals > 400))) game.expand();
     if (!zerg && ready && game.minerals > 400 && game.planned(building) === 0 && game.count(building) < 6) game.build(building);
 
-    // 4. The army: as many as there is money for.
+    // 4. The army: as many fighters as there is money for.
     game.want(unit, 200);
 
-    // 5. Attack: twelve at home leave together; a fighter that is out and has nothing to
-    // do goes on to the next thing of the enemy's it knows of.
+    // 5. Attack. A dozen at home leave together for the enemy's base; once out, a fighter with nothing left to do
+    // goes on to the next thing of theirs it knows of (`enemyBase` searches the map when it knows of nothing).
     const target = game.enemyBase();
     const atHome = game.army.filter((u) => !u.memory.out);
-    if (atHome.length >= 12 && target) {
+    if (atHome.length >= WAVE && target) {
       for (const u of atHome) u.memory.out = true;
       atHome.attack(target);
       game.log(`a wave of ${atHome.length} goes to ${Math.round(target.x)},${Math.round(target.y)}`);

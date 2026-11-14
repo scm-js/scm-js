@@ -42,6 +42,13 @@ export const BORROWED_TERRAIN = 0x40000;
 export const borrowedTerrainId = (sourceEra: number, index: number): number => BORROWED_TERRAIN + ((sourceEra & 7) << 8) + (index & 0xff);
 export const isBorrowedTerrain = (id: number): boolean => id >= BORROWED_TERRAIN && id < BORROWED_TERRAIN + (8 << 8);
 export const borrowedParts = (id: number): { sourceEra: number; index: number } => ({ sourceEra: ((id - BORROWED_TERRAIN) >> 8) & 7, index: (id - BORROWED_TERRAIN) & 0xff });
+/**
+ * The borrowed brush taking ground back from a source: the diamonds it paints stop being borrowed, and their cells go
+ * back to the tile they had before (`BorrowStroke.takeBack`). Index 0xFF, which no tileset's terrain uses.
+ */
+export const TAKE_BACK = 0xff;
+export const takeBackId = (sourceEra: number): number => borrowedTerrainId(sourceEra, TAKE_BACK);
+export const isTakeBack = (id: number): boolean => isBorrowedTerrain(id) && borrowedParts(id).index === TAKE_BACK;
 
 /* ── What can be painted ────────────────────────────────── */
 

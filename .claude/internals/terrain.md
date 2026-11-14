@@ -418,8 +418,7 @@ paints one when it is the active terrain (map ISOM not required); the first stro
 `SEAM_SHOWS`, untranslated, stand-ins, reset diamonds. Measured in headless Chromium on Butcher's Corner with the mod's
 folder attached: scan 20–25 s; two joining Roof strokes 176 + 110 tiles (18 / 26 joins showing); undo, redo; Save As,
 reopen, a third stroke joined with no reset; Walkability overlay over it; no page errors.
-*Left open:* nothing at the borders (the spike's mappers use ~376 purpose-drawn transition pieces, half of the frequent
-ones one-way; not a rule the files give); no rebuild of a lattice for borrowed ground laid without the member (another
+*Left open:* borders were left to drawn borders (below); no rebuild of a lattice for borrowed ground laid without the member (another
 editor, the mod's own maps: they start from base ground); walkability is the copies' (462 of 891 Installation megatiles
 have a copy that walks the same in the mod's Badlands); the eyedropper does not pick a borrowed terrain; one source per
 stroke.
@@ -502,3 +501,112 @@ maps 26.5 s, scan 9.4 s, save → 518,081 bytes, 3,373 pieces, 7 borrow tables (
 Jungle…); `readTerrainFile` 4–7 ms in Node. Added as a data set from a copy with the file: the Pieces view lists 3,414
 pieces under the set's name with nothing learned, the Isometric tab lists Installation and Jungle World with no scan
 (the same as the scan; the file without `standIns` had listed Ashworld too, see mods.md), a Roof stroke lays 208 tiles.
+
+**Drawn borders (`editor/borderLattice.ts`, `borderTable.ts`, `borderPass.ts`, `borderRecord.ts`, `services/borders.ts`,
+2026-11-14).** Where borrowed ground meets the host's own, a mod's maps lay purpose-drawn pieces. The spike
+(`~/mods-under-test/_notes/borders-findings.md`, "Round two"; code in the `scm-js-borders-spike` worktree's
+`spikes/borders/`) found the method; this is it, built.
+*Shape of a border cell.* The patch's diamonds are laid with the game's brush on a **stand-in** pair of the game's own
+terrains (`borderLattice.ts#standInShapes`): flat set when patch and ground are one height (Badlands Grass/Dirt, set 20),
+the cliff set (High Dirt/Dirt, set 34) when the patch is higher or lower (`standInFor`, by `megatileHeight` of the
+host's copies of X and its Y ground). Every cell the stand-in lays an edge-set tile on is a border cell; its shape is the
+edge group's four side links (`A` the ground's soft link, `B` the patch's, `h<n>` hard), the stack values, and `|L`/`|R`.
+The stand-in is the game's own Badlands beneath the data set (`gameOwnTileset(store, 0)`, `badlandsStandIns`); a test
+hands in its own (`tests/support/borderWorld.ts`, whose set 20 the gated test checks against the game's, link for link).
+*Learning* (`borderTable.ts`, evidence a map at a time like `PieceEvidence`: per pair, maps seen and per reading
+shape → tile → count; `encode/decodeBorderEvidence` JSON; `mergeBorderEvidence`; `cutBorderTables` picks per pair the
+reading — transition cells as neither terrain or as the ground — whose tiles keep to one shape most). Cell classes
+(`cellKind`): **X** a host megatile that is a copy of a source *flat* terrain (by every known source's borrow table,
+`borderClasses`, packed `era << 10 | index`); **Y** a host typed flat terrain **by picture** (typed pair groups' megatiles,
+and any megatile with the same pixels — mod maps lay their ground from untyped duplicates, which first cost Floor/Dirt
+6 of its 9 maps); **T** an untyped tile that is no copy of any known source and no picture of the host's typed sets.
+A pair is read where a T cell has exactly one X and one Y next to it; for a pair a map shows none of those, within two
+cells (a two-cell-thick drawn border; the synthetic world needs it). Using the two-cell reading for every pair made
+Floor/Dirt worse (8.8 joins/100 against 1.8): it is the fallback only. **Every known source helps**: with only
+Installation's table, other tilesets' copies in the mod count as T and Floor/Dirt read 3 maps, 14–19 joins/100; with all
+seven, 8 maps, 0–7 (below). So `services/borders.ts` learns with all known tables, and borders need the scan (or a file's
+tables) first; the learn report says so when none is known.
+*The pass* (`borderPass.ts#layBorder`): candidates the shape's 8 most-laid tiles, then the sheet pool (untyped non-copy
+tiles in groups within 2 of the table's, `sheetPool`) at a cost of +6; cost = Σ positive `seamStep` over 4 neighbours,
+passes until settled; a cell whose worst join > `SEAM_SHOWS` gets the pool first, then goes hard (X tile if it leans to
+the patch, else the ground's own tile before). Two changes from the spike: **the ground's own tile stays** on the
+ground's side wherever it joins (`kept`: no rubble on plain dirt, the spike's `c2`); **exact pruning** of pool
+candidates by a lower bound from per-side edge means (|mean diff| ≤ mean |diff|, so the bound never cuts a winner).
+*The stroke* (`BorrowStroke`, opts `{ record, borders }`). `finish` now always **settles** the stroke's box plus margin
+(`settle`): the map before any borrowed stroke rebuilt from the record, every cell of the window laid as the patch says —
+outside the patch its host tile, inside it the lattice's tile (a copy of any slot of the group stands), and with a setup
+each border cell whose pair (X from the diamonds around, Y the commonest host terrain within 2 cells before any borrowed
+stroke) has a table goes to `layBorder`; without a table, as the brush lays it. Its changes come back in
+`result.changes`; the hook applies them and adds them to the same `Stroke`, one undo step. Live strokes show the old
+output while dragging; the border comes on mouse-up. *What the patch is* (`inPatch`): the diamonds the brush painted (the
+record's `painted`, with the terrain painted, base ground included), else a flat non-base value (maps from before the
+record); a painted diamond the brush changed since (an edge, a buffer) is the patch only between borrowed terrains — at
+host ground it is not. Three rules came from the browser run, each from cliff walls laid where ground was taken back:
+that one; an inner cell whose lattice tile is the source's edge to its base ground next to host ground takes the
+patch's flat tile (`nearGround`); with a setup, a cell no stand-in reaches and no patch is near (`nearPatch`) is host
+ground (the lattice's leftover edges). And `takeBack` paints only borrowed diamonds (base over host ground laid edges
+around nothing). *The check* (`checkAgainstMap`) where a record or
+setup exists looks only at rects inside the patch, and there accepts an untyped tile in a recorded cell (a border piece
+the cliff stand-in reached inside with); without that, 150 random strokes found 9 false resets, now 0.
+**Base ground**: Installation's Floor is its base, so a Floor patch was invisible to the lattice (the old brush laid
+partial Floor rects with no edges); `painted` makes it a patch, and the settle lays it whole. **Take back**
+(`TAKE_BACK` = index 0xFF, `takeBackId`, a row per source in the list): paints base on the shadow, unpaints, restores
+recorded cells; the settle relays the border. All strokes then all taken back → the map byte for byte (tests).
+*Review round (2026-11-14).* Two defects in the browser pictures, both reproduced as pure strokes in the gated suite
+("the browser session's strokes": the session's pointer path, a brush application per new diamond as the hook does; the
+map pixel is 100 left and 50 up of the tile grid the driver named). **(1) Wall pieces left on Dirt after a partial
+take-back.** Cells beside painted Substructure diamonds that the take-back's brush turned into edges found no patch
+terrain (`xOfCell` read only `inPatch`, which says "not the patch" there), so with no pair they fell to "as the brush
+lays it" and kept the source's cliff. Now `xOfCell` looks two diamonds out and then at the painted terrain around, and,
+with drawn borders, a cell whose patch terrain is still unknown is host ground. It also no longer falls back to the
+stroke's last painted terrain: the answer must not depend on which stroke asks (an audit stroke disagreed with the
+painting one). **(2) Floor cut in blocks against Substructure.** The inner-cell rule replaced the lattice's tile with the
+patch's flat tile whenever ground was within a diamond (`nearGround`); where two borrowed terrains meet beside Dirt that
+overwrote their own edge. It now looks only at the rect's own diamonds (`onGround`). Not a reopen effect: it failed in one
+session too. What is left at that junction matches the source's own lattice cell for cell (mean colours compared; the
+straight vertical boundary is Installation's own vertical edge, and the door is a variation of the cliff group, picked at
+random as the game does), except rects that touch the tileset's ground, which are border cells by design.
+Tried and dropped: unpainting the brush's buffer on take-back (it unpainted Floor/Substructure junction edges within
+reach and made new holes); taking a painted edge as the patch whenever two painted terrains are around (no change).
+**Guards:** `BorrowStroke.strays(box)` — cells no patch diamond touches and no stand-in of their own pair names, not at
+their host tile (a pair without a table is laid as the brush lays it and is not counted) — checked after every
+drawn-border stroke in the random tests (CI and the mod) and the session test; `latticeEdgesBroken` (rects of two
+painted terrains with painted ground all round must hold copies of the lattice's tile) after every stroke, in one
+session and after encode/decode. Both fail on the old code. Also a kept ground half whose rect partner is drawn now
+takes the shape's own tile where one joins (+1–2 drawn cells on Substructure, +5–12 on Floor/Asphalt; joins unchanged).
+Checked, not changed: `d30`'s straight cut is the settle's own outcome (a whole-map settle afterwards changes 0 cells),
+not the write window; `d23`'s missing trim is hard cells on the right lobe (`h49,A,A,h49`, `B,h49,h49,B`,
+`h52,h54,A,A`, 3–26 tiles each, none joining there) plus kept ground halves elsewhere; no shape there has a variant
+under another stack value in the table.
+*Record* — a **second member**, `scmjs\borders-<id>.bin` "BRD1" (w, h, era, painted diamond count, cell count, (u32
+diamond, u16 terrain) painted, (u32 cell, u16 tile) cells), not a BOR2: an editor that reads only BOR1 still reads and writes the lattice and
+carries this member untouched (archive extras), so older and newer editors both open and save without loss. A record
+an older editor left stale is read with care: a recorded cell now holding typed host ground is dropped. It rides
+`HistoryEdit.members`, resize (`resizeBorderRecord`, beside the lattices in `resizeDocumentAtom`), save and shared maps
+like the lattice (members are synced whole).
+*Where tables come from* (`services/borders.ts#borderTables`, per pair, first stands): plugin
+(`providedBordersAtom`, `beforeDataSet`) > data set's terrain file (`borders` section → same atom under `@dataset:`) >
+learned (`learnedBordersAtom`, IndexedDB pieces store `borders/{host tilesetHash}/{source tilesetHash}`, so Forget and
+Clear all data drop it). `prepareBorders` loads the stand-in, all known contexts, the learned evidence, and warms the seam
+measures (`warmBorderPass`; the first pass on the mod's 23,772 megatiles otherwise pays ~900 ms). `peekBorderSetup` is
+null with the switch off (`drawnBordersAtom`, session-only, default on), unprepared (it starts) or no table.
+`refreshProvided` drops the scanned contexts too, so the panel re-reads them after it (its hovers went blank once).
+*Numbers* (Cosmonarchy's Badlands, 57 Badlands maps of CMBW-maps, all seven sources known; spike in brackets).
+Tables: Substructure/Dirt 10 maps 29 shapes (29), Floor/Dirt 8 maps 36 shapes (43), Floor/Asphalt 8 maps 36 (37); pools
+897 / 219 / 326 (938 / 335 / 218). Joins showing per 100 border cells, brush patches drag / notch-and-bar / two strokes:
+Substructure/Dirt 5.1 / 3.3 / 2.2 (7.4 / 5.4 / 7.1), hard 18 / 17 / 8 (25 / 27 / 24); Floor/Dirt 7.0 / 1.8 / 0.0
+(7.0 / 7.9 / 0.9), hard 34 / 13 / 5 (53 / 54 / 16); Floor/Asphalt 0.0 everywhere (blind measure, as in the spike), hard
+0. Pass times (Node, warm): Substructure/Dirt 69 / 127 / 131 ms, Floor/Dirt 21 / 30 / 18, Floor/Asphalt 9 / 17 / 28 —
+under 150 ms, so it runs on mouse-up in the stroke, not deferred. In the built bundle the mouse-up of a stroke took
+36–132 ms (5 ms without borders). Record 1.8–3.0 KB a patch (6 B a cell, 6 B a painted diamond); 3.2 KB after two
+crossing strokes; after the browser session (seven strokes, a take-back, Save As, two more) lattice 768 B, record
+3,084 B (86 diamonds, 425 cells).
+Learn from Maps over 404 maps: 26 s with borders (the same as without), 74 pairs.
+*Dead ends (spike):* same-picture shape classes (≤1% of cells), the sheet pool without the judge, choosing a rect's two
+tiles together from the pairs maps lay. *Here:* reading pairs within two cells everywhere (above); the brush's edge ring
+as part of the patch (an edge-valued diamond widens the stand-in's patch by a ring).
+*Left open:* shapes no map lays stay hard (the cliff sets' inner corners mostly); "unlike either side" counts most cliff
+pieces (they are partly walkable and unbuildable: true, but loud); the switch is not remembered between sessions; the
+stand-in is the game's Badlands for every host, so a host era with other cliff heights is read through Badlands' shapes.
+`tests/borders.test.ts` (made-up world in CI: learn from a map, lay, pins, take back, many strokes, save and reopen;
+gated: set 20 against the game's, the game's own maps learn nothing, the mod's numbers).

@@ -939,7 +939,8 @@ export interface EditTransaction {
    * A terrain of another tileset (`terrain.borrowed()`) painted on `diamonds` by that tileset's own
    * isometric brush, each tile written as this tileset's copy of its picture — what the Isometric
    * tab's "From other tilesets" list paints. The diamonds are set at once, as one stroke. Only the
-   * cells the stroke changes are written; pinned tiles are left as they are. False, with a note,
+   * cells the stroke changes are written; pinned tiles are left as they are. Where a drawn border is known for the
+   * terrain and the ground it meets (`borrowed()`'s `borders`), the border is laid as the brush lays it. False, with a note,
    * when the terrain is not one `borrowed()` listed, or `borrowed()` was not awaited first (the
    * other tileset's files are read there).
    *
@@ -2599,6 +2600,33 @@ export interface BorrowedTerrainInfo {
   standIns: number;
   /** `"scan"` when the editor matched the pictures, the id of the plugin whose table it is, or `@dataset:<id>` when the data set's terrain file gave it. */
   from: string;
+  /**
+   * The grounds of the open map's tileset (terrain ids, as `isomTypes()` lists them) this terrain has drawn borders
+   * against, and where each table came from: `"maps"` (Learn from Maps…), a plugin's id, or `@dataset:<id>`. Where one
+   * is known, `tx.paintBorrowed` and the brush lay the tileset's own border pieces there (unless the Drawn borders
+   * switch is off). Absent in editors older than drawn borders.
+   */
+  borders?: { ground: number; from: string }[];
+}
+
+/** What `terrain.provideBorderTable` takes. */
+export interface BorderTableSpec {
+  /** Names the table among the plugin's; the same id again replaces it. */
+  id: string;
+  /** The tileset whose tiles are written (the map's). */
+  tileset: TilesetId;
+  /** The tileset the borrowed terrain comes from. */
+  source: TilesetId;
+  /** The borrowed terrain: its terrain id in `source`. */
+  terrain: number;
+  /** The ground it meets: its terrain id in `tileset`. */
+  ground: number;
+  /**
+   * Border shape → the tiles of `tileset` to lay there, the likeliest first. Shapes are named as the editor reads them
+   * (the border's four sides and the tile's side of its rect, e.g. `"A,B,B,h53|L"`); a terrain file saved from the
+   * Pieces view after Learn from Maps… lists the ones maps use.
+   */
+  shapes: Readonly<Record<string, readonly number[]>>;
 }
 
 /** What `terrain.provideBorrowTable` takes. */
@@ -2854,6 +2882,15 @@ export interface TerrainApi {
    * api.terrain.provideBorrowTable({ id: "install", tileset: "badlands", source: "install", pairs: [[0x30, 0x9a40], [0x31, 0x9a41]] });
    */
   provideBorrowTable(spec: BorrowTableSpec): Disposable;
+  /**
+   * Hand the editor the drawn border between a borrowed terrain and a ground of the map's tileset: which tile to lay for
+   * each shape of the border. It stands ahead of a data set's terrain file and of what maps taught (Learn from Maps…)
+   * for the same pair. `borrowed()` lists the pairs each terrain has. Taken back with the plugin, or by disposing.
+   *
+   * @example
+   * api.terrain.provideBorderTable({ id: "floor-dirt", tileset: "badlands", source: "install", terrain: 3, ground: 2, shapes: { "A,A,B,h53|L": [0x9b20] } });
+   */
+  provideBorderTable(spec: BorderTableSpec): Disposable;
 }
 
 export interface TilesetApi {

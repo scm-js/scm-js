@@ -8,7 +8,9 @@
  *   tile ids row by row, -1 for a hole;
  * - `borrow`: exact source tile → tile pairs for the borrowed isometric brush (what `provideBorrowTable` takes), with
  *   the source tiles that are only stand-ins (the nearest picture where the tileset has no copy), so the terrains a
- *   file offers are the ones a scan would.
+ *   file offers are the ones a scan would;
+ * - `borders`: drawn borders between a borrowed terrain and the tileset's own ground (what `provideBorderTable` takes):
+ *   per pair, the tiles to lay for each border shape, the shapes named as the editor reads them (`editor/borderLattice.ts`).
  *
  * Each tileset's section names the group table its numbers are for (`table`, `editor/pieceLearn.ts#tableHash`, the
  * hash learned pieces are kept under); a tileset whose table has another hash does not use the section.
@@ -35,6 +37,10 @@ export const TERRAIN_LIMITS = {
   pairs: 200000,
   /** A table hash: the 13–14 base-36 characters `tableHash` gives, with room. */
   tableLength: 32,
+  borders: 2048,
+  borderShapes: 1024,
+  shapeLength: 80,
+  shapeTiles: 64,
 } as const;
 
 export interface TerrainFileTerrain { name: string; group: number }
@@ -46,11 +52,21 @@ export interface TerrainFileBorrow {
   standIns?: number[];
 }
 
+/** A drawn border: the borrowed terrain (`terrain`, its index in `source`) on this tileset's ground (`ground`, its index here). */
+export interface TerrainFileBorder {
+  source: string;
+  terrain: number;
+  ground: number;
+  /** Shape → the tiles to lay there, the likeliest first. */
+  shapes: Record<string, number[]>;
+}
+
 export interface TerrainFileSection {
   table: string;
   terrains: TerrainFileTerrain[];
   pieces: TerrainFilePiece[];
   borrow: TerrainFileBorrow[];
+  borders: TerrainFileBorder[];
   /** Keys this reader does not know, kept as they were. */
   extra: Record<string, unknown>;
 }
@@ -66,7 +82,7 @@ export interface TerrainFile {
 /** Why a row was left out. */
 export type TerrainDropReason =
   | "not-json" | "not-an-object" | "format" | "tileset" | "table" | "not-a-list" | "too-many" | "name" | "group"
-  | "size" | "tiles" | "empty" | "source" | "pair" | "duplicate";
+  | "size" | "tiles" | "empty" | "source" | "pair" | "duplicate" | "terrain";
 
 export interface TerrainDrop {
   /** Where, as a path in the file: `tilesets.badlands.pieces[3]`. */
@@ -80,7 +96,7 @@ export interface TerrainFileRead {
 }
 
 export const emptyTerrainFile = (): TerrainFile => ({ format: TERRAIN_FORMAT, tilesets: {}, extra: {} });
-export const emptyTerrainSection = (table: string): TerrainFileSection => ({ table, terrains: [], pieces: [], borrow: [], extra: {} });
+export const emptyTerrainSection = (table: string): TerrainFileSection => ({ table, terrains: [], pieces: [], borrow: [], borders: [], extra: {} });
 
 const TILESET_IDS: readonly string[] = TILESETS.map((t) => t.id);
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
@@ -184,7 +200,31 @@ function readSection(id: string, raw: unknown, at: string, dropped: TerrainDrop[
     sources.add(source);
     section.borrow.push({ source, pairs, ...(standIns ? { standIns } : {}) });
   });
-  for (const [key, v] of Object.entries(raw)) if (!["table", "terrains", "pieces", "borrow"].includes(key)) section.extra[key] = v;
+  const pairsSeen = new Set<string>();
+  list("borders", TERRAIN_LIMITS.borders, (row, where) => {
+    if (!isObject(row)) { dropped.push({ at: where, reason: "not-an-object" }); return; }
+    const source = typeof row.source === "string" ? row.source : "";
+    if (!TILESET_IDS.includes(source) || source === id) { dropped.push({ at: where, reason: "source" }); return; }
+    if (!isWhole(row.terrain, 0, 0xff) || !isWhole(row.ground, 0, 0xff)) { dropped.push({ at: where, reason: "terrain" }); return; }
+    const key = `${source}:${row.terrain}|${row.ground}`;
+    if (pairsSeen.has(key)) { dropped.push({ at: where, reason: "duplicate" }); return; }
+    if (!isObject(row.shapes)) { dropped.push({ at: `${where}.shapes`, reason: "not-an-object" }); return; }
+    const shapes: Record<string, number[]> = {};
+    let n = 0;
+    for (const [shape, tiles] of Object.entries(row.shapes)) {
+      if (n >= TERRAIN_LIMITS.borderShapes) { dropped.push({ at: `${where}.shapes`, reason: "too-many" }); break; }
+      if (shape.length === 0 || shape.length > TERRAIN_LIMITS.shapeLength || !Array.isArray(tiles) || tiles.length === 0 || tiles.length > TERRAIN_LIMITS.shapeTiles || !tiles.every((t) => isWhole(t, 0, 0xffff))) {
+        dropped.push({ at: `${where}.shapes[${JSON.stringify(shape)}]`, reason: "tiles" });
+        continue;
+      }
+      shapes[shape] = [...tiles] as number[];
+      n++;
+    }
+    if (n === 0) { dropped.push({ at: where, reason: "empty" }); return; }
+    pairsSeen.add(key);
+    section.borders.push({ source, terrain: row.terrain, ground: row.ground, shapes });
+  });
+  for (const [key, v] of Object.entries(raw)) if (!["table", "terrains", "pieces", "borrow", "borders"].includes(key)) section.extra[key] = v;
   return section;
 }
 
@@ -205,6 +245,9 @@ export function sectionAgainstTable(section: TerrainFileSection, id: string, tab
   section.borrow.forEach((b, i) => {
     const bad = b.pairs.filter(([, h]) => (h >> 4) >= table.groups || !table.hasPicture(h)).length;
     if (bad > 0) out.push({ at: `${at}.borrow[${i}]`, reason: "pair" });
+  });
+  section.borders.forEach((b, i) => {
+    if (Object.values(b.shapes).some((tiles) => tiles.some((t) => (t >> 4) >= table.groups || !table.hasPicture(t)))) out.push({ at: `${at}.borders[${i}]`, reason: "tiles" });
   });
   return out;
 }
@@ -238,6 +281,7 @@ export function writeTerrainFile(file: TerrainFile): string {
     rows("pieces", s.pieces.map((p) => ({ ...(p.name ? { name: p.name } : {}), ...(p.category ? { category: p.category } : {}), cols: p.cols, rows: p.rows, tiles: p.tiles })));
     if (s.borrow.length === 0) parts.push(`      "borrow": []`);
     else parts.push(`      "borrow": [\n${s.borrow.map((b) => `        { "source": ${j(b.source)}, "pairs": ${j(b.pairs)}${b.standIns?.length ? `, "standIns": ${j(b.standIns)}` : ""} }`).join(",\n")}\n      ]`);
+    if (s.borders.length > 0) parts.push(`      "borders": [\n${s.borders.map((b) => `        { "source": ${j(b.source)}, "terrain": ${b.terrain}, "ground": ${b.ground}, "shapes": ${j(b.shapes)} }`).join(",\n")}\n      ]`);
     for (const [key, v] of Object.entries(s.extra)) parts.push(`      ${j(key)}: ${j(v)}`);
     blocks.push(`    ${j(id)}: {\n${parts.join(",\n")}\n    }`);
   }
@@ -251,9 +295,9 @@ export function writeTerrainFile(file: TerrainFile): string {
 }
 
 /** Counts per tileset, for `mod info` and the editor's notes. */
-export function terrainFileCounts(file: TerrainFile): Record<string, { terrains: number; pieces: number; borrow: { source: string; pairs: number }[] }> {
-  const out: Record<string, { terrains: number; pieces: number; borrow: { source: string; pairs: number }[] }> = {};
-  for (const [id, s] of Object.entries(file.tilesets)) out[id] = { terrains: s.terrains.length, pieces: s.pieces.length, borrow: s.borrow.map((b) => ({ source: b.source, pairs: b.pairs.length })) };
+export function terrainFileCounts(file: TerrainFile): Record<string, { terrains: number; pieces: number; borrow: { source: string; pairs: number }[]; borders: { source: string; terrain: number; ground: number; shapes: number }[] }> {
+  const out: ReturnType<typeof terrainFileCounts> = {};
+  for (const [id, s] of Object.entries(file.tilesets)) out[id] = { terrains: s.terrains.length, pieces: s.pieces.length, borrow: s.borrow.map((b) => ({ source: b.source, pairs: b.pairs.length })), borders: s.borders.map((b) => ({ source: b.source, terrain: b.terrain, ground: b.ground, shapes: Object.keys(b.shapes).length })) };
   return out;
 }
 

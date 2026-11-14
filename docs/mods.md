@@ -193,7 +193,8 @@ everyone who adds the mod:
       "table": "1q2w3e4r5t6y",
       "terrains": [{ "name": "Plating", "group": 2466 }],
       "pieces": [{ "name": "Long ramp", "category": "Ramps", "cols": 2, "rows": 2, "tiles": [35010, 35011, -1, 35027] }],
-      "borrow": [{ "source": "install", "pairs": [[1234, 35010], [1235, 35011]] }]
+      "borrow": [{ "source": "install", "pairs": [[1234, 35010], [1235, 35011]] }],
+      "borders": [{ "source": "install", "terrain": 2, "ground": 2, "shapes": { "A,A,B,h53|L": [36130, 36131] } }]
     }
   }
 }
@@ -211,6 +212,12 @@ everyone who adds the mod:
   search. A row may also carry `standIns`, the other tileset's tiles whose pair is only
   the nearest picture and not a copy; a terrain is offered only where few of its tiles are
   stand-ins, as when the editor searches by itself.
+- `borders` gives the drawn border between a borrowed terrain and this tileset's own
+  ground: `terrain` is the other tileset's terrain, `ground` this tileset's, and `shapes`
+  the tiles to lay for each shape of the border, the likeliest first. The shapes are named
+  as the editor reads a border: its four sides and which half of a two-tile rect the tile
+  is. You do not write these by hand; the editor learns them from the mod's maps and
+  writes them (see below).
 
 It is found by `mod.json`'s rule: in the folder you name or one folder down, never in one
 of the game's folders, and it does not need a `mod.json` beside it. It is not one of the
@@ -223,16 +230,20 @@ The easiest way to make one is the editor's: open a map of the mod with the mod'
 use, learn its pieces and look for its borrowed terrain, then **Save as a terrain file…**
 in the Tile palette's pieces view. It writes the tileset in front's section from what the
 editor lists: the pieces (with the names a plugin or an earlier file gave), the terrains
-named for the Rect brush, and the borrowed-terrain tables. Choose an existing
-`terrain.json` and its other tilesets' sections are kept. In the editor, the file comes
-with the mod: a data set added from a folder (Help ▸ Game Data… ▸ Add a data set…) or a
-mod's folder chosen for a map reads it, and while that data set is in use its pieces are
-listed under the data set's name, its terrains are in the Rect tab, and its borrowed
-terrain is offered with no search. A plugin that declares the same thing is listed first.
+named for the Rect brush, the borrowed-terrain tables and the drawn borders learned from
+the mod's maps (look for the borrowed terrain before learning: the borders are read only
+for tilesets whose copies are known). Choose an existing `terrain.json` and its other
+tilesets' sections are kept. In the editor, the file comes with the mod: a data set added
+from a folder (Help ▸ Game Data… ▸ Add a data set…) or a mod's folder chosen for a map
+reads it, and while that data set is in use its pieces are listed under the data set's
+name, its terrains are in the Rect tab, its borrowed terrain is offered with no search,
+and its borders are drawn with nothing learned. A plugin that declares the same thing is
+listed first, and a border the file gives stands ahead of one learned from maps.
 
-`mod info` says whether a mod has one and what it holds per tileset, `mod check` lists the
-rows that would be left out and a section made for another version of the tileset's table,
-and `mod unpack` keeps a folder's `terrain.json` when it unpacks a new release over it.
+`mod info` says whether a mod has one and what it holds per tileset (the drawn borders and
+their shapes counted), `mod check` lists the rows that would be left out and a section
+made for another version of the tileset's table, and `mod unpack` keeps a folder's
+`terrain.json` when it unpacks a new release over it.
 
 ## The commands
 

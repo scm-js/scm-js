@@ -91,12 +91,28 @@ export { paintIsom, paintIsomDiamonds, checkIsom, hasIsom, isomTables, diamondAt
 export {
   borrowTable, borrowableTerrains, borrowBase, copiesOf, picturesOf, providedTable, tableCounts, tilesetHash, sourceTiles,
   encodeBorrowTable, decodeBorrowTable, borrowedTerrainId, isBorrowedTerrain, borrowedParts, BORROWED_TERRAIN, BORROW_BLOCK, BORROW_PIXEL,
+  TAKE_BACK, takeBackId, isTakeBack,
   type BorrowTable, type BorrowKind, type BorrowedTerrain, type Copy, type Pictures, type Slicing,
 } from "../../src/editor/borrow";
 export {
   BorrowStroke, borrowMember, BORROW_MEMBERS, encodeBorrowLattice, decodeBorrowLattice, latticeOf, baseLattice, resizeBorrowMember, borrowedCells,
   type BorrowContext, type BorrowStrokeResult,
 } from "../../src/editor/borrowLattice";
+// Drawn borders: where borrowed ground meets the tileset's own, the tileset's border pieces, learned from maps or given.
+export {
+  badlandsStandIns, BADLANDS_STANDIN, standInShapes, diamondsOf, patternKey, flatTerrainsOf, BORDER_MODES,
+  type StandIn, type StandIns, type BorderMode, type BorderShape, type StandInLaid,
+} from "../../src/editor/borderLattice";
+export {
+  borderClasses, gatherBorderEvidence, mergeBorderEvidence, cutBorderTables, emptyBorderEvidence, encodeBorderEvidence, decodeBorderEvidence,
+  sheetPool, poolOf, pairKey, pairOf, pairStandIn, hostTerrainOf, cellKind,
+  type BorderEvidence, type BorderClasses, type BorderSourceCtx, type BorderPairTable, type BorderSetup,
+} from "../../src/editor/borderTable";
+export { layBorder, warmBorderPass, type BorderCell, type BorderPassResult } from "../../src/editor/borderPass";
+export {
+  bordersMember, BORDER_MEMBERS, encodeBorderRecord, decodeBorderRecord, resizeBorderRecord, emptyRecord,
+  type BorderRecord,
+} from "../../src/editor/borderRecord";
 export { applyChanges, type TileChange } from "../../src/editor/terrain";
 export { checkDoodadPlacement, placeDoodad, applyDoodadChanges, DEFAULT_DOODAD_PLACEMENT, type DoodadPlacementOptions, type DoodadEdit } from "../../src/editor/doodads";
 export { symmetryImages, mirroredOwner, type SymmetryMode, type SymmetryImage } from "../../src/editor/symmetry";
@@ -193,7 +209,7 @@ export { sameRaces, raceLabel, raceChoices, hasRaceCandidates, racePlaysAs, GAME
 export {
   readTerrainFile, writeTerrainFile, withTerrainSection, sectionAgainstTable, terrainFileCounts, isTerrainFilePath, terrainFileOf,
   emptyTerrainFile, emptyTerrainSection, TERRAIN_FILE, TERRAIN_FORMAT, TERRAIN_LIMITS,
-  type TerrainFile, type TerrainFileSection, type TerrainFilePiece, type TerrainFileTerrain, type TerrainFileBorrow, type TerrainDrop, type TerrainDropReason, type TerrainFileRead,
+  type TerrainFile, type TerrainFileSection, type TerrainFilePiece, type TerrainFileTerrain, type TerrainFileBorrow, type TerrainFileBorder, type TerrainDrop, type TerrainDropReason, type TerrainFileRead,
 } from "../../src/formats/mod/terrain";
 export { normalizeRaces, raceCandidates, MAX_RACE_NAME as RACE_NAME_MAX, GAME_NETWORK_TBL_ENTRIES, type DataSetRace, type RaceCandidates } from "@scm-js/mod";
 

@@ -37,7 +37,7 @@ export async function folderTerrain(dir: string): Promise<SourceTerrain | null> 
   try { return read(TERRAIN_FILE, await readFile(join(dir, TERRAIN_FILE), "utf8")); } catch { return null; }
 }
 
-/** What `mod info` shows: per tileset, the terrains, pieces and borrow tables (pairs each). */
+/** What `mod info` shows: per tileset, the terrains, pieces, borrow tables (pairs each) and drawn borders (shapes each). */
 export function terrainInfo(terrain: SourceTerrain | null) {
   return terrain ? { path: terrain.path, tilesets: terrainFileCounts(terrain.file), dropped: terrain.dropped.length } : null;
 }
@@ -58,6 +58,7 @@ const WHY: Record<TerrainDropReason, () => string> = {
   source: () => t("not another of the game's tilesets"),
   pair: () => t("not a [source tile, tile] pair of tile ids, or a tile the table has no picture for"),
   duplicate: () => t("given twice: the first stands"),
+  terrain: () => t("terrain or ground not a terrain id (0–255)"),
 };
 
 export interface TerrainFinding { level: "warning"; rule: string; where: string; why: string }

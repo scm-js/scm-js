@@ -2612,14 +2612,21 @@ for `setActive({ terrain })` and `tx.paintBorrowed(diamonds, id)`, which paints 
 the other tileset's own brush and writes the copies. Await it before painting: it reads
 the other tileset's files; `{ scan: true }` works the copies out first where nobody has.
 `provideBorrowTable` hands the editor the pairs of tiles a mod meant for a pair of
-tilesets, instead of its own match by pictures. A mod's `terrain.json` does what
-`providePieces`, `provideTypes` and `provideBorrowTable` do, for everyone who adds the mod
-([Terrain a mod declares](mods.md#terrain-a-mod-declares)); what a plugin declares is
-listed ahead of it.
+tilesets, instead of its own match by pictures. Each row of `borrowed()` also says, in
+`borders`, which of this tileset's grounds the terrain has drawn borders against and where
+each came from (`"maps"`, a plugin's id, or the data set's terrain file); where one is
+known, `tx.paintBorrowed` lays the border as the brush does (unless the Drawn borders
+switch is off). `provideBorderTable` gives one: the tiles to lay for each shape of the
+border between a borrowed terrain and a ground, and it stands ahead of the terrain file's
+and of what maps taught. A mod's `terrain.json` does what `providePieces`, `provideTypes`,
+`provideBorrowTable` and `provideBorderTable` do, for everyone who adds the mod ([Terrain
+a mod declares](mods.md#terrain-a-mod-declares)); what a plugin declares is listed ahead
+of it.
 
 ```ts
 const roof = (await api.terrain.borrowed()).find((b) => b.source === "install" && b.name === "Roof");
 if (roof) api.document.edit("Roof", (tx) => { tx.paintBorrowed(api.terrain.diamondsIn({ x0: 20, y0: 20, x1: 36, y1: 30 }), roof.id); });
+// roof.borders: [{ ground: 2, from: "maps" }] — a drawn border against Dirt, learned from maps
 ```
 
 `checkIsom()` measures how well the ISOM lattice matches the tiles. Offer a rebuild when

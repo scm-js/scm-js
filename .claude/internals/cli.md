@@ -293,11 +293,13 @@ beside it, the user's "option 1":
   `BotModule` when it has `create(`, unless it has its own); a block with `game.` and no default export is wrapped
   in `onFrame(game)`; the `api.` listings are not checked. A misspelt method in the guide fails the suite (tried).
   `tests/docs.test.ts` lets `useTech` and `useMapSettings` through its hook-name check: they are the interface's.
-- **Publishing (the user does it; nothing has been published).** Needs the scope's owner. Locally:
-  `cd bot && npm pack --dry-run` (prepack builds; four files), then `npm publish --access public` from `bot/`
-  (prepack builds again). There is no CI job: to publish from CI as core does, add a job like `build.yml`'s
-  `core` and a trusted publisher on npmjs.com for `@scm-js/bot` (direct publish allowed — the 403 trap in
-  `core.md`), and note that `repository.directory` is `bot`. The guide and README point at docs.scmjs.dev/bots/,
+- **Publishing.** 1.0.0 by hand (the user, 2026-11-14): `cd bot && npm pack --dry-run` (prepack builds; four
+  files), then `npm publish --access public --browser=false` from `bot/` in a real terminal (the security key's
+  web 2FA). Later versions: `build.yml`'s `bot` job ("Publish the bot types") on a stable release publishes when
+  npm does not have `bot/package.json`'s version (its own version, not the editor's: the major is `BOT_API`), over
+  OIDC. It needs the trusted publisher on npmjs.com for `@scm-js/bot` (this repository, `build.yml`, direct
+  publish allowed — the 403 trap in `core.md`), which can only be set once the package exists.
+  `repository.directory` is `bot`. The guide and README point at docs.scmjs.dev/bots/,
   which exists once the docs site is next published.
 
 ## A ladder: `bot ladder` (`cli/src/ladder.ts`, `engine.ts`) — 2026-11-07

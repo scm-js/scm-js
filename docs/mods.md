@@ -208,7 +208,9 @@ everyone who adds the mod:
   pieces: `cols` × `rows` tile numbers, row by row, -1 for a gap.
 - `borrow` gives, for another of the game's tilesets, which tile of this one to lay for
   each of its tiles, so the Isometric tab can lay that tileset's terrain here with no
-  search.
+  search. A row may also carry `standIns`, the other tileset's tiles whose pair is only
+  the nearest picture and not a copy; a terrain is offered only where few of its tiles are
+  stand-ins, as when the editor searches by itself.
 
 It is found by `mod.json`'s rule: in the folder you name or one folder down, never in one
 of the game's folders, and it does not need a `mod.json` beside it. It is not one of the

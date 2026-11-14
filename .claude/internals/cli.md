@@ -253,8 +253,52 @@ native/ — see scm-sim's docs/own-bots.md. Added 2026-11-06 with "Made by Jeany
   Node strips types itself from 22.18; the CLI's floor is 22.12, so an older Node is told to compile). `checkBotGame`
   skips the kind check for one; `parseEntrants` adds one named after its file. The runner is spawned as for a
   `.scmbot`; the bot's module is imported by the runner from its path.
-- Not yet: `bot new --js` (a starter folder with the API's types: needs `BOT_API`'s `api.ts` public, scm-sim being
-  private), and a JS bot's `fit` to a mod (J4).
+- Not yet: `bot new --js` (a starter folder: the types are public now as `@scm-js/bot`, below, so it can write a
+  `package.json` with it as a devDependency and Starter from `docs/bots.md`), and a JS bot's `fit` to a mod (J4).
+- Seen while taking the guide's run output (2026-11-13, staged ts-bots play build): `bot run --help` still says
+  `bot  a .scmbot file` and `bot ladder --help` "bots (.scmbot files)"; both take `.mjs`. Starter as terran on a
+  generated Jungle Duel (seed 1) printed three "a command of 11 bytes did not fit in this turn and was dropped"
+  errors when a wave of 16 attacked, and exited 1 for them: a group order's size against the turn's room (runner or
+  layer side, not looked into). scm-sim's `deploy-play.mjs` stages but then refuses `play/assets/client-*.wasm`
+  ("a .wasm file outside the bots' folder"): its upload check predates the page bundling BWAPI-for-JS.
+
+### `@scm-js/bot`, the bot types (`bot/`, `scripts/build-bot-types.mjs`) — 2026-11-13
+
+The public guide is `docs/bots.md` (a rewrite of scm-sim's private `docs/bots.md` for readers: Starter first, the
+short way, mods, running, the 90-game scores, the interface underneath, trust; no scm-sim paths). The types package
+beside it, the user's "option 1":
+
+- **Name.** `@scm-js/bot`, beside `core`, `cli`, `mod`, `replay` (singular nouns; `plugin-api` is the one `-api`).
+  Folder `bot/` as `core/` and `cli/` are. Not on npm before 2026-11-13 (404).
+- **What it holds.** `bot/src/api.ts` and `bot/src/kit.ts`, **byte-for-byte copies** of scm-sim's `src/bot/api.ts`
+  and `src/bot/kit.ts` (the source of truth stays there), and `bot/src/index.ts` (ours: `export *` of both). The
+  tarball is `dist/index.d.ts`, `README.md`, `LICENSE`, `package.json` only: `dts-bundle-generator` on
+  `tsconfig.bot.json` (strict, `lib: ES2023`, `types: []`, `stripInternal` so `Game.update`/`aim`/`idOf`/
+  `sendToMine` and other `@internal` members are not in an author's completion), ~54 KB, no imports. Types only:
+  `exports` has a `types` condition alone, and the declared values (`BOT_API`, `UnitTypes`, `easyBot`…) do not exist
+  at run time; the guide says `import type` / JSDoc. A bot imports nothing at run time anyway (the page runs one file).
+- **Version.** Major = `BOT_API` (the build refuses a mismatch), as plugin-api's major is its API's. Set by hand in
+  `bot/package.json` (1.0.0 to start); bump the minor when the copies change, the major only if `BOT_API` does. Not
+  the editor's version: the interface does not move with editor releases.
+- **Keeping in step.** `node scripts/build-bot-types.mjs --from <scm-sim checkout>` copies the two files (refusing a
+  file that imports anything but `./api.ts`), prints the checkout's commit for the commit message, and builds;
+  `--check <scm-sim checkout>` fails when the copies differ. Copied from `~/github/scm-sim-ts-bots` (ts-bots,
+  540e90f "A friendly layer for JavaScript bots…") on 2026-11-13; once ts-bots merges, check against scm-sim main.
+  CI has no scm-sim, so the comparison is by hand, or `SCM_SIM_DIR=<checkout> npx vitest run tests/bot-package.test.ts`.
+- **Tests** (`tests/bot-package.test.ts`): the copies import only each other; name, major, `files`, `exports`, no
+  dependencies; the bundle builds with `BOT_API = 1` and without the internals; and **every `js`/`ts` block of
+  `docs/bots.md` and `bot/README.md` type-checks against the bundle** in a temp folder with
+  `node_modules/@scm-js/bot` (checkJs, strict, `noImplicitAny: false` because the guide's Starter indexes `ARMY` by
+  `game.race.name` as plain JS does). A block with `export default` is a module (given the JSDoc `EasyBot`, or
+  `BotModule` when it has `create(`, unless it has its own); a block with `game.` and no default export is wrapped
+  in `onFrame(game)`; the `api.` listings are not checked. A misspelt method in the guide fails the suite (tried).
+  `tests/docs.test.ts` lets `useTech` and `useMapSettings` through its hook-name check: they are the interface's.
+- **Publishing (the user does it; nothing has been published).** Needs the scope's owner. Locally:
+  `cd bot && npm pack --dry-run` (prepack builds; four files), then `npm publish --access public` from `bot/`
+  (prepack builds again). There is no CI job: to publish from CI as core does, add a job like `build.yml`'s
+  `core` and a trusted publisher on npmjs.com for `@scm-js/bot` (direct publish allowed — the 403 trap in
+  `core.md`), and note that `repository.directory` is `bot`. The guide and README point at docs.scmjs.dev/bots/,
+  which exists once the docs site is next published.
 
 ## A ladder: `bot ladder` (`cli/src/ladder.ts`, `engine.ts`) — 2026-11-07
 

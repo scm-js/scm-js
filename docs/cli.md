@@ -3101,7 +3101,8 @@ has no such characters, so there it is drawn with `#`, twice as wide.
 ## Bots
 
 `scmjs bot` builds a [BWAPI](https://github.com/bwapi/bwapi) 4.4.0 bot, the C++ AI modules
-of the bot tournaments, into one `.scmbot` file, and plays it.
+of the bot tournaments, into one `.scmbot` file, and plays it. It also plays a bot written
+in JavaScript, which needs no build; [the bot guide](bots.md) is about writing one.
 
 ### Building a bot
 
@@ -3169,7 +3170,8 @@ and with the same options, BWAPI telling it the game and carrying out its orders
 `--mod`, the bot is told the mod's name and hash and given its tables, every unit called
 by the mod's name ([a bot made for a mod](#a-bot-made-for-a-mod)). A TypeScript file needs
 Node 22.18 or newer, which reads TypeScript itself; with an older Node, compile it to
-JavaScript first. `--data` is for BWAPI bots only.
+JavaScript first. `--data` is for BWAPI bots only. [The bot guide](bots.md) has a first
+bot to start from and everything `game` offers.
 
 The bot's own text is printed as it comes. A loss is a result, not a failure: the command
 exits with 0 whoever won, with 1 when the bot printed errors, and with 2 when the game

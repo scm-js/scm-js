@@ -46,6 +46,8 @@ lines, a stand-in `waves` library, the README test's `// what it prints` check t
 `docs/trigscript-library.md` follows the same rule, a page a `trigscript/*` module; its
 examples are compiled too, and the first run caught a signal handler returning an action,
 copied from `signals.ts`'s own header comment, which still carries it.
+`docs/bots.md` (2026-11-13, after `cli` in the nav) is the JavaScript bot guide; its code blocks are type-checked
+the same way, against the `@scm-js/bot` bundle, by `tests/bot-package.test.ts` (`.claude/internals/cli.md`).
 **Nothing writes prose**, because a generator that did would be one more document to keep
 current. `site.mjs` is the URL
 model and, with it, the link rewriter that is the whole reason those documents keep

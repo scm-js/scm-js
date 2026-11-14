@@ -1386,8 +1386,8 @@ game's own data rather than the mod's, and the dialog says so; so does a target 
 cannot take the data set.
 
 From a terminal, `scmjs map trace` runs a map's triggers in the game and lists which
-fired, and `scmjs map test` plays scenarios you write and checks how each ended ([Running
-a map in the game](cli.md#running-a-map-in-the-game)).
+fired, and `scmjs map test` plays scenarios you write and checks how each ended ([Triggers
+in the game](cli.md#triggers-in-the-game)).
 
 ### Saving
 

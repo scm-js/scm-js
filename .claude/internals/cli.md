@@ -5,13 +5,45 @@ replay info|map|open|watch|export|share | mod info|unpack|pack|check|diff|new|bu
 E403 "too similar to scss, sockjs"), so the user chose the scope beside @scm-js/replay and @scm-js/plugin-api. The reader's page is `docs/cli.md`. The shape was the user's (2026-11-05): one command, a noun for
 each kind of thing (`map`, `replay`, `plugin`, `bot`), "an impressive UX tool … not overly engineered".
 
-**The reader's guide is organised by task** (2026-11-07 rewrite, branch `cli-docs`): `docs/cli.md`'s `##` pages are
-Getting started, Looking inside a map, Making a map, Changing a map, Maps in git, Running a map in the game, Replays,
-Sharing from the terminal, Bots, For developers, Command reference (every command linked to its section, a cheat
-sheet), then In the source. The old build-order pages' addresses are forwarded by `MOVED` in
-`scripts/lib/docs/site.mjs`. A new command gets a `###` on the page of its task and a row in the reference. Its
-pictures (`docs/images/cli-*.webp`) are made by `scripts/cli-screenshots.mjs` (see `docs-site.md`); re-run it when a
+**The reader's guide is organised by task** (2026-11-07 rewrite, branch `cli-docs`; 2026-11-14 pass, branch
+`cli-docs-pass`): `docs/cli.md`'s `##` pages are Getting started, Your setup, Looking inside a map, Making a map,
+Changing a map, Maps in git, Triggers in the game, Melee maps: layout and balance, Replays, Mods, Sharing from the
+terminal, Bots, AI tools, For developers, Command reference (every command linked to its section), then In the source. The old
+pages' addresses are forwarded by `MOVED` in `scripts/lib/docs/site.mjs`. A new command gets a `###` on the page of
+its task, a row in the reference, and a line in the cheat sheet when it is one people reach for. Its pictures
+(`docs/images/cli-*.webp`) are made by `scripts/cli-screenshots.mjs` (see `docs-site.md`); re-run it when a
 command's output changes, with `--play-url` at a staged scm-sim deploy when the play page lacks the newest runner.
+
+**What the 2026-11-14 pass settled** (the user asked whether the guide was current, too long, short of examples, and
+free of AI-sounding prose; it was current but for a handful of stale examples, and 39,000 words):
+- *Getting started is install, a first look, the cheat sheet, how help works.* "A first look" is five commands with
+  their real output on `tests/maps/ums.scx` (info, check, preview, diff, trace) and a table of where to read next. The
+  setup detail (the download, `doctor`, what needs StarCraft, updating, completion, Korean) is its own page, *Your
+  setup*, so a reader sees what the command does before 2,000 words of installing. The `###` slugs did not change, so
+  every `#fragment` still lands; only `MOVED`'s three entries into those sections were repointed.
+- *A command's section is: what it is for, an example with real output, an options table, then the edge cases.* Not
+  every section is there yet (the maps chapters mostly are). Examples are run, not written: the Mods chapter's are a
+  demo mod made with `mod new --tables units,weapons` and one damage value changed; the first test is a real run.
+- *The Mods chapter is the commands; `docs/mods.md` is the subject.* The play page's hand-over message and the exact
+  form of the hash moved to `mods.md` ("The hand-over from the command line", "How it is worked out" under The mod's
+  hash); the hash's history by date is told once, there. `cli.md` links rather than repeats.
+- *"Running a map in the game" is two pages*: Triggers in the game (trace, cost, test, coverage, with "From a bug
+  report to a test" tying `trace --replay`, `test record` and `test` together) and Melee maps: layout and balance
+  (analyze, rush, balance). `map --help` still has the one group; the guide says "much as".
+- *Wording.* "X is said" for "the command reports X" is gone (13 uses, found nowhere else in the docs): write who
+  tells whom ("the command tells you", "is reported", "is an error"). An option's old name is not mentioned where the
+  option is described; all seven are in "Renamed options" under For developers. No notes on what an earlier version
+  of the guide said.
+- *AI tools is a page of its own* (the user: "i want mcp better documented, seems like a powerful feature"), no
+  longer a `###` of For developers: setting it up (Claude Code with `--scope project`, Cursor's `.cursor/mcp.json`
+  with `"type": "stdio"`, Claude Desktop's config through Settings ▸ Developer ▸ Edit Config — checked against each
+  tool's own docs on 2026-11-14; VS Code is left to its docs, which were changing file and key), what to ask (a
+  request beside the tools it is for), one request step by step, the 33 tools with which write, what they can do to
+  the person's files, and the game tools. Every tool call and answer in it is real: the built `scmjs mcp` driven over
+  stdio (initialize, tools/list, tools/call) on `tests/maps/ums.scx`. The page says which commands are *not* tools.
+  A new tool gets a row in its table; a tool that differs from its command, a bullet under it.
+- *Not done, proposed*: a sample of the strings file in place of its description; output for `plugin check`,
+  `strings prune`, `replay share`, `account`; the long paragraphs left in Bots; the 80-row In the source table.
 
 ## Design
 
@@ -2480,7 +2512,7 @@ the analysis itself 20–140 ms (Spring Thaw 256 × 128, 4 starts: 135 ms; Big G
   verdicts' thresholds on both sides; `walkSpeed` over a hand-built iscript.bin; the command through a stand-in
   1.16.1 copy (refusals, report, PNG) and the committed melee map. cli-mcp: names + read-only + scale refusal + a
   real-copy call (`skipIf`); cli-doctor pins the row.
-- **Leftovers**: no screenshot in docs (`scripts/cli-screenshots.mjs` not run for it); the picture has no start
+- **Leftovers**: (its picture is in the docs since 2026-11-14, `cli-map-analyze.webp`); the picture has no start
   numbers (no font, as preview); unit size is fixed (no `--unit`); speed upgrades and acceleration not modelled; the
   natural is "nearest base on foot", so a map whose designers mean another base reads differently; chokes off the
   shortest walks (a second route's narrows) are not reported — the plugin's BWEM-style areas would be the next step;

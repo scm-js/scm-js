@@ -117,6 +117,16 @@ which Chromium writes lossless (VP8L) at quality 1, so the script needs only Pla
 pictures (`map preview`, `replay watch`) and the PNGs commands write go at 0.9. `replay watch` runs under
 `script -qfec` for a pty and is quit with `q` after six seconds. The QR picture is the encoder (`cli/src/qr.ts`,
 loaded with Vite's `ssrLoadModule`) on a fixed link, since a real `map share` needs a session.
+Three more scenes (2026-11-14): `map-analyze` (the PNG `map analyze --out --scale 8` writes for `(4)Crossing.scx`,
+seed 2026), `map-heatmap` and `replay-export`. The last two need games on that map, so `games()` plays a ladder of
+`starter.mjs` (scmbot's JavaScript example bot, in the `--bots` folder: no build, so it works where no `.scmbot` is
+on the machine) against the game's computers, `--races tzp --games 2`, 18 games, about six minutes the first time and
+skipped when a kept `--work` folder has `games/ladder.json`. The heatmap runs with `--parallel 2`: at four, three
+replays failed with `ENOMEM` reading the Remastered installation under WSL. `frame()` takes one frame of the WebM
+`replay export` wrote by playing it in the script's own page, so ffmpeg is still not needed; `--browser` is handed to
+the command as `SCMJS_BROWSER` too. On this machine the Playwright Chromium starts only with the libraries of the
+headless-browser recipe on `LD_LIBRARY_PATH`. With seeds 1 and 2 no side is dealt the bottom right start, which the
+guide's caption says.
 The scmjs.dev pictures (2026-09-06: `account`, `my-maps`, `save-to-scmjs`, `ai-menu`,
 `assistant`, `name-describe`, `review-map`, `rewrite-strings`, `generate-map`,
 `generated-map`, `make-scenario`) run against `scripts/lib/guide-scmjs-mock.mjs`, a

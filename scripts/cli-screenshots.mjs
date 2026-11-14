@@ -4,10 +4,12 @@
  * Builds `scmjs`, runs real commands with colour forced on, and draws what they print as a
  * terminal: the output goes through a small terminal emulator here (colours, cursor moves,
  * line erases), becomes a page of fixed-width cells, and headless Chromium photographs it.
- * The PNG files commands write themselves (`map preview --out`, `map diff --picture --out`)
- * are converted the same way. WebP is encoded by the browser's own canvas, lossless for
- * the terminals and at quality 90 for the map pictures, so the only package needed is
- * Playwright, which the end-to-end tests already install.
+ * The PNG files commands write themselves (`map preview --out`, `map diff --picture --out`,
+ * `map analyze --out`, `map heatmap --out`) are converted the same way, and the picture of
+ * `replay export` is one frame of the clip it makes, read by the same browser. WebP is
+ * encoded by the browser's own canvas, lossless for the terminals and at quality 90 for
+ * the map pictures, so the only package needed is Playwright, which the end-to-end tests
+ * already install.
  *
  *   node scripts/cli-screenshots.mjs [--only overview,map-info] [--out docs/images]
  *                                    [--browser <chrome>] [--starcraft <folder>]
@@ -25,7 +27,11 @@
  *     from scmjs.dev/play, or from `--play-url` (a staged scm-sim deploy served locally,
  *     when the newest runners are not deployed yet);
  *   - built bots for the ladder and the replay watched: `--bots` names a folder with
- *     `ualbertabot.scmbot` and `example.scmbot` (scm-sim's catalogue builds).
+ *     `ualbertabot.scmbot` and `example.scmbot` (scm-sim's catalogue builds);
+ *   - a JavaScript bot for the heatmap's and the clip's games, which needs no build:
+ *     `starter.mjs` in the `--bots` folder (scmbot's `examples/starter/starter.mjs`);
+ *   - for the clip, what `replay export` needs: a Chrome, Chromium or Edge it can start
+ *     (`--browser`, which is handed on as `SCMJS_BROWSER`).
  * A picture whose inputs are missing is skipped with a line saying why, and its file is
  * left as it is. Every command runs in a terminal made by util-linux's `script`, 96 columns wide, so it lays its
  * output out as it would on screen; this is why the script runs on Linux.
@@ -64,6 +70,7 @@ const ENV = {
   COLORTERM: "truecolor",
   ...(STARCRAFT ? { SCMJS_STARCRAFT: STARCRAFT } : {}),
   ...(PLAY_URL ? { SCMJS_PLAY_URL: PLAY_URL } : {}),
+  ...(BROWSER ? { SCMJS_BROWSER: BROWSER } : {}),
 };
 delete ENV.NO_COLOR;
 
@@ -314,9 +321,32 @@ async function picture(name, file) {
   write(name, await toWebp(readFileSync(join(WORK, file)), 0.9));
 }
 
+/**
+ * One frame of a clip `replay export` wrote, `seconds` in, as `<name>.webp`: the page plays the WebM itself, so the
+ * frame is the clip's own picture at its own size.
+ */
+async function frame(name, file, seconds) {
+  await page.setContent("<!doctype html><title>frame</title>");
+  const url = await page.evaluate(async ({ b64, seconds }) => {
+    const video = document.createElement("video");
+    video.muted = true;
+    video.src = `data:video/webm;base64,${b64}`;
+    await new Promise((ok, no) => { video.onloadeddata = ok; video.onerror = () => no(new Error("the clip does not play in this browser")); });
+    // A clip made picture by picture can carry no length; a seek past its end stops on its last picture.
+    await new Promise((ok) => { video.onseeked = ok; video.currentTime = seconds; });
+    const c = document.createElement("canvas");
+    c.width = video.videoWidth;
+    c.height = video.videoHeight;
+    c.getContext("2d").drawImage(video, 0, 0);
+    return c.toDataURL("image/webp", 0.9);
+  }, { b64: readFileSync(join(WORK, file)).toString("base64"), seconds });
+  write(name, Buffer.from(url.slice(url.indexOf(",") + 1), "base64"));
+}
+
 const have = {
   starcraft: () => { try { return JSON.parse(scmjs(["doctor", "--json"]).stdout).checks.some((c) => c.what === "StarCraft" && c.state === "ok"); } catch { return false; } },
   bots: () => !!BOTS && existsSync(join(BOTS, "ualbertabot.scmbot")) && existsSync(join(BOTS, "example.scmbot")),
+  starter: () => !!BOTS && existsSync(join(BOTS, "starter.mjs")),
 };
 
 const MAPS = join(root, "tests/maps");
@@ -408,6 +438,33 @@ const SHOTS = [
     },
   },
   {
+    name: "cli-map-analyze", needs: ["starcraft"],
+    async run() {
+      generate("(4)Crossing.scx", ["--players", "4", "--tileset", "desert", "--seed", "2026"]);
+      scmjs(["map", "analyze", "(4)Crossing.scx", "--out", "layout.png", "--scale", "8"], { allowFail: false });
+      await picture("cli-map-analyze", "layout.png");
+    },
+  },
+  {
+    name: "cli-map-heatmap", needs: ["starcraft", "starter"],
+    async run() {
+      await games();
+      // Two at a time: four games reading a Remastered installation at once ran out of memory on the computer this was made on.
+      scmjs(["map", "heatmap", "(4)Crossing.scx", "games", "--side-by-side", "--out", "heat.png", "--scale", "4", "--parallel", "2"], { allowFail: false });
+      await picture("cli-map-heatmap", "heat.png");
+    },
+  },
+  {
+    name: "cli-replay-export", needs: ["starcraft", "starter"],
+    async run() {
+      await games();
+      // Starter's Zealots in the computer's base, near the end of the game it wins; the frame is nine seconds in.
+      const made = scmjs(["replay", "export", `games/${CLIP_REPLAY}`, "--out", "fight.webm", "--follow", "starter", "--from", "7:10", "--to", "7:25"]);
+      if (made.status !== 0) throw new Error(made.text.trim().split("\n").pop());
+      await frame("cli-replay-export", "fight.webm", 9);
+    },
+  },
+  {
     name: "cli-qr",
     async run() {
       // Not signed in here, so not `map share --qr` itself: the same encoder and drawing, through the built command's code.
@@ -444,6 +501,17 @@ async function ladder() {
   laddered = true;
 }
 
+/** The games the heatmap and the clip are made from: Starter, a JavaScript bot, against each of the game's computers. */
+const CLIP_REPLAY = "starter-vs-computer-t_crossing_PvT_seed1.rep";
+async function games() {
+  if (existsSync(join(WORK, "games/ladder.json"))) return; // a kept --work folder's games, as its maps are kept
+  generate("(4)Crossing.scx", ["--players", "4", "--tileset", "desert", "--seed", "2026"]);
+  copyFileSync(join(BOTS, "starter.mjs"), join(WORK, "starter.mjs"));
+  rmSync(join(WORK, "games"), { recursive: true, force: true });
+  await shell(["bot", "ladder", "starter.mjs", "computer", "--maps", "(4)Crossing.scx", "--races", "tzp", "--games", "2", "--parallel", "4", "--out", "games"], { cols: LADDER_COLS });
+  if (!existsSync(join(WORK, "games", CLIP_REPLAY))) throw new Error("the ladder of starter.mjs against the computer left no replays");
+}
+
 /* ── run ──────────────────────────────────────────────────────────────────────────── */
 
 console.log(`Building scmjs …`);
@@ -453,7 +521,7 @@ mkdirSync(OUT, { recursive: true });
 mkdirSync(WORK, { recursive: true });
 console.log(`Working in ${WORK}`);
 
-const check = { starcraft: null, bots: null };
+const check = { starcraft: null, bots: null, starter: null };
 const lacks = (needs = []) => needs.filter((n) => (check[n] ??= have[n]()) === false);
 
 await openBrowser();

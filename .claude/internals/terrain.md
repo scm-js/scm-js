@@ -589,7 +589,8 @@ like the lattice (members are synced whole).
 learned (`learnedBordersAtom`, IndexedDB pieces store `borders/{host tilesetHash}/{source tilesetHash}`, so Forget and
 Clear all data drop it). `prepareBorders` loads the stand-in, all known contexts, the learned evidence, and warms the seam
 measures (`warmBorderPass`; the first pass on the mod's 23,772 megatiles otherwise pays ~900 ms). `peekBorderSetup` is
-null with the switch off (`drawnBordersAtom`, session-only, default on), unprepared (it starts) or no table.
+null with the switch off (`drawnBordersAtom`, stored as `scmjs.drawnBorders`, default on; memory storage in Node and the
+headless host, so on there), unprepared (it starts) or no table.
 `refreshProvided` drops the scanned contexts too, so the panel re-reads them after it (its hovers went blank once).
 *Numbers* (Cosmonarchy's Badlands, 57 Badlands maps of CMBW-maps, all seven sources known; spike in brackets).
 Tables: Substructure/Dirt 10 maps 29 shapes (29), Floor/Dirt 8 maps 36 shapes (43), Floor/Asphalt 8 maps 36 (37); pools
@@ -605,8 +606,16 @@ Learn from Maps over 404 maps: 26 s with borders (the same as without), 74 pairs
 *Dead ends (spike):* same-picture shape classes (≤1% of cells), the sheet pool without the judge, choosing a rect's two
 tiles together from the pairs maps lay. *Here:* reading pairs within two cells everywhere (above); the brush's edge ring
 as part of the patch (an edge-valued diamond widens the stand-in's patch by a ring).
-*Left open:* shapes no map lays stay hard (the cliff sets' inner corners mostly); "unlike either side" counts most cliff
-pieces (they are partly walkable and unbuildable: true, but loud); the switch is not remembered between sessions; the
+*Left open:* shapes no map lays stay hard (the cliff sets' inner corners mostly). "Unlike either side" (`borders.unlike`)
+counts walkability only since 2026-11-14 (it counted buildability too, which flagged nearly every cliff piece; numbers in
+"Follow-ups" below). The
 stand-in is the game's Badlands for every host, so a host era with other cliff heights is read through Badlands' shapes.
 `tests/borders.test.ts` (made-up world in CI: learn from a map, lay, pins, take back, many strokes, save and reopen;
 gated: set 20 against the game's, the game's own maps learn nothing, the mod's numbers).
+
+**Drawn borders, follow-ups (2026-11-14, branch `borders-followups`).** The switch is stored (`scmjs.drawnBorders` in
+`STORED_RESETS`, `RELOADS` and `storedLabels.ts`; `atomWithStorage` + `getOnInit` + `createJSONStorage(browserStorage)`,
+as `debugConsoleAtom`). The panel shows it unchecked and disabled where no border is known without writing it. Clear
+all data now also empties `learnedBordersAtom` and the data set's rows of `providedBordersAtom` live (their store was
+already cleared). The status line's count is walkability only: a drawn tile counts when its walkable minitiles
+(none / some / all) differ from both the patch's tile and the ground's.

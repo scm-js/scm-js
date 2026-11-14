@@ -71,7 +71,7 @@ function borrowNote(r: BorrowStrokeResult): string {
   let out = "";
   if (r.borders) {
     out += t(" — drawn border: {drawn, plural, one {# cell} other {# cells}} drawn, {hard, plural, one {# left} other {# left}} hard", { drawn: r.borders.drawn, hard: r.borders.hard });
-    if (r.borders.unlike > 0) out += t(" ({n, plural, one {# border tile walks or builds} other {# border tiles walk or build}} unlike either side)", { n: r.borders.unlike });
+    if (r.borders.unlike > 0) out += t(" ({n, plural, one {# border tile walks} other {# border tiles walk}} unlike either side)", { n: r.borders.unlike });
   }
   if (r.seams > 0) out += t(" — {n, plural, one {# join} other {# joins}} to this map's own ground show (Heal softens them)", { n: r.seams });
   if (r.untranslated > 0) out += t(" — {n, plural, one {# tile has} other {# tiles have}} no copy in this tileset and stayed as they were", { n: r.untranslated });

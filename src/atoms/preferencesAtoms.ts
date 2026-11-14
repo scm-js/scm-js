@@ -20,6 +20,7 @@ import { clearHandles } from "../services/handleStore";
 import { browserPieceStore, browserStore } from "../services/pieceStore";
 import { BORROW_STORE } from "../services/handleStore";
 import { borrowHostsAtom, providedBorrowAtom } from "./borrowAtoms";
+import { drawnBordersAtom, learnedBordersAtom, providedBordersAtom } from "./borderAtoms";
 import { learnedPiecesAtom, providedPiecesAtom, providedTypesAtom } from "./pieceAtoms";
 import { isDataSetKey } from "../editor/pieceList";
 import { recentFilesAtom } from "./documentAtoms";
@@ -125,6 +126,7 @@ const STORED_RESETS: Record<string, (set: Setter) => void> = {
   "scmjs.gameData": (set) => set(gameDataProfileAtom, RESET),
   // The races named for each data set; the source in use loses them at once and the panels repaint.
   "scmjs.dataSetRaces": (set) => { set(keptRacesAtom, RESET); set(refreshDataSetRacesAtom); },
+  "scmjs.drawnBorders": (set) => set(drawnBordersAtom, RESET),
 };
 
 /** The keys an atom owns — everything Preferences can clear *and* put back live. */
@@ -215,6 +217,7 @@ const RELOADS: Record<string, (get: Getter, set: Setter) => void> = {
   "scmjs.plugin-updates": () => {},
   "scmjs.gameData": (get, set) => set(gameDataProfileAtom, parsedMerged("scmjs.gameData", get(gameDataProfileAtom))),
   "scmjs.dataSetRaces": (_get, set) => { set(keptRacesAtom, parsed<Record<string, never>>("scmjs.dataSetRaces", {})); set(refreshDataSetRacesAtom); },
+  "scmjs.drawnBorders": (_get, set) => set(drawnBordersAtom, parsed("scmjs.drawnBorders", true)),
 };
 
 function parsed<T>(key: string, fallback: T): T {
@@ -248,7 +251,7 @@ export const clearStoredKeysAtom = atom(null, (_get, set, keys: readonly string[
  * options of the Units and Doodads palettes, the panels and their widths, the recent files
  * (and the file handles behind them), the installed plugin list, the copies of plugin code
  * kept for the plugins marked *local*, the registries browsed and their cached lists,
- * whatever the plugins themselves stored, the pieces learned from maps, the tables of borrowed terrain and the data sets' terrain files. Every atom is reset whether or not it had a key,
+ * whatever the plugins themselves stored, the pieces and drawn borders learned from maps, the tables of borrowed terrain and the data sets' terrain files. Every atom is reset whether or not it had a key,
  * so the defaults come back live even for a setting that was never written.
  */
 export const clearStoredDataAtom = atom(null, (_get, set): number => {
@@ -257,10 +260,12 @@ export const clearStoredDataAtom = atom(null, (_get, set): number => {
   // The pieces learned from maps are in IndexedDB, not in the keys above: they go too.
   void browserPieceStore.clear();
   set(learnedPiecesAtom, {});
+  set(learnedBordersAtom, {}); // (the drawn borders learned with them are kept in the same store)
   // (a data set's terrain file is kept in the same store: its rows go now too, not at the next switch)
   set(providedPiecesAtom, (rows) => rows.filter((r) => !isDataSetKey(r.key)));
   set(providedTypesAtom, (rows) => rows.filter((r) => !isDataSetKey(r.key)));
   set(providedBorrowAtom, (rows) => rows.filter((r) => !isDataSetKey(r.key)));
+  set(providedBordersAtom, (rows) => rows.filter((r) => !isDataSetKey(r.key)));
   // So are the tables of borrowed terrain.
   void browserStore(BORROW_STORE).clear();
   set(borrowHostsAtom, new Map());

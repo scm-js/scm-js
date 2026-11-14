@@ -20,7 +20,7 @@
  * Pure and canvas-free; `tests/borrow.test.ts`.
  */
 import { markDirty, type Scenario } from "../formats/chk/scenario";
-import { groupBuildable, megatileForTile, TileFlag, tileGroupOf, type Tileset } from "../formats/tileset/decode";
+import { megatileForTile, TileFlag, tileGroupOf, type Tileset } from "../formats/tileset/decode";
 import { flatTerrain } from "../formats/tileset/terrain";
 import { TILESETS } from "../data/tilesets";
 import { ISOM_TABLES, isomValueOf } from "../data/isomTables";
@@ -198,7 +198,7 @@ export interface BorrowStrokeResult {
   seams: number;
   /** The cells the stroke reached (its settle writes these and a margin); null when it reached none. */
   box: { x0: number; y0: number; x1: number; y1: number } | null;
-  /** Drawn borders, when the stroke laid them: border cells laid with a drawn tile, left as the hard edge, and drawn tiles that walk or build unlike both sides. */
+  /** Drawn borders, when the stroke laid them: border cells laid with a drawn tile, left as the hard edge, and drawn tiles that walk unlike both sides (`unlike`). */
   borders: { cells: number; drawn: number; hard: number; kept: number; unlike: number; ms: number } | null;
 }
 
@@ -583,14 +583,13 @@ export class BorrowStroke {
       changes.push({ at, before: scn.tiles[at], after: work[at] });
       this.touched.add(at);
     }
-    // Drawn tiles that walk or build unlike both sides: a border that changes play.
+    // Drawn tiles that walk unlike both sides: a border that changes where units go.
     let unlike = 0;
     const walks = (id: number) => { const m = megatileForTile(ctx.host, id); let n = 0; for (let k = 0; k < 16; k++) if (ctx.host.megatileFlags[m * 16 + k] & TileFlag.Walkable) n++; return n === 16 ? 2 : n === 0 ? 0 : 1; };
-    const builds = (id: number) => { const g = ctx.host.groups[tileGroupOf(id, ctx.host.groups.length)]; return g ? groupBuildable(g) : false; };
     for (const c of cells) {
       const t = work[c.i];
       if (t === c.xTile || t === host0[c.i]) continue;
-      if ((walks(t) !== walks(c.xTile) && walks(t) !== walks(host0[c.i])) || (builds(t) !== builds(c.xTile) && builds(t) !== builds(host0[c.i]))) unlike++;
+      if (walks(t) !== walks(c.xTile) && walks(t) !== walks(host0[c.i])) unlike++;
     }
     return { changes: changes.sort((a, b) => a.at - b.at), cells: cells.length, drawn: r.drawn, hard: r.hard, kept: r.kept, unlike, ms: performance.now() - t0, outside };
   }

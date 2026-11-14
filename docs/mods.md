@@ -447,8 +447,9 @@ scmjs mod play mymod --map "(2)Ridge.scx"
 
 opens the play page in your browser and hands it every file of the mod, its plugins and
 FireGraft files with them, and [the mod's hash](#the-mods-hash); the page keeps the files
-that differ from your copy of the game. With `--map` the map starts with the mod. The
-hand-over is described in the [command line's guide](cli.md#mods).
+that differ from your copy of the game. With `--map` the map starts with the mod. [The
+hand-over from the command line](#the-hand-over-from-the-command-line) has the message the
+page is sent.
 
 ```sh
 scmjs mod play "Cosmonarchy BW" --map "(4)Exodus 1.0.scx" --bot cosmonarchy-example
@@ -486,9 +487,14 @@ Left out are what is not the mod's files: a file an archive lists and does not h
 folder's read-mes and programs with no archive, a plugin inside an archive (no loader
 loads one from there), and FireGraft's database (`.fgd`). A page that does not run the
 code plays something else, so beside the hash there is one without the lines of the code;
-`mod info` prints both, and a page that runs none of it presents that one. Each file is a
-line, its name and the SHA-256 of its bytes, and the hash is over the sorted lines ([the
-exact form](cli.md#playing-a-mod-on-the-play-page)).
+`mod info` prints both, and a page that runs none of it presents that one.
+
+**How it is worked out.** Each file is one line, `name<TAB>sha256 of the file's bytes`.
+The lines are sorted by name and joined with newlines, and the hash is the first sixteen
+hex digits of the SHA-256 of that text. A game file's name is the game's, in lower case
+with backslashes (`arr\weapons.dat`). A module of the mod's code is `plugins\` and its
+file name, in lower case (`plugins\gptp.qdp`, `plugins\fmod.dll`). The FireGraft project's
+is its file name, in lower case (`cosmonarchy bw.fgp`).
 
 **The hash before 11 November 2026** had a line only for the plugins a mod carries as
 files: not for a patcher's own plugins, not for a library, and not for a FireGraft project
@@ -572,9 +578,13 @@ What reads it:
 - `scmjs replay info` shows it on the `Mod` line. With `--builds` it lists what each
   player ordered, by id until `--mod` names the mod's folder, and then with the mod's
   names and costs. A mod whose data set is not the one the replay names is refused. A
-  player of a race the mod adds is named by the section's `races` when it has them, else
-  by the [`races` of the mod's `mod.json`](#races-a-mod-adds) with `--mod`, else `Race`
-  and the number.
+  replay saved under an earlier rule for the hash is matched by [the hash the mod had
+  then](#the-mods-hash): `Earlier hash` and `Older hash` in `mod info`. The oldest
+  replays, saved before the hash had lines for the plugins and the FireGraft project, are
+  matched by the hash of the game files alone, or of those that differ from your copy of
+  the game. A player of a race the mod adds is named by the section's `races` when it has
+  them, else by the [`races` of the mod's `mod.json`](#races-a-mod-adds) with `--mod`,
+  else `Race` and the number.
 - `scmjs map trace --replay` and `map cost --replay` need the mod named with `--mod` and
   check it the same way. A game the mod's plugins ran in is refused, as the engine's
   runners do not run plugins.
@@ -696,6 +706,48 @@ A replay of a mod whose plugins run plays at about the game's own pace. Going ah
 part it has not played yet plays forward to the moment, and the page says how far it has
 run. Going back is quick: the page keeps a moment about every ten seconds of the game as
 it plays, returns to the one before the moment asked for, and plays on from there.
+
+### The hand-over from the command line
+
+This is for a tool or a page of your own. `scmjs mod play` and `scmjs map play` hand their
+files to the play page the same way. The command serves a page on 127.0.0.1, and that page
+opens the play page with `?handoff=1`. Each time the play page says `scmjs.ready` or
+`scmjs.play.ready`, the command's page posts it this message:
+
+```js
+{
+  type: "scmjs.play",
+  dataSet: {
+    name: "My Mod",
+    hash: "3f9a0c2e5b7d1146",          // 16 hex digits
+    files: [{ path: "arr/weapons.dat", file: File }, …, { path: "plugins/gptp.qdp", file: File }],
+  },
+  map: Uint8Array,                      // with --map: the map's bytes
+  name: "(2)Ridge.scx",                 // and its file name
+  bot: { key: "cosmonarchy-example", race: 1 },   // with --bot: a key, or { file: File, name, race }
+  setup: true,                          // with --bot and without --start: show the setup screen
+}
+```
+
+| Field | Holds |
+| --- | --- |
+| `dataSet.files[].path` | The game's path in lower case with forward slashes. Each module of the mod's code that [the hash](#the-mods-hash) has a line for is under `plugins/`, and a FireGraft file under `firegraft/`. Files an operating system leaves in folders are not handed over |
+| `dataSet.hash` | [The mod's hash](#the-mods-hash). The page works it out again from the same files and arrives at the same one. A page that already keeps a mod with that hash can skip storing it again |
+| `bot.race` | 0 for zerg, 1 terran, 2 protoss and 6 random |
+| `setup` | With a bot, the message also names the kind of game: the map's own settings for a mod with plugins or a FireGraft project, otherwise the page's own guess |
+
+A game file the page would not take as a loose file goes in a small MPQ,
+`scmjs-members.mpq`, which the page opens as it opens a mod's own. That is a file beside
+the game's folders, or one under `plugins\` or `firegraft\`, such as the members
+`plugins\apply` and `firegraft\reqlist.txt` of Cosmonarchy's loader archive.
+
+A mod with plugins or a FireGraft project is handed to the page at `?lift=live`, the
+address where the page runs them.
+
+The page answers with `scmjs.play.started`, `scmjs.play.shown` or `scmjs.taken`, which end
+the wait, or with `scmjs.play.error` and a `message`, which the command prints before it
+exits with 1. `scmjs.waiting` and `scmjs.play.waiting` messages are printed as they come.
+With a bot, `shown` and `started` carry `bot`, the bot's row as the setup screen words it.
 
 ## From a mod folder to a replay
 

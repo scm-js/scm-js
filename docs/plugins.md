@@ -2021,13 +2021,16 @@ removes doodads the terrain change broke and units the new ground cannot hold (i
 Units palette's *Remove stranded units* is on), commits and repaints.
 
 - **Terrain:** read and set tiles (`tileAt`, `setTile`, `setTiles`), the editor's brushes
-  (`stampTerrain`, `paintIsom`, `fillArea`, `placeBlend`, `replaceTerrain`, `fillFlat`),
-  and the ISOM lattice (`rebuildIsom`, `tilesFromIsom`). Most brushes need the tileset
-  graphics.
+  (`stampTerrain`, `paintIsom`, `fillArea`, `placeBlend`, `replaceTerrain`, `fillFlat`,
+  `heal`), and the ISOM lattice (`rebuildIsom`, `tilesFromIsom`). Most brushes need the
+  tileset graphics. `pin` keeps tiles as they are: a pinned tile is skipped by everything
+  here that lays terrain by rule (`paintIsom`, `stampTerrain`, `fillFlat`, `fillArea`,
+  `replaceTerrain`, `tilesFromIsom`, `heal`), as it is by the editor's own brushes, and
+  still written by `setTile`, `setTiles`, `placeBlend`, `paste` and the doodad calls.
 - **Objects:** units (`placeUnit`, `canPlaceUnit`, `addUnits`, `moveUnits`, `updateUnits`,
-  `placeStartLocations`, …), sprites, doodads (`placeDoodad`, `convertDoodads`), locations
-  (`addLocation`, `editLocation`; slot 63, Anywhere, is protected), fog (`setFog`,
-  `floodFog`, …) and `paste` for a whole `Clip`.
+  `placeStartLocations`, …), sprites, doodads (`placeDoodad`, `placeStretchedDoodad`,
+  `convertDoodads`), locations (`addLocation`, `editLocation`; slot 63, Anywhere, is
+  protected), fog (`setFog`, `floodFog`, …) and `paste` for a whole `Clip`.
 - **Symmetry:** `mirror` and `mirrorPoint` give the positions Tools ▸ Symmetry would also
   paint, so your edit can follow the user's setting.
 - `note(text)` adds a line to the status bar message.
@@ -2511,6 +2514,29 @@ lattice (`diamondAt`, `diamondsIn`), `floodRegion` and `blendCandidates`. Also t
 palette's current brush (`active` / `setActive`) and Tools ▸ Symmetry (`symmetry` /
 `setSymmetry`, `mirror`).
 
+For hand-made terrain: `seamStep` is the measure View ▸ Seam Overlay draws by and `seams`
+counts the joins it would draw; `pinned` lists the pinned tiles and `handLaid` the tiles
+the isometric data does not account for, which are the ones worth pinning before a plugin
+repaints around them; `symmetryShares` says how alike the map is to its image under each
+symmetry mode, and `fairness` is the full report for one mode: the small squares that
+differ in walking, height and building, where they are, and the resources with no equal
+counterpart.
+
+```ts
+// Widen the picked ramp by three steps and keep it as laid.
+const ramp = api.palette.active().doodad;
+const [axis] = api.palette.stretchAxes(ramp);
+if (axis) {
+  api.document.edit("Wide ramp", (tx) => { tx.pin(tx.placeStretchedDoodad(ramp, 40, 30, axis, 3)); });
+}
+
+// Is a mirrored map the same on both sides?
+const report = api.terrain.fairness("h");
+if (report && report.unlike > 0) {
+  api.ui.status(`${report.unlike} small squares differ in ${report.places.length} places`);
+}
+```
+
 `checkIsom()` measures how well the ISOM lattice matches the tiles. Offer a rebuild when
 it reports `stale`, not merely `mismatched`: some mismatch (hand-placed tiles, blends)
 never goes away.
@@ -2576,7 +2602,10 @@ What the Units, Sprites, Doodads and Fog palettes have picked and what they list
 plugin can use "whatever the user chose" without a picker of its own. Paint does this. It
 also holds the placement rules (collision, terrain, snap to grid, remove stranded units)
 that `placeUnit`, `canPlaceUnit` and `query.placement` follow. The Terrain palette's pick
-is `terrain.active()`.
+is `terrain.active()`. For a doodad, `stretchAxes` lists the directions it can be
+stretched along (a ramp along its cliff, a bridge along and across its deck) and
+`doodadTwin` names the doodad that is its mirror image, the ramp for the cliff running the
+other way.
 
 ### `api.names`
 

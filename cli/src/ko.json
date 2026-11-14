@@ -726,6 +726,7 @@
   "Name a map (.scm, .scx, .chk) or a replay (.rep).": "맵(.scm, .scx, .chk)이나 리플레이(.rep)를 지정하세요.",
   "{path} cannot be read ({code})": "{path}을(를) 읽을 수 없습니다 ({code})",
   "Check the name; put quotes round a name with spaces or brackets.": "이름을 확인하세요. 공백이나 괄호가 있는 이름은 따옴표로 감싸세요.",
+  "Node {version} cannot run a TypeScript bot as it is (Node 22.18 or newer strips the types itself): use a newer Node, or compile {file} to JavaScript.": "Node {version}에서는 TypeScript 봇을 그대로 실행할 수 없습니다(Node 22.18 이상은 타입을 스스로 제거합니다). 더 새 Node를 쓰거나 {file}을(를) JavaScript로 컴파일하세요.",
   "{name} is not a replay this can read: {reason}": "{name}은(는) 읽을 수 있는 리플레이가 아닙니다: {reason}",
   "a map": "맵",
   "a replay": "리플레이",
@@ -2563,5 +2564,9 @@
   "  {name}: {why}": "  {name}: {why}",
   "  none": "  없음",
   "identity: hash {hash}, without plugins {withoutPlugins}; {lines} lines and {plugins} plugin lines{older, select, none {} other {; older {older}}}{beforeCode, select, none {} other {; before its code had lines {beforeCode}}}{declared, select, none {} other {; mod.json says {declared}}}; code {code, select, yes {yes} other {no}}; startup data read again {startup, select, yes {yes} other {no}}": "식별: 해시 {hash}, 플러그인 없이 {withoutPlugins}; 줄 {lines}개와 플러그인 줄 {plugins}개{older, select, none {} other {; 이전 {older}}}{beforeCode, select, none {} other {; 코드에 줄이 생기기 전 {beforeCode}}}{declared, select, none {} other {; mod.json에 적힌 값 {declared}}}; 코드 {code, select, yes {있음} other {없음}}; 시작 데이터 다시 읽음 {startup, select, yes {예} other {아니요}}",
-  "said: {said}": "알림: {said}"
+  "said: {said}": "알림: {said}",
+  "--bot is for a C++ bot's folder (its scmbot.json); a JavaScript bot is told the mod at run time, and --js writes the module alone.": "--bot은 C++ 봇의 폴더(scmbot.json)를 위한 것입니다. JavaScript 봇은 실행할 때 모드를 전달받으며, --js는 모듈만 씁니다.",
+  "for a JavaScript bot: <Mod>.mjs in place of the C++ header": "JavaScript 봇용: C++ 헤더 대신 <Mod>.mjs",
+  "With --js, <Mod>.mjs in place of the header: the same ids as a JavaScript module (UnitTypes.Terran_Mason). A\nJavaScript bot is given the mod's names and its name and hash at run time anyway; the module is for an editor's\ncompletion, and for ids pinned to one version of the mod.": "--js를 주면 헤더 대신 <Mod>.mjs를 씁니다: 같은 ID를 JavaScript 모듈로(UnitTypes.Terran_Mason). JavaScript\n봇은 어차피 실행할 때 모드의 이름들과 모드의 이름·해시를 전달받습니다. 이 모듈은 편집기의 자동 완성과,\n모드의 한 버전에 고정된 ID를 위한 것입니다.",
+  "Module": "모듈"
 }

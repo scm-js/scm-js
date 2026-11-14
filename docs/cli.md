@@ -2944,6 +2944,19 @@ that name nothing are left out: an empty name, "None", "Reserved", "Unused", "*"
 data editor's "Extended Tech #54". The header says it was generated, from which mod and
 hash and on what day; run the command again rather than edit it.
 
+```sh
+scmjs mod header "Cosmonarchy BW" --js
+```
+
+writes `<Mod>.mjs` in place of the header, for a JavaScript bot: the same ids as a module,
+`MOD_NAME`, `MOD_HASH`, and `UnitTypes`, `WeaponTypes`, `UpgradeTypes` and `TechTypes` by
+name (`UnitTypes.Terran_Mason` is 7), with the JSON beside it. Its names follow the same
+rules but for one: a C++ keyword stays as it is (`max`, not `_max`), as any word may name
+a JavaScript object's member. A JavaScript bot does not need the file to play a mod: in
+the mod's game it is told the mod's name and hash, and its tables call every unit by the
+same names as the module. The module is for an editor's completion, and for ids pinned to
+one version of the mod. `--js` writes no `scmbot.json`, so it is not taken with `--bot`.
+
 With `--bot`, `--out` must be a bot's folder (one with `scmbot.json`): the two files go
 there and `scmbot.json` gains `"mod": { "name", "hash" }` (and `"link"` when the mod's
 `mod.json` has one), the rest of it as it was. The next `scmjs bot build` writes the mod
@@ -3146,6 +3159,18 @@ UAlbertaBot on (2)Jungle Duel.scx 128 × 128, jungle · bot zerg vs computer zer
 | `--ums`, `--melee` | The map with its own settings, or a melee game; by default the map's own settings when it looks made for them, or when the mod has plugins |
 | `--json` | Everything as data, the mod's name and hash at the top under `mod` |
 
+The bot can also be one written in JavaScript or TypeScript for the play page's own bot
+interface: a `.js`, `.mjs` or `.ts` file whose default export has a `name` and either
+`onFrame(game)`, called every few frames with the game and the means to order it about
+(`game.want("Marine", 40)`, `game.army.attack(game.enemyBase())`), or `create`, for a bot
+that keeps its own books from the plain view. Nothing is built:
+`scmjs bot run mybot.js "(2)Jungle Duel.scx"` plays the file as it is, on the same game
+and with the same options, BWAPI telling it the game and carrying out its orders. With
+`--mod`, the bot is told the mod's name and hash and given its tables, every unit called
+by the mod's name ([a bot made for a mod](#a-bot-made-for-a-mod)). A TypeScript file needs
+Node 22.18 or newer, which reads TypeScript itself; with an older Node, compile it to
+JavaScript first. `--data` is for BWAPI bots only.
+
 The bot's own text is printed as it comes. A loss is a result, not a failure: the command
 exits with 0 whoever won, with 1 when the bot printed errors, and with 2 when the game
 could not start. Every value, the bot file and the map are looked at before anything
@@ -3205,6 +3230,10 @@ the game's computer, and the maps:
 ```sh
 scmjs bot ladder out/mybot.scmbot:p ../rival/out/rival.scmbot computer --maps "(2)Jungle Duel.scx" "(4)Crossing.scx" --races tzp
 ```
+
+A bot written in JavaScript or TypeScript (`mybot.js`, `mybot.ts`) takes a side as a
+`.scmbot` does, named after its file: JavaScript bots, BWAPI bots and the computer play in
+one ladder.
 
 A race after a colon is the race that side always plays: `mybot.scmbot:p`,
 `computer:terran`; a part after the colon that is no race is said as such. A side without
@@ -3637,7 +3666,7 @@ gives its options.
 | [`scmjs mod build <folder>`](#checking-and-comparing-mods) | Check, then pack; stops on an error unless `--ignore-errors` |
 | [`scmjs mod play <mod>`](#playing-a-mod-on-the-play-page) | Every file of the mod handed to the play page with its hash; `--map` starts a map with it, `--bot` puts a bot on the other side |
 | [`scmjs mod test <mod> <map> [tests…]`](#a-mod-in-the-game-engine) | `map test` with the mod laid over the game; `map test`, `trace` and `cost` take `--mod` |
-| [`scmjs mod header <mod>`](#a-bot-made-for-a-mod) | The mod's units, weapons, upgrades and techs by name for a bot made for it: a C++ header and JSON; `--bot` writes the mod into the bot's `scmbot.json` |
+| [`scmjs mod header <mod>`](#a-bot-made-for-a-mod) | The mod's units, weapons, upgrades and techs by name for a bot made for it: a C++ header and JSON; `--bot` writes the mod into the bot's `scmbot.json`; `--js` a JavaScript module in place of the header |
 
 ### `scmjs plugin` and `scmjs bot`
 

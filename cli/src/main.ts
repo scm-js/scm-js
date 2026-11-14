@@ -1806,18 +1806,21 @@ address goes to standard error, and the result to standard output once the page 
     .option("-o, --out <folder>", t("where the files go (the working folder by default)"))
     .option("--namespace <name>", t("the C++ namespace, and the files' name (the mod's name made an identifier by default)"))
     .option("--bot", t("--out is a bot's folder: its scmbot.json gains the mod, which the bot file then carries"))
+    .option("--js", t("for a JavaScript bot: <Mod>.mjs in place of the C++ header"))
     .addOption(starcraftOption())
     .addHelpText("after", "\n" + t(`Writes <Mod>.h, C++ for a BWAPI bot built with scmbot (Cosmonarchy_BW::UnitTypes::Terran_Mason is a
 BWAPI::UnitType, Ids::Units::Terran_Mason the number), and <Mod>.ids.json, the same for other languages. Every name
 in the mod's tables is there, as the editor shows it. Both carry the mod's name and hash; with --bot, scmjs bot build
-writes them into the .scmbot file, and the runners say whether the game is the mod the bot was made for.`))
-    .action(async (path: string, o: { json?: boolean; out?: string; namespace?: string; bot?: boolean; starcraft?: string }) => {
+writes them into the .scmbot file, and the runners say whether the game is the mod the bot was made for.`) + "\n\n" + t(`With --js, <Mod>.mjs in place of the header: the same ids as a JavaScript module (UnitTypes.Terran_Mason). A
+JavaScript bot is given the mod's names and its name and hash at run time anyway; the module is for an editor's
+completion, and for ids pinned to one version of the mod.`))
+    .action(async (path: string, o: { json?: boolean; out?: string; namespace?: string; bot?: boolean; js?: boolean; starcraft?: string }) => {
       const base = await gameFilesOrNull(o.starcraft);
-      const r = await writeModHeader(await openMod(path, base), base, { out: o.out, namespace: o.namespace, bot: o.bot });
+      const r = await writeModHeader(await openMod(path, base), base, { out: o.out, namespace: o.namespace, bot: o.bot, js: o.js });
       if (o.json) { print(JSON.stringify(r, null, 2)); return; }
       print(`${mark.ok} ${pc.bold(r.mod.name)}: ${t("{units} units, {weapons} weapons, {upgrades} upgrades, {techs} techs named", { units: num(r.counts.units), weapons: num(r.counts.weapons), upgrades: num(r.counts.upgrades), techs: num(r.counts.techs) })}${dot}${pc.dim(t("hash {hash}", { hash: r.mod.hash }))}`,
         ...rows([
-          [t("Header"), pc.cyan(shownPath(r.files.header))],
+          [o.js ? t("Module") : t("Header"), pc.cyan(shownPath(r.files.header))],
           [t("Ids"), pc.cyan(shownPath(r.files.ids))],
           [t("Bot"), r.files.scmbot ? t("{file} now names the mod: build the bot again", { file: shownPath(r.files.scmbot) }) : null],
           [t("From the game"), r.fromGame.length ? t("the names of {list}: the mod has not got them", { list: r.fromGame.join(", ") }) : null],

@@ -241,6 +241,21 @@ native/ — see scm-sim's docs/own-bots.md. Added 2026-11-06 with "Made by Jeany
   a replay of the game saved out (the engine records commands; a `--replay` is a natural next step). Both came with
   `bot ladder` (below): the relay is local, in scm-sim's match runner.
 
+### JavaScript bots in `bot run` and `bot ladder` — 2026-11-13
+
+- scm-sim's runners (`run.ts`, `match.ts`) play a JavaScript bot's module (`BOT_API` 1, scm-sim `docs/bots.md`) as
+  BWAPI's client: BWAPI with no bot linked, its GameData read each frame by `ExactBotHost` (scm-sim
+  `docs/js-bots-plan.md`, J0–J2). The bot-less BWAPI (0.9 MB of wasm) is **inside** `run.mjs` and `match.mjs`
+  (`scripts/lib/client-build.mjs`), so the CLI fetches nothing new: a play page deployed with those runners plays
+  JS bots, an older one refuses the file as "not a bot file" (its `readBundle`).
+- The CLI's half is small: `files.ts` `isJsBot` (by extension `.js`/`.mjs`/`.ts`, where a `.scmbot` is told by its
+  magic), `jsBotName` (the file's name, as the runner names it), `typeScriptBotProblem` (`process.features.typescript`:
+  Node strips types itself from 22.18; the CLI's floor is 22.12, so an older Node is told to compile). `checkBotGame`
+  skips the kind check for one; `parseEntrants` adds one named after its file. The runner is spawned as for a
+  `.scmbot`; the bot's module is imported by the runner from its path.
+- Not yet: `bot new --js` (a starter folder with the API's types: needs `BOT_API`'s `api.ts` public, scm-sim being
+  private), and a JS bot's `fit` to a mod (J4).
+
 ## A ladder: `bot ladder` (`cli/src/ladder.ts`, `engine.ts`) — 2026-11-07
 
 `scmjs bot ladder <bots…> --maps <maps…> [--races r] [--games 1 | --seeds a,b] [--frames 50000] [--out] [--data]
@@ -2450,7 +2465,7 @@ The whole design, the proofs and the traps are in **`mods.md`**. Here, what touc
   the clips on the play page without the mod (the replay is the modded game's): a clip of a mod that changes the
   units can go out of step. Not guarded.
 
-- `mod header <mod> [--out] [--namespace] [--bot]` (C4, 2026-11-08): a bot's C++ header and JSON of the mod's ids by
+- `mod header <mod> [--out] [--namespace] [--bot] [--js]` (C4, 2026-11-08; `--js` 2026-11-14, scm-sim's js-bots J4): a bot's C++ header and JSON of the mod's ids by
   name; design and Cosmonarchy's numbers in `mods.md` "`mod header`". No MCP tool (a bot author's command). Its
   `Header`/`Ids`/`Bot` rows are new one-word catalogue keys.
 - `bot run` and `bot ladder` take `--mod`, `--ums`, `--melee` (C4): the mod with its code, overlay version 2; the start

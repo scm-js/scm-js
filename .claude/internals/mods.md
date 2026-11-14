@@ -416,8 +416,15 @@ it holds none.
   unique; Mason 7, Ministry 106, Supply Depot 109, Stockade 111, Quarry 174, Talos 20, Maverick 0, Sieve 419,
   Ogun 494 (worker mode) / 497 (smithy mode). The header compiles with the toolchain's flags, plain and MSVC-compat
   (em++ -std=c++17 against `native/` of scm-sim). 4.7 s, mostly the hash.
+- **`--js`** (2026-11-14, scm-sim js-bots J4): `<Mod>.mjs` (`moduleText`: `MOD_NAME`, `MOD_HASH`, four frozen objects,
+  a default export) and the ids JSON, no `.h`; refused with `--bot`. Identifiers by `jsIdentifierOf` (no C++
+  keyword/macro prefix) — the rule scm-sim's `src/bwapi/jsData.ts` copies for a JavaScript bot's `init.data.UnitTypes`
+  in a mod's game, over names read as here (scm-sim `readUnitLabels`: unitnames.tbl whole entries, stat_txt for <228,
+  "Name (Subtitle)"). **Keep the two in step**: on Cosmonarchy (hash c94acdf31982fa4b) all 621 unit names agree
+  (checked by a bot importing the module in a game). Weapons, upgrades and techs are not renamed at run time (BWAPI's
+  names): the module is how a JavaScript bot gets the mod's names for those.
 - Tests: `tests/cli-mod-header.test.ts` (made mod: tbl/unitnames names, a 230-unit `.dat`, stat.txt fill, a name list,
-  `--namespace`, `--bot`).
+  `--namespace`, `--bot`, `--js` imported as a module).
 
 ## `bot run --mod`, `bot ladder --mod`: overlay 2 (C4, 2026-11-08, branch `mod-header`)
 

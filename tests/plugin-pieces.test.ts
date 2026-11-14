@@ -190,6 +190,19 @@ describe("pieces on the API", () => {
     expect(api.terrain.pieces()).toHaveLength(1);
   });
 
+  it("replaces a set given again under its id, and an earlier handle no longer takes the later set away", () => {
+    const { api } = laid();
+    const one = { cols: 1, rows: 1, ids: [id(5, 5)] };
+    const first = api.terrain.providePieces({ id: "a", label: "A", tileset: "badlands", pieces: [{ name: "First", block: one }] });
+    const second = api.terrain.providePieces({ id: "a", label: "A", tileset: "badlands", pieces: [{ name: "Second", block: one }] });
+    const names = () => api.terrain.pieces().map((p) => p.name).filter(Boolean);
+    expect(names()).toEqual(["Second"]);
+    first.dispose();
+    expect(names()).toEqual(["Second"]);
+    second.dispose();
+    expect(names()).toEqual([]);
+  });
+
   it("refuses a set without an id or a known tileset", () => {
     const { api } = open();
     expect(() => api.terrain.providePieces({ id: "", label: "x", tileset: "badlands", pieces: [] })).toThrow(/an id/);

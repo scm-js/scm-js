@@ -572,8 +572,8 @@ finds a neighbour, and repeats the tiles that join each other best.
 - **How clean the result is depends on the tileset.** The bridges of Badlands, Space
   Platform and Jungle are drawn to repeat and stretch without a visible join. Cliff ramps
   repeat with a faint join every two tiles, as the long ramps of hand-made maps do. The
-  status bar says when the joins will show; the Tile and Blend brushes are there to touch
-  them up.
+  status bar counts the joins that show and **View ▸ Seam Overlay** marks them; the Heal,
+  Tile and Blend brushes are there to touch them up.
 - **Some ramps do not stretch.** A ramp built into a wall, such as the Badlands Structure
   ramp, is two tiles wide with a side wall in each. It has no middle, and stretched it is
   a row of half ramps with wedges of wall between them. The drag does nothing for such a

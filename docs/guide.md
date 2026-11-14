@@ -426,7 +426,8 @@ ground meets the tileset's: a trim along a floor's edge, a cliff wall from a rai
 down to dirt. With **Drawn borders** on (the switch under the list's heading, on by
 default where any is known), a stroke lays those pieces where its ground meets the
 tileset's own, instead of the other tileset's edge to its base ground. The hover on each
-terrain says which grounds it has borders against.
+terrain says which grounds it has borders against. The editor remembers whether you left
+the switch on or off.
 
 The editor learns the pieces from the mod's maps: Learn from Maps… in the Tile palette's
 pieces view reads the borders as it reads the pieces, the map in front included, and says
@@ -441,9 +442,9 @@ the piece the maps lay in its place, chosen so that it joins its neighbours; whe
 joins, the cell is left as the plain edge: the borrowed ground's own tile on its side, the
 map's ground on the other. On the ground's side, the tile that was there stays wherever it
 already joins, so plain ground is not scattered with pieces. The status line counts the
-cells drawn, the cells left as the plain edge, and the border tiles that walk or build
-unlike either ground (a cliff piece usually does). Learning finds most shapes of a border,
-not all: a shape no map lays is left as the plain edge.
+cells drawn, the cells left as the plain edge, and the border tiles that walk unlike
+either ground (part of a cliff piece usually cannot be walked on). Learning finds most
+shapes of a border, not all: a shape no map lays is left as the plain edge.
 
 What it does not do:
 

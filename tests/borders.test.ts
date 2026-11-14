@@ -56,6 +56,20 @@ function latticeEdgesBroken(scn: Scenario, ctx: BorrowContext, lattice: Uint8Arr
   return out;
 }
 
+describe("the Drawn borders switch", () => {
+  it("is on in a store with no browser storage behind it (Node, the headless host), and is a stored setting", async () => {
+    const { createStore } = await import("jotai");
+    const { drawnBordersAtom } = await import("../src/atoms/borderAtoms");
+    const store = createStore();
+    expect(store.get(drawnBordersAtom)).toBe(true);
+    store.set(drawnBordersAtom, false);
+    expect(store.get(drawnBordersAtom)).toBe(false);
+    const { browserStorage } = await import("../src/atoms/storage");
+    expect(browserStorage().getItem("scmjs.drawnBorders")).toBe("false"); // what the next page load reads
+    store.set(drawnBordersAtom, true);
+  });
+});
+
 describe("the border record", () => {
   it("keeps the painted base ground and each cell's host tile, and moves with a resize", () => {
     const size = { width: 64, height: 48 };
@@ -155,6 +169,7 @@ describe("drawn borders on a made-up tileset", async () => {
     expect(r.borders).not.toBeNull();
     expect(r.borders!.drawn).toBeGreaterThan(20);
     expect(r.borders!.hard).toBeLessThanOrEqual(r.borders!.cells / 10);
+    expect(r.borders!.unlike).toBe(0); // every tile of this world walks: no border tile walks unlike either side
     const scope = new Set<number>();
     for (let i = 0; i < orig.length; i++) if (on.tiles[i] !== orig[i] || off.tiles[i] !== orig[i]) for (const d of [0, -1, 1, -64, 64]) if (i + d >= 0 && i + d < orig.length) scope.add(i + d);
     expect(shownSeams(on, w.host, scope)).toBeLessThan(shownSeams(off, w.host, scope) / 4);

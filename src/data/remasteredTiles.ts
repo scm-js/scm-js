@@ -32,6 +32,19 @@ export function tileGroupRanges(era: number): { classic: number; remastered: num
 }
 
 /**
+ * Where the groups a data set adds to the game's begin, on a tileset of `groups` groups with ERA
+ * index `era`, or null when it adds none: when the table is longer than any of the game's
+ * (Remastered's is the longer), the groups past the 1.16 table's end. A mod's table is laid over
+ * 1.16's and goes on from its end (Cosmonarchy's Badlands: 1,665 groups to 4,094, every added
+ * one untyped); a mod made over Remastered's table would count Remastered's own additions among
+ * its groups too, which no file says otherwise.
+ */
+export function addedGroupsFrom(era: number, groups: number): number | null {
+  const { classic, remastered } = tileGroupRanges(era);
+  return groups > remastered ? classic : null;
+}
+
+/**
  * The group an MTXM value names with all twelve bits above the slot, bit 15 included: what a
  * mod's extended tileset reads (`decode.ts#tileGroupOf` past 2,048 groups). The game's own
  * tilesets take bit 15 as the creep flag, but maps made for them do not set it (of some 600

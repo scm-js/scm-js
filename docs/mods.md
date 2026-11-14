@@ -37,7 +37,12 @@ paths; a mod that ships as a `.zip` is unzipped first. A replay of a mod opens i
 editor too, and plays with the mod your browser keeps from the play page ([Replays of a
 mod](guide.md#replays-of-a-mod)).
 
-With the mod's data set in use, the flat ground its tilesets add can be painted: the Rect
+With the mod's data set in use, the ground and pictures its tilesets add can be laid. The
+Tile tab's filter lists the groups the mod adds, and its sheet shows them as the mod's
+artist drew them, a group a row: drag over a building, a ruin or a run of wall to pick it
+as a block, and the Tile brush lays it whole, or repeats it along a drag. Its pieces view
+learns from a folder of the mod's maps which parts of the sheet they lay whole, and lists
+them as pieces to pick, each picture once however often the tileset repeats it. The Rect
 brush lists the game's terrains the mod repeats at another height, and the pairs the open
 map lays as ground ([Ground a mod adds](guide.md#ground-a-mod-adds)). The isometric brush
 stays with the game's terrain types.

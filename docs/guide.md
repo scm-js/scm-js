@@ -349,7 +349,7 @@ what they have laid:
 | --- | --- |
 | Isometric | Terrain types, laying the cliffs and edges around them. The one to use for almost everything. |
 | Rect | Flat ground of one terrain type, with StarEdit's random variation. No cliffs, no edges. |
-| Tile | Any single tile by number: cliff pieces, doodad tiles, anything the tileset has. |
+| Tile | Any single tile by number, or a block of tiles picked from the tileset's sheet: cliff pieces, doodad pictures, anything the tileset has. |
 | Blend | One tile next to a tile you picked, chosen from those whose facing edge continues it. |
 | Heal | Nothing of its own: it trades a tile that joins its neighbours visibly for one that joins them and plays the same. |
 
@@ -382,7 +382,60 @@ editor's work.
 - **Rect** lays flat ground and nothing else, for filling an area you will shape
   afterwards, or for ground under a doodad.
 - **Tile** is for the pieces the isometric brush will not give you: a single cliff tile, a
-  doodad's tile, a corner the cliff sets do not have.
+  doodad's tile, a corner the cliff sets do not have. The tab shows the tileset four ways,
+  with the buttons beside its filter: grouped rows (each tile group as a labelled block),
+  one grid of every tile, the **sheet** and the **pieces**. The filter and the search
+  choose which groups any of the four lists. The grid shows each tile once: a tileset, a
+  mod's above all, often holds the same picture with the same flags several times, and
+  only the first is listed. The same picture where it walks, builds or stands at another
+  height is another tile and is listed too. The grouped rows and the sheet show every tile
+  in its place.
+
+  The sheet lays each tile group out as one row of its sixteen tiles, rows touching, in
+  group order, with the group's number at the left. Laid out that way the tileset shows
+  the pictures its artist drew across tiles and groups: a doodad is one group a row, and
+  so is the ground a mod adds. Where the listed groups are not consecutive a thin dashed
+  line separates them; a few empty groups in between are drawn as empty rows instead, so a
+  picture with a gap in it stays whole. The square button beside the view buttons shows
+  the tiles at full size, scrolling sideways when the palette is narrower.
+
+  In the sheet a click picks one tile, as in the other views, and a **drag picks a
+  block**: a rectangle of tiles, as many wide and high as you dragged, which cannot cross
+  a dashed line. With a block picked the Tile brush shows the whole block under the
+  pointer, its top-left corner on the tile you point at, as a paste does, and a click lays
+  it. Empty places in the block leave the map as it is. **Dragging repeats the block**:
+  the press sets where the first copy goes, and every copy the drag passes over is laid
+  next to the last, so a piece of wall or floor runs on without a seam. The whole drag is
+  one step to undo. Fill Area and **Fill Map with This Block** tile the block the same
+  way, lined up on the tile you clicked or on the map's corner, and leave pinned tiles
+  alone like the other fills. While a block is picked the brush size shows the block's
+  size; picking a single tile again (a click in any view, the Tile # box, Alt+click on the
+  map, or *Single tile*) goes back to the brush. A block belongs to the map and tileset it
+  was picked on: with another map in front, the Tile brush lays single tiles. Symmetry
+  does not mirror a block: a block's pictures face one way, so it is laid under the
+  pointer only, as a paste is.
+
+  The **pieces** view lists the parts of the sheet that maps lay whole: a wall, a ramp, a
+  ruin, its tiles side by side as they are drawn. Nothing in a tileset says where one
+  picture ends and the next begins, so the editor goes by how maps lay the tiles: where
+  two tiles that are neighbours in the sheet are laid as neighbours most of the times
+  either is laid at all, they belong to one piece. Each piece is drawn in its own outline;
+  hold the pointer over one for its size, how often maps lay it and its group. A click
+  picks it as a block, to lay as above, and the sheet then shows where it came from. *Most
+  laid first* puts the pieces maps use most at the top. Where a tileset holds one picture
+  several times over, exactly or redrawn with slightly different dots, it is one entry,
+  and the pointer says how many copies it stands for; one under other flags is listed
+  right after it and says what differs.
+
+  At first the pieces come from the map in front. **Learn from Maps…** reads every map in
+  a folder you choose (the mod's own maps, say) and keeps what they lay, for the data set
+  in use, in the browser for later sessions; the view then says how many maps it learned
+  from. A map made for other tiles than the data set's, or one that does not open, is
+  skipped and counted. Learning again replaces what was learned; *Forget* drops it. Maps
+  laid with the Isometric and Rect brushes lay no pieces, so on the game's own maps the
+  list is empty. With pieces listed, Alt+click on the map in Tile mode picks the whole
+  piece when the tile under the pointer is laid beside a neighbour from its piece, and the
+  single tile otherwise.
 - **Blend** is for joins the cliff sets never had: dirt into a doodad's base, one edge set
   into another, a hand-laid shoreline. Click a tile to make it the anchor, and the palette
   lists for each side the tiles whose opposite edge continues it, best seam first.
@@ -441,8 +494,18 @@ Rect tab lists the rest it can stand behind, below the game's:
 
 All of these paint, flood-fill and take part in **Tools ▸ Replace Terrain…** like the
 game's terrains — replacing Mud with *Mud (mid ground)* raises a mud flat without changing
-how it looks. The seams around them are the mod's own pieces: lay them with the Tile
-brush, or let the Blend brush find the tiles that continue an edge.
+how it looks.
+
+Most of what a mod adds is not flat ground but pictures: ruins, buildings, walls, roads,
+drawn over thousands of tile groups the way the game's doodads are. When the tileset in
+use has more groups than the game's, the Tile tab's filter has one more choice, *Added by*
+and the data set's name, which lists only those groups. Show them in the sheet and the
+pictures appear whole; drag over one to pick it as a block and lay it on the map in one
+click, or drag on the map to run a wall or a floor along. Learn from the mod's own maps
+and the pieces view lists the parts its maps lay whole, ready to pick. With *Added by*,
+the grid and the pieces leave out what the mod repeats from the game's own part of the
+table. The seams around them are the mod's own pieces too: pick them from the sheet, or
+let the Blend brush find the tiles that continue an edge.
 
 ### Overlays and tools
 
@@ -2208,10 +2271,11 @@ rely on a feature.
 - The isometric brush needs the map's isometric record. The Repair plugin, on by default,
   rebuilds one a protected map had stripped.
 - The isometric brush paints the game's terrain types only. Flat ground a mod adds is laid
-  with the Rect brush and its seams by hand ([Ground a mod adds](#ground-a-mod-adds)).
-- Symmetry does not mirror the Blend brush or pasting. The Tile brush copies the same tile
-  to each image, so an edge tile faces the same way on both sides; use the isometric brush
-  for cliffs and shores.
+  with the Rect brush, and its seams and pictures with the Tile brush, a tile or a block
+  at a time ([Ground a mod adds](#ground-a-mod-adds)).
+- Symmetry does not mirror the Blend brush, a block on the Tile brush, or pasting. The
+  Tile brush copies the same tile to each image, so an edge tile faces the same way on
+  both sides; use the isometric brush for cliffs and shores.
 - Changing the tileset lays the terrain again and drops the doodads; the units, sprites,
   locations, fog and triggers stay.
 

@@ -20,9 +20,11 @@ const STORE = "handles";
 export const RECOVERY_STORE = "recovery";
 /** The versions of files a save wrote over (`services/previousVersions.ts`). */
 export const PREVIOUS_STORE = "previous";
-// 2 added the recovery store, 3 the previous versions. The upgrade only ever adds a store that is missing.
-const VERSION = 3;
-const STORES = [STORE, RECOVERY_STORE, PREVIOUS_STORE];
+/** The pieces learned from folders of maps, per data set and tileset (`services/pieceStore.ts`). */
+export const PIECES_STORE = "pieces";
+// 2 added the recovery store, 3 the previous versions, 4 the learned pieces. The upgrade only ever adds a store that is missing.
+const VERSION = 4;
+const STORES = [STORE, RECOVERY_STORE, PREVIOUS_STORE, PIECES_STORE];
 
 /** The part of a handle every caller relies on; the DOM lib lacks the permission methods. */
 export interface StoredHandle {

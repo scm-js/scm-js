@@ -318,6 +318,81 @@ body.dock-resizing iframe {
   image-rendering: pixelated;
   cursor: pointer;
 }
+.tile-sheet {
+  position: relative;
+  padding: 4px 0;
+}
+.tile-sheet-content {
+  position: relative;
+  cursor: crosshair;
+  touch-action: none;
+  user-select: none;
+}
+.tile-sheet-row {
+  position: absolute;
+  display: block;
+  image-rendering: pixelated;
+}
+.tile-sheet-lbl {
+  position: absolute;
+  left: 0;
+  width: 30px;
+  padding-right: 4px;
+  text-align: right;
+  font-size: 9px;
+  color: var(--text-faint);
+  overflow: hidden;
+  white-space: nowrap;
+}
+.tile-sheet-break {
+  position: absolute;
+  background: repeating-linear-gradient(90deg, var(--border) 0 4px, transparent 4px 7px) center / 100% 1px no-repeat;
+}
+.tile-sheet-outline {
+  position: absolute;
+  box-sizing: border-box;
+  border: 2px solid var(--gold);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.7);
+  pointer-events: none;
+}
+.tile-sheet-outline.is-dragging {
+  border-style: dashed;
+  background: rgba(230, 185, 92, 0.12);
+}
+.tile-sheet-size {
+  position: absolute;
+  right: 0;
+  bottom: 100%;
+  padding: 0 3px;
+  font-size: 9px;
+  color: var(--bg-0);
+  background: var(--gold);
+}
+.pieces-head {
+  display: grid;
+  gap: 6px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  font-size: var(--fs-sm);
+  flex: none;
+}
+.pieces-head .hint {
+  font-size: var(--fs-xs);
+}
+.piece-thumb {
+  position: absolute;
+  display: block;
+  image-rendering: pixelated;
+  cursor: pointer;
+  outline: 1px solid rgba(255, 255, 255, 0.06);
+}
+.piece-thumb:hover {
+  outline-color: var(--gold-dim);
+}
+.piece-thumb.is-selected {
+  outline: 2px solid var(--gold);
+  outline-offset: 1px;
+}
 .palette-toolbar .search {
   position: relative;
   display: flex;

@@ -12,6 +12,11 @@ import {
   Stroke, type Rect, type TerrainPick, type TileChange,
 } from "../editor/terrain";
 import { healTiles, shownSeams } from "../editor/heal";
+import { tileBlockAtom } from "../atoms/tileBlockAtoms";
+import { blockCells, layPattern, PatternStroke, type TileBlock } from "../editor/tileSheet";
+import { pieceBlock } from "../editor/pieces";
+import { laidPieceAt } from "../editor/piecePick";
+import { piecesFromStore } from "./usePieces";
 import { mirrorIndices, mirrorPixel, mirrorRect } from "../editor/symmetry";
 import {
   applyIsomChanges, brushDiamonds, diamondAt, hasIsom, isDiamond, isomTables, isomTerrains, isomWidth, paintIsom, type Diamond,
@@ -48,6 +53,11 @@ export function paintsTiles(mode: TerrainMode): boolean {
   return mode === "rect" || mode === "tile" || mode === "heal" || mode === "pin";
 }
 
+/** What a block's stroke is called in the history and the status line. */
+export function blockLabel(block: Pick<TileBlock, "cols" | "rows">): string {
+  return t("Place {cols}×{rows} tiles", { cols: block.cols, rows: block.rows });
+}
+
 /** What a status line adds when pinned tiles stood in a brush's way. */
 function keptNote(kept: number): string {
   return kept > 0 ? t(" — {n, plural, one {# pinned tile} other {# pinned tiles}} left as laid (the Pin tab unpins)", { n: kept }) : "";
@@ -75,6 +85,8 @@ export function useTerrainTools() {
   const strokeKept = useRef(new Set<number>());
   /** A stroke of the Pin brush: the pins file before it and as it stands. */
   const pinStroke = useRef<{ before: Uint8Array | null; after: Uint8Array | null } | null>(null);
+  /** A stroke of the Tile brush with a block: the press set where the pattern's copies line up. */
+  const patternStroke = useRef<PatternStroke | null>(null);
 
   const info = TILESET_BY_ID[useAtomValue(mapTilesetAtom)];
   const loaded = peekTileset(useAtomValue(tilesetFileNameAtom));
@@ -198,6 +210,16 @@ export function useTerrainTools() {
     const scn = store.get(scenarioAtom);
     const s = stroke.current;
     if (!scn || !s) return;
+    // A block repeats as a pattern along the drag: each copy the pointer reaches is laid once.
+    const pattern = patternStroke.current;
+    if (pattern) {
+      const changes = pattern.at(scn, x, y);
+      if (changes.length === 0) return;
+      applyChanges(scn, changes);
+      s.add(changes);
+      bumpRevision((r) => r + 1);
+      return;
+    }
     if (store.get(terrainModeAtom) === "isom") {
       if (p) paintIsomAt(p);
       return;
@@ -224,8 +246,12 @@ export function useTerrainTools() {
     lastDiamond.current = null;
     strokeKept.current = new Set();
     pinStroke.current = null;
+    // A block is laid only under the pointer: its pictures cannot be mirrored, so symmetry leaves it alone, as it does a paste.
+    const block = mode === "tile" ? store.get(tileBlockAtom) : null;
+    patternStroke.current = block ? new PatternStroke(block, { x, y }) : null;
     strokeLabel.current =
-      mode === "pin" ? (store.get(pinBrushUnpinsAtom) ? t("Unpin tiles") : t("Pin tiles"))
+      block ? blockLabel(block)
+      : mode === "pin" ? (store.get(pinBrushUnpinsAtom) ? t("Unpin tiles") : t("Pin tiles"))
       : mode === "rect" ? (currentTerrain() ? t("Paint {terrain}", { terrain: terrainLabel(currentTerrain()!) }) : t("Paint terrain"))
         : mode === "isom" ? t("Paint {terrain} (isometric)", { terrain: translate(terrainName(info, currentIsomTerrain() ?? -1)) })
           : mode === "heal" ? t("Heal seams")
@@ -240,6 +266,7 @@ export function useTerrainTools() {
     stroke.current = null;
     isomStroke.current = null;
     lastDiamond.current = null;
+    patternStroke.current = null;
     if (!s || !scn) return;
     const pins = pinStroke.current;
     pinStroke.current = null;
@@ -284,6 +311,11 @@ export function useTerrainTools() {
       const region = mirrorIndices(store.get(symmetryAtom), floodRegion(scn, x, y, (id) => typeOf(id) === seedType), scn.width, scn.height);
       changes = stampTerrain(scn, loaded.tileset, { group: terrain.group, variation: store.get(rectVariationAtom) }, region);
       label = t("Fill {terrain}", { terrain: terrainLabel(terrain) });
+    } else if (store.get(tileBlockAtom)) {
+      // A block fills as its pattern, lined up on the cell clicked; not mirrored, since its pictures cannot be.
+      const block = store.get(tileBlockAtom)!;
+      changes = layPattern(scn, block, { x, y }, floodRegion(scn, x, y, (id) => id === seed));
+      label = t("Fill with {cols}×{rows} tiles", { cols: block.cols, rows: block.rows });
     } else {
       const tile = store.get(activeTileAtom);
       if (tile === seed) return;
@@ -317,7 +349,15 @@ export function useTerrainTools() {
     let label: string;
     const pinned = store.get(pinnedTilesAtom);
     let kept = 0;
-    if (store.get(terrainModeAtom) === "tile") {
+    const block = store.get(terrainModeAtom) === "tile" ? store.get(tileBlockAtom) : null;
+    if (block) {
+      // The block's pattern from the map's top-left corner; its holes leave the map as it is.
+      for (const c of layPattern(scn, block, { x: 0, y: 0 }, scn.tiles.keys())) {
+        if (pinned?.[c.at]) kept++;
+        else changes.push(c);
+      }
+      label = t("Fill map with {cols}×{rows} tiles", { cols: block.cols, rows: block.rows });
+    } else if (store.get(terrainModeAtom) === "tile") {
       const tile = store.get(activeTileAtom);
       for (let at = 0; at < scn.tiles.length; at++) {
         if (scn.tiles[at] === tile) continue;
@@ -487,6 +527,17 @@ export function useTerrainTools() {
       }
       setMode("tile");
     }
+    // A tile laid beside its sheet neighbour as part of a piece picks the whole piece.
+    if (mode === "tile" && loaded) {
+      const cut = piecesFromStore(store, loaded.tileset);
+      const piece = cut ? laidPieceAt(scn, loaded.tileset.groups.length, cut.index, x, y) : null;
+      if (piece) {
+        store.set(tileBlockAtom, pieceBlock(piece));
+        setStatus(t("Picked a {cols}×{rows} piece (group {group}) — click the map to lay it, drag to repeat it", { cols: piece.cols, rows: piece.rows, group: piece.group }));
+        return;
+      }
+    }
+    store.set(tileBlockAtom, null);
     setActiveTile(id);
     setStatus(t("Picked tile {tile} (group {group}, slot {slot})", { tile: hexTile(id), group: id >> 4, slot: id & 15 }));
   }, [store, loaded, info, types, isomTypes, setActiveTerrain, setActiveTile, setMode, setBlendAnchor, setStatus]);
@@ -532,6 +583,9 @@ export function useTerrainTools() {
         const tx = at % scn.width;
         out.push({ x: tx, y: Math.floor(at / scn.width), id: ((terrain.group + (tx & 1)) << 4) | variation });
       }
+    } else if (mode === "tile" && store.get(tileBlockAtom)) {
+      // The whole block with its top-left under the pointer, as a paste stands; not mirrored.
+      return blockCells(store.get(tileBlockAtom)!, x, y, scn.width, scn.height);
     } else if (mode === "tile") {
       const id = store.get(activeTileAtom);
       for (const at of cells) out.push({ x: at % scn.width, y: Math.floor(at / scn.width), id });

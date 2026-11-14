@@ -1,3 +1,4 @@
+import { tileBlockAtom } from "../../atoms/tileBlockAtoms";
 import { useState } from "react";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { Crosshair, MousePointer2, SquareDashed, Trash2 } from "lucide-react";
@@ -58,6 +59,7 @@ function TerrainProps() {
   const variation = useAtomValue(rectVariationAtom);
   const mode = useAtomValue(terrainModeAtom);
   const brush = useAtomValue(brushSizeAtom);
+  const block = useAtomValue(tileBlockAtom);
   const cursor = useAtomValue(cursorTileAtom);
   const scenario = useAtomValue(scenarioAtom);
   useAtomValue(terrainRevisionAtom); // the tile under the cursor changes as strokes land
@@ -79,7 +81,7 @@ function TerrainProps() {
           : <span className="row" style={{ gap: 6 }}><TileThumb loaded={loaded} id={tile} size={16} /><span className="mono">{hexTile(tile)}</span></span>}
       </Row>
       <Row k={t("Mode")}>{MODE_LABEL[mode]}</Row>
-      <Row k={t("Size")}>{mode === "blend" ? "1 × 1" : `${brush} × ${brush}`}</Row>
+      <Row k={t("Size")}>{mode === "blend" ? "1 × 1" : mode === "tile" && block ? t("{cols} × {rows} block", { cols: block.cols, rows: block.rows }) : `${brush} × ${brush}`}</Row>
       <div className="props-section">{t("Under cursor")}</div>
       <Row k={t("Tile")}>{underId !== null ? <span className="mono">{underId} · {hexTile(underId)}</span> : dash}</Row>
       <Row k={t("Group")}>{under && loaded ? <>{tileGroupLabel(loaded.tileset, info.terrain, under.group)} <span className="faint mono">g{under.group} s{under.slot}</span></> : dash}</Row>

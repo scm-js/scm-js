@@ -316,10 +316,11 @@ export async function borrowTable(host: Tileset, source: Tileset, slicing?: Slic
 }
 
 /**
- * A table a plugin hands in: source tile → host tile, as the author meant them. Kind
- * `"provided"`; the copies the check reads are the pairs' megatiles.
+ * A table a plugin or a mod's terrain file hands in: source tile → host tile, as the author meant them. Kind
+ * `"provided"`, or `"standIn"` for the source tiles said to be only the nearest picture; the copies the check reads are
+ * the pairs' megatiles.
  */
-export function providedTable(host: Tileset, source: Tileset, pairs: Iterable<readonly [number, number]>): BorrowTable {
+export function providedTable(host: Tileset, source: Tileset, pairs: Iterable<readonly [number, number]>, standIns: Iterable<number> = []): BorrowTable {
   const choices = new Map<number, number[]>();
   const kinds = new Map<number, BorrowKind>();
   const copies = new Map<number, number[]>();
@@ -332,6 +333,8 @@ export function providedTable(host: Tileset, source: Tileset, pairs: Iterable<re
     const c = copies.get(sm);
     if (c) { if (!c.includes(hm)) c.push(hm); } else copies.set(sm, [hm]);
   }
+  // (a tile said to be only the nearest picture counts as a stand-in, as a scan's does, for what is offered)
+  for (const t of standIns) if (kinds.has(t)) kinds.set(t, "standIn");
   return { choices, kinds, copies };
 }
 

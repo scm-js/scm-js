@@ -4,6 +4,7 @@
  * is for, and the mod's hash (the name the play page and a replay know it by: `hash.ts`). Read from names and sizes,
  * plus each table's size, and every file's bytes for the hash; nothing is run.
  */
+import { terrainInfo } from "./terrain";
 import { gameName, kindOf, leafOf, kindTotals, MOD_KINDS, say, tableShape, type DataSetRace, type ModKind } from "@scm-js/mod";
 import { modText, t } from "../i18n";
 import { dot, num, pc, rows, size } from "../ui";
@@ -46,6 +47,11 @@ export interface ModInfo {
   game: string;
   /** The races the mod adds, as its mod.json declares them (empty when none are declared). */
   races: DataSetRace[];
+  /**
+   * The terrain the mod declares (`terrain.json` beside mod.json): where it is, per tileset its named terrains, pieces
+   * and borrow tables (pairs each), and how many rows the reader left out. Null when the mod has none.
+   */
+  terrain: ReturnType<typeof terrainInfo>;
   duplicates: string[];
   left: string[];
   /** A copy of the game in what was handed over: its own archives, as the folder spells them, not read (not the mod's). */
@@ -114,7 +120,7 @@ export function modInfo(source: ModSource, hash: SourceHash | null = null): ModI
     firegraft: source.firegraft.map((p) => ({ name: leafOf(p.name), bytes: p.bytes, path: carriedPath(p) })),
     exes, libraries: source.code.filter((c) => c.role === "library").map((c) => c.name),
     maps: [...source.files.values()].filter((f) => kindOf(f.name) === "maps").map((f) => f.name).sort(),
-    game, races: source.races, duplicates: (d?.duplicates ?? []).map((x) => x.paths.map((p) => p.split("/").pop()).join(" and ")),
+    game, races: source.races, terrain: terrainInfo(source.terrain), duplicates: (d?.duplicates ?? []).map((x) => x.paths.map((p) => p.split("/").pop()).join(" and ")),
     left: source.left, gameCopy: source.gameCopy, probed: source.probed, unheld: source.unheld,
     said: source.said.filter((m) => !SAID_HERE.has(m.key)).map(modText),
     hash: hash?.hash ?? null, withoutPlugins: hash?.withoutPlugins ?? null, beforeCode: hash?.beforeCode ?? null,
@@ -191,6 +197,7 @@ export function printModInfo(r: ModInfo): string[] {
     ["FireGraft", r.firegraft.length ? `${carriedList(r.firegraft)} ${pc.dim(t("— kept, not applied"))}` : null],
     ...r.exes.map((e) => ["Exe", t("{file}: {what}, its archive at byte {at}", { file: e.file, what: exeWhat(e), at: num(e.at) })] as [string, string]),
     [t("Races"), r.races.length ? r.races.map((x) => `${x.name} ${pc.dim(`(${raceDetail(x)})`)}`).join(", ") : null],
+    ...terrainRows(r.terrain),
     [t("Maps"), r.maps.length ? `${t("{n, plural, one {# map} other {# maps}}", { n: r.maps.length })}${r.maps.length <= 4 ? `: ${r.maps.map((m) => m.split("\\").pop()).join(", ")}` : ""}` : null],
     [t("Layers"), r.layers.length > 1 ? r.layers.map(shownPath).join(pc.dim(` ${t("then")} `)) : null],
     [t("Hash"), r.hash],
@@ -212,4 +219,19 @@ export function printModInfo(r: ModInfo): string[] {
     ? t("Not the game's, left out: {list} and {more} more", { list: r.left.slice(0, 6).map((l) => l.split("/").pop()).join(", "), more: num(r.left.length - 6) })
     : t("Not the game's, left out: {list}", { list: r.left.map((l) => l.split("/").pop()).join(", ") })));
   return lines;
+}
+
+/** `mod info`'s lines for the terrain file: one per tileset it has a section for. */
+function terrainRows(terrain: ModInfo["terrain"]): [string, string | null][] {
+  if (!terrain) return [];
+  const per = Object.entries(terrain.tilesets).map(([id, c]) => {
+    const borrow = c.borrow.map((b) => t("{n, plural, one {# pair} other {# pairs}} from {source}", { n: b.pairs, source: b.source }));
+    return `${id}${pc.dim(":")} ${[
+      t("{n, plural, one {# terrain} other {# terrains}}", { n: c.terrains }),
+      t("{n, plural, one {# piece} other {# pieces}}", { n: c.pieces }),
+      ...borrow,
+    ].join(", ")}`;
+  });
+  const dropped = terrain.dropped ? pc.dim(` ${t("({n, plural, one {# row} other {# rows}} left out: mod check lists them)", { n: terrain.dropped })}`) : "";
+  return [[t("Terrain"), `${terrain.path}${dropped}`], ...per.map((line) => ["", line] as [string, string])];
 }

@@ -39,6 +39,8 @@ import { t, translate } from "../i18n";
 import { pickFolder } from "../plugins/host";
 import { attachReaderDataSet, switchDataSet } from "./gameData";
 import { readDataSet } from "./mapDataSet";
+import { keepDataSetTerrain } from "./dataSetTerrain";
+import { terrainFileOf } from "../formats/mod/terrain";
 
 type Store = ReturnType<typeof getDefaultStore>;
 
@@ -250,6 +252,8 @@ export async function drawFromModFolder(store: Store, scn: Scenario, options: Fo
   // The rule decides afresh for the map under the new data set, whatever it is called.
   forget(store, scn);
   const profile = folderProfile(name);
+  // The mod's terrain file, kept for the set's id before it comes into use (a folder without one forgets an older one).
+  await keepDataSetTerrain(profile.id, await folderTerrainText(pieces));
   attachReaderDataSet(store, profile, folderReader(set));
   store.set(pushToastAtom, {
     kind: "ok", ttl: 12000,
@@ -257,6 +261,16 @@ export async function drawFromModFolder(store: Store, scn: Scenario, options: Fo
     detail: t("Its files are read from the folder as they are needed; nothing is installed or kept. Help ▸ Game Data… switches back."),
   });
   return "drawn";
+}
+
+/** The text of the folder's `terrain.json` (beside `mod.json`, by its rule), or null. */
+async function folderTerrainText(pieces: readonly FolderPiece[]): Promise<string | null> {
+  const paths = pieces.map((p) => p.path.replaceAll("\\", "/"));
+  const first = (p: string) => (p.includes("/") ? p.slice(0, p.indexOf("/")) : "");
+  const top = paths.length && paths.every((p) => first(p) && first(p) === first(paths[0])) ? first(paths[0]) : "";
+  const at = terrainFileOf(paths, top);
+  if (!at) return null;
+  try { return new TextDecoder().decode(await pieces[paths.indexOf(at)].file.arrayBuffer()); } catch { return null; }
 }
 
 /* ── The notice ─────────────────────────────────────────── */

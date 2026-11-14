@@ -2612,7 +2612,10 @@ for `setActive({ terrain })` and `tx.paintBorrowed(diamonds, id)`, which paints 
 the other tileset's own brush and writes the copies. Await it before painting: it reads
 the other tileset's files; `{ scan: true }` works the copies out first where nobody has.
 `provideBorrowTable` hands the editor the pairs of tiles a mod meant for a pair of
-tilesets, instead of its own match by pictures.
+tilesets, instead of its own match by pictures. A mod's `terrain.json` does what
+`providePieces`, `provideTypes` and `provideBorrowTable` do, for everyone who adds the mod
+([Terrain a mod declares](mods.md#terrain-a-mod-declares)); what a plugin declares is
+listed ahead of it.
 
 ```ts
 const roof = (await api.terrain.borrowed()).find((b) => b.source === "install" && b.name === "Roof");

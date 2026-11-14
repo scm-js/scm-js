@@ -23,6 +23,7 @@ import { useDesktopFiles } from "./hooks/useDesktopFiles";
 import { useErrorCapture } from "./hooks/useErrorCapture";
 import { useUsageCounts } from "./hooks/useUsageCounts";
 import { droppedHandle } from "./services/mapIo";
+import { watchDataSetTerrain } from "./services/dataSetTerrain";
 import { handFilesToPlugins, takeDroppedFolders } from "./plugins/fileTypes";
 import { useOpenerHandoff } from "./hooks/useOpenerHandoff";
 import { TooltipProvider } from "./components/ui";
@@ -102,6 +103,8 @@ export default function App() {
   useUpdateCheck();
   useWhatsNew();
   useUsageCounts();
+  // A data set's terrain file (its pieces, terrain names and borrow tables) follows the data set in use.
+  useEffect(() => watchDataSetTerrain(store), [store]);
 
   useEffect(() => {
     if (chrome) return;

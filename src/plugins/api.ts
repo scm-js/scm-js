@@ -2597,7 +2597,7 @@ export interface BorrowedTerrainInfo {
   name: string;
   /** Tiles laid with the nearest picture this tileset has, where it holds no copy. */
   standIns: number;
-  /** `"scan"` when the editor matched the pictures, else the id of the plugin whose table it is. */
+  /** `"scan"` when the editor matched the pictures, the id of the plugin whose table it is, or `@dataset:<id>` when the data set's terrain file gave it. */
   from: string;
 }
 
@@ -2611,6 +2611,11 @@ export interface BorrowTableSpec {
   source: TilesetId;
   /** Source tile id → the tile of `tileset` to write for it. A source tile with no pair is not laid. */
   pairs: readonly (readonly [sourceTile: number, tile: number])[];
+  /**
+   * Source tiles whose tile here is only the nearest picture, not a copy (optional). A terrain is offered only where such
+   * tiles are at most a tenth of its tiles, as the editor's own match decides.
+   */
+  standIns?: readonly number[];
 }
 
 /** What `terrain.provideTypes` takes. */

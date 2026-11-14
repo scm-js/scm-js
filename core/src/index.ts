@@ -128,7 +128,7 @@ export { baseTerrain, flatTerrain, DIRT, type BaseTerrain, type TerrainFill } fr
 
 // ── The game's own files, decoded ──
 // The library carries none of them: these read what a person brings from their own copy of the game (`scmjs map preview`).
-export { loadTileset, megatileForTile, drawMegatile, MEGATILE_PX, megatileHeight, groupBuildable, tileGroupOf, TileFlag, type Tileset, type TilesetFiles } from "../../src/formats/tileset/decode";
+export { loadTileset, decodeCv5, CV5_ENTRY_BYTES, megatileForTile, drawMegatile, MEGATILE_PX, megatileHeight, groupBuildable, tileGroupOf, TileFlag, type Tileset, type TilesetFiles, type Cv5Group } from "../../src/formats/tileset/decode";
 export { buildDoodadCatalogue, type DoodadCatalogue, type DoodadDef } from "../../src/formats/tileset/doodads";
 export { decodeUnitsDat, decodeFlingyDat, decodeSpritesDat, decodeImagesDat, type UnitsDat, type FlingyDat, type SpritesDat, type ImagesDat } from "../../src/formats/dat/dat";
 export { decodeIscript, type IscriptBin } from "../../src/formats/dat/iscript";
@@ -190,6 +190,11 @@ export { diffMods, type ModChange, type ModChangeKind, type DiffSide } from "../
 // Races a data set adds to the game's own: the table `mod.json`'s `races` holds, a race's name by its byte, the hints a
 // mod's files give, and which of the game's three races a list of units plays as.
 export { sameRaces, raceLabel, raceChoices, hasRaceCandidates, racePlaysAs, GAME_RACE_NAMES, FIRST_DATASET_RACE } from "../../src/formats/mod/races";
+export {
+  readTerrainFile, writeTerrainFile, withTerrainSection, sectionAgainstTable, terrainFileCounts, isTerrainFilePath, terrainFileOf,
+  emptyTerrainFile, emptyTerrainSection, TERRAIN_FILE, TERRAIN_FORMAT, TERRAIN_LIMITS,
+  type TerrainFile, type TerrainFileSection, type TerrainFilePiece, type TerrainFileTerrain, type TerrainFileBorrow, type TerrainDrop, type TerrainDropReason, type TerrainFileRead,
+} from "../../src/formats/mod/terrain";
 export { normalizeRaces, raceCandidates, MAX_RACE_NAME as RACE_NAME_MAX, GAME_NETWORK_TBL_ENTRIES, type DataSetRace, type RaceCandidates } from "@scm-js/mod";
 
 // ── Names and tables ──

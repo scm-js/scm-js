@@ -98,9 +98,11 @@ async function readIndex(db: PieceStore, hostKey: string): Promise<BorrowSourceI
   }
 }
 
-function publish(store: Store, hostKey: string, sources: BorrowSourceInfo[]) {
+function publish(store: Store, hostKey: string, sources: BorrowSourceInfo[], scanned: boolean) {
   const next = new Map(store.get(borrowHostsAtom));
-  next.set(hostKey, { key: hostKey, sources });
+  // Nothing scanned and nothing provided: no entry, so the palette offers the scan.
+  if (!scanned && sources.length === 0) next.delete(hostKey);
+  else next.set(hostKey, { key: hostKey, sources, scanned });
   store.set(borrowHostsAtom, next);
 }
 
@@ -108,10 +110,10 @@ function publish(store: Store, hostKey: string, sources: BorrowSourceInfo[]) {
 export async function readKnownBorrowed(store: Store, era: number, host: Tileset, db: PieceStore = browserBorrowStore): Promise<BorrowHostInfo | null> {
   const key = hostKeyOf(era, host);
   const known = store.get(borrowHostsAtom).get(key);
-  if (known) return known;
+  if (known?.scanned) return known;
   const sources = await readIndex(db, key);
-  if (!sources) return null;
-  publish(store, key, sources);
+  if (!sources) return known ?? null;
+  publish(store, key, withProvided(store, era, sources), true);
   return store.get(borrowHostsAtom).get(key) ?? null;
 }
 
@@ -248,7 +250,7 @@ export async function scanBorrowed(store: Store, era: number, host: Tileset, dep
     keep(`${hostKey}|${f.sourceEra}`, { host, source: f.source, sourceEra: f.sourceEra, table });
   }
   await db.put(indexKey(hostKey), JSON.stringify({ sources })).catch(() => undefined);
-  publish(store, hostKey, withProvided(store, era, sources));
+  publish(store, hostKey, withProvided(store, era, sources), true);
   logInfo("terrain", "Looked through the other tilesets for borrowed terrain", {
     tileset: TILESET_FILENAMES[era & 7], sources: found.length, kept, ms: Math.round(performance.now() - started),
     onPage: maker === sliced ? found.length : fellBack, ...maker.stats?.(),
@@ -297,10 +299,11 @@ export async function refreshProvided(store: Store, era: number, host: Tileset, 
   const out: BorrowSourceInfo[] = [];
   for (const row of store.get(providedBorrowAtom).filter((r) => r.tileset === id)) {
     const sourceEra = TILESETS.findIndex((t) => t.id === row.source);
-    if (sourceEra < 0 || sourceEra === (era & 7)) continue;
+    // (rows come plugins first, a data set's terrain file after: the first table for a source stands)
+    if (sourceEra < 0 || sourceEra === (era & 7) || out.some((o) => o.sourceEra === sourceEra)) continue;
     const source = await sourceOf(sourceEra);
     if (!source) continue;
-    const table = providedTable(host, source, row.pairs);
+    const table = providedTable(host, source, row.pairs, row.standIns ?? []);
     out.push({ sourceEra, sourceHash: tilesetHash(source), terrains: borrowableTerrains(host, era, source, sourceEra, table), counts: tableCounts(source, table), provided: row.key });
     keep(`${hostKey}|${sourceEra}`, { host, source, sourceEra, table });
   }
@@ -308,7 +311,7 @@ export async function refreshProvided(store: Store, era: number, host: Tileset, 
   const scanned = (store.get(borrowHostsAtom).get(hostKey)?.sources ?? []).filter((s) => !s.provided);
   // A source whose provided table went away goes back to the scan's (read again on the next stroke).
   for (const k of [...tablesKeys()]) if (k.startsWith(`${hostKey}|`) && !out.some((o) => k === `${hostKey}|${o.sourceEra}`)) drop(k);
-  publish(store, hostKey, withProvided(store, era, scanned));
+  publish(store, hostKey, withProvided(store, era, scanned), store.get(borrowHostsAtom).get(hostKey)?.scanned ?? false);
 }
 
 /* ── The brush's context ─────────────────────────────────── */

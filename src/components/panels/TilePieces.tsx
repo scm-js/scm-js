@@ -1,6 +1,6 @@
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useAtomValue, useStore } from "jotai";
-import { ArrowDownWideNarrow, Eraser, FolderOpen } from "lucide-react";
+import { ArrowDownWideNarrow, Eraser, FileDown, FolderOpen } from "lucide-react";
 import { mapTilesetAtom } from "../../atoms/editorAtoms";
 import { scenarioAtom, terrainRevisionAtom } from "../../atoms/documentAtoms";
 import { pieceLearningAtom, providedPiecesAtom } from "../../atoms/pieceAtoms";
@@ -183,6 +183,7 @@ export function TilePieces({ loaded, listed, query, addedFrom, block, onBlock, o
   const learnedMaps = cut?.learnedMaps ?? 0;
   const learn = () => { void import("../../services/pieceLearning").then((m) => m.learnPiecesFromFolder(store)); };
   const forget = () => { void import("../../services/pieceLearning").then((m) => m.forgetPieces(store)); };
+  const saveFile = () => { void import("../../services/terrainFileSave").then((m) => m.saveTerrainFile(store)); };
   const none = sections.every((s) => s.items.length === 0);
   const source = learnedMaps > 0 ? t("From this map and {n, plural, one {# learned map} other {# learned maps}}", { n: learnedMaps }) : t("From this map");
 
@@ -203,6 +204,9 @@ export function TilePieces({ loaded, listed, query, addedFrom, block, onBlock, o
           </Tip>
         )}
         <Button size="sm" disabled={!!learning} onClick={learn} title={t("Read every map in a folder and learn the pieces they lay")}><FolderOpen size={11} /> {" "}{t("Learn from Maps…")}</Button>
+        <Tip label={t("Save as a terrain file…")}>
+          <Button icon size="sm" disabled={!!learning} onClick={saveFile} aria-label={t("Save as a terrain file…")}><FileDown size={13} /></Button>
+        </Tip>
         {!none && (
           <Tip label={t("Most laid first")}>
             <Button icon size="sm" active={byLaid} onClick={() => setByLaid(!byLaid)} aria-label={t("Most laid first")}><ArrowDownWideNarrow size={13} /></Button>

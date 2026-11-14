@@ -5,6 +5,7 @@
  * and so is every other module of the mod's code its hash has a line for (a plugin a patcher exe carries in itself, a
  * library its plugins load), under `plugins/`, so the folder packs back to the same mod and the same hash.
  */
+import { TERRAIN_FILE } from "../../../src/formats/mod/terrain";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import {
@@ -55,7 +56,7 @@ export async function unpackMod(source: ModSource, dir: string, o: UnpackOptions
   if (resolve(source.path) === resolve(dir)) throw new CliError(t("The folder to write is the mod itself."), t("Name another folder."), 2);
   // A new or empty folder; one an earlier unpack wrote only with --force, and then replaced whole (its edits are the
   // person's: never written over in silence, and nothing stale left beside the new files).
-  const { out, earlier } = await modTarget(dir, { force: o.force, source: source.path });
+  const { out, earlier, earlierTerrain } = await modTarget(dir, { force: o.force, source: source.path });
 
   const read = reader(source);
   const base = o.base ?? null;
@@ -155,6 +156,10 @@ export async function unpackMod(source: ModSource, dir: string, o: UnpackOptions
   if (!palette) manifest.notes.push(`no palette ${paletteName} was found (the mod's tileset\\${paletteName}.wpe, or the game's): the GRPs are kept as bytes`);
   tidyManifest(manifest);
   await writeFile(join(out, MOD_MANIFEST), `${JSON.stringify(manifest, null, 2)}\n`);
+  // The terrain the mod declares: the release's own terrain.json as it was, else that of the folder unpacked over (a new
+  // release into the folder of the last keeps it). Never one of the mod's files.
+  const terrain = source.terrain?.text ?? earlierTerrain;
+  if (terrain) await writeFile(join(out, TERRAIN_FILE), terrain);
   return {
     dir, source: source.path, name: manifest.name, members: written, forms,
     kept: manifest.kept.map((k) => ({ why: k.why, count: k.files.length, files: k.files })),

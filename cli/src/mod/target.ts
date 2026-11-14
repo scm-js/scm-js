@@ -4,6 +4,7 @@
  * nothing of the earlier folder survives into the new one but its dot files and folders (`.git`, `.gitignore`), which
  * are the person's, not the mod's.
  */
+import { TERRAIN_FILE } from "../../../src/formats/mod/terrain";
 import { mkdir, readdir, readFile, rm, stat } from "node:fs/promises";
 import { join, relative, resolve } from "node:path";
 import { MOD_MANIFEST, readManifest, type ModManifest } from "../../../src/formats/mod/folder";
@@ -15,6 +16,8 @@ export interface ModTarget {
   out: string;
   /** The manifest of the mod folder replaced (`--force`), or null. */
   earlier: ModManifest | null;
+  /** That folder's `terrain.json`, as it was (a new release unpacked over keeps it), or null. */
+  earlierTerrain: string | null;
 }
 
 /** Whether `inner` is `outer` or inside it. */
@@ -40,17 +43,19 @@ export async function modTarget(dir: string, o: { force?: boolean; source?: stri
   }
   if (o.source && within(o.source, out) && entries !== null) throw new CliError(t("The mod is inside {folder}, the folder to write.", { folder: dir }), t("Name another folder."), 2);
   let earlier: ModManifest | null = null;
+  let earlierTerrain: string | null = null;
   if (entries?.length) {
     let text: string | null = null;
     try { text = await readFile(join(out, MOD_MANIFEST), "utf8"); } catch { text = null; }
     try { earlier = text === null ? null : readManifest(text); } catch { earlier = null; }
     if (!earlier) throw new CliError(t("{folder} is there and is not a mod folder.", { folder: dir }), t("Name a new folder, or an empty one."), 2);
     if (!o.force) throw new CliError(t("{folder} is a mod folder already: writing into it would replace what you changed there.", { folder: dir }), t("--force replaces it (its dot files, such as .git, are kept); name a new folder to keep both."), 2);
+    try { earlierTerrain = await readFile(join(out, TERRAIN_FILE), "utf8"); } catch { earlierTerrain = null; }
     for (const name of entries) if (!name.startsWith(".")) await rm(join(out, name), { recursive: true, force: true });
   }
   try { await mkdir(out, { recursive: true }); } catch (e) {
     const code = (e as NodeJS.ErrnoException).code;
     throw new CliError(code === "ENOTDIR" || code === "EEXIST" ? t("{folder} cannot be made: a file is in its path.", { folder: dir }) : t("{folder} could not be made ({code}).", { folder: dir, code: code ?? String(e) }), null, 2);
   }
-  return { out, earlier };
+  return { out, earlier, earlierTerrain };
 }

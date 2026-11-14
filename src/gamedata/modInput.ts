@@ -5,6 +5,7 @@
  */
 import { gameCopyFiles, isModJsonPath, leafOf, readModJson, type DataSetRace } from "@scm-js/mod";
 import { isGameArchive } from "./archives";
+import { terrainFileOf } from "../formats/mod/terrain";
 import type { ExtractRequest } from "./extract.worker";
 import type { GameDataFiles, InstallBytes } from "./install";
 
@@ -14,10 +15,11 @@ const pathOf = (f: File) => (f as File & { webkitRelativePath?: string }).webkit
  * A picked folder as a data set's files: the game's own archives where the folder holds a copy of the game (a folder
  * with `StarDat.mpq` in it), and everything picked as the mod, read in the worker by `@scm-js/mod` (which leaves that
  * copy out); and the races the folder's `mod.json` declares (`[]` for none, no such file, or one that is not JSON), by
- * the package's rule for which `mod.json` is the mod's (in the folder picked or one folder down). It is no game file
- * and does not change the set's hash.
+ * the package's rule for which `mod.json` is the mod's (in the folder picked or one folder down); and the text of the
+ * mod's `terrain.json` by the same rule (`formats/mod/terrain.ts`), null for none. Neither is a game file, and neither
+ * changes the set's hash.
  */
-export async function pickedDataSet(files: readonly File[]): Promise<{ input: GameDataFiles; races: DataSetRace[] }> {
+export async function pickedDataSet(files: readonly File[]): Promise<{ input: GameDataFiles; races: DataSetRace[]; terrain: string | null }> {
   const paths = files.map(pathOf);
   const copy = gameCopyFiles(paths);
   const archives = files.filter((f, i) => copy.has(paths[i]) && isGameArchive(f.name)).map((f) => ({ name: f.name, data: f as InstallBytes }));
@@ -26,7 +28,10 @@ export async function pickedDataSet(files: readonly File[]): Promise<{ input: Ga
   const json = files.map((f, i) => ({ f, path: paths[i] })).filter((x) => isModJsonPath(x.path, top)).sort((a, b) => a.path.split("/").length - b.path.split("/").length)[0];
   let races: DataSetRace[] = [];
   if (json) { try { races = readModJson(await json.f.text())?.races ?? []; } catch { races = []; } }
-  return { input: { archives, picked: { name: top || "mod", files: files.map((f, i) => ({ path: paths[i], data: f as InstallBytes })) } }, races };
+  // The terrain the mod declares (`terrain.json`, by the same rule): its text, read by the editor when it is kept.
+  const terrainPath = terrainFileOf(paths, top);
+  const terrain = terrainPath ? await files[paths.indexOf(terrainPath)].text().catch(() => null) : null;
+  return { input: { archives, picked: { name: top || "mod", files: files.map((f, i) => ({ path: paths[i], data: f as InstallBytes })) } }, races, terrain };
 }
 
 const blobOf = (data: InstallBytes): Blob | ArrayBuffer => (data instanceof Blob ? data : (data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer));

@@ -5,6 +5,7 @@
  * back into their members by the same functions `mod unpack` checked them with; `mod.json` says what the paths do
  * not. The same folder always gives the same bytes: the members are added in name order, with fixed settings.
  */
+import { folderTerrain } from "./terrain";
 import { spawnSync } from "node:child_process";
 import { rmSync, writeFileSync, readFileSync } from "node:fs";
 import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
@@ -142,6 +143,8 @@ export async function packFolder(dir: string, manifest: ModManifest, options: Pa
   source.name = name;
   source.manifest = manifest;
   source.races = normalizeRaces(manifest.races);
+  // A mod folder's terrain file is beside its mod.json, not among the members.
+  source.terrain = await folderTerrain(dir);
   source.link = readModJson(JSON.stringify(manifest))?.link ?? null;
   source.layers = [...manifest.layers];
   const fileOf = new Map(members.map((m) => [gameName(m.member), m.file]));

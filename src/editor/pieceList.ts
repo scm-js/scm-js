@@ -19,6 +19,13 @@ export interface ProvidedPiece {
   block: TileBlock;
 }
 
+/**
+ * The provider of rows a data set's terrain file declares (`services/dataSetTerrain.ts`): their keys and `source` start
+ * with it (`@dataset:<id>`), which no plugin's id can. Such rows come after the plugins' in every list.
+ */
+export const DATA_SET_KEY = "@dataset:";
+export const isDataSetKey = (key: string): boolean => key.startsWith(DATA_SET_KEY);
+
 /** A plugin's set of pieces, as the host keeps it: `key` is the plugin's id and the set's. */
 export interface ProvidedPieceSet {
   key: string;
@@ -43,7 +50,7 @@ export interface ListedPiece {
   slot: number;
   name?: string;
   category?: string;
-  /** `"maps"` for a cut piece, else the providing plugin's id. */
+  /** `"maps"` for a cut piece, else the providing plugin's id, or `@dataset:<id>` for a data set's terrain file. */
   source: string;
   /** Times its tiles are laid, all told (0 for a provided piece). */
   laid: number;
@@ -87,7 +94,8 @@ export function pieceSections(tileset: Pick<Tileset, "groups" | "megatileCount">
   const out: PieceSection[] = [];
   const named = new Set<string>();
   for (const set of sets) {
-    const items = set.pieces.filter((p) => blockFits(tileset, p.block)).map((p) => provided(set, p));
+    // (a piece an earlier set already lists is not listed again: a plugin's ahead of a data set's file)
+    const items = set.pieces.filter((p) => blockFits(tileset, p.block)).map((p) => provided(set, p)).filter((i) => !named.has(keyOf(i.tiles)));
     for (const i of items) named.add(keyOf(i.tiles));
     if (items.length > 0) out.push({ label: set.label, source: set.source, items });
   }

@@ -22,6 +22,8 @@ export interface BorrowHostInfo {
   /** `{tileset file}/{tilesetHash}` of the host. */
   key: string;
   sources: BorrowSourceInfo[];
+  /** Whether the other tilesets were looked through (now or before); false while only provided tables are known. */
+  scanned: boolean;
 }
 
 /** What is known, by host key: read from IndexedDB, or worked out by a scan this session. */
@@ -38,6 +40,8 @@ export interface ProvidedBorrow {
   tileset: string;
   source: string;
   pairs: readonly (readonly [number, number])[];
+  /** Source tiles whose tile is only the nearest picture (stand-ins). */
+  standIns?: readonly number[];
 }
 
 export const providedBorrowAtom = atom<readonly ProvidedBorrow[]>([]);

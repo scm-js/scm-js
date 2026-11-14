@@ -33,7 +33,8 @@ import { strandedUnits } from "../editor/placement";
 import { peekUnitAssets } from "../formats/units/load";
 import { applySpriteChanges, removeSprites } from "../editor/sprites";
 import { encodePins, pinCells, PINS_MEMBER, pinsOf, resizePins, withPinsMember } from "../editor/pins";
-import { ALL_PARTS, applyEntry, entryArea, entryParts, hasEdits, NO_PARTS, swapWholeState, takeWholeState, touchesDoodads, touchesGround, type CommitNotice, type HistoryEdit, type HistoryEntry, type WholeState } from "../editor/history";
+import { BORROW_MEMBERS, resizeBorrowMember, withMember } from "../editor/borrowLattice";
+import { ALL_PARTS, applyEntry, entryArea, entryParts, hasEdits, hasMembers, NO_PARTS, swapWholeState, takeWholeState, touchesDoodads, touchesGround, type CommitNotice, type HistoryEdit, type HistoryEntry, type WholeState } from "../editor/history";
 import { applyTables, followTables, rebaseAfterTables, rebaseStrings, rebaseTables, TABLES_BUDGET, tablesKind, tablesWeight, takeTablesEdit, type TablesEdit } from "../editor/tableHistory";
 import { applyLocationChanges, boundsOf, isInverted, LOCATION_MIRROR_PX, locationName, moveLocationsMirrored, placedLocations, removeLocations, scrambledLocations, usedLocations } from "../editor/locations";
 import { mirrorMoves } from "../editor/symmetry";
@@ -331,11 +332,25 @@ export const resizeDocumentAtom = atom(null, (get, set, req: ResizeRequest): Res
     width: req.width, height: req.height, anchor: req.anchor,
     fill: baseTerrain(tileset, req.terrainId), tileset, era: tilesetIndex(scn), clampLocations: req.clampLocations,
   });
-  // The pins go where their tiles went. (Undoing the resize does not bring back the ones it cut off.)
+  // The pins go where their tiles went; the entry keeps the file as it was, so an undo brings back the ones it cut off.
+  const pinsMemberBefore = get(archiveExtrasAtom).get(PINS_MEMBER) ?? null;
   if (pinsBefore) set(archiveExtrasAtom, withPinsMember(get(archiveExtrasAtom), encodePins(scn, resizePins(pinsBefore, sizeBefore, scn, result.dx, result.dy))));
+  // So do the borrowed lattices, by whole rects (a shift by an odd number of columns drops one: the lattice cannot follow).
+  const members: NonNullable<HistoryEntry["members"]> = [];
+  for (const [era, name] of BORROW_MEMBERS.entries()) {
+    const member = get(archiveExtrasAtom).get(name);
+    if (!member) continue;
+    const after = resizeBorrowMember(member, sizeBefore, scn, era, result.dx, result.dy);
+    set(archiveExtrasAtom, withMember(get(archiveExtrasAtom), name, after));
+    members.push({ name, before: member, after });
+  }
   set(mapWidthAtom, scn.width);
   set(mapHeightAtom, scn.height);
-  afterWholeDocumentChange(get, set, wholeEntry(get, t("Resize map"), before));
+  // The entry carries the files the resize moved, so undoing it puts them back as they were.
+  const entry = wholeEntry(get, t("Resize map"), before);
+  if (entry && pinsBefore) entry.pins = { before: pinsMemberBefore, after: get(archiveExtrasAtom).get(PINS_MEMBER) ?? null };
+  if (entry && members.length > 0) entry.members = members;
+  afterWholeDocumentChange(get, set, entry);
   get(syncTapAtom)?.whole(get, set, t("Resize map"));
   set(noticeWholeAtom, { reason: "whole", label: t("Resize map") });
   count("map.resize", { size: `${scn.width}x${scn.height}` });
@@ -807,7 +822,7 @@ export const redoStackAtom = atom<HistoryEntry[]>([]);
  * paint live during a stroke and the whole stroke still undoes as one step.
  */
 export const commitEditAtom = atom(null, (get, set, entry: HistoryEntry) => {
-  if (!hasEdits(entry) && !entry.pins) return;
+  if (!hasEdits(entry) && !hasMembers(entry)) return;
   // The entry is already applied; on a view-only map it is taken back instead of recorded.
   if (!canEdit(get, set)) { set(rollbackEntryAtom, entry); return; }
   // The pins are a file of the archive, which a shared map sends when the files change.
@@ -827,7 +842,7 @@ export const commitEditAtom = atom(null, (get, set, entry: HistoryEntry) => {
   set(redoStackAtom, []);
   set(mapModifiedAtom, true);
   bumpGround(get, set, entry);
-  if (entry.pins && !touchesGround(entry)) set(terrainRevisionAtom, get(terrainRevisionAtom) + 1);
+  if (hasMembers(entry) && !touchesGround(entry)) set(terrainRevisionAtom, get(terrainRevisionAtom) + 1);
   if (entry.units) set(unitsRevisionAtom, get(unitsRevisionAtom) + 1);
   if (touchesDoodads(entry)) set(doodadsRevisionAtom, get(doodadsRevisionAtom) + 1);
   if (entry.locations) set(locationsRevisionAtom, get(locationsRevisionAtom) + 1);
@@ -941,8 +956,13 @@ export const pinnedTilesAtom = atom((get) => {
 
 /** Put an entry's pins in force: as they were before it (`"undo"`) or as it left them. */
 function stepPins(get: Getter, set: Setter, entry: HistoryEdit, direction: "do" | "undo") {
-  if (!entry.pins) return;
-  set(archiveExtrasAtom, withPinsMember(get(archiveExtrasAtom), direction === "do" ? entry.pins.after : entry.pins.before));
+  if (!hasMembers(entry)) return;
+  let extras: ReadonlyMap<string, Uint8Array> = get(archiveExtrasAtom);
+  if (entry.pins) extras = withPinsMember(extras, direction === "do" ? entry.pins.after : entry.pins.before);
+  // Undone newest first, so a member two parts of one entry touched ends as the first found it.
+  const members = direction === "do" ? entry.members ?? [] : [...(entry.members ?? [])].reverse();
+  for (const m of members) extras = withMember(extras, m.name, direction === "do" ? m.after : m.before);
+  set(archiveExtrasAtom, extras as Map<string, Uint8Array>);
   if (!touchesGround(entry)) set(terrainRevisionAtom, get(terrainRevisionAtom) + 1);
 }
 
@@ -987,6 +1007,8 @@ function stepWhole(get: Getter, set: Setter, scn: Scenario, entry: HistoryEntry,
   const shared = tap?.owns(get) === true;
   tap?.beforeWhole(get);
   entry.whole = swapWholeState(scn, entry.whole!);
+  // The archive's files the step moved with the map (a resize's pins and borrowed lattices).
+  stepPins(get, set, entry, direction);
   set(mapWidthAtom, scn.width);
   set(mapHeightAtom, scn.height);
   set(mapTilesetAtom, TILESETS[tilesetIndex(scn)].id);
@@ -1029,6 +1051,7 @@ export const undoAtom = atom(
       // be undone goes to the redo stack (nothing, when other people's edits took it all).
       const other = tap.step(get, set, entry, "undo");
       if (other && entry.pins) other.pins = entry.pins;
+      if (other && entry.members) other.members = entry.members;
       set(undoStackAtom, stack.slice(0, -1));
       if (other) set(redoStackAtom, [...get(redoStackAtom), other]);
       afterStep(get, set, other ?? entry);
@@ -1094,6 +1117,7 @@ export const redoAtom = atom(
     if (tap?.owns(get)) {
       const other = tap.step(get, set, entry, "do");
       if (other && entry.pins) other.pins = entry.pins;
+      if (other && entry.members) other.members = entry.members;
       set(redoStackAtom, stack.slice(0, -1));
       if (other) set(undoStackAtom, [...get(undoStackAtom), other]);
       afterStep(get, set, other ?? entry);

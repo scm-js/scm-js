@@ -26,6 +26,8 @@ import { displayColorHex, PLAYER_COLORS, playerColorIndex } from "../../data/pla
 import { FOG_PLAYERS, fogCount, fogPlayersAt, playerBit } from "../../editor/fog";
 import { fogPlayersLabel } from "../../hooks/useFogTools";
 import { terrainName, TILESET_BY_ID } from "../../data/tilesets";
+import { isBorrowedTerrain } from "../../editor/borrow";
+import { borrowedIdLabel } from "../../hooks/useTerrainTools";
 import { unitLabel } from "../../data/units";
 import { useTileset } from "../../hooks/useTileset";
 import { useUnitTools } from "../../hooks/useUnitTools";
@@ -81,7 +83,7 @@ function TerrainProps() {
     <div className="props">
       <Row k={t("Brush")}>
         {mode === "isom" || mode === "rect"
-          ? <>{brushTerrain ? terrainLabel(brushTerrain) : translate(terrainName(info, terrain))}{mode === "rect" && variation >= 0 ? <span className="faint"> {t("· var {variation}", { variation })}</span> : null}</>
+          ? <>{brushTerrain ? terrainLabel(brushTerrain) : mode === "isom" && isBorrowedTerrain(terrain) ? borrowedIdLabel(terrain) : translate(terrainName(info, terrain))}{mode === "rect" && variation >= 0 ? <span className="faint"> {t("· var {variation}", { variation })}</span> : null}</>
           : mode === "heal" ? t("joins that show")
           : mode === "pin" ? t("tiles to keep")
           : <span className="row" style={{ gap: 6 }}><TileThumb loaded={loaded} id={tile} size={16} /><span className="mono">{hexTile(tile)}</span></span>}

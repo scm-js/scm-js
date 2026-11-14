@@ -375,6 +375,50 @@ elsewhere. The Isometric tab warns when the record and the ground disagree, and 
 of the map is ground the brush cannot join up with, such as hand-placed tiles or another
 editor's work.
 
+### Terrain from other tilesets
+
+A tileset made for a mod often holds another tileset's ground copied in: Installation's
+floors and walls inside a Badlands, say. That ground has no terrain type in the tileset,
+so the isometric brush cannot lay it from the tileset's own tables. It can lay it from the
+*other* tileset's: the Isometric tab's **From other tilesets** list paints such a terrain
+with its own tileset's brush, cliffs and edges included, and writes each tile as this
+tileset's copy of the same picture.
+
+The first time, the list is a button, **Find terrain from other tilesets**. It looks
+through the game's other seven tilesets for terrains whose every tile has a copy here, and
+the ground the brush lays them onto too. It takes some seconds (about 25 for a mod's
+Badlands of 40,000 tiles, with a progress bar), and what it finds is kept in the browser:
+the next time a map on the same tileset files opens, the list is there at once. The copies
+are found by their pictures. A mod's copies are rarely exact (they were redrawn into the
+tileset's own colours, and one picture can be there several times), so a tile counts as a
+copy when it looks the same up close, not only when its bytes do. Where one tile of an
+otherwise whole terrain has no copy, the nearest picture stands in for it, and the
+terrain's hover says how many do. With the game's own data in use nothing is listed:
+nothing in the game's tilesets is borrowed.
+
+Painting one works as the isometric brush does: the brush size, symmetry and pinned tiles
+apply, and a stroke is one step to undo. A stroke meets ground no borrowed stroke has
+painted as the other tileset's base ground (what a new map of that tileset is made of:
+Floor for Installation), and only the tiles the stroke changes are written; the ground
+around is left as it is. Later strokes continue the earlier ones' cliffs and edges,
+because the editor keeps the other tileset's record of the diamonds with the map, as a
+small file inside it (`scmjs\borrowed-install.bin` for Installation). It is saved with the
+map, follows undo and Resize, and is shared on a shared map; the game never reads it.
+Where another brush has painted over borrowed ground since, that part is taken as base
+ground again before the next stroke, so a stroke does not continue edges that are gone.
+
+What it does not do:
+
+- **Join it to the map's own ground.** Where borrowed ground meets the tileset's own, the
+  two simply touch. The status line after a stroke counts the joins that show; the Heal
+  brush softens them, and the Tile palette's pieces view lists the transition pieces the
+  mod's own maps use there.
+- **Walk and build as the other tileset does.** Each tile walks, builds and stands at the
+  height this tileset's copy says, and a mod often keeps its copies under other flags than
+  the original (in one mod measured, only about half of Installation's tiles have a copy
+  that walks the same). The Walkability plugin's overlay (View ▸ Walkability) and the
+  Elevation and Buildability overlays show what was laid.
+
 ### Rect, Tile and Blend
 
 ![The Rect tab](images/palette-rect.webp) ![The Tile tab](images/palette-tile.webp) ![The Blend tab](images/palette-blend.webp)

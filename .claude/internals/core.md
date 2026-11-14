@@ -135,3 +135,9 @@ twice, `collapsePieces`), `editor/piecePick.ts`, `editor/pieceList.ts` (provided
 `heal.ts#kindKey`, `remasteredTiles.ts#addedGroupsFrom`. All pure; the walk stayed clean (`pieceList.ts` reaches
 `palette.ts` and `data/tilesets.ts`, already behind the entry). The services (`pieceStore.ts`, `pieces.ts`, the learning)
 are the editor's and not exported.
+
+Done 2026-11-14 (borrowed terrain): `editor/borrow.ts` (the copy test, the table, what is offered) and
+`editor/borrowLattice.ts` (the member, `BorrowStroke`) are exported. The lattice module names its member from
+`data/tilesets.ts#TILESETS` ids, not `formats/tileset/load.ts#TILESET_FILENAMES` (the same strings): `load.ts` reaches
+`src/gamedata/`, which the layering test refuses. `services/borrow.ts` (scan, IndexedDB, the game's own files under the data
+set) is the editor's and not exported.

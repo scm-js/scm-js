@@ -302,7 +302,7 @@ const SCENES = [
     await p.page.locator(".palette button[aria-label='Sheet']").click(); await p.wait(600);
     await p.page.locator(".palette select[aria-label='Group filter']").selectOption("doodad"); await p.wait(600);
     await p.page.locator(".palette button[aria-label='Tiles at full size']").click(); await p.wait(600);
-    await p.sheetScroll(1195);
+    await p.sheetScroll(1198);
     await p.sheetDrag([1202, 0], [1207, 5]);
     await p.quiet();
     await p.take("palette-sheet", PALETTE);

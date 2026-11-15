@@ -6,7 +6,7 @@ import {
   activeTerrainAtom, activeTileAtom, blendAnchorAtom, blendFollowAtom, brushSizeAtom, mapTilesetAtom, placementOptionsAtom,
   rectVariationAtom, symmetryAtom, terrainModeAtom, type TerrainMode,
 } from "../../atoms/editorAtoms";
-import { activeLayerAtom, clipSelectionAtom, pinBrushUnpinsAtom, viewFlagsAtom } from "../../atoms/editorAtoms";
+import { activeLayerAtom, clipSelectionAtom, pinBrushUnpinsAtom, tileBrowserAtom, viewFlagsAtom } from "../../atoms/editorAtoms";
 import { pinnedTilesAtom, scenarioAtom, terrainRevisionAtom } from "../../atoms/documentAtoms";
 import { countPins } from "../../editor/pins";
 import { pluginContextItemsAtom } from "../../atoms/pluginAtoms";
@@ -307,10 +307,13 @@ function TileTab() {
   // The learned pieces are read while the tab is open, so an Alt+click on the map can pick one.
   useLearnedPieces(loaded?.tileset ?? null);
   const setStatus = useSetAtom(statusMessageAtom);
-  const [filter, setFilter] = useState<TileFilter>("all");
-  const [query, setQuery] = useState("");
-  const [view, setView] = useState<TileView>("groups");
-  const [large, setLarge] = useState(false);
+  // Kept in an atom: the tab unmounts when another Terrain tab is shown, and comes back as it was left.
+  const [browser, setBrowser] = useAtom(tileBrowserAtom);
+  const filter = browser.filter as TileFilter, { query, view, large } = browser;
+  const setFilter = (f: TileFilter) => setBrowser((b) => ({ ...b, filter: f }));
+  const setQuery = (q: string) => setBrowser((b) => ({ ...b, query: q }));
+  const setView = (v: TileView) => setBrowser((b) => ({ ...b, view: v }));
+  const setLarge = (on: boolean) => setBrowser((b) => ({ ...b, large: on }));
   const [text, setText] = useState<string | null>(null);
   const setName = useAtomValue(gameDataSourceAtom)?.profile.name ?? "";
 
@@ -368,13 +371,13 @@ function TileTab() {
       </div>
       <div className="tile-info">
         <TileThumb loaded={loaded} id={active} size={64} className="preview" />
-        <div className="props" style={{ gridTemplateColumns: "56px 1fr" }}>
+        <div className="props" style={{ gridTemplateColumns: "56px minmax(0, 1fr)" }}>
           <span className="k">{t("Group")}</span><span><NumberInput value={active >> 4} onChange={(g) => pickTile((g << 4) | (active & 15))} min={0} max={4095} width={84} /></span>
           <span className="k">{t("Slot")}</span><span><NumberInput value={active & 15} onChange={(s) => pickTile((active & ~15) | s)} min={0} max={15} width={84} /></span>
           <span className="k">{t("Brush")}</span>
           <span>
             {block
-              ? <span className="row" style={{ gap: 6 }}><span className="mono">{block.cols}×{block.rows}</span><Button size="sm" onClick={() => setBlock(null)} title={t("Lay one tile again, at the brush size")}>{t("Single tile")}</Button></span>
+              ? <span className="row" style={{ gap: "4px 6px", flexWrap: "wrap" }}><span className="mono">{block.cols}×{block.rows}</span><Button size="sm" onClick={() => setBlock(null)} title={t("Lay one tile again, at the brush size")}>{t("Single tile")}</Button></span>
               : <BrushSelect bare />}
           </span>
           <span className="k">{t("MegaTile")}</span><span className="mono">{ti ? (ti.megatile >= 0 ? ti.megatile : "none") : "—"}</span>
@@ -395,10 +398,11 @@ function TileTab() {
           />
           {query !== "" && <button className="clear" onClick={() => setQuery("")} aria-label={t("Clear search")}><X size={11} /></button>}
         </div>
-        <select className="select grow" value={kind} onChange={(e) => setFilter(e.target.value as TileFilter)} aria-label={t("Group filter")}>
+        <select className="select tile-filter" value={kind} onChange={(e) => setFilter(e.target.value as TileFilter)} aria-label={t("Group filter")}>
           {KIND_FILTERS.map((f) => <option key={f.value} value={f.value}>{translate(f.label)}</option>)}
           {addedFrom !== null && <option value="added">{setName ? t("Added by {name}", { name: setName }) : t("Added tiles")}</option>}
         </select>
+        <span className="row tile-views">
         <Tip label={t("Grouped rows")}>
           <Button icon size="sm" active={view === "groups"} onClick={() => setView("groups")} aria-label={t("Grouped rows")}><Rows3 size={13} /></Button>
         </Tip>
@@ -416,6 +420,7 @@ function TileTab() {
             <Button icon size="sm" active={large} onClick={() => setLarge(!large)} aria-label={t("Tiles at full size")}><Maximize2 size={13} /></Button>
           </Tip>
         )}
+        </span>
       </div>
       {loaded ? (
         view === "grid"

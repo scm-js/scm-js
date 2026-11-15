@@ -391,10 +391,11 @@ editor's work.
   doodad's tile, a corner the cliff sets do not have. The buttons beside the filter show
   the tileset four ways: grouped rows (each tile group as a labelled block), one grid of
   every tile, the [sheet](#the-sheet-and-blocks) and the [pieces](#pieces). The filter and
-  the search box choose which groups any of the four lists. The grid lists a tile once
-  where the tileset holds the same picture with the same flags several times; the same
-  picture where it walks, builds or stands at another height is another tile and is listed
-  too.
+  the search box choose which groups any of the four lists. The tab comes back as you left
+  it (view, filter and search) after a visit to another tab, until the editor is closed.
+  The grid lists a tile once where the tileset holds the same picture with the same flags
+  several times; the same picture where it walks, builds or stands at another height is
+  another tile and is listed too.
 - **Blend** is for joins the cliff sets never had: dirt into a doodad's base, one edge set
   into another, a hand-laid shoreline. Click a tile on the map to make it the anchor, and
   the palette lists for each side the tiles whose opposite edge continues it, best seam
@@ -451,7 +452,8 @@ by how maps lay the tiles: two tiles that are neighbours in the sheet, and are l
 neighbours most of the times either is laid at all, belong to one piece. At first only the
 map in front is read. **Learn from Maps…** reads every map in a folder you choose and
 keeps what they lay in the browser for later sessions. When it is done, a notice says how
-many maps it read and skipped, and how many pieces each tileset now has. Learning again
+many maps it read and skipped, and how many pieces each tileset now has, and the line
+above the pieces says how many learned maps this tileset's list comes from. Learning again
 replaces what was learned. *Forget* (the eraser beside the line) drops it, and so does
 **Preferences ▸ Storage ▸ Clear all data**.
 

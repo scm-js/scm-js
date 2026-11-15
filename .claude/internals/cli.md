@@ -297,7 +297,8 @@ native/ — see scm-sim's docs/own-bots.md. Added 2026-11-06 with "Made by Jeany
 ### `@scm-js/bot`, the bot types (`bot/`, `scripts/build-bot-types.mjs`) — 2026-11-13
 
 The public guide is `docs/bots.md` (a rewrite of scm-sim's private `docs/bots.md` for readers: Starter first, the
-short way, mods, running, the 90-game scores, the interface underneath, trust; no scm-sim paths). The types package
+short way, mods, running, the 90-game scores, the interface underneath, trust; no scm-sim paths; restructured
+2026-11-14 for people playing against a bot and people with a BWAPI bot as well, `docs-site.md`). The types package
 beside it, the user's "option 1":
 
 - **Name.** `@scm-js/bot`, beside `core`, `cli`, `mod`, `replay` (singular nouns; `plugin-api` is the one `-api`).

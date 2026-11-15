@@ -46,7 +46,18 @@ lines, a stand-in `waves` library, the README test's `// what it prints` check t
 `docs/trigscript-library.md` follows the same rule, a page a `trigscript/*` module; its
 examples are compiled too, and the first run caught a signal handler returning an action,
 copied from `signals.ts`'s own header comment, which still carries it.
-`docs/bots.md` (2026-11-13, after `cli` in the nav) is the JavaScript bot guide; its code blocks are type-checked
+`docs/bots.md` (2026-11-13, after `cli` in the nav) is the bot guide. Since 2026-11-14 it is for three readers, named
+in a table at its top: someone who wants to play against a bot (`## Playing against a bot`: what each row of the setup
+screen's list is), someone writing one in JavaScript (`## A first bot`, then `## Running a bot`), and someone with a
+BWAPI bot (`## Bringing a BWAPI bot`: what plays and what does not, the build, what differs from Windows; the
+`scmbot.json` reference stays in the scmbot repository's README, which the section links). The two references
+(`## The short way`, `## The interface underneath`) come last, after `## What is not there yet`: the site gives each
+`##` a page, so they are pages of their own without a second file. Its pictures (`bot-setup`, `bot-options`,
+`bot-playing`) are of the play page and were taken by hand against the local stand-in (the play page is not in this
+repository, so no script here can take them): a generated map (`map generate --seed 1207`), `starter.mjs` added as a
+file, and for `bot-playing` the fog of war off, 16× until Starter's "a wave of" line is in the chat, the view
+scrolled to its marines, then the game's canvas alone (driven through the page's `window.scmsim` hooks).
+Its code blocks are type-checked
 the same way, against the `@scm-js/bot` bundle, by `tests/bot-package.test.ts` (`.claude/internals/cli.md`).
 **Nothing writes prose**, because a generator that did would be one more document to keep
 current. `site.mjs` is the URL

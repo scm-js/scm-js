@@ -50,8 +50,20 @@ The text format (`formats/triggers/text.ts`) resolves names through a `TriggerNa
 (`triggerNames(scn)` in `editor/triggers.ts`) so it is testable without a scenario; unknown names
 print as bare numbers and parse back, unknown types print as `Condition N(...)` / `Action N(...)`.
 The one thing text cannot carry is the `UnitTypeUsed` hint bit (0x10) — Blizzard's own maps disagree
-about it — so `tests/trigger.test.ts` masks the hint bits in its fixture round trip. `intern` appends
-to the string table while parsing (never removed, so harmless — a parse interns each string once).
+about it — so `tests/trigger.test.ts` masks the hint bits in its fixture round trip. The parser
+calls `intern` as it reads each text / WAV argument, and `triggerNames(scn).intern` appends to the
+map's string table there and then. That was called harmless until 2026-11-14, and is not: a text
+with a mistake on a later line had already added the strings of the lines before it, and Import
+Triggers parses when the file is picked, before Import is pressed — either way the strings stayed,
+marked dirty (so saved), with no entry on the undo stack until some later table commit swept them
+into its own. **Nothing parses text through `triggerNames` any more**: `parseTriggerText(scn, text,
+briefing, drafts)` (`editor/triggers.ts`) parses through the draft names below and
+`resolveDraftStrings` adds the strings once the triggers are going in. `triggersFromText` /
+`readTriggerFile` (`editor/exchange.ts`) resolve at once unless handed a `drafts` (the dialog hands
+one, and resolves in `apply`); `tx.triggers.fromText` resolves inside `withStrings`; and
+`api.triggers.text.parse` still answers real indices on success — TrigEdit, Magenta and the scmjs.dev
+tools apply what it returns — but adds nothing when it throws. `tests/exchange.test.ts`,
+`tests/plugins.test.ts` ("adds no string…").
 The Classic editor and Mission Briefing intern at every keystroke of a text, WAV or comment field, so
 they edit through `draftTriggerNames` (`editor/triggers.ts`): a string the map lacks gets a *negative*
 draft index held in the dialog (`StringDrafts`), and `resolveDraftStrings` interns the ones the list

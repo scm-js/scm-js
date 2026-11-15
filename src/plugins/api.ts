@@ -1473,7 +1473,8 @@ export interface TriggerTextApi {
   print(triggers: readonly ReadonlyTrigger[], options?: { briefing?: boolean }): string;
   /**
    * Parse text into records, resolving names against the open map (and interning the
-   * strings it mentions). Throws a `TriggerTextError` carrying the line on bad input.
+   * strings it mentions). Throws a `TriggerTextError` carrying the line on bad input,
+   * and then no string was added: the map is as it was.
    */
   parse(source: string, options?: { briefing?: boolean }): TextTrigger[];
   /** One trigger as its `Trigger(…)` block. */

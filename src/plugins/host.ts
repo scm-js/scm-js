@@ -80,9 +80,9 @@ import { applyCuwp, cuwpSlotView, cuwpSlotViews, patchCuwp, readCuwp } from "../
 import { emptyCuwpSlot } from "../formats/chk/sections/cuwp";
 import {
   addressOfEpd, applyBriefing, applyTriggers, epdOf, fingerprintTrigger, insertTrigger, isPreserved, moveTrigger, newAction, newCondition, newTrigger, readBriefing, readTriggers, removeTriggers, sameTriggers, triggerUsage,
-  setPreserved, triggerNames, triggersFor,
+  newStringDrafts, parseTriggerText, resolveDraftStrings, setPreserved, triggerNames, triggersFor,
 } from "../editor/triggers";
-import { formatTrigger, formatTriggers, parseTriggers, summarizeTrigger, triggerComment } from "../formats/triggers/text";
+import { formatTrigger, formatTriggers, summarizeTrigger, triggerComment } from "../formats/triggers/text";
 import { applyStrings, readStrings, stringUsages, unusedStrings } from "../editor/strings";
 import { bleedingLines, DEFAULT_TEXT_COLOR, escapeCode, fixBleeding, flattenStacks, INSERTABLE_CODES, plainText, runsOf, stackedLines, TEXT_CODES, textCode } from "../editor/textColors";
 import {
@@ -962,7 +962,10 @@ export function runUpdate(store: Store, label: string, build: (tx: UpdateTransac
         return write(moveTrigger(list, from, to));
       },
       fromText: (source, options = {}) => {
-        const parsed = withStrings(() => parseTriggers(source, triggerNames(scn), briefing).map((t) => t.trigger));
+        // Parsed whole before a string is added: text with a mistake in it throws here and leaves the map as it was.
+        const drafts = newStringDrafts();
+        const drafted = parseTriggerText(scn, source, briefing, drafts).map((t) => t.trigger);
+        const parsed = withStrings(() => resolveDraftStrings(scn, drafted, drafts));
         write(options.replace ? parsed : [...read(), ...parsed]);
         return parsed.length;
       },
@@ -1158,7 +1161,16 @@ export function triggersApi(store: Store): Omit<TriggersApi, "claim"> {
     text: {
       print: (triggers, options = {}) => formatTriggers(triggers, names(), options.briefing ?? false),
       one: (trigger, options = {}) => formatTrigger(trigger, names(), options.briefing ?? false),
-      parse: (source, options = {}) => parseTriggers(source, names(), options.briefing ?? false),
+      parse: (source, options = {}) => {
+        const scn = scenario();
+        if (!scn) throw new Error("No map is open.");
+        // The records answer with real string indices, as they always have, but the strings
+        // go in only after the whole text parsed: a mistake in it leaves the table alone.
+        const drafts = newStringDrafts();
+        const parsed = parseTriggerText(scn, source, options.briefing ?? false, drafts);
+        const resolved = resolveDraftStrings(scn, parsed.map((t) => t.trigger), drafts);
+        return parsed.map((t, i) => ({ ...t, trigger: resolved[i] }));
+      },
     },
     newTrigger,
     newCondition,

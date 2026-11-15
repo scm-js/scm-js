@@ -846,6 +846,31 @@ describe("plugin updates", () => {
     expect(scn.briefing).toHaveLength(0);
   });
 
+  it("adds no string, and no undo step, for trigger text with a mistake in it", () => {
+    const { store, scn } = blankStore();
+    const api = apiOf(store);
+    const good = "Trigger(\"Player 1\"){\nConditions:\n\tAlways();\nActions:\n\tDisplay Text Message(Always Display, \"A new string\");\n}";
+    const bad = good.replace("}", "\tNo Such Action(1);\n}");
+    const strings = scn.strings.strings.slice();
+    const depth = api.document.history().undoDepth;
+    scn.dirty.clear();
+
+    // The mistake is on the line after the string: the parser had interned it by then.
+    expect(() => api.document.update("bad", (tx) => { tx.triggers.fromText(bad); })).toThrow(/Line \d/);
+    expect(() => api.triggers.text.parse(bad)).toThrow(/Line \d/);
+    expect(scn.strings.strings).toEqual(strings);
+    expect(scn.dirty.size).toBe(0);
+    expect(api.document.history().undoDepth).toBe(depth);
+    expect(api.triggers.list()).toHaveLength(0);
+
+    // Text that parses still answers with strings the map holds, as plugins rely on.
+    const [parsed] = api.triggers.text.parse(good);
+    expect(api.names.string(parsed.trigger.actions[0].text)).toBe("A new string");
+    const added = api.document.update("good", (tx) => { expect(tx.triggers.fromText(good)).toBe(1); });
+    expect(added.changed).toBe(true);
+    expect(api.triggers.list()).toEqual([parsed.trigger]);
+  });
+
   it("keeps string 0 and overwrites a slot in place", () => {
     const { store, scn } = blankStore();
     const api = apiOf(store);

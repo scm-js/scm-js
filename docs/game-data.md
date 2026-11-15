@@ -116,6 +116,16 @@ effects, selection circles). The editor opens none of them. They are for the pla
 scmjs.dev/play, which runs maps and replays in the browser from the same copy. The desktop
 app's own copy leaves them out.
 
+From a classic installation's folder the copy also keeps `Local.dll`, the file beside
+`StarCraft.exe` (in no archive) that holds the game's keyboard shortcuts for control
+groups (Ctrl or Alt with a number) and the screen positions on F2–F4. The play page hands
+those keys to the game when it shows the game's own screen (an option of the play page).
+Remastered has no such file, and a copy without it still plays; on the game's own screen
+those keys then do nothing. A copy made before the editor kept it, or from `StarDat.mpq`
+and `BrooDat.mpq` picked on their own, is marked on the [Game Data
+page](https://scmjs.dev/editor/data); to add the file, remove the copy and choose the
+StarCraft folder again.
+
 From a Remastered installation, the copy can also keep what the game's real-time lighting
 reads: tick **Keep the files for real-time lighting on the play page** when you choose the
 folder. Choosing the folder again with the box ticked adds them to an existing copy.
@@ -193,17 +203,28 @@ MyMod/
   patch_rt.mpq         applied over the two, if present
   mymod.mpq            a mod's own archive
   My Mod.exe           a mod's self-executing loader: its archive is read, nothing is run
-  plugins/gptp.qdp     its plugins and FireGraft project: never run, part of its hash
+  plugins/gptp.qdp     its plugins, libraries and FireGraft project: never run, part of its hash
   arr/units.dat        loose files, by the game's paths
   unit/terran/marine.grp
   rez/…
 ```
 
-Where several sources have the same file, the later one wins, as in the game:
-`StarDat.mpq`, then `BrooDat.mpq`, then the other archives in name order, and loose files
-under `arr`, `unit`, `tileset`, `game`, `scripts` or `rez` over all of them. The mod's
-other files in the game's folders (its sounds, say) are not drawn with but count for [its
-hash](#a-map-remembers-its-data-set). Anything else in the folder is ignored.
+The mod is read as `scmjs mod info` reads it ([What a mod is](mods.md#what-a-mod-is)):
+where its game paths start, which archives, exes and zips are its, its code, and its
+`mod.json`. Where several sources have the same file, the later one wins, as in the game:
+`StarDat.mpq`, then `BrooDat.mpq`, then `patch_rt.mpq`, then the mod's own sources where
+its loader lays them (archives as MPQDraft's patcher takes them, then a FireGraft
+patcher's archive, then loose files over all of them). The game's archives are those of a
+copy of the game in the folder, beside which they lie with `StarDat.mpq`; a `patch_rt.mpq`
+anywhere else is the mod's own. The mod's files under `arr`, `unit`, `tileset`, `game`,
+`scripts` or `rez` are drawn with; its other files (its sounds, say) count for [its
+hash](#a-map-remembers-its-data-set). A folder whose name starts with a dot (`.git`) is
+never read, and read-mes beside the mod's files are not its. A `terrain.json` beside
+`mod.json` (or in its place) is read with the folder and kept with the data set: its named
+pieces, flat ground and borrowed-terrain tables are in the Tile and Isometric palettes
+while the data set is in use ([Terrain a mod declares](mods.md#terrain-a-mod-declares)).
+Adding the mod again replaces it, and removing the data set forgets it. The same holds for
+a mod's folder chosen for a map whose terrain the data in use lacks.
 
 The data set is stored under its own name beside the game's copy, so removing one leaves
 the others alone. The *Data sets* list appears in Help ▸ Game Data… once there is a second
@@ -306,14 +327,15 @@ so.
 
 **Races a data set adds.** A mod can give players races past the game's eight, which none
 of its files name ([Races a mod adds](mods.md#races-a-mod-adds)). They are named for a
-data set by the `races` of the `mod.json` in the folder you add it from (Help ▸ Game Data…
-▸ Add a data set…), or by a plugin, and they are kept with the data set, through a new
-release of the mod. Player Settings and Statistics then show them by name and offer them
-in the race list; without a name such a race shows as *Race* and its number, and Player
-Settings keeps it as the map has it. A map's note carries the races of its data set, and
-opening the map gives them to that data set when the map's data set is the one in use and
-none were named for it here. They are kept in the browser with your other settings:
-Preferences ▸ Storage lists them, and clearing them there takes the names away at once.
+data set by the `races` of the `mod.json` in the folder you add it from or one folder down
+(Help ▸ Game Data… ▸ Add a data set…), or by a plugin, and they are kept with the data
+set, through a new release of the mod. Player Settings and Statistics then show them by
+name and offer them in the race list; without a name such a race shows as *Race* and its
+number, and Player Settings keeps it as the map has it. A map's note carries the races of
+its data set, and opening the map gives them to that data set when the map's data set is
+the one in use and none were named for it here. They are kept in the browser with your
+other settings: Preferences ▸ Storage lists them, and clearing them there takes the names
+away at once.
 
 ### Terrain the data set has not got
 
@@ -371,14 +393,16 @@ instead. Check Map lists the same tiles under Terrain.
 
 The hash is [the mod's hash](mods.md#the-mods-hash): it covers every file of the data
 set's own — its loose files, the members of its archives (a loader `.exe` in the folder is
-read for its archive), the plugins and the FireGraft project it carries — and is worked
-out the same way as the play page and `scmjs mod info` work it out, so the editor, the
+read for its archive), every module of its code (its plugins, the plugins its patcher
+`.exe` carries, the libraries they load) and its FireGraft project — and is worked out by
+the same library as the play page and `scmjs mod info` work it out, so the editor, the
 command line and the play page give one mod the same hash. Files of the mod in the game's
 folders that the editor does not read, such as its sounds, count too. Nothing is compared
 with the copy the data set is laid over, so the hash does not depend on which copy that
 is. A data set made before November 2026 keeps the hash it was made with, which counted
-only the files that differ from the copy underneath; installing it again gives the hash by
-this rule.
+only the files that differ from the copy underneath; one made before 11 November 2026 kept
+a hash with no line for a patcher's own plugins or a library. Installing it again gives
+the hash by this rule.
 
 ### Names
 
@@ -601,16 +625,16 @@ under `src/formats/`.
 | `src/pages/GameDataPage.tsx`, `src/pages/data.tsx` | The Game Data page (`data.html`), one of the build's three pages, around the dialog's own controls. |
 | `src/pages/install.ts` | The installer page (`install.html`), the third: the play page frames it to have a Remastered folder installed. |
 | `src/gamedata/store.ts` | The browser's copies, in the Origin Private File System: `gamedata/` for the game's own, `gamedata-profiles/<id>/` per data set, a stamp file written last so a half-written copy counts as nothing. |
-| `src/gamedata/install.ts`, `zip.ts` | The install routes. `zip.ts` reads a zip's directory and single members over HTTP ranges with no zip library; `tests/zip.test.ts` drives it over a zip built in the test. |
+| `src/gamedata/install.ts`, `modInput.ts`, `zip.ts` | The install routes; a picked folder told into the game's archives and the mod (`modInput.ts`, loaded only when a data set is added). `zip.ts` reads a zip's directory and single members over HTTP ranges with no zip library; `tests/zip.test.ts` drives it over a zip built in the test. |
 | `src/gamedata/extract.ts` | The extraction: archives in as a `ReadMember`, a map of paths to bytes out, no file system and no network. It imports only the iscript and table codecs, so Node runs it without a build step. |
 | `src/gamedata/play.ts` | The files for playing: what the play page reads beyond the editor's files, copied after them. |
 | `src/gamedata/extract.worker.ts`, `scripts/extract-*.mjs`, `desktop/main.ts` | The three places the extraction runs: a browser worker, the Node scripts, the desktop's main process (which also holds the disk search and Test Map). |
 | `src/gamedata/remastered.ts` | A StarCraft: Remastered installation in the archives' place, over [kascade](https://github.com/jeany55/kascade); `tests/remastered.test.ts` checks the result against a direct extraction, and against a real installation when `SCM_REMASTERED_DIR` names one. |
 | `src/gamedata/remasteredFolder.ts` | Telling a Remastered installation folder from a folder pick (`.build.info`), kept apart so the extraction stays off the startup path. |
 | `src/gamedata/remasteredDefault.ts` | Turning Remastered graphics on after the installer page made a Remastered copy. |
-| `src/gamedata/archives.ts`, `scripts/lib/archives.mjs` | Opening the archives with [mopaq](https://github.com/jeany55/mopaq), later archives winning, with a mod's loose files as an overlay; and finding them on disk. |
+| `src/gamedata/archives.ts`, `scripts/lib/archives.mjs` | Opening the game's archives with [mopaq](https://github.com/jeany55/mopaq), later archives winning, with a mod's files as an overlay; a data set's mod as the files [`@scm-js/mod`](https://github.com/scm-js/mod) reads; and finding the archives on disk. |
 | `src/gamedata/profiles.ts`, `src/services/gameData.ts` | Data sets: the id and name, the stored choice, and the switch that drops every decoded table and loads again. |
-| `src/gamedata/overCopy.ts` | A data set laid over a copy rather than the game's archives, the images whose Remastered pictures it turns off, and the digest of its files. |
+| `src/gamedata/overCopy.ts` | A data set laid over a copy rather than the game's archives, and the images whose Remastered pictures it turns off. |
 | `src/services/mapDataSet.ts` | The note a map keeps of its data set, and the question asked when it opens elsewhere. `tests/map-dataset.test.ts`. |
 | `src/services/missingTerrain.ts`, `src/data/remasteredTiles.ts` | Whose a tile is (the game's, Remastered's additions, a mod's), the notice when the data set in use has not got some of a map's terrain, the installed data set it offers and the folder it draws from. `tests/missing-terrain.test.ts`. |
 | `src/gamedata/folderSet.ts` | A mod's folder as a data set in memory: its loose files by the game's names, read when asked for. `tests/mod-folder.test.ts`. |

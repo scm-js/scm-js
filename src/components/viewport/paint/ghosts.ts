@@ -12,6 +12,7 @@ import type { UnitsDat } from "../../../formats/dat/dat";
 import { inMap, neighbourOf, SIDES } from "../../../editor/blend";
 import { clipLocationBounds, type Clip, type ClipParts } from "../../../editor/clipboard";
 import { boundsOf } from "../../../editor/locations";
+import { isStretched } from "../../../editor/stretch";
 import { placementBox, unitBox, unitGeometry } from "../../../editor/units";
 import { START_LOCATION } from "../../../data/units";
 import type { DoodadGhost } from "../../../hooks/useDoodadTools";
@@ -59,7 +60,9 @@ export function drawDoodadGhost(v: PaintView, paint: SpritePainter, assets: Load
   }
   ctx.imageSmoothingEnabled = true;
   if (g.def.overlay) {
-    const cx = (g.x * TILE + g.def.width * 16) * zoom - sx, cy = (g.y * TILE + g.def.height * 16) * zoom - sy;
+    // A stretched doodad keeps its overlay where the piece as shipped stands.
+    const at = isStretched(g.def) ? { def: g.def.stretched.from, x: g.x - g.def.stretched.offset.x, y: g.y - g.def.stretched.offset.y } : g;
+    const cx = (at.x * TILE + at.def.width * 16) * zoom - sx, cy = (at.y * TILE + at.def.height * 16) * zoom - sy;
     ctx.imageSmoothingEnabled = zoom < spritePx();
     paint.thg2(g.def.overlay.id, g.def.flags, g.owner, cx, cy, alpha);
     ctx.imageSmoothingEnabled = true;

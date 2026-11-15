@@ -181,6 +181,17 @@ export function countPlacedUnits(changes: readonly UnitChange[] | undefined): vo
   for (const [unit, n] of placed) count("unit.place", { unit }, n);
 }
 
+/**
+ * A View tick the person switched: the grid, an overlay, a layer's eye, by the flag's name.
+ * `via` is where: the View menu, its toolbar button or its key (`view`), a palette's own
+ * checkbox (`palette`), the Layers panel (`layers`) or a dialog (`dialog`). The ticks the
+ * editor switches itself (an overlay shown while its tool is in use, a preference applied
+ * at startup, a plugin's `setFlags`) are not the person's and are not counted.
+ */
+export function countView(flag: string, on: boolean, via: "view" | "palette" | "layers" | "dialog"): void {
+  count("view", { flag, on, via });
+}
+
 /** Which plugins the registries list (`useUsageCounts` keeps it current from what Browse last read). */
 export function setListedPlugins(fn: (spec: string) => boolean): void {
   listed = fn;

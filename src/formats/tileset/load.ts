@@ -1,6 +1,6 @@
 import { buildAtlas, type TilesetAtlas } from "./atlas";
 import { cycleBands } from "./cycle";
-import { loadTileset, type Tileset } from "./decode";
+import { decodeCv5, loadTileset, type Cv5Group, type Tileset } from "./decode";
 import { buildDoodadCatalogue, DDDATA_SIZE, type DoodadCatalogue } from "./doodads";
 import {
   buildHdEffects, createHdTiles, decodeRawDds, looksLikeHdTiles, parseDdsGrp, parseHdTiles, parseTileMasks,
@@ -186,6 +186,18 @@ export async function loadTilesetGraphics(name: TilesetFileName): Promise<Tilese
   } catch (err) {
     throw new TilesetMissingError(name, err);
   }
+}
+
+/**
+ * A tileset's CV5 groups alone, from the data set in use, or null when it has none: what
+ * learning pieces from a folder of maps needs of each tileset, without the other files or an
+ * atlas. A loaded tileset's groups are handed back.
+ */
+export async function loadTilesetGroups(name: TilesetFileName): Promise<Cv5Group[] | null> {
+  const loaded = ready.get(name);
+  if (loaded) return loaded.tileset.groups;
+  const cv5 = await fetchOptional(`${name}.cv5`, isCv5);
+  return cv5 ? decodeCv5(cv5) : null;
 }
 
 /** Fetch, decode and rasterise a tileset. Repeat calls share one in-flight promise. */

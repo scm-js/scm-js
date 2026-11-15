@@ -15,6 +15,7 @@
  *                                      [--plugin http://localhost:3121/]   # a local scmjs.dev plugin build
  *                                      [--playground http://localhost:3110/]  # a local API Playground build
  *                                      [--remastered "/path/to/StarCraft"]    # a StarCraft: Remastered installation
+ *                                      [--mod <folder> --mod-maps <folder>]   # a mod and maps made for it
  *
  * Needs the game data extracted (the pictures are of real graphics) and, in
  * `fixtures/maps/`, Big Game Hunters, Binary Burghs, Crescent Moon and Ground Zero from
@@ -25,6 +26,11 @@
  * names an installation, which the scene installs through Help ▸ Game Data… as a user
  * would, beside the copy the dev server serves. Without it that scene is skipped and its
  * pictures are left as they are.
+ *
+ * The pictures of a mod's terrain likewise: `--mod` (or `SCM_MOD_DIR`) names the mod's
+ * folder, added as a data set through Help ▸ Game Data…, and `--mod-maps` (or
+ * `SCM_MOD_MAPS`) a folder of maps made for it, which Learn from Maps… reads. They were
+ * taken with Cosmonarchy's Badlands; without the options that scene is skipped.
  *
  * Coordinates are for a 1400×900 window with the default panel widths: the map area is
  * x 292..1150, y 85..870, which is why the strokes below are written against (292, 85).
@@ -57,6 +63,11 @@ const FIXTURES = join(root, "fixtures/maps");
 const PLAYGROUND_PLUGIN = opt("--playground", "github:scm-js/plugin-api-playground");
 /** A StarCraft: Remastered installation folder, for the scene that pictures its graphics. */
 const REMASTERED = opt("--remastered", process.env.SCM_REMASTERED_DIR ?? "");
+/** A mod's folder (its archives or loose files) and a folder of maps made for it, for the scene that pictures a mod's terrain. */
+const MOD = opt("--mod", process.env.SCM_MOD_DIR ?? "");
+const MOD_MAPS = opt("--mod-maps", process.env.SCM_MOD_MAPS ?? "");
+/** The data set's name, which the Tile tab's filter shows ("Added by …"). */
+const MOD_NAME = opt("--mod-name", process.env.SCM_MOD_NAME ?? "Cosmonarchy");
 
 const { chromium } = await load("playwright");
 const sharp = (await load("sharp")).default;
@@ -81,7 +92,8 @@ const rail = (i) => `.rail-btn >> nth=${i}`;
  */
 const SCENES = [
   scene("dialogs", "", async (p) => {
-    // One deep link per dialog: `?dialog=` opens it over the blank startup map.
+    // One deep link per dialog: `?dialog=` opens it over the blank startup map. (Symmetry's is
+    // taken by the symmetry scene, on a map with something to measure.)
     if (!ONLY.length || ONLY.includes("game-data")) {
       // The first-use state: with the bundled manifests unreachable the resolver ends at
       // "none" and the editor opens Game Data on its own, as it does on a fresh machine.
@@ -94,7 +106,7 @@ const SCENES = [
     for (const [name, id] of Object.entries({
       "new-scenario": "newMap", save: "saveAs", "export-image": "exportImage", "check-map": "validateMap",
       preferences: "preferences", "player-settings": "playerSettings", "force-settings": "forceSettings", "player-colors": "playerColors",
-      "unit-settings": "unitSettings", symmetry: "symmetry", cuwp: "cuwpEditor", "map-properties": "mapProperties", "test-map": "testMap",
+      "unit-settings": "unitSettings", cuwp: "cuwpEditor", "map-properties": "mapProperties", "test-map": "testMap",
     })) {
       if (ONLY.length && !ONLY.includes(name)) continue;
       await p.goto(`dialog=${id}`);
@@ -140,12 +152,14 @@ const SCENES = [
     await p.take("tutorial-base");
     await p.page.click(rail(0)); await p.wait(300);
     await p.menu("Tools", /^Paint/); await p.wait(1200);
+    await p.quiet({ updates: true });
     await p.take("paint");
   }),
 
   scene("bgh", "", async (p) => {
     await p.drop("(8)Big Game Hunters.scm");
     await p.minimap(0.22, 0.2);
+    await p.quiet({ updates: true });
     await p.take("editor-plain");
     if (!ONLY.length || ONLY.includes("editor")) await annotate(join(OUT, "editor-plain.webp"), join(OUT, "editor.webp"));
     await p.menu("Scenario", /String Editor/); await p.wait(1000); await p.dialog("string-editor"); await p.esc();
@@ -245,10 +259,254 @@ const SCENES = [
     await p.page.mouse.up();
   }),
 
+  // A cliff ramp pulled out along its cliff: a plateau laid with the isometric brush, the ramp picked,
+  // pressed where it fits and dragged, the picture taken with the button still down.
+  scene("stretch", "mode=isom", async (p) => {
+    await p.brush(7);
+    await p.terrain("High Dirt");
+    await p.stroke(Array.from({ length: 21 }, (_, i) => at(330 + i * 16, 200 + i * 8)));
+    await p.page.click(rail(1)); await p.wait(800);
+    await p.search("#77");
+    await p.page.locator(".palette .doodad").first().click(); await p.wait(400);
+    // The ramp fits one edge of the plateau only: try spots until the status bar says it went down.
+    const placed = async () => /Placed Cliff/.test((await p.page.locator("body").innerText()).split("\n").filter((l) => /Placed|Can't place/.test(l)).at(-1) ?? "");
+    let spot = null;
+    for (let y = 230; y < 520 && !spot; y += 16) {
+      for (let x = 180; x < 520 && !spot; x += 32) {
+        await p.page.mouse.click(...at(x, y)); await p.wait(40);
+        if (await placed()) spot = [x, y];
+      }
+    }
+    if (!spot) throw new Error("no place on the plateau took the ramp");
+    await p.page.keyboard.press("Control+z"); await p.wait(300);
+    await p.page.mouse.move(...at(...spot)); await p.page.mouse.down();
+    await p.page.mouse.move(...at(spot[0] + 192, spot[1] + 96), { steps: 12 }); await p.wait(400);
+    // A plugin's update notice, if one is up, is not part of the picture.
+    await p.page.evaluate(() => document.querySelectorAll(".toasts").forEach((el) => { el.style.visibility = "hidden"; }));
+    await p.take("doodad-stretch", MAP);
+    await p.page.mouse.up();
+    // The same ramp, placed, with the joins that show drawn over it.
+    await p.esc();
+    await p.menu("View", /Seam Overlay/);
+    await p.page.mouse.move(...at(820, 40));
+    await p.take("terrain-seams", MAP);
+  }),
+
+  // The Tile tab's sheet at full size, a Jungle temple picked by dragging over it, and the
+  // block laid on the map: pressed once and dragged, so the copies run on side by side.
+  scene("tile-sheet", "mode=isom&tileset=jungle", async (p) => {
+    await p.brush(7);
+    await p.terrain("Dirt");
+    for (const y of [260, 380, 500, 620]) await p.steadyStroke([at(40, y), at(820, y)]);
+    await p.tab("Tile");
+    await p.page.locator(".palette button[aria-label='Sheet']").click(); await p.wait(600);
+    await p.page.locator(".palette select[aria-label='Group filter']").selectOption("doodad"); await p.wait(600);
+    await p.page.locator(".palette button[aria-label='Tiles at full size']").click(); await p.wait(600);
+    await p.sheetScroll(1198);
+    await p.sheetDrag([1202, 0], [1207, 5]);
+    await p.quiet();
+    await p.take("palette-sheet", PALETTE);
+    await p.steadyStroke([at(110, 300), at(530, 300)]);
+    await p.page.mouse.move(1300, 500); await p.wait(300);
+    await p.take("terrain-block", MAP);
+  }, { init: () => SEEDED_RANDOM }),
+
+  // What pinning is for: a ramp stretched along a plateau (its tiles pinned as it goes down)
+  // and a stroke of the isometric brush along its foot that leaves it whole, the Pin tab open
+  // so the pins are marked.
+  scene("pin", "mode=isom", async (p) => {
+    await p.brush(7);
+    await p.terrain("High Dirt");
+    await p.steadyStroke(Array.from({ length: 21 }, (_, i) => at(330 + i * 16, 200 + i * 8)));
+    await p.page.click(rail(1)); await p.wait(800);
+    await p.search("#77");
+    await p.page.locator(".palette .doodad").first().click(); await p.wait(400);
+    const spot = await p.spot(/Placed Cliff/, [330, 640, 32], [300, 600, 16]);
+    await p.page.keyboard.press("Control+z"); await p.wait(300);
+    await p.drag(spot, [spot[0] + 192, spot[1] + 96]);
+    console.log(`pin: ${await p.status()}`);
+    await p.esc();
+    await p.page.click(rail(0)); await p.wait(600);
+    await p.tab("Isometric");
+    await p.brush(3);
+    await p.terrain("Grass");
+    await p.steadyStroke([at(spot[0] - 60, spot[1] + 150), at(spot[0] + 300, spot[1] + 150)]);
+    console.log(`pin: ${await p.status()}`);
+    await p.tab("Pin");
+    await p.page.mouse.move(1300, 500);
+    await p.quiet();
+    // The palette and the part of the map that holds the ramp.
+    await p.take("terrain-pin", { x: 0, y: 62, width: 940, height: 808 }, { lossless: false });
+  }, { init: () => SEEDED_RANDOM }),
+
+  // A small symmetric Desert map made under Left ↔ right: high ground, a cliff ramp whose twin
+  // lands across the axis (the doodad-twin picture, taken with the button still down), a start
+  // location with its mineral line. Then the Symmetry dialog's measure of it, and the
+  // differences drawn on the map.
+  scene("symmetry", "mode=isom&dialog=newMap", async (p) => {
+    // 64 × 64, no start locations: they are placed below, mirrored.
+    await p.page.locator(".dlg .tileset-card", { hasText: "Desert" }).click();
+    for (const i of [0, 1]) await p.page.locator(".dlg select").nth(i).selectOption("64");
+    const auto = p.page.locator(".dlg label", { hasText: "Place automatically" }).locator("input");
+    if (await auto.isChecked()) await auto.uncheck();
+    await p.page.locator(".dlg button", { hasText: /^Create$/ }).click(); await p.wait(1500);
+    await p.symmetry(/Left ↔ right/);
+    // A tar pit low on the left, copied to the right.
+    await p.zoom(1); await p.scrollTo(0, 38 * 32);
+    await p.brush(3);
+    await p.terrain("Tar"); await p.steadyStroke([await p.tile(10, 46), await p.tile(20, 50)]);
+    // High ground left of the axis and its copy right of it: the view moved eight tiles left of
+    // the map's middle to paint, then back.
+    await p.scrollTo(32 * 32 - 429 - 256, 32 * 32 - 392);
+    await p.brush(5);
+    await p.terrain("High Dirt"); await p.steadyStroke([at(160, 300), at(200, 400), at(330, 335)]);
+    await p.scrollTo(32 * 32 - 429, 32 * 32 - 392);
+    await p.page.click(rail(1)); await p.wait(800);
+    await p.search("#230");
+    await p.page.locator(".palette .doodad").first().click(); await p.wait(400);
+    // Where the ramp and its twin both fit ("Placed 2 ×").
+    const spot = await p.spot(/Placed 2 × Cliff/, [20, 420, 32], [150, 700, 16]);
+    await p.page.keyboard.press("Control+z"); await p.wait(300);
+    await p.page.mouse.move(...at(...spot)); await p.page.mouse.down();
+    await p.page.mouse.move(...at(spot[0] + 20, spot[1] + 6), { steps: 4 }); await p.wait(400);
+    await p.quiet();
+    await p.take("doodad-twin", MAP);
+    await p.page.mouse.up(); await p.wait(300);
+    console.log(`symmetry: ${await p.status()}`);
+    await p.esc();
+    // A start location on the high ground and its mineral line, copied for Player 2.
+    await p.page.click(rail(2)); await p.wait(600);
+    await p.unit("Start Location"); await p.click(...at(190, 330));
+    await p.unit("Mineral Field (Type 1)");
+    for (const [x, y] of [[96, 266], [86, 298], [82, 330], [86, 362], [96, 394]]) await p.click(...at(x, y));
+    // One more on the right only, with symmetry off for it.
+    await p.symmetry(/^Off/);
+    await p.click(...at(820, 200));
+    console.log(`symmetry: ${await p.status()}`);
+    await p.symmetry(/Left ↔ right/);
+    await p.esc(); await p.search("");
+    await p.page.click(rail(0)); await p.wait(400);
+    await p.menu("Tools", /^Symmetry…/); await p.wait(2500);
+    await p.dialog("symmetry");
+    // The dialog's first place: the differences drawn, the view at 50% on the whole map.
+    await p.page.locator(".dlg button", { hasText: /^Tiles / }).first().click(); await p.wait(1500);
+    await p.zoom(0.5); await p.minimap(0.5, 0.56);
+    await p.page.mouse.move(1300, 500);
+    await p.take("symmetry-differences", MAP);
+  }, { init: () => SEEDED_RANDOM }),
+
+  // Heal over the whole of Big Game Hunters, at 200% with the seam overlay on: the same
+  // shore before and after, side by side.
+  scene("heal", "mode=heal&zoom=2", async (p) => {
+    await p.drop("(8)Big Game Hunters.scm");
+    await p.page.locator(".palette label", { hasText: /Seam Overlay/ }).click();
+    await p.minimap(0.25, 0.27);
+    await p.quiet();
+    const view = { ...MAP, width: 429 };
+    const before = await p.page.screenshot({ clip: view });
+    await p.page.locator(".palette button", { hasText: /^Heal the Whole Map$/ }).click(); await p.wait(2500);
+    console.log(`heal: ${await p.status()}`);
+    const after = await p.page.screenshot({ clip: view });
+    if (!ONLY.length || ONLY.includes("terrain-heal")) await sideBySide(before, after, join(OUT, "terrain-heal.webp"), { labels: ["Before", "After"], halves: false });
+  }),
+
+  // A mod's Badlands (Cosmonarchy's when these were taken): the mod added as a data set
+  // through Game Data, its terrain from other tilesets found, its maps learned from, then the
+  // sheet, a piece, Installation's Floor laid over Dirt, and that floor with and without the
+  // borders the maps draw. The folder of maps goes in through the folder input: the scene
+  // takes the folder picker away (as a browser without one has it), since a headless browser
+  // cannot answer it.
+  scene("mod-terrain", "dialog=gameData", async (p) => {
+    if (!MOD || !MOD_MAPS) { console.log("mod-terrain: skipped — no --mod <folder> --mod-maps <folder>"); return; }
+    const t0 = Date.now();
+    await p.page.locator(".dlg button", { hasText: "Add a data set…" }).click();
+    await p.page.locator(".dlg input[placeholder^='Name of the data set']").fill(MOD_NAME);
+    const [chooser] = await Promise.all([p.page.waitForEvent("filechooser"), p.page.locator(".dlg button", { hasText: "Choose the folder…" }).click()]);
+    await chooser.setFiles(MOD);
+    await p.page.locator(".toast", { hasText: "Data set ready" }).waitFor({ timeout: 900_000 });
+    console.log(`mod-terrain: installed in ${((Date.now() - t0) / 1000).toFixed(0)} s`);
+    await p.goto("mode=isom&tileset=badlands");
+    await p.quiet();
+    // The other tilesets' terrain this one holds copies of, then what the mod's maps lay.
+    await p.page.locator(".palette button", { hasText: "Find terrain from other tilesets" }).click();
+    await p.page.locator(".palette .borrowed-source").first().waitFor({ timeout: 300_000 });
+    await p.page.locator(".palette", { hasText: "Looking through" }).waitFor({ state: "detached", timeout: 300_000 }).catch(() => {});
+    console.log(`mod-terrain: ${await p.status()}`);
+    await p.tab("Tile");
+    await p.page.locator(".palette button[aria-label='Pieces']").click(); await p.wait(800);
+    const [maps] = await Promise.all([p.page.waitForEvent("filechooser"), p.page.locator(".palette button", { hasText: "Learn from Maps…" }).click()]);
+    await maps.setFiles(MOD_MAPS);
+    await p.page.locator(".palette .pieces-source", { hasText: /learned map/ }).waitFor({ state: "attached", timeout: 600_000 });
+    await p.wait(2000);
+    console.log(`mod-terrain: ${(await p.status()).replace(/\. /g, ".\n")}`);
+    await p.quiet();
+    // The sheet, the mod's own groups only: a block of its floor plating picked by dragging over
+    // it and run along in three drags, then a shopfront picked the same way and laid on it.
+    await p.page.locator(".palette select[aria-label='Group filter']").selectOption("added"); await p.wait(800);
+    await p.page.locator(".palette button[aria-label='Sheet']").click(); await p.wait(800);
+    await p.sheetScroll(2470);
+    await p.sheetDrag([2477, 0], [2480, 7]);
+    await p.scrollTo(0, 0);
+    for (const y of [130, 258, 386]) await p.steadyStroke([at(100, y), at(740, y)]);
+    await p.sheetDrag([2491, 8], [2496, 15]);
+    console.log(`mod-terrain: ${await p.status()}`);
+    await p.click(...at(260, 200));
+    await p.page.mouse.move(1300, 500); await p.wait(300);
+    await p.take("mod-sheet", { x: 0, y: 62, width: 940, height: 808 }, { lossless: false });
+
+    // The pieces the maps lay: one picked and laid.
+    await p.page.locator(".palette button[aria-label='Pieces']").click(); await p.wait(800);
+    // Down the list (it draws only what is in view) to the first piece past the mod's rocks
+    // (groups 2200 on) of 30 tiles or more that the maps lay ten times or more.
+    const wanted = (t) => { const m = /(\d+) tiles · laid about ([\d,]+) times · group (\d+)/.exec(t ?? ""); return !!m && +m[1] >= 30 && +m[2].replace(",", "") >= 10 && +m[3] >= 2200; };
+    const list = p.page.locator(".tile-pieces");
+    for (let y = 0; ; y += 300) {
+      await list.evaluate((el, y) => { el.scrollTop = y; }, y); await p.wait(250);
+      const titles = await p.page.locator(".palette .piece-thumb").evaluateAll((els) => els.map((e) => e.getAttribute("title")));
+      const found = titles.findIndex(wanted);
+      if (found >= 0) { const thumb = p.page.locator(".palette .piece-thumb").nth(found); await thumb.scrollIntoViewIfNeeded(); await thumb.click(); break; }
+      if (await list.evaluate((el) => el.scrollTop + el.clientHeight >= el.scrollHeight)) throw new Error("no piece of the mod's buildings in the list");
+    }
+    await p.wait(500);
+    console.log(`mod-terrain: ${await p.status()}`);
+    await p.scrollTo(40 * 32, 0);
+    await p.click(...at(300, 300));
+    await p.page.mouse.move(1300, 500); await p.wait(300);
+    await p.take("mod-pieces", { x: 0, y: 62, width: 940, height: 808 }, { lossless: false });
+
+    // Installation's Floor, from the Isometric tab's list of other tilesets' terrain, over Dirt.
+    await p.tab("Isometric");
+    await p.page.locator(".palette .terrain-list .item", { hasText: /^Floor$/ }).click(); await p.wait(300);
+    await p.brush(3);
+    await p.scrollTo(0, 40 * 32);
+    await p.steadyStroke([at(200, 250), at(420, 360), at(560, 300)]);
+    console.log(`mod-terrain: ${await p.status()}`);
+    await p.page.mouse.move(1300, 500); await p.wait(300);
+    await p.take("mod-borrowed", { x: 0, y: 62, width: 940, height: 808 }, { lossless: false });
+
+    // The same stroke with Drawn borders off, then on: the same view, side by side.
+    const drawn = p.page.locator(".palette label", { hasText: "Drawn borders" }).locator("input");
+    const view = { x: MAP.x, y: MAP.y + 280, width: 520, height: 400 };
+    const stroke = async (on) => {
+      if ((await drawn.isChecked()) !== on) await drawn.click();
+      await p.scrollTo(40 * 32 - 80, 40 * 32);
+      await p.steadyStroke([at(250, 380), at(330, 420)]);
+      console.log(`mod-terrain: drawn borders ${on ? "on" : "off"}: ${await p.status()}`);
+      await p.page.mouse.move(1300, 500); await p.wait(400);
+      return p.page.screenshot({ clip: view });
+    };
+    await p.brush(2);
+    const plain = await stroke(false);
+    await p.page.keyboard.press("Control+z"); await p.wait(600);
+    const bordered = await stroke(true);
+    if (!ONLY.length || ONLY.includes("mod-borders")) await sideBySide(plain, bordered, join(OUT, "mod-borders.webp"), { labels: ["Plain edge", "Drawn borders"], halves: false });
+  }, { init: () => `delete window.showDirectoryPicker; ${SEEDED_RANDOM}` }),
+
   scene("desert", "layer=doodads", async (p) => {
     await p.drop("(2)Binary Burghs.scx");
     await p.minimap(0.5, 0.5);
     await p.page.locator(".palette .doodad").nth(3).click(); await p.wait(400);
+    await p.quiet({ updates: true });
     await p.take("doodads");
     await p.esc();
     await p.page.click(rail(3)); await p.wait(800);
@@ -327,6 +585,7 @@ const SCENES = [
     await p.minimap(0.22, 0.2);
     await p.page.click('.menubar button:has-text("Tools")'); await p.wait(300);
     await p.page.locator(".menu-item", { hasText: /^AI$/ }).hover(); await p.wait(800);
+    await p.quiet({ updates: true });
     await p.take("ai-menu");
     await p.esc(); await p.esc(); await p.wait(300);
 
@@ -335,6 +594,7 @@ const SCENES = [
     await p.page.locator(".plugin-panel textarea").fill("Give player 1 four marines and a siege tank beside their start location.");
     await p.page.keyboard.press("Enter");
     await p.page.locator(".plugin-panel .ai-msg", { hasText: /^Done\./ }).waitFor({ timeout: 60_000 }); await p.wait(1500);
+    await p.quiet({ updates: true });
     await p.take("assistant");
     await p.page.keyboard.press("Control+Shift+A"); await p.wait(400);
 
@@ -368,6 +628,7 @@ const SCENES = [
     await p.page.locator(".dlg button", { hasText: /^Refine$/ }).waitFor({ state: "visible", timeout: 60_000 }); await p.wait(1500);
     await p.esc(); await p.wait(500);
     await p.page.keyboard.press("Control+Shift+0"); await p.wait(1500);
+    await p.quiet({ updates: true });
     await p.take("generated-map");
 
     await p.submenu("Tools", /^AI$/, /^Make Scenario/); await p.wait(800);
@@ -422,6 +683,7 @@ const SCENES = [
       view: { x0: view.x0 + 18, y0: view.y0 + 14, x1: view.x1 + 18, y1: view.y1 + 14 },
     });
     await p.wait(1500);
+    await p.quiet({ updates: true });
     await p.take("share-editing");
     await p.menu("Account", /^Share this Map/); await p.wait(800);
     // The link as the hosted editor makes it, not the dev server and the stand-in's address.
@@ -541,6 +803,7 @@ const SCENES = [
     await p.page.mouse.move(...at(100, 400)); await p.page.mouse.wheel(270, 0); await p.wait(1200);
     // The pointer off the map, so no tile cursor is drawn.
     await p.page.mouse.move(1270, 800); await p.wait(300);
+    await p.quiet({ updates: true });
     await p.take("api-playground");
 
     // The reference on hover: `edit` in a line that calls it.
@@ -572,6 +835,7 @@ const SCENES = [
     await p.menu("Tools", /^Base Check/);
     await p.page.locator(".plugin-panel .list, .plugin-panel [role=listbox], .plugin-panel-body").first().waitFor(); await p.wait(600);
     await p.page.mouse.move(1270, 800);
+    await p.quiet({ updates: true });
     await p.take("plugin-base-check");
     await p.page.locator(".plugin-panel .dlg-close").first().click(); await p.wait(300);
 
@@ -591,12 +855,14 @@ const SCENES = [
     await p.example(['name: "Drop marines"']);
     await p.click(...at(330, 300)); await p.click(...at(420, 340));
     await p.page.mouse.move(...at(500, 300), { steps: 4 }); await p.wait(400);
+    await p.quiet({ updates: true });
     await p.take("plugin-map-tool");
     await p.esc();
 
     // An overlay, zoomed out far enough to see the rings, with its row in the Layers panel.
     await p.example(['name: "Start rings"'], { after: "api.view.setZoom(0.25);\napi.view.center(48, 48);" });
     await p.page.mouse.move(1270, 800);
+    await p.quiet({ updates: true });
     await p.take("plugin-overlay");
 
     // A claimed trigger and a button in the Trigger Editor's slot, in one picture.
@@ -609,6 +875,7 @@ const SCENES = [
     // Two of the recipes at once: the problems panel in the dock, the density overlay on the map.
     await p.example(['title: "Problems"', 'name: "Unit density"'], { after: "api.view.setZoom(0.5);\napi.view.center(24, 24);" });
     await p.page.mouse.move(1270, 500);
+    await p.quiet({ updates: true });
     await p.take("plugin-recipes");
 
     // Where plugin UI appears: a menu item, a floating and a docked panel, a status bar
@@ -625,6 +892,7 @@ const SCENES = [
     const cell = await boxOf(p.page.locator(".statusbar *", { hasText: /^\d+ problems$/ }));
     const button = await boxOf(p.page.locator(".hud-btn", { hasText: "Notes" }));
     await p.page.mouse.move(item.x + 20, item.y + item.height / 2); await p.wait(300);
+    await p.quiet({ updates: true });
     if (!ONLY.length || ONLY.includes("plugin-surfaces")) {
       const raw = join(OUT, ".plugin-surfaces.png");
       await p.page.screenshot({ path: raw });
@@ -639,6 +907,14 @@ const SCENES = [
     }
   }, { init: () => `localStorage.setItem("scmjs.plugins", ${JSON.stringify(JSON.stringify([{ spec: PLAYGROUND_PLUGIN, enabled: true }]))});` }),
 ];
+
+/**
+ * `Math.random` from a fixed seed, for a scene whose numbers should come out the same on
+ * every run: the isometric brush picks among a tile group's variations at random, and the
+ * variations of a cliff do not all walk alike, so the symmetry measure would move a little.
+ * Other code draws from it too, so a scene sets the seed (`__seed(n)`) before each stroke.
+ */
+const SEEDED_RANDOM = `{ let s = 0x5eed; globalThis.__seed = (n) => { s = n; }; Math.random = () => { s = (s + 0x6d2b79f5) | 0; let t = Math.imul(s ^ (s >>> 15), 1 | s); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }`;
 
 /**
  * The map the plugin guide's pictures are taken on, made through the plugin API: a 96 × 96
@@ -769,7 +1045,7 @@ function seedScmjs(mockUrl) {
 /* ── the annotated overview ────────────────────────────────────────────────────── */
 
 /** The overview's callouts, in the order "The editor window" lists them. */
-const EDITOR_MARKS = [[1, 640, 13], [2, 1000, 45], [3, 18, 345], [4, 200, 75], [5, 720, 300], [6, 1335, 75], [7, 1335, 347], [8, 1335, 596], [9, 1000, 888]];
+const EDITOR_MARKS = [[1, 790, 13], [2, 1110, 45], [3, 18, 345], [4, 200, 75], [5, 720, 300], [6, 1335, 75], [7, 1335, 347], [8, 1335, 621], [9, 1000, 888]];
 
 /** Numbered callouts (`[n, x, y]`) over a picture of the window. */
 async function annotate(from, to, marks = EDITOR_MARKS) {
@@ -783,18 +1059,22 @@ async function annotate(from, to, marks = EDITOR_MARKS) {
 /* ── the driver ────────────────────────────────────────────────────────────────── */
 
 /**
- * Two pictures of the same view as one: the left half of `left`, the right half of `right`,
- * a rule between them and a label on each side.
+ * Two pictures of the same view as one, a rule between them and a label on each side: the
+ * left half of `left` and the right half of `right`, or with `halves: false` both whole,
+ * next to each other (two pictures of the same clip, each half as wide as the result).
  */
-async function sideBySide(left, right, to) {
-  const { width, height } = await sharp(left).metadata();
-  const half = Math.floor(width / 2);
-  const rightHalf = await sharp(right).extract({ left: half, top: 0, width: width - half, height }).toBuffer();
+async function sideBySide(left, right, to, { labels: [first, second] = ["Classic", "Remastered"], halves = true } = {}) {
+  const { width: w, height } = await sharp(left).metadata();
+  const width = halves ? w : w * 2;
+  const half = halves ? Math.floor(width / 2) : w;
+  const rightPart = halves ? await sharp(right).extract({ left: half, top: 0, width: width - half, height }).toBuffer() : right;
   const label = (text, x, anchor) => `<rect x="${anchor === "start" ? x - 10 : x - 10 - text.length * 9.6}" y="14" width="${text.length * 9.6 + 20}" height="30" rx="4" fill="#0b0d12" fill-opacity="0.82"/>` +
     `<text x="${x}" y="35" font-family="Inter, 'Segoe UI', Arial, sans-serif" font-size="16" font-weight="600" fill="#e8c06a" text-anchor="${anchor}">${text}</text>`;
   const overlay = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">` +
-    `<rect x="${half - 1}" y="0" width="2" height="${height}" fill="#e8c06a"/>${label("Classic", 24, "start")}${label("Remastered", width - 24, "end")}</svg>`);
-  const info = await sharp(left).composite([{ input: rightHalf, left: half, top: 0 }, { input: overlay, left: 0, top: 0 }]).webp({ quality: 90 }).toFile(to);
+    `<rect x="${half - 1}" y="0" width="2" height="${height}" fill="#e8c06a"/>${label(first, 24, "start")}${label(second, width - 24, "end")}</svg>`);
+  const base = halves ? sharp(left) : sharp({ create: { width, height, channels: 3, background: "#000" } }).composite([{ input: left, left: 0, top: 0 }]);
+  const joined = halves ? base : sharp(await base.png().toBuffer());
+  const info = await joined.composite([{ input: rightPart, left: half, top: 0 }, { input: overlay, left: 0, top: 0 }]).webp({ quality: 90 }).toFile(to);
   console.log(`wrote ${to.split("/").pop().replace(/\.webp$/, "")} (${(info.size / 1024).toFixed(0)} KB)`);
 }
 
@@ -880,10 +1160,101 @@ function driver(page, mock, other) {
       await page.mouse.click(mm.x + mm.width * fx, mm.y + mm.height * fy); await wait(1500);
     },
     async esc() { await page.keyboard.press("Escape"); await wait(200); },
+    /**
+     * With a doodad picked, click map spots ([from, to, step] in x and y, against the map
+     * area's corner) until the status bar's last word on placing matches `placed`; a placing
+     * that does not match is undone.
+     */
+    async spot(placed, [x0, x1, dx], [y0, y1, dy]) {
+      const last = async () => (await page.locator("body").innerText()).split("\n").filter((l) => /Placed|Can't place/.test(l)).at(-1) ?? "";
+      for (let y = y0; y < y1; y += dy) {
+        for (let x = x0; x < x1; x += dx) {
+          await page.mouse.click(...at(x, y)); await wait(40);
+          const word = await last();
+          if (placed.test(word)) return [x, y];
+          if (word.startsWith("Placed")) { await page.keyboard.press("Control+z"); await wait(150); }
+        }
+      }
+      throw new Error(`no spot took the doodad (${placed}); the last word was: ${await last()}`);
+    },
+    /** Scroll the map so that map pixel (x, y) is at the map area's top-left. */
+    async scrollTo(x, y) { await page.evaluate(([x, y]) => { const el = document.querySelector(".scroller"); el.scrollLeft = x; el.scrollTop = y; }, [x, y]); await wait(500); },
+    /** The window point over the middle of map tile (tx, ty) at the zoom and scroll the view has now. */
+    async tile(tx, ty) {
+      const [sx, sy] = await page.evaluate(() => { const el = document.querySelector(".scroller"); return [el.scrollLeft, el.scrollTop]; });
+      const z = Number((await page.locator(".zoom-readout").first().innerText()).replace("%", "")) / 100;
+      return [MAP.x + (tx + 0.5) * 32 * z - sx, MAP.y + (ty + 0.5) * 32 * z - sy];
+    },
+    /** Pick a mode in the toolbar's symmetry list. */
+    async symmetry(label) {
+      await page.locator("[aria-label='Symmetry mode']").click(); await wait(300);
+      await page.locator(".select-item", { hasText: label }).first().click(); await wait(400);
+    },
+    /** Step the toolbar's zoom until it reads `to` (1 = 100%). */
+    async zoom(to) {
+      for (let i = 0; i < 8; i++) {
+        const now = Number((await page.locator(".zoom-readout").first().innerText()).replace("%", "")) / 100;
+        if (Math.abs(now - to) < 0.01) return;
+        await page.locator(`button[aria-label='${now > to ? "Zoom Out" : "Zoom In"}']`).first().click(); await wait(500);
+      }
+    },
+    /**
+     * Notices (a plugin's update, a finished job) are not part of a picture. With `updates`,
+     * only the notices of a new version (of the editor or a plugin), which depend on the day
+     * the picture is taken; a notice the picture is about stays.
+     */
+    async quiet({ updates = false } = {}) {
+      await page.evaluate((updates) => {
+        const notices = updates ? [...document.querySelectorAll(".toast")].filter((el) => /has been updated|updates? (is|are) available/.test(el.textContent ?? "")) : [...document.querySelectorAll(".toasts")];
+        for (const el of notices) el.style.visibility = "hidden";
+      }, updates);
+    },
+    /** The status bar's message, the last cell before the right-hand ones. */
+    async status() { return (await page.locator(".statusbar").innerText()).split("\n").find((l) => /\w{4,}.*\s\w+\s/.test(l) && !/^(TILE|PX|ID|MAP|LAYER)$/.test(l)) ?? ""; },
+    /** The middle of tile `col` of group `group`'s row in the Tile tab's sheet, in the window. */
+    async sheetCell(group, col) {
+      const box = await page.locator(".tile-sheet-content").boundingBox();
+      const { top, px, left } = await page.locator(".tile-sheet-content").evaluate((el, g) => {
+        const rows = [...el.querySelectorAll(".tile-sheet-row")];
+        const px = parseFloat(rows[0].style.height), left = parseFloat(rows[0].style.left);
+        const labels = [...el.querySelectorAll(".tile-sheet-lbl")].map((l) => ({ g: Number(l.textContent), top: parseFloat(l.style.top) }));
+        const near = labels.reduce((a, b) => (Math.abs(b.g - g) < Math.abs(a.g - g) ? b : a));
+        return { top: near.top + (g - near.g) * px, px, left };
+      }, group);
+      return [box.x + left + col * px + px / 2, box.y + top + px / 2];
+    },
+    /** Scroll the sheet so that group `group`'s row is at the top. */
+    async sheetScroll(group) {
+      for (let i = 0; i < 4; i++) {
+        const [, y] = await p.sheetCell(group, 0);
+        const view = await page.locator(".tile-sheet").boundingBox();
+        await page.locator(".tile-sheet").evaluate((el, dy) => { el.scrollTop += dy; }, y - view.y - 20); await wait(400);
+      }
+    },
+    /** Drag over the sheet from one [group, col] to another: picks that block. */
+    async sheetDrag(from, to) {
+      await page.mouse.move(...(await p.sheetCell(...from))); await page.mouse.down();
+      await page.mouse.move(...(await p.sheetCell(...to)), { steps: 6 }); await page.mouse.up(); await wait(500);
+    },
     async click(x, y) { await page.mouse.click(x, y); await wait(250); },
     async stroke(pts) {
       await page.mouse.move(pts[0][0], pts[0][1]); await page.mouse.down();
       for (const [x, y] of pts.slice(1)) await page.mouse.move(x, y, { steps: 6 });
+      await page.mouse.up(); await wait(500);
+    },
+    /**
+     * A stroke the editor sees the same way on every run: a move every 8 pixels, each given
+     * time to be drawn, so that no two are taken as one.
+     */
+    async steadyStroke(pts) {
+      // The same random choices too, where the scene seeded them (SEEDED_RANDOM).
+      await page.evaluate(() => globalThis.__seed?.(0x5eed));
+      await page.mouse.move(pts[0][0], pts[0][1]); await page.mouse.down(); await wait(60);
+      for (let i = 1; i < pts.length; i++) {
+        const [x0, y0] = pts[i - 1], [x1, y1] = pts[i];
+        const n = Math.max(1, Math.ceil(Math.hypot(x1 - x0, y1 - y0) / 8));
+        for (let k = 1; k <= n; k++) { await page.mouse.move(x0 + ((x1 - x0) * k) / n, y0 + ((y1 - y0) * k) / n); await wait(30); }
+      }
       await page.mouse.up(); await wait(500);
     },
     async drag(from, to) {

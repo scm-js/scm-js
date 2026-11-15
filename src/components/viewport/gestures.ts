@@ -60,6 +60,13 @@ export interface ObjectLayer {
   endDrag(): void;
   selectInBox(from: MapPoint, to: MapPoint, additive: boolean): void;
   placeAt(p: MapPoint): void;
+  /**
+   * Where the layer's choice can be stretched as it is placed (a doodad): a drag from the
+   * press pulls it out instead of drawing a marquee. `to` is told every move, with whether
+   * Shift is held (stretch any way, not only the ways the choice stretches well), and `end`
+   * once, after the placement.
+   */
+  stretch?: { to(from: MapPoint, p: MapPoint, any: boolean): void; end(): void };
 }
 
 /**
@@ -69,7 +76,7 @@ export interface ObjectLayer {
 export interface ObjectGesture extends Live {
   kind: "object";
   layer: ObjectLayerId;
-  mode: "move" | "click" | "select" | "marquee";
+  mode: "move" | "click" | "select" | "marquee" | "stretch";
   from: MapPoint;
   to: MapPoint;
   additive: boolean;
@@ -88,12 +95,21 @@ export function beginObjectGesture(layer: ObjectLayer, s: PointerSample): Object
     move(m) {
       g.to = m.mapPoint;
       if (g.mode === "move") layer.dragTo(g.to);
-      else if (g.mode !== "marquee" && travelled(g.from, g.to, m.zoom)) g.mode = "marquee";
+      else if (g.mode === "stretch") layer.stretch?.to(g.from, g.to, m.shift);
+      else if (g.mode !== "marquee" && travelled(g.from, g.to, m.zoom)) {
+        // While placing something that stretches, the drag pulls it out; otherwise it is a marquee.
+        g.mode = g.mode === "click" && layer.stretch ? "stretch" : "marquee";
+        if (g.mode === "stretch") layer.stretch?.to(g.from, g.to, m.shift);
+      }
     },
     up() {
       if (g.mode === "move") layer.endDrag();
       else if (g.mode === "marquee") layer.selectInBox(g.from, g.to, g.additive);
-      else {
+      else if (g.mode === "stretch") {
+        if (!g.additive) layer.select([]);
+        layer.placeAt(g.from);
+        layer.stretch?.end();
+      } else {
         if (!g.additive) layer.select([]);
         if (g.mode === "click") layer.placeAt(g.from);
       }
@@ -202,6 +218,38 @@ export function beginAreaGesture(kind: "clip" | "pick", s: PointerSample, on: { 
   return g;
 }
 
+/* ── A paste ─────────────────────────────────────────────── */
+
+/**
+ * A press while a clip is armed: a click stamps it with its corner on the tile pressed; a
+ * drag pulls it out from there first, the way a doodad stretches, and the release stamps
+ * what the drag made of it.
+ */
+export interface PasteGesture extends Live {
+  kind: "paste";
+  from: Tile;
+  stretching: boolean;
+}
+
+export function beginPasteGesture(s: PointerSample, on: { stretch(from: MapPoint, p: MapPoint, any: boolean): void; paste(tile: Tile): void; end(): void }): PasteGesture {
+  const from = s.point;
+  const g: PasteGesture = {
+    kind: "paste",
+    from: s.tile,
+    stretching: false,
+    move(m) {
+      if (!g.stretching && !travelled(from, m.mapPoint, m.zoom)) return;
+      g.stretching = true;
+      on.stretch(from, m.mapPoint, m.shift);
+    },
+    up() {
+      on.paste(g.from);
+      on.end();
+    },
+  };
+  return g;
+}
+
 /* ── A brush stroke ──────────────────────────────────────── */
 
 export interface Brush {
@@ -245,7 +293,7 @@ export interface ToolGesture {
   kind: "tool";
 }
 
-export type Gesture = ObjectGesture | LocationGesture | AreaGesture | StrokeGesture | ToolGesture;
+export type Gesture = ObjectGesture | LocationGesture | AreaGesture | StrokeGesture | ToolGesture | PasteGesture;
 
 /** The object-layer gesture in progress on `layer`, if that is what is in progress. */
 export function objectGestureOn(g: Gesture | null, layer: ObjectLayerId): ObjectGesture | null {

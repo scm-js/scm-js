@@ -9,6 +9,7 @@
  */
 import { atom } from "jotai";
 import { t } from "../i18n";
+import { countView } from "../services/usage";
 import type { ViewFlags } from "../editor/view";
 import { logError } from "../editor/log";
 import { locationsAutoHiddenAtom, viewFlagsAtom, viewOnlyAtom } from "./editorAtoms";
@@ -76,6 +77,7 @@ export const toggleFlagAtom = atom(null, (get, set, k: keyof ViewFlags, on?: boo
   if (mode.view && !flagOffered(mode, k)) { set(statusMessageAtom, notOnView(mode.view)); return; }
   const next = on ?? !flagShown(mode, get(viewFlagsAtom), k);
   const view = mode.view;
+  countView(k, next, "view");
   if (k === "fog" && view?.spec.onFog) {
     try { view.spec.onFog(next); } catch (err) { logError(view.plugin.name, "A map view's onFog failed", err); }
     return;

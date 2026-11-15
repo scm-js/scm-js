@@ -28,6 +28,7 @@ export const STORED_LABELS: Record<string, string> = {
   "scmjs.whatsNew": msg("What's New last seen"),
   "scmjs.gameData": msg("Data set in use"),
   "scmjs.dataSetRaces": msg("Races named for data sets"),
+  "scmjs.drawnBorders": msg("Drawn borders switch"),
   // Written by the hosted site's visit count (the front-door worker's script), not the editor.
   "scmjs.visits": msg("Visit count dates"),
   // Preferences ▸ General ▸ Privacy turned off, for the site's script to read.

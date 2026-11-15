@@ -8,9 +8,12 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { format, josa, LOCALES, locale, makeTranslator, messageKey, placeholderNames, resolveLocale, setLocale, t, tc } from "../src/i18n";
+import { format, josa, LOCALES, locale, makeTranslator, messageKey, placeholderNames, resolveLocale, setLocale, t, tc, translate } from "../src/i18n";
 import ko from "../src/i18n/ko.json";
 import { checkCatalogue, extractMessages, messagesIn, updatedCatalogue } from "../scripts/lib/i18n.mjs";
+import { MOD_MESSAGES, renderMessage, say } from "@scm-js/mod";
+import cliKo from "../cli/src/ko.json";
+import { modText } from "../cli/src/i18n";
 
 const SRC = join(import.meta.dirname, "..", "src");
 const CLI = join(import.meta.dirname, "..", "cli", "src");
@@ -131,6 +134,17 @@ describe("extraction", () => {
     expect(report.mismatched).toEqual([{ key: "Save {name}", want: ["name"], have: ["nom"] }]);
     expect(updatedCatalogue(messages, catalogue)).toEqual({ "Save {name}": "{nom} 저장", "Open": "열기", "New": "" });
   });
+
+  it("lets a translation show a package sentence's hidden parameter in place of a shown one, and nothing else", () => {
+    const text = "{path} could not be opened: {why}";
+    const messages = new Map([[text, { text, context: "", uses: [], hidden: ["reason"] }]]);
+    const check = (translation: string) => checkCatalogue(messages, { [text]: translation }).mismatched.length;
+    expect(check("{path|을} 열지 못했습니다: {reason}")).toBe(0);
+    expect(check("{path|을} 열지 못했습니다: {why}")).toBe(0);
+    expect(check("{path|을} 열지 못했습니다: {nope}")).toBe(1);
+    expect(check("열지 못했습니다: {reason}")).toBe(1);
+    expect(check("{path|을} 열지 못했습니다")).toBe(1);
+  });
 });
 
 // Two trees, each with its own catalogues: the editor's (`src/i18n/<locale>.json`) and the command line's
@@ -160,3 +174,51 @@ for (const [tree, root, catalogueOf] of [
     }
   });
 }
+
+// `@scm-js/mod` hands its sentences over as data (`MOD_MESSAGES`: key, English template, parameters), translated by the
+// template where they are shown. Each tree that imports the package asks for every template, so a sentence the package
+// adds is missing from both catalogues, and the check above fails, until it is translated.
+describe("@scm-js/mod's sentences", () => {
+  const templates = Object.values(MOD_MESSAGES).map((m) => m.text);
+
+  it("are asked for by both trees, every one", () => {
+    for (const root of [SRC, CLI]) {
+      const { messages } = extractMessages(root);
+      expect(templates.filter((text) => !messages.has(text)), root).toEqual([]);
+    }
+  });
+
+  it("are in Korean in both catalogues, rendered with their parameters by the translator", () => {
+    for (const catalogue of [ko, cliKo] as Record<string, string>[]) expect(templates.filter((text) => !catalogue[text])).toEqual([]);
+    setLocale("ko");
+    try {
+      const said = say("exe-unreadable", { path: "BG.exe", why: say("overlay-form", { at: 1024, form: 2, known: 1 }) });
+      const text = renderMessage(said, (template, params) => translate(template, params));
+      expect(text).toContain("BG.exe");
+      expect(text).toContain("1024");
+      expect(text).not.toContain("cannot be read");
+      const copy = renderMessage(say("game-copy", { folder: "Starcraft", list: "StarDat.mpq", more: 2 }), (template, params) => translate(template, params));
+      expect(copy).toContain("외 2개");
+    } finally { setLocale("en"); }
+  });
+
+  it("carry hidden parameters to the check: an archive that could not be opened shows its reason translated, its English as before", () => {
+    for (const root of [SRC, CLI]) {
+      const { messages } = extractMessages(root);
+      for (const key of ["archive-unopenable", "exe-archive-unopenable"] as const) expect(messages.get(MOD_MESSAGES[key].text)?.hidden, `${root} ${key}`).toEqual(["reason"]);
+    }
+    const why = "The hash table is damaged";
+    const opened = say("archive-unopenable", { path: "made.mpq", why, reason: say("mpq-damaged", { detail: why }) });
+    const inExe = say("exe-archive-unopenable", { path: "Made.exe", at: 1024, why, reason: say("mpq-damaged", { detail: why }) });
+    expect(modText(opened)).toBe(`made.mpq could not be opened as an archive: ${why}`);
+    expect(modText(inExe)).toBe(`the archive inside Made.exe (at byte 1024) could not be opened: ${why}`);
+    setLocale("ko");
+    try {
+      expect(modText(opened)).toBe(`made.mpq을(를) 아카이브로 열지 못했습니다: 손상되었습니다(${why})`);
+      expect(modText(inExe)).toBe(`Made.exe 안의 아카이브(1024바이트 위치)를 열지 못했습니다: 손상되었습니다(${why})`);
+      // (a message made without the reason, as 1.0.0 made it: the library's text stands in)
+      const bare = { ...opened, params: { path: "made.mpq", why } } as typeof opened;
+      expect(modText(bare)).toBe(`made.mpq을(를) 아카이브로 열지 못했습니다: ${why}`);
+    } finally { setLocale("en"); }
+  });
+});

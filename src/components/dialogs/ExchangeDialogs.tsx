@@ -9,7 +9,7 @@ import { closeDialogAtom, pushToastAtom, statusMessageAtom } from "../../atoms/u
 import {
   applyStringImport, encodeTrg, formatStringTable, parseStringTable, readTriggerFile, triggersToText, type TriggerFileFormat,
 } from "../../editor/exchange";
-import { applyBriefing, applyTriggers } from "../../editor/triggers";
+import { applyBriefing, applyTriggers, newStringDrafts, resolveDraftStrings, type StringDrafts } from "../../editor/triggers";
 import { hostTerms } from "../../editor/platform";
 import { getString } from "../../formats/chk/sections/strings";
 import type { TriggerRecord } from "../../formats/chk/sections/triggers";
@@ -95,6 +95,8 @@ export function ExportTriggersDialog({ entry }: DialogProps) {
 interface ImportState {
   fileName: string;
   triggers: TriggerRecord[] | null;
+  /** The file's strings the map does not hold yet: added on Import, not when the file is read. */
+  drafts: StringDrafts;
   error: string | null;
 }
 
@@ -117,12 +119,13 @@ export function ImportTriggersDialog({ entry }: DialogProps) {
     const file = await pickFile(accept);
     if (!file) return;
     setBusy(true);
+    const drafts = newStringDrafts();
     try {
       const bytes = new Uint8Array(await file.arrayBuffer());
-      const triggers = readTriggerFile(scenario, file.name, bytes, target === "briefing");
-      setState({ fileName: file.name, triggers, error: null });
+      const triggers = readTriggerFile(scenario, file.name, bytes, target === "briefing", drafts);
+      setState({ fileName: file.name, triggers, drafts, error: null });
     } catch (err) {
-      setState({ fileName: file.name, triggers: null, error: err instanceof Error ? err.message : String(err) });
+      setState({ fileName: file.name, triggers: null, drafts, error: err instanceof Error ? err.message : String(err) });
     } finally {
       setBusy(false);
     }
@@ -130,7 +133,8 @@ export function ImportTriggersDialog({ entry }: DialogProps) {
   const apply = () => {
     if (!state?.triggers) return;
     const existing = target === "triggers" ? scenario.triggers : scenario.briefing;
-    const next = replace ? state.triggers : [...existing, ...state.triggers];
+    const incoming = resolveDraftStrings(scenario, state.triggers, state.drafts);
+    const next = replace ? incoming : [...existing, ...incoming];
     if (target === "triggers") applyTriggers(scenario, next); else applyBriefing(scenario, next);
     commit();
     const n = state.triggers.length;

@@ -100,6 +100,62 @@ export function edgeDistance(edges: EdgeTable, a: number, sideA: Side, b: number
   return sum / EDGE_BYTES;
 }
 
+/* ── Seams ──────────────────────────────────────────────── */
+
+const grains = new WeakMap<Tileset, Float32Array>();
+
+/**
+ * How much a megatile's picture changes from its outermost row of pixels to the next one
+ * in, on each side: `megatile * 4 + side`, in `edgeDistance`'s units. The grain of the
+ * picture at that edge — rock is rough, a ramp's slope is smooth — and what a join has to
+ * be measured against: the eye finds a step of ten across a smooth slope and not a step
+ * of twenty across rubble.
+ */
+export function edgeGrain(tileset: Tileset): Float32Array {
+  const cached = grains.get(tileset);
+  if (cached) return cached;
+  const count = tileset.megatileCount;
+  const out = new Float32Array(count * 4);
+  const { palette } = tileset;
+  const last = MEGATILE_PX - 1;
+  const diff = (a: number, b: number) => Math.abs(palette[a * 4] - palette[b * 4]) + Math.abs(palette[a * 4 + 1] - palette[b * 4 + 1]) + Math.abs(palette[a * 4 + 2] - palette[b * 4 + 2]);
+  for (let m = 0; m < count; m++) {
+    let left = 0, top = 0, right = 0, bottom = 0;
+    for (let i = 0; i < EDGE_PX; i++) {
+      left += diff(paletteIndexAt(tileset, m, 0, i), paletteIndexAt(tileset, m, 1, i));
+      top += diff(paletteIndexAt(tileset, m, i, 0), paletteIndexAt(tileset, m, i, 1));
+      right += diff(paletteIndexAt(tileset, m, last, i), paletteIndexAt(tileset, m, last - 1, i));
+      bottom += diff(paletteIndexAt(tileset, m, i, last), paletteIndexAt(tileset, m, i, last - 1));
+    }
+    out[m * 4 + SIDE_INDEX.left] = left / EDGE_BYTES;
+    out[m * 4 + SIDE_INDEX.top] = top / EDGE_BYTES;
+    out[m * 4 + SIDE_INDEX.right] = right / EDGE_BYTES;
+    out[m * 4 + SIDE_INDEX.bottom] = bottom / EDGE_BYTES;
+  }
+  grains.set(tileset, out);
+  return out;
+}
+
+/**
+ * How much of a step the join between megatile `a` and the megatile `b` on its `side` is,
+ * beyond the grain of the two pictures there: `edgeDistance` across the join, less the
+ * mean of what each picture does by itself one pixel in. Around 0 for tiles drawn to meet.
+ */
+/**
+ * The step at which a join shows, for View ▸ Seam Overlay. Measured over sixteen of the
+ * game's own maps, 0.2–2% of the joins between tiles are steeper than this (around
+ * doodads and cliff faces, mostly); inside a ramp stretched along its cliff, one in ten.
+ */
+export const SEAM_SHOWS = 8;
+/** The step at which the overlay draws a join at full strength. */
+export const SEAM_GLARES = 24;
+
+export function seamStep(tileset: Tileset, a: number, side: Side, b: number): number {
+  const grain = edgeGrain(tileset);
+  const across = edgeDistance(edgeTable(tileset), a, side, b, OPPOSITE[side]);
+  return across - (grain[a * 4 + SIDE_INDEX[side]] + grain[b * 4 + SIDE_INDEX[OPPOSITE[side]]]) / 2;
+}
+
 /* ── Candidates ─────────────────────────────────────────── */
 
 export interface BlendCandidate {

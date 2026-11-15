@@ -4,7 +4,7 @@ import { gameDataRevisionAtom, gameDataSourceAtom } from "../atoms/gameDataAtoms
 import { GameDataBody } from "../components/dialogs/GameDataDialog";
 import Toasts from "../components/chrome/Toasts";
 import { formatBytes } from "../editor/save";
-import { copyKind, type CopyKind } from "../gamedata/copies";
+import { copyKind, lacksLanguageModule, type CopyKind } from "../gamedata/copies";
 import { resolveAssetSource } from "../gamedata/source";
 import { listStoredCopies, profileOf, type StoredCopy } from "../gamedata/store";
 import { SITE_ORIGIN } from "../moveIn";
@@ -91,6 +91,11 @@ export default function GameDataPage() {
                       {t("{n, plural, one {# file} other {# files}}", { n: copy.files })} · {formatBytes(copy.bytes)}{when(copy.at) ? ` · ${when(copy.at)}` : ""}
                       {copy.where === "memory" ? ` · ${t("until this tab closes")}` : ""}
                     </div>
+                    {lacksLanguageModule(copy) && (
+                      <div className="pg-copy-facts dim">
+                        {t('No Local.dll: with "The game\'s own screen" on in the play page\'s options, Ctrl or Alt with a number (control groups) and F2–F4 do nothing. To keep it, remove the copy and choose the StarCraft folder again.')}
+                      </div>
+                    )}
                   </li>
                 );
               })}

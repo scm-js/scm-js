@@ -23,6 +23,16 @@ export function copyKind(copy: Pick<StoredStamp, "from" | "profile" | "staredit"
   return copy.staredit || /^https?:\/\//i.test(copy.from) ? "download" : "classic";
 }
 
+/**
+ * A copy of somebody's 1.16 files that the play page plays from without the game's own keys for
+ * control groups and F2–F4: it has the play set but not the folder's `Local.dll` (`play.ts#PLAY_LANGUAGE`)
+ * — made before the copy kept it, or from the archives without their folder. Never a Remastered
+ * copy (that game has no such file), the download, or a copy without the play set.
+ */
+export function lacksLanguageModule(copy: Pick<StoredStamp, "from" | "profile" | "staredit" | "play">): boolean {
+  return copyKind(copy) === "classic" && copy.play !== undefined && !copy.play.language;
+}
+
 /** Whether any of the copies came from the person's own game rather than the free download. */
 export function ownGame(copies: readonly Pick<StoredStamp, "from" | "profile" | "staredit">[]): boolean {
   return copies.some((c) => { const k = copyKind(c); return k === "classic" || k === "remastered"; });

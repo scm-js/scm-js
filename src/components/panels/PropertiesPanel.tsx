@@ -1,3 +1,6 @@
+import { tileBlockAtom } from "../../atoms/tileBlockAtoms";
+import { providedTypesAtom } from "../../atoms/pieceAtoms";
+import { declaredTerrains } from "../../editor/pieceList";
 import { useState } from "react";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { Crosshair, MousePointer2, SquareDashed, Trash2 } from "lucide-react";
@@ -23,6 +26,11 @@ import { displayColorHex, PLAYER_COLORS, playerColorIndex } from "../../data/pla
 import { FOG_PLAYERS, fogCount, fogPlayersAt, playerBit } from "../../editor/fog";
 import { fogPlayersLabel } from "../../hooks/useFogTools";
 import { terrainName, TILESET_BY_ID } from "../../data/tilesets";
+import { isBorrowedTerrain } from "../../editor/borrow";
+import { isCopiedTerrain } from "../../editor/terrainCopyLattice";
+import { copyHostsAtom } from "../../atoms/copyAtoms";
+import { copyHostKey } from "../../services/terrainCopies";
+import { borrowedIdLabel } from "../../hooks/useTerrainTools";
 import { unitLabel } from "../../data/units";
 import { useTileset } from "../../hooks/useTileset";
 import { useUnitTools } from "../../hooks/useUnitTools";
@@ -32,7 +40,7 @@ import { spriteKind } from "../../editor/sprites";
 import { SpriteFlag } from "../../formats/chk/sections/objects";
 import { doodadOrigin } from "../../formats/tileset/doodads";
 import { DoodadThumb } from "./DoodadThumb";
-import { heightLabel, hexTile, isPairTerrain, terrainLabel, terrainOf, tileGroupLabel, tileInfo } from "../../formats/tileset/palette";
+import { heightLabel, hexTile, isPairTerrain, pairTerrain, terrainLabel, terrainOf, tileGroupLabel, tileInfo } from "../../formats/tileset/palette";
 import { UnitUsed } from "../../editor/units";
 import type { UnitRecord } from "../../formats/chk/sections/objects";
 import { Button, Check, NumberInput } from "../ui";
@@ -49,7 +57,7 @@ function Row({ k, children }: { k: string; children: React.ReactNode }) {
   );
 }
 
-const MODE_LABEL = { isom: msg("Isometric"), rect: msg("Rectangular"), tile: msg("Tile"), blend: msg("Blend") } as const;
+const MODE_LABEL = { isom: msg("Isometric"), rect: msg("Rectangular"), tile: msg("Tile"), blend: msg("Blend"), heal: msg("Heal"), pin: msg("Pin") } as const;
 
 function TerrainProps() {
   const info = TILESET_BY_ID[useAtomValue(mapTilesetAtom)];
@@ -58,6 +66,7 @@ function TerrainProps() {
   const variation = useAtomValue(rectVariationAtom);
   const mode = useAtomValue(terrainModeAtom);
   const brush = useAtomValue(brushSizeAtom);
+  const block = useAtomValue(tileBlockAtom);
   const cursor = useAtomValue(cursorTileAtom);
   const scenario = useAtomValue(scenarioAtom);
   useAtomValue(terrainRevisionAtom); // the tile under the cursor changes as strokes land
@@ -66,18 +75,30 @@ function TerrainProps() {
   const underId = scenario && cursor.x < scenario.width && cursor.y < scenario.height ? scenario.tiles[cursor.y * scenario.width + cursor.x] : null;
   const under = loaded && underId !== null ? tileInfo(loaded.tileset, info.terrain, underId) : null;
   // A pair terrain (a mod's added ground) has no name in the tileset's table; the Rect brush's is asked of the files.
-  const brushTerrain = isPairTerrain(terrain) && mode === "rect" ? terrainOf(loaded?.tileset ?? null, info.terrain, terrain) : null;
+  const declared = useAtomValue(providedTypesAtom);
+  // A pair a plugin named (`api.terrain.provideTypes`) by that name, else as the files say.
+  const brushTerrain = isPairTerrain(terrain) && mode === "rect"
+    ? (loaded ? declaredTerrains(loaded.tileset, info.terrain, declared.filter((d) => d.tileset === info.id).flatMap((d) => d.types)).find((d) => d.id === terrain) : undefined) ?? terrainOf(loaded?.tileset ?? null, info.terrain, terrain)
+    : null;
   const dash = <span className="faint">—</span>;
+  // A copied terrain (terrainCopyLattice.ts) by the Rect tab's name of its copy.
+  const copyHosts = useAtomValue(copyHostsAtom);
+  const copied = isCopiedTerrain(terrain) && loaded && scenario
+    ? copyHosts.get(copyHostKey(tilesetIndex(scenario), loaded.tileset))?.terrains.find((c) => c.id === terrain)
+    : undefined;
+  const copiedType = copied && loaded ? pairTerrain(loaded.tileset, info.terrain, copied.flat) : null;
 
   return (
     <div className="props">
       <Row k={t("Brush")}>
         {mode === "isom" || mode === "rect"
-          ? <>{brushTerrain ? terrainLabel(brushTerrain) : translate(terrainName(info, terrain))}{mode === "rect" && variation >= 0 ? <span className="faint"> {t("· var {variation}", { variation })}</span> : null}</>
+          ? <>{brushTerrain ? terrainLabel(brushTerrain) : mode === "isom" && isBorrowedTerrain(terrain) ? borrowedIdLabel(terrain) : mode === "isom" && copiedType ? terrainLabel(copiedType) : translate(terrainName(info, terrain))}{mode === "rect" && variation >= 0 ? <span className="faint"> {t("· var {variation}", { variation })}</span> : null}</>
+          : mode === "heal" ? t("joins that show")
+          : mode === "pin" ? t("tiles to keep")
           : <span className="row" style={{ gap: 6 }}><TileThumb loaded={loaded} id={tile} size={16} /><span className="mono">{hexTile(tile)}</span></span>}
       </Row>
       <Row k={t("Mode")}>{MODE_LABEL[mode]}</Row>
-      <Row k={t("Size")}>{mode === "blend" ? "1 × 1" : `${brush} × ${brush}`}</Row>
+      <Row k={t("Size")}>{mode === "blend" ? "1 × 1" : mode === "tile" && block ? t("{cols} × {rows} block", { cols: block.cols, rows: block.rows }) : `${brush} × ${brush}`}</Row>
       <div className="props-section">{t("Under cursor")}</div>
       <Row k={t("Tile")}>{underId !== null ? <span className="mono">{underId} · {hexTile(underId)}</span> : dash}</Row>
       <Row k={t("Group")}>{under && loaded ? <>{tileGroupLabel(loaded.tileset, info.terrain, under.group)} <span className="faint mono">g{under.group} s{under.slot}</span></> : dash}</Row>

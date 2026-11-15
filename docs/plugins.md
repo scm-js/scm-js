@@ -1053,6 +1053,7 @@ plugin activation order, and cannot block or change it. A listener that rewrites
 | `"commands"`, `"services"` | A plugin added or removed a command or service. |
 | `"dialogs"` | A dialog opened or closed. |
 | `"gameData"`, `"language"` | The game data or the editor's language changed. |
+| `"pieces"` | Pieces were learned or forgotten, or a plugin provided or withdrew a set: `terrain.pieces()` may answer differently. |
 
 Only `"document"` and `"commit"` carry a payload. The others say that something changed,
 and you read the new state from the API. A plugin that acts on maps as they open listens
@@ -1181,6 +1182,61 @@ const tool = api.ui.mapTool({
   },
 });
 ```
+
+### Named pieces for a tileset
+
+A tileset made for a mod draws its walls, buildings and floors across many tile groups,
+and the Tile palette's Pieces view finds the parts maps lay whole. A plugin that knows the
+tileset can name its pieces instead: they are listed under the plugin's heading, ahead of
+the ones cut from maps, and the search box finds them by name and category. This one names
+three pieces and one kind of flat ground, and adds a menu item that lays the first piece
+in the middle of the map.
+
+The group and slot numbers are the tileset's own: read them off the Tile palette's sheet,
+where each row is a group with its number at the left. The ones below are made up.
+
+```ts
+const PIECES = [
+  { name: "Gatehouse", category: "Buildings", group: 2304, slot: 0, cols: 12, rows: 10 },
+  { name: "Wall, straight", category: "Walls", group: 2314, slot: 0, cols: 4, rows: 9 },
+  { name: "Dry grass edge", category: "Ground", group: 1908, slot: 0, cols: 4, rows: 2 },
+];
+
+async function provide() {
+  // blockFrom reads the tileset, so wait for its graphics; a slot with no picture becomes a hole.
+  if (api.tileset.id() !== "badlands" || !(await api.tileset.load())) return;
+  const pieces = PIECES.flatMap(({ name, category, ...rect }) => {
+    const block = api.terrain.blockFrom(rect);
+    return block ? [{ name, category, block }] : [];
+  });
+  // The same id again replaces the set, so calling this on every map that opens is safe.
+  api.terrain.providePieces({ id: "ruins", label: "Ruins", tileset: "badlands", pieces });
+}
+
+void provide();
+api.events.on("document", () => { void provide(); });
+api.events.on("gameData", () => { void provide(); });
+
+// A pair of groups the tileset leaves untyped, named for the Rect brush and Replace Terrain.
+api.terrain.provideTypes({ id: "ground", tileset: "badlands", types: [{ name: "Ash plates", group: 1690 }] });
+
+api.menu.add("Tools", {
+  label: "Lay a Gatehouse in the Middle",
+  run: () => {
+    const info = api.document.info();
+    const gatehouse = api.terrain.pieces().find((p) => p.name === "Gatehouse");
+    if (!info || !gatehouse) return;
+    const block = api.terrain.blockOf(gatehouse);
+    api.document.edit("Gatehouse", (tx) => {
+      tx.placeBlock(block, (info.width - block.cols) >> 1, (info.height - block.rows) >> 1);
+    });
+  },
+});
+```
+
+Both lists go when the plugin is turned off. Picking a piece in the view, or
+`api.terrain.setActive({ mode: "tile", block })`, arms the Tile brush with it, so the
+person lays it where they click and drags to repeat it.
 
 ### Copies of the selection under the symmetry setting
 
@@ -2021,13 +2077,20 @@ removes doodads the terrain change broke and units the new ground cannot hold (i
 Units palette's *Remove stranded units* is on), commits and repaints.
 
 - **Terrain:** read and set tiles (`tileAt`, `setTile`, `setTiles`), the editor's brushes
-  (`stampTerrain`, `paintIsom`, `fillArea`, `placeBlend`, `replaceTerrain`, `fillFlat`),
-  and the ISOM lattice (`rebuildIsom`, `tilesFromIsom`). Most brushes need the tileset
-  graphics.
+  (`stampTerrain`, `paintIsom`, `fillArea`, `placeBlend`, `replaceTerrain`, `fillFlat`,
+  `heal`), and the ISOM lattice (`rebuildIsom`, `tilesFromIsom`). Most brushes need the
+  tileset graphics. `pin` keeps tiles as they are: a pinned tile is skipped by everything
+  here that lays terrain by rule (`paintIsom`, `stampTerrain`, `fillFlat`, `fillArea`,
+  `replaceTerrain`, `tilesFromIsom`, `heal`), as it is by the editor's own brushes, and
+  still written by `setTile`, `setTiles`, `placeBlend`, `placeBlock`, `fillPattern`,
+  `paste` and the doodad calls.
+- **Blocks:** `placeBlock` lays a block of tiles with its top-left at a tile, as the Tile
+  brush lays a block or a piece; `fillPattern` repeats one over an area, as Fill Map does
+  with a block. Holes and cells off the map are skipped; ISOM is left alone.
 - **Objects:** units (`placeUnit`, `canPlaceUnit`, `addUnits`, `moveUnits`, `updateUnits`,
-  `placeStartLocations`, …), sprites, doodads (`placeDoodad`, `convertDoodads`), locations
-  (`addLocation`, `editLocation`; slot 63, Anywhere, is protected), fog (`setFog`,
-  `floodFog`, …) and `paste` for a whole `Clip`.
+  `placeStartLocations`, …), sprites, doodads (`placeDoodad`, `placeStretchedDoodad`,
+  `convertDoodads`), locations (`addLocation`, `editLocation`; slot 63, Anywhere, is
+  protected), fog (`setFog`, `floodFog`, …) and `paste` for a whole `Clip`.
 - **Symmetry:** `mirror` and `mirrorPoint` give the positions Tools ▸ Symmetry would also
   paint, so your edit can follow the user's setting.
 - `note(text)` adds a line to the status bar message.
@@ -2147,7 +2210,8 @@ Reading triggers and everything needed to show one. Writing is `document.update`
 
 **To generate triggers, write text.** `tx.triggers.fromText` parses the text format,
 interns its strings and resolves names against the open map. That is easier than filling
-records field by field:
+records field by field, and text with a mistake in it throws with the line and changes
+nothing:
 
 ```ts
 const source = `
@@ -2511,6 +2575,75 @@ lattice (`diamondAt`, `diamondsIn`), `floodRegion` and `blendCandidates`. Also t
 palette's current brush (`active` / `setActive`) and Tools ▸ Symmetry (`symmetry` /
 `setSymmetry`, `mirror`).
 
+For hand-made terrain: `seamStep` is the measure View ▸ Seam Overlay draws by and `seams`
+counts the joins it would draw; `pinned` lists the pinned tiles and `handLaid` the tiles
+the isometric data does not account for, which are the ones worth pinning before a plugin
+repaints around them; `symmetryShares` says how alike the map is to its image under each
+symmetry mode, and `fairness` is the full report for one mode: the small squares that
+differ in walking, height and building, where they are, and the resources with no equal
+counterpart.
+
+```ts
+// Widen the picked ramp by three steps and keep it as laid.
+const ramp = api.palette.active().doodad;
+const [axis] = api.palette.stretchAxes(ramp);
+if (axis) {
+  api.document.edit("Wide ramp", (tx) => { tx.pin(tx.placeStretchedDoodad(ramp, 40, 30, axis, 3)); });
+}
+
+// Is a mirrored map the same on both sides?
+const report = api.terrain.fairness("h");
+if (report && report.unlike > 0) {
+  api.ui.status(`${report.unlike} small squares differ in ${report.places.length} places`);
+}
+```
+
+The Tile palette's sheet, blocks and pieces are here too. `sheet()` says how big the
+tileset's sheet is and where the groups a data set adds begin; `blockFrom` takes a
+rectangle of it as a block; `pieces()` is the list the Pieces view shows, `pieceAt` the
+piece Alt+click would pick and `blockOf` the block that lays a piece; `cutPieces` runs the
+editor's rule over maps of your own. `providePieces` lists named pieces of yours in the
+Pieces view, and `provideTypes` names flat ground the tileset does not type, for the Rect
+brush. `active().block` is the block the Tile brush lays, and `setActive({ block })` arms
+it. [Named pieces for a tileset](#named-pieces-for-a-tileset) puts these together.
+
+Terrain borrowed from another tileset (the Isometric tab's "From other tilesets"):
+`borrowed()` resolves to what the open map's tileset can lay that way, each with an `id`
+for `setActive({ terrain })` and `tx.paintBorrowed(diamonds, id)`, which paints it with
+the other tileset's own brush and writes the copies. Await it before painting: it reads
+the other tileset's files; `{ scan: true }` works the copies out first where nobody has.
+`provideBorrowTable` hands the editor the pairs of tiles a mod meant for a pair of
+tilesets, instead of its own match by pictures. Each row of `borrowed()` also says, in
+`borders`, which of this tileset's grounds the terrain has drawn borders against and where
+each came from (`"maps"`, a plugin's id, or the data set's terrain file); where one is
+known, `tx.paintBorrowed` lays the border as the brush does (unless the Drawn borders
+switch is off). `provideBorderTable` gives one: the tiles to lay for each shape of the
+border between a borrowed terrain and a ground, and it stands ahead of the terrain file's
+and of what maps taught. A mod's `terrain.json` does what `providePieces`, `provideTypes`,
+`provideBorrowTable` and `provideBorderTable` do, for everyone who adds the mod ([Terrain
+a mod declares](mods.md#terrain-a-mod-declares)); what a plugin declares is listed ahead
+of it.
+
+```ts
+const roof = (await api.terrain.borrowed()).find((b) => b.source === "install" && b.name === "Roof");
+if (roof) api.document.edit("Roof", (tx) => { tx.paintBorrowed(api.terrain.diamondsIn({ x0: 20, y0: 20, x1: 36, y1: 30 }), roof.id); });
+// roof.borders: [{ ground: 2, from: "maps" }] — a drawn border against Dirt, learned from maps
+```
+
+Copied terrain (the Isometric tab's "Copied terrain", [in the
+guide](guide.md#copied-terrain)): `copies()` resolves to the terrains the open map's
+tileset holds again at another height with their edge pieces, each with an `id` for
+`setActive({ terrain })` and `tx.paintCopy(diamonds, id)`, whether it is `complete` (else
+how many shapes are `missing`), and the blocks of tiles it can be laid with and the ground
+each is drawn for. `provideCopies` hands the editor one such block, which takes the place
+of what the editor found for that terrain and height; a mod's terrain file can carry the
+same (`copies`).
+
+```js
+const mud = (await api.terrain.copies()).find((c) => c.complete && c.height === 1);
+if (mud) api.document.edit("Mud", (tx) => { tx.paintCopy(api.terrain.diamondsIn({ x0: 20, y0: 20, x1: 36, y1: 30 }), mud.id); });
+```
+
 `checkIsom()` measures how well the ISOM lattice matches the tiles. Offer a rebuild when
 it reports `stale`, not merely `mismatched`: some mismatch (hand-placed tiles, blends)
 never goes away.
@@ -2576,7 +2709,10 @@ What the Units, Sprites, Doodads and Fog palettes have picked and what they list
 plugin can use "whatever the user chose" without a picker of its own. Paint does this. It
 also holds the placement rules (collision, terrain, snap to grid, remove stranded units)
 that `placeUnit`, `canPlaceUnit` and `query.placement` follow. The Terrain palette's pick
-is `terrain.active()`.
+is `terrain.active()`. For a doodad, `stretchAxes` lists the directions it can be
+stretched along (a ramp along its cliff, a bridge along and across its deck) and
+`doodadTwin` names the doodad that is its mirror image, the ramp for the cliff running the
+other way.
 
 ### `api.names`
 

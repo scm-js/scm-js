@@ -69,6 +69,17 @@ describe("scmjs bot ladder: who plays", () => {
     expect(parseEntrants([a, a], ["r"]).map((x) => [x.key, x.label])).toEqual([["mcrave", "McRave"], ["mcrave-2", "McRave (mcrave-2)"]]);
   });
 
+  it("takes a JavaScript bot's module as a bot, named after its file", () => {
+    const dir = tmp();
+    const js = join(dir, "my-bot.mjs"), ts = join(dir, "Rusher.ts");
+    writeFileSync(js, "export default { name: 'x', create: () => ({ onFrame() {} }) };");
+    writeFileSync(ts, "export default { name: 'y', create: () => ({ onFrame() {} }) };");
+    const a = botFile(dir, "a.scmbot", "mcrave", "McRave");
+    expect(parseEntrants([`${js}:t`, a, ts], ["r"]).map((x) => [x.key, x.label, x.race, x.file])).toEqual([
+      ["my-bot", "my-bot", "t", js], ["mcrave", "McRave", null, a], ["rusher", "Rusher", null, ts],
+    ]);
+  });
+
   it("takes a colon that is not a race as part of the path, and says what is wrong", () => {
     const dir = tmp();
     const odd = join(dir, "x:y");

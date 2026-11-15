@@ -16,6 +16,7 @@ import type { ModOverlay } from "./mod/overlay";
 import { t } from "./i18n";
 import { plainRunnerError } from "./runnerwords";
 import { CliError, dot, duration, mark, num, pc, print, table } from "./ui";
+import { isJsBot, jsBotName, typeScriptBotProblem } from "./files";
 
 /** A frame of the game on Fastest, as the clock counts it. */
 const FRAME_MS = 42;
@@ -58,7 +59,7 @@ export interface Entrant {
   /** As the tables show it: the bot's name, "Terran computer". */
   label: string;
   kind: "bot" | "computer";
-  /** The `.scmbot`, for a bot. */
+  /** The `.scmbot`, or a JavaScript bot's module, for a bot. */
   file?: string;
   /** The race it always plays (`mybot.scmbot:p`, a computer's), or null for each of `--races` in turn. */
   race: RaceLetter | null;
@@ -96,6 +97,13 @@ export function parseEntrants(specs: readonly string[], races: readonly RaceLett
     // (bot.scmbot:x, where bot.scmbot is there: the x is a race mistyped, not part of the file's name)
     if (!existsSync(name) && colon > 0 && existsSync(spec.slice(0, colon))) throw new CliError(t("{spec}: \"{race}\" is not a race", { spec, race: spec.slice(colon + 1) }), t("A race after the colon: z, t, p or r, or the word (mybot.scmbot:protoss)."), 2);
     if (!existsSync(name)) throw new CliError(t("No file {name}", { name }), t("A bot is a .scmbot file (scmjs bot build writes out/<key>.scmbot), or computer for the game's own."), 2);
+    // A JavaScript bot's module (BOT_API): named after its file, as the runner names it.
+    if (isJsBot(name)) {
+      const ts = typeScriptBotProblem(name);
+      if (ts) throw new CliError(ts, null, 2);
+      add({ key: slug(jsBotName(name)) || "bot", label: jsBotName(name), kind: "bot", file: resolve(name), race: suffix });
+      continue;
+    }
     let header: ReturnType<typeof readBotHeader>;
     try { header = readBotHeader(read(name)); }
     catch { throw new CliError(t("{name} is not a bot file", { name }), t("A bot is a .scmbot file, as scmjs bot build writes it."), 2); }

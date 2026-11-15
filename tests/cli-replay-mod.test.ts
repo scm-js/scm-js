@@ -12,7 +12,7 @@ import { chk, cmds, le16, writeReplay } from "@scm-js/replay/write";
 import { describe, expect, it } from "vitest";
 import { emptyDat, encodeDat } from "../src/formats/dat/table";
 import { encodeTblFile } from "../src/formats/dat/tblFile";
-import { dataSetHash } from "../src/formats/mod/sources";
+import { gameFilesHash as dataSetHash } from "./support/modHash";
 import { printReplayInfo, replayReport } from "../cli/src/replay";
 import { buildOrders, checkPlayedMod, modReplayReason, refuseModReplay, replayNamer } from "../cli/src/replaymod";
 import { CliError, visible } from "../cli/src/ui";

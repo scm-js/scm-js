@@ -625,7 +625,7 @@ export function createMcpServer(options: McpOptions = {}): { server: McpServer; 
 
   reg("mod_info", {
     title: "What a mod is",
-    description: "A StarCraft mod's name, files and sizes by kind (tables, scripts, pictures, sounds, terrain, strings, AI), which tables are wider than the game's and in which layout (DatExtend's expanded .dat, GPTP's .datex), the plugins and FireGraft files it carries (never run), the game it is for, and its hash (`hash`: the name the play page and a replay know the mod by, over every file it provides, its plugins and its FireGraft project; `withoutPlugins`: the same without the plugins, what a page that runs none of them presents), as `scmjs mod info` prints it. A copy of the game in the folder (a folder that holds StarDat.mpq) is not the mod: its own archives and everything under its Maps folder are left out, and the archives among them are named in `gameCopy`. `races` lists the races the mod adds as its mod.json declares them (empty when none are declared).",
+    description: "A StarCraft mod's name, files and sizes by kind (tables, scripts, pictures, sounds, terrain, strings, AI), which tables are wider than the game's and in which layout (DatExtend's expanded .dat, GPTP's .datex), the plugins and FireGraft files it carries (never run), the game it is for, and its hash (`hash`: the name the play page and a replay know the mod by, over every file it provides, its plugins and its FireGraft project; `withoutPlugins`: the same without the plugins, what a page that runs none of them presents), as `scmjs mod info` prints it. A copy of the game in the folder (a folder that holds StarDat.mpq) is not the mod: its own archives and everything under its Maps folder are left out, and the archives among them are named in `gameCopy`. `races` lists the races the mod adds as its mod.json declares them (empty when none are declared). `terrain` is its terrain.json beside mod.json (named flat ground, pieces and borrowed-terrain tables per tileset, for the editor), with counts per tileset; null when it has none.",
     inputSchema: { path: modPath, starcraft },
     annotations: { readOnlyHint: true },
   }, tool(async ({ path: file, starcraft: sc }) => {
@@ -636,7 +636,7 @@ export function createMcpServer(options: McpOptions = {}): { server: McpServer; 
 
   reg("mod_check", {
     title: "Check a mod",
-    description: "The lints across a mod's tables, strings, scripts and files (scmjs mod check): references past their tables, strings past their string table, images with no GRP or no iscript entry, button sets and requirements for things that are not there (errors); weapons and iscript entries the mod added that nothing uses, sound rows with no file, mixed extended layouts, units with one name (warnings). Each finding has where and why; `failed` is true when there is an error. What the mod leaves as the game had it is not judged. `hints` are not findings and fail nothing: one says when the mod's files suggest races of its own (names past the game's in network.tbl, per-race console files) and its mod.json declares none.",
+    description: "The lints across a mod's tables, strings, scripts and files (scmjs mod check): references past their tables, strings past their string table, images with no GRP or no iscript entry, button sets and requirements for things that are not there (errors); weapons and iscript entries the mod added that nothing uses, sound rows with no file, mixed extended layouts, units with one name (warnings). Each finding has where and why; `failed` is true when there is an error. What the mod leaves as the game had it is not judged. `hints` are not findings and fail nothing: one says when the mod's files suggest races of its own (names past the game's in network.tbl, per-race console files) and its mod.json declares none. A terrain.json beside the mod's mod.json is checked too: rows its reader leaves out, a tileset section made for another tile table than the mod's (the editor does not use it), rows the table has no pictures for (warnings).",
     inputSchema: { path: modPath, all: z.boolean().optional().describe("list every finding in the text; the data always has them all"), starcraft },
     annotations: { readOnlyHint: true },
   }, tool(async ({ path: file, all, starcraft: sc }) => {
@@ -689,21 +689,22 @@ export function createMcpServer(options: McpOptions = {}): { server: McpServer; 
 
   reg("mod_header", {
     title: "A mod's ids by name, for a bot",
-    description: "Write a mod's units, weapons, upgrades and techs by name for a BWAPI bot made for it (scmjs mod header): <Mod>.h, C++ for a bot built with scmbot (Cosmonarchy_BW::UnitTypes::Terran_Mason is a BWAPI::UnitType), and <Mod>.ids.json, the same ids for other languages, both carrying the mod's name and hash. With `bot`, `out` is a bot's folder (it has scmbot.json) and its scmbot.json gains the mod, which `scmjs bot build` (Docker) writes into the .scmbot file; the runners and the play page then say the bot was made for that mod. Overwrites the two files in `out`.",
+    description: "Write a mod's units, weapons, upgrades and techs by name for a BWAPI bot made for it (scmjs mod header): <Mod>.h, C++ for a bot built with scmbot (Cosmonarchy_BW::UnitTypes::Terran_Mason is a BWAPI::UnitType), and <Mod>.ids.json, the same ids for other languages, both carrying the mod's name and hash. With `bot`, `out` is a bot's folder (it has scmbot.json) and its scmbot.json gains the mod, which `scmjs bot build` (Docker) writes into the .scmbot file; the runners and the play page then say the bot was made for that mod. With `js`, <Mod>.mjs in place of the header: the same ids as a JavaScript module for a JavaScript bot (which is also given the mod's names, name and hash at run time). Overwrites the two files in `out`.",
     inputSchema: {
       path: modPath,
       out: z.string().optional().describe("the folder the files go in (the working directory by default); with `bot`, the bot's folder"),
       namespace: z.string().optional().describe("the C++ namespace and the files' name (the mod's name made an identifier by default)"),
       bot: z.boolean().optional().describe("`out` is a bot's folder: write the mod into its scmbot.json"),
+      js: z.boolean().optional().describe("for a JavaScript bot: <Mod>.mjs in place of the C++ header (not with `bot`)"),
       starcraft,
     },
     annotations: { destructiveHint: true },
-  }, tool(async ({ path: file, out: to, namespace, bot, starcraft: sc }) => {
+  }, tool(async ({ path: file, out: to, namespace, bot, js, starcraft: sc }) => {
     const base = await gameFilesOrNull(sc);
-    const r = await writeModHeader(await openMod(file, base), base, { out: to, namespace, bot });
+    const r = await writeModHeader(await openMod(file, base), base, { out: to, namespace, bot, js });
     return ok([
       `${r.mod.name}: ${r.counts.units} units, ${r.counts.weapons} weapons, ${r.counts.upgrades} upgrades, ${r.counts.techs} techs named · hash ${r.mod.hash}`,
-      `Header: ${shown(r.files.header)}`, `Ids: ${shown(r.files.ids)}`,
+      `${js ? "Module" : "Header"}: ${shown(r.files.header)}`, `Ids: ${shown(r.files.ids)}`,
       ...(r.files.scmbot ? [`Bot: ${shown(r.files.scmbot)} now names the mod: build the bot again (scmjs bot build)`] : []),
       ...(r.fromGame.length ? [`From the game: the names of ${r.fromGame.join(", ")} (the mod has not got them)`] : []),
     ], r);

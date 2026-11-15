@@ -2,7 +2,7 @@
 import { parseScenario, MAP_VERSIONS, mapVersionOf, tilesetIndex } from "../../src/formats/chk/scenario";
 import { TILESETS } from "../../src/data/tilesets";
 import { FRAME_MS, type ModTag, type Replay } from "@scm-js/replay";
-import { normalizeRaces, type DataSetRace } from "../../src/formats/mod/races";
+import { normalizeRaces, type DataSetRace } from "@scm-js/mod";
 import type { Input } from "./files";
 import { msg, t, translate } from "./i18n";
 import { printBuilds, type NamesFrom, type PlayerBuilds } from "./replaymod";

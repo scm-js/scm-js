@@ -671,3 +671,104 @@ the picker for it is a decision nobody has taken. Tests: `tests/fileTypes.test.t
 whose `File`s differ, so a handed file says which route read it).
 Also `graphics.grpImage(bytes, frame, { palette, teamColor, flipped, shadow })` → `Promise<PluginImage | null>`
 (`graphics.ts`; throws on a palette that is no tileset file name; `tests/grp-picture.test.ts`) — see `gamedata.md`.
+
+**The terrain tools of 2026-11-13 on the API**, all additive: `tx.placeStretchedDoodad(id, tx, ty, axis,
+steps, owner?)` (as terrain, like the editor's stretch; `(tx, ty)` is where the doodad would stand
+unstretched, so the footprint's corner is that plus `stretched.offset`; answers the cells it covers, empty
+when it does not fit; no ground check; at most `MAX_STRETCH_STEPS` 128), `tx.heal(cells)`, `tx.pin(cells,
+on?)`, `terrain.seamStep` / `seams` / `pinned` / `handLaid` / `symmetryShares` / `fairness`,
+`palette.stretchAxes` / `doodadTwin`; types `StretchAxis`, `FairnessReport`, `FairnessPlace`,
+`UnmatchedResource`. **A transaction's rule-based writes skip pinned tiles** (`applyRuled` in `runEdit`:
+`stampTerrain`, `fillFlat`, `fillArea`, `replaceTerrain`, `heal`; `paintIsom` and `tilesFromIsom` pass
+the pins to the pass), because a pin that only the built-in brushes honoured would be undone by the
+first generator plugin; `setTile(s)`, `placeBlend`, `paste` and the doodad calls write through, as the
+Tile brush does. Pins did not exist before, so no existing plugin's result changes. `tx.pin` writes the
+pins file at once (`pinCellsAtom`) and the entry gets `pins = { before the first change, as it stands }`;
+a transaction that only pins is recorded (`hasEdits(entry) || entry.pins`), and a builder that throws
+has them rolled back by `rollbackEntryAtom`. `tests/plugin-terrain-tools.test.ts`.
+
+**Blocks and pieces on the API (2026-11-14)**, additive, version 1: types `TileBlock` (cols, rows, ids row by row with
+-1 for a hole, optional `origin`), `TerrainPiece` (tiles, slot, group, cols, rows, laid, name?, category?, copies — a
+*count* of the pieces it stands for, not the list — and source, `"maps"` or the plugin id), `TileSheetInfo`, `PieceMap`,
+`PieceSetSpec`, `TerrainTypeSpec`. `tx.placeBlock(block, x, y)` / `tx.fillPattern(cells, block, origin?)` are
+`tileSheet.ts#layBlock` / `layPattern` through `applyTiles` (written over pins, as `setTile`), the block checked by
+`plugins/pieces.ts#checkedBlock` (throws in words, so the builder throws and the transaction rolls back).
+`api.terrain.sheet` / `blockFrom` / `pieces` / `pieceAt` / `blockOf` / `cutPieces` / `providePieces` / `provideTypes` are
+`plugins/pieces.ts#pieceCalls`, spread into the terrain group. `pieces()` is `services/pieces.ts#sectionsFromStore`
+flattened (provided first, the cut with copies folded); the learned part is asked for on first use, and the new
+**`"pieces"` event** (`EVENT_ATOMS.pieces = [learnedPiecesAtom, providedPiecesAtom]`) fires when it lands or a set comes
+or goes — the map's own part follows the `"terrain"` event, which is why the new event does not listen to the revision.
+`blockOf` hands back the block a listed piece was made from (a `WeakMap` from the object handed out, so a provided
+piece keeps its own shape, which need not be a sheet rectangle), else builds the rectangle from `tiles`/`group`/`slot`.
+`cutPieces` needs the loaded tileset (the CV5 for the cut, the graphics to fold copies); without it, `[]`.
+`providePieces` / `provideTypes` keep `{key: plugin:id, …}` rows in `providedPiecesAtom` / `providedTypesAtom`
+(`atoms/pieceAtoms.ts`; global, not per document: they are per tileset), the same id replacing, returned as
+`bag.add(remove)` so they go with the plugin or a scope. `active()` gains `block` (a copy), `setActive({ block })` writes
+`tileBlockAtom` after the tile so a block given with a tile wins; `tileBlockAtom` joined the `"palette"` event's atoms.
+**Departures from the coordinator's contract:** `copies` is a number (the contract's "copies it stands for" read as the
+count; the list would hand out other pieces' tiles nobody asked for); `TileSheetInfo.groups` is the table's length;
+`sheet()`, `blockFrom` and the reads answer null / `[]` without the graphics rather than throwing; a provided piece with
+a tile whose slot has no picture counts as "a tile the loaded table lacks" (laying it would write a black tile), so
+`blockFrom` (holes for empty slots) is the way to build one; `pieceAt` answers cut pieces only (the Alt+click rule needs
+a sheet neighbour, which a provided block need not have). The headless host is `createPluginApi`, so all of it works
+there: the transaction calls and reads with a primed or loaded tileset, the provide calls register into the store's atoms
+and `pieces()` lists them (`tests/plugin-pieces.test.ts` "the host without the editor"); the Pieces view and the Rect
+list are the only readers that need a page. `@scm-js/core` exports the pure half (`core.md`).
+
+
+**Drawn borders on the API (2026-11-14, branch `borrowed-borders`)**, additive, version 1: `BorrowedTerrainInfo.borders?`
+(a field on `borrowed()` rows rather than a new `borders()` call: a border belongs to one borrowed terrain and the rows
+are what a plugin already holds; each `{ ground, from }`, `from` `"maps"`, a plugin id or `@dataset:<id>`) and
+`api.terrain.provideBorderTable(spec: BorderTableSpec)` (`{ id, tileset, source, terrain, ground, shapes }`, kept in
+`providedBordersAtom` ahead of the data set's rows, `bag.add(remove)`). Precedence per pair: plugin > terrain file >
+learned (`services/borders.ts#borderTables`). `borrowed()` now also `prepareBorders` before it resolves, and
+`tx.paintBorrowed` passes the record member and `peekBorderSetup` to its `BorrowStroke`, applies `r.changes` after the
+stroke's own, and records both members before their first change (so `finishEntry` / rollback carry the record too).
+The headless host gets both through `createPluginApi`; with no game Badlands to stand in, `peekBorderSetup` is null and
+`paintBorrowed` lays as before.
+
+**Borrowed terrain on the API (2026-11-14)**, additive, version 1: types `BorrowedTerrainInfo` (id, source, terrain, name,
+standIns, from — `"scan"` or the plugin id) and `BorrowTableSpec`. `api.terrain.borrowed(options?)` and
+`provideBorrowTable(spec)` are `plugins/borrow.ts#borrowCalls`, spread into the terrain group beside `pieceCalls`.
+**`borrowed()` is async** (a departure from the read calls' style, on purpose): `tx.paintBorrowed` runs inside a
+synchronous transaction and needs the source tileset's four files and the table, which are read from the game data and
+IndexedDB, so `borrowed()` reads what was found before (`readKnownBorrowed`), with `{ scan: true }` scans where nothing
+was found, then loads every listed source's context (`borrowContext`) before it resolves; `tx.paintBorrowed(diamonds, id)`
+(`paintBorrowedIn`) then finds it with `peekBorrowContext`, else adds a note and answers false. It runs one `BorrowStroke`
+per call over all the diamonds, applies through the transaction's `applyTiles`, writes the member at once and records it
+before its first change (`membersBefore`), so `finishEntry` sets `entry.members` and a builder that throws rolls the member
+back through `rollbackEntryAtom` → `stepPins`. `provideBorrowTable` keeps `{key, tileset, source, pairs}` in
+`providedBorrowAtom` (global, per tileset like the provided pieces), returned as `bag.add(remove)`; `refreshProvided`
+turns each row into a `providedTable` and its terrains, and the provided source takes the scan's place for that source
+(listing and painting). No event of its own: the palette re-reads on `providedBorrowAtom`. The headless host gets both
+calls (they are part of `createPluginApi`'s terrain group); `borrowed()` there reads the game's files through the same
+asset source and IndexedDB stand-in (memory) as the editor; with the game's own data in use (or none, as there) a game
+tileset already loaded is taken as the source (`gameOwnTileset`). `tests/borrow.test.ts` "is on the plugin API" drives the
+headless host: a provided table, `borrowed()`, `tx.paintBorrowed`, one undo, the note for a wrong id, dispose.
+`borrowed({ scan: true })` scans through `services/borrow.ts#scanBorrowed`, so in the editor it uses the worker pool
+(terrain.md "The scan in a worker") and in the headless host the sliced path; a scan stopped from the palette resolves
+`borrowed()` with what was known.
+
+**Copied terrain on the API (2026-11-14)**, additive, version 1: types `CopiedTerrainInfo` (id, terrain, height, group,
+complete, missing, blocks with their ground and `from`) and `CopyBlockSpec`; `api.terrain.copies(options?)` and
+`provideCopies(spec)` are `plugins/copies.ts#copyCalls`, spread beside `borrowCalls`; `tx.paintCopy(diamonds, id)` is
+`paintCopyIn`. `copies()` is async for the same reason as `borrowed()`: it awaits `scanCopies` (read back from IndexedDB, or
+worked out: sliced in the headless host) so the transaction finds the terrain synchronously. `paintCopyIn` picks the block as
+the brush does (continuing a patch the first diamond touches, else `chooseBlock` on `groundUnder`), runs one `CopyStroke`
+over all the diamonds; the outer ground the game's brush lays first is already applied, so it is recorded with
+`tiles.add`/`isom.add` (the `recordApplied` callback), the translated cells go through `applyTiles`, and the member
+(`COPY_MEMBER`) is recorded in `membersBefore` as `paintBorrowed`'s is. A refused diamond (pair ground not under it) is a
+note. `provideCopies` rows go to `providedCopiesAtom` (`beforeDataSet`); `services/terrainCopies.ts#republish` puts a
+provided block in place of the scan's for its (terrain, height); `watchCopiesInFront` republishes when the atom changes. The
+re-lay after other strokes is the editor's (`useTerrainTools.endStroke`); a transaction's `paintIsom` does not re-lay (left
+open: a plugin painting next to a patch cuts it as the game's brush would).
+
+**A data set's terrain file beside the plugins' declarations (2026-11-14).** The three provided atoms also hold rows a
+data set's `terrain.json` declares (terrain.md "A mod's terrain file in the editor"): key and `source` start with
+`@dataset:<id>`. The `provide*` writers put a plugin's row ahead of them (`beforeDataSet`), so a plugin's declaration of
+the same piece, pair or source table wins. Additive, version 1: `TerrainPiece.source` and `BorrowedTerrainInfo.from` may
+be `@dataset:<id>`; `BorrowTableSpec.standIns?` (source tiles that are only the nearest picture) makes a plugin's table
+offer what a scan would. `borrowed()` now always refreshes the provided tables (so a table that went away goes); no new
+event (the palette follows the atoms). No `gameData` call was added: a plugin attaching a data set does not hand a
+terrain file, and the Mod Editor can show a live edit with the `provide*` calls.
+

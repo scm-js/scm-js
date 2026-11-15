@@ -5,13 +5,45 @@ replay info|map|open|watch|export|share | mod info|unpack|pack|check|diff|new|bu
 E403 "too similar to scss, sockjs"), so the user chose the scope beside @scm-js/replay and @scm-js/plugin-api. The reader's page is `docs/cli.md`. The shape was the user's (2026-11-05): one command, a noun for
 each kind of thing (`map`, `replay`, `plugin`, `bot`), "an impressive UX tool … not overly engineered".
 
-**The reader's guide is organised by task** (2026-11-07 rewrite, branch `cli-docs`): `docs/cli.md`'s `##` pages are
-Getting started, Looking inside a map, Making a map, Changing a map, Maps in git, Running a map in the game, Replays,
-Sharing from the terminal, Bots, For developers, Command reference (every command linked to its section, a cheat
-sheet), then In the source. The old build-order pages' addresses are forwarded by `MOVED` in
-`scripts/lib/docs/site.mjs`. A new command gets a `###` on the page of its task and a row in the reference. Its
-pictures (`docs/images/cli-*.webp`) are made by `scripts/cli-screenshots.mjs` (see `docs-site.md`); re-run it when a
+**The reader's guide is organised by task** (2026-11-07 rewrite, branch `cli-docs`; 2026-11-14 pass, branch
+`cli-docs-pass`): `docs/cli.md`'s `##` pages are Getting started, Your setup, Looking inside a map, Making a map,
+Changing a map, Maps in git, Triggers in the game, Melee maps: layout and balance, Replays, Mods, Sharing from the
+terminal, Bots, AI tools, For developers, Command reference (every command linked to its section), then In the source. The old
+pages' addresses are forwarded by `MOVED` in `scripts/lib/docs/site.mjs`. A new command gets a `###` on the page of
+its task, a row in the reference, and a line in the cheat sheet when it is one people reach for. Its pictures
+(`docs/images/cli-*.webp`) are made by `scripts/cli-screenshots.mjs` (see `docs-site.md`); re-run it when a
 command's output changes, with `--play-url` at a staged scm-sim deploy when the play page lacks the newest runner.
+
+**What the 2026-11-14 pass settled** (the user asked whether the guide was current, too long, short of examples, and
+free of AI-sounding prose; it was current but for a handful of stale examples, and 39,000 words):
+- *Getting started is install, a first look, the cheat sheet, how help works.* "A first look" is five commands with
+  their real output on `tests/maps/ums.scx` (info, check, preview, diff, trace) and a table of where to read next. The
+  setup detail (the download, `doctor`, what needs StarCraft, updating, completion, Korean) is its own page, *Your
+  setup*, so a reader sees what the command does before 2,000 words of installing. The `###` slugs did not change, so
+  every `#fragment` still lands; only `MOVED`'s three entries into those sections were repointed.
+- *A command's section is: what it is for, an example with real output, an options table, then the edge cases.* Not
+  every section is there yet (the maps chapters mostly are). Examples are run, not written: the Mods chapter's are a
+  demo mod made with `mod new --tables units,weapons` and one damage value changed; the first test is a real run.
+- *The Mods chapter is the commands; `docs/mods.md` is the subject.* The play page's hand-over message and the exact
+  form of the hash moved to `mods.md` ("The hand-over from the command line", "How it is worked out" under The mod's
+  hash); the hash's history by date is told once, there. `cli.md` links rather than repeats.
+- *"Running a map in the game" is two pages*: Triggers in the game (trace, cost, test, coverage, with "From a bug
+  report to a test" tying `trace --replay`, `test record` and `test` together) and Melee maps: layout and balance
+  (analyze, rush, balance). `map --help` still has the one group; the guide says "much as".
+- *Wording.* "X is said" for "the command reports X" is gone (13 uses, found nowhere else in the docs): write who
+  tells whom ("the command tells you", "is reported", "is an error"). An option's old name is not mentioned where the
+  option is described; all seven are in "Renamed options" under For developers. No notes on what an earlier version
+  of the guide said.
+- *AI tools is a page of its own* (the user: "i want mcp better documented, seems like a powerful feature"), no
+  longer a `###` of For developers: setting it up (Claude Code with `--scope project`, Cursor's `.cursor/mcp.json`
+  with `"type": "stdio"`, Claude Desktop's config through Settings ▸ Developer ▸ Edit Config — checked against each
+  tool's own docs on 2026-11-14; VS Code is left to its docs, which were changing file and key), what to ask (a
+  request beside the tools it is for), one request step by step, the 33 tools with which write, what they can do to
+  the person's files, and the game tools. Every tool call and answer in it is real: the built `scmjs mcp` driven over
+  stdio (initialize, tools/list, tools/call) on `tests/maps/ums.scx`. The page says which commands are *not* tools.
+  A new tool gets a row in its table; a tool that differs from its command, a bullet under it.
+- *Not done, proposed*: a sample of the strings file in place of its description; output for `plugin check`,
+  `strings prune`, `replay share`, `account`; the long paragraphs left in Bots; the 80-row In the source table.
 
 ## Design
 
@@ -240,6 +272,68 @@ native/ — see scm-sim's docs/own-bots.md. Added 2026-11-06 with "Made by Jeany
 - Not in this slice: bot against bot (two processes synced through the relay — one BWAPI build fits a game's memory),
   a replay of the game saved out (the engine records commands; a `--replay` is a natural next step). Both came with
   `bot ladder` (below): the relay is local, in scm-sim's match runner.
+
+### JavaScript bots in `bot run` and `bot ladder` — 2026-11-13
+
+- scm-sim's runners (`run.ts`, `match.ts`) play a JavaScript bot's module (`BOT_API` 1, scm-sim `docs/bots.md`) as
+  BWAPI's client: BWAPI with no bot linked, its GameData read each frame by `ExactBotHost` (scm-sim
+  `docs/js-bots-plan.md`, J0–J2). The bot-less BWAPI (0.9 MB of wasm) is **inside** `run.mjs` and `match.mjs`
+  (`scripts/lib/client-build.mjs`), so the CLI fetches nothing new: a play page deployed with those runners plays
+  JS bots, an older one refuses the file as "not a bot file" (its `readBundle`).
+- The CLI's half is small: `files.ts` `isJsBot` (by extension `.js`/`.mjs`/`.ts`, where a `.scmbot` is told by its
+  magic), `jsBotName` (the file's name, as the runner names it), `typeScriptBotProblem` (`process.features.typescript`:
+  Node strips types itself from 22.18; the CLI's floor is 22.12, so an older Node is told to compile). `checkBotGame`
+  skips the kind check for one; `parseEntrants` adds one named after its file. The runner is spawned as for a
+  `.scmbot`; the bot's module is imported by the runner from its path.
+- Not yet: `bot new --js` (a starter folder: the types are public now as `@scm-js/bot`, below, so it can write a
+  `package.json` with it as a devDependency and Starter from `docs/bots.md`), and a JS bot's `fit` to a mod (J4).
+- Seen while taking the guide's run output (2026-11-13, staged ts-bots play build): `bot run --help` still says
+  `bot  a .scmbot file` and `bot ladder --help` "bots (.scmbot files)"; both take `.mjs`. Starter as terran on a
+  generated Jungle Duel (seed 1) printed three "a command of 11 bytes did not fit in this turn and was dropped"
+  errors when a wave of 16 attacked, and exited 1 for them: a group order's size against the turn's room (runner or
+  layer side, not looked into). scm-sim's `deploy-play.mjs` stages but then refuses `play/assets/client-*.wasm`
+  ("a .wasm file outside the bots' folder"): its upload check predates the page bundling BWAPI-for-JS.
+
+### `@scm-js/bot`, the bot types (`bot/`, `scripts/build-bot-types.mjs`) — 2026-11-13
+
+The public guide is `docs/bots.md` (a rewrite of scm-sim's private `docs/bots.md` for readers: Starter first, the
+short way, mods, running, the 90-game scores, the interface underneath, trust; no scm-sim paths; restructured
+2026-11-14 for people playing against a bot and people with a BWAPI bot as well, `docs-site.md`). The types package
+beside it, the user's "option 1":
+
+- **Name.** `@scm-js/bot`, beside `core`, `cli`, `mod`, `replay` (singular nouns; `plugin-api` is the one `-api`).
+  Folder `bot/` as `core/` and `cli/` are. Not on npm before 2026-11-13 (404).
+- **What it holds.** `bot/src/api.ts` and `bot/src/kit.ts`, **byte-for-byte copies** of scm-sim's `src/bot/api.ts`
+  and `src/bot/kit.ts` (the source of truth stays there), and `bot/src/index.ts` (ours: `export *` of both). The
+  tarball is `dist/index.d.ts`, `README.md`, `LICENSE`, `package.json` only: `dts-bundle-generator` on
+  `tsconfig.bot.json` (strict, `lib: ES2023`, `types: []`, `stripInternal` so `Game.update`/`aim`/`idOf`/
+  `sendToMine` and other `@internal` members are not in an author's completion), ~54 KB, no imports. Types only:
+  `exports` has a `types` condition alone, and the declared values (`BOT_API`, `UnitTypes`, `easyBot`…) do not exist
+  at run time; the guide says `import type` / JSDoc. A bot imports nothing at run time anyway (the page runs one file).
+- **Version.** Major = `BOT_API` (the build refuses a mismatch), as plugin-api's major is its API's. Set by hand in
+  `bot/package.json` (1.0.0 to start); bump the minor when the copies change, the major only if `BOT_API` does. Not
+  the editor's version: the interface does not move with editor releases.
+- **Keeping in step.** `node scripts/build-bot-types.mjs --from <scm-sim checkout>` copies the two files (refusing a
+  file that imports anything but `./api.ts`), prints the checkout's commit for the commit message, and builds;
+  `--check <scm-sim checkout>` fails when the copies differ. Copied from `~/github/scm-sim-ts-bots` (ts-bots,
+  540e90f "A friendly layer for JavaScript bots…") on 2026-11-13; once ts-bots merges, check against scm-sim main.
+  CI has no scm-sim, so the comparison is by hand, or `SCM_SIM_DIR=<checkout> npx vitest run tests/bot-package.test.ts`.
+- **Tests** (`tests/bot-package.test.ts`): the copies import only each other; name, major, `files`, `exports`, no
+  dependencies; the bundle builds with `BOT_API = 1` and without the internals; and **every `js`/`ts` block of
+  `docs/bots.md` and `bot/README.md` type-checks against the bundle** in a temp folder with
+  `node_modules/@scm-js/bot` (checkJs, strict, `noImplicitAny: false` because the guide's Starter indexes `ARMY` by
+  `game.race.name` as plain JS does). A block with `export default` is a module (given the JSDoc `EasyBot`, or
+  `BotModule` when it has `create(`, unless it has its own); a block with `game.` and no default export is wrapped
+  in `onFrame(game)`; the `api.` listings are not checked. A misspelt method in the guide fails the suite (tried).
+  `tests/docs.test.ts` lets `useTech` and `useMapSettings` through its hook-name check: they are the interface's.
+- **Publishing.** 1.0.0 by hand (the user, 2026-11-14): `cd bot && npm pack --dry-run` (prepack builds; four
+  files), then `npm publish --access public --browser=false` from `bot/` in a real terminal (the security key's
+  web 2FA). Later versions: `build.yml`'s `bot` job ("Publish the bot types") on a stable release publishes when
+  npm does not have `bot/package.json`'s version (its own version, not the editor's: the major is `BOT_API`), over
+  OIDC. It needs the trusted publisher on npmjs.com for `@scm-js/bot` (this repository, `build.yml`, direct
+  publish allowed — the 403 trap in `core.md`), which can only be set once the package exists.
+  `repository.directory` is `bot`. The guide and README point at docs.scmjs.dev/bots/,
+  which exists once the docs site is next published.
 
 ## A ladder: `bot ladder` (`cli/src/ladder.ts`, `engine.ts`) — 2026-11-07
 
@@ -2419,7 +2513,7 @@ the analysis itself 20–140 ms (Spring Thaw 256 × 128, 4 starts: 135 ms; Big G
   verdicts' thresholds on both sides; `walkSpeed` over a hand-built iscript.bin; the command through a stand-in
   1.16.1 copy (refusals, report, PNG) and the committed melee map. cli-mcp: names + read-only + scale refusal + a
   real-copy call (`skipIf`); cli-doctor pins the row.
-- **Leftovers**: no screenshot in docs (`scripts/cli-screenshots.mjs` not run for it); the picture has no start
+- **Leftovers**: (its picture is in the docs since 2026-11-14, `cli-map-analyze.webp`); the picture has no start
   numbers (no font, as preview); unit size is fixed (no `--unit`); speed upgrades and acceleration not modelled; the
   natural is "nearest base on foot", so a map whose designers mean another base reads differently; chokes off the
   shortest walks (a second route's narrows) are not reported — the plugin's BWEM-style areas would be the next step;
@@ -2450,7 +2544,7 @@ The whole design, the proofs and the traps are in **`mods.md`**. Here, what touc
   the clips on the play page without the mod (the replay is the modded game's): a clip of a mod that changes the
   units can go out of step. Not guarded.
 
-- `mod header <mod> [--out] [--namespace] [--bot]` (C4, 2026-11-08): a bot's C++ header and JSON of the mod's ids by
+- `mod header <mod> [--out] [--namespace] [--bot] [--js]` (C4, 2026-11-08; `--js` 2026-11-14, scm-sim's js-bots J4): a bot's C++ header and JSON of the mod's ids by
   name; design and Cosmonarchy's numbers in `mods.md` "`mod header`". No MCP tool (a bot author's command). Its
   `Header`/`Ids`/`Bot` rows are new one-word catalogue keys.
 - `bot run` and `bot ladder` take `--mod`, `--ums`, `--melee` (C4): the mod with its code, overlay version 2; the start
@@ -2495,6 +2589,9 @@ handed to it; it reads the four sections and nothing after.
 - Tests: `tests/cli-replay-mod.test.ts` (9, no game data: a two-file mod of units.dat + unitnames.tbl made by the codecs).
 - Not done: `replay watch|export` with a mod (needs the replay runner / viewer to take a data set: R2); the hash rule
   will gain the plugins and the project in step 7a — `sourceHashes` must follow.
+- Since `@scm-js/mod` 1.1.0 (2026-11-12, `mods.md` "@scm-js/mod 1.1.0"): `all` is `identity.earlier`'s `game-files`;
+  `older` is every other hash `identity.earlier` lists (with its `withoutPlugins`) plus `changedWere`, the one form that
+  needs the person's copy, made from `identity.older.lines`. Nothing here derives an earlier form itself.
 
 ## Races a mod adds (2026-11-10, branch `mod-races`)
 
@@ -2662,7 +2759,10 @@ holding `0x…`, "stack words", `x.dll!`, "no stand-in for"; rewrites "the scmbo
 update, then scmjs bot build`; `SCMJS_DEBUG` keeps the raw text) and `plainReason` for a replay's end. The hint "The
 runner is scm-sim's…" is gone everywhere.
 
-**Plugin-only mod on Remastered (B13).** The runner's `readsStartupData(names)` is `!names.length || …`: a mod with **no
+**Plugin-only mod on Remastered (B13).** Superseded 2026-11-12: `@scm-js/mod`'s `readsStartupData` (the engine's rule,
+which scm-sim's runner on `mods-next` follows) says no for a mod with no game files, and `overlay.ts#gameLayer` takes
+`identity.readsStartupData`, so a plugins-only mod gets no game layer (`mods.md` "@scm-js/mod adopted"). As it was:
+The runner's `readsStartupData(names)` is `!names.length || …`: a mod with **no
 game files** reloads the startup data. `overlay.ts#readsStartupData` lacked the empty case, so no game layer was laid
 and the reload stopped at `unit\zerg\avenger.grp`. Mirrored now. Then EUDEnableR's plugins fail to load (no stand-ins
 for `kernel32.dll!CreateRemoteThread`, `msvcrt.dll!_strcmpi`) — scm-sim's; the game plays on without them.
@@ -2844,3 +2944,10 @@ heatmap's is (key: map scenario hash + replay hash + engine build + `--order`), 
 
 **Messages.** No "the runner is scm-sim's" in the game commands; runner-version errors read "The game engine at {dir}
 is from before …". Progress for trace/cost/rush/coverage/heatmap/balance goes to stderr (`note` in main.ts).
+
+**A mod's terrain file (2026-11-14):** `cli/src/mod/terrain.ts` — `readSourceTerrain` (from the tree, by `mod.json`'s
+rule, shown as a path inside the mod), `folderTerrain` (a mod folder's root), `terrainInfo`, `terrainFindings`. `mod info`
+and `mod_info` gained `terrain`; `mod check` / `mod_check` warnings `terrain-file` and `terrain-table` (mods.md "Terrain a
+mod declares"); `mod unpack` keeps a folder's file through `modTarget#earlierTerrain`. On Cosmonarchy's copy with the
+editor's file: `mod info` lists badlands' 3,373 pieces and seven borrow tables, `mod check` finds nothing in it; a copy
+with a wrong `table` and a bad piece gets both warnings.

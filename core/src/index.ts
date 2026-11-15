@@ -87,15 +87,75 @@ export { DEFAULT_PLACEMENT, type PlacementOptions } from "../../src/editor/place
 // Terrain and doodads as the editor lays them: the isometric brush (it needs the tileset's CV5 to say which tile joins
 // which), a doodad checked against StarEdit's rule and placed, and the symmetry modes' maps (`scmjs map generate`).
 export { paintIsom, paintIsomDiamonds, checkIsom, hasIsom, isomTables, diamondAt, type Diamond, type IsomEdit } from "../../src/editor/isom";
+// Borrowed terrain: another tileset's isometric brush laying its ground in a tileset that holds copies of its pictures.
+export {
+  borrowTable, borrowableTerrains, borrowBase, copiesOf, picturesOf, providedTable, tableCounts, tilesetHash, sourceTiles,
+  encodeBorrowTable, decodeBorrowTable, borrowedTerrainId, isBorrowedTerrain, borrowedParts, BORROWED_TERRAIN, BORROW_BLOCK, BORROW_PIXEL,
+  TAKE_BACK, takeBackId, isTakeBack,
+  type BorrowTable, type BorrowKind, type BorrowedTerrain, type Copy, type Pictures, type Slicing,
+} from "../../src/editor/borrow";
+export {
+  BorrowStroke, borrowMember, BORROW_MEMBERS, encodeBorrowLattice, decodeBorrowLattice, latticeOf, baseLattice, resizeBorrowMember, borrowedCells,
+  type BorrowContext, type BorrowStrokeResult,
+} from "../../src/editor/borrowLattice";
+// Copied terrain: a terrain of the tileset held again at another height, with the edge pieces it holds for it there,
+// found from the tileset's files and laid by the isometric brush through a shadow lattice.
+export {
+  findCopyBlocks, gateBlock, edgeSetsOf, blockKey, encodeCopyBlocks, decodeCopyBlocks, KEPT_BLOCKS, GATE_FLAGS,
+  type CopyBlock, type CopySource, type CopyStatus, type EdgeSetInfo,
+} from "../../src/editor/terrainCopyTable";
+export {
+  CopyStroke, copyTable, relayCopies, paintCount, rankGrounds, chooseOuter, groundUnder, groundsOf, patchAt,
+  COPY_MEMBER, encodeCopyMember, decodeCopyMember, resizeCopyMember, COPIED_TERRAIN, copiedTerrainId, isCopiedTerrain, copiedParts,
+  type CopyTable, type CopyGround, type RankedGround, type CopyPatch, type CopyStrokeResult, type RelayResult,
+} from "../../src/editor/terrainCopyLattice";
+// Drawn borders: where borrowed ground meets the tileset's own, the tileset's border pieces, learned from maps or given.
+export {
+  badlandsStandIns, BADLANDS_STANDIN, standInShapes, diamondsOf, patternKey, flatTerrainsOf, BORDER_MODES,
+  type StandIn, type StandIns, type BorderMode, type BorderShape, type StandInLaid,
+} from "../../src/editor/borderLattice";
+export {
+  borderClasses, gatherBorderEvidence, mergeBorderEvidence, cutBorderTables, emptyBorderEvidence, encodeBorderEvidence, decodeBorderEvidence,
+  sheetPool, poolOf, pairKey, pairOf, pairStandIn, hostTerrainOf, cellKind,
+  type BorderEvidence, type BorderClasses, type BorderSourceCtx, type BorderPairTable, type BorderSetup,
+} from "../../src/editor/borderTable";
+export { layBorder, warmBorderPass, type BorderCell, type BorderPassResult } from "../../src/editor/borderPass";
+export {
+  bordersMember, BORDER_MEMBERS, encodeBorderRecord, decodeBorderRecord, resizeBorderRecord, emptyRecord,
+  type BorderRecord,
+} from "../../src/editor/borderRecord";
 export { applyChanges, type TileChange } from "../../src/editor/terrain";
 export { checkDoodadPlacement, placeDoodad, applyDoodadChanges, DEFAULT_DOODAD_PLACEMENT, type DoodadPlacementOptions, type DoodadEdit } from "../../src/editor/doodads";
 export { symmetryImages, mirroredOwner, type SymmetryMode, type SymmetryImage } from "../../src/editor/symmetry";
+// A tileset as its sheet (a group a row, 16 slots wide): blocks picked from it and laid, once or as a pattern; the pieces
+// maps lay whole, cut from the maps' evidence a join of the sheet at a time; the same tile twice (picture and flags) and
+// pieces folded by it; learning from a folder of maps; the plugins' named pieces and declared ground beside the cut.
+export {
+  sheetRows, runBounds, blockFromRect, blockRect, blockCells, layBlock, layPattern, patternOrigin, patternTileAt, firstTile, PatternStroke,
+  HOLE, SHEET_COLUMNS, SHEET_BRIDGE, type SheetRow, type SheetRect, type TileBlock,
+} from "../../src/editor/tileSheet";
+export {
+  gatherEvidence, mergeEvidence, cutPieces, pieceBlock, pieceIndex, emptyEvidence, encodeEvidence, decodeEvidence, DEFAULT_CUT,
+  type PieceEvidence, type Piece, type CutOptions,
+} from "../../src/editor/pieces";
+export { learnFromMaps, piecesPerTileset, tableHash, isMapName, type LearnFile, type LearnResult, type LearnDeps, type SkipReason } from "../../src/editor/pieceLearn";
+export {
+  collapsePieces, entryPieces, uniqueTiles, sameTileKey, pictureKey, samePicture, COPY_BLOCK_MEAN, COPY_CELL_MEAN,
+  type PieceEntry, type FlagDifference,
+} from "../../src/editor/tileCopies";
+export { laidPieceAt, sheetTile } from "../../src/editor/piecePick";
+export {
+  pieceSections, declaredTerrains, blockTiles, blockFits,
+  type ProvidedPiece, type ProvidedPieceSet, type DeclaredTerrain, type ListedPiece, type PieceSection,
+} from "../../src/editor/pieceList";
+export { kindKey } from "../../src/editor/heal";
+export { addedGroupsFrom } from "../../src/data/remasteredTiles";
 // The flat ground a new map is filled with: the tileset's own tiles when it is loaded, the base-ground ids without it (as the editor does without game data).
 export { baseTerrain, flatTerrain, DIRT, type BaseTerrain, type TerrainFill } from "../../src/formats/tileset/terrain";
 
 // ── The game's own files, decoded ──
 // The library carries none of them: these read what a person brings from their own copy of the game (`scmjs map preview`).
-export { loadTileset, megatileForTile, drawMegatile, MEGATILE_PX, megatileHeight, groupBuildable, tileGroupOf, TileFlag, type Tileset, type TilesetFiles } from "../../src/formats/tileset/decode";
+export { loadTileset, decodeCv5, CV5_ENTRY_BYTES, megatileForTile, drawMegatile, MEGATILE_PX, megatileHeight, groupBuildable, tileGroupOf, TileFlag, type Tileset, type TilesetFiles, type Cv5Group } from "../../src/formats/tileset/decode";
 export { buildDoodadCatalogue, type DoodadCatalogue, type DoodadDef } from "../../src/formats/tileset/doodads";
 export { decodeUnitsDat, decodeFlingyDat, decodeSpritesDat, decodeImagesDat, type UnitsDat, type FlingyDat, type SpritesDat, type ImagesDat } from "../../src/formats/dat/dat";
 export { decodeIscript, type IscriptBin } from "../../src/formats/dat/iscript";
@@ -133,8 +193,19 @@ export { grpToPng, pngToGrp, sheetColumns, type GrpToPngOptions, type NamedPalet
 // ── Mods: a mod as a folder of text and pictures ──
 // What a mod comes in (a folder, an MPQ, a self-executing exe, a zip), the folder's form both ways with the check that
 // keeps a text only when it packs back to the same bytes, the lints across tables, and a changelog between two mods.
-export { GAME_FOLDERS, SYSTEM_FILES, isSystemFile, GAME_ARCHIVES, gameCopyFiles, gameName, modRoot, programEnd, exeArchive, isMpq, isZip, isExe, readZip, dataSetHash, fileDigest, dataSetHashOfDigests, ModSourceError, type ExeArchive, type ZipMember } from "../../src/formats/mod/sources";
-export { modHash, modHashOfDigests, hashLines, hashLinesAsWere, isSystemLine, gameLine, pluginLine, firegraftLine, isPluginFile, isFiregraftProject, isModCode, probeNames, type ModHash, type ModHashInput, type Digest } from "../../src/formats/mod/hash";
+// Reading a mod is `@scm-js/mod`'s (a dependency): these names are its, re-exported so that code written against
+// earlier releases of this library keeps working; `readMod` and the description are there too. The hash's helpers
+// this library had keep their signatures over it (`legacy.ts`), deprecated in favour of `readMod`'s `identity`.
+export {
+  GAME_FOLDERS, SYSTEM_FILES, isSystemFile, GAME_ARCHIVES, gameCopyFiles, modRoot, programEnd, libraryName, isMpq, isZip, isExe, readZip,
+  sha256Hex as fileDigest, ModError as ModSourceError, PatcherError, hashLines, hashLinesAsWere, isSystemLine, isPluginFile,
+  isCodeFile as isModCode, probeNames, readMod, MOD_MESSAGES, renderMessage,
+  type CarriedModule as PatcherPlugin, type ZipMember, type ModDescription, type ModFiles, type ModMessage, type Identity,
+} from "@scm-js/mod";
+export {
+  gameName, pluginLine, firegraftLine, exeArchive, modHash, modHashOfDigests, dataSetHash, dataSetHashOfDigests, gameLine, isFiregraftProject,
+  type ExeArchive, type ModHash, type ModHashInput, type Digest,
+} from "../../src/formats/mod/legacy";
 export {
   MOD_MANIFEST, MOD_FORMAT, MOD_FOLDERS, DEFAULT_PALETTE, emptyManifest, readManifest, folderPath, memberPath, placeOf, memberOf, aiNames, renderMember, renderAiScripts, packFile,
   recordRendered, tidyManifest, ModFolderError,
@@ -145,10 +216,13 @@ export { checkMod, GAME_ISCRIPT_LAST, type ModFinding, type CheckFiles } from ".
 export { diffMods, type ModChange, type ModChangeKind, type DiffSide } from "../../src/formats/mod/diff";
 // Races a data set adds to the game's own: the table `mod.json`'s `races` holds, a race's name by its byte, the hints a
 // mod's files give, and which of the game's three races a list of units plays as.
+export { sameRaces, raceLabel, raceChoices, hasRaceCandidates, racePlaysAs, GAME_RACE_NAMES, FIRST_DATASET_RACE } from "../../src/formats/mod/races";
 export {
-  normalizeRaces, sameRaces, raceLabel, raceChoices, raceCandidates, hasRaceCandidates, racePlaysAs, GAME_RACE_NAMES, FIRST_DATASET_RACE, RACE_NAME_MAX, GAME_NETWORK_TBL_ENTRIES,
-  type DataSetRace, type RaceCandidates,
-} from "../../src/formats/mod/races";
+  readTerrainFile, writeTerrainFile, withTerrainSection, sectionAgainstTable, terrainFileCounts, isTerrainFilePath, terrainFileOf,
+  emptyTerrainFile, emptyTerrainSection, TERRAIN_FILE, TERRAIN_FORMAT, TERRAIN_LIMITS,
+  type TerrainFile, type TerrainFileSection, type TerrainFilePiece, type TerrainFileTerrain, type TerrainFileBorrow, type TerrainFileBorder, type TerrainFileCopy, type TerrainDrop, type TerrainDropReason, type TerrainFileRead,
+} from "../../src/formats/mod/terrain";
+export { normalizeRaces, raceCandidates, MAX_RACE_NAME as RACE_NAME_MAX, GAME_NETWORK_TBL_ENTRIES, type DataSetRace, type RaceCandidates } from "@scm-js/mod";
 
 // ── Names and tables ──
 export { TILESETS, TILESET_BY_ID, MAP_SIZES, type TilesetId, type TilesetInfo } from "../../src/data/tilesets";

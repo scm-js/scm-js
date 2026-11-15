@@ -73,7 +73,7 @@ or take a screenshot:
 /?nosplash&dialog=playerSettings  open a dialog by id; repeatable
 /?nosplash&dialog=preferences&page=editing   open a dialog at one of its pages
 /?nosplash&zoom=0.5&tileset=ice   zoom level and tileset
-/?nosplash&mode=tile              terrain palette mode: isom, rect, tile
+/?nosplash&mode=tile              terrain palette mode: isom, rect, tile, blend, heal, pin
 /?nosplash&layer=fog&fogPlayer=3  view and paint one player's fog
 ```
 
@@ -131,15 +131,16 @@ npm run build:cli         # the scmjs command → cli/dist/scmjs.mjs
 npm run build:cli-binary  # scmjs as one program, Node inside, for this OS → cli/dist/bin/ (Node 24)
 npm run cli -- map info a.scx     # the scmjs command, built and run (docs/cli.md)
 npm run build:core        # the @scm-js/core library → core/dist/index.mjs + index.d.ts (docs/core.md)
+npm run build:bot-types   # the @scm-js/bot types → bot/dist/index.d.ts (docs/bots.md)
 ```
 
 `npm run build` is the type-check: `tsc -b` covers the app, the scripts and the desktop
-main process, the command line and the library's entry (`tsconfig.app.json`,
-`tsconfig.node.json`, `tsconfig.desktop.json`, `tsconfig.cli.json`, `tsconfig.core.json`).
-The app config is strict: `noUnusedLocals`, `noUnusedParameters`, `verbatimModuleSyntax`
-(so `import type` for types) and `erasableSyntaxOnly` (so no enums and no constructor
-parameter properties). Lint, the tests and the build run on every pull request and every
-push to `main`.
+main process, the command line, the library's entry and the bot types
+(`tsconfig.app.json`, `tsconfig.node.json`, `tsconfig.desktop.json`, `tsconfig.cli.json`,
+`tsconfig.core.json`, `tsconfig.bot.json`). The app config is strict: `noUnusedLocals`,
+`noUnusedParameters`, `verbatimModuleSyntax` (so `import type` for types) and
+`erasableSyntaxOnly` (so no enums and no constructor parameter properties). Lint, the
+tests and the build run on every pull request and every push to `main`.
 
 ## Repository layout
 
@@ -180,6 +181,7 @@ src/
 desktop/        The Electron shell: main process, preload bridge, updater
 cli/            The scmjs command line, built from the editor's code into one file (docs/cli.md)
 core/           The @scm-js/core package: one entry file naming the editor's modules it exports (docs/core.md)
+bot/            The @scm-js/bot package: the bot interface's types, copied from the play page's engine (docs/bots.md)
 scripts/        Extraction, vendoring, the desktop and docs builds, plugin typings, screenshots
 tests/          vitest suites; tests/maps holds the maps they open, made by tests/support
 e2e/            Browser tests: Playwright specs that drive the built editor
@@ -709,7 +711,7 @@ ruleset.
 ## Docs site and screenshots
 
 [docs.scmjs.dev](https://docs.scmjs.dev) is built by `npm run build:docs`. The guides are
-the thirteen `docs/*.md` files, split at their `##` headings into pages, with the `###`
+the fifteen `docs/*.md` files, split at their `##` headings into pages, with the `###`
 beneath as each page's contents. The API reference is generated from the bundled plugin
 typings, so a doc comment in `src/plugins/api.ts` is a paragraph on the site.
 
@@ -758,6 +760,14 @@ Some scenes have their own needs:
 - **The scmjs.dev and shared-map pictures** run against a stand-in for the service,
   `scripts/lib/guide-scmjs-mock.mjs`, which the script starts itself. When a dialog
   changes, change the scene; when a canned answer no longer fits, change the mock.
+- **`mod-terrain`** takes the pictures of a mod's terrain. `--mod <folder>` names the
+  mod's folder and `--mod-maps <folder>` a folder of maps made for it; `--mod-name` is the
+  name the mod shows under in the editor, Cosmonarchy unless given. Without the two
+  folders the scene is skipped and its pictures are left as they are. It takes about three
+  minutes.
+- **`symmetry`, `heal`, `pin` and `tile-sheet`** fix the seed of the page's random
+  numbers, so the isometric brush picks the same tile variations on every run and the
+  numbers in the pictures stay the same.
 
 ### Command line screenshots
 
@@ -776,13 +786,16 @@ node scripts/cli-screenshots.mjs --play-url http://127.0.0.1:8766/play --bots ~/
 The map pictures need a copy of StarCraft, and the pictures of commands that run the game
 need the play page's engine too: `--play-url` points at a staged play page when the newest
 runners are not deployed yet. The ladder and the replay picture need built bots (`--bots`,
-a folder with `ualbertabot.scmbot` and `example.scmbot`). A picture whose inputs are
-missing is skipped and its file left as it is. The terminal for `replay watch` comes from
-util-linux's `script`, so that picture is taken on Linux.
+a folder with `ualbertabot.scmbot` and `example.scmbot`). The heatmap and the frame of a
+`replay export` clip are made from games a JavaScript bot plays, `starter.mjs` in the same
+folder (scmbot's `examples/starter/starter.mjs`), and the clip needs a browser
+`replay export` can start (`--browser`). A picture whose inputs are missing is skipped and
+its file left as it is. The terminal for `replay watch` comes from util-linux's `script`,
+so that picture is taken on Linux.
 
 ## Contributing
 
-- **Keep the documents current.** The thirteen guides under `docs/` are the documentation
+- **Keep the documents current.** The fifteen guides under `docs/` are the documentation
   site and `README.md` is the repository's front page; a behaviour change that is not in
   them is undocumented. Write them for their readers, with `src/` paths only in a guide's
   closing *In the source* section. Keep the matching note in `.claude/internals/` in step

@@ -1,7 +1,7 @@
 /**
  * What the documentation site is made of, and where every link in it points.
  *
- * The eleven guides are the repository's own `docs/*.md`, split into
+ * The guides are the repository's own `docs/*.md`, split into
  * pages by `markdown.mjs`. This module is the map from a source file and a heading to a
  * URL on the site, which is the whole reason the links in those documents keep working:
  * a `[the plugin guide](docs/plugins.md)` written for a GitHub blob page has to become a
@@ -71,6 +71,13 @@ export const SOURCES = [
     title: "Command line",
     blurb: "scmjs in a terminal: looking inside maps, making and changing them, maps in git and CI, a map's triggers run and tested in the game, replays, sharing, bots, plugins and AI tools, and every command on one page.",
     pageTitle: "StarCraft maps and replays on the command line",
+  },
+  {
+    id: "bots",
+    file: "docs/bots.md",
+    title: "Bots",
+    blurb: "Computer players on the game's own engine, on the play page or from the command line: playing against one, writing one in JavaScript, bringing a BWAPI bot, bots for mods, and the reference.",
+    pageTitle: "StarCraft bots in JavaScript and BWAPI",
   },
   {
     id: "mods",
@@ -227,16 +234,17 @@ export const MOVED = {
   "/cli/a-map-as-text-and-in-git/": "/cli/maps-in-git/#reading-maps-in-git-diff",
   "/cli/a-maps-folder-as-a-project/": "/cli/maps-in-git/#setting-up-a-folder-of-maps",
   "/cli/a-map-as-a-folder/": "/cli/changing-a-map/#the-archive-as-a-folder",
-  "/cli/playing-the-game-what-those-commands-need/": "/cli/getting-started/#commands-that-need-starcraft",
-  "/cli/running-a-maps-triggers-in-the-game/": "/cli/running-a-map-in-the-game/",
-  "/cli/how-far-apart-the-start-locations-are/": "/cli/running-a-map-in-the-game/#rush-distances",
+  "/cli/playing-the-game-what-those-commands-need/": "/cli/your-setup/#commands-that-need-starcraft",
+  "/cli/running-a-maps-triggers-in-the-game/": "/cli/triggers-in-the-game/",
+  "/cli/running-a-map-in-the-game/": "/cli/triggers-in-the-game/",
+  "/cli/how-far-apart-the-start-locations-are/": "/cli/melee-maps-layout-and-balance/#rush-distances",
   "/cli/a-game-on-the-map-with-other-people/": "/cli/sharing-from-the-terminal/#a-game-with-other-people",
   "/cli/sharing-a-map-from-the-terminal/": "/cli/sharing-from-the-terminal/",
-  "/cli/for-ai-tools/": "/cli/for-developers/#ai-tools",
+  "/cli/for-ai-tools/": "/cli/ai-tools/",
   "/cli/plugins/": "/cli/for-developers/#writing-a-plugin",
   "/cli/opening-files-in-scmjs/": "/cli/looking-inside-a-map/#opening-a-map-in-scmjs",
-  "/cli/what-this-computer-has/": "/cli/getting-started/#checking-your-setup",
-  "/cli/completions/": "/cli/getting-started/#shell-completion",
+  "/cli/what-this-computer-has/": "/cli/your-setup/#checking-your-setup",
+  "/cli/completions/": "/cli/your-setup/#shell-completion",
   "/cli/in-scripts/": "/cli/for-developers/#in-scripts-and-pipes",
   "/development/desktop-build/": "/development/desktop/",
   "/development/game-data/": "/development/getting-started/",

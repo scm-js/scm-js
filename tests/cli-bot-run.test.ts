@@ -13,6 +13,7 @@ import { botRunValues, cacheRoot, checkBotGame, gameKind, looksLikeMapSettings, 
 import { TEST_MAPS_DIR } from "./support/maps";
 import { CliError, visible } from "../cli/src/ui";
 import { checkBotFolder } from "../cli/src/bot";
+import { isJsBot, jsBotName, typeScriptBotProblem } from "../cli/src/files";
 
 const tmp = () => mkdtempSync(join(tmpdir(), "scmjs-botrun-"));
 
@@ -199,6 +200,9 @@ describe("scmjs bot run", () => {
       if (hint) expect(e.hint).toMatch(hint);
       expect(e.exitCode).toBe(2);
     }
+    // A JavaScript bot's module is a bot by its extension (the runner plays it as BWAPI's client).
+    const js = join(dir, "mybot.mjs"); writeFileSync(js, "export default {};");
+    await expect(checkBotGame(js, melee)).resolves.toEqual({ starts: 2, mapSettings: false });
     // A map's own settings (--ums) seat the players as the map does: not counted.
     await expect(checkBotGame(bot, melee, { opponents: 2, game: "ums" })).resolves.toMatchObject({ starts: 2 });
   });
@@ -239,5 +243,16 @@ describe("scmjs bot run", () => {
       .toBe("bot1 was built before bots could play beside a mod's plugins (its memory starts at 1 GB, where eudenabler's plugins keep theirs): build it again with the newest toolchain (scmjs bot update, then scmjs bot build) to play it with eudenabler.");
     process.env.SCMJS_DEBUG = "1";
     try { expect(plainRunnerError("x (from 0x4d29c5)")).toBe("x (from 0x4d29c5)"); } finally { delete process.env.SCMJS_DEBUG; }
+  });
+});
+
+describe("a JavaScript bot's file", () => {
+  it("is told by its extension, named after its file, and a TypeScript one needs a Node that strips types", () => {
+    expect(["a.js", "b.mjs", "c.ts", "D.TS"].map(isJsBot)).toEqual([true, true, true, true]);
+    expect(["a.scmbot", "a.scx", "a"].map(isJsBot)).toEqual([false, false, false]);
+    expect(jsBotName("/x/y/My-Bot.ts")).toBe("My-Bot");
+    expect(typeScriptBotProblem("bot.ts", { typescript: "strip" })).toBeNull();
+    expect(typeScriptBotProblem("bot.mjs", {})).toBeNull();
+    expect(typeScriptBotProblem("bot.ts", {})).toMatch(/cannot run a TypeScript bot as it is.*compile bot\.ts to JavaScript/);
   });
 });

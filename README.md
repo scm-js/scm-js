@@ -38,8 +38,9 @@ Plugins ▸ Browse Plugins….
 - **Mods.** A mod such as Cosmonarchy BW plays in the browser at
   [scmjs.dev/play](https://scmjs.dev/play/) with its own plugins, against a bot made for
   it if you like, and its replays play back and are analysed in the editor. The editor
-  makes maps for a mod with its units by their own names, and `scmjs mod` keeps a mod as a
-  folder of text you can edit and keep in git. See [Mods](docs/mods.md).
+  makes maps for a mod with its units by their own names and the terrain its tilesets add,
+  and `scmjs mod` keeps a mod as a folder of text you can edit and keep in git. See
+  [Mods](docs/mods.md).
 - **A command line.** `scmjs` looks inside maps and replays, checks maps on every push
   with a GitHub Action, plays a map's triggers in the game, builds and plays bots, and
   gives AI tools the same commands. See [the command line guide](docs/cli.md).
@@ -68,6 +69,14 @@ Plugins ▸ Browse Plugins….
   [Cut, copy and paste](docs/guide.md#cut-copy-and-paste).
 - **Doodads into terrain.** *Convert Doodad to Terrain* turns a doodad into ordinary tiles
   you can edit. See [Doodads](docs/guide.md#doodads).
+- **Wider ramps, longer bridges.** Drag a ramp or a bridge as you place it and it
+  stretches along its cliff or its deck. View ▸ Seam Overlay marks the joins that show,
+  the Heal brush swaps them for tiles that play the same, and Pin keeps hand-laid ground
+  from the isometric brush. See [Stretching a ramp or a
+  bridge](docs/guide.md#stretching-a-ramp-or-a-bridge) and [Heal](docs/guide.md#heal).
+- **A symmetry report.** Tools ▸ Symmetry… says how alike the sides of a map play under
+  each mirror and turn, and lists the places that differ. See
+  [Symmetry](docs/guide.md#symmetry).
 - **Timelapse.** Timelapse (*Browse Plugins*) records the map change by change and exports
   a GIF or WebM video. See [Plugins](docs/guide.md#plugins).
 - **Maps from scmscx.com.** File ▸ Find on scmscx.com… searches the community map archive
@@ -113,13 +122,14 @@ same release as the editor at [scmjs.dev/editor](https://scmjs.dev/editor/).
 | [docs/installing.md](docs/installing.md) | The hosted editor, the desktop app, the container, and getting the game's graphics |
 | [docs/trigscript.md](docs/trigscript.md) | TrigScript, triggers written as TypeScript: the script window, tests, programs that run in the game, examples and the reference |
 | [docs/trigscript-language.md](docs/trigscript-language.md) | The language of TrigScript programs: values, arrays, functions, classes, errors, tasks, units, events, input, text, sounds and libraries |
-| [docs/trigscript-library.md](docs/trigscript-library.md) | The modules that come with TrigScript (maths, chance, timers, signals, menus, cutscenes, fog pictures, pixel screens, music), with an example of each |
+| [docs/trigscript-library.md](docs/trigscript-library.md) | The modules that come with TrigScript (maths, chance, timers, signals, menus, cutscenes, fog pictures, pixel screens, music, workers, spells), with an example of each |
 | [docs/triggers.md](docs/triggers.md) | Every trigger condition and action: what it does, its arguments, its text form and where it is stored |
 | [docs/game-data.md](docs/game-data.md) | Where the graphics come from, what is kept, mods as data sets, and how the pictures are drawn |
 | [docs/file-formats.md](docs/file-formats.md) | What the editor does with a map file: what it preserves, what Save can strip, revisions, protected maps |
 | [docs/chk-format.md](docs/chk-format.md) | Every section of the scenario file, byte by byte |
 | [docs/plugins.md](docs/plugins.md) | Writing and installing plugins; the plugin API |
-| [docs/cli.md](docs/cli.md) | The `scmjs` command line, by task: getting started, looking inside a map, making and changing maps, maps in git and CI, running a map's triggers in the game, replays, sharing, mods, bots, plugins and AI tools, and a reference of every command |
+| [docs/cli.md](docs/cli.md) | The `scmjs` command line, by task: getting started, looking inside a map, making and changing maps, maps in git and CI, running a map's triggers in the game, a melee map's layout and balance, replays, mods, sharing, bots, plugins and AI tools, and a reference of every command |
+| [docs/bots.md](docs/bots.md) | Bots on the play page and from the command line: playing against one, a first bot in JavaScript, bringing a BWAPI bot, bots for mods, how good the sample bots are, what is not there yet, and the reference for JavaScript bots |
 | [docs/mods.md](docs/mods.md) | Mods: a mod read as its makers ship it, kept as a folder of PyMS text and PNG sheets, checked, compared, packed back into an MPQ and played |
 | [docs/core.md](docs/core.md) | `@scm-js/core`, the editor's map code as an npm package for scripts and tools of your own |
 | [docs/development.md](docs/development.md) | Running from source, the desktop app and the container, releases, contributing |

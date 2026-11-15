@@ -40,7 +40,9 @@ fails, add that per-step check back first — it found the one real bug in minut
   clones the scenario first because resize/tileset mutate in place and a rebase must be
   able to put the old one back.
 - `extras`: whole members, detected by a `store.sub` on the extras atom (the plugin API and
-  the Sound Editor both write it).
+  the Sound Editor both write it). The borrowed brush's lattice and its border record
+  (`scmjs\borrowed-<id>.bin`, `scmjs\borders-<id>.bin`) go this way; a drawn border's tiles
+  are ordinary tile changes of the same commit, so nothing new is sent.
 
 **Traps that cost something.**
 - **Normalise on commit.** `commitEdit` undoes the editor's own application and re-applies

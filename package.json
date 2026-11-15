@@ -42,14 +42,16 @@
     "build:cli": "node scripts/build-cli.mjs",
     "build:cli-binary": "node scripts/build-cli-binary.mjs",
     "cli": "node scripts/build-cli.mjs --quiet && node cli/dist/scmjs.mjs",
-    "build:core": "node scripts/build-core.mjs"
+    "build:core": "node scripts/build-core.mjs",
+    "build:bot-types": "node scripts/build-bot-types.mjs"
   },
   "dependencies": {
+    "@scm-js/mod": "^1.2.0",
     "electron-updater": "^6.8.9",
     "jotai": "^2.20.3",
     "kascade": "^0.1.1",
     "lucide-react": "^1.38.0",
-    "mopaq": "^1.6.2",
+    "mopaq": "^1.6.3",
     "radix-ui": "^1.6.7",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",

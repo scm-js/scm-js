@@ -46,6 +46,19 @@ lines, a stand-in `waves` library, the README test's `// what it prints` check t
 `docs/trigscript-library.md` follows the same rule, a page a `trigscript/*` module; its
 examples are compiled too, and the first run caught a signal handler returning an action,
 copied from `signals.ts`'s own header comment, which still carries it.
+`docs/bots.md` (2026-11-13, after `cli` in the nav) is the bot guide. Since 2026-11-14 it is for three readers, named
+in a table at its top: someone who wants to play against a bot (`## Playing against a bot`: what each row of the setup
+screen's list is), someone writing one in JavaScript (`## A first bot`, then `## Running a bot`), and someone with a
+BWAPI bot (`## Bringing a BWAPI bot`: what plays and what does not, the build, what differs from Windows; the
+`scmbot.json` reference stays in the scmbot repository's README, which the section links). The two references
+(`## The short way`, `## The interface underneath`) come last, after `## What is not there yet`: the site gives each
+`##` a page, so they are pages of their own without a second file. Its pictures (`bot-setup`, `bot-options`,
+`bot-playing`) are of the play page and were taken by hand against the local stand-in (the play page is not in this
+repository, so no script here can take them): a generated map (`map generate --seed 1207`), `starter.mjs` added as a
+file, and for `bot-playing` the fog of war off, 16× until Starter's "a wave of" line is in the chat, the view
+scrolled to its marines, then the game's canvas alone (driven through the page's `window.scmsim` hooks).
+Its code blocks are type-checked
+the same way, against the `@scm-js/bot` bundle, by `tests/bot-package.test.ts` (`.claude/internals/cli.md`).
 **Nothing writes prose**, because a generator that did would be one more document to keep
 current. `site.mjs` is the URL
 model and, with it, the link rewriter that is the whole reason those documents keep
@@ -109,12 +122,24 @@ when the chrome changes, and never commit a picture that shows anything but the 
 `scripts/cli-screenshots.mjs` (2026-11-07) is its sibling for `docs/cli.md`'s `cli-*.webp`: it runs the built
 `scmjs` with `FORCE_COLOR=1`/`COLORTERM=truecolor` on `tests/maps/*`, maps `map generate` makes and the engine's
 replays, plays the output into a small terminal emulator (SGR, CR/LF, cursor up/down, `2K`, OSC/APC skipped; ▀▄█
-painted as two-colour gradients so half-block pictures have no seams), renders the cells in DejaVu Sans Mono and
+painted as two-colour gradients so half-block pictures have no seams; braille painted as dots on the cell's 2 × 4
+grid, since DejaVu Sans Mono has none and Chromium's fallback, DejaVu Sans, draws them 10px wide in an 8.43px cell,
+which cut the overview globe's right edge off and shifted its rows, 2026-11-14), renders the cells in DejaVu Sans Mono and
 screenshots them at 2× in headless Chromium. WebP comes from the page's own `canvas.toDataURL("image/webp", 1)`,
 which Chromium writes lossless (VP8L) at quality 1, so the script needs only Playwright, not sharp; the coloured-cell
 pictures (`map preview`, `replay watch`) and the PNGs commands write go at 0.9. `replay watch` runs under
 `script -qfec` for a pty and is quit with `q` after six seconds. The QR picture is the encoder (`cli/src/qr.ts`,
 loaded with Vite's `ssrLoadModule`) on a fixed link, since a real `map share` needs a session.
+Three more scenes (2026-11-14): `map-analyze` (the PNG `map analyze --out --scale 8` writes for `(4)Crossing.scx`,
+seed 2026), `map-heatmap` and `replay-export`. The last two need games on that map, so `games()` plays a ladder of
+`starter.mjs` (scmbot's JavaScript example bot, in the `--bots` folder: no build, so it works where no `.scmbot` is
+on the machine) against the game's computers, `--races tzp --games 2`, 18 games, about six minutes the first time and
+skipped when a kept `--work` folder has `games/ladder.json`. The heatmap runs with `--parallel 2`: at four, three
+replays failed with `ENOMEM` reading the Remastered installation under WSL. `frame()` takes one frame of the WebM
+`replay export` wrote by playing it in the script's own page, so ffmpeg is still not needed; `--browser` is handed to
+the command as `SCMJS_BROWSER` too. On this machine the Playwright Chromium starts only with the libraries of the
+headless-browser recipe on `LD_LIBRARY_PATH`. With seeds 1 and 2 no side is dealt the bottom right start, which the
+guide's caption says.
 The scmjs.dev pictures (2026-09-06: `account`, `my-maps`, `save-to-scmjs`, `ai-menu`,
 `assistant`, `name-describe`, `review-map`, `rewrite-strings`, `generate-map`,
 `generated-map`, `make-scenario`) run against `scripts/lib/guide-scmjs-mock.mjs`, a
@@ -211,6 +236,36 @@ other's zlib/CompressionStream output). `withTryIt` in `markdown.mjs` wraps both
 (marked's `code` renderer returns `false` for every other block, so they stay marked's own). The
 `?plugin=` half is `src/plugins/link.ts` + `hooks/usePluginLink.ts` (see `plugins-loading.md`).
 
+
+### The terrain tools' pictures (scenes `tile-sheet`, `pin`, `symmetry`, `heal`, `mod-terrain`, 2026-11-14)
+
+The guide's Terrain page was reordered and a **Mod terrain** page added after it (`## Mod terrain`:
+*Ground a mod adds*, *Pictures a mod adds*, *Terrain from other tilesets*, *Drawn borders* — the last three
+anchors are linked from `docs/mods.md` and `docs/plugins.md`, keep them). Fourteen pictures came with it:
+`palette-sheet`, `terrain-block` (`tile-sheet`, Jungle), `terrain-pin` (`pin`, Badlands ramp #77 stretched),
+`symmetry`, `symmetry-differences`, `doodad-twin` (`symmetry`, a 64×64 Desert map the scene builds),
+`terrain-heal` (`heal`, Big Game Hunters), and `mod-sheet`, `mod-pieces`, `mod-borrowed`, `mod-borders`
+(`mod-terrain`).
+
+- **The symmetry picture is no longer the `dialogs` scene's.** On an empty map every mode reads 100.0%, which
+  shows nothing; the `symmetry` scene builds a mirrored map with one resource out of place, and `dialogs`
+  leaves the dialog out so it does not overwrite the picture.
+- **`SEEDED_RANDOM`.** The isometric brush picks tile variations with `Math.random`, and the variations do
+  not all walk alike, so the report's percentages changed on every run. A scene's init script seeds
+  `Math.random`, and `steadyStroke` resets the seed before each stroke. With it every picture but
+  `mod-borrowed` comes out byte for byte the same twice (there, eleven palette pixels differ).
+- **`mod-terrain` shows a mod's tiles on purpose.** The user allowed Cosmonarchy's tiles in the guide's
+  pictures (2026-11-14); the pictures are still the editor, and the mod's files are read from `--mod` /
+  `--mod-maps` and never copied into the repository. The scene adds the mod through Help ▸ Game Data…,
+  runs *Find terrain from other tilesets* (≈11 s) and *Learn from Maps…* (404 maps, ≈30 s).
+- **Learn from Maps… in headless Chromium.** The editor uses `showDirectoryPicker` where it exists, which
+  nothing can answer headless; the scene's init script deletes it, so the editor falls back to its folder
+  input, which Playwright can fill.
+- **`sideBySide` takes `{ labels, halves }`.** The defaults are the Remastered picture's; `halves: false`
+  sets two whole clips beside each other (`terrain-heal`, `mod-borders`).
+- **Two notices are hidden** (`quiet({ updates: true })`): the plugin-updates notice and "scmJS has been
+  updated", which a fresh profile now gets. Other notices stay in the pictures.
+- The headless shell needed libnspr4, libnss3 and libasound on `LD_LIBRARY_PATH` on this machine.
 
 ### The API Playground pictures (scene `api-playground`)
 

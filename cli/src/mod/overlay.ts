@@ -11,23 +11,23 @@
  * of the mod. A 1.16.1 copy's archives hold them and the runner reads those itself: nothing is laid under the mod there.
  *
  * For a bot beside the mod (`bot run`, `bot ladder`: `code`, overlay version 2) the folder carries the mod's code as
- * well: the plugins it carries as files in `plugins/`, its FireGraft project and database in `firegraft/`, and
- * `mod.json` with the mod's name and its hash (`sourceHash`, the play page's rule), which the runner takes as the
- * mod's: the folder lays the files differently from how the mod has them, so the runner could not work it out again.
+ * well: in `plugins/`, every module of it the mod's hash has a line for (`@scm-js/mod`'s identity: the plugin files, the
+ * plugins a patcher exe carries in itself, the libraries its plugins load), its FireGraft project and database in
+ * `firegraft/`, and `mod.json` with the mod's name and its hash, which the runner takes as the mod's: the folder lays
+ * the files differently from how the mod has them, so the runner could not work it out again.
  */
 import { rmSync } from "node:fs";
 import { tempFolder } from "../lifecycle";
 import { join } from "node:path";
 import { decodeTblFile } from "../../../src/formats/dat/tblFile";
-import { gameName } from "../../../src/formats/mod/sources";
+import { gameName, leafOf, runningHash, sha256Hex, STARTUP_NAMES } from "@scm-js/mod";
 import type { ModTag } from "@scm-js/replay";
-import { fileDigest } from "../../../src/formats/mod/sources";
 import { VERSION } from "../about";
 import type { RunnerCodeReport, RunnerModReport } from "../engine";
 import type { GameFiles } from "../gamefiles";
 import { openMod } from "./open";
 import { writeLoose } from "./pack";
-import { sourceHash } from "./hash";
+import { pluginCount } from "./hash";
 import { mkdirSync, writeFileSync } from "node:fs";
 import type { ModSource } from "./source";
 
@@ -38,7 +38,7 @@ export interface ModOverlay {
   report: (m: RunnerModReport) => RunnerModReport;
   /** Removes them. */
   remove: () => void;
-  /** How many plugins the mod carries as files: what the runners load beside a bot (one in its archive is not loaded). */
+  /** How many plugins of the mod's code a loader loads: what the runners load beside a bot (one in its archive is not loaded). */
   plugins?: () => Promise<number>;
   /**
    * The `SCMJ` tag of a replay of a game played with the mod, as the play page's Save Replay writes it: the data set by
@@ -46,20 +46,6 @@ export interface ModOverlay {
    * the engine's build. `code` is what the runner said of the mod's code (`start.code`), when it ran any.
    */
   tag?: (o: { code?: RunnerCodeReport | null; build: string }) => Promise<ModTag>;
-}
-
-/** What the game's reload of its startup data reads by name besides the pictures (scm-sim `src/exact/mods.ts`, `STARTUP_NAMES`). */
-export const STARTUP_NAMES: readonly string[] = ["scripts\\iscript.bin", "arr\\images.dat", "game\\tselect.pcx", "arr\\images.tbl", "arr\\sfxdata.dat", "arr\\sfxdata.tbl", "arr\\mapdata.dat", "arr\\mapdata.tbl"];
-
-/**
- * Whether the runner reads the startup data again for a mod holding these names (scm-sim's `readsStartupData`): one
- * holding startup data — and one holding none of the game's files at all, a mod that is only plugins, which the runner
- * reloads for too (so on a Remastered copy it needs the game's pictures laid under it as much as any).
- */
-export function readsStartupData(names: Iterable<string>): boolean {
-  let any = false;
-  for (const n of names) { any = true; if (STARTUP_NAMES.includes(n) || n.startsWith("unit\\")) return true; }
-  return !any;
 }
 
 /** Every picture and overlay file images.tbl names (`unit\zerg\avenger.grp`), by the game's names, each once. */
@@ -75,10 +61,11 @@ const BATCH = 24;
 /**
  * The game's own files the reload reads and the mod has not got — the startup data, and every picture and overlay
  * of the image table the game will hold (the mod's images.tbl when it has one) — read out of a Remastered copy.
- * Empty for a 1.16.1 copy, for no copy, and for a mod the runner does not read the startup data again for.
+ * Empty for a 1.16.1 copy, for no copy, and for a mod the runner does not read the startup data again for
+ * (`@scm-js/mod`'s `readsStartupData`, the engine's rule: a mod that is only code changes no startup data).
  */
 export async function gameLayer(source: ModSource, base: GameFiles | null): Promise<{ member: string; data: Uint8Array }[]> {
-  if (base?.kind !== "remastered" || !readsStartupData(source.files.keys())) return [];
+  if (base?.kind !== "remastered" || !source.description?.identity.readsStartupData) return [];
   const own = source.files.get("arr\\images.tbl");
   const tbl = own ? await own.read() : await base.read("arr\\images.tbl");
   const names = [...STARTUP_NAMES, ...(tbl ? imageFiles(tbl) : [])].filter((n) => !source.files.has(n));
@@ -96,7 +83,7 @@ export function modOverlay(path: string, base: () => Promise<GameFiles | null>, 
   let opened: Promise<{ game: GameFiles | null; source: ModSource }> | null = null;
   const open = () => (opened ??= base().then(async (game) => ({ game, source: await openMod(path, game) })));
   return {
-    plugins: async () => (await open()).source.plugins.filter((p) => !p.member).length,
+    plugins: async () => pluginCount((await open()).source),
     tag: async ({ code, build }) => modTag((await open()).source, code ?? null, build),
     layers: async () => {
       if (!dirs) {
@@ -105,7 +92,8 @@ export function modOverlay(path: string, base: () => Promise<GameFiles | null>, 
         dirs = { game: null, mod: tempFolder("scmjs-mod-") };
         if (lay.length) { dirs.game = tempFolder("scmjs-game-"); await writeLoose(lay, dirs.game); }
         const members: { member: string; data: Uint8Array }[] = [];
-        for (const f of source.files.values()) members.push({ member: f.name, data: await f.read() });
+        // (a file its archive could not give, which the hash leaves out too, is left out: `unheld`)
+        for (const f of source.files.values()) { try { members.push({ member: f.name, data: await f.read() }); } catch { /* unreadable */ } }
         await writeLoose(members, dirs.mod);
         if (o.code) await writeCode(source, dirs.mod);
         mine = new Set(source.files.keys());
@@ -127,37 +115,39 @@ export function modOverlay(path: string, base: () => Promise<GameFiles | null>, 
 
 /** The mod's code beside its files, for a bot's runner: `plugins/`, `firegraft/` and `mod.json` (the module's head says why). */
 async function writeCode(source: ModSource, dir: string): Promise<void> {
-  // (a plugin inside the mod's archive is not loaded by the play page: only those carried as files)
-  const plugins = source.plugins.filter((p) => !p.member);
-  if (plugins.length) mkdirSync(join(dir, "plugins"), { recursive: true });
-  for (const p of plugins) writeFileSync(join(dir, "plugins", p.name.split(/[\\/]/).pop()!), await p.read());
+  // (every module of the mod's code the hash has a line for, under the name the hash knows it by; a plugin inside the
+  // mod's archive is loaded by no loader and has none)
+  if (source.code.length) mkdirSync(join(dir, "plugins"), { recursive: true });
+  for (const m of source.code) writeFileSync(join(dir, "plugins", m.name), await m.read());
   if (source.firegraft.length) mkdirSync(join(dir, "firegraft"), { recursive: true });
-  for (const f of source.firegraft) writeFileSync(join(dir, "firegraft", f.name.split(/[\\/]/).pop()!), await f.read());
-  const hash = await sourceHash(source);
-  const link = (source.manifest as { link?: unknown; url?: unknown } | null)?.link ?? (source.manifest as { url?: unknown } | null)?.url;
-  writeFileSync(join(dir, "mod.json"), JSON.stringify({ name: source.name, hash: hash.hash, withoutPlugins: hash.withoutPlugins, ...(typeof link === "string" && /^https?:\/\//.test(link) ? { link } : {}) }, null, 2) + "\n");
+  for (const f of source.firegraft) writeFileSync(join(dir, "firegraft", leafOf(f.name)), await f.read());
+  const id = source.description!.identity;
+  writeFileSync(join(dir, "mod.json"), JSON.stringify({ name: source.name, hash: id.hash, withoutPlugins: id.withoutPlugins, ...(source.link ? { link: source.link } : {}) }, null, 2) + "\n");
 }
 
 /**
- * A replay's tag for a game of `source` (`ModOverlay.tag`). The plugins that ran are those the mod carries as files,
- * less any the runner said failed (it names a plugin by the name the plugin gives itself, so a failure is matched by
- * the file's name where it can be); `noplugins` when it carries some and none ran.
+ * A replay's tag for a game of `source` (`ModOverlay.tag`). The plugins that ran are the mod's plugins (`code`, the
+ * libraries apart), less any the runner said failed (it names a plugin by the name the plugin gives itself, so a
+ * failure is matched by the file's name where it can be); `noplugins` when it has some and none ran. The data set is
+ * named by the hash of the game that ran: the mod's when all ran, without its code when none did, and the hash of
+ * what ran (`runningHash`) between.
  */
 export async function modTag(source: ModSource, code: RunnerCodeReport | null, build: string): Promise<ModTag> {
-  const hash = await sourceHash(source);
-  const carried = source.plugins.filter((p) => !p.member);
+  const id = source.description!.identity;
+  const carried = source.code.filter((c) => c.role !== "library");
   const failed = (code?.plugins ?? []).filter((l) => / failed: /.test(l)).map((l) => l.split(" failed: ")[0].toLowerCase());
-  const leaf = (n: string) => n.split(/[\\/]/).pop()!;
-  const ran = code ? carried.filter((p) => !failed.includes(leaf(p.name).toLowerCase())) : [];
-  const plugins = await Promise.all(ran.map(async (p) => ({ name: leaf(p.name), sha256: await fileDigest(await p.read()) })));
+  const ran = code ? carried.filter((p) => !failed.includes(p.name.toLowerCase())) : [];
+  const plugins = ran.map((p) => ({ name: p.name, sha256: id.plugins[p.name] }));
   const fgp = code?.firegraft ? source.firegraft.find((f) => /\.fgp$/i.test(f.name)) : undefined;
-  const link = (source.manifest as { link?: unknown; url?: unknown } | null)?.link ?? (source.manifest as { url?: unknown } | null)?.url ?? code?.link;
+  const link = source.link ?? code?.link;
   const noplugins = carried.length > 0 && plugins.length === 0;
+  const running = [...ran.map((p) => p.name), ...source.code.filter((c) => c.role === "library").map((c) => c.name)];
+  const hash = noplugins ? id.withoutPlugins : ran.length === carried.length ? id.hash : await runningHash(id.lines, id.plugins, running);
   return {
     v: 1,
-    dataSet: { hash: noplugins ? hash.withoutPlugins : hash.hash, name: source.name, url: typeof link === "string" && /^https?:\/\//i.test(link) ? link : null },
+    dataSet: { hash, name: source.name, url: typeof link === "string" && /^https?:\/\//i.test(link) ? link : null },
     plugins,
-    firegraft: fgp ? { name: leaf(fgp.name), sha256: await fileDigest(await fgp.read()) } : null,
+    firegraft: fgp ? { name: leafOf(fgp.name), sha256: await sha256Hex(await fgp.read()) } : null,
     noplugins,
     engine: { lifter: "shipped", build },
     madeBy: `scmjs ${VERSION}`,

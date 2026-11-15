@@ -14,7 +14,8 @@ import { archiveExtrasAtom } from "../atoms/documentAtoms";
 import { gameDataSourceAtom, keepRacesAtom } from "../atoms/gameDataAtoms";
 import { openDialogAtom } from "../atoms/uiAtoms";
 import { isDefaultProfile, isProfileId, keptRaces } from "../gamedata/profiles";
-import { normalizeRaces, sameRaces, type DataSetRace } from "../formats/mod/races";
+import { normalizeRaces, type DataSetRace } from "@scm-js/mod";
+import { sameRaces } from "../formats/mod/races";
 import { currentAssetSource, type AssetSource } from "../gamedata/source";
 import { listStoredCopies, profileOf } from "../gamedata/store";
 

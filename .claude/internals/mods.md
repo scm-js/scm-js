@@ -6,15 +6,13 @@ fifteenth guide) and the "Mods" page of `docs/cli.md`.
 
 ## Where things are
 
-- **Core (pure, exported from `core/src/index.ts`, "Mods: a mod as a folder" block):**
-  - `src/formats/mod/sources.ts` — `gameName` (lower case, backslashes: the key everywhere), `modRoot` (the game's
-    paths at the root or **one folder down only**, so `unit/terran/` under a root is not a second root),
-    `exeArchive` (FireGraft `PEGF` overlay first, then SEMPQ at 512-byte boundaries after the PE's last section, then
-    any `MPQ\x1A` with a sane header), `readZip` (central directory, stored + deflate via
-    `DecompressionStream("deflate-raw")`, no zip64/encryption), `dataSetHash`.
-  - `src/formats/mod/hash.ts` — the mod hash (`modHash`, `modHashOfDigests`, `hashLines`, the line forms) and
-    `probeNames` for a list-less archive; "The mod hash, one rule" below. `sources.ts` holds `SYSTEM_FILES` /
-    `isSystemFile`: an operating system's files, which have no line and are no file of a mod's.
+- **Reading a mod is `@scm-js/mod`'s** (`/home/jeany/github/mod`, `ADOPTION.md` there; adopted 2026-11-12, branch
+  `mod-package`, section "@scm-js/mod adopted" below). `src/formats/mod/sources.ts` and `hash.ts` are gone; nothing
+  here decides what a mod's files are, its layers, its code or its hash. The sections further down that describe
+  `sources.ts`, `hash.ts`, `fromPieces`, `dataSetHashOf`, `splitPickedFiles` are history: the rules they record are the
+  package's now (where the two disagreed, ADOPTION.md "Where the copies disagreed" says which was kept).
+- **Core (pure, exported from `core/src/index.ts`, "Mods" block):** re-exports the package's names it had (list in
+  "@scm-js/mod adopted"); its own:
   - `src/formats/mod/folder.ts` — the form: `placeOf(member)` (rule: member → folder file), `memberOf(file, manifest)`
     (inverse, with `manifest.members` overrides), `renderMember` / `renderAiScripts` (unpack, checked), `packFile`
     (pack), `recordRendered` + `tidyManifest` (the manifest), `ModManifest` (`mod.json`).
@@ -23,9 +21,124 @@ fifteenth guide) and the "Mods" page of `docs/cli.md`.
     past the standard count), `namesOf` (unitnames.tbl[id] when non-empty, else stat_txt[id] for id < 228; labels
     1-based into stat_txt).
   - `src/formats/mod/check.ts`, `diff.ts` — the lints and the changelog.
-- **CLI:** `cli/src/mod/{source,open,unpack,pack,info,check,diff,new,play,overlay}.ts`; registrations in `main.ts`
+  - `src/formats/mod/races.ts` — the editor's half of races: `raceLabel`, `raceChoices`, `GAME_RACE_NAMES`, `sameRaces`,
+    `racePlaysAs`, `hasRaceCandidates`. `normalizeRaces`, `raceCandidates`, `DataSetRace` are the package's.
+- **CLI:** `cli/src/mod/{source,open,unpack,pack,info,check,diff,new,play,overlay,hash}.ts`; registrations in `main.ts`
   under `mod`; MCP tools `mod_info|check|diff|unpack|pack|new` in `mcp.ts`. `engine.ts` gained `EngineCurrent.mods`,
   `Engine.mods`, `MOD_OVERLAY = 1`, `modArgs`; `maptest.ts`/`trace.ts` an option `mod: { folder() }`.
+
+## @scm-js/mod adopted (2026-11-12, branch `mod-package`)
+
+**Shape.** `cli/src/mod/source.ts#describedSource(path, kind, tree)` = `readMod(tree)` (a `diskFiles` tree from
+`@scm-js/mod/node`; for a text-form folder `pack.ts#packFolder` builds a `filesOf(…, { layout: "game" })` tree of its
+members, `plugins/<name>` for each non-member `manifest.plugins`, `firegraft/<name>` for each `manifest.firegraft`) put
+in the commands' `ModSource`: `files` (from `d.files` + `fileReaders`), `plugins` (plugin-file modules, and
+`d.carried` members inside archives with `member`), `firegraft` (`d.patches[0].files`), **`code`** (every module
+`identity.plugins` has a line for, by module name: plugin files, a patcher's carried plugins, libraries),
+`description`, `link`, `races`, `said` (paths shown), `gameCopy`/`left`/`probed`/`unheld` (paths shown: the folder's or
+zip's own name stripped). `exes`, `beside`, `duplicates`, `system` are gone (read `description`). `hash.ts#sourceHash`
+is `identity` + `beforeCode` + `older` (`left` = `older.files`) + `earlier` (since 1.1.0; it held `gameFilesOnly` and
+`systemLines` of its own before, "@scm-js/mod 1.1.0" below). Refusals:
+`ModError` → `CliError(modText(e.detail), …, 2)` (`exe-no-archive` keeps the "Name a mod" hint); `copy-only` from
+`d.said` is thrown with the folder as given. The CLI still sniffs replays, maps, bots, and an empty folder, before
+reading.
+
+**What moved with it.** `overlay.ts`: `readsStartupData`/`STARTUP_NAMES` are the package's (`identity.readsStartupData`:
+a plugins-only mod no longer gets a game layer; scm-sim's runner already follows that rule on `mods-next`);
+`writeCode` writes `source.code` under `plugins/` by module name and `mod.json` `{ name, hash, withoutPlugins, link }`
+from `identity`; `modTag` names the data set by `hash` / `withoutPlugins` / `runningHash(lines, plugins, ran +
+libraries)`. `play.ts#playSet` hands `source.code` under `plugins/` and takes `identity` (no own digest). `unpack.ts`
+writes `source.code` that is not a plugin file into `plugins/` too (so an unpacked patcher mod packs back to the
+release's hash — not for a library: package gap, `tests/cli-mod.test.ts` `it.fails`). `replaymod.ts#sourceHashes`:
+`older` = `[beforeCode, older.hash, older.withoutPlugins]`; the derived older forms `gameFilesOnlyWere` /
+`changedWere` were dropped (system members of archives are not exposed). `info.ts`: `kindOf`, `MOD_KINDS`,
+`kindTotals`, `tableShape` from the package; `libraries` replaces `beside`; `exes[].form` replaces `kind`;
+`beforeCode` ("Earlier hash" row) and `said` (package sentences other than game-copy/unheld/duplicate) added.
+
+**Editor.** `install.ts#pickedDataSet(files)` replaces `splitPickedFiles` + `pickedFolderRaces`: game archives = the
+pick's `gameCopyFiles` ∩ `isGameArchive`; races by `isModJsonPath` + `readModJson`; the whole pick goes as
+`GameDataFiles.picked`. `dataSetMod(name, input)` makes `ExtractRequest.mod` (picked as picked; or the API's
+`archives`/`files`/`code` in game layout: archives at top, files at their paths, `.qdp/.bwl/.dll` under `plugins/`,
+`.fgp/.fgd` under `firegraft/`). The worker: `archives.ts#modTree` → `readMod` → `identity.hash` is the stamp's hash;
+`d.files` winners under `isMemberPath` are preloaded as the overlay over the game's archives; the play set asks the mod's
+winners first. `overCopy.ts#dataSetHashOf`, `hashOnly`, `code`, `overlay` and archive `offset` are gone.
+`folderSet.ts` takes `modRoot`/`GAME_FOLDERS`/`isSystemFile`/`inDotFolder` from the package (24 folders: a
+`samase/` file is no longer served there).
+
+**Words.** `scripts/lib/i18n.mjs#extractMessages` adds every `MOD_MESSAGES` template to a tree that imports
+`@scm-js/mod` (both do), so both `ko.json` hold all 79; `cli/src/i18n.ts#modText` and `install.ts`'s `modText`
+render a `ModMessage` through `translate`. `tests/i18n.test.ts` "@scm-js/mod's sentences".
+
+**Measured** (`scmjs mod info`, the five real mods; before = `scm-js-patcher-exe` bfa4650): Burning Ground exe and
+folder `c76bfa18e9fc4fb5` / `0ed055cf80a95bd0` (was `0ed055cf80a95bd0`), SC Revolution `d9e4e6ff76c7e71d` /
+`bb3f273690cf8d8d`, earlier `90b8c22d9cb4ba31`, TriFresh `ea488d3ac3575bda` unchanged, Cosmonarchy release
+`c94acdf31982fa4b` / `db23a1f9dd8cef66`, earlier `20e1c6d89ae2af75`, older `1c41a2d7701fe842`. Cosmonarchy's release reads in
+3.0 s (5.6 s before), this machine's Linux-disk copy. Outputs under `~/mods-under-test/_out/adopt-scm-js/{before,after}/`.
+
+**Package needs found, fixed in the package (main fce2ce8, unpacked 2026-11-12):** a `.dll` under `plugins/` in
+`layout: "game"` was also a game file (two lines); `identity.older.files` now names the system files the older hash
+counted (archive members too). `sourceHash`'s `older.left` is `older.files`; `hash.ts#systemLines` read their bytes
+(loose under the folder layer, else the archives) for the earlier forms until 1.1.0 gave `older.lines`.
+
+**Follow-ups (2026-11-12).** Core keeps every released export (`core.md` "Mod names from @scm-js/mod"). `mod info
+--json` keeps 0.13.3's fields: `exes[].kind` (`firegraft`/`sempq`) beside `form`, `older.withoutPlugins` a string
+(the older hash when there are no plugin files). `replaymod.ts#sourceHashes` restores `gameFilesOnlyWere` and
+`changedWere`, as 0.13.1–0.13.3 accepted them. Who could have written them (scm-sim history read 2026-11-12): nobody.
+The replay tag (`SCMJ`) was first written by the play page in R2 (scm-sim 1731de9, 2026-11-08 13:35), already by the
+all-files rule decided that morning (ab0ff4b 11:37, "no real modded replay exists before R2"), so a tag from then to
+the system-files cutover (scm-sim cf2e8ee, 2026-11-09 15:35) is `older.hash` (Cosmonarchy `1c41a2d7701fe842`); scmjs
+tags replays only since `6b198b4` (unreleased); bots and ladders (scm-sim C4/C5) came after the rule too. The game
+files alone and the files that differ from a copy were never a tag's rule: they were the editor's data set stamp (up
+to 0.12.1) and the page's kept-mod key before 2026-11-08, matched by the page, not by these commands. Kept anyway
+(cheap, and what released versions accepted). `folderSet` serves every folder under a root
+found by the game's folders (Cosmonarchy's `config/`, `datreq/`, `lua/`, `samase/`: 102 files the first cut lost), and
+nothing when no game folder is there. `overlay.ts` leaves out a file its archive cannot give (SC Revolution's
+`wardendth00.wav` made `map test --mod` throw before this change too). Hand-over side by side (before =
+`scm-js-patcher-exe`, after = this): `~/mods-under-test/_out/adopt-scm-js/handover/`. `patcherPluginWords` is not used:
+`mod info`'s Exe row carries sizes and four-letter ids, which its sentence has not (its Korean is in the catalogues).
+`pickedDataSet`/`dataSetMod` moved to `src/gamedata/modInput.ts`, imported by the Game Data dialog and dynamically by
+`installDataSet`; `install.ts#runWorker` imports `renderMessage` only when the worker posts a message. So the editor's
+startup `source` chunk holds no package code (only the catalogue's 80 entries): 315,576 bytes at bfa4650, 335,994 in
+the first cut, 319,758 now.
+
+## @scm-js/mod 1.1.0 (2026-11-12, branch `mod-1-1`)
+
+`^1.1.0` in `package.json` and `core/package.json`. What it replaced (ADOPTION.md "What the last two adopters found"):
+
+- **Earlier forms.** `cli/src/mod/hash.ts`'s `systemLines` (read the system files' bytes again: loose, else every archive
+  layer opened a second time), `gameFilesOnly` (`hashLines` of the lines without `.fgp`) and `gameFilesOnlyWere` are
+  gone; `SourceHash.earlier` is `identity.earlier`. `replaymod.ts#sourceHashes`: `all` = the `game-files` entry; `older`
+  = every hash and `withoutPlugins` of `earlier` that is not `hash`/`withoutPlugins`/`all`, plus `changedWere` (the
+  differing files with `identity.older.lines`: the one form that needs the person's copy, so it stays here). Checked
+  before deleting (main's code with 1.1.0 installed, ten mods: Cosmonarchy release, Burning Ground folder, SC Revolution
+  exe, TriFresh exe and folder, remove-protoss, EUD Enabler, ThunderGraft, BWMetaAI's patch_rt.mpq, Cosmonarchy Plus):
+  `gameFilesOnly` = `game-files`, `gameFilesOnlyWere` = `game-files-older`, `systemLines` = `older.lines`, all ten.
+  **One form more is accepted**: `before-unlisted-project` (scm-sim's reader from 2026-11-11 until 1.0.0; SC
+  Revolution `693bf4a83f3a69a1`). `mod info --json` of Cosmonarchy, Burning Ground's folder, SC Revolution's exe and
+  TriFresh's exe: byte-identical to main's (`~/mods-under-test/_out/mod-package/scm-js-1-1/{before,after}/`).
+- **Lines by hand.** `replaymod.ts` (the differing files) and `legacy.ts` (`gameLine`, `modHashOfDigests`) write lines
+  with `gameFileLine`; legacy's names are core's `gameName` first (no leading backslash), so the values are 0.13.3's.
+- **Archives opened twice.** `source.ts#describedSource` and the extraction worker pass one `archives` map to `readMod`,
+  `fileReaders`, `openLayer` (a plugin inside an archive) and `firegraftBytes`. No `close()`: the CLI's readers live as
+  long as the `ModSource` (a command, an MCP call, `replaymod`'s per-process cache on purpose), the worker is terminated.
+- **Words.** Nine new templates in both `ko.json`. `archive-unopenable` / `exe-archive-unopenable` carry a hidden
+  `reason` (a message); the Korean entries show `{reason}` in place of `{why}`, the English is untouched. The check
+  allows it (`i18n.md`); both `modText`s let `why` stand in where a message has no `reason`.
+- Left as it was: `info.ts#SAID_HERE` (which `said` keys `mod info` prints on lines of its own: a choice of this command,
+  not a group `MOD_MESSAGE_GROUPS` has); `scripts/lib/i18n.mjs` asks for every template (all groups are shown somewhere);
+  `openModSource` still reads a named file whole to tell what it is before `diskFiles` reads it again (Burning Ground's
+  exe: 519 MB twice; not something 1.1.0 gives).
+
+
+## @scm-js/mod 1.2.0 (2026-11-12, branch `mod-1-2`)
+
+Only the range moves (`package.json`, `core/package.json`, the lock). What changes for the command line, the core and
+the installer comes from the package: an archive without a list of its files is searched for the names 1.16.1's own
+image, sound and portrait tables give too (the package carries them, names only), as the play page always searched
+with the person's tables. So such an archive that holds a file only those tables name is found to hold it here now,
+and its hash is the page's. No reader here ever passed `ReadOptions.tables`, which is deprecated and no longer asked.
+The hash such an archive had here before is in `identity.earlier` (`without-stock-names`), which `replaymod.ts`
+already takes whole. No mod in hand changes: SC Revolution, the one without a list, carries its own tables.
 
 ## Decisions (taken by the user, 2026-11-08 — do not reopen)
 
@@ -303,8 +416,15 @@ it holds none.
   unique; Mason 7, Ministry 106, Supply Depot 109, Stockade 111, Quarry 174, Talos 20, Maverick 0, Sieve 419,
   Ogun 494 (worker mode) / 497 (smithy mode). The header compiles with the toolchain's flags, plain and MSVC-compat
   (em++ -std=c++17 against `native/` of scm-sim). 4.7 s, mostly the hash.
+- **`--js`** (2026-11-14, scm-sim js-bots J4): `<Mod>.mjs` (`moduleText`: `MOD_NAME`, `MOD_HASH`, four frozen objects,
+  a default export) and the ids JSON, no `.h`; refused with `--bot`. Identifiers by `jsIdentifierOf` (no C++
+  keyword/macro prefix) — the rule scm-sim's `src/bwapi/jsData.ts` copies for a JavaScript bot's `init.data.UnitTypes`
+  in a mod's game, over names read as here (scm-sim `readUnitLabels`: unitnames.tbl whole entries, stat_txt for <228,
+  "Name (Subtitle)"). **Keep the two in step**: on Cosmonarchy (hash c94acdf31982fa4b) all 621 unit names agree
+  (checked by a bot importing the module in a game). Weapons, upgrades and techs are not renamed at run time (BWAPI's
+  names): the module is how a JavaScript bot gets the mod's names for those.
 - Tests: `tests/cli-mod-header.test.ts` (made mod: tbl/unitnames names, a 230-unit `.dat`, stat.txt fill, a name list,
-  `--namespace`, `--bot`).
+  `--namespace`, `--bot`, `--js` imported as a module).
 
 ## `bot run --mod`, `bot ladder --mod`: overlay 2 (C4, 2026-11-08, branch `mod-header`)
 
@@ -446,6 +566,72 @@ on a Cosmonarchy replay (a player of race 69, the mod's fourth race; ids 69–71
   Not done: an editor dialog to name races; `api.gameData.raceCandidates` gives nothing for a stored copy
   (`gamedata.md`).
 
+## A patcher exe's overlay, and an archive whose tables lie before its header (2026-11-10, branch `patcher-exe`)
+
+Found on two mods kept outside every repository (SC Revolution 2.2, Burning Ground 2.00); the fixes are general and
+name neither. mopaq 1.6.3 (`Archive.open(data, { offset })`) is needed: the `mopaq` link points at its worktree until
+it is published.
+
+**FireGraft's patcher overlay** (`sources.ts#exeArchive`; the same reader is scm-sim `src/mods/unpack.ts`, and the
+layout with its evidence is scm-sim `docs/patcher.md`). Five samples, two builds of the program ("FG Patcher",
+`PatchLoader.pdb`): the program's own header holds the overlay's offset at 0x18 (the program seeks there and reads
+`PEGF`; all five = the program's end). Then u32 **count**, u32 **form** (1 in all five; copied through by the program),
+and per plugin u32 id, u32 size, u32 0 **and its bytes at once** (interleaved: read from the program's code — after
+`PEGF` it reads the count into its loop counter, then per plugin three words and `size` bytes). No terminator; the
+archive follows at a 512-byte boundary, where storm looks. The old reader had count and form swapped and the entries
+grouped: right only for one plugin (Cosmonarchy, SC Revolution); Burning Ground's two (`EUDE`, GPTP) read as
+"MPQDraft's self-executing MPQ" with none, and TriFresh / remove-protoss (count 0) were "MPQDraft's" too — they are
+FireGraft's patcher with no plugins, and say so now (files and hashes unchanged). Refused with `PatcherError`
+(a `ModSourceError`; `what` in a few English words, the sentence through `t()` in the CLI and the editor's install): a
+form other than 1, more than 256 plugins, a third word not 0, a plugin past the file's end or not starting `MZ`, a
+patcher with no archive after it. `libraryName` names a plugin by its export directory (`GPTP.qdp`, `GPTP-v2.41.qdp`;
+the UPX-packed EUD Enabler says `qdp.dll`); `mod info` prints `name, id <hex or four letters>, size`.
+
+**`ExeArchive` changed shape**: `bytes` (the whole exe) and `at` instead of `archive` (a slice from the header), so
+every caller opens `Archive.open(found.bytes, { offset: found.at })`. A slice cannot reach tables before the header.
+`mpqHeaderAt` no longer believes a version 0 header's own size (SC Revolution writes 0xFFFFFFFF); it requires the
+tables' wrapped positions inside the file instead (the old check rejected the header, so `exeArchive` returned null and
+`mod info` said "Files 0 · 0 B" with no word why). The editor's install hands the worker the whole exe and an `offset`
+(`ExtractRequest.archives[].offset`, `openArchives`), not a copy from the header.
+
+**mopaq 1.6.3** (its CHANGELOG has the rules and StormLib's places): positions modulo 2^32; a cut table read as far as
+it goes (block table cut, hash table's missing slots empty); a table of 256 MB or more is a fake header; header size
+and archive size not believed; the scan passes over a fake header. **And storm's lookup**: StarCraft 1.16.1's
+storm.dll (0x15014610) returns an entry of the asked locale at once but otherwise keeps the *last* neutral match. SC
+Revolution puts a garbage decoy (flags `0x80020100`, IMPLODE|ADJUST_KEY without ENCRYPTED, bytes of nothing) at each
+name's home slot and the real entry later; mopaq read the decoy (`units.dat` 61,062 bytes of nothing) and now reads
+the real one (19,876). 490 of its 732 named slots are such decoys or fillers.
+
+**SC Revolution** has no `(listfile)`: the CLI probes (`probeNames`) and finds 205 files (11 tables of 1.16.1's sizes,
+both AI and iscript, 91 pictures, 97 sounds, 4 string tables), hash `90b8c22d9cb4ba31`. Its FireGraft project
+(`Firegraft\ModDatResurection - New.fgp`, named by the patcher's own `Firegraft\datalist.txt`) is **not** found here:
+the probe list has no FireGraft names, and adding them would change list-less archives' hashes on one side only
+(the page's `namesToProbe` would need the same). scm-sim's runners find it through the datalist for loading only.
+
+**Libraries beside the exe**: `ModSource.beside` (for an exe named alone, the `.dll`s in its folder; in a folder, those
+in the exe's folder, still in `left`), a ▲ line in `mod info`, `beside` in `--json`. Burning Ground's GPTP imports 17
+functions from `fmod.dll` (beside its exe), so it cannot load without it; Cosmonarchy's folder has
+`discord_game_sdk.dll`. The hash rule is unchanged (`.dll` left out; a plugin inside the exe has no line either).
+
+**What each command does with the patcher's own plugins**: `mod info` lists them (`exes[].plugins`: id, at, size,
+name; never bytes); `mod unpack`, `mod play` and the bot runners' folder (`overlay.ts#writeCode`) carry only plugins
+that are files, so none of these. The page does not run them (scm-sim `web/modDrop.ts` names them only).
+
+Measured (`scmjs mod info`, before = this branch's parent with mopaq 1.6.2, after = this branch):
+
+| exe | before | after |
+| --- | --- | --- |
+| SC Revolution 2.2 (21 MB) | Files 0 · 0 B, no word why | 205 files · 41.1 MB, 1 plugin (GPTP-v2.41.qdp), probed, `90b8c22d9cb4ba31` |
+| Burning Ground 2.00 (519 MB) | "MPQDraft's self-executing MPQ", no plugins | 2 plugins (qdp.dll id EUDE 13 KB; GPTP.qdp 483 KB), ▲ fmod.dll; 2,882 files, `0ed055cf80a95bd0` both |
+| TriFresh | "MPQDraft's self-executing MPQ" | "FireGraft's patcher"; 66 files, `ea488d3ac3575bda` both |
+| remove-protoss | "MPQDraft's self-executing MPQ" | "FireGraft's patcher"; 11 files, `fbd2edc992e7377e` both |
+| Cosmonarchy BW.exe | 1 plugin (id fc724f8c) | qdp-hotloader.qdp named, ▲ discord_game_sdk.dll; 7 files, `e18fe9901e9edd71` both |
+| Cosmonarchy release folder | 7,767 files, `20e1c6d89ae2af75` / `db23a1f9dd8cef66` | the same |
+
+Tests: `tests/cli-mod.test.ts` "reads FireGraft's patcher in both forms…" and "says why an exe is not read…", the bytes
+made by `tests/support/patcherExe.ts` (a copy of scm-sim's). Not done: `mod unpack` writing the patcher's plugins out;
+any hash line for them (a decision for all four repositories).
+
 ## Open
 
 - The hash is one rule everywhere since `mod-hash` ("The mod hash, one rule" above, with its known gaps). The copy
@@ -455,5 +641,48 @@ on a Cosmonarchy replay (a player of race 69, the mod's fourth race; ids 69–71
 - The runners' `--mod <folder>` and `current.json` `"mods"` (now 2) are scm-sim's to publish with a deploy.
 - `map run` (plugins, no engine) has no `--mod`; `map test|trace|cost` and `mod test` do.
 - iscript header comments (images using an id) are not written; table comments are.
-- `docs/images/cli-overview.webp` predates the `mod` row (re-run `scripts/cli-screenshots.mjs`).
 - Writing a 1 GB MPQ holds every member and the output in memory (~2 GB for Cosmonarchy).
+
+## Terrain a mod declares (2026-11-14, branch `mod-terrain-file`)
+
+`terrain.json` beside `mod.json` (found by `mod.json`'s rule — `formats/mod/terrain.ts#isTerrainFilePath` mirrors
+`@scm-js/mod`'s `isModJsonPath`, which the package does not export for another name — and needing no `mod.json`): per
+tileset `{ table, terrains, pieces, borrow }`, what `provideTypes` / `providePieces` / `provideBorrowTable` take, so
+every user of the mod gets them without learning or scanning. **Core** `src/formats/mod/terrain.ts` (exported beside the
+races functions): `readTerrainFile` never throws (bad rows dropped with `{at, reason}`; limits `TERRAIN_LIMITS`; a
+`format` other than 1 uses nothing and keeps the whole; unknown keys kept per level, an unknown tileset name kept under
+the file's extra and written back), `writeTerrainFile` (fixed key order, one row per line: a 3,373-piece file diffs by
+row), `withTerrainSection`, `sectionAgainstTable` (rows the loaded table has no pictures for), `terrainFileCounts`.
+**Beyond the brief:** a borrow row carries `standIns` (source tiles whose tile is only the nearest picture). Without it a
+file offered more than the scan did (Ashworld's Dirt in Cosmonarchy's Badlands: its 21 stand-ins are past the tenth
+`borrowableTerrains` allows, but a provided table had no stand-ins to count); `providedTable(…, standIns)` marks them, and
+`BorrowTableSpec.standIns?` is the optional API twin. **Hash**: not one of the mod's files (top-level or one-down, not in a
+game folder: `@scm-js/mod` never reads it as a member); `tests/terrain-file.test.ts` pins `sourceHash` with and without
+it; measured on Cosmonarchy's release copy: `c94acdf31982fa4b` both ways. **CLI** (`cli/src/mod/terrain.ts`):
+`ModSource.terrain` (`describedSource` reads it from the tree beside the mod; `packFolder` from a mod folder's root);
+`mod info` `terrain: {path, tilesets: counts, dropped}` and a `Terrain` row per tileset; `mod check` warnings
+`terrain-file` (each dropped row, each row the table has no picture for) and `terrain-table` (a section whose `table` is
+not `tableHash` of the mod's own `tileset\<id>.cv5`, else the game copy's; neither → a note); `mod unpack` writes the
+release's `terrain.json` as it was, else the one of the folder unpacked over (`modTarget` reads it before the folder is
+cleared, `earlierTerrain`). `mod pack` does not put it in the MPQ (it is not a game file).
+**Borders (2026-11-14, branch `borrowed-borders`):** a section may carry `borders: [{ source, terrain, ground, shapes:
+{ shape: [tile, …] } }]` — a drawn border between a borrowed terrain (`terrain`, the source's CV5 index) and the host's
+ground (`ground`), shapes named as `editor/borderLattice.ts` reads them (terrain.md "Drawn borders"). Read with the same
+never-throw rules (limits `borders` 2048 rows, 1024 shapes a row, 80 characters a shape, 64 tiles a shape; new drop reason
+`terrain` for an index outside 0–255; a second row for one pair is `duplicate`); `sectionAgainstTable` flags a row with a
+tile the table has no picture for; written one row per line after `borrow`, only when there are any (a file with none
+reads as before). Before this, `borders` was the example of an unknown key kept: `tests/terrain-file.test.ts` now keeps
+`shading` instead. **Save as a terrain file…** writes every pair's table the editor has (learned, the file's, a
+plugin's) — Cosmonarchy's Badlands after learning 404 maps: 74 borders, 984 shapes, the file 518,081 → 579,597 bytes.
+`mod info` counts borders and shapes per tileset; `mod check` warns on their rows like the others. In the editor the
+section goes into `providedBordersAtom` under `@dataset:<id>`, behind any plugin's (`beforeDataSet`). Measured: a data
+set added from a copy holding that file, nothing learned or scanned, draws the border on the first Substructure stroke
+(56 cells drawn, 2 hard).
+
+**`terrain.json`'s `copies` section (2026-11-14):** rows `{ terrain, height, ground: {terrain}|{pair}, pieces: [[piece, tile]…] }`
+(`formats/mod/terrain.ts#TerrainFileCopy`, at most `TERRAIN_LIMITS.copies` 256 a tileset, dropped as `terrain` / `pair` /
+`empty`); written only when non-empty, so older files and older editors are unchanged (an older editor keeps it as an unknown
+key). `mod info` counts the blocks per tileset, `mod check` lists rows whose tiles are past the table or pictureless
+(`sectionAgainstTable`), `mod unpack` keeps the file as it was. In the editor, `applyDataSetTerrain` turns them into
+`providedCopiesAtom` rows under `@dataset:`; **Save as a terrain file…** writes every offered block with the ground it is
+drawn for. See terrain.md "Copied terrain".

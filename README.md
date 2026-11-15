@@ -38,8 +38,9 @@ Plugins ▸ Browse Plugins….
 - **Mods.** A mod such as Cosmonarchy BW plays in the browser at
   [scmjs.dev/play](https://scmjs.dev/play/) with its own plugins, against a bot made for
   it if you like, and its replays play back and are analysed in the editor. The editor
-  makes maps for a mod with its units by their own names, and `scmjs mod` keeps a mod as a
-  folder of text you can edit and keep in git. See [Mods](docs/mods.md).
+  makes maps for a mod with its units by their own names and the terrain its tilesets add,
+  and `scmjs mod` keeps a mod as a folder of text you can edit and keep in git. See
+  [Mods](docs/mods.md).
 - **A command line.** `scmjs` looks inside maps and replays, checks maps on every push
   with a GitHub Action, plays a map's triggers in the game, builds and plays bots, and
   gives AI tools the same commands. See [the command line guide](docs/cli.md).
@@ -68,6 +69,14 @@ Plugins ▸ Browse Plugins….
   [Cut, copy and paste](docs/guide.md#cut-copy-and-paste).
 - **Doodads into terrain.** *Convert Doodad to Terrain* turns a doodad into ordinary tiles
   you can edit. See [Doodads](docs/guide.md#doodads).
+- **Wider ramps, longer bridges.** Drag a ramp or a bridge as you place it and it
+  stretches along its cliff or its deck. View ▸ Seam Overlay marks the joins that show,
+  the Heal brush swaps them for tiles that play the same, and Pin keeps hand-laid ground
+  from the isometric brush. See [Stretching a ramp or a
+  bridge](docs/guide.md#stretching-a-ramp-or-a-bridge) and [Heal](docs/guide.md#heal).
+- **A symmetry report.** Tools ▸ Symmetry… says how alike the sides of a map play under
+  each mirror and turn, and lists the places that differ. See
+  [Symmetry](docs/guide.md#symmetry).
 - **Timelapse.** Timelapse (*Browse Plugins*) records the map change by change and exports
   a GIF or WebM video. See [Plugins](docs/guide.md#plugins).
 - **Maps from scmscx.com.** File ▸ Find on scmscx.com… searches the community map archive

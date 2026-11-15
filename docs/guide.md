@@ -229,7 +229,8 @@ takes back the whole stroke.
 
 Ramps are not terrain: they are on the **Doodads** layer. Type `ramp` in its search box to
 list them, click one, and click on a cliff edge; the ghost is red until the footprint sits
-on ground it fits.
+on ground it fits. To make the ramp wider, drag along the cliff instead of clicking
+([Stretching a ramp or a bridge](#stretching-a-ramp-or-a-bridge)).
 
 ### 3. Place the bases
 
@@ -342,16 +343,17 @@ what is in a different place, and what to check before you move a map you care a
 
 ## Terrain
 
-Terrain is painted with five brushes, each a tab in the palette, and a sixth tab keeps
-what they have laid:
+The Terrain layer's palette has six tabs. Five are brushes, and the sixth protects what
+they have laid:
 
-| Brush | Paints |
+| Tab | What it does |
 | --- | --- |
-| Isometric | Terrain types, laying the cliffs and edges around them. The one to use for almost everything. |
-| Rect | Flat ground of one terrain type, with StarEdit's random variation. No cliffs, no edges. |
-| Tile | Any single tile by number, or a block of tiles picked from the tileset's sheet: cliff pieces, doodad pictures, anything the tileset has. |
-| Blend | One tile next to a tile you picked, chosen from those whose facing edge continues it. |
-| Heal | Nothing of its own: it trades a tile that joins its neighbours visibly for one that joins them and plays the same. |
+| [Isometric](#the-isometric-brush) | Paints terrain types and lays the cliffs and edges around them. The one to use for almost everything. |
+| [Rect](#rect-tile-and-blend) | Paints flat ground of one terrain type, with StarEdit's random variation. No cliffs, no edges. |
+| [Tile](#rect-tile-and-blend) | Lays any single tile, or a [block of tiles](#the-sheet-and-blocks) picked from the tileset's sheet: cliff pieces, doodad pictures, anything the tileset has. |
+| [Blend](#rect-tile-and-blend) | Lays a tile next to one you picked, chosen from those whose facing edge continues it. |
+| [Heal](#heal) | Swaps a tile whose join with its neighbours shows for one that joins better and plays the same. |
+| [Pin](#pin) | Lays nothing. It marks tiles that the Isometric, Rect and Heal brushes and the fills then leave alone. |
 
 ![Cliffs and a shore laid by the isometric brush, with a 3×3 brush ghost](images/terrain-isometric.webp)
 
@@ -359,6 +361,10 @@ Drag to paint. `[` and `]` resize the brush from 1×1 to 7×7, Alt+click picks t
 or tile under the cursor, and right-click offers Pick and Fill Area. The Properties panel
 breaks the tile under the cursor into group, slot, elevation, walkability and
 buildability.
+
+*Remove stranded units*, at the top of the palette, deletes the ground units a stroke has
+just left where they cannot walk, as part of the same undo step. The game would remove
+them at the start. Buildings stay where they are: the game makes them on any ground.
 
 ### The isometric brush
 
@@ -375,14 +381,324 @@ elsewhere. The Isometric tab warns when the record and the ground disagree, and 
 of the map is ground the brush cannot join up with, such as hand-placed tiles or another
 editor's work.
 
+### Rect, Tile and Blend
+
+![The Rect tab](images/palette-rect.webp) ![The Tile tab](images/palette-tile.webp) ![The Blend tab](images/palette-blend.webp)
+
+- **Rect** lays flat ground and nothing else, for filling an area you will shape
+  afterwards, or for ground under a doodad.
+- **Tile** is for the pieces the isometric brush will not give you: a single cliff tile, a
+  doodad's tile, a corner the cliff sets do not have. The buttons beside the filter show
+  the tileset four ways: grouped rows (each tile group as a labelled block), one grid of
+  every tile, the [sheet](#the-sheet-and-blocks) and the [pieces](#pieces). The filter and
+  the search box choose which groups any of the four lists. The grid lists a tile once
+  where the tileset holds the same picture with the same flags several times; the same
+  picture where it walks, builds or stands at another height is another tile and is listed
+  too.
+- **Blend** is for joins the cliff sets never had: dirt into a doodad's base, one edge set
+  into another, a hand-laid shoreline. Click a tile on the map to make it the anchor, and
+  the palette lists for each side the tiles whose opposite edge continues it, best seam
+  first.
+
+None of the three changes the isometric record, so the isometric brush does not know what
+they laid, and a later isometric stroke beside such tiles can lay over them. [Pin](#pin)
+the tiles you want kept.
+
+### The sheet and blocks
+
+The Tile tab's **sheet** view shows the tileset the way its artist drew it: one row for
+each tile group, sixteen tiles wide, the rows touching, with the group's number at the
+left. Pictures that run across tiles and groups show whole there: a doodad, a bridge, the
+buildings and walls a mod adds. A thin dashed line separates groups that are not
+consecutive. The button with two arrows beside the view buttons shows the tiles at full
+size, scrolling sideways when the palette is narrower.
+
+![The Tile tab's sheet view with a block picked](images/palette-sheet.webp)
+
+A click picks one tile, as in the other views. A **drag picks a block**: a rectangle of
+tiles as wide and high as you dragged, which cannot cross a dashed line. With a block
+picked:
+
+- **A click lays it.** The Tile brush shows the whole block under the pointer, its
+  top-left corner on the tile you point at, as a paste does. Empty places in the block
+  leave the map as it is.
+- **A drag repeats it.** The press sets where the first copy goes, and every copy the drag
+  passes over is laid next to the last, so a piece of wall or floor runs on without a
+  seam. The whole drag is one step to undo.
+- **The fills tile it.** Fill Area and **Fill Map with This Block** repeat the block the
+  same way, lined up on the tile you clicked or on the map's corner, and leave pinned
+  tiles alone. With a block, Fill Area covers the same terrain around the tile you
+  clicked, as the Rect fill does, not only the same exact tile.
+
+![A Jungle temple picked as a block and laid three times by one drag](images/terrain-block.webp)
+
+While a block is picked the brush size shows the block's size. Picking a single tile again
+(a click in any view, the Tile # box, Alt+click on the map, or *Single tile*) goes back to
+the brush. A block belongs to the map and tileset it was picked on. Symmetry does not
+mirror a block: its pictures face one way, so it is laid under the pointer only, as a
+paste is.
+
+### Pieces
+
+The Tile tab's **pieces** view lists the parts of the sheet that maps lay whole: a wall, a
+ramp, a ruin, each drawn in its own outline. A click picks a piece as a block, to lay as
+[above](#the-sheet-and-blocks), and the sheet then shows where it came from. Hold the
+pointer over a piece for its size, its group and how often maps lay it; *Most laid first*
+puts the pieces maps use most at the top.
+
+Nothing in a tileset says where one picture ends and the next begins, so the editor goes
+by how maps lay the tiles: two tiles that are neighbours in the sheet, and are laid as
+neighbours most of the times either is laid at all, belong to one piece. At first only the
+map in front is read. **Learn from Maps…** reads every map in a folder you choose and
+keeps what they lay in the browser for later sessions. When it is done, a notice says how
+many maps it read and skipped, and how many pieces each tileset now has. Learning again
+replaces what was learned. *Forget* (the eraser beside the line) drops it, and so does
+**Preferences ▸ Storage ▸ Clear all data**.
+
+- **The game's own maps give none.** A map laid with the Isometric and Rect brushes lays
+  no pieces, so the view is mostly for [a mod's tilesets](#pictures-a-mod-adds) and for
+  maps built tile by tile.
+- **A repeated picture is one entry.** Where a tileset holds one picture several times,
+  exactly or redrawn with slightly different dots, the pointer says how many copies the
+  entry stands for. A copy under other flags is listed right after it and says what
+  differs.
+- **Alt+click picks a whole piece.** With pieces listed, Alt+click on the map in Tile mode
+  picks the piece when the tile under the pointer is laid beside a neighbour from its
+  piece, and the single tile otherwise.
+- **What is learned belongs to the tileset's files.** A mod read from its folder and the
+  same mod installed share it, and a new version of a mod that changes a tileset starts
+  that tileset afresh.
+- **A mod or a plugin can name pieces.** A mod's terrain file lists its pieces under the
+  data set's name, and a plugin's named pieces come under its own heading; both stand
+  ahead of the learned ones, and the search box finds them by name. **Save as a terrain
+  file…** (the button with a down arrow) writes what the view lists into such a file, for
+  a mod to ship ([Terrain a mod declares](mods.md#terrain-a-mod-declares)).
+
+### Heal
+
+Heal mends the joins that [**View ▸ Seam Overlay**](#overlays-and-tools) marks. Drag over
+a join that shows, and where the tileset has another tile that meets the neighbours
+better, that tile is laid instead.
+
+![The same ground before and after the Heal brush, with the seam overlay on](images/terrain-heal.webp)
+
+Heal only takes a tile that is the same to the game: it walks, builds and blocks sight
+exactly as the old one does, at the same height, and is the same kind of ground. A stroke
+changes how the map looks and nothing about how it plays. Ground that already joins is
+left as it was laid, and a placed doodad is left whole (convert it to terrain first if its
+tiles are what needs mending).
+
+The tab's button does the same over the marked area, or over the whole map when nothing is
+marked, and says how many joins showed before and after. On the game's own maps that
+removes about half of the lines and changes one tile in a hundred. A stretched ramp gains
+less, since few tiles play the same as a ramp's.
+
+### Pin
+
+Pin keeps ground as you laid it. The isometric brush works out every tile around the
+diamonds it changes, so a stroke beside a ramp you built tile by tile takes part of the
+ramp with it. Drag the Pin brush over tiles to pin them, and such a stroke leaves them
+alone.
+
+![The Pin tab, and a stretched ramp whose pinned tiles an isometric stroke beside it has left whole](images/terrain-pin.webp)
+
+- **What leaves a pinned tile alone:** the brushes that lay terrain by rule (Isometric,
+  Rect and Heal), both fills and Replace Terrain. The status bar says when a stroke left
+  pinned tiles alone.
+- **What still writes it:** whatever you point at the tile. The Tile brush, Blend, a paste
+  and a doodad all lay over a pin.
+- **The cliffs around it follow the stroke.** The isometric brush still changes its own
+  record under a pinned tile, so the ground around is drawn as if the tile had followed.
+  Only the pinned picture stays.
+
+The tab's *Unpin* choice turns the brush round. **Pin All Hand-Laid Tiles** pins every
+tile the map's isometric record does not account for, which on a map from another editor
+is the ramps, blends and stray tiles its maker set by hand. With an area marked on the Cut
+/ Copy / Paste layer, it and the tab's other buttons work inside the area. A doodad placed
+as terrain is pinned as it goes down, unless *Pin terrain doodads* is unticked on the
+[Doodads](#doodads) layer.
+
+Pinned tiles carry a mark in their corner while the tab is open, and **View ▸ Pinned
+Tiles** keeps the marks on elsewhere. Pins are saved in the map file and move with their
+tiles when the map is resized. The game does not read them, and another editor will not
+keep them.
+
+### Overlays and tools
+
+Two overlays on the View menu show what the ground means to the game:
+
+![The elevation overlay tints each minitile by its height](images/terrain-elevation.webp)
+
+![The buildability overlay hatches the tiles a building cannot stand on](images/terrain-buildability.webp)
+
+**View ▸ Seam Overlay** shows where the ground's picture breaks. It draws a line along
+every join between two tiles where the picture steps: one tile ends lighter or darker than
+the next begins, by more than either picture changes by itself at that edge. Rough rock
+hides a join that a smooth slope shows, and the overlay weighs them the same way. The
+stronger the line, the plainer the join.
+
+![The seam overlay on a ramp stretched along a cliff: lines where its tiles join visibly](images/terrain-seams.webp)
+
+Ground laid by the isometric brush is almost free of lines; a few stand around doodads and
+cliff faces, where the game's own pieces meet roughly. Hand-placed tiles, a stretched ramp
+and a pasted block show where they need touching up: [Heal](#heal) mends what it can
+without changing how the map plays, and the Tile and Blend brushes are for the rest. The
+overlay compares the classic pictures, so with Remastered Graphics on it marks the same
+joins, whether or not the 2x pictures hide them.
+
+**View ▸ Walkability** (Ctrl+Shift+W) draws the ground as a unit walks it: islands, the
+areas the map divides into, the chokes between them with their widths, and the distances
+between start locations. In the editor at scmjs.dev its panel (Tools ▸ Walkability…) can
+also have the game itself walk the map: the regions the game plans routes over, real units
+walked between the start locations, a group of twelve units timed through every choke, and
+how fast each start location mines with 8, 16 and 24 workers.
+
+**File ▸ Import ▸ Terrain from Image…** turns a picture into terrain with the isometric
+brush, over the whole map or a rectangle. Walkability and Terrain from Image are plugins,
+on from the start; see [Plugins](#plugins).
+
+**Tools ▸ Replace Terrain…** turns every tile of one terrain type (or one exact tile) into
+another, over the whole map or the area marked on the Cut / Copy / Paste layer. **Tools ▸
+Fill Terrain** lays the whole map anew. Both are one undo step.
+
+### Symmetry
+
+Symmetry mirrors what you do across the map's axes or about its centre. `M` or the toolbar
+button turns it on and off, and the list beside the button picks the mode: left ↔ right,
+top ↔ bottom, four-way, a half turn, quarter turns, or either diagonal. The last three
+need a square map. While a mode is on, the axes show on the map and the ghost shows where
+the copies will land.
+
+- The terrain brushes (all but Blend), the fills and the fog brush also paint on the
+  mirror images.
+- Placing a unit, sprite, doodad or location places one at each image as well. Each copy
+  goes to its own player: P1's start location gives P2's under the two-way modes, and
+  P2's, P3's and P4's under the four-way ones. Neutral units and resources stay neutral. A
+  doodad that would have to turn is skipped, and so is a copy that does not fit where it
+  lands: on another doodad, or on the wrong ground.
+- Selecting something also selects whatever stands at its images. Dragging then moves them
+  all as mirror images, resizing a location resizes its copies, and Delete removes them
+  all. A map made symmetric by hand works the same way.
+
+Each change is one undo step. **Tools ▸ Symmetry…** describes each mode and has the option
+to keep copies for the same player instead.
+
+A doodad cannot be flipped, so across a left-right mirror its image is its *twin*: the
+doodad the tileset drew as its mirror image. A ramp for a cliff running down to the right
+gives the ramp for the cliff running up to the right, a bridge gives the bridge running
+the other way, and a stretched one gives its twin stretched the same. Every ramp and
+bridge of the game's eight tilesets has a twin, and selecting a doodad selects its twin
+too, so the two move together.
+
+![A cliff ramp and its twin placed across a left-right mirror](images/doodad-twin.webp)
+
+The status bar names the twin, and says when the game's two do not play alike: the two
+Desert cliff ramps differ in 83 small squares of height and ramp, the Ice ones in 16, and
+in Badlands, Jungle, Ashworld and Twilight the cliff ramps are exact images. Across a
+top-bottom mirror or a half turn a doodad has no twin, since no tileset has a ramp drawn
+facing up the screen, and the same doodad is tried there instead.
+
+#### Is the map the same on every side?
+
+The Symmetry dialog also measures the map as it stands. Beside each mode is how much of
+the ground plays alike on every side under it, so a map opened from somewhere else shows
+which symmetry it was made with: a mirrored map reads 98% or more under its own mode and
+far less under the others, and a map drawn freehand reads low under all of them.
+
+![The Symmetry dialog on a mirrored map, with the places that differ listed](images/symmetry.webp)
+
+Under the mode you pick, *The map as it is* says how many small squares (a quarter of a
+tile each way, the size the game decides walking and height at) do not match their images,
+split into walking, height and building, and lists the largest places as buttons. A button
+applies the mode, goes to the place and turns on **View ▸ Symmetry Differences**, which
+paints each such square red, or amber where only building differs, on both sides. Mineral
+fields, geysers and start locations are checked too: each wants one of its kind at every
+image of its spot, holding the same amount.
+
+![The Symmetry Differences overlay marking the squares that differ on both sides of the axis](images/symmetry-differences.webp)
+
+Some differences are the game's, not yours. A tile cannot be flipped, so the far side of a
+mirrored map is built from other tiles, and the game's own ramp pairs do not carry quite
+the same flags: mirror a Desert cliff ramp and 69 small squares stand at another height on
+one side.
+
+## Mod terrain
+
+A mod's tileset can hold ground and pictures the game never had. This section is about
+laying them, and applies only while a mod's data set is in use ([Data sets made from a
+mod](game-data.md#data-sets-made-from-a-mod) says how to add one); with the game's own
+data, nothing here is listed.
+
+What the tileset's files say about the added tiles decides which brush lays them:
+
+| The mod adds | Laid with |
+| --- | --- |
+| Flat ground: mud on high ground, a swamp, asphalt | The Rect brush ([Ground a mod adds](#ground-a-mod-adds)) |
+| Pictures drawn across many tiles: ruins, buildings, walls, roads | The Tile brush, a block or a piece at a time ([Pictures a mod adds](#pictures-a-mod-adds)) |
+| One of its own terrains again at another height, with edges drawn for it: Mud on high ground | The isometric brush ([Copied terrain](#copied-terrain)) |
+| Another tileset's terrain copied in: Installation's floors inside a Badlands | The isometric brush ([Terrain from other tilesets](#terrain-from-other-tilesets)) |
+
+A mod can also say all of this in a file it ships, and then nothing has to be found or
+learned ([Terrain a mod declares](mods.md#terrain-a-mod-declares)).
+
+### Ground a mod adds
+
+A mod's tileset can hold flat ground the game never had: Cosmonarchy's Jungle has mud on
+high ground, a swamp, asphalt and more. The tileset's files give that ground no terrain
+type and nothing the isometric brush could join it with, so the Isometric tab does not
+list it. The Rect tab lists what it can stand behind, below the game's terrains:
+
+- **The game's ground at another height.** Where a pair of tile groups has exactly the
+  pictures of one of the game's terrains under other flags, it is listed under that
+  terrain's name and its height: *Mud (mid ground)*, *Mud (high ground)*. Mid ground is
+  the level of High Dirt. The Tile tab names those groups the same way, and its *Flat
+  terrain* filter includes them.
+- **Ground the open map lays.** A pair the map already uses as ground, left and right
+  halves side by side, is listed as *Group* and its number. Nothing in a tileset tells
+  flat ground from the pieces of a seam between two terrains of nearly one colour, so the
+  map is what the editor goes by.
+- **A pair you pick.** In the Tile tab, right-click and choose **Paint This Tile's Pair
+  with the Rect Brush** to lay any pair as ground, on a map that has none of it yet.
+  Alt+click on such ground in the map picks it too.
+- **Ground the mod names.** A mod's terrain file can name its flat ground; those names are
+  listed too, and so are the names a plugin gives.
+
+All of these paint, flood-fill and take part in **Tools ▸ Replace Terrain…** like the
+game's terrains. Replacing Mud with *Mud (mid ground)* raises a mud flat without changing
+how it looks.
+
+### Pictures a mod adds
+
+Most of what a mod adds is not flat ground but pictures: ruins, buildings, walls, roads,
+drawn over thousands of tile groups the way the game's doodads are. They are laid with the
+Tile brush:
+
+1. In the Tile tab's filter, choose *Added by* and the data set's name. The choice is
+   there when the tileset has more groups than the game's, and lists only those.
+2. Switch to the [sheet](#the-sheet-and-blocks). The pictures appear whole. Drag over one
+   to pick it as a block and click on the map to lay it, or drag on the map to run a wall
+   or a floor along.
+3. For the parts the mod's own maps lay whole, switch to the [pieces](#pieces) view and
+   choose **Learn from Maps…** with the folder of the mod's maps. The pieces are then
+   listed ready to pick.
+
+![A mod's added tiles in the sheet view, with a building picked as a block](images/mod-sheet.webp)
+
+![The pieces view after learning from a mod's maps, and a piece laid on the map](images/mod-pieces.webp)
+
+With *Added by* chosen, the grid and the pieces leave out what the mod repeats from the
+game's own part of the table. The seams around a picture are the mod's own tiles too: pick
+them from the sheet, or let the Blend brush find the tiles that continue an edge.
+
 ### Copied terrain
 
 A tileset made for a mod sometimes holds one of its own terrains again at another height:
 the same Mud, say, on mid and on high ground. The Rect tab already offers such a copy
-("Mud (mid ground)"). Often the mod also drew that terrain's edges again at that height:
-the pieces that join Mud to the ground around it, Mud kept as it was and the other side
-repainted as the ground the copy is meant to sit on. The isometric brush cannot use those
-pieces from the tileset's tables, because they have no terrain type.
+("Mud (mid ground)", as [Ground a mod adds](#ground-a-mod-adds) says). Often the mod also
+drew that terrain's edges again at that height: the pieces that join Mud to the ground
+around it, Mud kept as it was and the other side repainted as the ground the copy is meant
+to sit on. The isometric brush cannot use those pieces from the tileset's tables, because
+they have no terrain type.
 
 When a tileset holds a copy, the editor looks through it once, by itself, for such pieces:
 the Isometric tab says so in a quiet line while it does, and lists what it found under
@@ -428,318 +744,90 @@ so the isometric brush cannot lay it from the tileset's own tables. It can lay i
 with its own tileset's brush, cliffs and edges included, and writes each tile as this
 tileset's copy of the same picture.
 
-A mod can ship the answer: when its terrain file gives a table for another tileset
-([Terrain a mod declares](mods.md#terrain-a-mod-declares)), that tileset's terrains are
-listed with no search, and their hover says the mod's file named the tiles. Otherwise, the
-first time, the list is a button, **Find terrain from other tilesets**. It looks through
-the game's other seven tilesets for terrains whose every tile has a copy here, and the
-ground the brush lays them onto too. It runs in the background, so you can keep painting
-and editing meanwhile: about ten seconds for a mod's Badlands of 40,000 tiles, with a
-progress bar and a **Stop** button beside it. What it finds is kept in the browser: the
-next time a map on the same tileset files opens, the list is there at once, and a scan you
-stopped starts again from what it had already done. The copies are found by their
-pictures. A mod's copies are rarely exact (they were redrawn into the tileset's own
-colours, and one picture can be there several times), so a tile counts as a copy when it
-looks the same up close, not only when its bytes do. Where one tile of an otherwise whole
-terrain has no copy, the nearest picture stands in for it, and the terrain's hover says
-how many do. With the game's own data in use nothing is listed: nothing in the game's
-tilesets is borrowed.
+![The Isometric tab's From other tilesets list, and Installation floor painted on a mod's Badlands](images/mod-borrowed.webp)
 
-Painting one works as the isometric brush does: the brush size, symmetry and pinned tiles
-apply, and a stroke is one step to undo. A stroke meets ground no borrowed stroke has
-painted as the other tileset's base ground (what a new map of that tileset is made of:
-Floor for Installation), and only the tiles around the stroke are written; the rest of the
-map is left as it is. Later strokes continue the earlier ones' cliffs and edges, because
-the editor keeps the other tileset's record of the diamonds with the map, as a small file
-inside it (`scmjs\borrowed-install.bin` for Installation). Beside it a second one
-(`scmjs\borders-install.bin`) keeps where the brush painted and the tile each cell had
-before it, so the ground can be given back. Both are saved with the map, follow undo and
-Resize, and are shared on a shared map; the game never reads them. Where another brush has
-painted over borrowed ground since, that part is taken as base ground again before the
-next stroke, so a stroke does not continue edges that are gone.
+The first time, the list is a button, **Find terrain from other tilesets**. It looks
+through the game's other seven tilesets for terrains whose every tile has a copy here.
 
-**Take back**, at the end of each tileset's list, gives ground back: paint it over
-borrowed ground and each cell gets the tile it had before the borrowed brush wrote it, the
-border around what is left laid again. Painting all of a patch back leaves the map as it
-was.
+- **It runs in the background**, so you can keep editing: about ten seconds for a mod's
+  Badlands of 40,000 tiles, with a progress bar and a **Stop** button. A search you
+  stopped carries on from where it was.
+- **What it finds is kept in the browser.** The next time a map on the same tileset files
+  opens, the list is there at once.
+- **Copies are found by their pictures.** A mod's copies are rarely exact, since they were
+  redrawn into the tileset's own colours, so a tile counts as a copy when it looks the
+  same up close. Where one tile of an otherwise whole terrain has no copy, the nearest
+  picture stands in for it, and the terrain's hover says how many do.
+- **A mod's terrain file skips the search.** The terrains it gives are listed straight
+  away, and their hover says the mod's file named the tiles.
+
+Painting works as the isometric brush does: the brush size, symmetry and pinned tiles
+apply, and a stroke is one step to undo.
+
+- **Only the tiles around the stroke are written.** Ground that no borrowed stroke has
+  painted counts as the other tileset's base ground, the one a new map of that tileset is
+  made of (Floor for Installation), and the rest of the map is left as it is.
+- **Later strokes continue earlier ones.** The editor keeps the other tileset's record of
+  what you painted inside the map file, so cliffs and edges carry on across strokes and
+  sessions. The record is saved with the map, follows undo and Resize, and is shared on a
+  shared map. The game does not read it ([What the editor adds to a
+  map](file-formats.md#what-the-editor-adds-to-a-map)).
+- **Painting over it with another brush gives the ground back.** That part counts as base
+  ground again at the next borrowed stroke, so a stroke does not continue edges that are
+  gone.
+- **Take back**, at the end of each tileset's list, undoes borrowed ground by painting:
+  each cell gets the tile it had before the borrowed brush wrote it, and the border around
+  what is left is laid again. Painting all of a patch back leaves the map as it was.
+
+Two things it does not do:
+
+- **Walk and build as the other tileset does.** Each tile walks, builds and stands at the
+  height this tileset's copy says, and a mod often keeps its copies under other flags than
+  the original: in Cosmonarchy's Badlands, about half of Installation's tiles have a copy
+  that walks the same. View ▸ Walkability and the Elevation and Buildability overlays show
+  what was laid.
+- **Join the two grounds where no border is known.** Without a [drawn
+  border](#drawn-borders) for a pair of grounds, the two simply touch. The status line
+  after a stroke counts the joins that show; the Heal brush softens them, and the pieces
+  view lists the transition pieces the mod's own maps use there.
 
 #### Drawn borders
 
 A mod that copies another tileset's ground in usually draws its own pieces for where that
 ground meets the tileset's: a trim along a floor's edge, a cliff wall from a raised floor
-down to dirt. With **Drawn borders** on (the switch under the list's heading, on by
-default where any is known), a stroke lays those pieces where its ground meets the
-tileset's own, instead of the other tileset's edge to its base ground. The hover on each
-terrain says which grounds it has borders against. The editor remembers whether you left
-the switch on or off.
+down to dirt. With **Drawn borders** on, a stroke lays those pieces where its ground meets
+the tileset's own, instead of the other tileset's edge to its base ground.
 
-The editor learns the pieces from the mod's maps: Learn from Maps… in the Tile palette's
-pieces view reads the borders as it reads the pieces, the map in front included, and says
-how many it found for each pair of grounds. It can read them only once it knows which
-tiles are copies of the other tilesets, so look for the borrowed terrain first; the more
-of the other tilesets it knows, the better it tells a copy from a drawn piece. A mod's
-terrain file can carry them instead, and a plugin can give them too; then nothing has to
-be learned.
+![The same stroke of Installation floor with a plain edge and with drawn borders](images/mod-borders.webp)
 
-The border is laid when the stroke ends, as part of the same step. Each border cell gets
-the piece the maps lay in its place, chosen so that it joins its neighbours; where none
-joins, the cell is left as the plain edge: the borrowed ground's own tile on its side, the
-map's ground on the other. On the ground's side, the tile that was there stays wherever it
-already joins, so plain ground is not scattered with pieces. The status line counts the
-cells drawn, the cells left as the plain edge, and the border tiles that walk unlike
-either ground (part of a cliff piece usually cannot be walked on). Learning finds most
-shapes of a border, not all: a shape no map lays is left as the plain edge.
+The switch is under the list's heading. It is on to begin with wherever a border is known,
+and the editor remembers how you left it. The hover on each terrain says which grounds it
+has borders against.
 
-What it does not do:
+The editor learns the borders from the mod's maps, in this order:
 
-- **Join it where nothing is known.** Where no drawn border is known for a pair of grounds
-  (or Drawn borders is off), the two simply touch. The status line after a stroke counts
-  the joins that show; the Heal brush softens them, and the Tile palette's pieces view
-  lists the transition pieces the mod's own maps use there.
-- **Walk and build as the other tileset does.** Each tile walks, builds and stands at the
-  height this tileset's copy says, and a mod often keeps its copies under other flags than
-  the original (in one mod measured, only about half of Installation's tiles have a copy
-  that walks the same). The Walkability plugin's overlay (View ▸ Walkability) and the
-  Elevation and Buildability overlays show what was laid.
+1. **Find terrain from other tilesets**, so the editor knows which tiles are copies. The
+   more of the other tilesets it knows, the better it tells a copy from a drawn piece.
+2. **Learn from Maps…** in the Tile tab's pieces view. It reads the borders as it reads
+   the pieces, the map in front included, and says how many it found for each pair of
+   grounds.
 
-### Rect, Tile and Blend
+A mod's terrain file or a plugin can carry the borders instead, and then nothing has to be
+learned.
 
-![The Rect tab](images/palette-rect.webp) ![The Tile tab](images/palette-tile.webp) ![The Blend tab](images/palette-blend.webp)
+The border is laid when the stroke ends, as part of the same undo step:
 
-- **Rect** lays flat ground and nothing else, for filling an area you will shape
-  afterwards, or for ground under a doodad.
-- **Tile** is for the pieces the isometric brush will not give you: a single cliff tile, a
-  doodad's tile, a corner the cliff sets do not have. The tab shows the tileset four ways,
-  with the buttons beside its filter: grouped rows (each tile group as a labelled block),
-  one grid of every tile, the **sheet** and the **pieces**. The filter and the search
-  choose which groups any of the four lists. The grid shows each tile once: a tileset, a
-  mod's above all, often holds the same picture with the same flags several times, and
-  only the first is listed. The same picture where it walks, builds or stands at another
-  height is another tile and is listed too. The grouped rows and the sheet show every tile
-  in its place.
+- Each border cell gets the piece the maps lay in its place, chosen so that it joins its
+  neighbours.
+- Where no piece joins, the cell is left as the plain edge: the borrowed ground's own tile
+  on its side, the map's ground on the other. A shape of border that no map lays is left
+  plain too.
+- On the map's side, the tile that was there stays wherever it already joins, so plain
+  ground is not scattered with pieces.
 
-  The sheet lays each tile group out as one row of its sixteen tiles, rows touching, in
-  group order, with the group's number at the left. Laid out that way the tileset shows
-  the pictures its artist drew across tiles and groups: a doodad is one group a row, and
-  so is the ground a mod adds. Where the listed groups are not consecutive a thin dashed
-  line separates them; a few empty groups in between are drawn as empty rows instead, so a
-  picture with a gap in it stays whole. The square button beside the view buttons shows
-  the tiles at full size, scrolling sideways when the palette is narrower.
-
-  In the sheet a click picks one tile, as in the other views, and a **drag picks a
-  block**: a rectangle of tiles, as many wide and high as you dragged, which cannot cross
-  a dashed line. With a block picked the Tile brush shows the whole block under the
-  pointer, its top-left corner on the tile you point at, as a paste does, and a click lays
-  it. Empty places in the block leave the map as it is. **Dragging repeats the block**:
-  the press sets where the first copy goes, and every copy the drag passes over is laid
-  next to the last, so a piece of wall or floor runs on without a seam. The whole drag is
-  one step to undo. Fill Area and **Fill Map with This Block** tile the block the same
-  way, lined up on the tile you clicked or on the map's corner, and leave pinned tiles
-  alone like the other fills. With a block, Fill Area covers the ground the Rect fill
-  would, the same terrain around the tile you clicked, not only the same exact tile. While
-  a block is picked the brush size shows the block's size; picking a single tile again (a
-  click in any view, the Tile # box, Alt+click on the map, or *Single tile*) goes back to
-  the brush. A block belongs to the map and tileset it was picked on: with another map in
-  front, the Tile brush lays single tiles. Symmetry does not mirror a block: a block's
-  pictures face one way, so it is laid under the pointer only, as a paste is.
-
-  The **pieces** view lists the parts of the sheet that maps lay whole: a wall, a ramp, a
-  ruin, its tiles side by side as they are drawn. Nothing in a tileset says where one
-  picture ends and the next begins, so the editor goes by how maps lay the tiles: where
-  two tiles that are neighbours in the sheet are laid as neighbours most of the times
-  either is laid at all, they belong to one piece. Each piece is drawn in its own outline;
-  hold the pointer over one for its size, how often maps lay it and its group. A click
-  picks it as a block, to lay as above, and the sheet then shows where it came from. *Most
-  laid first* puts the pieces maps use most at the top. Where a tileset holds one picture
-  several times over, exactly or redrawn with slightly different dots, it is one entry,
-  and the pointer says how many copies it stands for; one under other flags is listed
-  right after it and says what differs. A plugin can add named pieces of its own: they are
-  listed under its heading ahead of the others, and the search box finds them by name.
-
-  At first the pieces come from the map in front. **Learn from Maps…** reads every map in
-  a folder you choose (the mod's own maps, say) and keeps what they lay in the browser for
-  later sessions; the view then says how many maps it learned from. When it is done, the
-  status bar and a notice say how many maps it read and skipped, and how many pieces each
-  tileset now has. A map made for other tiles than the data set's, or one that does not
-  open, is skipped and counted. What is learned belongs to the tilesets' tables, not to a
-  data set's name: the same mod drawn from its folder or installed shares it, and a new
-  version of a mod that changes a tileset starts that tileset afresh. Learning again
-  replaces what was learned; *Forget* (the eraser beside the line) drops it, and so does
-  **Preferences ▸ Storage ▸ Clear all data**. Maps laid with the Isometric and Rect
-  brushes lay no pieces, so on the game's own maps the list is empty. A mod's terrain file
-  lists its pieces under the data set's name, ahead of the learned ones and with nothing
-  to learn ([Terrain a mod declares](mods.md#terrain-a-mod-declares)), and a plugin's
-  named pieces come before both. **Save as a terrain file…** (the button with a down
-  arrow) writes what the view lists for the tileset in front, with the named terrains and
-  the borrowed terrain's tables, into such a file for a mod to ship. With pieces listed,
-  Alt+click on the map in Tile mode picks the whole piece when the tile under the pointer
-  is laid beside a neighbour from its piece, and the single tile otherwise.
-- **Blend** is for joins the cliff sets never had: dirt into a doodad's base, one edge set
-  into another, a hand-laid shoreline. Click a tile to make it the anchor, and the palette
-  lists for each side the tiles whose opposite edge continues it, best seam first.
-
-- **Heal** mends what **View ▸ Seam Overlay** marks. Drag over a join that shows, and
-  where the tileset has another tile that meets the neighbours better, that tile is laid
-  instead. It only takes a tile that is the same to the game: it walks, builds and blocks
-  sight exactly as the old one does, at the same height, and is the same kind of ground.
-  So a stroke changes how the map looks and nothing about how it plays. Ground that
-  already joins is left as it was laid, and a placed doodad is left whole (convert it to
-  terrain first if its tiles are what needs mending). The tab's button does the same over
-  the marked area, or over the whole map when nothing is marked, and says how many joins
-  showed before and after. On the game's own maps that removes about half of the lines and
-  changes one tile in a hundred. A stretched ramp gains less, since few tiles play the
-  same as a ramp's.
-
-- **Pin** keeps ground as you laid it. The isometric brush works out every tile around the
-  diamonds it changes, so a stroke beside a ramp you built tile by tile takes part of the
-  ramp with it. Drag the Pin brush over tiles to pin them. A pinned tile is left alone by
-  the brushes that lay terrain by rule: Isometric, Rect and Heal, both fills and Replace
-  Terrain. The isometric brush still changes its own record of the ground under a pinned
-  tile, so the cliffs around it are drawn as if the tile had followed, and only the pinned
-  picture stays. What you point at a tile still writes it: the Tile brush, Blend, a paste,
-  a doodad. The status bar says when a stroke left pinned tiles alone.
-
-  The tab's *Unpin* choice turns the brush round. **Pin All Hand-Laid Tiles** pins every
-  tile the map's isometric data does not account for, which on a map from another editor
-  is the ramps, blends and stray tiles its maker set by hand; with an area marked it and
-  the other buttons work inside the area. Pinned tiles carry a mark in their corner while
-  the tab is open, and **View ▸ Pinned Tiles** keeps the marks on elsewhere. Pins are
-  saved in the map file. The game does not read them, and another editor will not keep
-  them. Resizing the map moves each pin with its tile.
-
-These four leave the isometric record alone.
-
-### Ground a mod adds
-
-A mod's tileset can hold flat ground the game never had, and the tileset's files give that
-ground no terrain type and nothing the isometric brush could join it with: Cosmonarchy's
-Jungle has mud on high ground, a swamp, asphalt and more, all of it placed tile by tile in
-the mod's own maps. The Isometric tab therefore lists only the game's terrain types. The
-Rect tab lists the rest it can stand behind, below the game's:
-
-- **The game's ground at another height.** Where a pair of tile groups has exactly the
-  pictures of one of the game's terrains under other flags, it is listed under that
-  terrain's name and its height: *Mud (mid ground)*, *Mud (high ground)*. Mid ground is
-  the level of High Dirt. The Tile tab names those groups the same way, and its *Flat
-  terrain* filter includes them.
-- **Ground the open map lays.** A pair the map already uses as ground, left and right
-  halves side by side, is listed as *Group* and its number. Nothing in a tileset tells
-  flat ground from the pieces of a seam between two terrains of nearly one colour, so the
-  map is what the editor goes by.
-- **A pair you pick.** In the Tile tab, right-click and choose **Paint This Tile's Pair
-  with the Rect Brush** to lay any pair as ground, on a map that has none of it yet.
-  Alt+click on such ground in the map picks it too.
-- **Ground the mod names.** A mod's terrain file can name its flat ground; with the mod's
-  data in use, those names are listed too ([Terrain a mod
-  declares](mods.md#terrain-a-mod-declares)), and so are the names a plugin gives.
-
-All of these paint, flood-fill and take part in **Tools ▸ Replace Terrain…** like the
-game's terrains — replacing Mud with *Mud (mid ground)* raises a mud flat without changing
-how it looks.
-
-Most of what a mod adds is not flat ground but pictures: ruins, buildings, walls, roads,
-drawn over thousands of tile groups the way the game's doodads are. When the tileset in
-use has more groups than the game's, the Tile tab's filter has one more choice, *Added by*
-and the data set's name, which lists only those groups. Show them in the sheet and the
-pictures appear whole; drag over one to pick it as a block and lay it on the map in one
-click, or drag on the map to run a wall or a floor along. Learn from the mod's own maps
-and the pieces view lists the parts its maps lay whole, ready to pick. With *Added by*,
-the grid and the pieces leave out what the mod repeats from the game's own part of the
-table. The seams around them are the mod's own pieces too: pick them from the sheet, or
-let the Blend brush find the tiles that continue an edge.
-
-### Overlays and tools
-
-Two overlays on the View menu show what the ground means to the game:
-
-![The elevation overlay tints each minitile by its height](images/terrain-elevation.webp)
-
-![The buildability overlay hatches the tiles a building cannot stand on](images/terrain-buildability.webp)
-
-A third shows what the eye would find. **View ▸ Seam Overlay** draws a line along every
-join between two tiles where the picture steps: one tile ends lighter or darker than the
-next begins, by more than either picture changes by itself at that edge. Rough rock hides
-a join that a smooth slope shows, and the overlay weighs them the same way. The stronger
-the line, the plainer the join.
-
-![The seam overlay on a ramp stretched along a cliff: lines where its tiles join visibly](images/terrain-seams.webp)
-
-Ground laid by the isometric brush is almost free of lines; a few stand around doodads and
-cliff faces, where the game's own pieces meet roughly. Hand-placed tiles, a stretched ramp
-and a pasted block show where they need touching up, and the Tile and Blend brushes are
-the tools for it. The overlay compares the classic pictures, so with Remastered Graphics
-on it marks the same joins, whether or not the 2x pictures hide them.
-
-**View ▸ Walkability** (Ctrl+Shift+W) draws the ground as a unit walks it: islands, the
-areas the map divides into, the chokes between them with their widths, and the distances
-between start locations. In the editor at scmjs.dev its panel (Tools ▸ Walkability…) can
-also have the game itself walk the map: the regions the game plans routes over, real units
-walked between the start locations, a group of twelve units timed through every choke, and
-how fast each start location mines with 8, 16 and 24 workers.
-
-**File ▸ Import ▸ Terrain from Image…** turns a picture into terrain with the isometric
-brush, over the whole map or a rectangle. Walkability and Terrain from Image are plugins,
-on from the start; see [Plugins](#plugins).
-
-**Tools ▸ Replace Terrain…** turns every tile of one terrain type (or one exact tile) into
-another, over the whole map or the area marked on the Cut / Copy / Paste layer. **Tools ▸
-Fill Terrain** lays the whole map anew. Both are one undo step.
-
-**Symmetry** mirrors what you do across the map's axes or about its centre. `M` or the
-toolbar button turns it on and off, and the list beside the button picks the mode: left ↔
-right, top ↔ bottom, four-way, a half turn, quarter turns, or either diagonal. The last
-three need a square map. While a mode is on, the axes show on the map and the ghost shows
-where the copies will land.
-
-- The terrain brushes (all but Blend), the fills and the fog brush also paint on the
-  mirror images.
-- Placing a unit, sprite, doodad or location places one at each image as well. Each copy
-  goes to its own player: P1's start location gives P2's under the two-way modes, and
-  P2's, P3's and P4's under the four-way ones. Neutral units and resources stay neutral. A
-  doodad that would have to turn is skipped.
-- A doodad cannot be flipped, so across a left-right mirror its image is its *twin*: the
-  doodad the tileset drew as its mirror image. A ramp for a cliff running down to the
-  right gives the ramp for the cliff running up to the right, a bridge gives the bridge
-  running the other way, and a stretched one gives its twin stretched the same. Every ramp
-  and bridge of the game's eight tilesets has a twin. The status bar names it, and says
-  when the game's two do not play alike: the two Desert cliff ramps differ in 83 small
-  squares of height and ramp, the Ice ones in 16, and in Badlands, Jungle, Ashworld and
-  Twilight the cliff ramps are exact images. Across a top-bottom mirror or a half turn a
-  doodad has no twin (nobody drew a ramp facing up the screen), and the same doodad is
-  tried there as before. Selecting a doodad selects its twin across the mirror too, so the
-  two move together.
-- Selecting something also selects whatever stands at its images. Dragging then moves them
-  all as mirror images, resizing a location resizes its copies, and Delete removes them
-  all. A map made symmetric by hand works the same way.
-
-Each change is one undo step. **Tools ▸ Symmetry…** describes each mode and has the option
-to keep copies for the same player instead.
-
-![The Symmetry dialog](images/symmetry.webp)
-
-#### Is the map the same on every side?
-
-The dialog also measures the map as it stands. Beside each mode is how much of the ground
-plays alike on every side under it, so a map opened from somewhere else shows which
-symmetry it was made with: a mirrored map reads 98% or more under its own mode and far
-less under the others, and a map drawn freehand reads low under all of them.
-
-Under the mode you pick, *The map as it is* says how many small squares (a quarter of a
-tile each way, the size the game decides walking and height at) do not match their images,
-split into walking, height and building, and lists the largest places as buttons. A button
-applies the mode, goes to the place and turns on **View ▸ Symmetry Differences**, which
-paints each such square red, or amber where only building differs, on both sides. Mineral
-fields, geysers and start locations are checked too: each wants one of its kind at every
-image of its spot, holding the same amount.
-
-Some differences are the game's, not yours. A tile cannot be flipped, so the far side of a
-mirrored map is built from other tiles, and the game's own ramp pairs do not carry quite
-the same flags: mirror a Desert cliff ramp and 69 small squares stand at another height on
-one side. The report is how you find out, before a player does.
-
-The Terrain palette's *Remove stranded units* tick deletes the ground units a stroke has
-just left where they cannot walk, which the game would remove at the start, as part of the
-same undo step. Buildings stay where they are: the game makes them on any ground.
+The status line counts the cells drawn, the cells left as the plain edge ("left hard"),
+and the border tiles that walk unlike either ground, which part of a cliff piece usually
+does.
 
 ## Doodads
 
@@ -752,7 +840,8 @@ from the current tileset's own groups, with StarEdit's categories and placement 
 Picking a doodad arms placement, and the ghost turns red where the footprint leaves the
 map, covers another doodad or sits on the wrong terrain. *Place anywhere* drops that rule;
 *Snap to grid* keeps the footprint on StarEdit's two-tile isometric grid, for a move as
-well as a placement. Right-click or Esc stops placing.
+well as a placement. Right-click or Esc stops placing. With [symmetry](#symmetry) on, a
+ramp or a bridge placed on one side of a left-right mirror puts its twin on the other.
 
 The three buttons beside the category list set how large the previews are drawn: small
 fits several to a row, large draws one per row so a doodad's detail can be read. The
@@ -779,9 +868,9 @@ and choose *Convert Doodad to Terrain* (the Properties panel has the same button
 tiles stay, the doodad goes, and an overlay stays on as an ordinary sprite. From then on
 the Terrain layer treats the cells as ground. *Place as terrain* in the palette does the
 same at placement, for ramps and cliff pieces you mean to work over by hand. With *Pin
-terrain doodads* ticked, as it is to begin with, the tiles laid that way are pinned (see
-the Pin tab of the Terrain layer), so a later stroke of the isometric brush beside them
-does not take them apart.
+terrain doodads* ticked, as it is to begin with, the tiles laid that way are
+[pinned](#pin), so a later stroke of the isometric brush beside them does not take them
+apart.
 
 ### Stretching a ramp or a bridge
 
@@ -2411,9 +2500,15 @@ rely on a feature.
 
 - The isometric brush needs the map's isometric record. The Repair plugin, on by default,
   rebuilds one a protected map had stripped.
-- The isometric brush paints the game's terrain types only. Flat ground a mod adds is laid
-  with the Rect brush, and its seams and pictures with the Tile brush, a tile or a block
-  at a time ([Ground a mod adds](#ground-a-mod-adds)).
+- The isometric brush lays terrain types only. On a mod's tileset that includes a terrain
+  the mod drew again at another height and another tileset's terrain it copied in, but not
+  the flat ground and the pictures the mod adds: those are laid with the Rect and Tile
+  brushes ([Mod terrain](#mod-terrain)).
+- A stretched ramp or bridge goes down as tiles, not as a doodad, so it cannot be selected
+  or moved afterwards. Undo is the way back.
+- Pins, and the records of copied terrain and of terrain painted from another tileset, are
+  kept in files inside the map that only scmJS reads. The game ignores them, and another
+  editor will not keep them when it saves the map.
 - Symmetry does not mirror the Blend brush, a block on the Tile brush, or pasting. The
   Tile brush copies the same tile to each image, so an edge tile faces the same way on
   both sides; use the isometric brush for cliffs and shores.

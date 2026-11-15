@@ -73,7 +73,7 @@ or take a screenshot:
 /?nosplash&dialog=playerSettings  open a dialog by id; repeatable
 /?nosplash&dialog=preferences&page=editing   open a dialog at one of its pages
 /?nosplash&zoom=0.5&tileset=ice   zoom level and tileset
-/?nosplash&mode=tile              terrain palette mode: isom, rect, tile
+/?nosplash&mode=tile              terrain palette mode: isom, rect, tile, blend, heal, pin
 /?nosplash&layer=fog&fogPlayer=3  view and paint one player's fog
 ```
 
@@ -760,6 +760,14 @@ Some scenes have their own needs:
 - **The scmjs.dev and shared-map pictures** run against a stand-in for the service,
   `scripts/lib/guide-scmjs-mock.mjs`, which the script starts itself. When a dialog
   changes, change the scene; when a canned answer no longer fits, change the mock.
+- **`mod-terrain`** takes the pictures of a mod's terrain. `--mod <folder>` names the
+  mod's folder and `--mod-maps <folder>` a folder of maps made for it; `--mod-name` is the
+  name the mod shows under in the editor, Cosmonarchy unless given. Without the two
+  folders the scene is skipped and its pictures are left as they are. It takes about three
+  minutes.
+- **`symmetry`, `heal`, `pin` and `tile-sheet`** fix the seed of the page's random
+  numbers, so the isometric brush picks the same tile variations on every run and the
+  numbers in the pictures stay the same.
 
 ### Command line screenshots
 

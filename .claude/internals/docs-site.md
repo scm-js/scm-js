@@ -226,6 +226,36 @@ other's zlib/CompressionStream output). `withTryIt` in `markdown.mjs` wraps both
 `?plugin=` half is `src/plugins/link.ts` + `hooks/usePluginLink.ts` (see `plugins-loading.md`).
 
 
+### The terrain tools' pictures (scenes `tile-sheet`, `pin`, `symmetry`, `heal`, `mod-terrain`, 2026-11-14)
+
+The guide's Terrain page was reordered and a **Mod terrain** page added after it (`## Mod terrain`:
+*Ground a mod adds*, *Pictures a mod adds*, *Terrain from other tilesets*, *Drawn borders* — the last three
+anchors are linked from `docs/mods.md` and `docs/plugins.md`, keep them). Fourteen pictures came with it:
+`palette-sheet`, `terrain-block` (`tile-sheet`, Jungle), `terrain-pin` (`pin`, Badlands ramp #77 stretched),
+`symmetry`, `symmetry-differences`, `doodad-twin` (`symmetry`, a 64×64 Desert map the scene builds),
+`terrain-heal` (`heal`, Big Game Hunters), and `mod-sheet`, `mod-pieces`, `mod-borrowed`, `mod-borders`
+(`mod-terrain`).
+
+- **The symmetry picture is no longer the `dialogs` scene's.** On an empty map every mode reads 100.0%, which
+  shows nothing; the `symmetry` scene builds a mirrored map with one resource out of place, and `dialogs`
+  leaves the dialog out so it does not overwrite the picture.
+- **`SEEDED_RANDOM`.** The isometric brush picks tile variations with `Math.random`, and the variations do
+  not all walk alike, so the report's percentages changed on every run. A scene's init script seeds
+  `Math.random`, and `steadyStroke` resets the seed before each stroke. With it every picture but
+  `mod-borrowed` comes out byte for byte the same twice (there, eleven palette pixels differ).
+- **`mod-terrain` shows a mod's tiles on purpose.** The user allowed Cosmonarchy's tiles in the guide's
+  pictures (2026-11-14); the pictures are still the editor, and the mod's files are read from `--mod` /
+  `--mod-maps` and never copied into the repository. The scene adds the mod through Help ▸ Game Data…,
+  runs *Find terrain from other tilesets* (≈11 s) and *Learn from Maps…* (404 maps, ≈30 s).
+- **Learn from Maps… in headless Chromium.** The editor uses `showDirectoryPicker` where it exists, which
+  nothing can answer headless; the scene's init script deletes it, so the editor falls back to its folder
+  input, which Playwright can fill.
+- **`sideBySide` takes `{ labels, halves }`.** The defaults are the Remastered picture's; `halves: false`
+  sets two whole clips beside each other (`terrain-heal`, `mod-borders`).
+- **Two notices are hidden** (`quiet({ updates: true })`): the plugin-updates notice and "scmJS has been
+  updated", which a fresh profile now gets. Other notices stay in the pictures.
+- The headless shell needed libnspr4, libnss3 and libasound on `LD_LIBRARY_PATH` on this machine.
+
 ### The API Playground pictures (scene `api-playground`)
 
 The API Playground is not a default, so the scene installs it — from its repository, or from a local

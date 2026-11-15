@@ -40,6 +40,12 @@ export const activeTerrainAtom = atom<number>(2);
 export const rectVariationAtom = atom<number>(-1);
 /** Raw MTXM tile id the Tile brush paints. */
 export const activeTileAtom = atom<number>(0x20);
+/**
+ * How the Tile tab's browser was left: its view, group filter, search and whether the sheet is at full size.
+ * The tab unmounts when another Terrain tab is shown, so this is an atom and not the tab's own state; it is
+ * not stored, so a new session starts on grouped rows. `filter` is a group kind, "all" or "added".
+ */
+export const tileBrowserAtom = atom<{ view: "groups" | "grid" | "sheet" | "pieces"; filter: string; query: string; large: boolean }>({ view: "groups", filter: "all", query: "", large: false });
 /** Map cell the Blend brush is matching against (see editor/blend.ts), or null before one is picked. */
 export const blendAnchorAtom = atom<{ x: number; y: number } | null>(null);
 /** Whether placing a blend candidate moves the anchor onto the tile it just placed. */

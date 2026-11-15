@@ -61,7 +61,7 @@ function FairnessLines({ fairness, chosen, closeKey, apply }: { fairness: Fairne
               : t("Under {mode}, {share} of the ground plays alike on every side. {n, plural, one {# small square differs} other {# small squares differ}} in {places, plural, one {# place} other {# places}}: {walk} in walking, {height} in height, {build} in building.", { mode: symmetryLabel(mode), share: percent(report.alike), n: report.unlike, places: report.places.length, walk: report.walk, height: report.height, build: report.build })}
           </p>
           {report.places.slice(0, LISTED).map((p, i) => (
-            <Button key={i} size="sm" style={{ justifySelf: "start", alignSelf: "flex-start" }} onClick={() => show((p.x0 + p.x1) / 2, (p.y0 + p.y1) / 2)}>
+            <Button key={i} size="sm" className="wrap" style={{ justifySelf: "start", alignSelf: "flex-start" }} onClick={() => show((p.x0 + p.x1) / 2, (p.y0 + p.y1) / 2)}>
               {t("Tiles {x0}–{x1}, {y0}–{y1}: {n, plural, one {# small square} other {# small squares}}", { x0: p.x0, x1: p.x1 - 1, y0: p.y0, y1: p.y1 - 1, n: p.squares })}
             </Button>
           ))}
@@ -70,7 +70,7 @@ function FairnessLines({ fairness, chosen, closeKey, apply }: { fairness: Fairne
             <>
               <p className="hint">{t("{n, plural, one {# mineral field, geyser or start location has} other {# mineral fields, geysers or start locations have}} no equal counterpart:", { n: report.resources.length })}</p>
               {report.resources.slice(0, LISTED).map((r) => (
-                <Button key={r.index} size="sm" style={{ alignSelf: "flex-start" }} onClick={() => show(r.x / 32, r.y / 32)}>
+                <Button key={r.index} size="sm" className="wrap" style={{ alignSelf: "flex-start" }} onClick={() => show(r.x / 32, r.y / 32)}>
                   {r.why === "amount"
                     ? t("{unit} at tile {x}, {y}: its counterpart holds another amount", { unit: unitLabel(r.unitId), x: r.x >> 5, y: r.y >> 5 })
                     : t("{unit} at tile {x}, {y}: nothing of its kind at its image", { unit: unitLabel(r.unitId), x: r.x >> 5, y: r.y >> 5 })}

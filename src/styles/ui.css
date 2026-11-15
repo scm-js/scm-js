@@ -62,6 +62,20 @@
   padding: 0 8px;
   font-size: var(--fs-sm);
 }
+/* A button whose text is a sentence (a place in a report): it wraps inside its container instead of running past it. */
+.btn.wrap {
+  height: auto;
+  min-height: var(--h-control);
+  max-width: 100%;
+  padding-top: 3px;
+  padding-bottom: 3px;
+  white-space: normal;
+  text-align: left;
+  justify-content: flex-start;
+}
+.btn.sm.wrap {
+  min-height: 22px;
+}
 .btn.icon {
   min-width: 0;
   width: var(--h-control);

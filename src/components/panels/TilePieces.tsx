@@ -185,11 +185,12 @@ export function TilePieces({ loaded, listed, query, addedFrom, block, onBlock, o
   const forget = () => { void import("../../services/pieceLearning").then((m) => m.forgetPieces(store)); };
   const saveFile = () => { void import("../../services/terrainFileSave").then((m) => m.saveTerrainFile(store)); };
   const none = sections.every((s) => s.items.length === 0);
-  const source = learnedMaps > 0 ? t("From this map and {n, plural, one {# learned map} other {# learned maps}}", { n: learnedMaps }) : t("From this map");
+  const source = learnedMaps > 0 ? t("This map and {n, plural, one {# learned map} other {# learned maps}}", { n: learnedMaps }) : t("This map only");
 
   return (
     <>
       <div className="pieces-head row">
+        <span className="grow row pieces-from">
         {learning ? (
           <span className="grow row" style={{ gap: 6 }} title={t("Learning from maps")}>
             <span className="progress-track"><i style={{ width: `${(100 * learning.done) / Math.max(1, learning.total)}%` }} /></span>
@@ -203,6 +204,8 @@ export function TilePieces({ loaded, listed, query, addedFrom, block, onBlock, o
             <Button icon size="sm" onClick={forget} aria-label={t("Forget")}><Eraser size={13} /></Button>
           </Tip>
         )}
+        </span>
+        <span className="row pieces-tools">
         <Button size="sm" disabled={!!learning} onClick={learn} title={t("Read every map in a folder and learn the pieces they lay")}><FolderOpen size={11} /> {" "}{t("Learn from Maps…")}</Button>
         <Tip label={t("Save as a terrain file…")}>
           <Button icon size="sm" disabled={!!learning} onClick={saveFile} aria-label={t("Save as a terrain file…")}><FileDown size={13} /></Button>
@@ -212,6 +215,7 @@ export function TilePieces({ loaded, listed, query, addedFrom, block, onBlock, o
             <Button icon size="sm" active={byLaid} onClick={() => setByLaid(!byLaid)} aria-label={t("Most laid first")}><ArrowDownWideNarrow size={13} /></Button>
           </Tip>
         )}
+        </span>
       </div>
       <div ref={ref} className="palette-scroll tile-pieces" onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)}>
         {none ? (

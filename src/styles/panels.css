@@ -378,8 +378,21 @@ body.dock-resizing iframe {
   flex: none;
   min-width: 0;
 }
+/* The line that says where the pieces come from (with Forget, which is about that line) and the buttons
+   share a row where the palette is wide enough for the line, and take a row each where it is not. */
+.pieces-head {
+  flex-wrap: wrap;
+}
+.pieces-from {
+  flex: 1 1 170px;
+  gap: 6px;
+}
 .pieces-head .grow {
   min-width: 0;
+}
+.pieces-tools {
+  flex: none;
+  gap: 6px;
 }
 .pieces-source {
   overflow: hidden;
@@ -415,6 +428,16 @@ body.dock-resizing iframe {
   display: flex;
   align-items: center;
   flex: 1 1 100%;
+}
+/* The Tile tab's group filter and view buttons: one row where the palette has room for the filter's longer
+   labels ("Added by <a mod's name>"), a row each where it has not, so the label is not cut. */
+.palette-toolbar .tile-filter {
+  flex: 1 1 150px;
+  min-width: 0;
+}
+.palette-toolbar .tile-views {
+  flex: none;
+  gap: 6px;
 }
 .palette-toolbar .search > svg {
   position: absolute;

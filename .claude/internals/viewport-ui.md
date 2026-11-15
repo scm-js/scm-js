@@ -221,6 +221,19 @@ read in the first effect pass is still null.
   `api.terrain.color` (a plugin asks for a tile id's picture or colour of the loaded tileset; null/another tile as
   before — changing what a plugin gets is a contract change, not taken here). `useMissingTerrain`, mounted here
   with `useTileset`'s `loaded`, is the notice — see `gamedata.md` "Terrain the data set lacks".
+- **The Tile tab at the palette's default width** (2026-11-14, found taking the guide's pictures). The palette's
+  content is ~216 px wide there, and three things ran past it. (1) The group filter shared a row with four or five
+  view buttons and got ~76 px, so "Doodad tiles" read "Doodad" and "Added by Cosmonarchy" read "Added by Cc". The
+  filter is now `flex: 1 1 150px` and the buttons one unshrinking group (`.tile-filter`, `.tile-views`), so they share
+  a row only where the palette has room and take a row each otherwise — always the same layout at a given width,
+  whatever the filter says (letting the filter's own text decide the wrap made the rows jump on a pick). (2) With a
+  block picked, the `Single tile` button made the info grid's `1fr` column grow to its content and pushed the Ground
+  value out of the panel; the column is `minmax(0, 1fr)` and the block row wraps. (3) In the Pieces view the line
+  "From this map and N learned maps" was left ~7 px; it and Forget (which is about that line) are one group, the
+  other buttons another, wrapping the same way. `tileBrowserAtom` (view, filter, search, full size) replaced the
+  tab's `useState`: Radix unmounts a tab's content, so the tab used to come back on grouped rows. Not stored, on
+  purpose — a session starts where a newcomer expects. `e2e/tilePalette.spec.ts` holds both.
+  The Symmetry dialog's report buttons are sentences; `.btn.wrap` lets such a button wrap inside its container.
 - **The Tile tab's sheet** (2026-11-13, `panels/TileBrowser.tsx#TileSheet`, model and reasons in `terrain.md`). A third
   `TileView` beside grouped rows and the grid: one canvas per visible row (16 slots, `drawTile`, blank rows `drawVoid`),
   windowed by binary search over a `tops` array (rows touch; a run break adds `SHEET_BREAK` 7 px), so 4,000 rows cost

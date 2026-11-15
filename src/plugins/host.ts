@@ -635,7 +635,7 @@ export function runTransaction(store: Store, label: string, build: (tx: EditTran
   let isomChanges: TileChange[] = [];
   let fogChanges: TileChange[] = [];
   const finishEntry = (): HistoryEntry => {
-    const entry: HistoryEntry = { label, changes: tiles.finish() };
+    const entry: HistoryEntry = { label, tool: "plugin", changes: tiles.finish() };
     isomChanges = isom.finish();
     fogChanges = fog.finish();
     if (isomChanges.length > 0) entry.isom = isomChanges;

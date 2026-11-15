@@ -38,6 +38,7 @@ import { CopiedTerrains } from "./CopiedTerrains";
 import { sameTileKey, uniqueTiles } from "../../editor/tileCopies";
 import { useLearnedPieces } from "../../hooks/usePieces";
 import { msg, t, translate } from "../../i18n";
+import { countView } from "../../services/usage";
 
 const BRUSH_SIZES = [1, 2, 3, 4, 5, 6, 7];
 
@@ -485,7 +486,7 @@ function HealTab() {
   return (
     <div className="hint" style={{ padding: "10px 12px", display: "grid", gap: 10, justifyItems: "start" }}>
       <div>{t("Drag over joins that show. Where the tileset has a tile that joins its neighbours better and is the same tile to the game (it walks, builds and blocks sight alike, at the same height, and is the same kind of ground), that tile is laid instead. Ground that already joins is left as it is, and so are placed doodads.")}</div>
-      <Check label={t("Show the joins (View ▸ Seam Overlay)")} checked={flags.seams} onChange={(e) => setFlags({ ...flags, seams: e.target.checked })} />
+      <Check label={t("Show the joins (View ▸ Seam Overlay)")} checked={flags.seams} onChange={(e) => { countView("seams", e.target.checked, "palette"); setFlags({ ...flags, seams: e.target.checked }); }} />
       <Button size="sm" disabled={!scenario || !loaded} onClick={() => tools.heal(markedArea ?? undefined)}>
         {markedArea ? t("Heal the Marked Area") : t("Heal the Whole Map")}
       </Button>
@@ -511,7 +512,7 @@ function PinTab() {
         <Check radio label={t("Unpin")} checked={unpins} onChange={() => setUnpins(true)} />
       </div>
       <div>{count === 0 ? t("No tile is pinned.") : t("{n, plural, one {# tile is} other {# tiles are}} pinned.", { n: count })}</div>
-      <Check label={t("Always show (View ▸ Pinned Tiles)")} checked={flags.pins} onChange={(e) => setFlags({ ...flags, pins: e.target.checked })} />
+      <Check label={t("Always show (View ▸ Pinned Tiles)")} checked={flags.pins} onChange={(e) => { countView("pins", e.target.checked, "palette"); setFlags({ ...flags, pins: e.target.checked }); }} />
       <Button size="sm" disabled={!scenario || !loaded} title={t("Pin every tile the map's isometric data does not account for: doodads placed as terrain, stretched ramps, blends set tile by tile, ground from another editor.")} onClick={() => tools.pinArea("handLaid", true, area)}>
         {markedArea ? t("Pin Hand-Laid Tiles in the Marked Area") : t("Pin All Hand-Laid Tiles")}
       </Button>

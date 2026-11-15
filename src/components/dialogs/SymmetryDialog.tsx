@@ -15,6 +15,7 @@ import { SymmetryIcon } from "../ui/SymmetryIcon";
 import DialogFrame from "../ui/DialogFrame";
 import type { DialogProps } from "./DialogHost";
 import { t, translate } from "../../i18n";
+import { countView } from "../../services/usage";
 
 /** A share as a percentage, rounded down so that 100% is said only of a map with no difference at all. */
 const percent = (share: number) => `${(Math.floor(share * 1000) / 10).toFixed(1)}%`;
@@ -37,6 +38,7 @@ function FairnessLines({ fairness, chosen, closeKey, apply }: { fairness: Fairne
   /** Go to a place, in tiles, with the mode applied and the differences drawn. */
   const show = (x: number, y: number) => {
     apply();
+    if (!flags.asymmetry) countView("asymmetry", true, "dialog");
     setFlags({ ...flags, asymmetry: true });
     setCenter({ x, y, animate: true });
     close(closeKey);
@@ -76,7 +78,7 @@ function FairnessLines({ fairness, chosen, closeKey, apply }: { fairness: Fairne
               ))}
             </>
           )}
-          <Check label={t("Show on the map (View ▸ Symmetry Differences)")} checked={flags.asymmetry} onChange={(e) => setFlags({ ...flags, asymmetry: e.target.checked })} />
+          <Check label={t("Show on the map (View ▸ Symmetry Differences)")} checked={flags.asymmetry} onChange={(e) => { countView("asymmetry", e.target.checked, "dialog"); setFlags({ ...flags, asymmetry: e.target.checked }); }} />
         </>
       )}
     </div>

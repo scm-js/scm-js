@@ -138,8 +138,26 @@ export function swapWholeState(scn: Scenario, state: WholeState): WholeState {
   return out;
 }
 
+/**
+ * What made an edit, where the layer and the terrain tab it was made on do not already say:
+ * a stroke of the plain brush has none. A word of this list and nothing else, since the
+ * feature counts carry it (`services/usage.ts`); the label is the user's words and never is.
+ */
+export type EditTool =
+  /* Terrain */
+  | "block" | "copied" | "borrowed" | "fill" | "fillMap" | "replace" | "healArea"
+  | "pin" | "unpin" | "pinArea" | "unpinArea" | "pinHandLaid"
+  /* Doodads */
+  | "stretch" | "asTerrain" | "twin"
+  /* Cut / Copy / Paste */
+  | "cut" | "delete" | "paste" | "pasteStretch"
+  /* An edit a plugin made through the API */
+  | "plugin";
+
 export interface HistoryEntry extends HistoryEdit {
   label: string;
+  /** For the feature counts alone; nothing reads it to apply, undo or send an edit. */
+  tool?: EditTool;
 }
 
 /**

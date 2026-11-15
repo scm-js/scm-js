@@ -871,12 +871,12 @@ export const commitEditAtom = atom(null, (get, set, entry: HistoryEntry) => {
   countEdit(get, entry);
 });
 
-/** The feature count of an edit: the layer it was made on, what it changed, the terrain tool or mirror in use, and the types of the units it placed. */
+/** The feature count of an edit: the layer it was made on, what it changed, the terrain tab and mirror in use, the tool that made it where it says one, and the types of the units it placed. */
 function countEdit(get: Getter, entry: HistoryEntry) {
   const layer = get(activeLayerAtom);
   const symmetry = get(symmetryAtom);
-  const part = Object.entries(entryParts(entry)).filter(([, on]) => on).map(([k]) => k).join("+") || "other";
-  count("edit", { layer, part, ...(layer === "terrain" ? { mode: get(terrainModeAtom) } : {}), ...(symmetry !== "none" ? { symmetry } : {}) });
+  const part = Object.entries({ ...entryParts(entry), pins: entry.pins !== undefined }).filter(([, on]) => on).map(([k]) => k).join("+") || "other";
+  count("edit", { layer, part, ...(layer === "terrain" ? { mode: get(terrainModeAtom) } : {}), ...(entry.tool ? { tool: entry.tool } : {}), ...(symmetry !== "none" ? { symmetry } : {}) });
   countPlacedUnits(entry.units);
 }
 

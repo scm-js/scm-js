@@ -30,6 +30,16 @@ export function fileTypeFor(types: readonly PluginFileTypeEntry[], fileName: str
   return types.find((t) => t.extensions.some((ext) => name.endsWith(ext))) ?? null;
 }
 
+/** Whether a plugin opens replays (`.rep`), so one dropped or picked becomes a tab of that plugin's making rather than a map. */
+export function opensReplays(types: readonly PluginFileTypeEntry[]): boolean {
+  return fileTypeFor(types, "replay.rep") !== null;
+}
+
+/** Whether a plugin opens a dropped folder (`FileTypeSpec.openFolder`: a mod's folder). */
+export function opensFolders(types: readonly PluginFileTypeEntry[]): boolean {
+  return types.some((t) => typeof t.spec.openFolder === "function");
+}
+
 /**
  * Hand every claimed file to its plugin, the files of one type together, and answer the
  * ones nobody claimed (the editor opens the first of those as a map, as before).

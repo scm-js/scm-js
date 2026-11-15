@@ -13,10 +13,19 @@
 
 import { desktopBridge } from "../gamedata/desktop";
 import { msg, translate } from "../i18n";
+import { onSite } from "../site";
 
 /** Whether this is the desktop build (the Electron bridge is there). */
 export function isDesktop(): boolean {
   return desktopBridge() !== null;
+}
+
+/**
+ * Whether this editor is on the site: served with scmjs.dev's own pages beside it, so the
+ * menu bar and the start screen may link to them. The rule is `site.ts#onSite`.
+ */
+export function isOnSite(): boolean {
+  return typeof window !== "undefined" && onSite(window.location, isDesktop());
 }
 
 export interface HostTerms {

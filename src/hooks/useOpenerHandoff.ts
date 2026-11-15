@@ -4,6 +4,7 @@ import { pluginsStartedAtom } from "../atoms/pluginAtoms";
 import { handFilesToPlugins } from "../plugins/fileTypes";
 import { guardedAction, openFileInto } from "./useMapFileActions";
 import type { MapFileHandle } from "../services/mapIo";
+import { takeInbox } from "../services/inbox";
 
 type Store = ReturnType<typeof useStore>;
 
@@ -18,6 +19,9 @@ const mayHandOver = (origin: string) => LOOPBACK.test(origin) || origin === wind
  */
 const HANDOFF = typeof window !== "undefined" && new URL(window.location.href).searchParams.has("handoff");
 let handedOver = false;
+/** …or to take a file a page of its own site left for it (`services/inbox.ts`): read once, the same way. */
+const INBOX = typeof window !== "undefined" && new URL(window.location.href).searchParams.has("inbox");
+let inboxTaken = false;
 
 /**
  * Files given to the editor from outside (the desktop's open-with, `scmjs … open`): once the plugins have started,
@@ -66,5 +70,15 @@ export function useOpenerHandoff() {
     // (Nothing in it: any page may know the editor is ready, only a loopback one or the site's own is listened to.)
     opener.postMessage({ type: "scmjs.ready" }, "*");
     return () => window.removeEventListener("message", onMessage);
+  }, [store]);
+
+  // The site's inbox: a map or a replay dropped on a page of the site, which left it in the browser's
+  // file storage and came here. Opened as a dropped file, in this tab.
+  useEffect(() => {
+    if (!INBOX || inboxTaken) return;
+    inboxTaken = true;
+    const url = new URL(window.location.href);
+    if (url.searchParams.has("inbox")) { url.searchParams.delete("inbox"); window.history.replaceState(window.history.state, "", url); }
+    void takeInbox("editor").then((files) => { if (files) void openGivenFiles(store, files); });
   }, [store]);
 }

@@ -7,7 +7,7 @@ import { formatBytes } from "../editor/save";
 import { copyKind, lacksLanguageModule, type CopyKind } from "../gamedata/copies";
 import { resolveAssetSource } from "../gamedata/source";
 import { listStoredCopies, profileOf, type StoredCopy } from "../gamedata/store";
-import { SITE_ORIGIN } from "../moveIn";
+import { isOnSite } from "../editor/platform";
 import { t } from "../i18n";
 
 /**
@@ -53,7 +53,8 @@ export default function GameDataPage() {
     return () => { cancelled = true; };
   }, [source, revision]);
 
-  const onSite = window.location.origin === SITE_ORIGIN;
+  // On the site the mark leads to the site's home, as the header that links here does; anywhere else to the editor.
+  const onSite = isOnSite();
   const editor = import.meta.env.BASE_URL;
 
   return (

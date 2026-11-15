@@ -3,7 +3,7 @@ import { createStore } from "jotai";
 import { pluginFileTypesAtom } from "../src/atoms/pluginAtoms";
 import { folderReadsAtom } from "../src/atoms/uiAtoms";
 import { logEntries, resetLogForTests } from "../src/editor/log";
-import { handFilesToPlugins, pickerFileTypes, takeDroppedFolders } from "../src/plugins/fileTypes";
+import { handFilesToPlugins, opensFolders, opensReplays, pickerFileTypes, takeDroppedFolders } from "../src/plugins/fileTypes";
 import { directoryHandleFiles, entryFiles, entryPaths, folderInputFiles, handleFinder, readFound, type DirectoryHandleLike, type EntryLike, type FileHandleLike } from "../src/plugins/folders";
 import type { FolderFile } from "../src/plugins/api";
 import { Contributions, createPluginApi } from "../src/plugins/host";
@@ -35,6 +35,21 @@ describe("kinds of file plugins open", () => {
     expect(seen).toEqual(["a"]);
     first.dispose();
     expect(handFilesToPlugins(store, [file("x.rep")]).map((f) => f.name)).toEqual(["x.rep"]);
+  });
+
+  it("says whether a plugin opens replays and whether one opens folders, for the start screen's words", () => {
+    const store = createStore();
+    const types = () => store.get(pluginFileTypesAtom);
+    expect(opensReplays(types())).toBe(false);
+    expect(opensFolders(types())).toBe(false);
+    const api = createPluginApi(store, { id: "p", name: "P", source: "s" }, new Contributions());
+    const replays = api.ui.fileType({ name: "StarCraft replay", extensions: [".REP"], open: () => {} });
+    expect(opensReplays(types())).toBe(true);
+    expect(opensFolders(types())).toBe(false);
+    replays.dispose();
+    api.ui.fileType({ name: "StarCraft mod", extensions: [], open: () => {}, openFolder: () => {} });
+    expect(opensReplays(types())).toBe(false);
+    expect(opensFolders(types())).toBe(true);
   });
 
   it("keeps going when a plugin's open throws", () => {

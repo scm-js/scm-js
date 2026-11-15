@@ -95,6 +95,11 @@ react-dom takes to evaluate — hence "imported first", and hence the microtask 
 `VITE_REACT_TRACKS=1` keeps React's track if you want to profile renders. If startup ever feels frozen
 again, measure `longtask` entries before blaming the loading code.
 
+**The start screen waits for all of this** (2026-11-14, `viewport/StartScreen.tsx`): it shows with no map open, and
+at start there is none until `useStartupMap` has made the blank one, so it is held until `preloadStepAtom.done`
+(whose last task is that map) or a map has been open. The editor does not start on it; see `viewport-ui.md`, "The start screen", for
+what starting on it would take.
+
 `Preferences.startup.reopenLast` (`useStartupMap`): after the blank map is made, the most
 recent file with a stored handle is opened through `openRecentInto`, which replaces the
 untouched blank the way any first open does. The desktop app and a browser whose

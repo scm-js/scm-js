@@ -37,3 +37,18 @@ export function lacksLanguageModule(copy: Pick<StoredStamp, "from" | "profile" |
 export function ownGame(copies: readonly Pick<StoredStamp, "from" | "profile" | "staredit">[]): boolean {
   return copies.some((c) => { const k = copyKind(c); return k === "classic" || k === "remastered"; });
 }
+
+/**
+ * What a browser holds of the game, in one word, for the one-line indicators (the site's
+ * header, and the editor's menu bar when it is on the site): the person's own game when
+ * there is any (`classic`, `remastered`, or `both`), else the free `download`, else `none`.
+ * A mod's data set is not the game's and does not count.
+ */
+export type HeldGameData = "none" | "download" | "classic" | "remastered" | "both";
+
+export function heldGameData(copies: readonly Pick<StoredStamp, "from" | "profile" | "staredit">[]): HeldGameData {
+  const kinds = new Set(copies.map(copyKind));
+  if (kinds.has("classic")) return kinds.has("remastered") ? "both" : "classic";
+  if (kinds.has("remastered")) return "remastered";
+  return kinds.has("download") ? "download" : "none";
+}

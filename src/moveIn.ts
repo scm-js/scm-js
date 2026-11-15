@@ -17,10 +17,10 @@
  * and neither is anything kept outside `localStorage`.
  */
 import { browserStorage, STORAGE_PREFIX, storagePersists } from "./atoms/storage";
-import { SHARED_NIGHTLY } from "./site";
+import { SHARED_NIGHTLY, SITE_ORIGIN } from "./site";
 
 /** The site, the only origin that asks. */
-export const SITE_ORIGIN = "https://scmjs.dev";
+export { SITE_ORIGIN };
 /**
  * The origin the editor had, and its hand-off page. The hosted nightly moved too, from
  * `nightly.editor.scmjs.dev` to `scmjs.dev/nightly/`, and asks its own old address: that

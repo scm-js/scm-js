@@ -3,7 +3,9 @@ import { Menubar } from "radix-ui";
 import { Check, ChevronRight, Dot } from "lucide-react";
 import { useAtom, useAtomValue, useSetAtom, useStore } from "jotai";
 import AppLogo from "../ui/AppLogo";
-import { isDesktop } from "../../editor/platform";
+import SiteNav from "./SiteNav";
+import { isDesktop, isOnSite } from "../../editor/platform";
+import { SITE_PAGES } from "../../site";
 import {
   activeLayerAtom,
   brushSizeAtom,
@@ -40,7 +42,7 @@ import { PluginIconView } from "../ui/PluginIconView";
 import { activateDocumentIn, clearRecents, editCopyIn, quitGuard, stepDocumentIn, useMapFileActions } from "../../hooks/useMapFileActions";
 import { useTerrainTools } from "../../hooks/useTerrainTools";
 import { useClipboardTools } from "../../hooks/useClipboardTools";
-import { isOwnText, msg, pluginText, t, translate } from "../../i18n";
+import { isOwnText, locale, msg, pluginText, t, translate } from "../../i18n";
 import { count } from "../../services/usage";
 import { useT } from "../../i18n/react";
 
@@ -607,17 +609,39 @@ function Items({ items }: { items: Item[] }): ReactNode {
   });
 }
 
-export default function MenuBar() {
-  const menus = useMenus();
+/** The map in front and whether it has unsaved changes, at the right of the bar. */
+function DocName() {
   const name = useAtomValue(mapNameAtom);
   const modified = useAtomValue(mapModifiedAtom);
+  // With no map open (the start screen) there is no name to show: the name atom keeps the last map's.
+  const open = useAtomValue(scenarioAtom) !== null;
+  if (!open) return null;
+  return (
+    <div className="menubar-doc" title={modified ? t("Unsaved changes") : t("No unsaved changes")}>
+      <span className={`dot ${modified ? "" : "clean"}`} />
+      <span className="doc-name">{name}{modified ? " *" : ""}</span>
+    </div>
+  );
+}
+
+export default function MenuBar() {
+  const menus = useMenus();
+  // On the site the bar is the site's header too: the mark leads home and the site's other doors sit at the right end (`SiteNav`).
+  const site = isOnSite();
 
   return (
-    <Menubar.Root className="menubar">
-      <div className="brand" title={t("scmJS")}>
-        <AppLogo size={16} />
-        {t("scmJS")}
-      </div>
+    <Menubar.Root className={`menubar${site ? " on-site" : ""}`}>
+      {site ? (
+        <a className="brand" href={locale() === "ko" ? SITE_PAGES.homeKo : SITE_PAGES.home} title={t("scmjs.dev home")}>
+          <AppLogo size={16} />
+          <span>scm<i>JS</i></span>
+        </a>
+      ) : (
+        <div className="brand" title={t("scmJS")}>
+          <AppLogo size={16} />
+          {t("scmJS")}
+        </div>
+      )}
       {menus.map((m) => (
         <Fragment key={m.label}>
           <Menubar.Menu>
@@ -630,10 +654,13 @@ export default function MenuBar() {
           </Menubar.Menu>
         </Fragment>
       ))}
-      <div className="menubar-doc" title={modified ? t("Unsaved changes") : t("No unsaved changes")}>
-        <span className={`dot ${modified ? "" : "clean"}`} />
-        <span>{name}{modified ? " *" : ""}</span>
-      </div>
+      {site ? (
+        // What is left of the bar after the menus: the map's name gives way first, then the site's items (chrome.css).
+        <div className="menubar-rest">
+          <DocName />
+          <SiteNav />
+        </div>
+      ) : <DocName />}
     </Menubar.Root>
   );
 }

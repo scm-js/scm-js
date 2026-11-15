@@ -1,3 +1,4 @@
+import { tileBlockAtom } from "../../atoms/tileBlockAtoms";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useAtomValue, useSetAtom, useStore, type Atom } from "jotai";
 import { ContextMenu } from "radix-ui";
@@ -52,10 +53,11 @@ import {
 } from "../../atoms/editorAtoms";
 import { animateUnitsSpeedAtom, animateWaterSpeedAtom, gridLookAtom, preferencesAtom, remasteredEffectsAtom } from "../../atoms/preferencesAtoms";
 import { openDialogAtom, statusMessageAtom } from "../../atoms/uiAtoms";
-import { activeDocumentIdAtom, canEdit, doodadsRevisionAtom, locationsAtom, scenarioAtom, startLocationsAtom, terrainRevisionAtom, unitsRevisionAtom, viewOnlyAtom } from "../../atoms/documentAtoms";
+import { activeDocumentIdAtom, canEdit, doodadsRevisionAtom, locationsAtom, pinnedTilesAtom, scenarioAtom, startLocationsAtom, terrainRevisionAtom, unitsRevisionAtom, viewOnlyAtom } from "../../atoms/documentAtoms";
 import { useTileset } from "../../hooks/useTileset";
 import { useMissingTerrain } from "../../hooks/useMissingTerrain";
 import { paintsTiles, useTerrainTools, type MapPoint } from "../../hooks/useTerrainTools";
+import { useFairness } from "../../hooks/useFairness";
 import { cancelMapPickAtom, cancelMapToolAtom, mapPickAtom, mapViewStateAtom, mapToolAtom, mapToolRevisionAtom, pluginOverlayRevisionAtom, pluginOverlaysAtom, shownMapViewAtom, viewFlashesAtom, type PluginOverlayEntry } from "../../atoms/pluginAtoms";
 import type { MapPointer, MapView, OverlayAbove, PickedObject } from "../../plugins/api";
 import { wheelStep } from "../../plugins/mapViews";
@@ -86,7 +88,7 @@ import { LAYERS } from "../chrome/MenuBar";
 import { TILESET_BY_ID } from "../../data/tilesets";
 import { t, translate } from "../../i18n";
 import {
-  beginAreaGesture, beginLocationGesture, beginObjectGesture, beginStrokeGesture, objectGestureOn,
+  beginAreaGesture, beginLocationGesture, beginObjectGesture, beginPasteGesture, beginStrokeGesture, objectGestureOn,
   type Gesture, type ObjectLayer, type PointerSample, type Tile,
 } from "./gestures";
 import { drawBlendAnchor, drawBrushSquare, drawClipGhost, drawDoodadGhost, drawIsomDiamonds, drawSpriteGhosts, drawTileGhost, drawUnitGhosts } from "./paint/ghosts";
@@ -159,7 +161,7 @@ const fmtTiles = (px: number) => (Number.isInteger(px / TILE) ? String(px / TILE
  * rendering for it.
  */
 const REPAINT_ATOMS: readonly Atom<unknown>[] = [
-  activeTileAtom, activeTerrainAtom, rectVariationAtom,
+  activeTileAtom, activeTerrainAtom, rectVariationAtom, tileBlockAtom,
   unitsRevisionAtom, activeUnitAtom, unitOwnerAtom,
   activeDoodadAtom, doodadPlacementAtom,
   activeSpriteKindAtom, activeSpriteAtom, activeUnitSpriteAtom, spritePlaceOptionsAtom,
@@ -299,6 +301,7 @@ export default function MapViewport() {
   const open = useSetAtom(openDialogAtom);
   const scenario = useAtomValue(scenarioAtom);
   const terrainRevision = useAtomValue(terrainRevisionAtom);
+  const pinned = useAtomValue(pinnedTilesAtom);
   /** Blend mode: a click picks the anchor cell; tiles are placed from the palette, never by stroke. */
   const blending = layer === "terrain" && scenario !== null && terrainMode === "blend";
   // (Never on a view-only map, so no brush outline promises a stroke that will not happen.)
@@ -325,6 +328,8 @@ export default function MapViewport() {
   const { loaded: tilesetAssets, loading: tilesetLoading, error: tilesetError } = useTileset();
   // Terrain the data set in use has not got (a mod's map over the game's files): said once, as a toast.
   useMissingTerrain(tilesetAssets);
+  // View ▸ Symmetry Differences: measured only while it is on.
+  const fairness = useFairness(flags.asymmetry, tilesetAssets?.tileset ?? null);
 
   const tilePx = TILE * zoom;
   const worldW = mapW * tilePx;
@@ -388,7 +393,9 @@ export default function MapViewport() {
     let movingInView = false;
     if (tiles && tilesetAssets) {
       ({ animated: animatedInView, moving: movingInView } = paintGround(v, groundLayerRef, {
-        scenario, tiles, assets: tilesetAssets, terrainRevision, doodadsRevision, elevation: flags.elevation, buildability: flags.buildability,
+        scenario, tiles, assets: tilesetAssets, terrainRevision, doodadsRevision, elevation: flags.elevation, buildability: flags.buildability, seams: flags.seams,
+        pins: flags.pins || (layer === "terrain" && terrainMode === "pin") ? pinned : null,
+        unlike: fairness?.report?.mask ?? null,
         lacks: scenario ? mapLacks(tiles, tilesetIndex(scenario), tilesetAssets.tileset.groups.length, terrainRevision + doodadsRevision) : null,
         motion: flags.animateWater ? { pass: effectPass, seconds: (performance.now() / 1000) * waterSpeed, tune: effectTune } : null,
       }));
@@ -497,7 +504,11 @@ export default function MapViewport() {
       const marked = marking ? tileRect(marking.from, marking.to) : clipSelection;
       if (marked) markedTiles(v, marked, "rgba(230,185,92,0.10)", INK.gold, `${marked.x1 - marked.x0} × ${marked.y1 - marked.y0}`, INK.goldPale);
       const at = hoverRef.current;
-      if (clipPasting && clip && at && !marking) drawClipGhost(v, paint, scenario, tilesetAssets, doodadTools.catalogue, clip, clipParts, at.x, at.y);
+      // While a press is pulling the clip out, it stands where the press put it.
+      const pulling = gesture?.kind === "paste" ? gesture : null;
+      const ghost = clipPasting && clip && !marking && (pulling ?? at) ? clipTools.ghostAt((pulling?.from ?? at!).x, (pulling?.from ?? at!).y) : null;
+      // The parts ticked decide what of the clip shows; stretched, it is its terrain and nothing else.
+      if (ghost) drawClipGhost(v, paint, scenario, tilesetAssets, doodadTools.catalogue, ghost.clip, ghost.stretched ? ghost.parts : clipParts, ghost.x, ghost.y);
     }
 
     if (blending && blendAnchor && scenario && inMapBounds(scenario, blendAnchor)) drawBlendAnchor(v, scenario, blendAnchor);
@@ -513,6 +524,9 @@ export default function MapViewport() {
       drawIsomDiamonds(v, tools.ghostDiamondsAt(hp));
     } else if (doodadDrag?.mode === "move") {
       for (const g of doodadTools.dragGhosts()) drawDoodadGhost(v, paint, tilesetAssets, g, 0.6);
+    } else if (doodadDrag?.mode === "stretch") {
+      // The doodad pulled out along the drag, standing where the press put it.
+      doodadTools.ghostsAt(doodadDrag.from).forEach((ghost, i) => drawDoodadGhost(v, paint, tilesetAssets, ghost, ghost.verdict.ok ? (i === 0 ? 0.75 : 0.5) : 0.45));
     } else if (hp && doodadDrag?.mode === "marquee") {
       drawMarquee(v, doodadDrag.from, doodadDrag.to);
     } else if (hp && spriteDrag?.mode === "marquee") {
@@ -531,7 +545,10 @@ export default function MapViewport() {
       if (painting && tilesetAssets && tilePx >= 4 && gesture?.kind !== "stroke") {
         // A preview of what the terrain brush would leave behind.
         if (drawTileGhost(v, tilesetAssets, tools.ghostAt(hv.x, hv.y))) animatedInView = true;
-        drawBrushSquare(v, hv, side, null);
+        // A block on the Tile brush stands with its top-left under the pointer, as a paste does.
+        const block = terrainMode === "tile" ? store.get(tileBlockAtom) : null;
+        if (block && layer === "terrain") strokeTileRect(v, { x0: hv.x, y0: hv.y, x1: hv.x + block.cols, y1: hv.y + block.rows }, INK.gold);
+        else drawBrushSquare(v, hv, side, null);
       } else {
         // On the fog layer the brush previews its effect: black lays fog, light lifts it.
         drawBrushSquare(v, hv, side, fogPainting ? (fogMode === "fog" ? "rgba(0,0,0,0.6)" : "rgba(255,255,255,0.22)") : "rgba(230,185,92,0.12)");
@@ -560,7 +577,7 @@ export default function MapViewport() {
       lastViewportRect.current = rect;
       setViewportRect(rect);
     }
-  }, [size, tilePx, zoom, mapW, mapH, worldW, worldH, tileset, flags, gridSize, gridLook, layer, brush, setViewportRect, scenario, tilesetAssets, terrainRevision, locations, startLocations, terrainMode, painting, blending, blendAnchor, tools, tilesetLoading, unitsEditing, unitPlacing, unitTools, unitAssets, animator, selectedUnits, showFog, fogViewPlayer, fogPainting, fogMode, doodadsEditing, doodadPlacing, doodadTools, doodadsRevision, selectedDoodads, clipEditing, clipPasting, clip, clipParts, clipSelection, picking, mapPick, tooling, mapTool, overlays, spritesEditing, spritePlacing, spriteTools, selectedSprites, locationsEditing, locationTools, selectedLocations, symmetry, flashes, waterSpeed, effectTune, effectPass]);
+  }, [size, tilePx, zoom, mapW, mapH, worldW, worldH, tileset, flags, gridSize, gridLook, layer, brush, setViewportRect, scenario, tilesetAssets, terrainRevision, pinned, fairness, locations, startLocations, terrainMode, painting, blending, blendAnchor, tools, tilesetLoading, unitsEditing, unitPlacing, unitTools, unitAssets, animator, selectedUnits, showFog, fogViewPlayer, fogPainting, fogMode, doodadsEditing, doodadPlacing, doodadTools, doodadsRevision, selectedDoodads, clipEditing, clipPasting, clip, clipParts, clipSelection, clipTools, picking, mapPick, tooling, mapTool, overlays, spritesEditing, spritePlacing, spriteTools, selectedSprites, locationsEditing, locationTools, selectedLocations, symmetry, flashes, waterSpeed, effectTune, effectPass, store]);
 
   /**
    * Every repaint request — a pointer move, a scroll, a render that changed what is drawn —
@@ -949,7 +966,7 @@ export default function MapViewport() {
    */
   const objectLayer = (): ObjectLayer | null => {
     const layer = editableObjectLayer();
-    return layer && viewOnly ? { ...layer, placing: false, beginDrag: () => {}, dragTo: () => {}, endDrag: () => {}, placeAt: () => {} } : layer;
+    return layer && viewOnly ? { ...layer, placing: false, beginDrag: () => {}, dragTo: () => {}, endDrag: () => {}, placeAt: () => {}, stretch: undefined } : layer;
   };
 
   /** The active object layer as its gesture sees it; the three differ only in what they pick and box-select by. */
@@ -973,6 +990,7 @@ export default function MapViewport() {
         select: doodadTools.select, beginDrag: doodadTools.beginDrag, dragTo: doodadTools.dragTo, endDrag: doodadTools.endDrag,
         selectInBox: (a, b, additive) => doodadTools.selectInBox({ x0: tileOf(a.px), y0: tileOf(a.py), x1: tileOf(b.px), y1: tileOf(b.py) }, additive),
         placeAt: (p) => { doodadTools.placeAt(p); },
+        stretch: { to: (from, p, any) => { doodadTools.stretchTo(from, p, any); }, end: doodadTools.endStretch },
       };
     }
     if (spritesEditing) {
@@ -1016,7 +1034,11 @@ export default function MapViewport() {
       return beginLocationGesture({ ...locationTools, ...still, selected: selectedLocations }, s);
     }
     if (clipEditing) {
-      if (clipPasting) { if (!viewOnly) clipTools.pasteAt(tile.x, tile.y); return "done"; }
+      if (clipPasting) {
+        if (viewOnly) return "done";
+        // A click stamps the clip; a drag pulls it out first, the way a doodad stretches.
+        return beginPasteGesture(s, { stretch: (from, p, any) => { clipTools.stretchTo(from, p, any); }, paste: (at) => { clipTools.pasteAt(at.x, at.y); }, end: clipTools.endStretch });
+      }
       // Otherwise a drag marks the area Cut / Copy take; a click marks one tile.
       return beginAreaGesture("clip", s, { change: setClipSelection, done: (r) => setClipSelection(r) });
     }
@@ -1192,9 +1214,9 @@ export default function MapViewport() {
     if (tooling) { e.preventDefault(); drop("tool"); cancelTool(); scheduleDraw(); return; }
     // While placing, a right-click leaves placement mode instead of opening the menu.
     if (unitPlacing) { e.preventDefault(); unitTools.stopPlacing(); scheduleDraw(); return; }
-    if (doodadPlacing) { e.preventDefault(); doodadTools.stopPlacing(); scheduleDraw(); return; }
+    if (doodadPlacing) { e.preventDefault(); drop("object"); doodadTools.endStretch(); doodadTools.stopPlacing(); scheduleDraw(); return; }
     if (spritePlacing) { e.preventDefault(); spriteTools.stopPlacing(); scheduleDraw(); return; }
-    if (clipPasting) { e.preventDefault(); clipTools.stopPasting(); scheduleDraw(); return; }
+    if (clipPasting) { e.preventDefault(); drop("paste"); clipTools.endStretch(); clipTools.stopPasting(); scheduleDraw(); return; }
     if (locationsEditing && hoverPointRef.current) {
       // Right-clicking a location selects it so the menu's items act on it.
       const hit = locationTools.pickAt(hoverPointRef.current);

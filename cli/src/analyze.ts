@@ -671,12 +671,12 @@ export function layoutReport(input: Pick<Input, "path" | "name">, scn: Scenario,
 
 /**
  * `scmjs map analyze`: the copy of the game opened, the map's ground read and analysed, the report's lines, and the
- * picture written when `--picture` names a file (`-` for standard output, the words then on standard error).
+ * picture written when `--out` names a file (`-` for standard output, the words then on standard error).
  */
 export async function analyzeMap(input: Input, map: OpenedMap, o: AnalyzeOptions, stdout: Writable = process.stdout): Promise<{ report: AnalyzeReport; lines: string[] }> {
   const t0 = performance.now();
   const scn = map.scenario;
-  if (o.scale !== undefined && o.picture === undefined) throw new CliError(t("--scale is the picture's: give --picture a file to write too"), null, 2);
+  if (o.scale !== undefined && o.picture === undefined) throw new CliError(t("--scale is the picture's: give --out a file to write too"), null, 2);
   const scale = o.scale === undefined ? DEFAULT_PNG_SCALE : Number(o.scale);
   if (!(PNG_SCALES as readonly number[]).includes(scale)) throw new CliError(t("--scale takes {scales}, not \"{value}\"", { scales: PNG_SCALES.join(", "), value: String(o.scale) }), null, 2);
   const count = startPlaces(map).length;
@@ -701,8 +701,8 @@ export async function analyzeMap(input: Input, map: OpenedMap, o: AnalyzeOptions
 
 const MARK: Record<VerdictLevel, string> = { ok: mark.ok, warn: mark.warn, info: mark.info };
 const t0f = (n: number) => num(Math.round(n));
-/** "9 fields + gas", "7 fields, no gas", "15 fields + 2 gas", "a geyser alone". */
-const resourcesText = (fields: number, geysers: number) => (!fields
+/** "9 fields + gas", "7 fields, no gas", "15 fields + 2 gas", "a geyser alone", "no resources". */
+export const resourcesText = (fields: number, geysers: number) => (!fields && !geysers ? t("no resources") : !fields
   ? t("{n, plural, one {a geyser alone} other {# geysers alone}}", { n: geysers })
   : geysers === 0 ? t("{n, plural, one {# field} other {# fields}}, no gas", { n: fields })
     : geysers === 1 ? t("{n, plural, one {# field} other {# fields}} + gas", { n: fields })

@@ -1,0 +1,42 @@
+{
+  "name": "@scm-js/bot",
+  "version": "1.0.0",
+  "description": "Type declarations for JavaScript bots that play StarCraft: Brood War on scmjs.dev/play and from the scmjs command line",
+  "keywords": [
+    "starcraft",
+    "brood war",
+    "bot",
+    "bwapi",
+    "ai",
+    "scmjs",
+    "types"
+  ],
+  "license": "MIT",
+  "author": "Jeany",
+  "type": "module",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist/index.d.ts",
+    "README.md"
+  ],
+  "sideEffects": false,
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/scm-js/scm-js.git",
+    "directory": "bot"
+  },
+  "homepage": "https://docs.scmjs.dev/bots/",
+  "bugs": "https://github.com/scm-js/scm-js/issues",
+  "scripts": {
+    "prepack": "cd .. && node scripts/build-bot-types.mjs"
+  }
+}

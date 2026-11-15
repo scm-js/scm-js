@@ -39,8 +39,16 @@ The Save dialog's **Archive** fold decides how the scenario is stored:
 
 A map is written back the way it was opened: a map that came in as PKWARE goes out as
 PKWARE. A new map gets StarEdit's layout, PKWARE and encrypted. A member stored with a
-method the editor can read but not write (bzip2, for one) is written with whichever layout
-the dialog shows.
+method the editor can read but not write is kept exactly as it was stored, as long as it
+is unchanged: a sound StarEdit stored with the game's own sound compression (ADPCM, about
+a quarter of the size and slightly lossy) stays that size instead of growing about four
+times as plain PCM. A sound replaced in the Sound Editor is written afresh, with whichever
+layout the dialog shows. A member stored with zlib or bzip2 is not kept that way in a map
+written for every version of the game, which could not read it.
+
+A file that holds no scenario at all (not a single section a map has, such as a text file
+given a map's name) is refused when opened, rather than opened as an empty map that a save
+would then write over it.
 
 ### Built maps
 
@@ -295,6 +303,7 @@ For developers. The archive and the scenario are under `src/formats/mpq/` and
 | File | Does |
 | --- | --- |
 | `src/formats/mpq/scm.ts` | Opens and writes the archive over [mopaq](https://github.com/jeany55/mopaq): finds the scenario, accepts a bare `.chk`, reports how the member was stored, keeps the other members. |
+| `src/formats/mpq/stored.ts` | A member kept as it was stored: the methods its sectors use, the stored form remembered with the bytes it decodes to, and a stored member moved to another place in the archive with the key that place needs. |
 | `src/formats/chk/reader.ts` | Reads the run of sections: every occurrence in order, odd lengths, trailing bytes. |
 | `src/formats/chk/sections/registry.ts` | One entry per known section: how copies combine, its size, and which Save groups it belongs to. |
 | `src/formats/chk/scenario.ts` | The scenario model, reading and writing it, the revisions, and where a new section goes. |

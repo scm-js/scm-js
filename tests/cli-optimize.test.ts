@@ -16,7 +16,7 @@ import { ActionType } from "../src/formats/chk/sections/triggers";
 import { loadMap, saveMap } from "../src/formats/mpq/scm";
 import { diffMaps } from "../cli/src/diff";
 import { GAME_MEMBERS, keepTest, optimizeMap, printOptimize, sizeLine, usesMemory } from "../cli/src/optimize";
-import { fileKey, packStored, relocate } from "../cli/src/relocate";
+import { fileKey, packStored, relocate } from "../src/formats/mpq/stored";
 import { visible } from "../cli/src/ui";
 import { testMap } from "./support/maps";
 

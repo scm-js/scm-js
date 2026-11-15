@@ -5,7 +5,7 @@
  * run through a stand-in for the map runner's test mode (the real one needs the lifted game and a copy of StarCraft,
  * which CI has not got). The sample beside the test map, tests/maps/ums.tests.json, is the one the docs show.
  */
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -15,6 +15,8 @@ import {
 } from "../cli/src/maptest";
 import { githubTestAnnotations, junitTestXml, sarifTestJson, type TestReport } from "../cli/src/report";
 import { CliError, visible } from "../cli/src/ui";
+import { buildProgram, typedOptions } from "../cli/src/main";
+import type { Command } from "commander";
 import { ActionType, ConditionType } from "../src/formats/chk/sections/triggers";
 import { testMap } from "./support/maps";
 import { classicCopy, FAKE_TEST_RUNNER, OLD_TEST_RUNNER, stagedEngine } from "./support/mapRunner";
@@ -92,7 +94,7 @@ describe("scmjs map test: a scenario planned against the map", () => {
       counts: [{ player: 0, unit: 1, location: 1 }, { player: 17, unit: 230, location: 0 }],
     });
     expect(p.expect.map((x) => x.what)).toEqual([
-      'trigger #1 "Opening" fired', "trigger #2 fired at least 2 times", "Player 1 has at least 2 Terran Ghost in Base", "All Players has at least 1 Men", 'switch "Alarm raised" is clear',
+      'trigger #1 "Opening" fired', "trigger #2 fired at least 2 times", "Terran Ghost of Player 1 in Base: at least 2", "Men of All Players: at least 1", 'switch "Alarm raised" is clear',
     ]);
     // The map itself is untouched: the copy is the scenario's own.
     expect((await planScenario((await ums()).chk, { name: "none" }, "f", 0, DEFAULTS)).scenario.triggers).toHaveLength(3);
@@ -103,7 +105,17 @@ describe("scmjs map test: a scenario planned against the map", () => {
       [{ setup: [{ create: "Marine", player: 1, location: "Moon" }] }, /setup\[0\]\.location: the map has no location "Moon" \(it has "Base", "Nest", "Middle"/],
       [{ expect: [{ trigger: "Finale" }] }, /no trigger has the comment "Finale" \(the map's comments: "Opening"\)/],
       [{ expect: [{ trigger: 9 }] }, /the map has 3 triggers: 9 is not one of them/],
-      [{ expect: [{ units: "Marine", is: "lots" }] }, /expect\[0\]\.is: takes a number or a comparison/],
+      [{ expect: [{ units: "Marine", is: "lots" }] }, /expect\[0\]\.is: takes true, false, a number or a comparison/],
+      [{ expect: [{ deaths: "Marine", player: 1, is: "lots" }] }, /expect\[0\]\.is: takes a number or a comparison/],
+      [{ expect: [{ trigger: 2, fired: "yes" }] }, /expect\[0\]\.fired: takes true, false, a number or a comparison/],
+      // A key the tests do not know, at every level, with the nearest they do.
+      [{ frams: "0:05", expect: [{ trigger: 2 }] }, /"bad": "frams" is not something the tests know: did you mean "frames"\?/],
+      [{ expect: [{ trigger: 2, fird: false }] }, /expect\[0\]: "fird" is not something the tests know: did you mean "fired"\?/],
+      [{ expect: [{ units: "Terran Marine", playr: 2, is: 0 }] }, /expect\[0\]: "playr" .*did you mean "player"\?/],
+      [{ setup: [{ create: "Marine", player: 1, cont: 2 }] }, /setup\[0\]: "cont" .*did you mean "count"\?/],
+      [{ steps: [{ at: 10, chat: "hi", colour: 3 }] }, /steps\[0\]: "colour" is not something the tests know \(chat, at\)/],
+      [{ step: [{ at: 10, chat: "hi" }], expect: [{ ended: true }] }, /"step" .*did you mean "steps"\?/],
+      [{ expect: [{ trigger: 2, switch: 1 }] }, /expects trigger and switch at once/],
       [{ frames: 100, steps: [{ at: 100, chat: "late" }] }, /is at frame 100, and the scenario runs 100 frames/],
       [{ steps: [{ at: 10, chat: "hi", kill: "Any unit" }] }, /does kill and chat at once|does .* at once/],
       [{ steps: [{ chat: "hi" }] }, /says when with "at"/],
@@ -121,11 +133,16 @@ describe("scmjs map test: a scenario planned against the map", () => {
     const chk = (await ums()).chk;
     expect((await refused(() => readTests("t.json", "{ nope", chk, DEFAULTS))).message).toMatch(/t\.json is not JSON/);
     expect((await refused(() => readTests("t.json", "{}", chk, DEFAULTS))).message).toMatch(/no "scenarios" list/);
+    // At the top of the file, a scenario that expects nothing, and two of one name; a // key is a comment.
+    expect((await refused(() => readTests("t.json", JSON.stringify({ scenarios: [], sed: 3 }), chk, DEFAULTS))).message).toMatch(/t\.json: "sed" .*did you mean "seed"\?/);
+    expect((await refused(() => readTests("t.json", JSON.stringify({ scenarios: [{ name: "x", frames: "0:05" }] }), chk, DEFAULTS))).message).toMatch(/"x": expects nothing, so it would pass whatever the game did/);
+    expect((await refused(() => readTests("t.json", JSON.stringify([{ name: "x", expect: [{ ended: true }] }, { name: "X", expect: [{ ended: false }] }]), chk, DEFAULTS))).message).toMatch(/has two scenarios named "X"/);
+    expect(readTests("t.json", JSON.stringify({ "//": "the map's tests", scenarios: [{ name: "x", "// why": "a note", expect: [{ ended: true, "//": "ok" }] }] }), chk, DEFAULTS)).toHaveLength(1);
     // A list alone is taken as the scenarios; the file's frames and seed are every scenario's unless one says.
-    const list = readTests("t.json", JSON.stringify([{ name: "a" }]), chk, DEFAULTS);
+    const list = readTests("t.json", JSON.stringify([{ name: "a", expect: [{ ended: true }] }]), chk, DEFAULTS);
     expect(list.map((s) => [s.name, s.frames, s.seed, s.line])).toEqual([["a", 2400, 1, 1]]);
-    const top = readTests("t.json", JSON.stringify({ frames: "0:10", seed: 7, scenarios: [{ name: "a" }, { name: "b", frames: 50, seed: 2 }] }, null, 2), chk, DEFAULTS);
-    expect(top.map((s) => [s.frames, s.seed, s.line])).toEqual([[240, 7, 6], [50, 2, 9]]);
+    const top = readTests("t.json", JSON.stringify({ frames: "0:10", seed: 7, scenarios: [{ name: "a", expect: [{ ended: true }] }, { name: "b", frames: 50, seed: 2, expect: [{ ended: true }] }] }, null, 2), chk, DEFAULTS);
+    expect(top.map((s) => [s.frames, s.seed, s.line])).toEqual([[240, 7, 6], [50, 2, 14]]);
   });
 
   it("reads the sample beside the test map", async () => {
@@ -184,6 +201,9 @@ describe("scmjs map test: the runner", () => {
       await planScenario(map.chk, { name: "wins", seed: 4, setup: [{ switch: 1 }], steps: [{ at: 24, chat: "glhf" }], expect: [{ switch: "Alarm raised" }, { outcome: "victory", player: 1 }] }, "ums.tests.json", 0, DEFAULTS),
       await planScenario(map.chk, { name: "loses", expect: [{ switch: "Alarm raised", is: "clear" }, { ended: false }] }, "ums.tests.json", 1, DEFAULTS),
     ];
+    // The replay of a time "wins" failed: it goes once it passes.
+    mkdirSync(out, { recursive: true });
+    writeFileSync(join(out, "ums.tests.wins.rep"), "an old failure");
     const lines: string[] = [];
     let started = 0;
     const run = await runTests("ums.scx", scenarios, map, { out, engine: staged.dir, starcraft: copy, live: (l) => lines.push(visible(l)), onStart: () => started++ });
@@ -191,9 +211,10 @@ describe("scmjs map test: the runner", () => {
     expect(run.scenarios.map((s) => [s.name, s.ok])).toEqual([["wins", true], ["loses", false]]);
     const [wins, loses] = run.scenarios;
     expect(wins.replay).toBeNull();
-    expect(loses.replay).toBe(join(out, "loses.rep"));
+    // Named after the tests file and the scenario, as the clips are.
+    expect(loses.replay).toBe(join(out, "ums.tests.loses.rep"));
     expect(readFileSync(loses.replay!, "utf8")).toBe("a replay");
-    expect(existsSync(join(out, "wins.rep"))).toBe(false);
+    expect(existsSync(join(out, "ums.tests.wins.rep"))).toBe(false);
     expect(loses.notices).toEqual(["WARNING: Unit unplaceable! (Terran Marine) (1040,976)"]);
     const handed = readFileSync(specs, "utf8").trim().split("\n").map((l) => JSON.parse(l));
     expect(handed.map((h) => [h.map, h.seed, h.spec.frames, h.spec.steps])).toEqual([["ums.scx", 4, 2400, [{ frame: 24, kind: "chat", text: "glhf" }]], ["ums.scx", 1, 2400, []]]);
@@ -209,7 +230,7 @@ describe("scmjs map test: the runner", () => {
     const copy = classicCopy(tmp()), map = await ums();
     const p = await planScenario(map.chk, { name: "a" }, "t.json", 0, DEFAULTS);
     // The trace's stand-in is such a runner: it ignores --test and starts with no mode.
-    await expect(runTests("ums.scx", [p], map, { out: tmp(), engine: stagedEngine(tmp()).dir, starcraft: copy })).rejects.toThrow(/map runner from before map test/);
+    await expect(runTests("ums.scx", [p], map, { out: tmp(), engine: stagedEngine(tmp()).dir, starcraft: copy })).rejects.toThrow(/is from before map test/);
     await expect(runTests("ums.scx", [p], map, { out: tmp(), engine: stagedEngine(tmp(), false).dir, starcraft: copy })).rejects.toThrow(/has no map runner/);
     await expect(runTests("bad.scx", [p], map, { out: tmp(), engine: stagedEngine(tmp(), true, FAKE_TEST_RUNNER).dir, starcraft: copy })).rejects.toThrow(/did not take this map/);
     await expect(runTests("ums.scx", [p], map, { out: tmp(), engine: stagedEngine(tmp(), true, FAKE_TEST_RUNNER).dir, starcraft: tmp() })).rejects.toThrow(/not a copy of StarCraft/);
@@ -238,7 +259,7 @@ describe("scmjs map test: scenarios driven by a replay", () => {
     process.env.SCMJS_TEST_SPECS = specs;
     process.env.SCMJS_TEST_ANSWER = answer;
     writeFileSync(answer, JSON.stringify({ frame: 1000, ended: true, check: { named: 9, gone: 0, ahead: 1, parted: 720 }, observed: { switches: [0], resources: Array.from({ length: 12 }, (_, i) => (i === 0 ? [80, 8] : [0, 0])) } }));
-    writeFileSync(tests, formatTests({ scenarios: [{ name: "steady", setup: [] }, { name: "bug", replay: "bug.rep", expect: [{ switch: "Alarm raised", is: "clear" }, { minerals: ">= 50", player: 1 }, { gas: 3, player: 1 }] }] }));
+    writeFileSync(tests, formatTests({ scenarios: [{ name: "steady", setup: [], expect: [{ ended: true }] }, { name: "bug", replay: "bug.rep", expect: [{ switch: "Alarm raised", is: "clear" }, { minerals: ">= 50", player: 1 }, { gas: 3, player: 1 }] }] }));
     const scenarios = readTests(tests, readFileSync(tests, "utf8"), map.chk, DEFAULTS);
     const lines: string[] = [];
     const run = await runTests("ums.scx", scenarios, map, { out: tmp(), engine: staged.dir, starcraft: copy, live: (l) => lines.push(visible(l)) });
@@ -256,10 +277,10 @@ describe("scmjs map test: scenarios driven by a replay", () => {
     expect(updateTests(updating.scenarios)).toEqual([{ file: tests, expectations: 2 }]);
     const written = JSON.parse(readFileSync(tests, "utf8"));
     expect(written.scenarios[1].expect).toEqual([{ switch: "Alarm raised", is: "set" }, { minerals: ">= 50", player: 1 }, { gas: 8, player: 1 }]);
-    expect(written.scenarios[0]).toEqual({ name: "steady", setup: [] });
+    expect(written.scenarios[0]).toEqual({ name: "steady", setup: [], expect: [{ ended: true }] });
     // A runner from before --play ran it with nobody playing: said, not judged.
     const old = stagedEngine(tmp(), true, OLD_TEST_RUNNER);
-    await expect(runTests("ums.scx", [scenarios[1]], map, { out: tmp(), engine: old.dir, starcraft: copy })).rejects.toThrow(/map runner from before tests driven by a replay/);
+    await expect(runTests("ums.scx", [scenarios[1]], map, { out: tmp(), engine: old.dir, starcraft: copy })).rejects.toThrow(/is from before tests driven by a replay/);
   });
 
   it("makes expectations from the end of a game, in the file's own words", async () => {
@@ -316,6 +337,37 @@ describe("scmjs map test: scenarios driven by a replay", () => {
       "{", '  "scenarios": [', "    {", '      "name": "a",', '      "replay": "b.rep",', '      "expect": [', '        { "trigger": 1, "fired": 2 },', '        { "text": "x", "shown": true }', "      ]", "    }", "  ]", "}",
     ].join("\n"));
     expect(formatTests({ steps: [], setup: {} })).toBe('{ "steps": [], "setup": {} }');
+  });
+});
+
+describe("scmjs map test record: its options", () => {
+  it("reads --json, --frames, --starcraft and --engine typed after it, which map test declares too", async () => {
+    const program = buildProgram();
+    const record = program.commands.find((c) => c.name() === "map")!.commands.find((c) => c.name() === "test")!.commands.find((c) => c.name() === "record")!;
+    let seen: Record<string, unknown> = {};
+    record.action((_m: string, _r: string, local: Record<string, unknown>, cmd: Command) => { seen = typedOptions(cmd, local, ["json", "frames", "starcraft", "engine", "name"]); });
+    await program.parseAsync(["map", "test", "record", "a.scx", "b.rep", "--tests", "e.json", "--frames", "1000", "--json", "--starcraft", "/sc", "--name", "x"], { from: "user" });
+    expect(seen).toMatchObject({ json: true, frames: "1000", starcraft: "/sc", name: "x", tests: "e.json" });
+    // Not typed: map test's own default (2,400 frames) is not taken for the recording's.
+    await program.parseAsync(["map", "test", "record", "a.scx", "b.rep"], { from: "user" });
+    expect(seen.frames).toBeUndefined();
+  });
+});
+
+describe("scmjs map test, trace and balance: options that cannot go together", () => {
+  it("refuses them before anything is read or played (exit 2)", async () => {
+    const refused = async (args: string[]) => {
+      const program = buildProgram();
+      program.exitOverride();
+      try { await program.parseAsync(args, { from: "user" }); } catch (e) { return [(e as CliError).exitCode, (e as Error).message]; }
+      return null;
+    };
+    expect(await refused(["map", "test", "nowhere.scx", "--json", "--format", "junit"])).toEqual([2, "--json and --format junit both say what standard output holds: give one."]);
+    expect(await refused(["map", "test", "nowhere.scx", "--clips-format", "webm"])).toEqual([2, "--clips-format says what the clips are: use it with --clips."]);
+    expect(await refused(["map", "test", "nowhere.scx", "--frames", "soon"])).toEqual([2, '--frames takes a number of frames or a time (m:ss), not "soon"']);
+    expect(await refused(["map", "trace", "--replay", "nowhere.rep", "--seed", "3"])).toEqual([2, "--seed does nothing with --replay: the game plays with the replay's own seed."]);
+    expect(await refused(["map", "trace", "nowhere.scx", "--every", "often"])).toEqual([2, '--every takes a whole number, not "often"']);
+    expect(await refused(["map", "balance", "nowhere.scx", "--bots", "a.scmbot", "--games", "3", "--seeds", "1,2"])).toEqual([2, "--games and --seeds both say which games to play: give one."]);
   });
 });
 

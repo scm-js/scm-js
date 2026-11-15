@@ -4,9 +4,10 @@
  * browser reads messages on its file descriptor 3 and writes them on 4, each a JSON text ended by a NUL byte. Nothing
  * is bundled for it and nothing is installed: the command says where to get a browser when there is none.
  */
-import { spawn, type ChildProcess } from "node:child_process";
-import { existsSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
-import { homedir, tmpdir } from "node:os";
+import type { ChildProcess } from "node:child_process";
+import { existsSync, readdirSync, rmSync } from "node:fs";
+import { homedir } from "node:os";
+import { spawnOwned, tempFolder } from "./lifecycle";
 import { delimiter, join } from "node:path";
 import type { Readable, Writable } from "node:stream";
 import { msg, t, translate } from "./i18n";
@@ -133,7 +134,7 @@ export interface Launched {
 
 /** Starts `path` headless, a fresh profile in the temporary folder, speaking the protocol on a pipe. */
 export function launchBrowser(path: string, size: { width: number; height: number }): Launched {
-  const profile = mkdtempSync(join(tmpdir(), "scmjs-browser-"));
+  const profile = tempFolder("scmjs-browser-");
   const args = [
     "--headless", "--remote-debugging-pipe", `--user-data-dir=${profile}`, "--no-first-run", "--no-default-browser-check",
     "--mute-audio", "--hide-scrollbars", "--disable-extensions", "--disable-background-timer-throttling",
@@ -144,7 +145,7 @@ export function launchBrowser(path: string, size: { width: number; height: numbe
   ];
   let child: ChildProcess;
   try {
-    child = spawn(path, args, { stdio: ["ignore", "ignore", "pipe", "pipe", "pipe"] });
+    child = spawnOwned(path, args, { stdio: ["ignore", "ignore", "pipe", "pipe", "pipe"] });
   } catch (e) {
     rmSync(profile, { recursive: true, force: true });
     throw new CliError(t("{path} could not be started ({reason}).", { path, reason: String(e instanceof Error ? e.message : e) }), translate(NO_BROWSER));
@@ -158,7 +159,7 @@ export function launchBrowser(path: string, size: { width: number; height: numbe
   toBrowser.on("error", () => { /* it went: said by `exited` */ });
   const exited = new Promise<number | null>((resolve) => {
     child.once("error", (e) => { cdp.close(new CliError(t("{path} could not be started ({reason}).", { path, reason: e.message }), translate(NO_BROWSER))); resolve(null); });
-    child.once("exit", (code) => { cdp.close(new CliError(code ? t("The browser stopped (exit code {code}).", { code }) : t("The browser stopped."), said.trim().split("\n").slice(-3).join("\n") || null)); resolve(code); });
+    child.once("exit", (code) => { cdp.close(new CliError(code ? t("The browser stopped (exit code {code}).", { code }) : t("The browser stopped."), stoppedHint(path, said), 2)); resolve(code); });
   });
   let stopping: Promise<void> | null = null;
   const stop = () => stopping ??= (async () => {
@@ -170,4 +171,13 @@ export function launchBrowser(path: string, size: { width: number; height: numbe
     rmSync(profile, { recursive: true, force: true });
   })();
   return { cdp, process: child, exited, stop };
+}
+
+/**
+ * What to do when the browser stopped: `scmjs doctor` and `--browser`. What the browser said (a crash's register dump,
+ * often) only with `SCMJS_DEBUG`.
+ */
+function stoppedHint(path: string, said: string): string {
+  const hint = t("{path} did not keep running here. scmjs doctor says whether a browser is found and starts; --browser (SCMJS_BROWSER) names another.", { path });
+  return process.env.SCMJS_DEBUG && said.trim() ? `${hint}\n${said.trim().split("\n").slice(-3).join("\n")}` : hint;
 }

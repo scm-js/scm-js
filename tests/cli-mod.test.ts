@@ -6,7 +6,7 @@
  * are there, and skip otherwise.
  */
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { stripVTControlCharacters } from "node:util";
@@ -20,25 +20,29 @@ import { aiscriptFromText } from "../src/formats/dat/aiscript";
 import { encodeLoFile } from "../src/formats/dat/loFile";
 import { encodeGrpImage, frameFromPicture } from "../src/formats/dat/grpFile";
 import { encodeReqGraft } from "../src/formats/dat/graft";
-import { dataSetHash, exeArchive, gameName, modRoot, readZip } from "../src/formats/mod/sources";
+import { exeArchive, gameName, PatcherError } from "@scm-js/mod";
+import { gameFilesHash as dataSetHash } from "./support/modHash";
 import { readManifest } from "../src/formats/mod/folder";
 import { archiveFiles, storageFiles, type GameFiles } from "../cli/src/gamefiles";
 import { codeWords, fitWords, MOD_CODE, modArgs, MOD_OVERLAY, type Engine } from "../cli/src/engine";
 import { sourceHash } from "../cli/src/mod/hash";
-import { modInfo, printModInfo } from "../cli/src/mod/info";
-import { gameFilesOrNull, openMod } from "../cli/src/mod/open";
+import { bigSize, modInfo, printModInfo } from "../cli/src/mod/info";
+import { checkModAndMap, gameFilesOrNull, openMod } from "../cli/src/mod/open";
 import { gameSource } from "../cli/src/mod/source";
 import { unpackMod } from "../cli/src/mod/unpack";
-import { packFolder, packMod, readModFolder, writeMpq } from "../cli/src/mod/pack";
+import { checkPackOut, packFolder, packMod, readModFolder, writeMpq } from "../cli/src/mod/pack";
 import { checkModSource } from "../cli/src/mod/check";
 import { diffModSources, printModDiff } from "../cli/src/mod/diff";
-import { newMod } from "../cli/src/mod/new";
+import { newMod, parseTables } from "../cli/src/mod/new";
 import { handoffExtra, pageRace, playBotOf, playOnPage, playSet, type PlayOptions, type PlaySet } from "../cli/src/mod/play";
 import { runInNewContext } from "node:vm";
 import { gameLayer, modOverlay } from "../cli/src/mod/overlay";
 import { runMapInGame } from "../cli/src/trace";
 import { CliError, visible } from "../cli/src/ui";
+import { TEST_MAPS_DIR } from "./support/maps";
+import { PassThrough } from "node:stream";
 import { cosmonarchyPath, gameFile, gameImagePaths, haveCosmonarchy, haveGameArchives } from "./support/modFiles";
+import { library, modArchive, patcherExe, program as patcherProgram } from "./support/patcherExe";
 
 const root = mkdtempSync(join(tmpdir(), "scmjs-mod-"));
 let n = 0;
@@ -156,18 +160,127 @@ const members = (m: Map<string, Uint8Array>) => [...m].map(([member, data]) => (
 /* ── Reading what a mod ships as ───────────────────────────────────────── */
 
 describe("scmjs mod info: what a mod ships as", () => {
-  it("finds the game's paths at a folder's root or one folder down, and the archive in a self-executing exe", async () => {
-    expect(modRoot(["mpq/arr/units.dat", "mpq/unit/x.grp", "README.md"])).toBe("mpq");
-    expect(modRoot(["arr/units.dat", "unit/terran/marine.grp"])).toBe("");
+  it("finds the archive in a self-executing exe, after FireGraft's overlay or after the program", async () => {
     const mpq = await writeMpq(members(madeMod()), "zlib");
-    const plugin = latin("PLUGINBYTES!");
+    const plugin = latin("MZ PLUGINBYTES!");
     const overlay = new Uint8Array(24); const ov = new DataView(overlay.buffer);
     ov.setUint32(0, 0x46474550, true); ov.setUint32(4, 1, true); ov.setUint32(8, 1, true); ov.setUint32(12, 0xfc724f8c, true); ov.setUint32(16, plugin.length, true);
     const firegraft = concat(program(), overlay, plugin, mpq);
-    expect(exeArchive(firegraft)).toMatchObject({ kind: "firegraft", at: 0x300 + 24 + plugin.length, plugins: [{ id: 0xfc724f8c, size: plugin.length }] });
+    expect(exeArchive(firegraft)).toMatchObject({ form: "firegraft-patcher", at: 0x300 + 24 + plugin.length, plugins: [{ id: 0xfc724f8c, at: 0x300 + 24, size: plugin.length, name: null }] });
     const sempq = concat(program(), new Uint8Array(0x100), mpq);
-    expect(exeArchive(sempq)).toMatchObject({ kind: "sempq", at: 0x400, plugins: [] });
+    expect(exeArchive(sempq)).toMatchObject({ at: 0x400, plugins: [] });
+    // @scm-js/core's exeArchive keeps the fields it had: `kind`, and the archive from its header on.
+    const core = await import("../core/src/index");
+    expect(core.exeArchive(firegraft)).toMatchObject({ kind: "firegraft", form: "firegraft-patcher" });
+    expect(core.exeArchive(sempq)).toMatchObject({ kind: "sempq", at: 0x400 });
+    expect(core.exeArchive(sempq)!.archive).toEqual(mpq);
     expect(exeArchive(program())).toBeNull();
+  });
+
+  it("reads FireGraft's patcher in both forms: its plugins one after the other, its archive's tables before its header", async () => {
+    // Two plugins, named by their export directories, then the archive at the next 512-byte boundary.
+    const eude = library("qdp.dll"), gptp = library("GPTP.qdp");
+    const two = patcherExe([{ id: 0x45445545, bytes: eude }, { id: 0x1b4d69b6, bytes: gptp }], modArchive());
+    expect(exeArchive(two.exe)).toMatchObject({ form: "firegraft-patcher", at: two.at, plugins: [{ id: 0x45445545, at: 0x400 + 24, size: 0x400, name: "qdp.dll" }, { id: 0x1b4d69b6, at: 0x400 + 24 + 0x400 + 12, size: 0x400, name: "GPTP.qdp" }] });
+    // No plugins: the patcher all the same.
+    expect(exeArchive(patcherExe([], modArchive()).exe)).toMatchObject({ form: "firegraft-patcher", at: 0x600, plugins: [] });
+    // Tables before the header, the header's sizes 0xFFFFFFFF; no list of its files.
+    const wrapped = patcherExe([{ id: 0x1b4d69b6, bytes: library("GPTP-v2.41.qdp") }], modArchive(false), { tablesFirst: true });
+    expect(new DataView(wrapped.exe.buffer).getUint32(wrapped.at + 16, true)).toBeGreaterThan(0x80000000);
+    expect(exeArchive(wrapped.exe)).toMatchObject({ at: wrapped.at, plugins: [{ name: "GPTP-v2.41.qdp" }] });
+    const dir = tmp("patcher"); mkdirSync(dir);
+    writeFileSync(join(dir, "Two.exe"), two.exe);
+    writeFileSync(join(dir, "Wrapped.exe"), wrapped.exe);
+    writeFileSync(join(dir, "fmod.dll"), latin("MZ a library"));
+    writeFileSync(join(dir, "plain.mpq"), modArchive());
+    const r = modInfo(await openMod(join(dir, "Wrapped.exe"), null));
+    expect(r.files).toBe(1); // weapons.dat, by the names the game reads (the archive lists none)
+    expect(r.probed).toEqual(["Wrapped.exe"]);
+    expect(r.libraries).toEqual(["fmod.dll"]);
+    const lines = printModInfo(r).map(visible).join("\n");
+    expect(lines).toContain("FireGraft's patcher with 1 plugin (GPTP-v2.41.qdp, id 1b4d69b6, 1.0 KB)");
+    expect(lines).toContain("A library of the mod's code: fmod.dll.");
+    // The patcher's own plugins and the library beside it are the mod's code, each a line of its hash (since 2026-11-11):
+    // without them it hashes as its archive alone does.
+    const twoSource = await openMod(join(dir, "Two.exe"), null);
+    const fromExe = modInfo(twoSource, await sourceHash(twoSource)), plain = await openMod(join(dir, "plain.mpq"), null), fromMpq = modInfo(plain, await sourceHash(plain));
+    expect(fromExe.exes[0].plugins.map((p) => p.name)).toEqual(["qdp.dll", "GPTP.qdp"]);
+    expect(printModInfo(fromExe).map(visible).join("\n")).toContain("(qdp.dll, id EUDE, 1.0 KB; GPTP.qdp, id 1b4d69b6, 1.0 KB)");
+    expect(fromExe.hash).not.toBe(fromMpq.hash);
+    expect(fromExe.withoutPlugins).toBe(fromMpq.hash);
+    expect(twoSource.code.map((c) => c.name).sort()).toEqual(["GPTP.qdp", "fmod.dll", "qdp.dll"]);
+    expect(fromExe.plugins).toEqual([]);
+    // As a folder: the library beside the exes is the mod's code too, not left out.
+    const folder = modInfo(await openMod(dir, null));
+    expect(folder.libraries).toEqual(["fmod.dll"]);
+    expect(folder.left).not.toContain("fmod.dll");
+  });
+
+  it("hands every module of the mod's code on: a patcher's own plugins and the library beside it, with the hash's line each", async () => {
+    // A release folder: FireGraft's patcher with two plugins, the library its plugin imports beside it, a plugin file.
+    const dir = tmp("code"); mkdirSync(join(dir, "plugins"), { recursive: true });
+    const two = patcherExe([{ id: 0x45445545, bytes: library("qdp.dll") }, { id: 0x1b4d69b6, bytes: library("GPTP.qdp") }], modArchive());
+    writeFileSync(join(dir, "Release.exe"), two.exe);
+    writeFileSync(join(dir, "fmod.dll"), latin("MZ a library"));
+    writeFileSync(join(dir, "plugins", "extra.qdp"), library("extra.qdp"));
+    const source = await openMod(dir, null);
+    const h = await sourceHash(source);
+    expect(source.code.map((c) => c.name).sort()).toEqual(["GPTP.qdp", "extra.qdp", "fmod.dll", "qdp.dll"]);
+    // By the rule before 2026-11-11 only the plugin file had a line: that hash is neither of the two now, and is shown.
+    expect(h.beforeCode).toMatch(/^[0-9a-f]{16}$/);
+    expect([h.hash, h.withoutPlugins]).not.toContain(h.beforeCode);
+    const lines = printModInfo(modInfo(source, h)).map(visible).join("\n");
+    expect(lines).toContain(`Earlier hash     ${h.beforeCode} (by the rule before 2026-11-11, when only plugin files had lines)`);
+    expect(lines).toContain("A library of the mod's code: fmod.dll.");
+    // The runner's folder: every module under plugins/, and mod.json with the package's hash.
+    const overlay = modOverlay(dir, async () => null, { code: true });
+    const [folder] = await overlay.layers();
+    expect(readdirSync(join(folder, "plugins")).sort()).toEqual(["GPTP.qdp", "extra.qdp", "fmod.dll", "qdp.dll"]);
+    expect(JSON.parse(readFileSync(join(folder, "mod.json"), "utf8"))).toMatchObject({ hash: h.hash, withoutPlugins: h.withoutPlugins });
+    expect(await overlay.plugins!()).toBe(3);
+    overlay.remove();
+    // The play page is handed the same modules.
+    const set = await playSet(source);
+    expect(set.files.filter((f) => f.path.startsWith("plugins/")).map((f) => f.path).sort()).toEqual(["plugins/GPTP.qdp", "plugins/extra.qdp", "plugins/fmod.dll", "plugins/qdp.dll"]);
+    expect(set.hash).toBe(h.hash);
+  });
+
+  it("unpacks a patcher's own plugins into the mod folder, which packs back to the release's hash", async () => {
+    const dir = tmp("code-qdp"); mkdirSync(dir);
+    writeFileSync(join(dir, "Release.exe"), patcherExe([{ id: 0x1b4d69b6, bytes: library("GPTP.qdp") }], modArchive()).exe);
+    const source = await openMod(dir, null);
+    const h = await sourceHash(source);
+    const unpacked = tmp("code-qdp-unpacked");
+    await unpackMod(source, unpacked);
+    expect(existsSync(join(unpacked, "plugins", "GPTP.qdp"))).toBe(true);
+    expect((await sourceHash(await openMod(unpacked, null))).hash).toBe(h.hash);
+  });
+
+  // (a DLL under plugins/ of a tree in the game's paths is a library and no game file, so the library's line is there once)
+  it("unpacks a library of the mod's code into the mod folder, which packs back to the release's hash", async () => {
+    const dir = tmp("code-dll"); mkdirSync(dir);
+    writeFileSync(join(dir, "Release.exe"), patcherExe([{ id: 0x1b4d69b6, bytes: library("GPTP.qdp") }], modArchive()).exe);
+    writeFileSync(join(dir, "fmod.dll"), latin("MZ a library"));
+    const source = await openMod(dir, null);
+    const unpacked = tmp("code-dll-unpacked");
+    await unpackMod(source, unpacked);
+    expect((await sourceHash(await openMod(unpacked, null))).hash).toBe((await sourceHash(source)).hash);
+  });
+
+  it("says why an exe is not read, never showing it as a mod of no files", async () => {
+    const dir = tmp("not-read"); mkdirSync(dir);
+    const said = async (file: string, bytes: Uint8Array) => {
+      writeFileSync(join(dir, file), bytes);
+      try { await openMod(join(dir, file), null); } catch (e) { expect(e).toBeInstanceOf(CliError); return (e as Error).message; }
+      throw new Error(`${file} was read`);
+    };
+    expect(await said("Tool.exe", patcherProgram())).toMatch(/Tool\.exe holds no archive: it is a program only/);
+    expect(await said("Odd.exe", patcherExe([], modArchive(), { form: 2 }).exe)).toBe("Odd.exe cannot be read as a mod: its patcher overlay (at byte 1024) is of form 2; only form 1 is known.");
+    expect(await said("Junk.exe", patcherExe([{ id: 1, bytes: new Uint8Array(32) }], modArchive()).exe)).toMatch(/plugin 1 of its patcher overlay \(at byte 1048\) is no Windows library/);
+    const { exe, at } = patcherExe([], modArchive());
+    const broken = exe.slice(); new DataView(broken.buffer).setUint32(at + 24, 0x40000000, true);
+    expect(await said("Broken.exe", broken)).toMatch(/^the archive inside Broken\.exe \(at byte \d+\) could not be opened: /);
+    expect(() => exeArchive(patcherExe([], modArchive(), { form: 2 }).exe)).toThrow(PatcherError);
   });
 
   it("reads a folder, an MPQ, an exe and a zip alike, and names what each carries", async () => {
@@ -189,24 +302,131 @@ describe("scmjs mod info: what a mod ships as", () => {
       expect(r.scripts, path).toEqual(["scripts\\aiscript.bin", "scripts\\iscript.bin"]);
     }
     const fromFolder = modInfo(await openMod(folder, null));
-    expect(fromFolder.plugins).toEqual([{ name: "gptp.qdp", bytes: 7 }]);
+    expect(fromFolder.plugins).toEqual([{ name: "gptp.qdp", bytes: 7, path: "plugins/gptp.qdp" }]);
+    // A second plugin of one file name is no plugin of the mod's (a loader loads one file of a name): the first in the
+    // folder's order is, the other left out. A size past a thousand megabytes is in gigabytes.
+    mkdirSync(join(folder, "more"));
+    writeFileSync(join(folder, "more", "gptp.qdp"), latin("other"));
+    const twoInfo = modInfo(await openMod(folder, null));
+    expect(printModInfo(twoInfo).map(visible).join("\n")).toMatch(/Plugins +gptp\.qdp \(5 B\) — kept, not run/);
+    expect(twoInfo.left).toContain("plugins/gptp.qdp");
+    expect(bigSize(1093341184)).toBe("1.0 GB");
+    expect(bigSize(723.7 * 1048576)).toBe("723.7 MB");
     expect(fromFolder.left).toEqual(["README.md"]);
     expect(fromFolder.layers).toEqual(["mpq/"]);
     const fromExe = modInfo(await openMod(exe, null));
     expect(fromExe.kind).toBe("exe");
-    expect(fromExe.exes[0]).toMatchObject({ kind: "sempq", at: 0x400 });
+    expect(fromExe.exes[0]).toMatchObject({ kind: "sempq", form: "archive-after-program", at: 0x400 });
     expect(fromExe.name).toBe("Made Mod");
     const lines = printModInfo(fromExe).map(visible).join("\n");
     expect(lines).toMatch(/^Made Mod\nA mod for StarCraft 1\.16\.1, from a self-executing mod/);
-    expect(lines).toContain("MPQDraft's self-executing MPQ");
+    expect(lines).toContain("a program with an archive after it");
     // An extended table is named with its layout and width.
     const wide = new Map([["arr\\units.datex", table("units", undefined, 300).subarray(0, 0)]]);
     wide.set("arr\\units.datex", new Uint8Array(300 * 99));
     const wideMpq = join(root, "wide.mpq"); writeFileSync(wideMpq, await writeMpq(members(wide), "zlib"));
     expect(modInfo(await openMod(wideMpq, null)).extended).toEqual(["units.datex: 300 entries (the game's 228), GPTP's .datex layout"]);
     // A zip's members read whether stored or deflated.
-    const read = readZip(readFileSync(z));
-    expect(await read[0].read()).toEqual(mod.get([...mod.keys()][0]));
+    const zipped = await openMod(z, null);
+    for (const [name, data] of mod) expect(await zipped.files.get(gameName(name))!.read(), name).toEqual(data);
+  });
+});
+
+/** What `fn` threw, for its message and exit code. */
+const thrown = async (fn: () => Promise<unknown>): Promise<CliError> => {
+  try { await fn(); } catch (e) { return e as CliError; }
+  throw new Error("nothing was thrown");
+};
+
+describe("scmjs mod: what is not a mod", () => {
+  it("says what a thing is that holds none of the game's files, in one line (exit 2)", async () => {
+    const empty = tmp("emptydir"); mkdirSync(empty);
+    const notes = tmp("notes"); mkdirSync(notes); writeFileSync(join(notes, "README.txt"), "hello");
+    const exe = join(root, "Not A Mod.exe"); writeFileSync(exe, program());
+    const replay = join(root, "a.rep"); writeFileSync(replay, concat(new Uint8Array(12), latin("seRS"), new Uint8Array(64)));
+    const cases: [string, RegExp, RegExp][] = [
+      [empty, /is an empty folder: there is no mod in it/, /Name a mod/],
+      [notes, /holds none of the game's files: it is not a mod/, /Name a mod/],
+      [exe, /holds no archive: it is a program only/, /Name a mod/],
+      [join(TEST_MAPS_DIR, "melee.scx"), /melee\.scx is a map, not a mod/, /scmjs map info/],
+      [join(root, "nope"), /No file or folder/, /Name a mod/],
+    ];
+    for (const [path, said, hint] of cases) {
+      const e = await thrown(() => openMod(path, null));
+      expect(e, path).toBeInstanceOf(CliError);
+      expect(e.message, path).toMatch(said);
+      expect(e.hint ?? "", path).toMatch(hint);
+      expect(e.exitCode, path).toBe(2);
+    }
+    // A replay, said as one when its first bytes are a replay's.
+    const r = await thrown(() => openMod(replay, null));
+    expect(r.exitCode).toBe(2);
+    expect(r.message).toMatch(/a\.rep is a replay, not a mod/);
+    expect(r.hint).toMatch(/scmjs replay info/);
+    // Unpacking one writes nothing: no folder, no mod.json.
+    const into = tmp("up");
+    await expect(openMod(empty, null).then((s) => unpackMod(s, into))).rejects.toThrow(/empty folder/);
+    expect(existsSync(into)).toBe(false);
+  });
+
+  it("says a mod.json that is not JSON, and a folder that is not there, in every command", async () => {
+    const mpq = join(root, "for-bad.mpq"); writeFileSync(mpq, await writeMpq(members(madeMod()), "zlib"));
+    const dir = tmp("bad4");
+    await unpackMod(await openMod(mpq, null), dir);
+    writeFileSync(join(dir, "mod.json"), "{ not json\n");
+    for (const read of [() => openMod(dir, null), () => readModFolder(dir)]) {
+      const e = await thrown(read);
+      expect(e).toBeInstanceOf(CliError);
+      expect(e.message).toMatch(/mod\.json is not valid JSON/);
+      expect(e.message).toContain(join(dir, "mod.json"));
+      expect(e.exitCode).toBe(2);
+    }
+    expect((await thrown(() => readModFolder(join(root, "nope")))).message).toMatch(/^No folder .*nope$/);
+    expect((await thrown(() => readModFolder(mpq))).message).toMatch(/is a file, not a mod folder/);
+    // A mod.json that is JSON and not scmjs's (a folder of the game's files naming itself) is read as before.
+    const own = tmp("named"); writeFolder(own, madeMod()); writeFileSync(join(own, "mod.json"), JSON.stringify({ name: "Named" }));
+    expect((await openMod(own, null)).name).toBe("Named");
+    await expect(readModFolder(own)).rejects.toThrow(/is not one scmjs wrote/);
+  });
+
+  it("says a mod and a map given the wrong way round", async () => {
+    const mpq = join(root, "swapped.mpq"); writeFileSync(mpq, await writeMpq(members(madeMod()), "zlib"));
+    const map = join(TEST_MAPS_DIR, "ums.scx");
+    await expect(checkModAndMap(mpq, map)).resolves.toBeUndefined();
+    const e = await thrown(() => checkModAndMap(map, mpq));
+    expect(e.message).toMatch(/swapped\.mpq is a mod, not a map: the mod comes first/);
+    expect(e.hint).toBe("scmjs mod test <mod> <map>");
+    expect(e.exitCode).toBe(2);
+    expect((await thrown(() => checkModAndMap(mpq, root))).message).toMatch(/is a folder, not a map/);
+  });
+
+  it("packs to standard output with --out -, and refuses what cannot be written so", async () => {
+    const mpq = join(root, "piped.mpq"); writeFileSync(mpq, await writeMpq(members(madeMod()), "zlib"));
+    const dir = tmp("piped");
+    await unpackMod(await openMod(mpq, null), dir);
+    const out = new PassThrough(); const chunks: Buffer[] = [];
+    out.on("data", (c: Buffer) => chunks.push(c));
+    const r = await packMod(dir, await readModFolder(dir), { out: "-", stdout: out });
+    expect(r.path).toBe("-");
+    expect(Buffer.concat(chunks).length).toBe(r.bytes);
+    expect(Archive.open(new Uint8Array(Buffer.concat(chunks))).files()!.length).toBe(madeMod().size);
+    expect(existsSync(join(process.cwd(), "-"))).toBe(false);
+    // Without a stream to write to (the MCP server's standard output is its protocol), - is refused.
+    await expect(packMod(dir, await readModFolder(dir), { out: "-" })).rejects.toThrow(/cannot go to standard output/);
+    // A missing folder is made.
+    const deep = join(root, "not", "there", "x.mpq");
+    expect((await packMod(dir, await readModFolder(dir), { out: deep })).path).toBe(deep);
+    expect(existsSync(deep)).toBe(true);
+    const refused = (o: Parameters<typeof checkPackOut>[0]) => { try { checkPackOut(o); return null; } catch (e) { return e as CliError; } };
+    expect(refused({ out: "-" })).toBeNull();
+    expect(refused({ out: "a.MPQ" })).toBeNull();
+    expect(refused({ folder: "loose" })).toBeNull();
+    for (const [o, said] of [[{ out: "-", json: true }, /--json and the MPQ/], [{ out: "y.mpq", folder: "x" }, /not both/], [{ folder: "-" }, /cannot go to standard output/], [{ out: "rp.json" }, /\.json file; the mod is written as an \.mpq/], [{ out: "noext" }, /no extension/]] as const) {
+      const e = refused(o);
+      expect(e, JSON.stringify(o)).toBeInstanceOf(CliError);
+      expect(e!.message).toMatch(said);
+      expect(e!.exitCode).toBe(2);
+    }
   });
 });
 
@@ -262,7 +482,10 @@ describe("scmjs mod unpack / pack", () => {
     expect(same(byName.get("arr\\sfxdata.dat"), madeMod().get("arr\\sfxdata.dat"))).toBe(true);
     expect(new TextDecoder().decode(byName.get("glue\\added.bin"))).toBe("new");
     writeFileSync(file, "Weapon(0):\n\tdamage_amount lots\n");
-    await expect(packFolder(dir, await readModFolder(dir))).rejects.toThrow(/tables\/weapons\.txt:2: expected an entry header/);
+    // Said with the mod folder's path before the file, so that it opens from where the command was run.
+    const e = await packFolder(dir, await readModFolder(dir)).catch((x) => x);
+    expect(e.message).toMatch(/tables\/weapons\.txt:2: expected an entry header/);
+    expect(e.message.startsWith(`${join(dir, "tables", "weapons.txt")}:2: `)).toBe(true);
   });
 
   it("keeps as bytes what does not come back the same, and says why", async () => {
@@ -294,11 +517,64 @@ describe("scmjs mod unpack / pack", () => {
     expect(r.files).toEqual(["mod.json", "README.md"]);
     expect(readManifest(readFileSync(join(dir, "mod.json"), "utf8"))).toMatchObject({ scmjs: 1, name: "My Mod", base: "1.16.1" });
     expect(readFileSync(join(dir, "README.md"), "utf8").split("\n").filter((l) => l.trim()).length).toBe(2);
-    await expect(newMod(dir)).rejects.toThrow(/is there and is not empty/);
+    await expect(newMod(dir)).rejects.toThrow(/is a mod folder already/);
     writeFolder(join(dir, "files"), new Map([["arr\\units.dat", table("units", (f) => { f.columns.hit_points[0] = 45 * 256; })]]));
     const packed = await packMod(dir, await readModFolder(dir), { out: join(root, "new.mpq") });
     expect(packed.members).toBe(1);
-    await expect(unpackMod(await openMod(join(root, "new.mpq"), null), root)).rejects.toThrow(/is there and is not an unpacked mod/);
+    await expect(unpackMod(await openMod(join(root, "new.mpq"), null), root)).rejects.toThrow(/The mod is inside/);
+  });
+
+  it("starts a mod from the game's own tables, as text that packs back to the game's bytes", async () => {
+    const game = madeGame();
+    const dir = tmp("from-game");
+    const r = await newMod(dir, "From The Game", { tables: parseTables("weapons, sfxdata"), base: asGame(game) });
+    expect(r.files).toEqual(["mod.json", "README.md", "tables/weapons.txt", "tables/sfxdata.txt"]);
+    expect(readFileSync(join(dir, "tables", "weapons.txt"), "utf8")).toContain("\tdamage_amount ");
+    const packed = await packFolder(dir, await readModFolder(dir));
+    expect((await readModFolder(dir)).name).toBe("From The Game");
+    for (const m of packed.members) expect(same(m.data, game.get(m.member)), m.member).toBe(true);
+    expect(parseTables("all")).toHaveLength(11);
+    expect(() => parseTables("bogus")).toThrow(/"bogus" is not one of the game's tables/);
+    await expect(newMod(tmp("no-game"), undefined, { tables: ["units"], base: null })).rejects.toThrow(/no copy of StarCraft was found/);
+  });
+
+  it("refuses to unpack over a mod folder unless --force, which replaces it whole", async () => {
+    const mpq = join(root, "again.mpq"); writeFileSync(mpq, await writeMpq(members(madeMod()), "zlib"));
+    const dir = tmp("over");
+    await unpackMod(await openMod(mpq, null), dir);
+    const file = join(dir, "tables/weapons.txt");
+    const edited = readFileSync(file, "utf8").replace("\tdamage_amount 7\n", "\tdamage_amount 12\n");
+    writeFileSync(file, edited);
+    writeFileSync(join(dir, "tables/added.txt"), "mine");
+    writeFileSync(join(dir, "notes.txt"), "mine");
+    mkdirSync(join(dir, ".git"));
+    writeFileSync(join(dir, ".git", "HEAD"), "ref");
+    // Without --force the edits stay, and the refusal says why (exit 2).
+    const refused = await unpackMod(await openMod(mpq, null), dir).catch((e) => e);
+    expect(refused).toBeInstanceOf(CliError);
+    expect(refused.message).toMatch(/is a mod folder already/);
+    expect(refused.hint).toMatch(/--force/);
+    expect(refused.exitCode).toBe(2);
+    expect(readFileSync(file, "utf8")).toBe(edited);
+    // With it, nothing of the earlier folder survives but its dot files.
+    await unpackMod(await openMod(mpq, null), dir, { force: true });
+    expect(readFileSync(file, "utf8")).toContain("\tdamage_amount 7\n");
+    for (const gone of ["tables/added.txt", "notes.txt"]) expect(existsSync(join(dir, gone)), gone).toBe(false);
+    expect(readFileSync(join(dir, ".git", "HEAD"), "utf8")).toBe("ref");
+    // An empty folder is fine; a file, or a folder holding something else, is refused even with --force.
+    const empty = tmp("empty"); mkdirSync(empty);
+    await unpackMod(await openMod(mpq, null), empty);
+    const file2 = join(root, "a-file"); writeFileSync(file2, "x");
+    for (const [target, why] of [[file2, /is a file, not a folder/], [join(file2, "under"), /a file is in its path/]] as const) {
+      const e = await unpackMod(await openMod(mpq, null), target, { force: true }).catch((x) => x);
+      expect(e, target).toBeInstanceOf(CliError);
+      expect(e.message).toMatch(why);
+      expect(e.exitCode).toBe(2);
+      await expect(newMod(target)).rejects.toThrow(why);
+    }
+    const other = tmp("other"); mkdirSync(other); writeFileSync(join(other, "keep.txt"), "x");
+    await expect(unpackMod(await openMod(mpq, null), other, { force: true })).rejects.toThrow(/is there and is not a mod folder/);
+    expect(existsSync(join(other, "keep.txt"))).toBe(true);
   });
 });
 
@@ -350,6 +626,24 @@ describe("scmjs mod diff", () => {
     const self = await diffModSources(await openMod(dir, base), await openMod(dir, base), base);
     expect(self.same).toBe(true);
   });
+
+  it("exits 1 when two mods differ and 0 when they are the same, as map diff does", async () => {
+    const { buildProgram } = await import("../cli/src/main");
+    const a = tmp("diff-a"); writeFolder(a, madeMod());
+    const changed = madeMod(); changed.set("glue\\extra.bin", latin("more"));
+    const b = tmp("diff-b"); writeFolder(b, changed);
+    const was = process.exitCode, write = process.stdout.write;
+    const exitOf = async (...args: string[]) => {
+      process.exitCode = 0;
+      process.stdout.write = (() => true) as typeof process.stdout.write;
+      try { await buildProgram().exitOverride().parseAsync(["node", "scmjs", "mod", "diff", ...args]); } finally { process.stdout.write = write; }
+      return Number(process.exitCode ?? 0);
+    };
+    try {
+      expect(await exitOf(a, b)).toBe(1);
+      expect(await exitOf(a, a)).toBe(0);
+    } finally { process.exitCode = was; }
+  }, 30_000);
 });
 
 /* ── Play, test ────────────────────────────────────────────────────────── */
@@ -387,10 +681,23 @@ describe("scmjs mod play", () => {
     const set = await playSet(await openMod(dir, null));
     expect(set.files.length).toBe(madeMod().size);
     let page = "";
-    const done = playOnPage(set, { play: "http://play.test/", onAddress: (a) => { page = a; }, timeout: 10_000 });
+    const said: string[] = [];
+    const done = playOnPage(set, { play: "http://play.test/", onAddress: (a) => { page = a; }, timeout: 10_000, live: (l) => said.push(visible(l)) });
     while (!page) await new Promise((r) => setTimeout(r, 10));
     await fetch(`${page}/message`, { method: "POST", body: JSON.stringify({ type: "scmjs.play.error", message: "Not this mod" }) });
     expect(await done).toMatchObject({ started: false, error: "Not this mod" });
+    // With BROWSER=none nothing is opened, and the line says so with the address.
+    expect(said[0]).toBe(`ℹ Open ${page} in a browser to play ${set.name} on the play page`);
+  });
+
+  it("refuses --start and --race without --bot, before anything is read", async () => {
+    const { buildProgram } = await import("../cli/src/main");
+    for (const [flag, said] of [[["--start"], /--start is for a game with a bot/], [["--race", "terran"], /--race is the bot's/]] as const) {
+      const e = await buildProgram().exitOverride().parseAsync(["node", "scmjs", "mod", "play", join(root, "no-such-mod"), ...flag]).catch((x) => x);
+      expect(e, flag.join(" ")).toBeInstanceOf(CliError);
+      expect(e.message).toMatch(said);
+      expect(e.exitCode).toBe(2);
+    }
   });
 });
 
@@ -590,6 +897,15 @@ describe("scmjs mod test and --mod", () => {
     const classic = modOverlay(dir, async () => asGame(game));
     expect(await classic.layers()).toHaveLength(1);
     classic.remove();
+
+    // A mod that is only plugins changes none of the startup data, so the runner does not read it again (`@scm-js/mod`'s
+    // readsStartupData, the engine's rule): nothing is laid under it, and its plugin goes beside its files.
+    const plugins = tmp("overlay-plugins"); mkdirSync(plugins); writeFileSync(join(plugins, "EUD.qdp"), latin("plugin"));
+    const code = modOverlay(plugins, async () => remastered, { code: true });
+    const layers = await code.layers();
+    expect(layers).toHaveLength(1);
+    expect(existsSync(join(layers[0], "plugins", "EUD.qdp"))).toBe(true);
+    code.remove();
   });
 });
 

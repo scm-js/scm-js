@@ -84,14 +84,14 @@ export default function ViewportHud({ tilesetName, tilesetLoading, unitAssets, d
       {tooling && mapTool && <span className="hud-chip pick"><b>{mapTool.spec.name}</b>{mapTool.spec.hint && <> · {mapTool.spec.hint}</>} {" "}{t("· Esc / right-click to stop")}</span>}
       {unitPlacing && !tooling && <span className="hud-chip">{t("placing")}{" "}<b>{unitLabel(activeUnit)}</b> {" "}{t("· Esc / right-click to stop")}</span>}
       {spritePlacing && !tooling && <span className="hud-chip">{t("placing sprite")}{" "}<b>{spriteName(unitAssets, activeSpriteKind, activeSpriteKind === "pure" ? activeSprite : activeUnitSprite)}</b>{spritePlaceOptions.flipped ? t(" · flipped") : ""} {" "}{t("· Esc / right-click to stop")}</span>}
-      {doodad && <span className="hud-chip">{t("placing")}{" "}<b>{doodadLabel(doodad)}</b>{doodadPlacement.placeAnywhere ? t(" · anywhere") : ""} {" "}{t("· Esc / right-click to stop")}</span>}
+      {doodad && <span className="hud-chip">{t("placing")}{" "}<b>{doodadLabel(doodad)}</b>{doodadPlacement.placeAnywhere ? t(" · anywhere") : ""} {" "}{t("· drag to stretch")} {" "}{t("· Esc / right-click to stop")}</span>}
       {locationsEditing && <span className="hud-chip">{t("locations · drag empty ground to create · snap")}{" "}<b>{locationSnap ? `${locationSnap} px` : "off"}</b></span>}
       {clipEditing && !clipPasting && (
         <span className="hud-chip">
           {t("cut / copy / paste · drag to mark an area")}{clipSelection && <> · <b>{clipSelection.x1 - clipSelection.x0}×{clipSelection.y1 - clipSelection.y0}</b> {t("at {x}, {y}", { x: clipSelection.x0, y: clipSelection.y0 })}</>} {" "}{t("· Ctrl+C copies")}{clip && t(" · Ctrl+V pastes")}
         </span>
       )}
-      {clipPasting && clip && !tooling && <span className="hud-chip">{t("pasting")}{" "}<b>{clipSummary(clip)}</b> {" "}{t("· click to stamp · Esc / right-click to stop")}</span>}
+      {clipPasting && clip && !tooling && <span className="hud-chip">{t("pasting")}{" "}<b>{clipSummary(clip)}</b> {" "}{t("· click to stamp · drag to stretch · Esc / right-click to stop")}</span>}
       {showFog && <span className="hud-chip">{t("fog of war")}{" "}<b>{t("P{v}", { v: fogViewPlayer + 1 })}</b>{fogPainting && <> · {fogMode === "fog" ? t("painting") : t("clearing")} {" "}{t("· Shift inverts")}</>}</span>}
     </div>
   );

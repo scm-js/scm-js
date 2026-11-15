@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  beginAreaGesture, beginLocationGesture, beginObjectGesture, beginStrokeGesture, objectGestureOn,
+  beginAreaGesture, beginLocationGesture, beginObjectGesture, beginPasteGesture, beginStrokeGesture, objectGestureOn,
   type LocationLayer, type ObjectLayer, type PointerSample,
 } from "../src/components/viewport/gestures";
 
@@ -78,6 +78,26 @@ describe("an object-layer gesture", () => {
     expect(calls).toEqual(["box 100,100 300,260 +"]);
   });
 
+  it("stretches instead where the layer's choice can be pulled out, and places on the release", () => {
+    const { layer, calls } = objects({ placing: true });
+    layer.stretch = { to: (from, p, any) => { calls.push(`stretch ${from.px},${from.py} ${p.px},${p.py}${any ? " any" : ""}`); }, end: () => { calls.push("end"); } };
+    const g = beginObjectGesture(layer, at(100, 100));
+    g.move(at(102, 100));
+    expect(g.mode).toBe("click");
+    g.move(at(164, 132));
+    expect(g.mode).toBe("stretch");
+    // Shift, held while dragging, asks for any direction.
+    g.move(at(228, 164, true));
+    g.up();
+    expect(calls).toEqual(["stretch 100,100 164,132", "stretch 100,100 228,164 any", "select []", "place 100,100", "end"]);
+    // Not placing, the same layer still draws a marquee.
+    const selecting = objects();
+    selecting.layer.stretch = layer.stretch;
+    const m = beginObjectGesture(selecting.layer, at(100, 100));
+    m.move(at(200, 200));
+    expect(m.mode).toBe("marquee");
+  });
+
   it("follows the edge of the map when the pointer leaves it", () => {
     const { layer, calls } = objects({ objectAt: 0 });
     const g = beginObjectGesture(layer, at(100, 100));
@@ -90,6 +110,38 @@ describe("an object-layer gesture", () => {
     expect(objectGestureOn(g, "units")).toBe(g);
     expect(objectGestureOn(g, "doodads")).toBeNull();
     expect(objectGestureOn(null, "units")).toBeNull();
+  });
+});
+
+describe("a paste gesture", () => {
+  const record = () => {
+    const calls: string[] = [];
+    const on = {
+      stretch: (from: { px: number; py: number }, p: { px: number; py: number }, any: boolean) => { calls.push(`stretch ${from.px},${from.py} ${p.px},${p.py}${any ? " any" : ""}`); },
+      paste: (tile: { x: number; y: number }) => { calls.push(`paste ${tile.x},${tile.y}`); },
+      end: () => { calls.push("end"); },
+    };
+    return { calls, on };
+  };
+
+  it("stamps the clip on a click, with its corner on the tile pressed", () => {
+    const { calls, on } = record();
+    const g = beginPasteGesture(at(100, 70), on);
+    g.move(at(102, 71));
+    g.up();
+    expect(calls).toEqual(["paste 3,2", "end"]);
+  });
+
+  it("pulls the clip out on a drag, from where it was pressed, and stamps it on the release", () => {
+    const { calls, on } = record();
+    const g = beginPasteGesture(at(100, 70), on);
+    g.move(at(164, 102));
+    expect(g.stretching).toBe(true);
+    g.move(at(228, 134, true));
+    // Back near the press it is still a stretch, of nothing: the tools say how many steps.
+    g.move(at(101, 70));
+    g.up();
+    expect(calls).toEqual(["stretch 100,70 164,102", "stretch 100,70 228,134 any", "stretch 100,70 101,70", "paste 3,2", "end"]);
   });
 });
 

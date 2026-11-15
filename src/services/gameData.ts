@@ -21,8 +21,9 @@ import { releaseAllTilesets, retryTilesetParts } from "../formats/tileset/load";
 import { resetUnitAssets, retryFailedParts } from "../formats/units/load";
 import { clearFrameCache } from "../formats/units/sprites";
 import { installDataSet, InstallError, installFromRemastered, type GameDataFiles, type InstallProgress, type RemasteredFolder, type RemasteredOptions } from "../gamedata/install";
+import { keepDataSetTerrain } from "./dataSetTerrain";
 import { DEFAULT_PROFILE, isDefaultProfile, isProfileId, racesOf, takesRaces, type GameDataProfile } from "../gamedata/profiles";
-import { normalizeRaces, raceCandidates, type DataSetRace } from "../formats/mod/races";
+import { normalizeRaces, raceCandidates, type DataSetRace } from "@scm-js/mod";
 import { storedPathOf } from "../gamedata/paths";
 import { REMASTERED_PROFILE } from "../gamedata/profiles";
 import { adoptStoredCopy, currentAssetSource, readContext, readFrom, resetAssetSource, resolveAssetSource, setAssetSource, type AssetSource, type DataSetReader } from "../gamedata/source";
@@ -244,6 +245,7 @@ export async function removeDataSet(store: Store, id: string): Promise<boolean> 
   const copies = await listStoredCopies();
   const had = copies.some((c) => profileOf(c).id === id);
   await clearStoredCopy(id);
+  await keepDataSetTerrain(id, null);
   const current = store.get(gameDataSourceAtom);
   if (current?.profile.id === id || store.get(gameDataProfileAtom).profile === id) {
     store.set(gameDataProfileAtom, { profile: DEFAULT_PROFILE.id });

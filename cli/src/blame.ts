@@ -64,7 +64,8 @@ function locationItems(doc: OpenedMap): Item[] {
     const l = s.locations[i];
     const name = plainText(locationName(s, i));
     const where = `${l.left},${l.top}–${l.right},${l.bottom}${l.elevationFlags ? ` flags ${l.elevationFlags}` : ""}`;
-    return { id: `${i}`, content: `${name}\n${where}`, label: name, text: `#${i}  ${where}` };
+    // Numbered as triggers number locations, from 1.
+    return { id: `${i}`, content: `${name}\n${where}`, label: name, text: `#${i + 1}  ${where}` };
   });
 }
 
@@ -143,7 +144,8 @@ export interface Blamed {
   /** null for a change not committed yet. */
   commit: (Omit<Commit, "parents"> & { boundary: boolean }) | null;
 }
-export interface BlameRow { label: string; text: string; commit: Blamed["commit"] }
+/** A row; a location's has its `number` as triggers count them (from 1) and its 0-based slot `index`. */
+export interface BlameRow { label: string; text: string; commit: Blamed["commit"]; number?: number; index?: number }
 
 export interface MapBlame {
   file: string;
@@ -210,7 +212,7 @@ export async function blameMap(file: string, kinds: readonly BlameKind[], o: { r
   }
   const topSnap = snapshot(topDoc, kinds, true);
   const rows: Partial<Record<BlameKind, BlameRow[]>> = {};
-  for (const k of kinds) rows[k] = topSnap[k]!.map((it) => ({ label: it.label, text: it.text, commit: null }));
+  for (const k of kinds) rows[k] = topSnap[k]!.map((it) => ({ label: it.label, text: it.text, commit: null, ...(k === "locations" ? { number: Number(it.id) + 1, index: Number(it.id) } : {}) }));
 
   // A node of the walk: the uncommitted file, a listed commit, or (with a range) a commit at its edge.
   type Pending = { kind: BlameKind; row: number; at: number };

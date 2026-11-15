@@ -123,7 +123,10 @@ describe("scmjs in Korean", () => {
     const help = visible(map.helpInformation());
     // The usage line's syntax is commander's, as typed.
     expect(help.split("\n")[0]).toBe("사용법: scmjs map [options] [command]");
-    expect(help).toContain("명령:");
+    // Its commands in groups by task (main.ts COMMAND_GROUPS), the headings in Korean.
+    expect(help).toContain("맵 들여다보기:");
+    const plugin = program.commands.find((c) => c.name() === "plugin")!;
+    expect(visible(plugin.helpInformation())).toContain("명령:");
     const check = map.commands.find((c) => c.name() === "check")!;
     expect(visible(check.helpInformation()).replace(/\s+/g, " ")).toContain("(기본값: \"text\")");
   });

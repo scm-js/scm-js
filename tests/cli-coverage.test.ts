@@ -104,7 +104,7 @@ describe("map coverage: the run", () => {
 
     const scn = await coverageScenario(input);
     const lines = plain(printCoverage(r, scn, { width: 120 }));
-    expect(lines[0]).toBe("▲ ums.scx: 2 of 3 triggers fired in 3 games; 1 never fired");
+    expect(lines[0]).toMatch(/^▲ (.*\/)?ums\.scx: 2 of 3 triggers fired in 3 games; 1 never fired$/);
     expect(lines[1]).toBe("▲ 1 game parted from the map: parted.rep at 0:21. What fired after that is not counted: the players' commands were meant for another game.");
     expect(lines[3]).toMatch(/^ {2}# {2}Games {2}Fired {2}First {2}Players {2}Trigger$/);
     expect(lines[4]).toMatch(/^ {2}1 +3\/3 +81 +0:00 +P1 +Always\(\) → Display Text Message/);
@@ -138,7 +138,7 @@ describe("map coverage: the run", () => {
   it("counts a tests file's scenarios as games", async () => {
     const dir = tmp();
     const tests = join(dir, "ums.tests.json");
-    writeFileSync(tests, JSON.stringify({ scenarios: [{ name: "quiet", frames: 100 }, { name: "quiet again", frames: 200 }] }));
+    writeFileSync(tests, JSON.stringify({ scenarios: [{ name: "quiet", frames: 100, expect: [{ ended: false }] }, { name: "quiet again", frames: 200, expect: [{ ended: false }] }] }));
     const answer = join(dir, "answer.json");
     writeFileSync(answer, JSON.stringify({ frame: 100, trace: [copy({ player: 0, row: 0, fired: 3, firstFired: 2 }), copy({ player: 0, row: 1, failed: 3, lastFail: { slot: 0, type: 3, frame: 64 } }), copy({ player: 1, row: 2, fired: 1, firstFired: 50 })] }));
     process.env.SCMJS_TEST_ANSWER = answer;
@@ -158,7 +158,7 @@ describe("map coverage: the run", () => {
     const fail = (p: Promise<unknown>) => p.then(() => null, (e: CliError) => [e.exitCode, e.message]);
     const dir = await replays();
     expect(await fail(runCoverage(input, await doc(), [], { engine: staged.dir, starcraft: sc }))).toEqual([2, expect.stringMatching(/^Name the replays to count/)]);
-    expect(await fail(runCoverage(input, await doc(), [join(dir, "melee.rep")], { engine: staged.dir, starcraft: sc }))).toEqual([2, "melee.rep is not a Use Map Settings game on ums.scx."]);
+    expect(await fail(runCoverage(input, await doc(), [join(dir, "melee.rep")], { engine: staged.dir, starcraft: sc }))).toEqual([2, `${join(dir, "melee.rep")} is not a Use Map Settings game on ums.scx.`]);
     expect(await fail(runCoverage(input, await doc(), [join(dir, "a.rep")], { engine: staged.dir, starcraft: sc, parallel: "0" }))).toEqual([2, expect.stringMatching(/^--parallel takes a whole number/)]);
     // --tests with no tests file beside the map.
     const elsewhere: Input = { ...input, path: join(tmp(), "ums.scx") };
@@ -168,7 +168,7 @@ describe("map coverage: the run", () => {
     const forced = await runCoverage(input, await doc(), [join(dir, "other.rep")], { engine: staged.dir, starcraft: sc, force: true });
     expect(forced.games[0].match).toBe("forced");
     const old = stagedEngine(tmp(), true, OLD_RUNNER);
-    expect(await fail(runCoverage(input, await doc(), [join(dir, "a.rep")], { engine: old.dir, starcraft: sc }))).toEqual([1, expect.stringMatching(/map runner from before map trace --replay/)]);
+    expect(await fail(runCoverage(input, await doc(), [join(dir, "a.rep")], { engine: old.dir, starcraft: sc }))).toEqual([1, expect.stringMatching(/is from before map trace --replay/)]);
     // A game the engine could not play is left out and said, and the command fails; with none played, it says so.
     const refused: Input = { ...input, path: join(tmp(), "bad.scx"), name: "bad.scx" };
     writeFileSync(refused.path, input.bytes);

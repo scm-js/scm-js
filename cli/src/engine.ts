@@ -9,11 +9,12 @@
  * A runner is run in a process of its own (one game a process: the lifted game takes its memory when its module is
  * first imported) and speaks JSON lines, which each command turns into the terminal's.
  */
-import { spawn, type ChildProcess } from "node:child_process";
-import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import type { ChildProcess } from "node:child_process";
+import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { gunzipSync } from "node:zlib";
+import { spawnOwned } from "./lifecycle";
 import { runnerEnv } from "./runtime";
 import { msg, t, translate } from "./i18n";
 import { CliError, dot, mark, pc } from "./ui";
@@ -99,9 +100,11 @@ export interface Engine {
 /**
  * The engine's folder: `at` is a folder that already holds the files (a staged deploy, a clone's `data/lifted` with
  * the runners beside), else the play page's address, whose `engine/current.json` names the build to fetch into the
- * cache, runners and all.
+ * cache, runners and all. A fetch is said on standard error, by every command alike and whatever else it prints (a
+ * `--json` command's standard output is its JSON alone). The third argument, once where that line went, is not read.
  */
-export async function ensureEngine(at: string = process.env.SCMJS_PLAY_URL || PLAY_URL, cache = cacheRoot(), say: (line: string) => void = () => {}): Promise<Engine> {
+export async function ensureEngine(at: string = process.env.SCMJS_PLAY_URL || PLAY_URL, cache = cacheRoot(), _say?: (line: string) => void): Promise<Engine> {
+  const say = (line: string) => { process.stderr.write(`${line}\n`); };
   if (!/^https?:\/\//.test(at)) {
     const dir = resolve(at);
     const current = join(dir, "current.json");
@@ -126,7 +129,7 @@ export async function ensureEngine(at: string = process.env.SCMJS_PLAY_URL || PL
   const wanted = [...current.files, ...Object.values(runners)];
   const missing = wanted.filter((f) => !existsSync(join(dir, f)));
   // (A build fetched before a runner was deployed lacks only that runner: a small fetch, said as such.)
-  if (missing.some((f) => current.files.includes(f))) say(`${pc.dim(t("Fetching the game engine from {url} (about 25 MB, once) → {dir}", { url: base, dir }))}`);
+  if (missing.some((f) => current.files.includes(f))) say(`${pc.dim(t("Fetching the game engine from {url} (about 25 MB to download, 105 MB on disk, once) → {dir}", { url: base, dir }))}`);
   else if (missing.length) say(`${pc.dim(t("Fetching the newer runners from {url} → {dir}", { url: base, dir }))}`);
   for (const name of missing) {
     const bytes = await fetchBytes(`${base}/engine/${current.build}/${name}`);
@@ -136,7 +139,20 @@ export async function ensureEngine(at: string = process.env.SCMJS_PLAY_URL || PL
     renameSync(part, join(dir, name));
     fetched += bytes.length;
   }
+  if (missing.length) pruneRunners(dir, new Set(wanted));
   return { dir, build: current.build, runner: current.runner, runners, fetched, mods: modsOf(current) };
+}
+
+/**
+ * The runners a build's folder holds that the play page no longer names, removed once newer ones are fetched: every
+ * command reads `current.json` before it plays, so none starts an old one again (a game playing one now has it loaded
+ * already). Only runners: the engine's own files are the build's and stay with it.
+ */
+function pruneRunners(dir: string, named: ReadonlySet<string>): void {
+  for (const name of readdirSafe(dir)) {
+    const runner = (Object.keys(RUNNERS) as RunnerKind[]).some((k) => RUNNERS[k].file.test(name));
+    if (runner && !named.has(name)) { try { rmSync(join(dir, name), { force: true }); } catch { /* in use (Windows): next time */ } }
+  }
 }
 
 const modsOf = (c: EngineCurrent) => (typeof c.mods === "number" && c.mods > 0 ? c.mods : 0);
@@ -212,6 +228,27 @@ export function modWords(m: RunnerModReport): string {
   return `  ${pc.dim(`${t("mod:")} ${read}${reload}${m.game ? `, ${t("the game's own pictures from your Remastered copy under it")}` : ""}`)}`;
 }
 
+/**
+ * What to do when a runner ended without a word of its game: the game copy or the engine's cache is at fault, and
+ * doctor tells which; a cache it calls ready but that will not play is fetched again once its folder is gone.
+ */
+export function noResultHint(engineDir: string): string {
+  return t("Run scmjs doctor to check your copy of the game and the engine. If it says both are ready, remove the engine's folder {dir}; the next command fetches it again.", { dir: engineDir });
+}
+
+/**
+ * Why a runner says a game ended, as a person reads it: the runner's own words name the engine's insides (a frame
+ * loop, a word at an address), so anything but plain words is "the game ended". Null stays null. The runner's words
+ * themselves are for a bug report: `SCMJS_DEBUG` keeps them beside (`endDetail`).
+ */
+export function endReason(reason: string | null): string | null {
+  if (reason === null) return null;
+  if (/0x[0-9a-f]{3,}|frame loop|word|^over$|stands still/i.test(reason)) return t("the game ended");
+  return reason;
+}
+/** The runner's own words for the end, under `detail`, when `SCMJS_DEBUG` asks for them. */
+export const endDetail = (reason: string | null): { detail?: string } => (process.env.SCMJS_DEBUG && reason ? { detail: reason } : {});
+
 /** The runners `current.json` names, by kind. */
 function runnersNamed(c: EngineCurrent): Engine["runners"] {
   const out: Engine["runners"] = {};
@@ -253,18 +290,30 @@ export function usualGameFolders(env = process.env): string[] {
   return [...new Set(out)];
 }
 
-/** The copy of the game to play with: the one named, else the first usual folder that holds one. */
+/** Said once a run: SCMJS_STARCRAFT names a folder that holds no copy of the game. */
+let saidSetting = false;
+
+/**
+ * The copy of the game to play with: the one named, else the first usual folder that holds one. None is a mistake the
+ * person fixes before anything plays (exit 2), as is a `SCMJS_STARCRAFT` that names no copy, which is said on standard
+ * error with the copy used instead.
+ */
 export function findGameCopy(named: string | undefined): { folder: string; kind: "remastered" | "classic" } {
   if (named) {
     const kind = gameCopyKind(resolve(named));
-    if (!kind) throw new CliError(t("{folder} is not a copy of StarCraft.", { folder: named }), t("A Remastered installation (with .build.info) or a 1.16.1 one (StarDat.mpq and BrooDat.mpq)."));
+    if (!kind) throw new CliError(t("{folder} is not a copy of StarCraft.", { folder: named }), t("A Remastered installation (with .build.info) or a 1.16.1 one (StarDat.mpq and BrooDat.mpq)."), 2);
     return { folder: resolve(named), kind };
   }
+  const setting = process.env.SCMJS_STARCRAFT;
+  const settingBad = !!setting && !gameCopyKind(resolve(setting));
   for (const folder of usualGameFolders()) {
     const kind = gameCopyKind(folder);
-    if (kind) return { folder, kind };
+    if (!kind) continue;
+    if (settingBad && !saidSetting) { saidSetting = true; process.stderr.write(`${mark.warn} ${t("SCMJS_STARCRAFT names {setting}, which is not a copy of StarCraft; playing with the one in {folder}.", { setting: setting!, folder })}\n`); }
+    return { folder, kind };
   }
-  throw new CliError(t("No copy of StarCraft was found on this computer."), t("The game plays with your own installation's files: name its folder with --starcraft (or SCMJS_STARCRAFT)."));
+  if (settingBad) throw new CliError(t("SCMJS_STARCRAFT names {setting}, which is not a copy of StarCraft, and there is none in the usual places.", { setting: setting! }), t("A Remastered installation (with .build.info) or a 1.16.1 one (StarDat.mpq and BrooDat.mpq)."), 2);
+  throw new CliError(t("No copy of StarCraft was found on this computer."), t("The game plays with your own installation's files: name its folder with --starcraft (or SCMJS_STARCRAFT)."), 2);
 }
 
 /**
@@ -272,6 +321,11 @@ export function findGameCopy(named: string | undefined): { folder: string; kind:
  * pipe of JSON lines; its standard input a pipe too when `stdin` is asked for (a paced runner reads it), else closed.
  */
 export function startRunner(runner: string, args: string[], { node = process.execPath, stdin = false } = {}): ChildProcess {
+  // The runner's real path: it starts its game only when it is the main module, which it tells by comparing the path
+  // it was started with to its own, and Node gives a module its real one — a cache reached through a link differs.
+  let real = runner;
+  try { real = realpathSync(runner); } catch { /* not there: the spawn says so */ }
   // In the single executable `process.execPath` is scmjs itself, which runs the script as Node would when told to.
-  return spawn(node, [runner, ...args], { stdio: [stdin ? "pipe" : "ignore", "pipe", "pipe"], env: runnerEnv(node) });
+  // Ended with the command, whatever ends it, with any process it starts (lifecycle.ts).
+  return spawnOwned(node, [real, ...args], { stdio: [stdin ? "pipe" : "ignore", "pipe", "pipe"], env: runnerEnv(node) });
 }

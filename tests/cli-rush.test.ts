@@ -18,6 +18,8 @@ const plain = (lines: string[]) => lines.map(visible);
 /**
  * A runner that prints what scm-sim's does with `--rush`: three starts on a 64 × 64 map. 1 and 2 are joined (2 → 1
  * slower), 2 → 3 arrives and 3 → 2 is stuck, and 3 stands apart from 1. A map named `island.scx` has every pair apart,
+ * `crowded.scx` has the map's own units (a Carrier, unit 72) walked beside the unit asked, and in its place from 1 to
+ * 2, as the real runner does on a map that places units for player 1; `bare.scx` has no walks at all,
  * `bad.scx` is refused, and unit 43 (a Mutalisk) does not walk.
  */
 const RUSH_RUNNER = `
@@ -34,7 +36,9 @@ const starts = [{ owner: 0, x: 200, y: 200 }, { owner: 1, x: 1800, y: 200 }, { o
 const air = (a, b) => Math.round(Math.hypot(starts[a].x - starts[b].x, starts[a].y - starts[b].y));
 const island = name === "island.scx";
 const walk = (from, to, outcome, frames, travelled, off) => ({ from, to, unit, outcome: island ? "apart" : outcome, frames: island ? 0 : frames, travelled: island ? 0 : travelled, off, regions: 4, air: air(from, to), at: { x: starts[from].x + 100, y: starts[from].y + 100 }, ms: 5 });
-const walks = [walk(0, 1, "arrived", 400, 1900, 60), walk(0, 2, "apart", 0, 0, 2200), walk(1, 0, "arrived", 420, 1960, 60), walk(1, 2, "arrived", 380, 1750, 70), walk(2, 0, "apart", 0, 0, 2200), walk(2, 1, "stuck", 300, 900, 700)];
+let walks = [walk(0, 1, "arrived", 400, 1900, 60), walk(0, 2, "apart", 0, 0, 2200), walk(1, 0, "arrived", 420, 1960, 60), walk(1, 2, "arrived", 380, 1750, 70), walk(2, 0, "apart", 0, 0, 2200), walk(2, 1, "stuck", 300, 900, 700)];
+if (name === "crowded.scx") walks = walks.flatMap((w, i) => [{ ...w, unit: 72, outcome: "arrived", frames: 99, travelled: 333 }, ...(i === 0 ? [] : [w])]);
+if (name === "bare.scx") walks = [];
 say({ kind: "start", mode: "rush", map: { name, width: 64, height: 64, tileset: "badlands" }, copy: "classic", seed: Number(flag("seed") ?? 12345), unit, starts, walks: walks.length, ms: { load: 1, start: 2 } });
 for (const w of walks) say({ kind: "walk", ...w });
 say({ kind: "end", mode: "rush", walks, ms: { load: 1, start: 2, walk: 30, total: 1200 } });
@@ -94,7 +98,7 @@ describe("scmjs map rush: the runner", () => {
   it("says when the engine's map runner is older than map rush, a unit does not walk, or the game refuses the map", async () => {
     const copy = classicCopy(tmp());
     // The trace's stand-in ignores --rush and runs the triggers, as a runner from before it would.
-    await expect(runRush(aMap(), { engine: stagedEngine(tmp()).dir, starcraft: copy })).rejects.toThrow(/map runner from before map rush/);
+    await expect(runRush(aMap(), { engine: stagedEngine(tmp()).dir, starcraft: copy })).rejects.toThrow(/is from before map rush/);
     await expect(runRush(aMap(), { engine: stagedEngine(tmp(), false).dir, starcraft: copy })).rejects.toThrow(/has no map runner/);
     const flyer = runRush(aMap(), { engine: rushEngine(), starcraft: copy, unit: 43 });
     await expect(flyer).rejects.toThrow(/The Mutalisk does not walk/);
@@ -143,7 +147,24 @@ describe("scmjs map rush: the report", () => {
     const r = await runRush(aMap("island.scx"), { engine: rushEngine(), starcraft: classicCopy(tmp()) });
     const lines = plain(printRush("island.scx", r));
     expect(lines[0]).toMatch(/^▲ island\.scx: an SCV walked/);
-    expect(lines.slice(2)).toEqual(["  No two start locations are joined by ground: an island map. The straight lines between them:", "  1 ↔ 2  1,600 px", "  1 ↔ 3  2,263 px", "  2 ↔ 3  1,600 px"]);
+    expect(lines.slice(2)).toEqual(["▲ No two start locations are joined by ground: an island map.", "  The straight lines between them:", "  1 ↔ 2  1,600 px", "  1 ↔ 3  2,263 px", "  2 ↔ 3  1,600 px"]);
+    // Nothing walked at all (no walkable ground at the starts): the straight lines, under a warning.
+    const bare = plain(printRush("bare.scx", await runRush(aMap("bare.scx"), { engine: rushEngine(), starcraft: classicCopy(tmp()) })));
+    expect(bare[0]).toMatch(/^▲ bare\.scx: /);
+    expect(bare.slice(2)).toEqual(["▲ The game could not put an SCV at the start locations to walk it: there may be no ground to walk there. map analyze reads the ground without the game.", "  The straight lines between them:", "  1 ↔ 2  1,600 px", "  1 ↔ 3  2,263 px", "  2 ↔ 3  1,600 px"]);
+  });
+
+  it("takes only the walks of the unit asked: the map's own units walked beside it are not its", async () => {
+    const live: string[] = [];
+    const r = await runRush(aMap("crowded.scx"), { engine: rushEngine(), starcraft: classicCopy(tmp()), live: (l) => live.push(visible(l)) });
+    const rep = rushReport("crowded.scx", r);
+    // One walk a pair, as on a map with no units of its own; 1 → 2 had none of the SCV's.
+    expect(rep.walks.map((w) => [w.from, w.to, w.outcome])).toEqual([[1, 2, "unwalked"], [1, 3, "apart"], [2, 1, "arrived"], [2, 3, "arrived"], [3, 1, "apart"], [3, 2, "stuck"]]);
+    expect(rep.walks[0]).toMatchObject({ instead: true, pixels: 0 });
+    expect(live.filter((l) => /→/.test(l))).toHaveLength(5);
+    const lines = plain(printRush("crowded.scx", r));
+    expect(lines).toContain("  ▸ 1 → 2 not walked: the game walked the map's own units of player 1 there, not the unit asked for");
+    expect(lines.join("\n")).not.toMatch(/333 px/);
   });
 
   it("gives the matrix and every walk as JSON", async () => {

@@ -1,10 +1,10 @@
 /**
  * A replay's mod. A replay records commands, not the files the game read, so scm-sim and the editor's tools add an
  * `SCMJ` section that names the mod a game was played with (`@scm-js/replay`'s `mod`: the data set's hash, name and
- * link, the plugins that ran). Here: the mod named with `--mod` checked against it by that hash (the play page's rule,
- * core's `modHashOfDigests` over every file the mod provides, with its plugins or without them; and, for a replay
- * tagged before that rule, the older forms: the game files alone, or those that differ from the person's game; and each
- * of these as it was while an operating system's files had lines, where the mod has such files), the names and costs of
+ * link, the plugins that ran). Here: the mod named with `--mod` checked against it by that hash (`@scm-js/mod`'s
+ * identity of the mod, with its code or without it; and, for a replay tagged by an earlier rule, the older forms: the
+ * hash before every module of a mod's code had a line, the hashes while an operating system's files had lines, the
+ * game files alone, or those that differ from the person's game), the names and costs of
  * units, upgrades and technologies from the mod's tables (the game's for a replay of the game itself, and bare ids for
  * a mod's replay with no mod named: never the game's name for a mod's id), and the refusal of the commands that play a
  * replay, which would play another game with other files.
@@ -13,9 +13,7 @@ import { FRAME_MS, type ModTag, type Replay } from "@scm-js/replay";
 import { techName, unitName, upgradeName } from "../../src/data/units";
 import type { DatFile } from "../../src/formats/dat/table";
 import { loadModData, type ModData } from "../../src/formats/mod/data";
-import type { DataSetRace } from "../../src/formats/mod/races";
-import { hashLinesAsWere } from "../../src/formats/mod/hash";
-import { dataSetHashOfDigests, fileDigest, gameName } from "../../src/formats/mod/sources";
+import { gameFileLine, hashLines, hashLinesAsWere, sha256Hex, type DataSetRace } from "@scm-js/mod";
 import { sourceHash } from "./mod/hash";
 import type { GameFiles } from "./gamefiles";
 import { t, translate } from "./i18n";
@@ -30,12 +28,17 @@ export interface ModHashes {
   hash: string;
   /** The same without the plugins' lines: a page that ran none of them. */
   withoutPlugins: string;
-  /** Older forms, for replays tagged before the rule: over the game files alone, and over those that differ from the person's game (null without a copy). */
-  all: string;
+  /**
+   * Older forms, for replays tagged before the rule: over the game files alone (`identity.earlier`'s `game-files`), and
+   * over those that differ from the person's game (null without a copy).
+   */
+  all: string | null;
   changed: string | null;
   /**
-   * Each of those as it was until 2026-11-09, while an operating system's files (`desktop.ini`, …) had lines: there
-   * only for a mod that has such files where the command line reads them. A replay tagged then names the mod by one.
+   * Every other hash an earlier rule gave the mod (`identity.earlier`, with and without its code: the rule before
+   * 2026-11-11, the hashes while an operating system's files (`desktop.ini`, …) had lines until 2026-11-09, the game files
+   * alone with those lines), and the files that differ from the person's game with those lines, as the play page tagged
+   * its replays until 2026-11-08. A replay tagged then names the mod by one.
    */
   older: string[];
 }
@@ -43,25 +46,25 @@ export interface ModHashes {
 /** Every hash the mod may be named by in a replay's tag. */
 export async function sourceHashes(source: ModSource, base: GameFiles | null): Promise<ModHashes> {
   const h = await sourceHash(source);
+  // (the lines of the operating system's files the older rule counted, for the form of the files that differ)
+  const systemLines = source.description?.identity.older?.lines ?? [];
   let changed: string | null = null, changedWere: string | null = null;
   if (base) {
-    const differ: { name: string; sha256: string }[] = [];
-    for (const f of source.files.values()) {
+    const differ: string[] = [];
+    for (const [name, f] of source.files) {
       let data: Uint8Array;
       try { data = await f.read(); } catch { continue; }
       const theirs = await base.read(f.name);
-      if (!(theirs && theirs.length === data.length && theirs.every((b, i) => b === data[i]))) differ.push({ name: f.name, sha256: await fileDigest(data) });
+      if (!(theirs && theirs.length === data.length && theirs.every((b, i) => b === data[i]))) differ.push(gameFileLine(name, await sha256Hex(data)));
     }
-    changed = await dataSetHashOfDigests(differ);
+    changed = await hashLines(differ);
     // (An operating system's file is in no copy of the game, so it always differed.)
-    if (source.system.size) {
-      const lines = new Map(differ.map((f) => [gameName(f.name), f.sha256]));
-      for (const [name, f] of source.system) { try { lines.set(name, await fileDigest(await f.read())); } catch { /* left out then too */ } }
-      changedWere = await hashLinesAsWere([...lines].map(([name, sha]) => `${name}\t${sha}`));
-    }
+    if (systemLines.length) changedWere = await hashLinesAsWere([...differ, ...systemLines]);
   }
-  const older = [h.older?.hash, h.older?.withoutPlugins, h.gameFilesOnlyWere, changedWere].filter((x): x is string => !!x);
-  return { hash: h.hash, withoutPlugins: h.withoutPlugins, all: h.gameFilesOnly, changed, older };
+  const all = h.earlier.find((e) => e.rule === "game-files")?.hash ?? null;
+  const known = new Set([h.hash, h.withoutPlugins, all]);
+  const older = [...new Set([...h.earlier.flatMap((e) => [e.hash, e.withoutPlugins]), changedWere])].filter((x): x is string => !!x && !known.has(x));
+  return { hash: h.hash, withoutPlugins: h.withoutPlugins, all, changed, older };
 }
 
 /** Whether a replay's data set is the mod, by any of the forms it may be named by. */
@@ -76,7 +79,7 @@ export const modWords = (tag: ModTag) => `${tag.dataSet.name || t("a mod")}${vis
  */
 export function refuseModReplay(rep: Replay, file: string, command: string): void {
   if (!rep.mod) return;
-  throw new CliError(t("{file} was played with {mod}, and {command} cannot play a mod's replay yet: with the game's own files it would play another game.", { file, mod: modWords(rep.mod), command }), rep.mod.dataSet.url ? t("The mod's makers: {url}", { url: rep.mod.dataSet.url }) : null);
+  throw new CliError(t("{file} was played with {mod}, and {command} cannot play a mod's replay yet: with the game's own files it would play another game.", { file, mod: modWords(rep.mod), command }), rep.mod.dataSet.url ? t("The mod's makers: {url}", { url: rep.mod.dataSet.url }) : null, 2);
 }
 
 const opened = new Map<string, Promise<{ source: ModSource; base: GameFiles | null; hashes: ModHashes }>>();
@@ -92,7 +95,7 @@ export const modReplayReason = (rep: Replay): string | null => (rep.mod ? t("pla
 export async function checkPlayedMod(rep: Replay, file: string, mod: string | undefined, starcraft: string | undefined, warn: (line: string) => void): Promise<void> {
   if (!rep.mod) return;
   if (!mod) throw new CliError(t("{file} was played with {mod}: name the mod's folder with --mod, or the game would play another game.", { file, mod: modWords(rep.mod) }), rep.mod.dataSet.url ? t("The mod's makers: {url}", { url: rep.mod.dataSet.url }) : null, 2);
-  if (!rep.mod.noplugins && rep.mod.plugins.length) throw new CliError(t("{file} was played with the plugins of {mod}, which the engine here does not run: it would play another game.", { file, mod: modWords(rep.mod) }), null, 1);
+  if (!rep.mod.noplugins && rep.mod.plugins.length) throw new CliError(t("{file} was played with the plugins of {mod}, which the engine here does not run: it would play another game.", { file, mod: modWords(rep.mod) }), null, 2);
   await checkReplayMod(rep, file, mod, starcraft, warn);
 }
 
@@ -118,7 +121,7 @@ export async function checkReplayMod(rep: Replay, file: string, path: string, st
   if (isTaggedMod(tag.dataSet.hash, hashes)) return { source, base, hash: tag.dataSet.hash };
   throw new CliError(
     t("{mod} is not the mod {file} was played with: its data set is {hash}, the replay's is {wanted} ({name}).", { mod: source.name, file, hash, wanted: tag.dataSet.hash, name: tag.dataSet.name }),
-    tag.dataSet.url ? t("The mod's makers: {url}", { url: tag.dataSet.url }) : null, 1);
+    tag.dataSet.url ? t("The mod's makers: {url}", { url: tag.dataSet.url }) : null, 2);
 }
 
 /** `replay info`'s options for names: `--mod`, `--builds`, `--starcraft`. */
@@ -197,7 +200,8 @@ export async function replayNamer(rep: Replay, file: string, o: { mod?: string; 
     return name ? translate(name) : bare(kind, id);
   };
   const from: NamesFrom = { kind: "game", name: null, hash: null };
-  const base = o.costs ? await gameFilesOrNull(o.starcraft).catch(() => null) : null;
+  // (a copy named with --starcraft that is not one is said, as everywhere; one looked for in the usual places may be absent)
+  const base = !o.costs ? null : o.starcraft ? await gameFilesOrNull(o.starcraft) : await gameFilesOrNull(undefined).catch(() => null);
   if (base) {
     const data = await loadModData(async () => null, (n) => base.read(n), {});
     // The game's names as the editor has them (in every language it speaks), the copy's costs.

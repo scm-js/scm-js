@@ -258,7 +258,7 @@ describe("a 1.16.1 copy", () => {
     expect(await refused({ out: "a.png", scale: "3" })).toEqual([2, '--scale takes 1, 2, 4, 8, 16, 32, not "3"']);
     expect(await refused({ out: "a.png", width: "80" })).toEqual([2, expect.stringMatching(/--width is the terminal/)]);
     expect(await refused({ width: "4" })).toEqual([2, expect.stringMatching(/--width takes/)]);
-    expect(await refused({ starcraft: tmp() })).toEqual([1, expect.stringMatching(/is not a copy of StarCraft/)]);
+    expect(await refused({ starcraft: tmp() })).toEqual([2, expect.stringMatching(/is not a copy of StarCraft/)]);
     const ice = { ...map, scenario: createScenario({ width: 64, height: 64, era: 6, name: "t" }) };
     expect(await previewMap(input, ice, { starcraft: copy() }, term).catch((e: CliError) => e.message)).toMatch(/StarCraft 1\.16\.1 \(3 archives\) in .* has no ice\.cv5/);
 
@@ -267,6 +267,11 @@ describe("a 1.16.1 copy", () => {
     expect(shown.report).toMatchObject({ tileset: "jungle", copy: { kind: "classic" }, picture: { form: "ascii", columns: 79, rows: 40, depth: "none" } });
     expect(shown.lines).toHaveLength(1 + 40); // the title and the picture; no legend for a map with nothing on it
     expect(shown.lines.slice(1).every((l) => !l.includes("\x1b"))).toBe(true);
+    // --json in kitty: the form the plain command would send (the picture itself), described and not drawn.
+    const kitty = { ...term, inline: "kitty" as const };
+    const described = await previewMap(input, map, { starcraft: copy(), json: true }, kitty);
+    expect(described.report.picture.form).toBe("kitty");
+    expect(described.lines).toEqual([]);
   });
 });
 

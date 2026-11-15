@@ -33,6 +33,10 @@
 #             cuts one: it commits the version, tags, and dispatches this workflow on
 #             the tag. Nothing moves package.json on afterwards: a nightly's version is
 #             a patch bump of the newest tag, worked out by scripts/next-version.mjs.
+#             Once the release has its assets, the `packages` job at the end runs the
+#             Homebrew tap's and the Scoop bucket's update workflows, so `brew upgrade`
+#             and `scoop update` have the version at once and not at their own next
+#             look (packaging/README.md, "Each release").
 #
 # The container image (`docker/Dockerfile`, pushed by the `image` job to
 # `ghcr.io/<owner>/<repo>`) is nginx with the release's own web bundle in it — the very zip
@@ -585,6 +589,46 @@ jobs:
           node --input-type=module -e "import('./dist/index.mjs').then((m) => { if (typeof m.openMapBytes !== 'function') throw new Error('no openMapBytes'); console.log(Object.keys(m).length, 'exports'); })"
           npm publish
 
+  # `@scm-js/bot`, the JavaScript bot interface's types (bot/, docs/bots.md), on npm. Its version
+  # is its own (the major is the interface's, BOT_API), not the editor's: on a stable release it
+  # is published when npm does not have bot/package.json's version yet, and left alone when it
+  # does. Trusted publishing over OIDC, as `core` above; the trusted publisher on npmjs.com for
+  # @scm-js/bot names this repository and `build.yml`, with direct publishing allowed. The
+  # package's first version was published by hand (a trusted publisher is set on a package
+  # that exists).
+  bot:
+    name: Publish the bot types
+    needs: [channel, web]
+    if: needs.channel.outputs.channel == 'stable'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+      - run: |
+          npm install -g npm@latest
+          npm --version
+      - name: Publish
+        working-directory: bot
+        run: |
+          set -e
+          NAME="$(node -p "require('./package.json').name")"
+          VERSION="$(node -p "require('./package.json').version")"
+          if npm view "$NAME@$VERSION" version >/dev/null 2>&1; then
+            echo "::notice::$NAME $VERSION is already on npm; nothing to publish."
+            exit 0
+          fi
+          # (prepack builds dist/index.d.ts and refuses a major that is not BOT_API's)
+          npm publish
+
   pages:
     name: Deploy Pages
     needs: [channel, web]
@@ -941,3 +985,39 @@ jobs:
             gh release create nightly assets/* \
               --title "Nightly ($VERSION)" --notes "$notes" --prerelease --latest=false
           fi
+
+  # The package managers, told at once. The Homebrew tap and the Scoop bucket each look for a new release on a
+  # schedule of their own (every 4 hours as written; 8 to 10 as GitHub runs it), so a release used to reach
+  # `brew upgrade` and `scoop update` hours after it was out. This runs their workflows the moment the release
+  # has its assets. Their schedules stay as the net under this: nothing here fails the run, and a workflow that
+  # could not be run leaves a warning. winget is not here: each version is a pull request to
+  # microsoft/winget-pkgs, made by hand (packaging/README.md).
+  #
+  # One secret, not required (a fork releases without it): PACKAGES_PAT, a fine-grained token with Actions: write
+  # on <owner>/homebrew-tap and <owner>/scoop-bucket, which is all that running a workflow there takes.
+  packages:
+    name: Package managers (${{ needs.channel.outputs.tag }})
+    needs: [channel, release]
+    if: needs.channel.outputs.channel == 'stable'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      OWNER: ${{ github.repository_owner }}
+      VERSION: ${{ needs.channel.outputs.version }}
+    steps:
+      - name: Homebrew and Scoop
+        env:
+          GH_TOKEN: ${{ secrets.PACKAGES_PAT }}
+        run: |
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "::notice title=Package managers::PACKAGES_PAT is not set; the tap and the bucket pick $VERSION up on their own schedules."
+            exit 0
+          fi
+          # The tap fills its formula for the version named, installs it and runs its test before it pushes;
+          # the bucket's checkver reads the newest release itself.
+          gh workflow run update.yml --repo "$OWNER/homebrew-tap" -f version="$VERSION" \
+            || echo "::warning title=Homebrew::Could not run $OWNER/homebrew-tap's update.yml; it follows on its schedule."
+          gh workflow run excavator.yml --repo "$OWNER/scoop-bucket" \
+            || echo "::warning title=Scoop::Could not run $OWNER/scoop-bucket's excavator.yml; it follows on its schedule."
+

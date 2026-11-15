@@ -70,11 +70,20 @@ export function rootHelp(cmd: Command, helper: Help, version: string, opts: { as
   // The groups follow one another with no blank line between (each row is a command the 23 lines have room for
   // only then); the one blank line is before Options.
   const groups = helper.groupItems([...cmd.commands], helper.visibleCommands(cmd), (sub) => sub.helpGroup() || "Commands:");
-  for (const [heading, commands] of groups) {
-    const list = helper.formatItemList(heading, commands.map((sub) =>
-      helper.formatItem(helper.styleSubcommandTerm(helper.subcommandTerm(sub)), termWidth, helper.styleSubcommandDescription(helper.subcommandDescription(sub)), helper)), helper);
-    out.push(...list.filter((l) => l !== ""));
-  }
+  // The commands hidden to keep the 23 lines (`about`, `lsp`, `completion`, `login`, `logout`) are named on the last
+  // group's heading line, which has the room: the guide documents each, and `scmjs help <command>` shows it.
+  const hidden = cmd.commands.filter((c) => (c as unknown as { _hidden?: boolean })._hidden && c.name() !== "help").map((c) => c.name()).sort();
+  [...groups.keys()].forEach((heading, i, all) => {
+    const list = helper.formatItemList(heading, groups.get(heading)!.map((sub) =>
+      helper.formatItem(helper.styleSubcommandTerm(helper.subcommandTerm(sub)), termWidth, helper.styleSubcommandDescription(helper.subcommandDescription(sub)), helper)), helper).filter((l) => l !== "");
+    if (i === all.length - 1 && hidden.length) {
+      const also = t("also {commands}", { commands: hidden.join(", ") });
+      const title = helper.styleTitle(heading);
+      // Beside the descriptions when it fits the width, else under the heading's own words.
+      if (columns(heading) + 2 <= termWidth + 2 && termWidth + 2 + columns(also) <= (helper.helpWidth ?? 80)) list[0] = `${title}${" ".repeat(termWidth + 2 - columns(heading))}${pc.dim(also)}`;
+    }
+    out.push(...list);
+  });
   out.push("");
   out.push(`${helper.styleTitle("Options:")} ${helper.visibleOptions(cmd).map((o) => helper.styleOptionTerm(helper.optionTerm(o))).join("   ")}`, "");
   return out.join("\n");

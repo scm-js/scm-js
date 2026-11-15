@@ -52,7 +52,7 @@ describe("scmjs map run", () => {
     expect(sourceFor(join(dir, "plugin.json"))).toMatchObject({ kind: "remote", manifestUrl: expect.stringMatching(/^file:/), entryUrl: null });
     expect(sourceFor(join(dir, "plugin.js"))).toMatchObject({ kind: "remote", manifestUrl: null, entryUrl: expect.stringMatching(/plugin\.js$/) });
     expect(sourceFor("github:scm-js/plugin-repair")).toMatchObject({ kind: "remote", github: { owner: "scm-js", repo: "plugin-repair" } });
-    expect(() => sourceFor("nothing-here-at-all")).toThrow(/Unrecognised plugin location/);
+    expect(() => sourceFor("nothing-here-at-all")).toThrow(/No file or folder nothing-here-at-all/);
   });
 
   it("runs a plugin against the map, prints what it showed, and writes the change", async () => {
@@ -112,7 +112,7 @@ describe("scmjs map run", () => {
     await expect(runOnMap(await open(), testMap("ums.scx"), bytes(), throwing)).rejects.toThrow(CliError);
     await expect(runOnMap(await open(), testMap("ums.scx"), bytes(), throwing)).rejects.toThrow(/failed in activate: no thanks/);
     const empty = tmp();
-    await expect(runOnMap(await open(), testMap("ums.scx"), bytes(), empty)).rejects.toThrow(/Could not fetch .*plugin\.json/);
+    await expect(runOnMap(await open(), testMap("ums.scx"), bytes(), empty)).rejects.toThrow(/has no plugin\.json/);
     const noActivate = join(tmp(), "none.mjs");
     writeFileSync(noActivate, "export const x = 1;\n");
     await expect(runOnMap(await open(), testMap("ums.scx"), bytes(), noActivate)).rejects.toThrow(/exports no activate function/);

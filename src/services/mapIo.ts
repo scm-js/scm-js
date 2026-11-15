@@ -185,6 +185,33 @@ export async function saveBlob(blob: Blob, fileName: string, handle: MapFileHand
   return { route: "download", fileName, handle: null };
 }
 
+/**
+ * Write a file made from what is at the chosen place: through the save dialog where supported (the file picked is read
+ * first, null when it is new or empty), else as a download made from nothing (`compose(null)`). Null when the user
+ * dismissed the dialog. What a terrain file is saved with: a file chosen that already exists keeps its other parts.
+ */
+export async function saveComposed(fileName: string, compose: (existing: File | null) => Promise<Blob>): Promise<SaveOutcome | null> {
+  const picker = (window as unknown as { showSaveFilePicker?: ShowSaveFilePicker }).showSaveFilePicker;
+  if (picker) {
+    let picked: MapFileHandle | null = null;
+    try {
+      picked = await picker({ suggestedName: fileName, types: pickerTypes(fileName), id: PICKER_ID });
+    } catch (err) {
+      if (isAbort(err)) return null;
+      // A browser that has the picker but refuses this call: a download below.
+    }
+    if (picked) {
+      const existing = await picked.getFile().catch(() => null);
+      const blob = await compose(existing && existing.size > 0 ? existing : null);
+      const writable = await picked.createWritable();
+      await writable.write(blob);
+      await writable.close();
+      return { route: "picker", fileName: picked.name, handle: picked };
+    }
+  }
+  return saveBlob(await compose(null), fileName);
+}
+
 /** Write into an existing handle, asking for write permission first; false when that is refused or the write fails. */
 async function writeThrough(handle: MapFileHandle, blob: Blob, before?: BeforeOverwrite): Promise<boolean> {
   try {
@@ -224,6 +251,7 @@ function pickerTypes(fileName: string) {
   const ext = fileName.split(".").pop()?.toLowerCase();
   if (ext === "scm" || ext === "scx" || ext === "chk") return MAP_TYPES;
   if (ext === "png") return [{ description: t("PNG image"), accept: { "image/png": [".png"] } }];
+  if (ext === "json") return [{ description: t("JSON file"), accept: { "application/json": [".json"] } }];
   return undefined;
 }
 

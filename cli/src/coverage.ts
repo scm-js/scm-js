@@ -7,9 +7,9 @@
  * own melee triggers. A game whose players' commands parted from the map counts what fired before it parted, from the
  * firings in order the runner hands back, and is said.
  */
-import { mkdtempSync, readFileSync, rmSync, existsSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { basename, join, relative } from "node:path";
+import { readFileSync, existsSync } from "node:fs";
+import { removeFolder, tempFolder } from "./lifecycle";
+import { basename, relative } from "node:path";
 import { performance } from "node:perf_hooks";
 import { openMapBytes, readArchive, type OpenedMap } from "../../src/editor/mapFile";
 import { scenarioName, type Scenario } from "../../src/formats/chk/scenario";
@@ -21,12 +21,13 @@ import { ensureEngine, findGameCopy, type Engine } from "./engine";
 import { loadReplayInput, readInput, STDIO, type Input } from "./files";
 import { modReplayReason } from "./replaymod";
 import { matchReplay, type MatchKind } from "./heat";
-import { defaultParallel, mapIdentity, replayFiles, replayMapIdentity, sha256, skippedLines } from "./heatmap";
+import { defaultParallel, mapIdentity, noReplays, playingLine, replayFiles, replayMapIdentity, sha256, skippedLines, unreadable } from "./heatmap";
 import { defaultTests, readTests, runTests, type PlannedScenario } from "./maptest";
 import { GAME_TYPES } from "./replay";
 import { gameClock, gameMap, rowText, runMapInGame, type CopyLine } from "./trace";
 import type { CoverageForm } from "./report";
 import { t, translate } from "./i18n";
+import { parseWhole } from "./values";
 import { CliError, columns, dot, mark, num, pc, table, visible } from "./ui";
 
 const USE_MAP_SETTINGS = 10;
@@ -91,7 +92,10 @@ export interface CoverageReport {
   /** Replays not counted, and why: another map, not Use Map Settings, the same replay twice, one the game could not play. */
   skipped: { file: string; reason: string }[];
   rows: CoverageRow[];
-  engine?: { build: string; fetched: number };
+  engine?: { build: string; dir: string; fetched: number };
+  /** The copy of the game played with. */
+  game?: { folder: string; kind: "remastered" | "classic" };
+  /** Whole milliseconds. */
   ms: number;
 }
 
@@ -175,8 +179,7 @@ export function gameLine(k: number, total: number, g: CoverageGame | null, file:
  */
 export async function runCoverage(input: Input, doc: OpenedMap, sources: readonly string[], o: CoverageOptions = {}, live: (line: string) => void = () => {}): Promise<CoverageReport> {
   const t0 = performance.now();
-  const parallel = o.parallel === undefined ? defaultParallel() : Number(o.parallel);
-  if (!Number.isInteger(parallel) || parallel < 1) throw new CliError(t("--parallel takes a whole number of games, 1 or more, not \"{value}\"", { value: String(o.parallel) }), null, 2);
+  const parallel = o.parallel === undefined ? defaultParallel() : parseWhole(o.parallel, "parallel", 1);
   const testFiles = sources.filter((s) => /\.json$/i.test(s));
   if (o.tests) {
     if (input.path === STDIO) throw new CliError(t("A map read from standard input has no tests beside it: name the tests file."), null, 2);
@@ -184,6 +187,8 @@ export async function runCoverage(input: Input, doc: OpenedMap, sources: readonl
   }
   const replayPaths = sources.filter((s) => !/\.json$/i.test(s));
   if (!replayPaths.length && !testFiles.length) throw new CliError(t("Name the replays to count: files, or folders of them (and --tests for the map's tests)."), null, 2);
+  // The copy of the game first: a wrong --starcraft is said before anything is read or printed.
+  const game = findGameCopy(o.starcraft);
   const scn = await gameScenario(input.bytes, input.name);
   const rows = readTriggers(scn).length;
 
@@ -193,11 +198,13 @@ export async function runCoverage(input: Input, doc: OpenedMap, sources: readonl
   const skipped: CoverageReport["skipped"] = [];
   const taken: { file: string; path: string; match: MatchKind; players: string[] }[] = [];
   const hashes = new Set<string>();
+  let unread = 0;
   for (const path of files) {
-    const name = relative(process.cwd(), path) || basename(path);
+    // The path as it was typed (a folder's replays under the folder as typed).
+    const name = path;
     try {
       const rin = await readInput(path);
-      if (rin.kind !== "replay") { skipped.push({ file: name, reason: t("not a replay") }); continue; }
+      if (rin.kind !== "replay") { unread++; skipped.push({ file: name, reason: t("not a replay") }); continue; }
       if (rin.path === STDIO) throw new CliError(t("a replay from standard input: the game reads a file"), null, 2);
       const hash = sha256(rin.bytes);
       if (hashes.has(hash)) { skipped.push({ file: name, reason: t("the same replay as one before it") }); continue; }
@@ -211,13 +218,13 @@ export async function runCoverage(input: Input, doc: OpenedMap, sources: readonl
       taken.push({ file: name, path, match: m.match, players: rep.players.filter((p) => p.type === 1 || p.type === 2).map((p) => p.name) });
     } catch (e) {
       if (!(e instanceof CliError)) throw e;
-      skipped.push({ file: name, reason: e.message.replace(/^No file .*/, t("no such file")) });
+      unread++;
+      skipped.push({ file: name, reason: unreadable(path, e) });
     }
   }
   for (const line of skippedLines(skipped)) live(line);
   if (!taken.length && !testFiles.length) {
-    const what = files.length === 1 ? t("{file} is not a Use Map Settings game on {map}.", { file: basename(files[0]), map: input.name }) : t("None of the {n, plural, one {# replay} other {# replays}} is a Use Map Settings game on {map}.", { n: files.length, map: input.name });
-    throw new CliError(what, t("A replay counts when its map is this one, or has the same name and size (--force takes others), and it was played as Use Map Settings."), 2);
+    throw noReplays(replayPaths, files, unread, () => new CliError(files.length === 1 ? t("{file} is not a Use Map Settings game on {map}.", { file: files[0], map: input.name }) : t("None of the {n, plural, one {# replay} other {# replays}} is a Use Map Settings game on {map}.", { n: files.length, map: input.name }), t("A replay counts when its map is this one, or has the same name and size (--any-map takes others), and it was played as Use Map Settings."), 2));
   }
 
   // The tests, read before anything is played: a mistake in the file is said at once.
@@ -233,18 +240,19 @@ export async function runCoverage(input: Input, doc: OpenedMap, sources: readonl
   const replays = t("{n, plural, one {# replay} other {# replays}}", { n: taken.length }), tests = t("{n, plural, one {# test scenario} other {# test scenarios}}", { n: scenarios.length });
   const toPlay = taken.length && scenarios.length ? t("{replays} and {tests} to play", { replays, tests }) : t("{what} to play", { what: taken.length ? replays : tests });
   live(`${pc.bold(input.name)}${dot}${t("{n, plural, one {# trigger} other {# triggers}}", { n: rows })}${dot}${toPlay}${taken.length > 1 && parallel > 1 ? t(", {n} at a time", { n: Math.min(parallel, taken.length) }) : ""}`);
-  const game = findGameCopy(o.starcraft);
   const engine: Engine = await ensureEngine(o.engine, undefined, live);
   let done = 0;
 
   // The replays, a few at once: one game a process, as map trace --replay plays one.
   const errors = new Map<number, string>();
+  const now = playingLine(live);
   if (taken.length) {
     let next = 0, older: CliError | null = null;
     const results: (typeof games[number] | null)[] = taken.map(() => null);
     const worker = async () => {
       while (next < taken.length && !older) {
         const k = next++, r = taken[k];
+        now.start(r.file);
         try {
           if (o.signal?.aborted) throw new CliError(t("The run was cancelled."));
           const target = await gameMap(doc, input.path, input.name);
@@ -253,12 +261,14 @@ export async function runCoverage(input: Input, doc: OpenedMap, sources: readonl
           const folded = gameRows(run.end.trace ?? [], rows, parted, run.end.order ?? null);
           const g: CoverageGame = { kind: "replay", file: r.file, name: basename(r.path), match: r.match, frames: run.end.frame, players: run.start?.replay?.players.map((p) => p.name) ?? r.players, parted, fired: folded.filter((s) => s.fired).length, ms: run.end.ms.total };
           results[k] = { game: g, rows: folded };
-          live(gameLine(++done, total, g, r.file));
+          now.end(r.file);
+          now.say(gameLine(++done, total, g, r.file));
         } catch (e) {
           if (e instanceof CliError && /from before/.test(e.message)) { older = e; return; }
           if (o.signal?.aborted) throw e;
           errors.set(k, e instanceof Error ? e.message.split("\n")[0] : String(e));
-          live(gameLine(++done, total, null, r.file, errors.get(k)));
+          now.end(r.file);
+          now.say(gameLine(++done, total, null, r.file, errors.get(k)));
         }
       }
     };
@@ -271,7 +281,7 @@ export async function runCoverage(input: Input, doc: OpenedMap, sources: readonl
 
   // The tests' scenarios, one game each; whether they pass is map test's business, not this one's.
   if (scenarios.length) {
-    const out = mkdtempSync(join(tmpdir(), "scmjs-coverage-"));
+    const out = tempFolder("scmjs-coverage-");
     try {
       await runTests(input.name, scenarios, { extras: archive?.extras ?? new Map(), stored: archive?.stored ?? null }, {
         out, quiet: true, starcraft: game.folder, engine: o.engine, signal: o.signal, node: o.node, live,
@@ -284,16 +294,17 @@ export async function runCoverage(input: Input, doc: OpenedMap, sources: readonl
           live(gameLine(++done, total, g, g.file));
         },
       });
-    } finally { rmSync(out, { recursive: true, force: true }); }
+    } finally { removeFolder(out); }
   }
-  if (!games.length) throw new CliError(t("The game played none of the {n, plural, one {# replay} other {# replays}}.", { n: taken.length }), t("The map runner is scm-sim's; your own copy of StarCraft and replays the game itself plays are what it needs."));
+  if (!games.length) throw new CliError(t("The game played none of the {n, plural, one {# replay} other {# replays}}.", { n: taken.length }), t("Your own copy of StarCraft and replays the game itself plays are what it needs."));
 
   const all = addGames(games.map((g) => ({ name: gameName(g.game), rows: g.rows })), rows);
   const owned = all.filter((c) => c.players.length);
   const fired = owned.filter((c) => c.fired).length;
   return {
-    file: input.name, name: plainText(scenarioName(scn) ?? "").trim(), triggers: rows, owned: owned.length, fired, never: owned.length - fired,
-    games: games.map((g) => g.game), skipped, rows: all, engine: { build: engine.build, fetched: engine.fetched }, ms: performance.now() - t0,
+    // The map as it was typed (its name, read from standard input).
+    file: input.path === STDIO ? input.name : input.path, name: plainText(scenarioName(scn) ?? "").trim(), triggers: rows, owned: owned.length, fired, never: owned.length - fired,
+    games: games.map((g) => g.game), skipped, rows: all, engine: { build: engine.build, dir: engine.dir, fetched: engine.fetched }, game, ms: Math.round(performance.now() - t0),
   };
 }
 
@@ -337,7 +348,9 @@ export function printCoverage(r: CoverageReport, scn: Scenario, { all = false, s
   const never = r.rows.filter((c) => c.players.length && !c.fired);
   if (never.length) {
     out.push("", pc.dim(`  ${t("Never fired ({n} of {total})", { n: num(never.length), total: num(r.owned) })}`));
-    for (const c of never.slice(0, all ? Infinity : 20)) out.push(`  ${pc.yellow("▸")} ${pc.dim(`#${c.row + 1}`)}  ${rowText(scn, c.row, Math.max(30, width - 10))}`, `      ${pc.dim(neverWhy(c))}`);
+    // The numbers padded to the widest, so the triggers' text lines up past #9.
+    const listedNever = never.slice(0, all ? Infinity : 20), wide = Math.max(...listedNever.map((c) => String(c.row + 1).length));
+    for (const c of listedNever) out.push(`  ${pc.yellow("▸")} ${pc.dim(`#${String(c.row + 1).padEnd(wide)}`)}  ${rowText(scn, c.row, Math.max(30, width - 10 - wide))}`, `      ${pc.dim(neverWhy(c))}`);
     if (never.length > 20 && !all) out.push(pc.dim(`  ${t("… and {n} more (--all lists them)", { n: num(never.length - 20) })}`));
   }
   return out;

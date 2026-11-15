@@ -10,8 +10,8 @@
  * The game deals the start locations itself (melee), and the match runner has no option to fix them, so the starts are
  * read from each game's replay and the games binned by them; enough games give every start its turns.
  */
-import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
+import { madeFolder, tempFolder } from "./lifecycle";
 import { join, resolve } from "node:path";
 import { performance } from "node:perf_hooks";
 import type { OpenedMap } from "../../src/editor/mapFile";
@@ -332,8 +332,9 @@ export function mirrorOnce(games: readonly ScheduledGame[], entrants: readonly E
 }
 
 /** The line a game gets as it ends. */
-export function balanceLine(g: BalanceGame, entrants: readonly Entrant[], starts: readonly StartPlace[], total: number): string {
-  const at = pc.dim(`${String(g.game.index).padStart(String(total).length)}/${total}`);
+export function balanceLine(g: BalanceGame, entrants: readonly Entrant[], starts: readonly StartPlace[], total: number, done = g.game.index): string {
+  // How many are done of all, as games finish in any order a few at once (as map heatmap and map coverage count).
+  const at = pc.dim(`${String(done).padStart(String(total).length)}/${total}`);
   const r = g.result;
   const side = (k: number) => {
     const st = g.starts[k];
@@ -357,7 +358,7 @@ export async function runBalance(file: string, mapPath: string, doc: OpenedMap, 
   if (!o.bots.length || o.bots.length > 2) throw new CliError(t("--bots names one bot (played against the computer) or two"), t("scmjs map balance map.scx --bots mybot.scmbot   (or --bots a.scmbot,b.scmbot)"), 2);
   const races = o.races ?? ["r"];
   // One bot plays the game's computer (once for each of --races); two bots play each other, both ways round.
-  const entrants = parseEntrants(o.bots.length === 1 ? [o.bots[0], "computer"] : o.bots, races);
+  const entrants = parseEntrants(o.bots.length === 1 ? [o.bots[0], "computer"] : o.bots, races, undefined, "map balance");
   const seeds = o.seeds ?? [1, 2, 3, 4, 5, 6, 7, 8];
   const played = o.play ?? mapPath;
   const games = mirrorOnce(schedule(entrants, [played], races, seeds), entrants);
@@ -374,10 +375,11 @@ export async function runBalance(file: string, mapPath: string, doc: OpenedMap, 
   }
 
   const keep = !!o.out;
-  const out = keep ? resolve(o.out!) : mkdtempSync(join(tmpdir(), "scmjs-balance-"));
+  const out = keep ? resolve(o.out!) : tempFolder("scmjs-balance-");
+  if (keep && !existsSync(out)) madeFolder(out);
   mkdirSync(out, { recursive: true });
   const data = join(out, "bwapi-data");
-  say(`${pc.bold(t("{n, plural, one {# game} other {# games}}", { n: games.length }))}${dot}${entrants.map((e) => e.label).join(" vs ")}${dot}${t("{n, plural, one {# start location} other {# start locations}}", { n: starts.length })}${dot}${engine.build}${o.parallel && o.parallel > 1 ? `${dot}${t("{n} at once", { n: o.parallel })}` : ""}`);
+  say(`${pc.bold(t("{n, plural, one {# game} other {# games}}", { n: games.length }))}${dot}${entrants.map((e) => e.label).join(" vs ")}${dot}${t("{n, plural, one {# start location} other {# start locations}}", { n: starts.length })}${dot}${engine.build}${Math.min(o.parallel ?? defaultParallel(), games.length) > 1 ? `${dot}${t("{n} at once", { n: Math.min(o.parallel ?? defaultParallel(), games.length) })}` : ""}`);
 
   const done: BalanceGame[] = [];
   const parallel = Math.max(1, Math.min(o.parallel ?? defaultParallel(), games.length));
@@ -390,11 +392,11 @@ export async function runBalance(file: string, mapPath: string, doc: OpenedMap, 
         let ev: GameEvents | null = null, unread: string | null = null;
         if (result.replay) {
           try { ev = await playForEvents(replayRunner, engine.dir, game.folder, result.replay, o.node); }
-          catch (e) { unread = e instanceof Error && e.message ? e.message : t("the replay runner is from before map heatmap"); }
+          catch (e) { unread = e instanceof Error && e.message ? e.message : t("the game engine is from before map heatmap"); }
         }
         const b = readGame(g, result, ev, starts, unread);
         done.push(b);
-        say(balanceLine(b, entrants, starts, games.length));
+        say(balanceLine(b, entrants, starts, games.length, done.length));
       }
     };
     await Promise.all(Array.from({ length: parallel }, worker));
@@ -404,7 +406,7 @@ export async function runBalance(file: string, mapPath: string, doc: OpenedMap, 
   done.sort((a, b) => a.game.index - b.game.index);
   return {
     report: balanceReport(file, doc, starts, entrants, done, rush),
-    engine: { build: engine.build, dir: engine.dir, fetched: engine.fetched }, game, out: keep ? out : null, ms: performance.now() - t0, rushError,
+    engine: { build: engine.build, dir: engine.dir, fetched: engine.fetched }, game, out: keep ? out : null, ms: Math.round(performance.now() - t0), rushError,
   };
 }
 
@@ -438,17 +440,20 @@ the other side. Rush: the average walk to the other starts (map rush). t: tiles 
   const v = rep.verdict;
   out.push("", `${v.kind === "balanced" ? mark.ok : v.kind === "unbalanced" ? mark.warn : mark.info} ${v.text}`);
   for (const n of rep.notes) out.push(pc.dim(`  ${n}`));
-  out.push(pc.dim(`  ${t("The game deals the start locations; each game's are read from its replay (the match runner has no option to fix them).")}`));
+  out.push(pc.dim(`  ${t("The game deals the start locations; each game's are read from its replay (the game cannot be told which to give).")}`));
   if (r.rushError) out.push(pc.dim(`  ${t("The walks between the starts could not be measured: {error}", { error: r.rushError })}`));
   if (r.out) out.push(`${mark.info} ${t("Replays in {folder}", { folder: pc.cyan(r.out) })}`);
   return out;
 }
 
 /** `--json`: the report, the games without their runner lines, where the engine and the game came from. */
+const RACE_WORD: Record<string, string> = { z: "zerg", t: "terran", p: "protoss", r: "random" };
+
 export function balanceJson(r: BalanceOutcome) {
   const rep = r.report;
   return {
-    file: rep.file, map: rep.map, sides: rep.sides,
+    // A side's race as the games' sides give it (the word), its letter beside.
+    file: rep.file, map: rep.map, sides: rep.sides.map((s) => ({ ...s, race: s.race ? RACE_WORD[s.race] ?? s.race : null, raceLetter: s.race })),
     starts: rep.starts,
     pairs: rep.pairs.map((p) => ({ a: rep.starts[p.a].player, b: rep.starts[p.b].player, games: p.games })),
     verdict: { ...rep.verdict, start: rep.verdict.start === null ? null : rep.starts[rep.verdict.start].player },

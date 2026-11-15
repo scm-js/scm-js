@@ -17,11 +17,17 @@ import {
   spritePlaceOptionsAtom, symmetryAtom, terrainModeAtom, unitOwnerAtom, viewFlagsAtom, viewportRectAtom, viewportRepaintAtom, zoomAtom, ZOOM_STEPS, type EditorLayer,
 } from "../atoms/editorAtoms";
 import {
-  activeDocumentIdAtom, archiveExtrasAtom, archiveStoredAtom, builtByAtom, changeTilesetAtom, commitEditAtom, commitNoticeAtom, commitSettingsAtom, commitTerrainAtom, commitTriggersAtom, documentChangeAtom, documentsAtom, documentTabsAtom, doodadsRevisionAtom, locationsAtom, locationsRevisionAtom, objectEditRevisionAtom,
+  activeDocumentIdAtom, archiveExtrasAtom, archiveStoredAtom, builtByAtom, changeTilesetAtom, commitEditAtom, commitNoticeAtom, commitSettingsAtom, commitTerrainAtom, commitTriggersAtom, documentChangeAtom, documentsAtom, documentTabsAtom, doodadsRevisionAtom, locationsAtom, locationsRevisionAtom, objectEditRevisionAtom, pinCellsAtom,
   recentFilesAtom, redoAtom, redoStackAtom, replaceScenarioAtom, resizeDocumentAtom, rollbackEntryAtom, scenarioAtom, settingsRevisionAtom, terrainRevisionAtom, tilesetFileNameAtom, triggersRevisionAtom,
   undoAtom, undoStackAtom, unitsRevisionAtom, viewOnlyAtom, viewOnlyMessage, type HistoryEntry,
 } from "../atoms/documentAtoms";
 import { closeDialogAtom, dialogStackAtom, openDialogAtom, pushToastAtom, statusMessageAtom } from "../atoms/uiAtoms";
+import { tileBlockAtom } from "../atoms/tileBlockAtoms";
+import { learnedPiecesAtom, providedPiecesAtom } from "../atoms/pieceAtoms";
+import { layBlock, layPattern } from "../editor/tileSheet";
+import { checkedBlock, copyBlock, pieceCalls } from "./pieces";
+import { borrowCalls, paintBorrowedIn } from "./borrow";
+import { copyCalls, paintCopyIn } from "./copies";
 import { claimBadge, locateClaims } from "./claims";
 import { cameraOfMap, mapLookAt, mapViewSwitch, offerMapView, pruneMapViews, showMapView, wheelStep } from "./mapViews";
 import { zoomToAtom } from "../atoms/zoomAtoms";
@@ -54,7 +60,8 @@ import { cleanStoredPath, storedPathOf } from "../gamedata/paths";
 import { attachReaderDataSet, dataSetRaceCandidates, installDataSetInto, listDataSets, rehashDataSet, reloadDataSet, removeDataSet, setDataSetRaces, switchDataSet } from "../services/gameData";
 import { displayColorHex, PLAYER_TYPES, playerTypeLabel } from "../data/players";
 import { dataSetRaceLabel, dataSetRaces } from "../data/races";
-import { normalizeRaces, raceChoices } from "../formats/mod/races";
+import { normalizeRaces } from "@scm-js/mod";
+import { raceChoices } from "../formats/mod/races";
 import { dataSetUnitGroups, starEditUnitGroups, TECH_NAMES, techName, UNIT_NAMES, unitName, unitTypeCount, UPGRADE_NAMES, upgradeName } from "../data/units";
 import { WEAPON_NAMES, weaponName } from "../data/weapons";
 import {
@@ -108,12 +115,12 @@ import { attachTooltip } from "./tooltip";
 import {
   applyIsomChanges, diamondAt, hasIsom, isDiamond, isomHeight, isomReport, isomTables, isomTerrainAt, isomTerrains, isomWidth, paintIsom, rebuildIsomFromTiles, type Diamond,
 } from "../editor/isom";
-import { hasEdits, NO_PARTS } from "../editor/history";
+import { hasEdits, hasMembers, NO_PARTS } from "../editor/history";
 import { addUnits, applyUnitChanges, DEFAULT_GAS, DEFAULT_MINERALS, isResource, makeUnit, MINERAL_FIELD_IDS, nextSerial, removeUnits, snapPlacement, TILE_PX, unitAt, unitBox, unitGeometry, updateUnits, VESPENE_GEYSER, type UnitChange } from "../editor/units";
 import {
   addSprites, applySpriteChanges, clampSprite, FALLBACK_SIZE, makeSprite, removeSprites, spriteAt, spriteKind, spritesInBox, type SpriteChange, type SpriteSize,
 } from "../editor/sprites";
-import { applyDoodadChanges, checkDoodadPlacement, convertDoodads, doodadAt, placeDoodad, removeDoodads, type DoodadChange } from "../editor/doodads";
+import { applyDoodadChanges, checkDoodadPlacement, convertDoodads, doodadAt, placeDoodad, placeDoodadAsTerrain, removeDoodads, type DoodadChange } from "../editor/doodads";
 import { addLocation, applyLocationChanges, editLocation, ensureLocationSlots, locationAt, removeLocations, type LocationChange } from "../editor/locations";
 import { applyFogChanges, ensureMask, paintFog } from "../editor/fog";
 import {
@@ -141,7 +148,15 @@ import { currentSync, startSync } from "../services/sync";
 import { saveBlob } from "../services/mapIo";
 import { ensureTileset as loadTilesetFiles, TILESET_FILENAMES } from "../formats/tileset/load";
 import { floodRegion, flatGroupOf, replaceTerrain } from "../editor/terrain";
-import { blendCandidates, DEFAULT_BLEND_OPTIONS, placeBlend } from "../editor/blend";
+import { blendCandidates, DEFAULT_BLEND_OPTIONS, placeBlend, seamStep } from "../editor/blend";
+import { healTiles, shownSeams } from "../editor/heal";
+import { countPins, handLaidCells, PINS_MEMBER, pinsOf, withoutPinned } from "../editor/pins";
+import { isStretched, soundAxes, STRETCH_AXES, stretchDoodad } from "../editor/stretch";
+import { doodadTwin } from "../editor/doodadTwin";
+import { fairnessReport, symmetryShares } from "../editor/fairness";
+
+/** The longest stretch a plugin may ask for; the map's edge stops a real one long before. */
+const MAX_STRETCH_STEPS = 128;
 import { tilesFromIsom } from "../editor/isom";
 import { mirrorIndices, mirrorPixel, symmetryAvailable } from "../editor/symmetry";
 import { moveUnits } from "../editor/units";
@@ -298,6 +313,14 @@ export function runTransaction(store: Store, label: string, build: (tx: EditTran
     return type;
   };
   const applyTiles = (changes: TileChange[]) => { applyChanges(scn, changes); tiles.add(changes); return changes.length; };
+  /** The pinned tiles as they stand now (`tx.pin` may have changed them). */
+  const pinned = () => pinsOf(store.get(archiveExtrasAtom), scn);
+  /** What lays terrain by rule leaves pinned tiles as they are, as the editor's own brushes do. */
+  const applyRuled = (changes: TileChange[]) => applyTiles(withoutPinned(changes, pinned()).changes);
+  /** The pins file before the transaction's first change to it; undefined while it has made none. */
+  let pinsBefore: Uint8Array | null | undefined;
+  /** Each borrowed lattice (editor/borrowLattice.ts) as it was before the transaction first changed it. */
+  const membersBefore = new Map<string, Uint8Array | null>();
   const tables = () => peekUnitAssets()?.units ?? null;
 
   const tx: EditTransaction = {
@@ -311,7 +334,7 @@ export function runTransaction(store: Store, label: string, build: (tx: EditTran
     stampTerrain: (cells, terrainId, variation = -1) => {
       const type = flatOf(terrainId);
       if (!type || !loaded) return 0;
-      return applyTiles(stampTerrain(scn, loaded.tileset, { group: type.group, variation }, cellsOf(cells)));
+      return applyRuled(stampTerrain(scn, loaded.tileset, { group: type.group, variation }, cellsOf(cells)));
     },
     fillFlat: (rect, terrainId) => {
       const type = flatOf(terrainId);
@@ -319,7 +342,7 @@ export function runTransaction(store: Store, label: string, build: (tx: EditTran
       const flat = flatTerrain(w, h, { id: type.id, group: type.group }, loaded.tileset, Math.random, tilesetIndex(scn));
       const changes: TileChange[] = [];
       for (const at of cellsOf(rect)) if (scn.tiles[at] !== flat.tiles[at]) changes.push({ at, before: scn.tiles[at], after: flat.tiles[at] });
-      const n = applyTiles(changes);
+      const n = applyRuled(changes);
       if (hasIsom(scn) && scn.isom.length === flat.isom.length) {
         const iw = isomWidth(scn);
         const changesIsom: TileChange[] = [];
@@ -339,12 +362,14 @@ export function runTransaction(store: Store, label: string, build: (tx: EditTran
     },
     paintIsom: (d, terrainId, extent = 1) => {
       if (!hasIsom(scn) || !loaded) return false;
-      const edit = paintIsom(scn, loaded.tileset, d, terrainId, extent);
+      const edit = paintIsom(scn, loaded.tileset, d, terrainId, extent, Math.random, pinned());
       if (!edit) return false;
       tiles.add(edit.tiles);
       isom.add(edit.isom);
       return true;
     },
+    paintBorrowed: (diamonds, terrainId) => paintBorrowedIn(store, scn, diamonds ?? [], terrainId, pinned(), applyTiles, membersBefore, notes),
+    paintCopy: (diamonds, terrainId) => paintCopyIn(store, scn, diamonds ?? [], terrainId, pinned(), applyTiles, (applied, isomChanges) => { tiles.add(applied); isom.add(isomChanges); }, membersBefore, notes),
     rebuildIsom: () => {
       if (!loaded) { notes.push(t("rebuilding the ISOM needs the tileset graphics")); return null; }
       const rebuilt = rebuildIsomFromTiles(scn, loaded.tileset);
@@ -400,6 +425,21 @@ export function runTransaction(store: Store, label: string, build: (tx: EditTran
       doodads.push(...edit.doodads);
       sprites.push(...edit.sprites);
       return edit.doodads[0]?.index ?? -1;
+    },
+    placeStretchedDoodad: (doodadId, tx0, ty0, axis, steps, owner = 0) => {
+      const def = loaded?.doodads.byId.get(doodadId);
+      if (!def || !loaded) { notes.push(t("doodad {doodadId} is not in this tileset", { doodadId })); return []; }
+      if (!STRETCH_AXES.includes(axis) || !Number.isInteger(steps) || Math.abs(steps) > MAX_STRETCH_STEPS) return [];
+      const long = steps === 0 ? def : stretchDoodad(loaded.tileset, def, axis, steps);
+      const x = tx0 + (isStretched(long) ? long.stretched.offset.x : 0), y = ty0 + (isStretched(long) ? long.stretched.offset.y : 0);
+      if (x < 0 || y < 0 || x + long.width > w || y + long.height > h) return [];
+      const edit = placeDoodadAsTerrain(scn, long, x, y, owner);
+      applyTiles(edit.tiles);
+      applySpriteChanges(scn, edit.sprites);
+      sprites.push(...edit.sprites);
+      const cells: number[] = [];
+      for (let r = 0; r < long.height; r++) for (let c = 0; c < long.width; c++) if (long.tiles[r * long.width + c]) cells.push((y + r) * w + x + c);
+      return cells;
     },
     removeDoodads: (indices) => {
       const edit = removeDoodads(scn, loaded?.tileset ?? null, loaded?.doodads ?? NO_DOODADS, indices);
@@ -480,7 +520,7 @@ export function runTransaction(store: Store, label: string, build: (tx: EditTran
 
     replaceTerrain: (from, to, rect) => {
       if ((from.kind === "terrain" || to.kind === "terrain") && !loaded) { notes.push(t("replacing a terrain type needs the tileset graphics")); return 0; }
-      return applyTiles(replaceTerrain(scn, loaded?.tileset ?? null, from, to, rect));
+      return applyRuled(replaceTerrain(scn, loaded?.tileset ?? null, from, to, rect));
     },
     fillArea: (x, y, fill, match = "terrainId" in fill ? "terrain" : "tile") => {
       if (x < 0 || y < 0 || x >= w || y >= h) return 0;
@@ -496,10 +536,10 @@ export function runTransaction(store: Store, label: string, build: (tx: EditTran
         region = floodRegion(scn, x, y, (id) => id === seed);
       }
       const cells = mirrorIndices(store.get(symmetryAtom), region, w, h);
-      if ("tileId" in fill) return applyTiles(stampTile(scn, cells, fill.tileId));
+      if ("tileId" in fill) return applyRuled(stampTile(scn, cells, fill.tileId));
       const type = flatOf(fill.terrainId);
       if (!type || !loaded) return 0;
-      return applyTiles(stampTerrain(scn, loaded.tileset, { group: type.group, variation: store.get(rectVariationAtom) }, cells));
+      return applyRuled(stampTerrain(scn, loaded.tileset, { group: type.group, variation: store.get(rectVariationAtom) }, cells));
     },
     placeBlend: (x, y, side, id) => {
       const ch = placeBlend(scn, { x, y }, side, id);
@@ -507,9 +547,22 @@ export function runTransaction(store: Store, label: string, build: (tx: EditTran
       applyTiles(ch);
       return true;
     },
+    placeBlock: (block, x, y) => applyTiles(layBlock(scn, checkedBlock(block, "placeBlock"), x, y)),
+    fillPattern: (cells, block, origin = { x: 0, y: 0 }) => applyTiles(layPattern(scn, checkedBlock(block, "fillPattern"), origin, cellsOf(cells))),
+    heal: (cells) => {
+      if (!loaded) { notes.push(t("healing seams needs the tileset graphics")); return 0; }
+      return applyRuled(healTiles(scn, loaded.tileset, cellsOf(cells)));
+    },
+    pin: (cells, on = true) => {
+      const before = store.get(archiveExtrasAtom).get(PINS_MEMBER) ?? null;
+      const count = countPins(pinned());
+      if (!store.set(pinCellsAtom, { cells: cellsOf(cells), on })) return 0;
+      if (pinsBefore === undefined) pinsBefore = before;
+      return Math.abs(countPins(pinned()) - count);
+    },
     tilesFromIsom: () => {
       if (!hasIsom(scn) || !loaded) { notes.push(t("regenerating the tiles needs ISOM and the tileset graphics")); return null; }
-      const edit = tilesFromIsom(scn, loaded.tileset);
+      const edit = tilesFromIsom(scn, loaded.tileset, Math.random, pinned());
       applyChanges(scn, edit.tiles);
       tiles.add(edit.tiles);
       applyIsomChanges(scn, edit.isom);
@@ -582,7 +635,7 @@ export function runTransaction(store: Store, label: string, build: (tx: EditTran
   let isomChanges: TileChange[] = [];
   let fogChanges: TileChange[] = [];
   const finishEntry = (): HistoryEntry => {
-    const entry: HistoryEntry = { label, changes: tiles.finish() };
+    const entry: HistoryEntry = { label, tool: "plugin", changes: tiles.finish() };
     isomChanges = isom.finish();
     fogChanges = fog.finish();
     if (isomChanges.length > 0) entry.isom = isomChanges;
@@ -595,6 +648,8 @@ export function runTransaction(store: Store, label: string, build: (tx: EditTran
     if (createdMask) entry.createdMask = createdMask;
     if (createdIsom) { entry.createdIsom = createdIsom; delete entry.isom; }
     else if (rebuiltIsom) entry.rebuiltIsom = true;
+    if (pinsBefore !== undefined) entry.pins = { before: pinsBefore, after: store.get(archiveExtrasAtom).get(PINS_MEMBER) ?? null };
+    if (membersBefore.size > 0) entry.members = [...membersBefore].map(([name, before]) => ({ name, before, after: store.get(archiveExtrasAtom).get(name) ?? null }));
     return entry;
   };
 
@@ -608,14 +663,14 @@ export function runTransaction(store: Store, label: string, build: (tx: EditTran
   } catch (err) {
     closed = true;
     const entry = finishEntry();
-    if (hasEdits(entry)) store.set(rollbackEntryAtom, entry);
+    if (hasEdits(entry) || hasMembers(entry)) store.set(rollbackEntryAtom, entry);
     throw err;
   }
   closed = true;
   checkSyncBuilder("document.edit", returned, notes);
 
   const entry = finishEntry();
-  if (!hasEdits(entry)) return { ...EMPTY_RESULT, notes };
+  if (!hasEdits(entry) && !hasMembers(entry)) return { ...EMPTY_RESULT, notes };
   // The commit's stranded-doodad / stranded-unit pass may append to the entry's lists, so the counts come after it.
   store.set(commitTerrainAtom, { entry, summary: notes.length > 0 ? `${label} — ${notes.join(", ")}` : label });
   const strandedUnits = (entry.units?.length ?? 0) - units.length;
@@ -1206,7 +1261,7 @@ export function queryApi(store: Store): QueryApi {
       const def = l?.doodads.byId.get(doodadId);
       if (!scn || !l || !def) return null;
       // The rule itself, not the palette's switch: a plugin asking is asking whether StarEdit would allow it.
-      return checkDoodadPlacement(scn, l.tileset, def, tx, ty, { placeAnywhere: false, snapToGrid: false, asTerrain: false });
+      return checkDoodadPlacement(scn, l.tileset, def, tx, ty, { placeAnywhere: false, snapToGrid: false, asTerrain: false, pin: false });
     },
     validate: () => {
       const scn = scenario();
@@ -1668,7 +1723,8 @@ export function gameDataApi(store: Store): GameDataApi {
     attach: async (profile, read, options) => {
       if (!isProfileId(profile.id)) throw new Error(`"${profile.id}" is not a data set id: lower-case letters, digits and hyphens, up to 40 characters.`);
       if (typeof read !== "function") throw new Error("gameData.attach needs a function that reads a file");
-      return publish(attachReaderDataSet(store, profile, read, options?.hash));
+      const { races, ...rest } = profile;
+      return publish(attachReaderDataSet(store, { ...rest, ...(races ? { races: normalizeRaces(races) } : {}) }, read, options?.hash));
     },
     reload: () => reloadDataSet(store),
     rehash: (hash) => {
@@ -1871,7 +1927,7 @@ const EVENT_ATOMS = {
   modified: [mapModifiedAtom],
   palette: [
     terrainModeAtom, activeTerrainAtom, activeTileAtom, rectVariationAtom, brushSizeAtom, activeUnitAtom, unitOwnerAtom, activeSpriteKindAtom, activeSpriteAtom,
-    activeUnitSpriteAtom, spritePlaceOptionsAtom, activeDoodadAtom, fogPlayersAtom, fogModeAtom,
+    activeUnitSpriteAtom, spritePlaceOptionsAtom, activeDoodadAtom, fogPlayersAtom, fogModeAtom, tileBlockAtom,
   ],
   options: [symmetryAtom, placementOptionsAtom, doodadPlacementAtom, locationSnapAtom, fogViewPlayerAtom, clipPartsAtom, clipPasteModeAtom, clipPastingAtom, lockedLayersAtom, gridLookAtom, preferencesAtom],
   file: [mapFilePathAtom, mapFileHandleAtom, saveOptionsAtom, archiveExtrasAtom, recentFilesAtom],
@@ -1879,6 +1935,7 @@ const EVENT_ATOMS = {
   services: [pluginServicesAtom],
   dialogs: [dialogStackAtom],
   gameData: [gameDataSourceAtom, gameDataRevisionAtom],
+  pieces: [learnedPiecesAtom, providedPiecesAtom],
 } as const;
 
 /**
@@ -2366,14 +2423,22 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
         }
         return out;
       },
-      active: () => ({ mode: store.get(terrainModeAtom), terrain: store.get(activeTerrainAtom), tile: store.get(activeTileAtom), brushSize: store.get(brushSizeAtom), variation: store.get(rectVariationAtom) }),
+      active: () => {
+        const block = store.get(tileBlockAtom);
+        return { mode: store.get(terrainModeAtom), terrain: store.get(activeTerrainAtom), tile: store.get(activeTileAtom), brushSize: store.get(brushSizeAtom), variation: store.get(rectVariationAtom), block: block ? copyBlock(block) : null };
+      },
       setActive: (brush) => {
         if (brush.mode !== undefined) store.set(terrainModeAtom, brush.mode);
         if (brush.terrain !== undefined) store.set(activeTerrainAtom, brush.terrain);
         if (brush.tile !== undefined) store.set(activeTileAtom, brush.tile);
         if (brush.brushSize !== undefined) store.set(brushSizeAtom, brush.brushSize);
         if (brush.variation !== undefined) store.set(rectVariationAtom, brush.variation);
+        // After the tile, so a block given with one wins (arming it sets the tile to its first).
+        if (brush.block !== undefined) store.set(tileBlockAtom, brush.block === null ? null : checkedBlock(brush.block, "setActive"));
       },
+      ...pieceCalls(store, info.id, bag),
+      ...borrowCalls(store, info.id, bag),
+      ...copyCalls(store, info.id, bag),
       floodRegion: (x, y, match = "terrain") => {
         const scn = scenario();
         if (!scn || x < 0 || y < 0 || x >= scn.width || y >= scn.height) return [];
@@ -2388,6 +2453,33 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
         return [...floodRegion(scn, x, y, (id) => id === seed)];
       },
       blendCandidates: (anchorId, side, options = {}) => { const l = loaded(); return l ? blendCandidates(l.tileset, anchorId, side, { ...DEFAULT_BLEND_OPTIONS, ...options }) : []; },
+      seamStep: (tileId, side, neighbourId) => {
+        const l = loaded();
+        if (!l) return null;
+        const a = megatileForTile(l.tileset, tileId), b = megatileForTile(l.tileset, neighbourId);
+        return a > 0 && b > 0 ? seamStep(l.tileset, a, side, b) : null;
+      },
+      seams: (cells) => {
+        const scn = scenario(), l = loaded();
+        if (!scn || !l) return 0;
+        const list: number[] = [];
+        if (cells === undefined) for (let at = 0; at < scn.width * scn.height; at++) list.push(at);
+        else if (typeof (cells as Rect).x0 === "number") {
+          const r = cells as Rect;
+          for (let y = Math.max(0, r.y0); y < Math.min(scn.height, r.y1); y++) for (let x = Math.max(0, r.x0); x < Math.min(scn.width, r.x1); x++) list.push(y * scn.width + x);
+        } else for (const at of cells as Iterable<number>) if (at >= 0 && at < scn.width * scn.height) list.push(at);
+        return shownSeams(scn, l.tileset, list);
+      },
+      pinned: () => {
+        const scn = scenario();
+        const pins = scn ? pinsOf(store.get(archiveExtrasAtom), scn) : null;
+        const out: number[] = [];
+        if (pins) for (let at = 0; at < pins.length; at++) if (pins[at]) out.push(at);
+        return out;
+      },
+      handLaid: (rect) => { const scn = scenario(), l = loaded(); return scn && l ? handLaidCells(scn, l.tileset, rect) : []; },
+      symmetryShares: () => { const scn = scenario(), l = loaded(); return scn && l ? symmetryShares(scn, l.tileset) : {}; },
+      fairness: (mode = store.get(symmetryAtom)) => { const scn = scenario(), l = loaded(); return scn && l ? fairnessReport(scn, l.tileset, mode) : null; },
       flatGroupOf: (terrainId) => { const l = loaded(); return l ? flatGroupOf(l.tileset, terrainId) : -1; },
       symmetry: () => store.get(symmetryAtom),
       setSymmetry: (mode) => store.set(symmetryAtom, mode),
@@ -2493,6 +2585,8 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
       spriteName: (kind, id) => spriteName(peekUnitAssets(), kind, id),
       doodadCategories: () => (loaded()?.doodads.categories ?? []).map((c) => ({ name: c.name, doodads: c.doodads.map(doodadInfoOf) })),
       doodadInfo: (id) => { const def = loaded()?.doodads.byId.get(id); return def ? doodadInfoOf(def) : null; },
+      stretchAxes: (id) => { const l = loaded(), def = l?.doodads.byId.get(id); return l && def ? soundAxes(l.tileset, def) : []; },
+      doodadTwin: (id) => { const l = loaded(), def = l?.doodads.byId.get(id); return l && def ? doodadTwin(l.tileset, l.doodads, def)?.id ?? null : null; },
     },
 
     sync: {

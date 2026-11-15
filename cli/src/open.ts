@@ -80,7 +80,7 @@ export interface HandoverMessage { type: string; [key: string]: unknown }
  * ready; this waits for the page to say it was taken (or `timeout`) and stops serving. Every other message the opened
  * page sends back goes to `onMessage`, which a command uses to print what the page reports (a lobby's link).
  */
-async function handOver(input: Input, editor: string, { lobby = false, onMessage, onAddress, timeout = 120_000, what = "the editor" }: { lobby?: boolean; onMessage?: (m: HandoverMessage) => void; onAddress?: (page: string) => void; timeout?: number; what?: string } = {}): Promise<boolean> {
+async function handOver(input: Input, editor: string, { lobby = false, onMessage, onAddress, timeout = 120_000, what = "the editor", say = print }: { lobby?: boolean; onMessage?: (m: HandoverMessage) => void; onAddress?: (page: string) => void; timeout?: number; what?: string; say?: (...lines: string[]) => void } = {}): Promise<boolean> {
   const token = randomBytes(12).toString("hex");
   const target = new URL(editor);
   target.searchParams.set("handoff", "1");
@@ -112,13 +112,15 @@ async function handOver(input: Input, editor: string, { lobby = false, onMessage
   openBrowser(page);
   // `what` is English for the loopback page; the terminal says it in the reader's language.
   const which = what === "the play page" ? "play" : "editor";
-  print(`${mark.info} ${t("Opening {name} in {what, select, play {the play page} other {the editor}} in your browser", { name: pc.bold(input.name), what: which })}`, pc.dim(`  ${t("If nothing opens, go to {page}", { page })}`));
+  // BROWSER=none opens nothing, so the address is the instruction rather than a fallback.
+  if (process.env.BROWSER === "none") say(`${mark.info} ${t("Open {page} in your browser to hand {name} to {what, select, play {the play page} other {the editor}}", { page, name: pc.bold(input.name), what: which })}`);
+  else say(`${mark.info} ${t("Opening {name} in {what, select, play {the play page} other {the editor}} in your browser", { name: pc.bold(input.name), what: which })}`, pc.dim(`  ${t("If nothing opens, go to {page}", { page })}`));
   const timer = setTimeout(() => done(false), timeout);
   const taken = await finished;
   clearTimeout(timer);
   server.close();
   if (!taken) throw new CliError(t("{what, select, play {The play page} other {The editor}} did not take the file", { what: which }), t("Open {address} and drop {name} on it.", { address: editor, name: input.name }));
-  print(`${mark.ok} ${t("Handed to {what, select, play {the play page} other {the editor}}", { what: which })}`);
+  say(`${mark.ok} ${t("Handed to {what, select, play {the play page} other {the editor}}", { what: which })}`);
   return taken;
 }
 
@@ -130,11 +132,11 @@ export interface LobbyOutcome { link: string | null; invite: string | null; name
  * invite link, printed here for the person to send around. The page asks the person to sign in or to give it the
  * game's files when it must; what it says meanwhile is printed too.
  */
-export async function playInLobby(input: Input, options: { play?: string; live?: (line: string) => void; onAddress?: (page: string) => void; timeout?: number; qr?: boolean } = {}): Promise<LobbyOutcome> {
+export async function playInLobby(input: Input, options: { play?: string; live?: (line: string) => void; onAddress?: (page: string) => void; timeout?: number; qr?: boolean; say?: (...lines: string[]) => void } = {}): Promise<LobbyOutcome> {
   const out: LobbyOutcome = { link: null, invite: null, name: null, waited: [], error: null };
   const say = options.live ?? (() => {});
   await handOver(input, options.play ?? process.env.SCMJS_PLAY_URL ?? PLAY_PAGE_URL, {
-    lobby: true, timeout: options.timeout ?? 300_000, what: "the play page", onAddress: options.onAddress,
+    lobby: true, timeout: options.timeout ?? 300_000, what: "the play page", onAddress: options.onAddress, say: options.say,
     onMessage: (m) => {
       if (m.type === "scmjs.invite") { out.link = String(m.link ?? ""); out.invite = String(m.invite ?? ""); out.name = typeof m.name === "string" ? m.name : null; out.error = null; say(`${mark.ok} ${t("{lobby}: send this link to the people you want to play with", { lobby: pc.bold(t("Lobby open")) })}\n  ${pc.cyan(out.link)}`); if (options.qr && out.link) say(["", ...qrFor(out.link), ""].join("\n")); }
       else if (m.type === "scmjs.waiting") { const text = String(m.message ?? m.reason ?? "waiting"); out.waited.push(text); say(`${mark.info} ${text}${m.reason === "sign-in" ? pc.dim(` ${t("(sign in on the page; the lobby opens after)")}`) : ""}`); }

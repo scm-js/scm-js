@@ -141,6 +141,9 @@ or winget on Windows:
 winget install scm-js.scmjs
 ```
 
+winget does not list scmjs yet: its first version is waiting for review. Until it does,
+use Scoop or the download.
+
 Scoop works too (`scoop bucket add scm-js https://github.com/scm-js/scoop-bucket`, then
 `scoop install scmjs`), and so does npm on Node.js 22.12 or newer
 (`npm install -g @scm-js/cli`). Without any of these, download it from the [releases

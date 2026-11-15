@@ -19,7 +19,7 @@ import { START_LOCATION } from "../src/data/units";
 import type { Input } from "../cli/src/files";
 import {
   analyzeLayout, analyzeMap, apartFrom, blockers, CHOKE_NARROW, clusterResources, layoutPicture, medianOf, NATURAL_TILES, rankSpread, sideOf,
-  spreadOf, verdictsOf, type Layout, type Resource, type StartLayout,
+  resourcesText, spreadOf, verdictsOf, type Layout, type Resource, type StartLayout,
 } from "../cli/src/analyze";
 import {
   clearance, distancesFrom, distancesWithin, groundFromTiles, narrowestOn, nearestCell, openCells, passableCells, passageWidth, pathTo,
@@ -134,6 +134,10 @@ describe("the walk", () => {
 });
 
 describe("the numbers", () => {
+  it("words a start's resources, nothing at all among them", () => {
+    expect([resourcesText(9, 1), resourcesText(7, 0), resourcesText(15, 2), resourcesText(0, 1), resourcesText(0, 0)]).toEqual(["9 fields + gas", "7 fields, no gas", "15 fields + 2 gas", "a geyser alone", "no resources"]);
+  });
+
   it("spreads, medians and the starts set apart", () => {
     expect(spreadOf([100, 110])).toBeCloseTo(0.1);
     expect(spreadOf([100])).toBeNull();
@@ -347,7 +351,7 @@ describe("the command", () => {
     expect(await refused({ picture: "a.png", scale: "3" })).toEqual([2, expect.stringMatching(/--scale takes 1, 2, 4/)]);
     const lone = createScenario({ width: 32, height: 32, era: 4, name: "one" });
     expect(await refused({ starcraft: "/nowhere" }, { ...map, scenario: lone })).toEqual([2, "wall.scx has 0 start locations: map analyze compares starts, and needs two or more."]);
-    expect(await refused({ starcraft: tmp() })).toEqual([1, expect.stringMatching(/is not a copy of StarCraft/)]);
+    expect(await refused({ starcraft: tmp() })).toEqual([2, expect.stringMatching(/is not a copy of StarCraft/)]);
   });
 
   it("reports through a stand-in copy, and writes the picture", async () => {

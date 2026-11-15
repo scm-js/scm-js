@@ -21,8 +21,11 @@ import { STDIO } from "./files";
 import { t } from "./i18n";
 import { CliError } from "./ui";
 
-export const NEW_VERSIONS = ["broodwar", "remastered"] as const satisfies readonly MapVersion[];
-export type NewMapVersion = (typeof NEW_VERSIONS)[number];
+/** Every revision `map set` takes, `map new` makes too. */
+export const NEW_VERSIONS = Object.keys(MAP_VERSIONS) as MapVersion[];
+export type NewMapVersion = MapVersion;
+/** The extension a name without one gets, by revision. */
+export const MAP_EXTENSIONS = Object.fromEntries(Object.entries(MAP_VERSIONS).map(([k, v]) => [k, v.extension])) as Record<MapVersion, string>;
 export const LAYOUTS = ["ring", "corners"] as const satisfies readonly StartLayout[];
 
 export interface NewMapOptions {

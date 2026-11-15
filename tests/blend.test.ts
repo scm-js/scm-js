@@ -8,8 +8,8 @@ import { TILESETS } from "../src/data/tilesets";
 import { isFlatPair, terrainTypes } from "../src/formats/tileset/palette";
 import { applyChanges } from "../src/editor/terrain";
 import {
-  blendCandidates, blendSides, DEFAULT_BLEND_OPTIONS, drawableTiles, edgeDistance, edgeTable, neighbourOf, OPPOSITE, placeBlend, SIDES,
-  type Side,
+  blendCandidates, blendSides, DEFAULT_BLEND_OPTIONS, drawableTiles, edgeDistance, edgeGrain, edgeTable, neighbourOf, OPPOSITE, placeBlend, SEAM_SHOWS,
+  seamStep, SIDES, type Side,
 } from "../src/editor/blend";
 
 /* ── A synthetic tileset with solid-colour and split megatiles ── */
@@ -161,6 +161,40 @@ describe("placing a blend", () => {
     expect(placeBlend(scn, { x: 2, y: 0 }, "top", 0x123)).toBeNull();
     expect(placeBlend(scn, { x: 7, y: 2 }, "right", 0x123)).toBeNull();
     expect(placeBlend(scn, { x: 2, y: 5 }, "bottom", 0x123)).toBeNull();
+  });
+});
+
+describe("the step at a join", () => {
+  const ts = synthetic();
+
+  it("is the whole edge difference where the pictures are flat up to their edges", () => {
+    // Megatile 1 is solid red and 2 solid green: nothing changes a pixel in from either edge.
+    expect(edgeGrain(ts)[1 * 4 + 2]).toBe(0);
+    expect(seamStep(ts, 1, "right", 2)).toBe(edgeDistance(edgeTable(ts), 1, "right", 2, "left"));
+    expect(seamStep(ts, 1, "right", 2)).toBeGreaterThan(SEAM_SHOWS);
+    // Red beside near-red is a seam nobody finds.
+    expect(seamStep(ts, 1, "right", 4)).toBeLessThan(SEAM_SHOWS);
+    expect(seamStep(ts, 1, "bottom", 1)).toBe(0);
+  });
+
+  it("discounts what each picture does by itself one pixel in", () => {
+    // A tileset of one more megatile: stripes a pixel wide, red and green, so its own grain
+    // at the left and right edges is as large as a join can be.
+    const striped = synthetic();
+    const minitiles = new Uint8Array(striped.minitiles.length + 64);
+    minitiles.set(striped.minitiles);
+    const stripes = striped.minitiles.length / 64;
+    for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++) minitiles[stripes * 64 + y * 8 + x] = x % 2 === 0 ? RED : GREEN;
+    const m = striped.megatileCount;
+    const refs = new Uint32Array((m + 1) * 16);
+    refs.set(striped.megatileRefs);
+    refs.fill(stripes << 1, m * 16);
+    const wide: Tileset = { ...striped, minitiles, megatileRefs: refs, megatileCount: m + 1 };
+    // Its right edge is green and solid red's left edge is red: a full step by the edges alone…
+    expect(edgeDistance(edgeTable(wide), m, "right", 1, "left")).toBeCloseTo(170, 0);
+    // …of which half is the stripes' own doing, and the stripes meeting themselves is no step at all.
+    expect(seamStep(wide, m, "right", 1)).toBeCloseTo(85, 0);
+    expect(seamStep(wide, m, "right", m)).toBeLessThanOrEqual(0);
   });
 });
 

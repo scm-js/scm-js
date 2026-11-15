@@ -46,6 +46,8 @@ lines, a stand-in `waves` library, the README test's `// what it prints` check t
 `docs/trigscript-library.md` follows the same rule, a page a `trigscript/*` module; its
 examples are compiled too, and the first run caught a signal handler returning an action,
 copied from `signals.ts`'s own header comment, which still carries it.
+`docs/bots.md` (2026-11-13, after `cli` in the nav) is the JavaScript bot guide; its code blocks are type-checked
+the same way, against the `@scm-js/bot` bundle, by `tests/bot-package.test.ts` (`.claude/internals/cli.md`).
 **Nothing writes prose**, because a generator that did would be one more document to keep
 current. `site.mjs` is the URL
 model and, with it, the link rewriter that is the whole reason those documents keep
@@ -109,12 +111,24 @@ when the chrome changes, and never commit a picture that shows anything but the 
 `scripts/cli-screenshots.mjs` (2026-11-07) is its sibling for `docs/cli.md`'s `cli-*.webp`: it runs the built
 `scmjs` with `FORCE_COLOR=1`/`COLORTERM=truecolor` on `tests/maps/*`, maps `map generate` makes and the engine's
 replays, plays the output into a small terminal emulator (SGR, CR/LF, cursor up/down, `2K`, OSC/APC skipped; ▀▄█
-painted as two-colour gradients so half-block pictures have no seams), renders the cells in DejaVu Sans Mono and
+painted as two-colour gradients so half-block pictures have no seams; braille painted as dots on the cell's 2 × 4
+grid, since DejaVu Sans Mono has none and Chromium's fallback, DejaVu Sans, draws them 10px wide in an 8.43px cell,
+which cut the overview globe's right edge off and shifted its rows, 2026-11-14), renders the cells in DejaVu Sans Mono and
 screenshots them at 2× in headless Chromium. WebP comes from the page's own `canvas.toDataURL("image/webp", 1)`,
 which Chromium writes lossless (VP8L) at quality 1, so the script needs only Playwright, not sharp; the coloured-cell
 pictures (`map preview`, `replay watch`) and the PNGs commands write go at 0.9. `replay watch` runs under
 `script -qfec` for a pty and is quit with `q` after six seconds. The QR picture is the encoder (`cli/src/qr.ts`,
 loaded with Vite's `ssrLoadModule`) on a fixed link, since a real `map share` needs a session.
+Three more scenes (2026-11-14): `map-analyze` (the PNG `map analyze --out --scale 8` writes for `(4)Crossing.scx`,
+seed 2026), `map-heatmap` and `replay-export`. The last two need games on that map, so `games()` plays a ladder of
+`starter.mjs` (scmbot's JavaScript example bot, in the `--bots` folder: no build, so it works where no `.scmbot` is
+on the machine) against the game's computers, `--races tzp --games 2`, 18 games, about six minutes the first time and
+skipped when a kept `--work` folder has `games/ladder.json`. The heatmap runs with `--parallel 2`: at four, three
+replays failed with `ENOMEM` reading the Remastered installation under WSL. `frame()` takes one frame of the WebM
+`replay export` wrote by playing it in the script's own page, so ffmpeg is still not needed; `--browser` is handed to
+the command as `SCMJS_BROWSER` too. On this machine the Playwright Chromium starts only with the libraries of the
+headless-browser recipe on `LD_LIBRARY_PATH`. With seeds 1 and 2 no side is dealt the bottom right start, which the
+guide's caption says.
 The scmjs.dev pictures (2026-09-06: `account`, `my-maps`, `save-to-scmjs`, `ai-menu`,
 `assistant`, `name-describe`, `review-map`, `rewrite-strings`, `generate-map`,
 `generated-map`, `make-scenario`) run against `scripts/lib/guide-scmjs-mock.mjs`, a

@@ -10,12 +10,15 @@ import { decodeIscript } from "../src/formats/dat/iscript";
 import { decodeTblEntries } from "../src/formats/dat/tbl";
 import { EXTRA_TABLES, extractUnits, SOUND_TABLES, UNIT_TABLES, type ReadMember } from "../src/gamedata/extract";
 import { DAT_SCHEMAS } from "../src/formats/dat/schema";
-import { openArchives, readerFor } from "../src/gamedata/archives";
+import { modTree, openArchives, readerFor } from "../src/gamedata/archives";
 import { namesFromAssets, unitCatalogue } from "../src/data/gameNames";
 import { dataSetUnitGroups, installNames, unitName, unitTypeCount } from "../src/data/units";
 import { CLASSIC_GROUP_LIMIT, decodeCv5, hasCreepFlag, loadTileset, megatileForTile, tileGroupOf, TILE_CREEP_FLAG } from "../src/formats/tileset/decode";
-import { dataSetHashOf, extractOverCopy, hdOffImages, storedPathOf } from "../src/gamedata/overCopy";
-import { dataSetHash } from "../src/formats/mod/sources";
+import { extractOverCopy, hdOffImages, storedPathOf } from "../src/gamedata/overCopy";
+import { readMod } from "@scm-js/mod";
+import { gameFilesHash as dataSetHash } from "./support/modHash";
+import type { GameDataFiles } from "../src/gamedata/install";
+import { dataSetMod } from "../src/gamedata/modInput";
 import { Archive, Creator } from "mopaq";
 import type { ExtractRequest, ExtractResponse } from "../src/gamedata/extract.worker";
 import { growDat, MADE_UNITS, madeName, madeUnitNames, madeUnitsDat } from "./support/madeDataSet";
@@ -177,23 +180,25 @@ describe.skipIf(!haveCopy)("a data set laid over a copy instead of the game's ar
 
 describe("a data set's hash", () => {
   const bytes = (...b: number[]) => new Uint8Array(b);
+  const hashOf = async (input: GameDataFiles) => (await readMod(modTree(dataSetMod("Made", input)!))).identity;
 
-  it("is core's mod hash over every file the set has, whatever their order or slashes, never compared with a copy", async () => {
-    const own = new Map([["arr\\units.dat", bytes(1, 2)], ["arr\\weapons.dat", bytes(9, 9)], ["rez\\unitnames.tbl", bytes(3)]]);
-    const h = await dataSetHashOf(["rez/unitnames.tbl", "ARR\\Units.dat", "arr/weapons.dat", "arr/flingy.dat"], (n) => own.get(n) ?? null);
+  it("is @scm-js/mod's hash over every file the set has, whatever their slashes, never compared with a copy", async () => {
+    const h = await hashOf({ archives: [], files: [{ path: "rez/unitnames.tbl", data: bytes(3) }, { path: "ARR\\Units.dat", data: bytes(1, 2) }, { path: "arr/weapons.dat", data: bytes(9, 9) }] });
     // flingy.dat is not the set's: not in it. weapons.dat is, whatever the game's is.
-    expect(h?.hash).toBe(await dataSetHash([{ name: "arr\\units.dat", bytes: bytes(1, 2) }, { name: "arr\\weapons.dat", bytes: bytes(9, 9) }, { name: "rez\\unitnames.tbl", bytes: bytes(3) }]));
-    expect(h?.hash).toMatch(/^[0-9a-f]{16}$/);
-    expect(await dataSetHashOf(["arr\\flingy.dat"], (n) => own.get(n) ?? null)).toBeNull();
+    expect(h.hash).toBe(await dataSetHash([{ name: "arr\\units.dat", bytes: bytes(1, 2) }, { name: "arr\\weapons.dat", bytes: bytes(9, 9) }, { name: "rez\\unitnames.tbl", bytes: bytes(3) }]));
+    expect(h.hash).toMatch(/^[0-9a-f]{16}$/);
+    expect(dataSetMod("Made", { archives: [{ name: "StarDat.mpq", data: bytes(0) }] })).toBeUndefined();
   });
 
-  it("has a line for each plugin and the FireGraft project, and a hash without the plugins beside it", async () => {
-    const own = new Map([["arr\\units.dat", bytes(1)], ["firegraft\\mod.fgp", bytes(2)], ["plugins\\inside.qdp", bytes(3)]]);
-    const h = await dataSetHashOf(own.keys(), (n) => own.get(n) ?? null, [{ name: "plugins/gptp.qdp", bytes: bytes(4) }, { name: "mod.fgd", bytes: bytes(5) }]);
-    expect(h?.lines.map((l) => l.split("\t")[0])).toEqual(["arr\\units.dat", "mod.fgp"]);
-    // A plugin inside the set's archive is no line (the play page does not load it); one carried as a file is.
-    expect(h?.pluginLines.map((l) => l.split("\t")[0])).toEqual(["plugins\\gptp.qdp"]);
-    expect(h?.withoutPlugins).not.toBe(h?.hash);
+  it("has a line for each module of code and the FireGraft project, and a hash without the code beside it", async () => {
+    const inside = new Creator({ listfile: true });
+    inside.addFile("arr\\units.dat", bytes(1));
+    inside.addFile("plugins\\inside.qdp", bytes(3));
+    const h = await hashOf({ archives: [{ name: "mod.mpq", data: inside.write() }], code: [{ path: "plugins/gptp.qdp", data: bytes(4) }, { path: "mod.fgp", data: bytes(2) }, { path: "mod.fgd", data: bytes(5) }] });
+    expect(h.lines.map((l) => l.split("\t")[0])).toEqual(["arr\\units.dat", "mod.fgp"]);
+    // A plugin inside the set's archive is no line (no loader loads it from there); one carried as a file is.
+    expect(Object.keys(h.plugins)).toEqual(["gptp.qdp"]);
+    expect(h.withoutPlugins).not.toBe(h.hash);
   });
 });
 
@@ -224,9 +229,11 @@ describe.skipIf(!haveArchives)("a made data set installed through the editor's e
     const ab = (b: Uint8Array) => b.slice().buffer as ArrayBuffer;
     const req: ExtractRequest = {
       kind: "extract", from: "test", profile: { id: "made", name: "Made" },
-      archives: [{ name: "StarDat.mpq", bytes: ab(stardat) }, { name: "BrooDat.mpq", bytes: ab(broodat) }, { name: "made.mpq", bytes: ab(modMpq) }],
-      overlay: [{ path: "rez/unitnames.tbl", bytes: ab(unitNames) }, { path: "arr/weapons.dat", bytes: ab(game.readFile("arr\\weapons.dat")) }],
-      hashOnly: [{ path: "sound/made/new.wav", data: new Blob([ab(sound)]) }],
+      archives: [{ name: "StarDat.mpq", bytes: ab(stardat) }, { name: "BrooDat.mpq", bytes: ab(broodat) }],
+      mod: dataSetMod("Made", {
+        archives: [{ name: "made.mpq", data: modMpq }],
+        files: [{ path: "rez/unitnames.tbl", data: unitNames }, { path: "arr/weapons.dat", data: game.readFile("arr\\weapons.dat") }, { path: "sound/made/new.wav", data: new Blob([ab(sound)]) }],
+      }),
     };
     const replies: ExtractResponse[] = [];
     const done = new Promise<ExtractResponse>((resolve) => {

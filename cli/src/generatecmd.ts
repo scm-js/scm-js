@@ -15,7 +15,7 @@ import { writeOutput } from "./exchange";
 import { STDIO } from "./files";
 import { openGameFiles, readTileset } from "./gamefiles";
 import {
-  BALANCE_TOLERANCE, defaultSymmetry, GEN_PLAYERS, GEN_STYLES, GEN_SYMMETRIES, generateMap, LayoutError, recipeOf, resolveSymmetry, smallestSide,
+  BALANCE_TOLERANCE, defaultSymmetry, GEN_PLAYERS, GEN_STYLES, GEN_SYMMETRIES, generateMap, LayoutError, RECIPES, recipeOf, resolveSymmetry, smallestSide,
   type GenerateOptions, type Generated, type GenSymmetry, type GenStyle, type Graphics,
 } from "./generate";
 import { msg, t, translate } from "./i18n";
@@ -43,13 +43,16 @@ export function generateOptions(f: GenerateFlags, random: () => number = Math.ra
   if (Math.min(width, height) < least) {
     throw new CliError(t("{width} × {height} is too small for {players} players", { width, height, players }), t("Each side {least} or more ({list}).", { least, list: (MAP_SIZES as readonly number[]).filter((n) => n >= least).join(", ") }), 2);
   }
-  const tileset = parseTileset(f.tileset ?? "jungle");
-  try { recipeOf(tileset); } catch (e) { throw new CliError((e as Error).message, t("One of {list}.", { list: TILESETS.filter((ts) => ts.id !== "install").map((ts) => ts.id).join(", ") }), 2); }
-  const symmetry = (f.symmetry ?? defaultSymmetry(players, width, height)) as GenSymmetry;
+  // The list is the tilesets a melee map can be laid on: Installation has no ground a building stands on.
+  const list = TILESETS.filter((ts) => RECIPES[ts.id]).map((ts) => ts.id).join(", ");
+  let tileset: TilesetId;
+  try { tileset = parseTileset(f.tileset ?? "jungle"); } catch (e) { throw new CliError((e as Error).message, t("One of {list}.", { list }), 2); }
+  try { recipeOf(tileset); } catch (e) { throw new CliError((e as Error).message, t("One of {list}.", { list }), 2); }
+  const symmetry = (f.symmetry?.toLowerCase() ?? defaultSymmetry(players, width, height)) as GenSymmetry;
   if (!(GEN_SYMMETRIES as readonly string[]).includes(symmetry)) throw new CliError(t("--symmetry takes {list}, not \"{value}\"", { list: GEN_SYMMETRIES.join(", "), value: String(f.symmetry) }), null, 2);
   const resolved = resolveSymmetry(players, symmetry, width, height);
   if ("problem" in resolved) throw new CliError(t("No {symmetry} layout here: {problem}", { symmetry, problem: resolved.problem }), null, 2);
-  const style = (f.style ?? "open") as GenStyle;
+  const style = (f.style?.toLowerCase() ?? "open") as GenStyle;
   if (!(GEN_STYLES as readonly string[]).includes(style)) throw new CliError(t("--style takes {list}, not \"{value}\"", { list: GEN_STYLES.join(" or "), value: String(f.style) }), null, 2);
   let seed: number;
   if (f.seed === undefined) seed = Math.floor(random() * 1_000_000_000);
@@ -75,6 +78,9 @@ export async function readGraphics(tileset: TilesetId, f: Pick<GenerateFlags, "s
   if (!dddata) throw new CliError(t("{label} in {folder} has no {tileset}\\dddata.bin, where the ramps are described.", { label: files.label, folder: files.folder, tileset }), t("The copy may be incomplete; name another with --starcraft."));
   return { graphics: { tileset: ts, doodads: buildDoodadCatalogue(ts, dddata, null) }, from: `${files.label}` };
 }
+
+/** The style as the summary says it; the JSON keeps the option's word. */
+const STYLE_WORDS: Record<string, string> = { open: msg("an open middle"), chokes: msg("a middle narrowed by high ground") };
 
 const SYMMETRY_WORDS: Record<string, string> = { rot180: msg("turned 180°"), h: msg("mirrored left to right"), v: msg("mirrored top to bottom"), hv: msg("mirrored both ways"), diag: msg("mirrored on the diagonal") };
 
@@ -155,7 +161,7 @@ export function printGenerated(r: GenerateReport, shown: string): string[] {
   return [
     head,
     ...rows([
-      [t("Laid out"), `${r.laidOut}${dot}${r.style}${dot}${t("{n, plural, one {# ramp} other {# ramps}}", { n: r.ramps })}${free ? `${dot}${t("{n, plural, one {# free base} other {# free bases}}", { n: free })}` : ""}`],
+      [t("Laid out"), `${r.laidOut}${dot}${translate(STYLE_WORDS[r.style] ?? r.style)}${dot}${t("{n, plural, one {# ramp} other {# ramps}}", { n: r.ramps })}${free ? `${dot}${t("{n, plural, one {# free base} other {# free bases}}", { n: free })}` : ""}`],
       [t("Balance"), balanceText(r)],
       [t("Check Map"), r.check.errors ? pc.red(t("{n, plural, one {# error} other {# errors}}", { n: r.check.errors })) : r.check.warnings.length ? t("no errors, {n, plural, one {# warning} other {# warnings}}", { n: r.check.warnings.length }) : t("no errors or warnings")],
       [t("Layout"), `${r.layout.tried === 1 ? t("the first layout tried") : t("layout {attempt} of the {tried} tried", { attempt: r.layout.attempt, tried: num(r.layout.tried) })}${dot}${r.graphics}`],

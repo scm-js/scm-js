@@ -12,7 +12,7 @@
  * positions stay as they are: those name the thing the finding is about.
  */
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, relative, resolve } from "node:path";
 import type { Scenario } from "../../src/formats/chk/scenario";
 import { triggerNames } from "../../src/editor/triggers";
@@ -21,6 +21,7 @@ import type { TriggerRecord } from "../../src/formats/chk/sections/triggers";
 import type { Issue, IssueLevel } from "../../src/editor/validate";
 import { t } from "./i18n";
 import { CliError } from "./ui";
+import { writeError } from "./files";
 
 /** The file `--baseline` and `--write-baseline` use when given no path: in the working directory. */
 export const BASELINE_FILE = ".scmjs-baseline.json";
@@ -78,6 +79,8 @@ export function readBaseline(file: string): Baseline {
   if (!existsSync(file)) throw new CliError(t("No baseline {file}", { file }), t("{command} writes one from the findings the maps have now.", { command: `scmjs map check <maps…> --write-baseline${file === BASELINE_FILE ? "" : ` ${file}`}` }), 2);
   let v: unknown;
   try { v = JSON.parse(readFileSync(file, "utf8")); } catch (e) { throw new CliError(t("{file} is not JSON: {reason}", { file, reason: String(e instanceof Error ? e.message : e) }), null, 2); }
+  const version = (v as { version?: unknown })?.version;
+  if (version !== undefined && version !== 1) throw new CliError(t("{file} is a baseline of version {version}, which this scmjs does not read", { file, version: String(version) }), typeof version === "number" && version > 1 ? t("A newer scmjs wrote it: update scmjs, or write the baseline again with --write-baseline.") : null, 2);
   const maps = (v as { maps?: unknown })?.maps;
   if (typeof maps !== "object" || maps === null || Array.isArray(maps)) throw new CliError(t("{file} is not a baseline: it has no \"maps\".", { file }), t("scmjs map check --write-baseline writes one."), 2);
   const out: Baseline = { file, maps: {} };
@@ -117,6 +120,11 @@ export function baselineEntries(issues: readonly Issue[], scn: Scenario): Baseli
 export function writeBaseline(file: string, previous: Baseline | null, now: Record<string, BaselineEntry[]>): number {
   const maps: Record<string, BaselineEntry[]> = { ...previous?.maps, ...now };
   const sorted = Object.fromEntries(Object.keys(maps).sort((a, b) => a.localeCompare(b, "en")).map((k) => [k, maps[k]]));
-  writeFileSync(file, JSON.stringify({ about: ABOUT, version: 1, maps: sorted }, null, 2) + "\n");
+  try {
+    mkdirSync(dirname(file), { recursive: true });
+    writeFileSync(file, JSON.stringify({ about: ABOUT, version: 1, maps: sorted }, null, 2) + "\n");
+  } catch (e) {
+    throw writeError(file, e);
+  }
   return Object.values(sorted).reduce((n, l) => n + l.length, 0);
 }

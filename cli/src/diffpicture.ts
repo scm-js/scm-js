@@ -508,12 +508,12 @@ export function diffLegend(c: DiffCounts, depth: Depth, unicode: boolean, ascii:
       : depth === "none" ? text : `\x1b[${sgr(38, rgbOf(hex), depth)}m${unicode ? "■" : "#"}\x1b[39m ${text}`;
   const moved = c.unitsMoved + c.unitsChanged;
   const parts = [
-    swatch(ADDED_COLOR, ASCII_CHANGE.added, t("{sign}{n} units", { sign: "+", n: num(c.unitsAdded) })),
-    swatch(REMOVED_COLOR, ASCII_CHANGE.removed, t("{sign}{n} units", { sign: minus, n: num(c.unitsRemoved) })),
-    ...(moved ? [swatch(MOVED_COLOR, ASCII_CHANGE.moved, !c.unitsChanged ? t("~{n} units moved", { n: num(moved) }) : !c.unitsMoved ? t("~{n} units edited", { n: num(moved) }) : t("~{n} units moved or edited", { n: num(moved) }))] : []),
-    ...(tiles ? [swatch(TILE_COLOR, ASCII_CHANGE.tile, t("~{n} tiles", { n: num(c.tiles) }))] : []),
-    ...(tiles && c.resized ? [swatch(RESIZED_COLOR, ASCII_CHANGE.resized, t("{n} tiles in one map only", { n: num(c.resized) }))] : []),
-    swatch(MOVED_COLOR, ASCII_CHANGE.location, t("~{n} locations", { n: num(c.locations) })),
+    swatch(ADDED_COLOR, ASCII_CHANGE.added, t("{sign}{n, plural, one {# unit} other {# units}}", { sign: "+", n: c.unitsAdded })),
+    swatch(REMOVED_COLOR, ASCII_CHANGE.removed, t("{sign}{n, plural, one {# unit} other {# units}}", { sign: minus, n: c.unitsRemoved })),
+    ...(moved ? [swatch(MOVED_COLOR, ASCII_CHANGE.moved, !c.unitsChanged ? t("~{n, plural, one {# unit} other {# units}} moved", { n: moved }) : !c.unitsMoved ? t("~{n, plural, one {# unit} other {# units}} edited", { n: moved }) : t("~{n, plural, one {# unit} other {# units}} moved or edited", { n: moved }))] : []),
+    ...(tiles ? [swatch(TILE_COLOR, ASCII_CHANGE.tile, t("~{n, plural, one {# tile} other {# tiles}}", { n: c.tiles }))] : []),
+    ...(tiles && c.resized ? [swatch(RESIZED_COLOR, ASCII_CHANGE.resized, t("{n, plural, one {# tile} other {# tiles}} in one map only", { n: c.resized }))] : []),
+    swatch(MOVED_COLOR, ASCII_CHANGE.location, t("~{n, plural, one {# location} other {# locations}}", { n: c.locations })),
   ];
   return parts.join("  ");
 }

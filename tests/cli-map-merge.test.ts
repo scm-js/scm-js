@@ -125,6 +125,8 @@ describe("diff3 over lists", () => {
     expect(around(line, 150, 40)).toBe(`…${"a".repeat(13)}XYZ${"b".repeat(22)}…`);
     expect(around("short", 3, 40)).toBe("short");
     expect(around("x".repeat(50), 0, 40)).toBe(`${"x".repeat(39)}…`);
+    // A trigger's owners stay at the start, whatever is cut after them.
+    expect(around(`Player 1: ${"a".repeat(150)}XYZ${"b".repeat(100)}`, 160, 40, 10)).toBe(`Player 1: …${"a".repeat(10)}XYZ${"b".repeat(15)}…`);
   });
 
   it("groups tiles into rectangles by 8-connected regions", () => {
@@ -272,6 +274,8 @@ describe("scmjs map merge", () => {
     const read = async () => ({ base: asMap(await readInput(base)), ours: asMap(await readInput(ours)), theirs: asMap(await readInput(theirs)) });
     const r = await runMerge(await read());
     expect(r.written).toBeNull();
+    // Not "merged": nothing was, and --json says so.
+    expect(r.kind).toBe("conflicts");
     expect(readFileSync(ours)).toEqual(before);
     const text = printMerge(r).map(visible);
     expect(text[0]).toBe("✖ ours.scx: 1 conflict; nothing written");
@@ -290,7 +294,7 @@ describe("scmjs map merge", () => {
   it("is a verb under map, with no row of its own in the overview", () => {
     const map = program.commands.find((c) => c.name() === "map")!;
     const cmd = map.commands.find((c) => c.name() === "merge")!;
-    expect(cmd.options.map((o) => o.long)).toEqual(["--json", "--out", "--ours", "--theirs", "--name", "--dry-run"]);
+    expect(cmd.options.filter((o) => !o.hidden).map((o) => o.long)).toEqual(["--json", "--out", "--ours", "--theirs", "--name", "--dry-run"]);
     expect(program.helpInformation().split("\n").some((l) => l.includes("merge"))).toBe(false);
   });
 });

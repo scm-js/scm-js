@@ -46,6 +46,24 @@ describe("scmjs map play", () => {
     expect(lines[at + 1]).toMatch(/[█▀▄]/u);
   });
 
+  it("says its own lines where it is told (standard error under --json), and with BROWSER=none gives the address to open", async () => {
+    process.env.BROWSER = "none";
+    const said: string[] = [];
+    let page = "";
+    const writes: string[] = [];
+    const o = process.stdout.write;
+    process.stdout.write = ((s: string) => { writes.push(String(s)); return true; }) as typeof process.stdout.write;
+    try {
+      const done = playInLobby(input(), { play: "http://play.test/", onAddress: (a) => { page = a; }, say: (...l) => said.push(...l.map(visible)), timeout: 10_000 });
+      while (!page) await new Promise((r) => setTimeout(r, 10));
+      await pageSays(page, [{ type: "scmjs.invite", link: "https://scmjs.dev/play/?game=invite1x", invite: "invite1x", name: "melee.scx" }]);
+      await done;
+    } finally { process.stdout.write = o; }
+    expect(writes).toEqual([]);
+    expect(said[0]).toBe(`ℹ Open ${page} in your browser to hand melee.scx to the play page`);
+    expect(said.at(-1)).toBe("✔ Handed to the play page");
+  });
+
   it("keeps the page's error when no lobby came, and the link when a retry on the page worked", async () => {
     process.env.BROWSER = "none";
     let page = "";

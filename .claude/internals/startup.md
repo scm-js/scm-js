@@ -103,3 +103,8 @@ needs a user gesture, so a toast with a **Reopen** action does it on the click. 
 happens when the recents are empty or the entry has no handle (Firefox, Safari).
 `Preferences.newMap.version` is applied by `newMapInto` after `createScenario` (`setMapVersion`,
 Remastered = VER 206 + STRx); every new map used to be Brood War 205.
+
+**Workers on the startup path (2026-11-14).** `main.tsx` imports `services/borrowTableClient.ts` (a few kB, with
+`editor/borrowWorker.ts#tilesetParts`) to hand the borrowed-terrain scan its worker pool; `borrow.ts` was in the main
+chunk already (the Isometric tab). The worker itself is its own chunk (`borrowTable.worker-*.js`, 5.3 kB) and is started
+only when a scan runs.

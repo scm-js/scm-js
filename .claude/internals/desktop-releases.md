@@ -71,6 +71,7 @@ installers on ONE rolling prerelease whose `nightly` tag is force-moved and whos
 replaced with `gh release upload --clobber`, never deleted and recreated) and `v*` tags (permanent
 numbered releases, the only ones that accumulate).
 The `cli` job publishes `@scm-js/cli` to npm on `v*` tags only (its version is the editor's; see `cli.md`).
+The `bot` job publishes `@scm-js/bot` (the bot types) on the same tags when npm lacks `bot/package.json`'s version, which is its own (the major is `BOT_API`) and which the release script does not set (`cli.md`, "`@scm-js/bot`").
 **The command as single executables** (2026-11-07, branch `cli-binary`; `cli.md` "Installing" + "Downloading the program"): the
 `cli-binary` matrix (ubuntu-latest → linux-x64, windows-latest → win-x64, macos-latest → darwin-arm64
 *and* darwin-x64, the Intel one's Node run under Rosetta) runs `scripts/build-cli-binary.mjs --archive
@@ -81,7 +82,8 @@ comment now says; pushes to main skip it). `release` needs it beside `desktop`, 
 before `gh release create`/`upload --clobber`; Scoop's autoupdate reads the zip's line from it. So a
 failed executable blocks the release as a failed installer does. The recipes the user publishes are
 `packaging/` (Scoop bucket, winget-pkgs, Homebrew tap; `packaging/README.md`), filled per release by
-`scripts/release-recipes.mjs <version>` from that SHA256SUMS. No macOS capacity trap is recorded
+`scripts/release-recipes.mjs <version>` from that SHA256SUMS. The `packages` job (stable, after `release`) has the tap and
+the bucket take the version at once (`cli.md`, "The release tells the tap and the bucket"); winget is by hand. No macOS capacity trap is recorded
 here: the matrix uses the same `macos-latest` label as `desktop`, one Mac job per run, not a second
 (Intel) Mac runner.
 **Both hosted builds are releases**: the `pages` job serves the *tag* at `editor.scmjs.dev` (it was
@@ -199,7 +201,7 @@ props)` gathers lines for 2 min (same name+props → one line with `n`) and hand
 `scmjs.dev` (not `HOSTED_SITE`: the stable build is also the zip, container and desktop bundle). Props are words from fixed lists only — never a file/map name,
 typed text, or a non-scm-js plugin's id (`pluginCountName` → `other` unless `github:scm-js/…`,
 `builtin:`, or listed in the *default* registry). Hook sites: `openDialogAtom` (`dialog`),
-`commitEditAtom`/`commitTriggersAtom`/`commitSettingsAtom` (`edit`), `countPlacedUnits` from `commitEditAtom`'s `countEdit` (`unit.place` `{ unit }` = the units.dat id, never `unitName`, which a mod's data can set to anything; ids ≥ 228 → `other`; pure adds only, and `count`'s third argument `times` puts a stroke's 40 Zerglings on one line as `n: 40` — added 2026-11-03 for the planned public `/stats` page, whose served-side shape is ai-server's and not this repo's), undo/redo, resize, tileset,
+`commitEditAtom`/`commitTriggersAtom`/`commitSettingsAtom` (`edit`: `layer`, `part` — `entryParts` joined, plus `pins`, so a Pin stroke is `pins` and not `other` — `mode` on the terrain layer, `symmetry`, and since 2026-11-14 `tool` = the entry's `HistoryEntry.tool`, an `EditTool` word set at the commit site wherever the layer and the terrain tab do not already say what made the edit: `block`/`copied`/`borrowed`/`fill`/`fillMap`/`replace`/`healArea`/`pin`/`unpin`/`pinArea`/`unpinArea`/`pinHandLaid` in `useTerrainTools`, `stretch`/`asTerrain`/`twin` in `useDoodadTools`, `cut`/`delete`/`paste`/`pasteStretch` in `useClipboardTools`, `plugin` in the host's `finishEntry`; a plain brush stroke has none. Before it, stretch, twins, paste stretch, copied and borrowed terrain and blocks were indistinguishable from a plain edit on their layer. **A new tool that commits through an existing mode needs a word added to `EditTool`** — never the label, which carries a doodad's or a clip's name. Nothing reads `tool` to apply, undo or send an edit), `countView` (`view` `{ flag, on, via }`, 2026-11-14: a View tick the person switched — `toggleFlagAtom` for the menu, toolbar and key (`via: view`), the Heal/Pin/Fog palettes' own checkboxes (`palette`), the Layers panel's eyes (`layers`), the Symmetry dialog (`dialog`). Called at the sites, not from a subscription on `viewFlagsAtom`: `useAutoShow`, `useApplyPreferences`, the scrambled-locations auto-hide, `gameData.ts` and a plugin's `setFlags` write the flags too and are not the person's), `countPlacedUnits` from `commitEditAtom`'s `countEdit` (`unit.place` `{ unit }` = the units.dat id, never `unitName`, which a mod's data can set to anything; ids ≥ 228 → `other`; pure adds only, and `count`'s third argument `times` puts a stroke's 40 Zerglings on one line as `n: 40` — added 2026-11-03 for the planned public `/stats` page, whose served-side shape is ai-server's and not this repo's), undo/redo, resize, tileset,
 `openFileInto`/`newMapInto`/`saveDocument` (`map.open/new/save/build`), `services/mapBuild.ts`
 (`map.build.refused` `{ step, plugin }`: a plain `Error` from a plugin's step, its message to the
 user, which is not an `error`), Test Map, `api.sync.start`

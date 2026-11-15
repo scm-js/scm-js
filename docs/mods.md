@@ -37,10 +37,18 @@ paths; a mod that ships as a `.zip` is unzipped first. A replay of a mod opens i
 editor too, and plays with the mod your browser keeps from the play page ([Replays of a
 mod](guide.md#replays-of-a-mod)).
 
-With the mod's data set in use, the flat ground its tilesets add can be painted: the Rect
+With the mod's data set in use, the ground and pictures its tilesets add can be laid. The
+Tile tab's filter lists the groups the mod adds, and its sheet shows them as the mod's
+artist drew them, a group a row: drag over a building, a ruin or a run of wall to pick it
+as a block, and the Tile brush lays it whole, or repeats it along a drag. Its pieces view
+learns from a folder of the mod's maps which parts of the sheet they lay whole, and lists
+them as pieces to pick, each picture once however often the tileset repeats it. The Rect
 brush lists the game's terrains the mod repeats at another height, and the pairs the open
-map lays as ground ([Ground a mod adds](guide.md#ground-a-mod-adds)). The isometric brush
-stays with the game's terrain types.
+map lays as ground ([Ground a mod adds](guide.md#ground-a-mod-adds)). Where a mod's
+tileset holds another tileset's ground copied in, the Isometric tab can lay that ground
+with the other tileset's own brush, cliffs and edges included ([Terrain from other
+tilesets](guide.md#terrain-from-other-tilesets)); a plugin can hand the editor the exact
+pairs of tiles the mod meant ([`provideBorrowTable`](plugins.md#api-terrain)).
 
 To only look at a map made for a mod, nothing needs installing. Opened without the mod,
 the map has the terrain the data set in use lacks drawn hatched, and a notice that offers
@@ -81,7 +89,7 @@ mymod/
   sounds/sound/…        the WAV files, as they are
   grafts/Units.txt …    GPTP's .graft files (requirements, buttons), as graftc's text
   maps/…                the mod's maps
-  plugins/, Firegraft/  plugins and FireGraft files, as they are
+  plugins/, Firegraft/  the mod's code and FireGraft files, as they are
   files/…               every other file of the game the mod changes, as it is
 ```
 
@@ -107,7 +115,10 @@ text or picture packs back into exactly the same bytes; that check is the packer
 file that would not — a GRP another tool encoded, which reads as the same pictures but in
 other bytes, or a file that is not what its name says — is kept as it is under `files/`,
 and `mod.json` lists it under `kept` with why. So an unpacked folder packs back into the
-mod it came from, file for file, and an edit to one text changes that one file.
+mod it came from, file for file, and an edit to one text changes that one file. The mod's
+code goes under `plugins/` as it is: its plugin files, the plugins a patcher `.exe`
+carries in itself and the libraries its plugins load, so the folder has [the mod's
+hash](#the-mods-hash) too.
 
 **mod.json** holds what a person fills in (`name`, `version`, `authors`, `licence`,
 `base`, the game the mod is for) and what packing needs: each table's file and layout,
@@ -146,9 +157,12 @@ number: `Race 69` in `replay info`'s player list, in Player Settings and in Stat
 
 A row with one of the game's numbers, a number an earlier row has, or no name is left out.
 `mod.json` is not one of the mod's files, so naming races leaves [the mod's
-hash](#the-mods-hash) as it was. It is read at the top of a folder of the game's files as
+hash](#the-mods-hash) as it was. It is read in the folder you name or one folder down (a
+release that keeps the mod in a folder of its own), never in one of the game's folders, as
 well as in a folder `mod unpack` wrote, and `mod unpack` keeps the races when it unpacks a
-new release over a folder that has them.
+new release over a folder that has them. Beside `races`, the same file can give the mod's
+`name` (up to 80 characters) and its makers' address (`link`, `url` or `homepage`, an
+`http` or `https` address).
 
 `mod info` lists them, `replay info --mod` names a player's race by them when the replay
 does not name it itself, and `mod play --race` takes one by its name or its number.
@@ -158,9 +172,86 @@ none: strings past the game's own in `rez\network.tbl`, or a console picture
 and n. That is a hint, not a finding: the check fills in no name and fails nothing for it.
 
 In the editor, a data set added from a folder (Help ▸ Game Data… ▸ Add a data set…) takes
-the races of the `mod.json` directly in that folder; a plugin can name them too, and a map
-made with the data set carries them ([A map remembers its data
+the races of the `mod.json` in that folder or one folder down; a plugin can name them too,
+and a map made with the data set carries them ([A map remembers its data
 set](game-data.md#a-map-remembers-its-data-set)).
+
+### Terrain a mod declares
+
+A mod's tilesets often hold ground the game's tables do not describe: flat ground with no
+terrain type, buildings and walls drawn across many tiles, another tileset's ground copied
+in. The editor can find some of it by itself (the Tile palette learns pieces from a folder
+of maps, the Isometric tab looks for another tileset's terrain), but every mapper has to
+do that again, and it takes a while. A `terrain.json` beside `mod.json` says it once, for
+everyone who adds the mod:
+
+```json
+{
+  "format": 1,
+  "tilesets": {
+    "badlands": {
+      "table": "1q2w3e4r5t6y",
+      "terrains": [{ "name": "Plating", "group": 2466 }],
+      "pieces": [{ "name": "Long ramp", "category": "Ramps", "cols": 2, "rows": 2, "tiles": [35010, 35011, -1, 35027] }],
+      "borrow": [{ "source": "install", "pairs": [[1234, 35010], [1235, 35011]] }],
+      "borders": [{ "source": "install", "terrain": 2, "ground": 2, "shapes": { "A,A,B,h53|L": [36130, 36131] } }],
+      "copies": [{ "terrain": 4, "height": 1, "ground": { "terrain": 3 }, "pieces": [[9216, 39248], [9217, 39249]] }]
+    }
+  }
+}
+```
+
+- `table` says which version of the tileset's tile table the numbers are for. A tileset
+  whose table is another (a new release of the mod renumbered it) does not use its
+  section, and the editor says so once.
+- `terrains` names flat ground for the Rect brush and the fills: each `group` is the even
+  group of a left and right pair.
+- `pieces` lists blocks of tiles under a name and a category, for the Tile palette's
+  pieces: `cols` × `rows` tile numbers, row by row, -1 for a gap.
+- `borrow` gives, for another of the game's tilesets, which tile of this one to lay for
+  each of its tiles, so the Isometric tab can lay that tileset's terrain here with no
+  search. A row may also carry `standIns`, the other tileset's tiles whose pair is only
+  the nearest picture and not a copy; a terrain is offered only where few of its tiles are
+  stand-ins, as when the editor searches by itself.
+- `borders` gives the drawn border between a borrowed terrain and this tileset's own
+  ground: `terrain` is the other tileset's terrain, `ground` this tileset's, and `shapes`
+  the tiles to lay for each shape of the border, the likeliest first. The shapes are named
+  as the editor reads a border: its four sides and which half of a two-tile rect the tile
+  is. You do not write these by hand; the editor learns them from the mod's maps and
+  writes them (see below).
+- `copies` gives the pieces of [copied terrain](guide.md#copied-terrain): for one of this
+  tileset's terrains (`terrain`) held again at a height (`height`: 0 low, 1 mid, 2 high),
+  the ground its pieces are drawn to meet (`ground`: a terrain of the tileset, or
+  `{ "pair": group }` for an untyped pair of flat ground), and which tile stands for each
+  piece of the terrain's edge (`pieces`, pairs of tile numbers). A tileset with such a row
+  uses it in place of what the editor would find by itself for that terrain and height.
+
+It is found by `mod.json`'s rule: in the folder you name or one folder down, never in one
+of the game's folders, and it does not need a `mod.json` beside it. It is not one of the
+mod's files, so it leaves [the mod's hash](#the-mods-hash) as it was. A row the editor
+cannot use (a name too long, a tile number past the table, a gap where a block's size says
+a tile) is left out; keys the editor does not know are kept, so a later version of the
+file can add to it.
+
+The easiest way to make one is the editor's: open a map of the mod with the mod's data in
+use, learn its pieces and look for its borrowed terrain, then **Save as a terrain file…**
+in the Tile palette's pieces view. It writes the tileset in front's section from what the
+editor lists: the pieces (with the names a plugin or an earlier file gave), the terrains
+named for the Rect brush, the borrowed-terrain tables and the drawn borders learned from
+the mod's maps (look for the borrowed terrain before learning: the borders are read only
+for tilesets whose copies are known), and the copied terrain the Isometric tab lists.
+Choose an existing `terrain.json` and its other tilesets' sections are kept. In the
+editor, the file comes with the mod: a data set added from a folder (Help ▸ Game Data… ▸
+Add a data set…) or a mod's folder chosen for a map reads it, and while that data set is
+in use its pieces are listed under the data set's name, its terrains are in the Rect tab,
+its borrowed terrain is offered with no search, and its borders are drawn with nothing
+learned. A plugin that declares the same thing is listed first, and a border the file
+gives stands ahead of one learned from maps.
+
+`mod info` says whether a mod has one and what it holds per tileset (the drawn borders and
+their shapes, and the blocks of copied terrain, counted), `mod check` lists the rows that
+would be left out and a section made for another version of the tileset's table, and
+`mod unpack` keeps a folder's `terrain.json` when it unpacks a new release over it.
 
 ## The commands
 
@@ -174,41 +265,75 @@ scmjs mod info "Cosmonarchy BW"
 Cosmonarchy BW
 A mod for StarCraft 1.16.1, from a folder of the game's files
 
-  Files            7,769 · 931.1 MB
-  Kinds            11 tables (748 KB), 13 scripts (2.0 MB), 3,894 pictures (254.1 MB), 3,527 sounds (553.1 MB), …
+  Files            7,767 · 931.2 MB
+  Kinds            11 tables (748 KB), 13 scripts (2.0 MB), 3,895 pictures (254.1 MB), 3,525 sounds (553.1 MB), …
   Tables           flingy.datex, images.datex, mapdata.datex, orders.datex, portdata.datex, sfxdata.dat, …
   Extended         flingy.datex: 1,000 entries (the game's 209), GPTP's .datex layout
                    …
                    units.datex: 3,000 entries (the game's 228), GPTP's .datex layout
-  Plugins          _qdp-hotloader.qdp (358 KB), aise.qdp (1.0 MB), gptp.qdp (5.9 MB), … — kept, not run
+  Plugins          aise.qdp (1.0 MB), aize_debug.qdp (1.1 MB), gptp.qdp (5.9 MB), …, _qdp-hotloader.qdp (358 KB) — kept, not run
   FireGraft        1161.fgd (555 KB), Cosmonarchy BW.fgp (98 KB) — kept, not applied
-  Exe              Cosmonarchy BW.exe: FireGraft's patcher with 1 plugin (id fc724f8c, 358 KB), its archive at byte 804,352
-  Layers           Cosmonarchy BW.exe then mpq
-  Hash             ac3f86533e4b5a31
-  Without plugins  b13e467fb5abb298 (a page that runs none of the plugins)
+  Exe              Cosmonarchy BW.exe: FireGraft's patcher with 1 plugin (qdp-hotloader.qdp, id fc724f8c, 358 KB), its archive at byte 804,352
+  Layers           mpq then Cosmonarchy BW.exe
+  Hash             c94acdf31982fa4b
+  Without plugins  db23a1f9dd8cef66 (a page that runs none of the plugins)
+  Earlier hash     20e1c6d89ae2af75 (by the rule before 2026-11-11, when only plugin files had lines)
+  Older hash       1c41a2d7701fe842 (with sound\cm\desktop.ini, sound\desktop.ini, which the hash leaves out)
+
+▲ A library of the mod's code: discord_game_sdk.dll. A plugin of the mod may need it; it is in the mod's hash, and nothing here loads it.
+
+▲ temp.mpq is _qdp-hotloader.qdp's own packing of its folder of files (it names it): the folder is laid in its place, at 500000.
 ```
 
 It takes a folder (the game's paths at its root or in a folder under it, as a release
-keeps them under `mpq/`), an `.mpq`, a mod's `.exe` or a `.zip`. A folder's own archives
-and exes are read too, archives first and loose files over them, the later winning, as the
-game lays its own archives. A self-executing exe is read for the archive appended to it,
-never run: MPQDraft's self-executing MPQ, or FireGraft's patcher with its plugins listed.
+keeps them under `mpq/`), an `.mpq`, a mod's `.exe` or a `.zip`. A folder's own archives,
+exes and zips are read too, and every source is laid where the mod's loader would lay it,
+the later winning: archives as MPQDraft's patcher takes them first, then the archive of a
+FireGraft patcher, and loose files over all of them. A plugin that loads a folder of
+plugins (Cosmonarchy's hot loader) lays its folder of files below FireGraft's archive, and
+an archive it packs that folder into is read as that folder. `Layers` lists them in that
+order. A self-executing exe is read for the archive appended to it, never run: MPQDraft's
+self-executing MPQ, FireGraft's patcher, or a program with an archive after it in neither
+form. FireGraft's patcher can carry plugins of its own after the program, and `mod info`
+lists them in the order the patcher loads them, each by the name it gives itself and its
+id (`GPTP.qdp, id 1b4d69b6`; some ids are four letters, `EUDE`). Some patchers keep the
+archive's tables in front of its header and write nonsense in its size fields; the archive
+is read the way the game reads it all the same. An exe that holds no archive, or a patcher
+laid out in a way not known here, is refused with the reason rather than shown as a mod of
+no files.
+
+A library (`.dll`) in the mod's `plugins` folder, or beside the exe that holds the mod, is
+named in a ▲ line: a plugin of the mod may load it, or need it to load at all (Burning
+Ground's GPTP takes its sound functions from the `fmod.dll` that ships beside it). It is
+part of the mod's code and has a line in its hash. A `.dll` anywhere else is left out.
+
+A mod is named by the `name` in its `mod.json`, else after the one program at the top of
+the folder you name that holds the mod (a release's launcher), else after the folder or
+file itself. Two plugins with the same file name are one too many: the first in the
+folder's order is the mod's, and the other is left out. A folder whose name starts with a
+dot (`.git`) is a tool's and is never read.
+
 A zip's stored and deflated members are read; a zip64 or encrypted zip is not. An
 archive's list of its files is taken as its files; an archive with no list is searched for
-the names the game reads. A name the list holds and the archive does not (Cosmonarchy's
-loader lists six tileset files it never packed) is left out and said.
+the names the game reads, the names its own image, sound and portrait tables give, and the
+names the game's own three tables give. A name the list holds and the archive does not
+(Cosmonarchy's loader lists six tileset files it never packed) is left out and said.
 
 A copy of the game in the folder is not the mod. Some downloads carry the whole game the
 mod runs on beside the mod itself; a folder that holds a `StarDat.mpq` is taken for such a
 copy, and its own archives (`StarDat.mpq`, `BrooDat.mpq`, `patch_rt.mpq`, `StarCraft.mpq`,
 `BroodWar.mpq`) and everything under its `Maps` folder are left out; a ▲ line names the
 archives among them. Anything else in it, a mod's own archive or exe put there for one, is
-read as before. A folder that holds only a copy of the game is refused. A single
-`patch_rt.mpq` named by itself, the form some older mods ship in, opens as a mod.
+read as before. A folder that holds only a copy of the game is refused. An archive named
+as one of the game's own outside such a copy, such as a `patch_rt.mpq`, the form some
+older mods ship in, is the mod's, and stands in for the game's archive of that name.
 
-The last two lines are [the mod's hash](#the-mods-hash). An `Older hash` line follows them
-when the mod holds files an operating system left in its folders (`desktop.ini`,
-`Thumbs.db`, `.DS_Store`): the hash it had while those counted.
+`Hash` and `Without plugins` are [the mod's hash](#the-mods-hash). An `Earlier hash` line
+follows them when the mod's hash by the rule before 11 November 2026 was another (a mod
+with a patcher's own plugins, a library, or a FireGraft project found only through
+FireGraft's own list), and an `Older hash` line when the mod holds files an operating
+system left in its folders (`desktop.ini`, `Thumbs.db`, `.DS_Store`): the hash it had
+while those counted. A replay or a kept mod from before those dates names the mod by them.
 
 ### A folder to edit
 
@@ -224,8 +349,12 @@ scmjs mod unpack MyMod.mpq mymod
   Names          from the mod's string tables
 ```
 
-`--palette badlands` draws the sheets in another tileset's palette. Unpacking over an
-earlier unpack replaces its folders and leaves anything you added beside them.
+`--palette badlands` draws the sheets in another tileset's palette. The folder is the
+mod's source from then on, so unpacking into a folder an earlier unpack wrote stops rather
+than write over your edits. `--force` replaces that folder whole: nothing of it is kept
+but its dot files and folders, such as `.git`, so no file of the old release lingers in
+the new. The races the old folder's `mod.json` named are kept. A folder that holds
+something other than a mod folder is refused either way; an empty one is fine.
 
 ### Back into an MPQ
 
@@ -300,14 +429,23 @@ writes `mod.json` and a README of one paragraph. Put the game's files you change
 `files/` at their paths (`files/arr/units.dat`), or the texts in their folders, and pack.
 Starting from an existing mod is `mod unpack`.
 
+```sh
+scmjs mod new mymod --tables units,weapons
+```
+
+starts it with the game's own tables, read from your copy of StarCraft and written as text
+as `mod unpack` writes a mod's (`tables/units.txt`, with the game's names beside each
+entry); `--tables all` writes all eleven. As they are they pack back into the game's own
+bytes, so the mod changes nothing until you edit them.
+
 ### Check, then pack
 
 ```sh
 scmjs mod build mymod -o MyMod.mpq
 ```
 
-runs `mod check` and, when it finds no error, `mod pack` with the same options. `--force`
-packs anyway.
+runs `mod check` and, when it finds no error, `mod pack` with the same options.
+`--ignore-errors` packs anyway (`--force`, its old name, still works).
 
 ### Playing it
 
@@ -317,8 +455,9 @@ scmjs mod play mymod --map "(2)Ridge.scx"
 
 opens the play page in your browser and hands it every file of the mod, its plugins and
 FireGraft files with them, and [the mod's hash](#the-mods-hash); the page keeps the files
-that differ from your copy of the game. With `--map` the map starts with the mod. The
-hand-over is described in the [command line's guide](cli.md#mods).
+that differ from your copy of the game. With `--map` the map starts with the mod. [The
+hand-over from the command line](#the-hand-over-from-the-command-line) has the message the
+page is sent.
 
 ```sh
 scmjs mod play "Cosmonarchy BW" --map "(4)Exodus 1.0.scx" --bot cosmonarchy-example
@@ -332,22 +471,51 @@ protoss or random, or a race the mod's `mod.json` [names](#races-a-mod-adds), by
 or its number. The page's own bots need a scmjs.dev account, and the page asks you to sign
 in; a file of your own does not.
 
+With `BROWSER=none` no browser is opened: the command prints the address to open, and
+waits for it.
+
 ### The mod's hash
 
 A mod goes by a hash of sixteen hex digits, worked out the same way by the play page,
 `scmjs mod info`, the editor's data sets and the tools that read a replay of the mod, so
-one mod has one hash everywhere. It covers every file the mod provides: each file it lays
-over the game, loose under its game folders or inside its archives (an `.mpq`, or the
-archive inside a FireGraft or MPQDraft loader `.exe`), each plugin it carries as a file,
-and its FireGraft project (`.fgp`). It is never compared with anyone's copy of the game,
-so two people with different copies give the same mod the same hash, and a release
-unpacked into a folder and packed again keeps it. Left out are what is not the mod's
-files: a file an archive lists and does not hold, a folder's read-mes, programs and
-libraries, and FireGraft's database (`.fgd`). A page that does not run the plugins plays
-something else, so beside the hash there is one without the plugins; `mod info` prints
-both, and a page that runs none of them presents that one. Each file is a line, its name
-and the SHA-256 of its bytes, and the hash is over the sorted lines ([the exact
-form](cli.md#playing-a-mod-on-the-play-page)).
+one mod has one hash everywhere: all of them read mods with the same library,
+[`@scm-js/mod`](https://github.com/scm-js/mod). It covers every file the mod provides:
+each file it lays over the game, loose under its game folders or inside its archives (an
+`.mpq`, or the archive inside a FireGraft or MPQDraft loader `.exe`), and the file that
+wins where two layers give one; its FireGraft project (`.fgp`), whether a folder holds it,
+an archive lists it, or only FireGraft's own list in an archive with no list of its files
+names it; and every module of its code: each plugin it carries as a file, each plugin a
+patcher `.exe` carries in itself, and each library its plugins load (a `.dll` in its
+`plugins` folder, or beside the program that holds the mod). Two people whose code differs
+never hold the "same" mod. It is never compared with anyone's copy of the game, so two
+people with different copies give the same mod the same hash, and a release unpacked into
+a folder and packed again keeps it. A release folder and its `.exe` named alone have the
+same hash: what sits beside the exe is a read-me or a library, never a file of the game.
+Left out are what is not the mod's files: a file an archive lists and does not hold, a
+folder's read-mes and programs with no archive, a plugin inside an archive (no loader
+loads one from there), and FireGraft's database (`.fgd`). A page that does not run the
+code plays something else, so beside the hash there is one without the lines of the code;
+`mod info` prints both, and a page that runs none of it presents that one.
+
+**How it is worked out.** Each file is one line, `name<TAB>sha256 of the file's bytes`.
+The lines are sorted by name and joined with newlines, and the hash is the first sixteen
+hex digits of the SHA-256 of that text. A game file's name is the game's, in lower case
+with backslashes (`arr\weapons.dat`). A module of the mod's code is `plugins\` and its
+file name, in lower case (`plugins\gptp.qdp`, `plugins\fmod.dll`). The FireGraft project's
+is its file name, in lower case (`cosmonarchy bw.fgp`).
+
+**The hash before 11 November 2026** had a line only for the plugins a mod carries as
+files: not for a patcher's own plugins, not for a library, and not for a FireGraft project
+found only through FireGraft's own list. A mod with such code had another hash then.
+Burning Ground's `BG_v2.00.exe` (two plugins in the patcher, `fmod.dll` beside it) was
+`0ed055cf80a95bd0`, which is now its hash without plugins, and is `c76bfa18e9fc4fb5`; SC
+Revolution 2.2 was `90b8c22d9cb4ba31` and is `d9e4e6ff76c7e71d`; Cosmonarchy's release was
+`20e1c6d89ae2af75` and is `c94acdf31982fa4b`. A mod with no such code, such as TriFresh
+(`ea488d3ac3575bda`), keeps its hash. `mod info` prints the earlier one as `Earlier hash`,
+and the replay commands accept it. Between 11 and 12 November 2026 the play page gave a
+line to every module of a mod's code but still none to a FireGraft project found only
+through FireGraft's own list, so SC Revolution 2.2 was `693bf4a83f3a69a1` there; the
+replay commands accept that hash too.
 
 **Files an operating system leaves in folders are not the mod's.** Windows Explorer writes
 `desktop.ini` and `Thumbs.db` into folders it has shown, the macOS Finder `.DS_Store`, and
@@ -418,9 +586,13 @@ What reads it:
 - `scmjs replay info` shows it on the `Mod` line. With `--builds` it lists what each
   player ordered, by id until `--mod` names the mod's folder, and then with the mod's
   names and costs. A mod whose data set is not the one the replay names is refused. A
-  player of a race the mod adds is named by the section's `races` when it has them, else
-  by the [`races` of the mod's `mod.json`](#races-a-mod-adds) with `--mod`, else `Race`
-  and the number.
+  replay saved under an earlier rule for the hash is matched by [the hash the mod had
+  then](#the-mods-hash): `Earlier hash` and `Older hash` in `mod info`. The oldest
+  replays, saved before the hash had lines for the plugins and the FireGraft project, are
+  matched by the hash of the game files alone, or of those that differ from your copy of
+  the game. A player of a race the mod adds is named by the section's `races` when it has
+  them, else by the [`races` of the mod's `mod.json`](#races-a-mod-adds) with `--mod`,
+  else `Race` and the number.
 - `scmjs map trace --replay` and `map cost --replay` need the mod named with `--mod` and
   check it the same way. A game the mod's plugins ran in is refused, as the engine's
   runners do not run plugins.
@@ -461,6 +633,12 @@ for the names' rules. To try a bot on the mod without a page,
 `scmjs bot run mybot/out/mybot.scmbot "(4)Exodus 1.0.scx" --mod "Cosmonarchy BW"` plays it
 with the mod's plugins, and `scmjs bot ladder … --mod` plays a ladder on the mod ([a bot
 on a mod](cli.md#a-bot-on-a-mod)).
+
+A bot written in JavaScript needs no header: in the mod's game it is told the mod's name
+and hash, and every unit is called by the mod's name, the same ones the header uses
+(`Terran_Mason`). `scmjs mod header … --js` writes them as a JavaScript module all the
+same, for an editor's completion ([the command](cli.md#a-bot-made-for-a-mod)). [Bots for
+mods](bots.md#bots-for-mods) in the bot guide has an example made for Cosmonarchy.
 
 ### For AI tools
 
@@ -536,6 +714,48 @@ A replay of a mod whose plugins run plays at about the game's own pace. Going ah
 part it has not played yet plays forward to the moment, and the page says how far it has
 run. Going back is quick: the page keeps a moment about every ten seconds of the game as
 it plays, returns to the one before the moment asked for, and plays on from there.
+
+### The hand-over from the command line
+
+This is for a tool or a page of your own. `scmjs mod play` and `scmjs map play` hand their
+files to the play page the same way. The command serves a page on 127.0.0.1, and that page
+opens the play page with `?handoff=1`. Each time the play page says `scmjs.ready` or
+`scmjs.play.ready`, the command's page posts it this message:
+
+```js
+{
+  type: "scmjs.play",
+  dataSet: {
+    name: "My Mod",
+    hash: "3f9a0c2e5b7d1146",          // 16 hex digits
+    files: [{ path: "arr/weapons.dat", file: File }, …, { path: "plugins/gptp.qdp", file: File }],
+  },
+  map: Uint8Array,                      // with --map: the map's bytes
+  name: "(2)Ridge.scx",                 // and its file name
+  bot: { key: "cosmonarchy-example", race: 1 },   // with --bot: a key, or { file: File, name, race }
+  setup: true,                          // with --bot and without --start: show the setup screen
+}
+```
+
+| Field | Holds |
+| --- | --- |
+| `dataSet.files[].path` | The game's path in lower case with forward slashes. Each module of the mod's code that [the hash](#the-mods-hash) has a line for is under `plugins/`, and a FireGraft file under `firegraft/`. Files an operating system leaves in folders are not handed over |
+| `dataSet.hash` | [The mod's hash](#the-mods-hash). The page works it out again from the same files and arrives at the same one. A page that already keeps a mod with that hash can skip storing it again |
+| `bot.race` | 0 for zerg, 1 terran, 2 protoss and 6 random |
+| `setup` | With a bot, the message also names the kind of game: the map's own settings for a mod with plugins or a FireGraft project, otherwise the page's own guess |
+
+A game file the page would not take as a loose file goes in a small MPQ,
+`scmjs-members.mpq`, which the page opens as it opens a mod's own. That is a file beside
+the game's folders, or one under `plugins\` or `firegraft\`, such as the members
+`plugins\apply` and `firegraft\reqlist.txt` of Cosmonarchy's loader archive.
+
+A mod with plugins or a FireGraft project is handed to the page at `?lift=live`, the
+address where the page runs them.
+
+The page answers with `scmjs.play.started`, `scmjs.play.shown` or `scmjs.taken`, which end
+the wait, or with `scmjs.play.error` and a `message`, which the command prints before it
+exits with 1. `scmjs.waiting` and `scmjs.play.waiting` messages are printed as they come.
+With a bot, `shown` and `started` carry `bot`, the bot's row as the setup screen words it.
 
 ## From a mod folder to a replay
 
@@ -613,6 +833,10 @@ give `--bot cosmonarchy-example` in step 5.
 - The command line keeps and lists plugins (`.qdp`, `.bwl`) and never runs them on your
   computer; a FireGraft file's edits to the game's program are applied only inside the
   game that the play page and the engine's bot runners play, where the plugins run too.
+- The plugins FireGraft's patcher carries inside its exe are listed and nothing more:
+  `mod unpack` does not write them out, `mod play` does not hand them to the play page,
+  and the play page does not run them. Nor does anything load a library that ships beside
+  the exe.
 - `scmjs mod test`, `map test`, `map trace` and `map cost` lay a mod's files over the game
   but run none of its plugins, and have no scenario with a bot on the other side yet.
 - With a mod's plugins running, a game goes at about the game's own pace: analysing its
@@ -623,8 +847,8 @@ give `--bot cosmonarchy-example` in step 5.
   invitation link; a page joined another way is told, not switched.
 - Replays recorded by StarCraft itself with a mod are expected to play with the mod, but
   none has been checked.
-- The editor does not open a mod's `.zip` or `.exe` itself; its data sets take a folder (a
-  loader `.exe` in the folder is read for its archive).
+- The editor does not open a mod's `.zip` or `.exe` itself; its data sets take a folder
+  (an `.exe`, `.mpq` or `.zip` in the folder is read as the command line reads it).
 - `mod pack` does not make a self-executing exe; MPQDraft does.
 - PNG sheets need the palette they name when a picture has lost its palette (saved in full
   colour). An untouched sheet carries its own.
@@ -636,12 +860,11 @@ give `--bot cosmonarchy-example` in step 5.
 
 | File | Does |
 | --- | --- |
-| `src/formats/mod/sources.ts` | What a mod comes in: where the game's paths start in a folder, a copy of the game beside the mod, the archive in a self-executing exe, a zip read |
-| `src/formats/mod/hash.ts` | The mod's hash and the hash without plugins, and the names looked for in an archive with no list |
+| [`@scm-js/mod`](https://github.com/scm-js/mod) | Reading a mod, a library of its own: what a mod comes in, where the game's paths start in a folder, a copy of the game beside the mod, the archive and plugins in a self-executing exe, a zip, the mod's code in its loader's order, `mod.json`, and the mod's hash; every sentence it says, which the editor and `scmjs` translate |
 | `src/formats/mod/folder.ts` | The folder's form: where each file goes, each form written and read back with the same function, `mod.json` |
 | `src/formats/mod/data.ts` | A mod's tables, string tables and scripts over the game's, and which entries it changed |
 | `src/formats/mod/check.ts` | The lints |
-| `src/formats/mod/races.ts` | Races a mod adds: the `races` table's rule, a race's name by its number, the hints a mod's files give |
+| `src/formats/mod/races.ts` | Races a mod adds: a race's name by its number and the choices offered (the `races` table's rule and the hints a mod's files give are `@scm-js/mod`'s) |
 | `src/formats/mod/diff.ts` | The changelog, the animation scripts compared an animation at a time |
 | `src/formats/dat/` | The codecs: every table in all three layouts, PyMS's texts, GRP, PCX, overlays, iscript, AI scripts, `.graft` |
-| `cli/src/mod/` | The `scmjs mod` commands: the source opened, unpack, pack, info, check, diff, new, play, the engine's overlay |
+| `cli/src/mod/` | The `scmjs mod` commands: the mod read with `@scm-js/mod` and put in the commands' shape, unpack, pack, info, check, diff, new, play, the engine's overlay |

@@ -56,6 +56,19 @@ export interface HistoryEdit {
    */
   createdMask?: Uint8Array;
   /**
+   * A change to the pinned tiles (editor/pins.ts): the pins file of the map's archive as it
+   * was and as the edit left it, null for none. Not part of the scenario, so `applyEntry`
+   * leaves it alone and the commit, undo and redo atoms put it in force; it may come alone
+   * (a stroke of the Pin brush) or with the tiles it pins (a doodad placed as terrain).
+   */
+  pins?: { before: Uint8Array | null; after: Uint8Array | null };
+  /**
+   * Other editor-owned files of the map's archive the edit changed — a borrowed terrain's lattice
+   * (editor/borrowLattice.ts) — each as it was and as the edit left it, null for none. Put in
+   * force like `pins`, beside them.
+   */
+  members?: { name: string; before: Uint8Array | null; after: Uint8Array | null }[];
+  /**
    * What a dialog wrote — settings, triggers, the briefing, strings (editor/tableHistory.ts).
    * An entry with this part has no other: `applyEntry` leaves it alone, and the undo and
    * redo atoms apply it with `applyTables`.
@@ -125,8 +138,26 @@ export function swapWholeState(scn: Scenario, state: WholeState): WholeState {
   return out;
 }
 
+/**
+ * What made an edit, where the layer and the terrain tab it was made on do not already say:
+ * a stroke of the plain brush has none. A word of this list and nothing else, since the
+ * feature counts carry it (`services/usage.ts`); the label is the user's words and never is.
+ */
+export type EditTool =
+  /* Terrain */
+  | "block" | "copied" | "borrowed" | "fill" | "fillMap" | "replace" | "healArea"
+  | "pin" | "unpin" | "pinArea" | "unpinArea" | "pinHandLaid"
+  /* Doodads */
+  | "stretch" | "asTerrain" | "twin"
+  /* Cut / Copy / Paste */
+  | "cut" | "delete" | "paste" | "pasteStretch"
+  /* An edit a plugin made through the API */
+  | "plugin";
+
 export interface HistoryEntry extends HistoryEdit {
   label: string;
+  /** For the feature counts alone; nothing reads it to apply, undo or send an edit. */
+  tool?: EditTool;
 }
 
 /**
@@ -171,6 +202,9 @@ export const touchesDoodads = (entry: HistoryEdit) =>
 export const touchesGround = (entry: HistoryEdit) =>
   entry.changes.length > 0 || (entry.isom?.length ?? 0) > 0 || entry.createdIsom !== undefined || entry.rebuiltIsom === true
   || (entry.doodadTiles?.length ?? 0) > 0 || (entry.fog?.length ?? 0) > 0 || entry.createdMask !== undefined;
+
+/** Whether the entry changes files of the archive the editor keeps (the pins, a borrowed lattice). */
+export const hasMembers = (entry: HistoryEdit): boolean => entry.pins !== undefined || (entry.members?.length ?? 0) > 0;
 
 export const hasEdits = (entry: HistoryEdit) =>
   entry.changes.length > 0 || (entry.isom?.length ?? 0) > 0 || entry.createdIsom !== undefined || (entry.units?.length ?? 0) > 0

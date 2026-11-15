@@ -68,7 +68,7 @@ await check("map info", () => expectRun(scmjs(["map", "info", "melee.scx"]), { o
 await check("info from standard input", () => expectRun(scmjs(["map", "info", "-"], { input: readFileSync(join(work, "melee.scx")) }), { out: /Jungle World/ }));
 await check("map check over the test maps", () => expectRun(scmjs(["map", "check", ...readdirSync(maps).filter((f) => /\.sc[mx]$/.test(f)).map((f) => join(maps, f))]), { out: /5 maps checked/ }));
 await check("map new", () => expectRun(scmjs(["map", "new", "new.scx", "--players", "2"])));
-await check("map dump", () => expectRun(scmjs(["map", "dump", "ums.scx"]), { out: /^# ums\.scx — scmjs map dump/ }));
+await check("map dump", () => expectRun(scmjs(["map", "dump", "ums.scx"]), { out: /^# scmjs map dump \d/ }));
 await check("map find", () => expectRun(scmjs(["map", "find", "Marine", "ums.scx"]), { out: /Marine/ }));
 await check("map set, then map diff", () => {
   expectRun(scmjs(["map", "set", "melee.scx", "--name", "Renamed", "--out", "renamed.scx"]));
@@ -81,7 +81,7 @@ await check("map unpack and pack", () => {
 });
 await check("map triggers export", () => expectRun(scmjs(["map", "triggers", "export", "ums.scx", "--out", "-"]), { out: /Trigger/ }));
 await check("map preview without the game's files says so", () => {
-  expectRun(scmjs(["map", "preview", "melee.scx", "--starcraft", work]), { status: 1, err: /StarCraft/ });
+  expectRun(scmjs(["map", "preview", "melee.scx", "--starcraft", work]), { status: 2, err: /StarCraft/ });
 });
 await check("map run with a plugin script", () => {
   writeFileSync(join(work, "rename.js"), 'export default function activate(api) { api.document.update("Rename", (tx) => tx.properties({ name: "From a plugin" })); }\n');

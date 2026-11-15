@@ -28,8 +28,9 @@ a file's own terrain is never touched. `tests/blank-fill.test.ts`.
 **Data sets** (`gamedata/profiles.ts`, `services/gameData.ts`): the editor draws from one set of
 game files at a time, and a `GameDataProfile` (id + name) names it — `DEFAULT_PROFILE` is the game's
 own; any other is a mod's, the same formats with files replaced, installed under its id
-(`installDataSet`: the game's two archives required, the mod's archives and loose files laid over
-them through `readerFor`'s overlay; `splitPickedFiles` turns a picked folder into that) and stored
+(`installDataSet`: the game's two archives required, the mod read in the worker by `@scm-js/mod`'s `readMod`
+and its winning files under the extraction's folders laid over them through `readerFor`'s overlay;
+`pickedDataSet` turns a picked folder into that — since 2026-11-12, `mods.md` "@scm-js/mod adopted") and stored
 under `gamedata-profiles/<id>/` beside the game's `gamedata/` (`store.ts#profileDir`, every store
 function takes the id, `listStoredCopies`). The choice is `scmjs.gameData` (`gameDataProfileAtom`,
 in `STORED_RESETS`; the resolver reads the key itself through `activeProfileId` since it runs
@@ -247,6 +248,29 @@ for byte, at `SD\sound\glue\countdown.wav`. A copy takes the one at the game's n
 every other sound, so a Remastered copy counts down with Remastered's. Not required: a copy without it
 plays. The play page reads versions 1–6 (scm-sim `PLAY_VERSIONS`) and must be deployed first.
 
+**The language module (2026-11-13), not a version.** 1.16.1 keeps its accelerator tables (Ctrl/Alt + digit for
+control groups, F2–F4 for screen places) in `Local.dll`, a loose file of the game's folder, in no archive. scm-sim's
+own-screen work (#112) hands the person's keys to the game's window procedure and reads those tables from it:
+`gameSource.ts#namedFilesFor` asks every source for `named.ts#LANGUAGE_MODULE` = `"local.dll"`, and a copy answers
+through `copySource.read` → `fileOf(dir, copyPath("local.dll"))`, i.e. the file `local.dll` at the top of the copy's
+folder (`gamedata/` or `gamedata-profiles/<id>/`). OPFS names are case-sensitive, so it is stored as
+`play.ts#PLAY_LANGUAGE` = `"local.dll"`, lower case, whatever the folder called it. The route: the folder pick reaches
+`install.ts#installFromFiles` whole (the dialog's `fromPickedFolder` → `fromFiles`); `pickLanguageModule` takes the
+shallowest file whose name is `local.dll` in any case (exact name: `EditLocal.dll`, StarEdit's, sits beside it; the
+same rule as scm-sim `web/ownFiles.ts#pickLanguage`), its bytes go to the worker as `ExtractRequest.language`
+(transferred), and `copyPlaySet(…, { language })` writes it **only when the set is whole**, counting it in
+`play.files`/`bytes` and recording `play.language` = its length. Not written: a set that is not whole, a memory-only
+copy (no play set), a copy over a base, the Remastered routes (no file), the desktop's extraction (no play set), a
+data set (`splitPickedFiles` skips `.dll`; whether a mod folder's `Local.dll` should go with it is open).
+**`PLAY_VERSION` stays 6** on purpose: the play page refuses a version it does not list, the file is optional on both
+sides, and a copy without it plays with those keys doing nothing (the play page's Options row says so). An older
+copy's stamp has no `play.language`: `copies.ts#lacksLanguageModule` (a `classic` copy with `play` and no
+`language`) puts one line on the Game Data page saying the keys do nothing and that removing the copy and choosing
+the folder again keeps the file — true for a copy made before this and for archives picked without their folder; with
+data in place the dialog shows no folder button, so "remove, then choose" is the only renewal there is. Never for
+Remastered, the download, a mod, or a copy without `play`. Measured: 1.16.1's `Local.dll` is 52,224 bytes.
+`tests/play-set.test.ts`, `tests/gamedata.test.ts` ("pickLanguageModule"), `tests/copies.test.ts`.
+
 It is **not part of `extractGameData`**, on purpose: that would put 280 MB into the `Map` the
 Remastered passes hold, change what `npm run extract` and the desktop write, and move the file
 counts every test pins. Instead the worker copies it after the editor's files and before the
@@ -394,7 +418,10 @@ The mods plan's slice M4 (`scm-sim` branch mods-plan, `docs/mods-plan.md`, "Tier
   now renames only the extraction's own tileset subfiles (four remaps + `dddata.bin`) — the play set's
   `tileset\<name>\dark.pcx` etc. stay at the game's path, which is where `play.ts` writes them (the old regex sent
   them to `tileset/<name>.dark.pcx`, a path nothing writes).
-- **Hash** (the one mod hash, 2026-11-08 branch `mod-hash`; `mods.md` "The mod hash, one rule"):
+- **Hash** (the one mod hash, 2026-11-08 branch `mod-hash`; `mods.md` "The mod hash, one rule"). **Superseded
+  2026-11-12:** the stamp's hash is `readMod(modTree(req.mod)).identity.hash` in the worker (`ExtractRequest.mod`,
+  made by `install.ts#dataSetMod`); `dataSetHashOf`, `hashOnly`, `code`, `overlay` and `splitPickedFiles` below are
+  gone (`mods.md` "@scm-js/mod adopted"). The record as it was:
   `overCopy.ts#dataSetHashOf(names, own, code)` = core's `modHashOfDigests` over **every** own file — never compared
   with the base (the old `changedFiles`/`firstOf`/`copyChain`/`hashUnbased` are gone; `hashUnbased` stays in
   `StoredStamp` only so old stamps read). Names: the overlay's keys, `ExtractRequest.hashOnly` (loose files in
@@ -531,3 +558,15 @@ The mods plan's slice M4 (`scm-sim` branch mods-plan, `docs/mods-plan.md`, "Tier
   installed before shows the labels' names until it is added again. The list rules (`nameList`: a line for every entry
   or not at all, `""` keeps the label; `statWithText`) are shared with `scmjs mod header` (`cli/src/mod/header.ts#modNames`
   now calls them; core exports them).
+
+**A data set's terrain file (2026-11-14).** `pickedDataSet` also answers the text of the folder's `terrain.json`
+(`terrain`, by `mod.json`'s rule); the Game Data dialog keeps it for the set's id before installing
+(`services/dataSetTerrain.ts#keepDataSetTerrain`, IndexedDB, the learned pieces' store under `terrain/<id>`, text — it
+can be half a MB, so not localStorage beside the races). The folder route (`drawFromModFolder`) does the same for
+`folderProfile(name).id` before attaching. `removeDataSet` forgets it; Clear all data clears the store and drops the
+file's rows. A plugin's `api.gameData.attach` carries none: the Mod Editor can call the three `provide*` functions for a
+live edit, so no profile field or `setTerrain` call was added. `watchDataSetTerrain` (App) follows
+`gameDataSourceAtom` and `gameDataRevisionAtom` and runs `applyDataSetTerrain` (terrain.md). Measured adding
+Cosmonarchy's release folder (a hard-linked copy, 7,797 files, 2.6 GB) as a data set in headless Chromium against the
+built bundle: with the 518 KB `terrain.json` 33.2 s and +228.30 MB of `navigator.storage.estimate()`, without it
+33.6 s and +228.09 MB — the file costs nothing measurable.

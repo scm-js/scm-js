@@ -5,22 +5,23 @@
  * back into their members by the same functions `mod unpack` checked them with; `mod.json` says what the paths do
  * not. The same folder always gives the same bytes: the members are added in name order, with fixed settings.
  */
+import { folderTerrain } from "./terrain";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync, readFileSync } from "node:fs";
+import { rmSync, writeFileSync, readFileSync } from "node:fs";
 import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { tempFolder } from "../lifecycle";
+import type { Writable } from "node:stream";
+import { dirname, extname, join, resolve } from "node:path";
 import { Creator } from "mopaq";
-import { DEFAULT_PALETTE, MOD_MANIFEST, ModFolderError, packFile, readManifest, type ModManifest, type PackContext } from "../../../src/formats/mod/folder";
-import { gameName, isSystemFile } from "../../../src/formats/mod/sources";
-import { isModCode } from "../../../src/formats/mod/hash";
+import { DEFAULT_PALETTE, MOD_MANIFEST, ModFolderError, packFile, type ModManifest, type PackContext } from "../../../src/formats/mod/folder";
+import { filesOf, gameName, isCodeFile, isSystemFile, normalizeRaces, readModJson } from "@scm-js/mod";
 import { loadModData } from "../../../src/formats/mod/data";
-import { normalizeRaces } from "../../../src/formats/mod/races";
 import type { NamedPalette, QuantiseReport } from "../../../src/formats/dat/grpPng";
 import type { GameFiles } from "../gamefiles";
 import { t } from "../i18n";
 import { CliError } from "../ui";
-import { emptySource, type ModSource } from "./source";
+import { STDIO } from "../files";
+import { describedSource, folderManifest, type ModSource } from "./source";
 
 export type ModCompression = "zlib" | "pkware" | "none";
 export const MOD_COMPRESSIONS: readonly ModCompression[] = ["zlib", "pkware", "none"];
@@ -58,7 +59,7 @@ async function folderFiles(dir: string, prefix = ""): Promise<string[]> {
 
 /** A sound that is not a WAV, as one: ffmpeg, when it is on the PATH, to 16-bit PCM at 22,050 Hz mono (the game's own). */
 export async function convertWithFfmpeg(bytes: Uint8Array, file: string): Promise<Uint8Array> {
-  const dir = mkdtempSync(join(tmpdir(), "scmjs-sound-"));
+  const dir = tempFolder("scmjs-sound-");
   try {
     const input = join(dir, `in${file.replace(/^.*(\.[^.]+)$/, "$1")}`), output = join(dir, "out.wav");
     writeFileSync(input, bytes);
@@ -102,7 +103,8 @@ export async function packFolder(dir: string, manifest: ModManifest, options: Pa
       if (file.startsWith("sounds/") && !/\.wav$/i.test(file) && list.length) converted.push(file);
       put(file, list);
     } catch (e) {
-      if (e instanceof ModFolderError) throw new CliError(e.message, null, 1);
+      // (the file as it is from where the person is, the mod folder's path before it, so that it opens as printed)
+      if (e instanceof ModFolderError) { const at = `${e.file}${e.line > 0 ? `:${e.line}` : ""}: `; throw new CliError(`${join(dir, ...e.file.split("/"))}${e.line > 0 ? `:${e.line}` : ""}: ${e.message.startsWith(at) ? e.message.slice(at.length) : e.message}`, null, 1); }
       throw e;
     }
   };
@@ -128,15 +130,30 @@ export async function packFolder(dir: string, manifest: ModManifest, options: Pa
   for (const f of later) await pack(f);
 
   const members = [...out.values()].sort((a, b) => (gameName(a.member) < gameName(b.member) ? -1 : gameName(a.member) > gameName(b.member) ? 1 : 0));
-  const source = emptySource(dir, "mod folder", manifest.name || dir.replace(/[\\/]+$/, "").split(/[\\/]/).pop()!);
+  // The folder read as the mod it packs to (`@scm-js/mod`, the game's paths at its top): its members, each module of its
+  // code under plugins/, its FireGraft files under firegraft/. A plugin or FireGraft file that was in the mod's archive
+  // (`member`) goes back in as a member when packed, and is the mod's code, not a game file; a plugin there is loaded
+  // by no loader and has no line in the hash, so it is not read as one here.
+  const tree = new Map<string, Uint8Array>();
+  for (const m of members) if (!isCodeFile(m.member)) tree.set(gameName(m.member).replace(/\\/g, "/"), m.data);
+  for (const p of manifest.plugins) if (!p.member) tree.set(`plugins/${p.name}`, new Uint8Array(await readFile(join(dir, p.file))));
+  for (const f of manifest.firegraft) tree.set(`firegraft/${f.name}`, new Uint8Array(await readFile(join(dir, f.file))));
+  const name = manifest.name || dir.replace(/[\\/]+$/, "").split(/[\\/]/).pop()!;
+  const source = await describedSource(dir, "mod folder", filesOf(name, tree, { layout: "game" }));
+  source.name = name;
   source.manifest = manifest;
   source.races = normalizeRaces(manifest.races);
-  source.layers.push(...manifest.layers);
-  // (A plugin or FireGraft file that was in the mod's archive goes back in as a member, and is the mod's code, not a game file.)
-  for (const m of members) if (!isModCode(m.member)) source.files.set(gameName(m.member), { name: m.member, size: m.data.length, read: async () => m.data, layer: m.file });
+  // A mod folder's terrain file is beside its mod.json, not among the members.
+  source.terrain = await folderTerrain(dir);
+  source.link = readModJson(JSON.stringify(manifest))?.link ?? null;
+  source.layers = [...manifest.layers];
+  const fileOf = new Map(members.map((m) => [gameName(m.member), m.file]));
+  for (const [key, f] of source.files) f.layer = fileOf.get(key) ?? f.layer;
+  source.plugins = [];
+  source.firegraft = [];
   for (const p of [...manifest.plugins, ...manifest.firegraft]) {
     const path = join(dir, p.file);
-    const carried = { name: p.name, bytes: p.bytes, read: async () => new Uint8Array(await readFile(path)), member: p.member, layer: p.file };
+    const carried = { name: p.name, bytes: p.bytes, read: async () => new Uint8Array(await readFile(path)), ...(p.member ? { member: p.member } : {}), layer: p.file };
     (manifest.plugins.includes(p) ? source.plugins : source.firegraft).push(carried);
   }
   return { source, manifest, members, left: left.filter((f) => ![...manifest.plugins, ...manifest.firegraft].some((p) => p.file === f)), quantised, converted };
@@ -192,6 +209,19 @@ export interface PackModOptions extends PackFolderOptions {
   /** A loose folder to write instead of an MPQ. */
   folder?: string | null;
   compression?: ModCompression;
+  /** Where `out` `-` writes the MPQ (standard output); without it `-` is refused. */
+  stdout?: Writable;
+}
+
+/**
+ * `--out` and `--folder` as `mod pack` and `mod build` take them, checked before anything is read: one or the other,
+ * `-` (standard output) for the MPQ alone, and an MPQ's name ending in `.mpq`.
+ */
+export function checkPackOut(o: { out?: string | null; folder?: string | null; json?: boolean }): void {
+  if (o.out && o.folder) throw new CliError(t("--out and --folder: the MPQ or the loose folder, not both."), null, 2);
+  if (o.folder === STDIO) throw new CliError(t("--folder writes a folder, which cannot go to standard output."), t("Name a folder, or give --out - for the MPQ."), 2);
+  if (o.out === STDIO && o.json) throw new CliError(t("--json and the MPQ both want standard output"), t("Write the MPQ to a file with --out, or leave --json off."), 2);
+  if (o.out && o.out !== STDIO && extname(o.out).toLowerCase() !== ".mpq") throw new CliError(extname(o.out) ? t("--out names a {ext} file; the mod is written as an .mpq", { ext: extname(o.out) }) : t("--out names a file with no extension; the mod is written as an .mpq"), null, 2);
 }
 
 /** `mod pack`: the folder read and written as an MPQ or a loose folder. */
@@ -202,13 +232,21 @@ export async function packMod(dir: string, manifest: ModManifest, o: PackModOpti
     const out = resolve(o.folder);
     if (out === resolve(dir) || out.startsWith(resolve(dir) + "/")) throw new CliError(t("The loose folder would be written inside the mod folder."), t("Name a folder elsewhere with --folder."), 2);
     const bytes = await writeLoose(packed.members, out);
-    return { path: out, form: "folder", members: packed.members.length, bytes, compression: null, left: packed.left, quantised, converted: packed.converted };
+    return { path: o.folder, form: "folder", members: packed.members.length, bytes, compression: null, left: packed.left, quantised, converted: packed.converted };
   }
   const compression = o.compression ?? "zlib";
-  const out = resolve(o.out ?? `${resolve(dir).replace(/[\\/]+$/, "")}.mpq`);
   const bytes = await writeMpq(packed.members, compression);
-  await mkdir(dirname(out), { recursive: true });
-  await writeFile(out, bytes);
+  if (o.out === STDIO) {
+    const stdout = o.stdout;
+    if (!stdout) throw new CliError(t("The MPQ cannot go to standard output here."), t("Name a file for it."), 2);
+    await new Promise<void>((done, fail) => stdout.write(bytes, (e) => (e ? fail(e) : done())));
+    return { path: STDIO, form: "mpq", members: packed.members.length, bytes: bytes.length, compression, left: packed.left, quantised, converted: packed.converted };
+  }
+  const out = o.out ?? `${dir.replace(/[\\/]+$/, "")}.mpq`;
+  try {
+    await mkdir(dirname(resolve(out)), { recursive: true });
+    await writeFile(out, bytes);
+  } catch (e) { throw new CliError(t("{path} could not be written ({code})", { path: out, code: String((e as NodeJS.ErrnoException).code ?? e) }), null, 2); }
   return { path: out, form: "mpq", members: packed.members.length, bytes: bytes.length, compression, left: packed.left, quantised, converted: packed.converted };
 }
 
@@ -219,10 +257,15 @@ export async function isFolder(path: string): Promise<boolean> {
 
 /** The manifest of a folder mod unpack or mod new wrote, or a CliError saying what the folder is not. */
 export async function readModFolder(dir: string): Promise<ModManifest> {
-  let text: string;
-  try { text = await readFile(join(dir, MOD_MANIFEST), "utf8"); } catch { throw new CliError(t("{folder} has no {file}: it is not a mod folder.", { folder: dir, file: MOD_MANIFEST }), t("scmjs mod unpack <mod> <folder> makes one from a mod, scmjs mod new <folder> an empty one."), 2); }
-  let manifest: ModManifest | null;
-  try { manifest = readManifest(text); } catch (e) { throw new CliError((e as Error).message, null, 2); }
+  let s;
+  try { s = await stat(dir); } catch { throw new CliError(t("No folder {folder}", { folder: dir }), t("scmjs mod unpack <mod> <folder> makes one from a mod, scmjs mod new <folder> an empty one."), 2); }
+  if (!s.isDirectory()) throw new CliError(t("{folder} is a file, not a mod folder.", { folder: dir }), t("scmjs mod pack takes the folder scmjs mod unpack or scmjs mod new wrote."), 2);
+  if (!(await isFile(join(dir, MOD_MANIFEST)))) throw new CliError(t("{folder} has no {file}: it is not a mod folder.", { folder: dir, file: MOD_MANIFEST }), t("scmjs mod unpack <mod> <folder> makes one from a mod, scmjs mod new <folder> an empty one."), 2);
+  const manifest = await folderManifest(dir);
   if (!manifest) throw new CliError(t("{file} is not one scmjs wrote (it has no \"scmjs\" version).", { file: join(dir, MOD_MANIFEST) }), null, 2);
   return manifest;
+}
+
+async function isFile(path: string): Promise<boolean> {
+  try { return (await stat(path)).isFile(); } catch { return false; }
 }

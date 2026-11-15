@@ -31,17 +31,26 @@ function annotation(kind: "error" | "warning" | "notice", props: Record<string, 
 const GITHUB_KIND: Record<IssueLevel, "error" | "warning" | "notice"> = { error: "error", warn: "warning", info: "notice" };
 
 /** One annotation per finding; GitHub shows them on the pull request's Files and in the job's summary. */
-export function githubAnnotations(reports: CheckReport[]): string[] {
-  return reports.flatMap((r) => r.issues.map((i) => annotation(GITHUB_KIND[i.level], { file: reportPath(r.file), title: `${r.name || r.file}${i.where ? ` · ${translate(i.where)}` : ""}` }, i.text)));
+/** A file named that could not be read as a map: the path as given and why. */
+export interface Unread { file: string; error: string }
+
+export function githubAnnotations(reports: CheckReport[], unread: readonly Unread[] = []): string[] {
+  return [
+    ...unread.map((u) => annotation("error", { file: reportPath(u.file), title: u.file }, u.error)),
+    ...reports.flatMap((r) => r.issues.map((i) => annotation(GITHUB_KIND[i.level], { file: reportPath(r.file), title: `${r.name || r.file}${i.where ? ` · ${translate(i.where)}` : ""}` }, i.text))),
+  ];
 }
 
 const xml = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const LEVEL_WORD: Record<IssueLevel, string> = { error: "error", warn: "warning", info: "note" };
 
 /** JUnit XML: one test case per map, failed when the check failed it, every finding in the case's output. */
-export function junitXml(reports: CheckReport[]): string {
+export function junitXml(reports: CheckReport[], unread: readonly Unread[] = []): string {
   const failures = reports.filter((r) => r.failed).length;
-  const out = [`<?xml version="1.0" encoding="UTF-8"?>`, `<testsuites name="scmjs map check" tests="${reports.length}" failures="${failures}">`, `  <testsuite name="scmjs map check" tests="${reports.length}" failures="${failures}">`];
+  // A map that could not be read is a test case in error, not one left out: the counts say every file named.
+  const tests = reports.length + unread.length, errors = unread.length ? ` errors="${unread.length}"` : "";
+  const out = [`<?xml version="1.0" encoding="UTF-8"?>`, `<testsuites name="scmjs map check" tests="${tests}" failures="${failures}"${errors}>`, `  <testsuite name="scmjs map check" tests="${tests}" failures="${failures}"${errors}>`];
+  for (const u of unread) out.push(`    <testcase name="${xml(reportPath(u.file))}" classname="${xml(reportPath(u.file))}" file="${xml(reportPath(u.file))}">`, `      <error message="${xml(u.error)}"/>`, `    </testcase>`);
   for (const r of reports) {
     const lines = r.issues.map((i) => `${LEVEL_WORD[i.level]}: ${i.text}${i.where ? ` (${translate(i.where)})` : ""}`);
     out.push(`    <testcase name="${xml(r.name || reportPath(r.file))}" classname="${xml(reportPath(r.file))}" file="${xml(reportPath(r.file))}">`);
@@ -60,7 +69,7 @@ const SARIF_LEVEL: Record<IssueLevel, "error" | "warning" | "note"> = { error: "
 const ruleId = (where: string) => `scmjs/${(where || "map").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}`;
 
 /** SARIF 2.1.0: a rule per area of the check (Players, Triggers, …), a result per finding, located at the map file. */
-export function sarifJson(reports: CheckReport[], version: string): string {
+export function sarifJson(reports: CheckReport[], version: string, unread: readonly Unread[] = []): string {
   const rules = new Map<string, string>();
   const results = reports.flatMap((r) => r.issues.map((i) => {
     const id = ruleId(i.where);
@@ -72,6 +81,8 @@ export function sarifJson(reports: CheckReport[], version: string): string {
     runs: [{
       tool: { driver: { name: "scmjs map check", version, informationUri: "https://docs.scmjs.dev/cli/", rules: [...rules].map(([id, name]) => ({ id, name, shortDescription: { text: `Check Map: ${name}` } })) } },
       results,
+      // A file that could not be read is the run's own trouble, not a finding: said as SARIF says that.
+      ...(unread.length ? { invocations: [{ executionSuccessful: false, toolExecutionNotifications: unread.map((u) => ({ level: "error", message: { text: u.error }, locations: [{ physicalLocation: { artifactLocation: { uri: reportPath(u.file), uriBaseId: "%SRCROOT%" } } }] })) }] } : {}),
     }],
   };
   return JSON.stringify(log, null, 2) + "\n";

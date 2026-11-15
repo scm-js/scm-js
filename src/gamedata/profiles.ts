@@ -11,7 +11,7 @@
  * which set is loaded beyond what the files say (names, types, pictures) and this label.
  */
 import { browserStorage } from "../atoms/storage";
-import { normalizeRaces, type DataSetRace } from "../formats/mod/races";
+import { normalizeRaces, type DataSetRace } from "@scm-js/mod";
 
 export interface GameDataProfile {
   /** Lower-case letters, digits and hyphens, up to 40 characters; the copy's folder name. */

@@ -240,6 +240,8 @@ export async function serveLsp(options: LspOptions = {}): Promise<void> {
   // A reader and a writer rather than the streams: given streams, the library ends the process when they close.
   const connection: Connection = createConnection(ProposedFeatures.all, new StreamMessageReader(input), new StreamMessageWriter(output));
   let shutdown = false;
+  /** An editor said `initialized`: what ends the server without a shutdown is then the editor, not a mistyped setup. */
+  let spoken = false;
   const documents = new TextDocuments(TextDocument);
   const workspaces = new Map<string, Promise<Workspace | null>>();
   /** Files the server wrote for a definition outside the script's folder (the standard library, the declarations): which script and path they are. */
@@ -395,6 +397,7 @@ export async function serveLsp(options: LspOptions = {}): Promise<void> {
     };
   });
   connection.onInitialized(() => {
+    spoken = true;
     log(`scmjs ${VERSION}: TrigScript language server on stdio, folder ${folder}${mapFromOption ? `, --map ${mapFromOption.kind === "folder" ? mapFromOption.dir : mapFromOption.path}` : ""}`);
   });
 
@@ -489,5 +492,7 @@ export async function serveLsp(options: LspOptions = {}): Promise<void> {
     connection.listen();
   });
   connection.dispose();
+  // An end with no shutdown is said, so a setup that starts the server wrongly leaves a clue in the editor's log.
+  if (!shutdown) log(spoken ? "the editor closed the connection without shutting the server down" : `standard input closed before an editor spoke to the server: scmjs lsp is started by a text editor, which speaks the Language Server Protocol to it (setup for each editor: https://docs.scmjs.dev/cli/)`);
   if (stdio) process.exit(shutdown ? 0 : 1);
 }

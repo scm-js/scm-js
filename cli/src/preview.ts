@@ -365,12 +365,13 @@ export async function previewMap(input: Input, map: OpenedMap, o: PreviewOptions
   }
 
   // The terminal: the picture itself where the terminal can show one, else colour blocks, else shades.
-  const inline = !o.blocks && !o.json ? term.inline : null;
+  // (With --json, the form the plain command would use, described and not sent.)
+  const inline = !o.blocks ? term.inline : null;
   if (inline) {
     const columns = width ?? Math.max(8, term.columns - 1);
     const drawn = previewPng(map, graphics, { scale: scale && (PNG_SCALES as readonly number[]).includes(scale) ? scale : scaleFor((columns * 8) / scn.width), marks });
     const report: PreviewReport = { ...base, picture: { form: inline, width: drawn.picture.width, height: drawn.picture.height, scale: drawn.scale, columns }, drawn: drawn.counts, ms: ms(performance.now()) };
-    return { report, lines: [title(report, files), inlineImage(drawn.png, inline, columns), ...(drawn.marks.length ? [legendLine(drawn.marks, term.depth, term.unicode)] : [])] };
+    return { report, lines: o.json ? [] : [title(report, files), inlineImage(drawn.png, inline, columns), ...(drawn.marks.length ? [legendLine(drawn.marks, term.depth, term.unicode)] : [])] };
   }
   const columns = terminalWidth(scn.width, scn.height, term.columns, { width, scale });
   const drawn = mapPicture(map, graphics, { width: columns, marks });

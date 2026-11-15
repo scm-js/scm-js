@@ -63,6 +63,8 @@ import type { PlacementOptions } from "../editor/placement";
 import type { DoodadPlacementOptions, DoodadVerdict } from "../editor/doodads";
 import type { StartLayout, StartPlacementResult } from "../editor/startLocations";
 import type { BlendCandidate, BlendOptions, Side } from "../editor/blend";
+import type { StretchAxis } from "../editor/stretch";
+import type { FairnessPlace, FairnessReport, UnmatchedResource } from "../editor/fairness";
 import type { Clip, ClipParts, PasteMode, PasteResult } from "../editor/clipboard";
 import type { StringImport } from "../editor/exchange";
 import type { Preferences } from "../editor/preferences";
@@ -122,6 +124,7 @@ export type DeepReadonly<T> =
 export type ReadonlyScenario = DeepReadonly<Scenario>;
 
 export type { ReadonlyTrigger };
+export type { StretchAxis, FairnessPlace, FairnessReport, UnmatchedResource };
 
 /**
  * A transaction builder's return type: whatever it likes, so long as it is not a promise.
@@ -933,6 +936,33 @@ export interface EditTransaction {
    */
   paintIsom(d: Diamond, terrainId: number, extent?: number): boolean;
   /**
+   * A terrain of another tileset (`terrain.borrowed()`) painted on `diamonds` by that tileset's own
+   * isometric brush, each tile written as this tileset's copy of its picture — what the Isometric
+   * tab's "From other tilesets" list paints. The diamonds are set at once, as one stroke. Only the
+   * cells the stroke changes are written; pinned tiles are left as they are. Where a drawn border is known for the
+   * terrain and the ground it meets (`borrowed()`'s `borders`), the border is laid as the brush lays it. False, with a note,
+   * when the terrain is not one `borrowed()` listed, or `borrowed()` was not awaited first (the
+   * other tileset's files are read there).
+   *
+   * @example
+   * const [floor] = (await api.terrain.borrowed()).filter((b) => b.name === "Floor");
+   * await api.document.edit("Floor room", (tx) => tx.paintBorrowed(api.terrain.diamondsIn({ x0: 8, y0: 8, x1: 24, y1: 20 }), floor.id));
+   */
+  paintBorrowed(diamonds: readonly Diamond[], terrainId: number): boolean;
+  /**
+   * A copied terrain (`terrain.copies()`) painted on `diamonds` by the isometric brush — what the Isometric tab's
+   * "Copied terrain" list paints: the tileset's own brush lays the terrain, and each tile is written as the tile the
+   * tileset holds for it at the copy's height. The block laid is the one that joins the ground under the diamonds best;
+   * where its pieces are drawn to meet a terrain of the tileset, that terrain is laid under the diamonds first. The
+   * diamonds are set at once, as one stroke; pinned tiles are left as they are. False, with a note, when the terrain is
+   * not one `copies()` listed, or `copies()` was not awaited first.
+   *
+   * @example
+   * const [mud] = (await api.terrain.copies()).filter((c) => c.complete);
+   * await api.document.edit("Mud", (tx) => tx.paintCopy(api.terrain.diamondsIn({ x0: 8, y0: 8, x1: 24, y1: 20 }), mud.id));
+   */
+  paintCopy(diamonds: readonly Diamond[], terrainId: number): boolean;
+  /**
    * Reconstruct the ISOM section from the tiles — for a map that arrived without one, or
    * whose lattice no longer matches after Rect / Tile edits: exact for terrain that was
    * laid down isometrically, a best guess under doodads and for hand-placed tiles. A
@@ -981,6 +1011,28 @@ export interface EditTransaction {
 
   /** Stamp a doodad (a `dddata.bin` id) at a tile; returns its record index, or -1 when unknown or off the map. */
   placeDoodad(doodadId: number, tx: number, ty: number, owner?: number): number;
+  /**
+   * Place a doodad stretched along one of its axes: a ramp made wider, a bridge made
+   * longer or wider (`palette.stretchAxes` lists the axes a doodad stretches along; any
+   * of the four is accepted). The ends move apart and the middle is laid again in the gap,
+   * `steps` times; a step is two tiles across (and one down or up on a diagonal), or one
+   * tile down for `"s"`. A negative count stretches back from where the doodad stands.
+   * `(tx, ty)` is the top-left tile the doodad would have unstretched.
+   *
+   * It goes down as terrain, as the editor's own stretch does: the tiles in both sections
+   * and an overlay as a plain sprite, with no doodad record, since a map can only name a
+   * doodad as the game ships it. Nothing checks the ground under it. Returns the flat
+   * indices of the tiles it covers (pass them to `pin` to keep them), or an empty list
+   * when the doodad is unknown, the graphics are missing or the stretch does not fit on
+   * the map.
+   *
+   * @example
+   * // A ramp three steps wider along its cliff, and kept as laid.
+   * const ramp = api.palette.active().doodad;
+   * const [axis] = api.palette.stretchAxes(ramp);
+   * if (axis) api.document.edit("Wide ramp", (tx) => { tx.pin(tx.placeStretchedDoodad(ramp, 40, 30, axis, 3)); });
+   */
+  placeStretchedDoodad(doodadId: number, tx: number, ty: number, axis: StretchAxis, steps: number, owner?: number): number[];
   removeDoodads(indices: readonly number[]): number;
   /**
    * Make doodads plain terrain: their records go, their tiles stay (in TILE as well as
@@ -1051,6 +1103,44 @@ export interface EditTransaction {
    * (`terrain.blendCandidates` ranks what fits). Returns whether the cell was on the map.
    */
   placeBlend(x: number, y: number, side: Side, id: number): boolean;
+  /**
+   * Lay a block (`terrain.blockFrom`, `terrain.blockOf`, or one you made) with its top-left at
+   * tile (x, y), as the Tile brush lays a block: holes and cells off the map are skipped, a
+   * pinned tile is written as `setTile` writes it, ISOM is untouched. Returns tiles changed.
+   *
+   * @example
+   * const [piece] = api.terrain.pieces();
+   * if (piece) api.document.edit("Lay a piece", (tx) => { tx.placeBlock(api.terrain.blockOf(piece), 12, 8); });
+   */
+  placeBlock(block: TileBlock, x: number, y: number): number;
+  /**
+   * Repeat a block over `cells` as a pattern, its copies lined up on `origin` (the map's corner
+   * when omitted), as Fill Map does with a block: each cell takes the block's tile for its place
+   * in the pattern, a hole leaves it alone. Same rules as `placeBlock`. Returns tiles changed.
+   *
+   * @example
+   * // A strip of wall along the top of the marked area.
+   * const area = api.selection.markedArea();
+   * const wall = api.terrain.blockFrom({ group: 2314, slot: 0, cols: 4, rows: 9 });
+   * if (area && wall) api.document.edit("Wall", (tx) => { tx.fillPattern({ ...area, y1: area.y0 + 9 }, wall, { x: area.x0, y: area.y0 }); });
+   */
+  fillPattern(cells: Cells, block: TileBlock, origin?: { x: number; y: number }): number;
+  /**
+   * The Heal brush over `cells`: where a tile joins a neighbour visibly (`terrain.seamStep`
+   * over 8, what View ▸ Seam Overlay draws) and the tileset has a tile that joins better
+   * and is the same to the game (the same flags bit for bit, the same kind of ground),
+   * that tile is laid instead. How the map plays does not change. Tiles under a placed
+   * doodad and pinned tiles are left alone. Needs the graphics; returns tiles changed.
+   */
+  heal(cells: Cells): number;
+  /**
+   * Pin (or with `on` false, unpin) tiles. A pinned tile is left as it is by everything
+   * that lays terrain by rule, in the editor and in a transaction alike: `paintIsom`,
+   * `stampTerrain`, `fillFlat`, `fillArea`, `replaceTerrain`, `tilesFromIsom` and `heal`.
+   * `setTile`, `setTiles`, `placeBlend`, `paste` and the doodad calls still write it. Pins
+   * are saved with the map. Returns how many tiles' pins changed.
+   */
+  pin(cells: Cells, on?: boolean): number;
   /**
    * What StarEdit does after an isometric edit: regenerate every tile from the ISOM
    * lattice (the reverse of `rebuildIsom`). Needs ISOM and the graphics; returns tiles
@@ -2437,6 +2527,179 @@ export interface ActiveBrush {
   brushSize: number;
   /** The Rect brush's variation slot, or -1 for a random one per pair. */
   variation: number;
+  /**
+   * The block the Tile brush lays instead of one tile, or null. Setting one arms the brush
+   * with it (its first tile becomes `tile`); setting `tile`, or null here, goes back to single
+   * tiles. The editor drops a block when another map or tileset comes in front.
+   */
+  block: TileBlock | null;
+}
+
+/**
+ * A rectangle of tiles laid as one: what the Tile palette's sheet picks with a drag, what a
+ * piece is laid as, and what `tx.placeBlock` and `tx.fillPattern` take. `ids` are MTXM tile
+ * ids row by row, `cols × rows` of them; -1 is a hole, a cell the block leaves as the map has
+ * it. `origin` is where its top-left came from in the tileset's sheet, when it came from one
+ * (the Sheet view outlines it there).
+ *
+ * @example
+ * // A 2 × 2 block from the sheet's groups 2900–2901, slots 4–5, with its lower-right cell left out.
+ * const block = { cols: 2, rows: 2, ids: [2900 * 16 + 4, 2900 * 16 + 5, 2901 * 16 + 4, -1] };
+ */
+export interface TileBlock {
+  cols: number;
+  rows: number;
+  ids: number[];
+  origin?: { group: number; slot: number };
+}
+
+/**
+ * A piece of the tileset: a part of its sheet that maps lay whole (a wall, a ramp, a ruin),
+ * or a named one a plugin provides. `tiles` are its tile ids, ascending; `group`, `slot`,
+ * `cols` and `rows` its rectangle in the sheet. `laid` counts how often its tiles are laid in
+ * the maps it was cut from (0 for a provided piece). `copies` is how many other pieces, the
+ * same tiles elsewhere in the tileset, it stands for. `source` is `"maps"` for a piece cut
+ * from maps, else the providing plugin's id.
+ */
+export interface TerrainPiece {
+  tiles: number[];
+  slot: number;
+  group: number;
+  cols: number;
+  rows: number;
+  laid: number;
+  name?: string;
+  category?: string;
+  copies: number;
+  source: string;
+}
+
+/** The tileset's sheet: 16 slots wide, a group a row. `addedFrom` is where the groups a data set adds begin, or null. */
+export interface TileSheetInfo {
+  columns: 16;
+  groups: number;
+  addedFrom: number | null;
+}
+
+/** A map's tiles for `terrain.cutPieces`: MTXM ids row by row, as `ReadonlyScenario.tiles` holds them. */
+export interface PieceMap {
+  tiles: ArrayLike<number>;
+  width: number;
+  height: number;
+}
+
+/** What `terrain.providePieces` takes. */
+export interface PieceSetSpec {
+  /** Names the set among the plugin's; the same id again replaces it. */
+  id: string;
+  /** The heading the Pieces view lists the set under. */
+  label: string;
+  /** The tileset the tiles are of: the set is listed while a map on it is in front. */
+  tileset: TilesetId;
+  pieces: { name?: string; category?: string; block: TileBlock }[];
+}
+
+/** A terrain of another tileset the open map's tileset can lay with that tileset's own isometric brush (`terrain.borrowed`). */
+export interface BorrowedTerrainInfo {
+  /** The id the palette selects (`setActive({ terrain })`) and `tx.paintBorrowed` takes. Never written to a map. */
+  id: number;
+  /** The tileset it is borrowed from. */
+  source: TilesetId;
+  /** Its terrain id in that tileset (what `isomTypes()` lists on a map of it). */
+  terrain: number;
+  /** That tileset's name for it. */
+  name: string;
+  /** Tiles laid with the nearest picture this tileset has, where it holds no copy. */
+  standIns: number;
+  /** `"scan"` when the editor matched the pictures, the id of the plugin whose table it is, or `@dataset:<id>` when the data set's terrain file gave it. */
+  from: string;
+  /**
+   * The grounds of the open map's tileset (terrain ids, as `isomTypes()` lists them) this terrain has drawn borders
+   * against, and where each table came from: `"maps"` (Learn from Maps…), a plugin's id, or `@dataset:<id>`. Where one
+   * is known, `tx.paintBorrowed` and the brush lay the tileset's own border pieces there (unless the Drawn borders
+   * switch is off). Absent in editors older than drawn borders.
+   */
+  borders?: { ground: number; from: string }[];
+}
+
+/**
+ * A copied terrain the open map's tileset can lay with the isometric brush (`terrain.copies`): one of its own terrains
+ * held again at another height (the Rect tab's "Mud (mid ground)") together with the edge pieces it holds for it there.
+ */
+export interface CopiedTerrainInfo {
+  /** The id the palette selects (`setActive({ terrain })`) and `tx.paintCopy` takes. Never written to a map. */
+  id: number;
+  /** The terrain copied: its terrain id in the tileset (what `isomTypes()` lists). */
+  terrain: number;
+  /** The copy's height: 0 low, 1 mid, 2 high. */
+  height: number;
+  /** The copy's flat pair, as the Rect tab lists it (`types()` with the pair's id). */
+  group: number;
+  /** Whether the tileset has a tile for every edge shape the brush asks for; when not, how many it lacks. */
+  complete: boolean;
+  missing: number;
+  /** The blocks of tiles it can be laid with (the brush picks the one that joins the ground under a stroke best). */
+  blocks: { ground: { terrain: number } | { pair: number }; complete: boolean; from: string }[];
+}
+
+/** What `terrain.provideCopies` takes: one block of tiles standing for a terrain's edge set at a copy's height. */
+export interface CopyBlockSpec {
+  /** Names the block among the plugin's; the same id again replaces it. */
+  id: string;
+  tileset: TilesetId;
+  /** The terrain copied (its terrain id) and the copy's height (0 low, 1 mid, 2 high): the tileset must hold such a copy. */
+  terrain: number;
+  height: number;
+  /** The ground the pieces are drawn to meet: a terrain id of the tileset, or an untyped flat pair by its even group. */
+  ground: { terrain: number } | { pair: number };
+  /** A piece of the terrain's edge set (`group << 4 | slot`) → the tile standing for it. */
+  pieces: readonly (readonly [piece: number, tile: number])[];
+}
+
+/** What `terrain.provideBorderTable` takes. */
+export interface BorderTableSpec {
+  /** Names the table among the plugin's; the same id again replaces it. */
+  id: string;
+  /** The tileset whose tiles are written (the map's). */
+  tileset: TilesetId;
+  /** The tileset the borrowed terrain comes from. */
+  source: TilesetId;
+  /** The borrowed terrain: its terrain id in `source`. */
+  terrain: number;
+  /** The ground it meets: its terrain id in `tileset`. */
+  ground: number;
+  /**
+   * Border shape → the tiles of `tileset` to lay there, the likeliest first. Shapes are named as the editor reads them
+   * (the border's four sides and the tile's side of its rect, e.g. `"A,B,B,h53|L"`); a terrain file saved from the
+   * Pieces view after Learn from Maps… lists the ones maps use.
+   */
+  shapes: Readonly<Record<string, readonly number[]>>;
+}
+
+/** What `terrain.provideBorrowTable` takes. */
+export interface BorrowTableSpec {
+  /** Names the table among the plugin's; the same id again replaces it. */
+  id: string;
+  /** The tileset whose tiles are written (the map's). */
+  tileset: TilesetId;
+  /** The tileset whose isometric brush lays the terrain. */
+  source: TilesetId;
+  /** Source tile id → the tile of `tileset` to write for it. A source tile with no pair is not laid. */
+  pairs: readonly (readonly [sourceTile: number, tile: number])[];
+  /**
+   * Source tiles whose tile here is only the nearest picture, not a copy (optional). A terrain is offered only where such
+   * tiles are at most a tenth of its tiles, as the editor's own match decides.
+   */
+  standIns?: readonly number[];
+}
+
+/** What `terrain.provideTypes` takes. */
+export interface TerrainTypeSpec {
+  /** Names the declaration among the plugin's; the same id again replaces it. */
+  id: string;
+  tileset: TilesetId;
+  /** Each a name and the even group of a left/right pair of flat ground. */
+  types: { name: string; group: number }[];
 }
 
 export interface TerrainApi {
@@ -2501,6 +2764,46 @@ export interface TerrainApi {
    * Empty without the graphics.
    */
   blendCandidates(anchorTileId: number, side: Side, options?: Partial<BlendOptions>): BlendCandidate[];
+  /**
+   * How much of a step the join is between a tile and the tile on its `side`: the
+   * difference between the two rows of pixels that meet, less what each picture changes
+   * by one pixel in from that edge. Around 0 for tiles drawn to meet; over 8, View ▸ Seam
+   * Overlay draws the join. Null without the graphics or for a tile with no picture.
+   */
+  seamStep(tileId: number, side: Side, neighbourId: number): number | null;
+  /** How many joins View ▸ Seam Overlay draws on `cells` (on the whole map when omitted); 0 without the graphics. */
+  seams(cells?: Cells): number;
+  /** The pinned tiles (`tx.pin`), as flat indices in ascending order. */
+  pinned(): number[];
+  /**
+   * The tiles laid by hand, as far as the map can tell: those its isometric data does
+   * not account for (a doodad placed as terrain, a blend, another editor's ground), in
+   * `rect` or on the whole map. Empty without ISOM or the graphics.
+   *
+   * @example
+   * // Keep everything hand-laid before repainting around it.
+   * api.document.edit("Pin hand-laid ground", (tx) => { tx.pin(api.terrain.handLaid()); });
+   */
+  handLaid(rect?: Rect): number[];
+  /**
+   * How alike the map's ground plays to its own image under each symmetry mode that fits
+   * its shape, 0..1: the share of small squares (minitiles) that walk, stand and build as
+   * their images do. A mirrored map reads 0.98 and up under its own mode. Empty without
+   * the graphics.
+   */
+  symmetryShares(): Partial<Record<SymmetryMode, number>>;
+  /**
+   * The map against its own image under `mode` (the symmetry tool's mode when omitted):
+   * how many small squares differ in walking, height and building, the places they are
+   * in, a mask for drawing them, and the mineral fields, geysers and start locations with
+   * no equal counterpart. Null for `"none"`, for a mode the map's shape does not allow,
+   * and without the graphics.
+   *
+   * @example
+   * const report = api.terrain.fairness("h");
+   * if (report) api.ui.status(`${report.unlike} small squares differ in ${report.places.length} places`);
+   */
+  fairness(mode?: SymmetryMode): FairnessReport | null;
   /** The Rect brush's terrain, in the tileset's own terms: the even CV5 group of a flat pair, or -1. */
   flatGroupOf(terrainId: number): number;
   /** Tools ▸ Symmetry…: the mode the brushes paint and the palettes place under. */
@@ -2517,7 +2820,144 @@ export interface TerrainApi {
   /** A map pixel and its images under the symmetry mode, the original first. */
   mirrorPoint(px: number, py: number): { x: number; y: number }[];
   active(): ActiveBrush;
+  /**
+   * @example
+   * // Arm the Tile brush with a piece the maps lay, as a click in the Pieces view does.
+   * const [piece] = api.terrain.pieces();
+   * if (piece) api.terrain.setActive({ mode: "tile", block: api.terrain.blockOf(piece) });
+   */
   setActive(brush: Partial<ActiveBrush>): void;
+
+  /**
+   * The tileset's sheet as the Tile palette lays it out: 16 slots a row, a group a row, and
+   * where the groups the data set in use adds to the game's begin (null when it adds none).
+   * Null without the tileset graphics.
+   */
+  sheet(): TileSheetInfo | null;
+  /**
+   * A rectangle of the sheet as a block: `cols` slots from `slot` across `rows` groups from
+   * `group`, a slot with no picture a hole. Null when the rectangle runs off the table, when
+   * it holds no tile, or without the graphics.
+   *
+   * @example
+   * const block = api.terrain.blockFrom({ group: 2900, slot: 0, cols: 4, rows: 3 });
+   * if (block) api.document.edit("Lay it", (tx) => { tx.placeBlock(block, 10, 10); });
+   */
+  blockFrom(rect: { group: number; slot: number; cols: number; rows: number }): TileBlock | null;
+  /**
+   * The list the Tile palette's Pieces view shows for the map in front, unfiltered: the sets
+   * plugins provide for its tileset first, then the pieces cut from the map and from what was
+   * learned from folders of maps, the same tiles listed once. A cut piece with the same tiles as
+   * a provided one is left out. The learned part is read the first time it is asked for, and the
+   * `"pieces"` event fires when it arrives. Empty without a map or the graphics.
+   *
+   * @example
+   * const walls = api.terrain.pieces().filter((p) => p.category === "Walls");
+   * api.log(`${walls.length} walls, ${api.terrain.pieces().length} pieces in all`);
+   */
+  pieces(): TerrainPiece[];
+  /**
+   * The piece the map lays at a tile, by the Pieces view's Alt+click rule: the tile is one of a
+   * cut piece's, and a neighbour from the same piece is laid beside it as in the sheet. Null
+   * otherwise.
+   */
+  pieceAt(x: number, y: number): TerrainPiece | null;
+  /** A piece as the block that lays it: its rectangle in the sheet, a hole where it has no tile. */
+  blockOf(piece: TerrainPiece): TileBlock;
+  /**
+   * The pieces the rule cuts from maps of your own (each `{ tiles, width, height }`), read
+   * against the tileset of the map in front — to mine a folder and keep the result where you
+   * like. The same tiles are folded into one piece when the graphics are loaded. Nothing is
+   * kept by the editor.
+   *
+   * @example
+   * // Maps read with @scm-js/core's openMapBytes, bundled into the plugin.
+   * import { openMapBytes } from "@scm-js/core";
+   * const files = await api.ui.pickFiles({ directory: true });
+   * const maps = [];
+   * for (const f of files.filter((f) => /\.sc[mx]$/i.test(f.path))) {
+   *   const opened = await openMapBytes(new Uint8Array(await f.file.arrayBuffer()), f.path).catch(() => null);
+   *   if (opened) maps.push(opened.scenario);
+   * }
+   * api.log(api.terrain.cutPieces(maps).length, "pieces");
+   */
+  cutPieces(maps: readonly PieceMap[]): TerrainPiece[];
+  /**
+   * Named pieces for the Pieces view: listed under `label`, ahead of the pieces cut from maps,
+   * while a map on `tileset` is in front. A piece with a tile the loaded table lacks is not
+   * listed; a cut piece with the same tiles as one of yours is not listed again. The search box
+   * finds yours by name and category. Taken back with the plugin, or by disposing.
+   *
+   * @example
+   * api.terrain.providePieces({
+   *   id: "walls", label: "Ruined walls", tileset: "badlands",
+   *   pieces: [{ name: "Wall, long", category: "Walls", block: api.terrain.blockFrom({ group: 2900, slot: 0, cols: 6, rows: 3 })! }],
+   * });
+   */
+  providePieces(spec: PieceSetSpec): Disposable;
+  /**
+   * Declare flat ground the tileset does not type, for the Rect brush: each `group` is the even
+   * group of a left/right pair, listed under `name` in the Rect tab and Replace Terrain, laid,
+   * filled and replaced as the Rect brush lays any pair. A group that is not such a pair in the
+   * loaded table is skipped. `types()` still lists the game's types alone. Taken back with the
+   * plugin, or by disposing.
+   *
+   * @example
+   * api.terrain.provideTypes({ id: "ground", tileset: "jungle", types: [{ name: "Swamp", group: 2466 }] });
+   */
+  provideTypes(spec: TerrainTypeSpec): Disposable;
+  /**
+   * The terrains of other tilesets the open map's tileset can lay (its Isometric tab's "From other
+   * tilesets"): those whose every tile, and every tile of the ground the brush lays them onto, has
+   * a copy here. Found by matching pictures, once per pair of tilesets' files, or given by a
+   * plugin (`provideBorrowTable`). Resolves after reading what was found before and the other
+   * tilesets' files, so `tx.paintBorrowed` can run; with `scan: true`, works it out first where it
+   * never was (seconds, once). Empty without the graphics, and when the editor draws from the
+   * game's own data (nothing there is borrowed).
+   *
+   * @example
+   * for (const b of await api.terrain.borrowed({ scan: true })) api.log(b.source, b.name, b.id);
+   */
+  borrowed(options?: { scan?: boolean }): Promise<BorrowedTerrainInfo[]>;
+  /**
+   * Hand the editor the table for a pair of tilesets: which tile of `tileset` to write for each
+   * tile of `source`. The editor's own picture match is then not used for that pair: a mod's
+   * author knows which copy is meant, under which flags. `borrowed()` lists what the table
+   * makes paintable. Taken back with the plugin, or by disposing.
+   *
+   * @example
+   * api.terrain.provideBorrowTable({ id: "install", tileset: "badlands", source: "install", pairs: [[0x30, 0x9a40], [0x31, 0x9a41]] });
+   */
+  provideBorrowTable(spec: BorrowTableSpec): Disposable;
+  /**
+   * Hand the editor the drawn border between a borrowed terrain and a ground of the map's tileset: which tile to lay for
+   * each shape of the border. It stands ahead of a data set's terrain file and of what maps taught (Learn from Maps…)
+   * for the same pair. `borrowed()` lists the pairs each terrain has. Taken back with the plugin, or by disposing.
+   *
+   * @example
+   * api.terrain.provideBorderTable({ id: "floor-dirt", tileset: "badlands", source: "install", terrain: 3, ground: 2, shapes: { "A,A,B,h53|L": [0x9b20] } });
+   */
+  provideBorderTable(spec: BorderTableSpec): Disposable;
+  /**
+   * The open map's tileset's copied terrains (its Isometric tab's "Copied terrain"): a terrain held again at another
+   * height whose edge pieces the tileset holds there too. Found by the editor from the tileset's files (once per files,
+   * by itself when the tileset holds a copy), or given (`provideCopies`, a mod's terrain file). Resolves after what was
+   * found is known, so `tx.paintCopy` can run; with `scan: true` works it out first where it never was. Lists only
+   * terrains whose pieces walk and build as the terrain does at the copy's height.
+   *
+   * @example
+   * for (const c of await api.terrain.copies({ scan: true })) api.log(c.terrain, c.height, c.complete ? "complete" : `${c.missing} shapes missing`);
+   */
+  copies(options?: { scan?: boolean }): Promise<CopiedTerrainInfo[]>;
+  /**
+   * Hand the editor a block of tiles for a copied terrain: which tile stands for each piece of the terrain's edge set at
+   * the copy's height, and which ground the pieces are drawn to meet. It takes the place of what the editor found for
+   * that terrain and height. Taken back with the plugin, or by disposing.
+   *
+   * @example
+   * api.terrain.provideCopies({ id: "mud-mid", tileset: "jungle", terrain: 4, height: 1, ground: { terrain: 3 }, pieces: [[0x2400, 0x9950], [0x2410, 0x9951]] });
+   */
+  provideCopies(spec: CopyBlockSpec): Disposable;
 }
 
 export interface TilesetApi {
@@ -2762,6 +3202,19 @@ export interface PaletteApi {
   /** The open map's doodads by palette category; empty without the tileset graphics. */
   doodadCategories(): { name: string; doodads: DoodadInfo[] }[];
   doodadInfo(doodadId: number): DoodadInfo | null;
+  /**
+   * The axes a doodad stretches along without making a mess (`tx.placeStretchedDoodad`):
+   * a ramp along the cliff it cuts, a bridge along its deck and, for most, across it.
+   * `"se"` and `"ne"` are the two diagonals, `"e"` straight across, `"s"` straight down.
+   * Empty for a doodad with no middle to repeat, and without the graphics.
+   */
+  stretchAxes(doodadId: number): StretchAxis[];
+  /**
+   * The doodad that is this one seen in a mirror, left for right: the ramp for the cliff
+   * running the other way. What the symmetry tool places across a left-right mirror. The
+   * doodad itself when it is its own image; null when the tileset has none.
+   */
+  doodadTwin(doodadId: number): number | null;
 }
 
 /* ── Names ──────────────────────────────────────────────── */
@@ -4515,7 +4968,9 @@ export type PluginEvent =
   /** A dialog opened or closed — `ui.openDialogs()` says which are open. */
   | "dialogs"
   /** The game data source changed: installed, switched to another data set, or a copy removed. `gameData.source()` says what it is now. */
-  | "gameData";
+  | "gameData"
+  /** `terrain.pieces()` may answer differently: pieces were learned or forgotten, or a plugin provided or withdrew a set. The map's own part follows its ground, which the `"terrain"` event tells. */
+  | "pieces";
 
 /**
  * What the `"commit"` event hands its listeners: one change to the map in front, after it

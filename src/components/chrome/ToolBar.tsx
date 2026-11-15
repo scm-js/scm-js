@@ -22,7 +22,8 @@ import {
   ZoomOut,
   CloudFog,
 } from "lucide-react";
-import { activeLayerAtom, brushSizeAtom, mapHeightAtom, mapWidthAtom, symmetryAtom, toggleSymmetryAtom, viewFlagsAtom, type EditorLayer } from "../../atoms/editorAtoms";
+import { activeLayerAtom, brushSizeAtom, mapHeightAtom, mapWidthAtom, symmetryAtom, terrainModeAtom, toggleSymmetryAtom, viewFlagsAtom, type EditorLayer } from "../../atoms/editorAtoms";
+import { tileBlockAtom } from "../../atoms/tileBlockAtoms";
 import { chromeModeAtom, flagOffered, flagShown, mapInFront, toggleFlagAtom } from "../../atoms/viewModeAtoms";
 import { shownZoomAtom, zoomToAtom } from "../../atoms/zoomAtoms";
 import { redoAtom, undoAtom } from "../../atoms/documentAtoms";
@@ -86,6 +87,10 @@ export default function ToolBar() {
   const [redoLabel, redo] = useAtom(redoAtom);
   const [layer, setLayer] = useAtom(activeLayerAtom);
   const [brush, setBrush] = useAtom(brushSizeAtom);
+  // A block on the Tile brush has its own size; the brush size means nothing until a single tile is picked again.
+  const tileBlock = useAtomValue(tileBlockAtom);
+  const terrainMode = useAtomValue(terrainModeAtom);
+  const blockShown = layer === "terrain" && terrainMode === "tile" ? tileBlock : null;
   const flags = useAtomValue(viewFlagsAtom);
   const toggle = useSetAtom(toggleFlagAtom);
   const zoom = useAtomValue(shownZoomAtom);
@@ -137,11 +142,17 @@ export default function ToolBar() {
       !viewOnly && (layer === "terrain" || layer === "fog") ? (
         <div key="brush" className="tb-group">
           <span className="lbl">{t("Brush")}</span>
-          <select className="select narrow" value={brush} onChange={(e) => setBrush(Number(e.target.value))} aria-label={t("Brush size")}>
-            {[1, 2, 3, 4, 5, 6, 7].map((n) => (
-              <option key={n} value={n}>{n}×{n}</option>
-            ))}
-          </select>
+          {blockShown ? (
+            <select className="select narrow" value="block" disabled title={t("The Tile brush lays the block picked in the palette")} aria-label={t("Brush size")}>
+              <option value="block">{blockShown.cols}×{blockShown.rows}</option>
+            </select>
+          ) : (
+            <select className="select narrow" value={brush} onChange={(e) => setBrush(Number(e.target.value))} aria-label={t("Brush size")}>
+              {[1, 2, 3, 4, 5, 6, 7].map((n) => (
+                <option key={n} value={n}>{n}×{n}</option>
+              ))}
+            </select>
+          )}
         </div>
       ) : null,
     ],

@@ -1,42 +1,49 @@
 /**
- * A mod's hash as the command line works it out: core's `modHashOfDigests` (`src/formats/mod/hash.ts`, the play page's
- * rule) over every file the opened mod lays over the game, the plugins it carries as files and its FireGraft project.
- * A file at a time, the bytes let go after each. Nothing of the person's copy of the game is in it. An operating
- * system's files are not the mod's and have no line (`ModSource.system`); where the mod has any, `older` is its hash as
- * it was while they had lines.
+ * A mod's hash as the command line shows and matches it: `@scm-js/mod`'s identity of the mod (`ModDescription.identity`:
+ * every game file it lays, its FireGraft project and every module of its code), with what a replay tagged by an
+ * earlier rule may name it by — every hash `identity.earlier` lists (the rule before 2026-11-11, the hashes while an
+ * operating system's files had lines, the game files alone, …). Nothing of the person's copy of the game is in any of
+ * them; the forms that need the person's copy are `replaymod.ts#sourceHashes`'.
  */
-import { modHashOfDigests, type Digest, type ModHash } from "../../../src/formats/mod/hash";
-import { fileDigest } from "../../../src/formats/mod/sources";
+import { isPluginFile, type EarlierHash } from "@scm-js/mod";
 import type { ModSource } from "./source";
 
-export interface SourceHash extends ModHash {
+export interface SourceHash {
+  hash: string;
+  /** The hash without the lines of the mod's code: what a game that runs none of it presents. */
+  withoutPlugins: string;
+  /** The hash by the rule before 2026-11-11, where it is neither of those two; null otherwise. */
+  beforeCode: string | null;
+  /** The hashes while an operating system's files had lines (until 2026-11-09), where the mod has such files; null otherwise. */
+  older: { hash: string; withoutPlugins: string | null; left: string[] } | null;
+  /** The hash's lines but the code's (the game files' and the FireGraft project's), sorted. */
+  lines: string[];
   /** Lines of each kind. */
   files: number;
   plugins: number;
   firegraft: number;
-  /** The game files that could not be read (by game name): left out, as the play page leaves them. */
+  /** The game files that could not be read (by game name): left out. */
   unreadable: string[];
-  /** The hash over the game files alone: what `scmjs` called a mod's data set before the plugins and the project had lines. */
-  gameFilesOnly: string;
-  /** That hash as it was while an operating system's files had lines; null when the mod has none. */
-  gameFilesOnlyWere: string | null;
+  /**
+   * Every hash an earlier rule gave the same files (`identity.earlier`), each with its rule: for matching a replay or a
+   * kept mod named then, never for naming the mod.
+   */
+  earlier: EarlierHash[];
 }
 
-/** The mod's hash, its hash without plugins, and what went into them. */
+/** The mod's hash, its hash without its code, the earlier forms, and what went into them. */
 export async function sourceHash(source: ModSource): Promise<SourceHash> {
-  const files: Digest[] = [], plugins: Digest[] = [], firegraft: Digest[] = [], unreadable: string[] = [];
-  for (const [name, f] of source.files) {
-    let bytes: Uint8Array;
-    try { bytes = await f.read(); } catch { unreadable.push(name); continue; }
-    files.push({ name, sha256: await fileDigest(bytes) });
-  }
-  // (A plugin inside the mod's archive is not loaded by the play page, so it is not a line; one carried as a file is.)
-  for (const p of source.plugins) if (!p.member) plugins.push({ name: p.name, sha256: await fileDigest(await p.read()) });
-  for (const p of source.firegraft) if (/\.fgp$/i.test(p.name)) firegraft.push({ name: p.name, sha256: await fileDigest(await p.read()) });
-  // (An operating system's files, read for the older form alone: the rule itself drops their lines.)
-  const system: Digest[] = [];
-  for (const [name, f] of source.system) { try { system.push({ name, sha256: await fileDigest(await f.read()) }); } catch { /* left out then too */ } }
-  const hash = await modHashOfDigests({ files: [...system, ...files], plugins, firegraft });
-  const onlyGame = await modHashOfDigests({ files: [...system, ...files] });
-  return { ...hash, files: files.length, plugins: hash.pluginLines.length, firegraft: hash.lines.length - files.length, unreadable, gameFilesOnly: onlyGame.hash, gameFilesOnlyWere: onlyGame.older?.hash ?? null };
+  const d = source.description;
+  if (!d) throw new Error(`${source.name} was not read as a mod`);
+  const id = d.identity;
+  const firegraft = id.lines.filter((l) => /\.fgp\t/.test(l)).length;
+  return {
+    hash: id.hash, withoutPlugins: id.withoutPlugins, beforeCode: id.beforeCode ?? null,
+    older: id.older ? { hash: id.older.hash, withoutPlugins: id.older.withoutPlugins ?? null, left: id.older.files } : null,
+    lines: id.lines, files: id.lines.length - firegraft, plugins: Object.keys(id.plugins).length, firegraft,
+    unreadable: d.unreadable, earlier: id.earlier ?? [],
+  };
 }
+
+/** How many of the mod's code modules are plugins a loader loads (not the libraries they map). */
+export const pluginCount = (source: ModSource) => source.code.filter((c) => c.role !== "library" && (c.role !== undefined || isPluginFile(c.name))).length;

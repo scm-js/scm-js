@@ -10,8 +10,8 @@
  * The runner speaks JSON lines — start, progress, end — kept here and worded against the map's own triggers, read
  * with the editor's code so a row is shown as the trigger window shows it.
  */
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, writeFileSync } from "node:fs";
+import { removeFolder, tempFolder } from "./lifecycle";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { mapVersionOf, parseScenario, serializeScenario, type Scenario } from "../../src/formats/chk/scenario";
@@ -23,13 +23,13 @@ import { summarizeTrigger } from "../../src/formats/triggers/text";
 import { conditionDef } from "../../src/data/triggerDefs";
 import { createInterface } from "node:readline";
 import { FRAME_MS, type Replay } from "@scm-js/replay";
-import { cacheRoot, ensureEngine, findGameCopy, runnerFor, startRunner, type Engine, modArgs, modWords, type RunnerModReport } from "./engine";
+import { cacheRoot, endDetail, endReason, ensureEngine, findGameCopy, noResultHint, runnerFor, startRunner, type Engine, modArgs, modWords, type RunnerModReport } from "./engine";
 import { VERSION } from "./about";
 import { assetFile, INSTALL } from "./runtime";
 import { diffMaps, summarizeDiff } from "./diff";
 import { GAME_TYPES } from "./replay";
 import { t, translate } from "./i18n";
-import { CliError, columns, dot, duration, mark, num, pc, table } from "./ui";
+import { CliError, columns, dot, duration, mark, num, pc, table, visible } from "./ui";
 
 /* ── The runner's lines (scm-sim's src/exact/runMap.ts) ──────── */
 
@@ -134,7 +134,7 @@ export async function gameMap(doc: OpenedMap, inputPath: string, inputName = inp
   if (!converted && inputPath !== "-") return { path: inputPath, converted: false };
   const copy = parseScenario(serializeScenario(doc.scenario));
   if (converted) changeMapVersion(copy, "broodwar");
-  const path = join(mkdtempSync(join(tmpdir(), "scmjs-game-")), inputName.replace(/^.*[\\/]/, "").replace(/\.(scm|scx|chk)$/i, "") + ".scx");
+  const path = join(tempFolder("scmjs-game-"), inputName.replace(/^.*[\\/]/, "").replace(/\.(scm|scx|chk)$/i, "") + ".scx");
   temporary.add(path);
   try { writeFileSync(path, await writeMapBytes(copy, { format: "scx", extras: doc.extras, stored: doc.stored ?? null })); } catch (e) { removeGameMap(path); throw e; }
   return { path, converted };
@@ -146,7 +146,7 @@ const temporary = new Set<string>();
 /** A copy `gameMap` wrote, deleted with its folder; anything else is left alone. */
 export function removeGameMap(path: string): void {
   if (!temporary.delete(path)) return;
-  try { rmSync(dirname(path), { recursive: true, force: true }); } catch { /* the temporary folder is the system's to clear */ }
+  removeFolder(dirname(path));
 }
 
 /** A frame as the game's clock on Fastest, `m:ss`: 42 ms a frame, as `replay info` and `replay watch` count it. */
@@ -175,7 +175,7 @@ export async function runMapInGame(map: string | null, what: "trace" | "cost", o
 const cancelled = () => new CliError(t("The run was cancelled: the game was stopped before it finished."), null);
 
 /** Said when the runner is older than the replays: it wanted a map, or ran the map with nobody playing. */
-const olderThanReplays = (dir: string) => new CliError(t("The engine at {dir} has a map runner from before map trace --replay.", { dir }), t("A play page deployed since has one; the next run fetches it (or name a newer one with --engine)."));
+const olderThanReplays = (dir: string) => new CliError(t("The game engine at {dir} is from before map trace --replay.", { dir }), t("A play page deployed since has one; the next run fetches it (or name a newer one with --engine)."));
 
 async function runMap(map: string | null, what: "trace" | "cost", o: MapRunOptions): Promise<MapRunOutcome> {
   if (map !== null && !existsSync(map)) throw new CliError(t("No file {file}", { file: map }), null, 2);
@@ -216,7 +216,7 @@ async function runMap(map: string | null, what: "trace" | "cost", o: MapRunOptio
         start = l; o.live?.(wordStart(l));
         if (l.mod) o.live?.(modWords(l.mod));
       }
-      else if (l.kind === "progress") { progress.push(l); o.onProgress?.(l); o.live?.(`  ${pc.dim(`${start?.mode === "replay" ? `${gameClock(l.frame).padStart(5)}  ` : ""}${t("frame {frame}  {n, plural, one {# pass} other {# passes}} of the triggers", { frame: String(l.frame).padStart(6), n: l.passes })}`)}`); }
+      else if (l.kind === "progress") { progress.push(l); o.onProgress?.(l); o.live?.(`  ${pc.dim(`${start?.mode === "replay" ? `${gameClock(l.frame).padStart(5)}  ` : ""}${t("frame {frame}  {n, plural, one {# pass} other {# passes}} of the triggers", { frame: num(l.frame).padStart(7), n: l.passes })}`)}`); }
       else if (l.kind === "end") end = l;
       else if (l.kind === "error") error = l.message;
     }
@@ -224,8 +224,8 @@ async function runMap(map: string | null, what: "trace" | "cost", o: MapRunOptio
   const exitCode = await exited;
   if (o.signal?.aborted) throw cancelled();
   if (older || (o.replay && error && /--map is needed/.test(error))) throw olderThanReplays(engine.dir);
-  if (error) throw new CliError(error, o.replay ? t("The runner is scm-sim's; a replay StarCraft itself plays and your own copy of the game are what it needs.") : t("The runner is scm-sim's; a map StarCraft itself opens, with a slot for a person, and your own copy of the game are what it needs."));
-  if (!end) throw new CliError(`${t("The game did not finish: the runner stopped without a result (exit {code}).", { code: exitCode })}${stderr.trim() ? `\n${stderr.trim().split("\n").slice(-6).join("\n")}` : ""}`);
+  if (error) throw new CliError(error, o.replay ? t("A replay StarCraft itself plays and your own copy of the game are what it needs.") : t("A map StarCraft itself opens, with a slot for a person, and your own copy of the game are what it needs."));
+  if (!end) throw new CliError(`${t("The game did not finish: it stopped without a result (exit {code}).", { code: exitCode })}${stderr.trim() ? `\n${stderr.trim().split("\n").slice(-6).join("\n")}` : ""}`, noResultHint(engine.dir));
   return { engine: { build: engine.build, dir: engine.dir, fetched: engine.fetched }, game, start, progress, end };
 }
 
@@ -330,12 +330,21 @@ export function replayReport(r: Pick<MapRunOutcome, "start" | "end">): ReplayRep
 export function traceReport(file: string, scn: Scenario, r: MapRunOutcome): TraceReport {
   const rows = readTriggers(scn).length;
   const replay = replayReport(r);
-  return { file, rows: summarizeRows(r.end.trace ?? [], rows), passes: r.end.passes, frame: r.end.frame, ended: r.end.ended, reason: r.end.reason, ...(replay ? { replay } : {}), ...(r.start?.mod ? { mod: r.start.mod } : {}) };
+  return { file, rows: summarizeRows(r.end.trace ?? [], rows), passes: r.end.passes, frame: r.end.frame, ended: r.end.ended, reason: endReason(r.end.reason), ...endDetail(r.end.reason), ...(replay ? { replay } : {}), ...(r.start?.mod ? { mod: r.start.mod } : {}) };
 }
 
-/** `map trace --json`: the report, with where the engine and the game came from, every copy's line and the run's times. */
+/** A run's times in whole milliseconds, each key kept. */
+export const wholeMs = <T extends object>(o: T): T => Object.fromEntries(Object.entries(o).map(([k, v]) => [k, typeof v === "number" ? Math.round(v) : v])) as T;
+/** Milliseconds as the text gives them: five places under a thousandth, three under a tenth, else two. */
+export const msAsSaid = (x: number) => Number(x > 0 && x < 0.001 ? x.toFixed(5) : x > 0 && x < 0.1 ? x.toFixed(3) : x.toFixed(2));
+
+/**
+ * `map trace --json`: the report, each trigger with its number as the text gives it (from 1), its text and its players
+ * from 1 (`players` stays 0-based), where the engine and the game came from, every copy's line and the run's times.
+ */
 export function traceJson(file: string, scn: Scenario, r: MapRunOutcome) {
-  return { ...traceReport(file, scn, r), engine: r.engine, game: r.game, copies: r.end.trace, ms: r.end.ms };
+  const rep = traceReport(file, scn, r);
+  return { ...rep, rows: rep.rows.map((s) => ({ number: s.row + 1, ...s, playerNumbers: s.players.map((p) => p + 1), text: visible(rowText(scn, s.row, 160)) })), engine: r.engine, game: r.game, copies: r.end.trace, ms: wholeMs(r.end.ms) };
 }
 
 /** Why a row never fired, in words. */
@@ -343,12 +352,15 @@ function neverWhy(s: RowSummary): string {
   return !s.players.length ? t("no player in the game owns it") : s.lastFail ? t("{condition} (condition {slot}) said no last, at frame {frame}", { condition: conditionDef(s.lastFail.type)?.name ?? `condition ${s.lastFail.type}`, slot: s.lastFail.slot + 1, frame: num(s.lastFail.frame) }) : s.failed ? t("its conditions said no") : t("it was never asked");
 }
 
+/** "the game ended", with why when the game said more than that. */
+const endedWords = (reason: string | null) => (reason && reason !== t("the game ended") ? t("the game ended: {reason}", { reason }) : t("the game ended"));
+
 /** How a replay's run ended, in a few words: who won, the replay's end, or where it was stopped. */
 function endWords(rep: TraceReport): string {
   const r = rep.replay!;
   if (r.by === "victory") { const won = r.players.filter((p) => p.outcome === "victory").map((p) => p.name); return won.length ? t("{players} won", { players: won.join(", ") }) : t("a side won"); }
   if (r.by === "replay") return t("to the replay's end");
-  return rep.ended ? t("the game ended: {reason}", { reason: rep.reason ?? "over" }) : t("stopped there");
+  return rep.ended ? endedWords(rep.reason) : t("stopped there");
 }
 
 /** The trace's lines: the run in one, a table of the triggers, then the ones that never fired and why. With a replay, the firings in order after them when asked for. */
@@ -362,9 +374,12 @@ export function printTrace(file: string, scn: Scenario, r: MapRunOutcome, { all 
   const when = replay ? (f: number | null) => (f === null ? pc.dim("–") : gameClock(f)) : frame;
   const out = replay
     ? [`${mark.ok} ${pc.bold(file)}: ${t("{n, plural, one {# trigger} other {# triggers}}", { n: rep.rows.length })}${listed.length !== rep.rows.length ? pc.dim(` ${t("({n} owned by the players)", { n: num(listed.length) })}`) : ""}${dot}${t("{frames} frames", { frames: num(rep.frame) })} ${pc.dim(`(${gameClock(rep.frame)})`)}, ${endWords(rep)}${dot}${t("{n, plural, one {# pass} other {# passes}}", { n: rep.passes })}${dot}${pc.green(t("{n} fired", { n: fired }))}${never.length ? `${dot}${pc.yellow(t("{n} never", { n: never.length }))}` : ""}${dot}${(r.end.ms.total / 1000).toFixed(1)} s`]
-    : [`${mark.ok} ${pc.bold(file)}: ${t("{n, plural, one {# trigger} other {# triggers}}", { n: rep.rows.length })}${dot}${t("{frames} frames", { frames: num(rep.frame) })} ${pc.dim(t("({clock} of play)", { clock: clock(rep.frame) }))}${rep.ended ? pc.dim(t(", the game ended: {reason}", { reason: rep.reason ?? "over" })) : ""}${dot}${t("{n, plural, one {# pass} other {# passes}}", { n: rep.passes })}${dot}${pc.green(t("{n} fired", { n: fired }))}${never.length ? `${dot}${pc.yellow(t("{n} never", { n: never.length }))}` : ""}${dot}${(r.end.ms.total / 1000).toFixed(1)} s`];
+    : [`${mark.ok} ${pc.bold(file)}: ${t("{n, plural, one {# trigger} other {# triggers}}", { n: rep.rows.length })}${dot}${t("{frames} frames", { frames: num(rep.frame) })} ${pc.dim(t("({clock} of play)", { clock: clock(rep.frame) }))}${rep.ended ? pc.dim(`, ${endedWords(rep.reason)}`) : ""}${dot}${t("{n, plural, one {# pass} other {# passes}}", { n: rep.passes })}${dot}${pc.green(t("{n} fired", { n: fired }))}${never.length ? `${dot}${pc.yellow(t("{n} never", { n: never.length }))}` : ""}${dot}${(r.end.ms.total / 1000).toFixed(1)} s`];
   if (replay && replay.parted !== null) out.push(`${mark.warn} ${pc.yellow(t("The game parted from the replay at {clock} (frame {frame})", { clock: gameClock(replay.parted), frame: num(replay.parted) }))}${t(": the players' commands after it were meant for another game, so what fired after that is not what happened.")}`);
   if (replay && !replay.mapSettings) out.push(`${mark.info} ${pc.dim(t("The replay is a {type} game: the game ran its own triggers for it, not the map's.", { type: translate(replay.gameType) }))}`);
+  // With nobody playing, a game the map ends (a Victory or Defeat, nobody left) cuts the trace short: said, with where to go.
+  if (!replay && rep.ended) out.push(`${mark.info} ${pc.dim(t("map trace plays the map with nobody at the controls, so what the map does to an idle player ends the game here (a Defeat or Victory, or nobody left). map test plays a scenario with steps: units made, orders given, switches set."))}`);
+  if (!replay && !rep.rows.length) out.push(`${mark.info} ${pc.dim(t("The map has no triggers of its own: a melee game runs the game's melee rules, which are not traced."))}`);
   if (!listed.length) return out;
   const limit = all ? Infinity : 40;
   const shown = listed.slice(0, limit);
@@ -376,7 +391,9 @@ export function printTrace(file: string, scn: Scenario, r: MapRunOutcome, { all 
   if (listed.length > shown.length) out.push(pc.dim(`  ${t("… and {n} more (--all lists them)", { n: num(listed.length - shown.length) })}`));
   if (never.length) {
     out.push("", pc.dim(`  ${t("Never fired ({n} of {total})", { n: never.length, total: listed.length })}`));
-    for (const s of never.slice(0, all ? Infinity : 20)) out.push(`  ${pc.yellow("▸")} ${pc.dim(`#${s.row + 1}`)}  ${rowText(scn, s.row, Math.max(30, width - 10))}`, `      ${pc.dim(neverWhy(s))}`);
+    // The numbers padded to the widest, so the triggers' text lines up past #9.
+    const listedNever = never.slice(0, all ? Infinity : 20), wide = Math.max(...listedNever.map((s) => String(s.row + 1).length));
+    for (const s of listedNever) out.push(`  ${pc.yellow("▸")} ${pc.dim(`#${String(s.row + 1).padEnd(wide)}`)}  ${rowText(scn, s.row, Math.max(30, width - 10 - wide))}`, `      ${pc.dim(neverWhy(s))}`);
     if (never.length > 20 && !all) out.push(pc.dim(`  ${t("… and {n} more (--all lists them)", { n: num(never.length - 20) })}`));
   }
   if (replay?.order) out.push("", ...orderLines(scn, replay, { all, width }));
@@ -459,21 +476,22 @@ export interface CostReport {
 
 export function costReport(file: string, r: MapRunOutcome): CostReport {
   const c = r.end.cost;
-  if (!c) throw new CliError(t("The runner counted no cost."));
+  if (!c) throw new CliError(t("The game counted no cost."));
   const ran = c.ns.map((n, i) => [n, i] as const).filter(([n]) => n > 0);
   const peak = ran.reduce((best, x) => (x[0] > best[0] ? x : best), [0, -1] as readonly [number, number]);
-  const rows = c.rows.map((x) => ({ row: x.row, msAFrame: x.ns / 1e6 / Math.max(1, x.frames), frames: x.frames, records: x.conditions + x.actions, triggers: x.triggers, peakMs: x.peakNs / 1e6 })).sort((a, b) => b.msAFrame - a.msAFrame || b.records - a.records);
+  const rows = c.rows.map((x) => ({ row: x.row, msAFrame: msAsSaid(x.ns / 1e6 / Math.max(1, x.frames)), frames: x.frames, records: x.conditions + x.actions, triggers: x.triggers, peakMs: msAsSaid(x.peakNs / 1e6) })).sort((a, b) => b.msAFrame - a.msAFrame || b.records - a.records);
   return {
     file, frames: c.ns.length, ranIn: ran.length,
-    averageMs: ran.length ? ran.reduce((n, [x]) => n + x, 0) / 1e6 / ran.length : 0,
-    peakMs: peak[0] / 1e6, peakFrame: peak[1] >= 0 ? peak[1] + c.from : -1, peakRecords: peak[1] >= 0 ? c.records[peak[1]] : 0, peakTriggers: peak[1] >= 0 ? c.triggers[peak[1]] : 0,
-    limits: c.limits, ungrouped: { records: c.ungroupedRecords.reduce((n, x) => n + x, 0), ms: c.ungroupedNs.reduce((n, x) => n + x, 0) / 1e6 }, rows,
+    averageMs: msAsSaid(ran.length ? ran.reduce((n, [x]) => n + x, 0) / 1e6 / ran.length : 0),
+    peakMs: msAsSaid(peak[0] / 1e6), peakFrame: peak[1] >= 0 ? peak[1] + c.from : -1, peakRecords: peak[1] >= 0 ? c.records[peak[1]] : 0, peakTriggers: peak[1] >= 0 ? c.triggers[peak[1]] : 0,
+    limits: c.limits, ungrouped: { records: c.ungroupedRecords.reduce((n, x) => n + x, 0), ms: msAsSaid(c.ungroupedNs.reduce((n, x) => n + x, 0) / 1e6) }, rows,
   };
 }
 
-/** `map cost --json`: the report, with where the engine and the game came from, the frame-by-frame series and the run's times. */
-export function costJson(file: string, r: MapRunOutcome) {
-  return { ...costReport(file, r), ...(r.start?.mod ? { mod: r.start.mod } : {}), engine: r.engine, game: r.game, series: r.end.cost, ms: r.end.ms };
+/** `map cost --json`: the report (each trigger with its number from 1 and its text), where the engine and the game came from, the frame-by-frame series and the run's times. */
+export function costJson(file: string, r: MapRunOutcome, scn?: Scenario) {
+  const rep = costReport(file, r);
+  return { ...rep, rows: rep.rows.map((x) => ({ number: x.row + 1, ...x, ...(scn ? { text: visible(rowText(scn, x.row, 160)) } : {}) })), ...(r.start?.mod ? { mod: r.start.mod } : {}), engine: r.engine, game: r.game, series: r.end.cost, ms: wholeMs(r.end.ms) };
 }
 
 /** Milliseconds, with the digits a small number needs (a trigger of three records is a hundredth of a microsecond). */
@@ -490,7 +508,7 @@ export function printCost(file: string, scn: Scenario, r: MapRunOutcome, { all =
       peakAt: pc.dim(t("(frame {frame}: {records, plural, one {# record} other {# records}}, {triggers, plural, one {# trigger} other {# triggers}})", { frame: num(rep.peakFrame), records: rep.peakRecords, triggers: rep.peakTriggers })),
     })}`,
   ];
-  if (rep.limits) out.push(`  ${pc.dim(t("Remastered on a fast computer: smooth to about {smooth} ms of triggers a frame, slows past {most} ms", { smooth: rep.limits.smoothMs, most: rep.limits.mostMs.toFixed(0) }))}`);
+  if (rep.limits) out.push(`  ${pc.dim(t("Remastered on a fast computer: smooth to about {smooth} ms of triggers a frame, slows past {most} ms", { smooth: rep.limits.smoothMs, most: rep.limits.mostMs }))}`);
   if (rep.ungrouped.records) out.push(`  ${pc.dim(t("{n} of the records ran in no trigger of the map — a program's own (TrigScript, eudplib), {ms} in all", { n: num(rep.ungrouped.records), ms: ms(rep.ungrouped.ms) }))}`);
   const shown = rep.rows.slice(0, all ? Infinity : 12);
   if (shown.length) {

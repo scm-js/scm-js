@@ -74,7 +74,9 @@ Its entry imports `moveIn` first, like `main.tsx`. `styles/pages.css` undoes `ba
 `overflow: hidden` with `html:has(.pg)`. `e2e/dataPage.spec.ts` seeds a stamp in OPFS and reads the
 list back. **`site/header.js` is a second reader of the stamps** (plain JS, no build, so it cannot
 import `copies.ts`): it walks `gamedata/` and `gamedata-profiles/*/` for `stamp.json` and applies
-the same rule to label the site's top bar. Change the rule or the stamp's shape and change both. The
+the same rule to label the site's top bar. Change the rule or the stamp's shape and change both.
+The one-word summary the bar shows is `copies.ts#heldGameData` here, used by the editor's own menu bar
+when it is on the site (`viewport-ui.md`, "The menu bar on the site"). The
 same script is a second client of the scmjs.dev account: it reads and writes the session in
 `scmjs.plugin.scmjs-dev.settings` and runs the plugin's popup sign-in (`/v1/auth/start`, the
 `scmjs-ai-auth` message), so those names are a contract with the site too.

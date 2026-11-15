@@ -64,6 +64,8 @@ export default function MinimapPanel() {
     const scale = size / Math.max(w, h);
     const ox = (size - w * scale) / 2;
     const oy = (size - h * scale) / 2;
+    // No map open (the start screen is in the map's place) and no view with a picture of its own: nothing to draw.
+    if (!scenario && !own) return;
 
     // terrain — recomputed only when the ground itself may have changed
     const tiles = scenario?.tiles;
@@ -138,6 +140,8 @@ export default function MinimapPanel() {
     }
     const ctx = c.getContext("2d")!;
     ctx.drawImage(picture, 0, 0);
+    // With no map open there is no view to box.
+    if (!scenario && !own) return;
     const scale = size / Math.max(w, h);
     const ox = (size - w * scale) / 2;
     const oy = (size - h * scale) / 2;

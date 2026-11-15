@@ -101,13 +101,152 @@
   line-height: 14px;
   text-align: center;
 }
-.map-empty {
+
+/* ── The start screen ───────────────────────────────────────
+   In the map's place while no map is open (`StartScreen`): over the empty viewport and its
+   notices, under a plugin's floating panel. The drop zone is the Open dialog's `.dropzone`,
+   and the window's own drop highlight (`.app.drop-target`) lights it. */
+.start-screen {
   position: absolute;
   inset: 0;
+  z-index: 5;
+  overflow: auto;
+  background: var(--bg-1);
+  container: start-screen / inline-size;
+}
+.start-body {
   display: grid;
-  place-items: center;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+  max-width: 920px;
+  margin: 0 auto;
+  padding: 40px 24px;
+}
+.start-drop {
+  min-height: 236px;
+  align-content: center;
+  gap: 10px;
+  padding: 28px 24px;
+  background: var(--bg-0);
+}
+.start-drop h2 {
+  font-size: var(--fs-lg);
+  font-weight: 600;
+  color: var(--text);
+}
+.start-drop p {
+  max-width: 46ch;
+  font-size: var(--fs-md);
+  line-height: 1.5;
+  text-wrap: balance;
+}
+.start-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+.start-actions .btn {
+  height: 30px;
+  padding: 0 14px;
+}
+.start-actions a.btn {
+  text-decoration: none;
+  cursor: pointer;
+}
+.start-actions .btn svg {
+  color: inherit;
+}
+.app.drop-target .start-drop {
+  border-color: var(--gold);
+  border-style: solid;
+  background: color-mix(in srgb, var(--gold) 8%, var(--bg-0));
+  color: var(--text);
+}
+.app.drop-target .start-drop > svg {
+  color: var(--gold);
+}
+.start-recent {
+  display: grid;
+  gap: 8px;
+  justify-items: start;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-2);
+  box-shadow: var(--bevel-raised);
+}
+.start-recent h3 {
+  padding: 0 4px;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.start-recent .hint {
+  padding: 4px;
+  font-size: var(--fs-sm);
+}
+.start-recent ul {
+  justify-self: stretch;
+  display: grid;
+  gap: 1px;
+  list-style: none;
+}
+.start-recent li button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  padding: 5px 6px;
+  border-radius: var(--radius);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+.start-recent li button:hover {
+  background: var(--bg-4);
+}
+.start-recent li button:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+}
+.start-recent li button svg {
+  flex: none;
   color: var(--text-faint);
-  pointer-events: none;
+}
+.start-recent li button.no-handle {
+  color: var(--text-dim);
+}
+.start-recent-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+}
+.start-recent-when {
+  flex: none;
+  color: var(--text-faint);
+  font-size: var(--fs-xs);
+}
+.start-recent .btn.ghost {
+  min-width: 0;
+  color: var(--text-dim);
+}
+/* A narrow map area (both docks open in a small window): one column. */
+@container start-screen (max-width: 620px) {
+  .start-body {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 20px 14px;
+  }
+  .start-drop { min-height: 0; }
 }
 
 /* non-blocking notices over the map (e.g. tileset graphics missing), stacked so two do not overlap */

@@ -81,6 +81,144 @@
   box-shadow: none;
 }
 
+/* ── The menu bar on the site ───────────────────────────────
+   Only where the editor has scmjs.dev's pages beside it (`.on-site`): the mark leads to the
+   site's home, and the site's other doors, what the browser holds of the game and the
+   library sit at the right end (`SiteNav`). Everywhere else the bar is as above. */
+a.brand {
+  text-decoration: none;
+  cursor: pointer;
+}
+a.brand i {
+  font-style: normal;
+  color: var(--text);
+}
+a.brand:hover {
+  background: var(--bg-4);
+}
+a.brand:focus-visible {
+  outline: none;
+  box-shadow: inset var(--focus);
+}
+/* What the menus leave of the bar. Its width is the room there is, whatever the language and
+   however many menus the plugins added, so the steps below are in its terms. */
+.menubar-rest {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  overflow: hidden;
+  container: menubar-rest / inline-size;
+}
+.menubar-rest .menubar-doc {
+  flex: 0 1 auto;
+  min-width: 0;
+  margin-left: 0;
+  padding: 0 10px;
+}
+.menubar-rest .menubar-doc .dot {
+  flex: none;
+}
+.menubar-rest .doc-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.site-nav {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 100%;
+  padding-left: 6px;
+  border-left: 1px solid var(--border);
+}
+.site-door {
+  padding: 3px 8px;
+  border-radius: var(--radius);
+  color: var(--text-dim);
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.site-door:hover {
+  background: var(--bg-4);
+  color: var(--text);
+}
+/* The door the person is in: a replay's tab is in front. */
+.site-door.here {
+  background: color-mix(in srgb, var(--gold) 12%, transparent);
+  color: var(--gold);
+}
+.site-door:focus-visible,
+.site-data:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+}
+.site-data {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 20px;
+  margin: 0 4px;
+  padding: 0 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  color: var(--text-dim);
+  font-size: var(--fs-sm);
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.site-data:hover {
+  background: var(--bg-4);
+  color: var(--text);
+}
+.site-data-dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--teal);
+  box-shadow: 0 0 6px var(--teal);
+}
+.site-data[data-state="none"] .site-data-dot {
+  background: var(--text-faint);
+  box-shadow: none;
+}
+/* A narrow window: the menus keep the bar, and what is right of them gives way in steps.
+   The game data's words go first (its dot and its tooltip stay); the map's name shortens
+   and then goes (its dot stays); then the library, with the rest drawn closer together,
+   which is what fits beside the menus at the desktop app's smallest window (900px); then
+   Replays, Play and the game data's dot. The mark still leads to the site's home, where
+   every one of them is. Each step is the width its row needs, measured, plus a little. */
+@container menubar-rest (max-width: 520px) {
+  .site-data-label { display: none; }
+  .site-data { padding: 0 6px; }
+}
+@container menubar-rest (max-width: 300px) {
+  .menubar-rest .doc-name { display: none; }
+}
+@container menubar-rest (max-width: 240px) {
+  .site-door.library { display: none; }
+  .site-door { padding: 3px 6px; }
+  .site-data { margin: 0 2px; }
+  .site-nav { padding-left: 4px; }
+  .menubar-rest .menubar-doc { padding: 0 7px; }
+}
+@container menubar-rest (max-width: 156px) {
+  .site-door.replays { display: none; }
+}
+@container menubar-rest (max-width: 92px) {
+  .site-door { display: none; }
+}
+@container menubar-rest (max-width: 52px) {
+  .site-nav { display: none; }
+}
+
 /* dropdown / context menu content */
 .menu-content {
   min-width: 220px;

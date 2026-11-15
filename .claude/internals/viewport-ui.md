@@ -419,6 +419,64 @@ read in the first effect pass is still null.
   whose `Exec` ends in `%U`, and the macOS bundle gets the `CFBundleDocumentTypes` without which
   Finder routes nothing and `open-file` can never fire. The Windows *zip* registers nothing, as any
   unpacked build does not — dragging a map onto `scmJS.exe` still goes through `argv`.
+- **The menu bar on the site** (2026-11-14, a site redesign's editor half: three doors, Editor / Play / Replays, and
+  one header). `site.ts#onSite(at, desktop)` is the rule and `platform.ts#isOnSite()` asks it of the page: the origin is
+  `SITE_ORIGIN` (the stable editor at `/editor/` and the nightly at `/nightly/`), or the host is `localhost` /
+  `127.0.0.1` and the path starts with `/editor/` (a stand-in for the site: `npm run dev:site`). It is the scm-sim
+  plugin's `simAddress` rule on purpose — where the play page is, the site is — and the two must stay in step. The
+  desktop app is refused first, whatever its window loaded. `SITE_ORIGIN` moved to `site.ts` (`moveIn.ts` re-exports
+  it; `site.ts` must stay free of imports, since `atoms/storage.ts` and `moveIn.ts` read it before storage is).
+  `tests/site.test.ts`. **Off the site nothing changed**: `MenuBar` renders the old `div.brand` and the bare
+  `.menubar-doc`. On it: `a.brand` (scm in the pink, JS in `--text`, as the splash title; `/` or `/ko/` by the editor's
+  language, the site header's own rule), and after the menus `.menubar-rest` holding the map's name and `SiteNav`
+  (`chrome/SiteNav.tsx`): Play `/play/`, Replays `/replay/`, the game data chip, Library `/library` (`SITE_PAGES`).
+  - *The chip* is `copies.ts#heldGameData` over `listStoredCopies()`, listed again on `gameDataSourceAtom` /
+    `gameDataRevisionAtom` as the Game Data page does, in the site header's words and tooltips (`site/header.js` is the
+    third place the rule lives: none / download / classic / remastered / both, a mod's set not counted). It links to
+    `/editor/data`, the header's address for `data.html`. It says what the *browser holds*, so a build with bundled
+    data (a stand-in over a checkout with `public/tileset`) reads "No game data" over drawn terrain; its tooltip then
+    says the files come with the build. `GameDataPage`'s mark link uses `isOnSite()` too now.
+  - *Replays is the current door* (`.here`, `aria-current`) when the map in front is view-only **and** a plugin's
+    file type claims `.rep` (`fileTypes.ts#opensReplays`). The editor cannot tell a replay's map from another
+    view-only one — `ViewOnly.label` is the plugin's translated word — and Aftermath is the only thing that opens
+    one, so that is the test. A plugin that opened view-only previews would light it wrongly.
+  - *No account button*: the scmjs.dev plugin's account is the Account menu (before Help) and a status bar cell;
+    nothing of a plugin's is at the bar's right end, and there is no API that puts something there.
+  - *Leaving*: plain same-tab `<a href>`s, like the site header's. `useCloseGuard`'s `beforeunload` is what asks
+    with unsaved changes — the same question as closing the tab, nothing new to keep in step (checked in headless
+    Chromium: clean goes at once, a painted map gets the browser's dialog, Cancel stays). The editor's own Close
+    Scenario dialog (`quitGuard`, Save first) was not used: after Don't Save the `beforeunload` listener would ask
+    a second time unless it were told to stand down, and a new tab for every door was rejected as unlike the site.
+    Every *other* link in the editor (`window.open(…, "_blank")`: docs, issues) goes off the origin and stays so.
+  - *Narrow* (`chrome.css`, "A narrow window"): `.menubar-rest` is `flex: 1 1 0` and a size container, so its width
+    is exactly the room the menus leave, whatever the language and however many menus plugins added, and the steps
+    are container queries on it: ≤520 the chip's words go (dot + tooltip stay), ≤300 the map's name (it ellipsizes
+    before that; its dot stays), ≤240 Library and the paddings tighten, ≤156 Replays, ≤92 Play, ≤52 the chip. Each
+    number is the measured width of the row that must fit, plus a few px: English with the Account menu is 733 px of
+    brand and menus, so at the desktop's 900 px minimum (the only stated minimum; a browser has none) the room is
+    161 px and holds dot, Play, Replays and the chip's dot. Korean menus are narrower (637). Re-measure if a door is
+    added or a label grows. The menus are never pushed: they are `flex: none` before the container.
+  `e2e/startScreen.spec.ts` covers both sides (see `e2e.md`).
+- **The start screen** (2026-11-14, `viewport/StartScreen.tsx`, in `.map-stack` under its own `Guarded`). Shown
+  while `scenarioAtom` is null **and** the editor has started — the editor still starts on StarEdit's blank map
+  (`useStartupMap`), so this is what File ▸ Close Map on the last map leaves, where there used to be an empty
+  viewport (the only trace of an empty state was a dead `.map-empty` rule, removed). "Started" is `preloadStepAtom.done`
+  (the preload's last task waits for the startup map; without the gate the screen flashed for the moment before
+  that map exists) or a map having been open since the page loaded (`mapSeen`, a module variable: `App` remounts on
+  a language change and on the crash screen's Try again, and the second preload that retry starts never finishes
+  with no map open). Making it the landing view instead would mean not creating the startup map, and `documentReady` in
+  `usePreload` then never resolves (the splash would sit until `MAX_MS`); it also changes what every plugin and
+  deep link finds at start. Not done; it is a decision, not an oversight.
+  It opens nothing itself: the drop zone is the Open dialog's `.dropzone` with no handlers (a drop bubbles to
+  `App`'s `onDrop`, and `.app.drop-target .start-drop` is the highlight), New map… is `openDialog("newMap")`, Open a
+  file… is `pickMapFile(pickerFileTypes(store))` into `guard({ action: "open" })` — the Open dialog's Browse without
+  the dialog — and a recent row is `openRecent` (a row without a handle leads to the picker; the menu greys those).
+  The words follow the plugins: "or a mod's folder" only while a file type has `openFolder` (`opensFolders`), the
+  replay sentence only while one claims `.rep`, and "in Replays" in it only on the site, where there is such a door.
+  From your library (`/library`) is on the site only. `z-index: 5`: over the viewport's notices (same level, later
+  in the DOM), under a plugin's floating panel (6). Two columns, one below 620 px of map area (a container query:
+  the docks decide that width, not the window). After a close the minimap keeps the closed map's picture and the
+  bar its name — both older than this screen and left alone.
 - Dropping a map on the window is `App.tsx`'s `onDrop`, and the same file has a **document-level**
   pair of listeners behind it, because two things render outside `.app`: the splash and every dialog
   (Radix portals them to the body). A drop that reaches no handler is navigation — the window loads

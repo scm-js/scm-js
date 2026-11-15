@@ -153,7 +153,8 @@ a second time for Pages) and `NIGHTLY_DOMAIN`, secret `NIGHTLY_PAT` (Contents: w
 **The hosted editor is at `scmjs.dev/editor/` (built 2026-10-12; live once `PAGES_BASE` is
 `/editor/`, the worker is deployed and `scmjs.dev` is proxied).** One origin with the site, because
 OPFS game data and `localStorage` (the sign-in among it) are per origin and the site is to show and
-manage both. Nothing in the editor is path-aware beyond Vite's `base`: `SCMJS_BASE` was already
+manage both. Nothing in the editor is path-aware beyond Vite's `base` (and, since 2026-11-14, `site.ts#onSite`,
+which reads the page's address to decide whether the site's items go in the menu bar — `viewport-ui.md`): `SCMJS_BASE` was already
 there for forks, game data is fetched under `import.meta.env.BASE_URL`, and the plugins' link
 helpers take the base off the page's own path. The parts:
 - **Pages is unchanged in place** — still this repository's site on `editor.scmjs.dev` — but built

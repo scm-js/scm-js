@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { isStarEditDownload } from "../src/gamedata/archives";
-import { copyKind, lacksLanguageModule, ownGame } from "../src/gamedata/copies";
+import { copyKind, heldGameData, lacksLanguageModule, ownGame } from "../src/gamedata/copies";
 import { PLAY_VERSION } from "../src/gamedata/play";
 import { BLIZZARD_ZIP_URL } from "../src/gamedata/install";
 import { REMASTERED_ORIGIN, REMASTERED_PROFILE } from "../src/gamedata/profiles";
@@ -31,6 +31,23 @@ describe("what a stored copy is", () => {
     expect(ownGame([{ from: BLIZZARD_ZIP_URL }, { from: REMASTERED_ORIGIN, profile: REMASTERED_PROFILE }])).toBe(true);
     expect(ownGame([{ from: "StarDat.mpq + BrooDat.mpq" }])).toBe(true);
     expect(ownGame([{ from: "x", profile: { id: "my-mod", name: "My Mod" } }])).toBe(false);
+  });
+
+  it("sums up what a browser holds in one word, as the site's header does", () => {
+    const download = { from: BLIZZARD_ZIP_URL };
+    const classic = { from: "StarDat.mpq + BrooDat.mpq" };
+    const remastered = { from: REMASTERED_ORIGIN, profile: REMASTERED_PROFILE };
+    const mod = { from: "x", profile: { id: "my-mod", name: "My Mod" } };
+    expect(heldGameData([])).toBe("none");
+    expect(heldGameData([download])).toBe("download");
+    expect(heldGameData([{ from: "StarDat.mpq + BrooDat.mpq + patch_rt.mpq", staredit: true as const }])).toBe("download");
+    expect(heldGameData([classic])).toBe("classic");
+    expect(heldGameData([remastered])).toBe("remastered");
+    expect(heldGameData([remastered, classic])).toBe("both");
+    // Somebody's own game says more than the download beside it; a mod's data set is not the game's.
+    expect(heldGameData([download, remastered])).toBe("remastered");
+    expect(heldGameData([mod])).toBe("none");
+    expect(heldGameData([mod, download])).toBe("download");
   });
 
   it("says which of somebody's 1.16 copies play without the game's keys (no Local.dll)", () => {

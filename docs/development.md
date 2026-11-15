@@ -99,6 +99,13 @@ npm run dev:site                                  # this repository: http://loca
 Both dev servers keep their own hot reload. `DEV_SITE_PORT`, `DEV_SITE_EDITOR` and
 `DEV_SITE_SIM` change the three ports.
 
+An editor served this way counts as being on the site, by the same rule the plugin finds
+the play page with: the address is scmjs.dev, or it is this machine and the path starts
+with `/editor/`. There the menu bar carries the site's items (the mark as a link to `/`,
+Play, Replays, the game data box and Library) and the start screen offers the library.
+This origin has no home page, replay page or library, so those links lead nowhere here;
+`npm run dev` on its own, at `/`, shows the bar as the desktop app has it.
+
 ## Commands
 
 ```sh

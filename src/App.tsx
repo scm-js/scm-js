@@ -39,6 +39,7 @@ import { LeftDock, RightDock } from "./components/panels/Docks";
 import { BottomDockedPluginPanels } from "./components/panels/PluginPanels";
 import MapViewport from "./components/viewport/MapViewport";
 import PluginMapViews from "./components/viewport/PluginMapViews";
+import StartScreen from "./components/viewport/StartScreen";
 import DialogHost from "./components/dialogs/DialogHost";
 import SplashScreen from "./components/splash/SplashScreen";
 import { removeBootSplash } from "./components/splash/bootSplash";
@@ -195,6 +196,8 @@ export default function App() {
                 <div className="map-stack">
                   <Guarded surface="map view"><MapViewport /></Guarded>
                   <Guarded surface="plugin map views"><PluginMapViews /></Guarded>
+                  {/* With no map open: where to drop one, the ways to start and the recent files, in the map's place. */}
+                  <Guarded surface="start screen"><StartScreen /></Guarded>
                 </div>
                 <Guarded surface="plugin panels"><BottomDockedPluginPanels /></Guarded>
               </div>

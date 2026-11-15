@@ -1422,6 +1422,19 @@ Phase one of "share links from files on disk". Server half: ai-server 0.36.0 (`P
   `scmjs.taken`, which the page forwards to the command, which exits. Why this way round: a hosted page fetching
   from localhost meets Chrome's local-network-access prompt and Safari's mixed-content block; a loopback page
   posting to the window it opened meets neither. No COOP header on scmjs.dev, which this depends on (window.opener).
+- **The site's inbox (2026-11-14, `src/services/inbox.ts`, the second effect in `useOpenerHandoff`)**: the same
+  hand-over without a second tab, for the site's own pages (scmjs.dev's home page, its library, the play page). A
+  dropped file is not a click, and a browser opens a tab only on one, so the opener's way cost the visitor one more
+  press on a sheet that had nothing to ask. Pages of one origin share the browser's private file storage: the page
+  writes the file to the folder `scmjs-inbox` (`meta.json` = `{ v, at, target, lobby?, files: [{ name }] }`, written
+  last, and the bytes beside it as `0`, `1`, …) and sends the tab to `/editor/?inbox=1`; the editor reads what is for
+  `target: "editor"` and was left within ten minutes, empties the folder, takes `?inbox` out of the address and opens
+  the files like a drop (`openGivenFiles`: a replay goes to the plugin that claims it). The play page reads the same
+  folder for `target: "play"`. Three hands on one format: the site's `open.js` writes, this and scm-sim's
+  `web/inbox.ts` read (the play page also writes, for a replay it sends here). `INBOX` is read once at module load
+  and `inboxTaken` guards the effect, for the same StrictMode reason as below. Nothing outside the origin can write
+  there, so there is no origin check to make. The opener's way stays: it is the only one a loopback page has, and
+  the site falls back to it where the storage cannot be written.
 - **Trap (cost a run)**: React StrictMode runs the effect twice in dev. The first run removed `?handoff` from the
   address and the second returned early, so nothing listened. `HANDOFF` is read once at module load, `handedOver`
   is module-level, and the page re-sends on each ready because the first listener is gone before it arrives.

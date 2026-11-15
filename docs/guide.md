@@ -90,6 +90,21 @@ A map opens in its own tab, beside the ones already open (see [The editor
 window](#the-editor-window)). The blank map the editor starts on is the exception: the
 first map you open takes its place.
 
+With no map open, which is what closing the last one leaves (File ▸ Close Map), the map's
+area shows a start screen instead:
+
+- **Drop a map to edit it.** A `.scm`, `.scx` or `.chk` file dropped anywhere on the
+  window opens, here as at any other time. A replay dropped there opens in a tab of its
+  own (see [Replays](#replays)), and a mod's folder goes to a plugin that opens one. The
+  screen names each of these only while a plugin that takes it is running.
+- **New map…** is File ▸ New…, and **Open a file…** picks a file as File ▸ Open… does.
+- **Recent** lists the files of File ▸ Open Recent. A click reopens one straight from
+  disk; a file the browser kept no way back to says *browse for it*, and a click picks it
+  again. *Clear Recent* empties the list.
+- In the editor at scmjs.dev, **From your library** leads to your library on the site.
+
+The start screen goes as soon as a map is open.
+
 A map that is damaged, or that a map protector has altered, is checked and repaired as it
 opens. See [Damaged and protected maps](#damaged-and-protected-maps).
 
@@ -99,8 +114,10 @@ The window has nine parts, numbered in the picture below.
 
 ![The editor window with its parts numbered](images/editor.webp)
 
-1. **Menu bar.** Every command is here, with its shortcut beside it. The dot at the right
-   end glows while the map has unsaved changes.
+1. **Menu bar.** Every command is here, with its shortcut beside it. The dot beside the
+   map's name, at the right, glows while the map has unsaved changes. In the editor at
+   scmjs.dev the bar is the site's header as well (see [The menu bar at
+   scmjs.dev](#the-menu-bar-at-scmjsdev)).
 2. **Toolbar.** New / open / save, undo and redo, cut / copy / paste, the active layer and
    brush size, the grid, locations and fog-of-war toggles, symmetry, find, zoom, and
    buttons for Player Settings, the Trigger Editor and Test Map.
@@ -122,6 +139,31 @@ The window has nine parts, numbered in the picture below.
    layer and zoom, and a line saying what the last action did or why it was refused. At
    the right end, your scmjs.dev account (or *Sign in to scmjs.dev*), and the *AI* cell
    when the [AI](#the-ai) is on; each is a click to open.
+
+### The menu bar at scmjs.dev
+
+The editor at scmjs.dev is one of the site's three parts, with the play page and replays,
+and its menu bar says so. Nothing below is in the desktop app, in a container or in an
+editor hosted anywhere else, which have none of those pages.
+
+- The **scmJS** mark at the left end leads to the site's home page.
+- **Play** and **Replays**, at the right end, lead to the play page and to the site's
+  replay page. While a replay's tab is in front, *Replays* is lit: that is where you are.
+- **The game's files.** A small box says what this browser holds of StarCraft: *No game
+  data*, *Editor graphics* (Blizzard's free download), *StarCraft 1.16*, *StarCraft:
+  Remastered*, or both. It is what the site's own header says. A click opens the Game Data
+  page, where copies are added and removed (see [The game's
+  graphics](#the-games-graphics)).
+- **Library** leads to your library on the site.
+
+These are links, and they leave the editor in the same tab. With unsaved changes the
+browser asks before it goes, as it does when you close the tab; Ctrl+click or a middle
+click opens the page in a new tab and keeps the editor where it is.
+
+In a narrow window the menus keep the bar and these give way, in this order: the words in
+the game's files box (its dot stays, and pointing at it says what it stands for), the
+map's name (its dot stays), then Library, Replays, Play and the box. The mark stays, and
+the site's home page has all of them.
 
 ### Several maps
 
@@ -1669,7 +1711,8 @@ ordinary copy of the map in a new tab, which asks where to save the first time y
 it.
 
 Switching tabs switches replays, each keeping its own place on the timeline, and closing
-the tab closes the replay.
+the tab closes the replay. In the editor at scmjs.dev, *Replays* in the menu bar is lit
+while a replay's tab is in front.
 
 ### The timeline and the panel
 

@@ -70,6 +70,21 @@ in middleware mode and `ssrLoadModule`s the two modules — the same transform v
 `tests/`. Only types are imported statically. `tsconfig.e2e.json` (a fourth `tsc -b` reference)
 type-checks the specs with the app's options, since those type imports pull `src/` in.
 
+**`startScreen.spec.ts` (2026-11-14): the start screen, and the site's items in the bar.** The start screen is
+reached by File ▸ Close Map (the editor starts on a blank map, so nothing on load changed for the other specs);
+Open a file… and a handle-less recent row are answered through `filechooser`, and the drop is a `DataTransfer`
+built in the page and dispatched on the zone (`dragover` then `drop`, which bubble to `.app`). **On the site
+without a site**: `vite preview` answers any path with the page and the build's asset paths are absolute, so
+`./editor/?nosplash` is the editor at a path `site.ts#onSite` takes for a stand-in (localhost + `/editor/`); the
+fixture's game-data rule still matches, the paths being under the base. The spec reads the doors' hrefs and never
+follows them. The "not on the site" test skips itself when the suite is pointed at `…/editor/`
+(`SCMJS_E2E_URL`), where every spec runs with the site's items in the bar.
+
+**`pluginUpdates.spec.ts` counts against what is vendored.** It expects two offers, for the two defaults its
+registry makes newer than `defaults.ts`'s pins; a `plugins/` folder behind those pins (a build made without
+`prebuild`, a folder shared with an older checkout) adds an offer for each plugin that is behind and the spec
+fails with "4 updates available". `npm run vendor:plugins`, then build again.
+
 `ColorTextField` (Map Properties' name) is a `role="textbox"` div until clicked and an
 `<input>` after: assert the text on the div, click, then fill the input.
 

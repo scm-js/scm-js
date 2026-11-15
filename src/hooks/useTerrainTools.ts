@@ -4,6 +4,7 @@ import {
   activeTerrainAtom, activeTileAtom, blendAnchorAtom, blendFollowAtom, brushSizeAtom, mapTilesetAtom, pinBrushUnpinsAtom,
   rectVariationAtom, symmetryAtom, terrainModeAtom, type TerrainMode,
 } from "../atoms/editorAtoms";
+import type { EditTool } from "../editor/history";
 import { archiveExtrasAtom, commitTerrainAtom, pinCellsAtom, pinnedTilesAtom, scenarioAtom, terrainRevisionAtom, tilesetFileNameAtom, type HistoryEntry } from "../atoms/documentAtoms";
 import { borrowHostsAtom } from "../atoms/borrowAtoms";
 import { borrowedParts, isBorrowedTerrain, isTakeBack, TAKE_BACK, type BorrowedTerrain } from "../editor/borrow";
@@ -145,6 +146,8 @@ export function useTerrainTools() {
   /** The last diamond an isometric stroke painted; the brush fires once per diamond. */
   const lastDiamond = useRef<Diamond | null>(null);
   const strokeLabel = useRef(t("Paint terrain"));
+  /** What the stroke is counted as, where the tab alone does not say (`EditTool`): a block, a pin or an unpin. */
+  const strokeTool = useRef<EditTool | undefined>(undefined);
   /** The cells of pinned tiles the stroke would have changed. */
   const strokeKept = useRef(new Set<number>());
   /** A stroke of the Pin brush: the pins file before it and as it stands. */
@@ -410,6 +413,7 @@ export function useTerrainTools() {
     // A block is laid only under the pointer: its pictures cannot be mirrored, so symmetry leaves it alone, as it does a paste.
     const block = mode === "tile" ? store.get(tileBlockAtom) : null;
     patternStroke.current = block ? new PatternStroke(block, { x, y }) : null;
+    strokeTool.current = block ? "block" : mode === "pin" ? (store.get(pinBrushUnpinsAtom) ? "unpin" : "pin") : undefined;
     strokeLabel.current =
       block ? blockLabel(block)
       : mode === "pin" ? (store.get(pinBrushUnpinsAtom) ? t("Unpin tiles") : t("Pin tiles"))
@@ -432,7 +436,7 @@ export function useTerrainTools() {
     const pins = pinStroke.current;
     pinStroke.current = null;
     if (pins) {
-      commitTerrain(scn, { label: strokeLabel.current, changes: [], pins: { before: pins.before, after: pins.after } }, t("{label} — {n, plural, one {# tile is} other {# tiles are}} pinned now", { label: strokeLabel.current, n: countPins(store.get(pinnedTilesAtom)) }));
+      commitTerrain(scn, { label: strokeLabel.current, tool: strokeTool.current, changes: [], pins: { before: pins.before, after: pins.after } }, t("{label} — {n, plural, one {# tile is} other {# tiles are}} pinned now", { label: strokeLabel.current, n: countPins(store.get(pinnedTilesAtom)) }));
       return;
     }
     /**
@@ -464,7 +468,7 @@ export function useTerrainTools() {
         return;
       }
       if (members.length > 0) store.set(archiveExtrasAtom, withMember(store.get(archiveExtrasAtom), COPY_MEMBER, r.after));
-      commitTerrain(scn, { label: strokeLabel.current, changes, isom: isom.length > 0 ? isom : undefined, members: members.length > 0 ? members : undefined },
+      commitTerrain(scn, { label: strokeLabel.current, tool: "copied", changes, isom: isom.length > 0 ? isom : undefined, members: members.length > 0 ? members : undefined },
         t("{label} — {n, plural, one {# tile} other {# tiles}}", { label: strokeLabel.current, n: changes.length }) + copyNote(r, cs.ground) + keptNote(strokeKept.current.size));
       return;
     }
@@ -493,7 +497,7 @@ export function useTerrainTools() {
       let extras = store.get(archiveExtrasAtom);
       for (const m of members) extras = withMember(extras, m.name, m.after);
       if (members.length > 0) store.set(archiveExtrasAtom, extras);
-      commitTerrain(scn, { label: strokeLabel.current, changes, members: members.length > 0 ? members : undefined },
+      commitTerrain(scn, { label: strokeLabel.current, tool: "borrowed", changes, members: members.length > 0 ? members : undefined },
         t("{label} — {n, plural, one {# tile} other {# tiles}}", { label: strokeLabel.current, n: changes.length }) + borrowNote(r) + relayNote(relaid.dropped, relaid.hard) + keptNote(strokeKept.current.size));
       return;
     }
@@ -507,7 +511,7 @@ export function useTerrainTools() {
       return;
     }
     if (relaid.member) store.set(archiveExtrasAtom, withMember(store.get(archiveExtrasAtom), COPY_MEMBER, relaid.member.after));
-    commitTerrain(scn, { label: strokeLabel.current, changes, isom: isom.length > 0 ? isom : undefined, members: relaid.member ? [relaid.member] : undefined }, t("{label} — {n, plural, one {# tile} other {# tiles}}", { label: strokeLabel.current, n: changes.length }) + relayNote(relaid.dropped, relaid.hard) + keptNote(kept));
+    commitTerrain(scn, { label: strokeLabel.current, tool: strokeTool.current, changes, isom: isom.length > 0 ? isom : undefined, members: relaid.member ? [relaid.member] : undefined }, t("{label} — {n, plural, one {# tile} other {# tiles}}", { label: strokeLabel.current, n: changes.length }) + relayNote(relaid.dropped, relaid.hard) + keptNote(kept));
   }, [store, loaded, commitTerrain, setStatus]);
 
   const isStroking = useCallback(() => stroke.current !== null, []);
@@ -561,7 +565,7 @@ export function useTerrainTools() {
       return;
     }
     applyChanges(scn, changes);
-    commitTerrain(scn, { label, changes }, t("{label} — {n, plural, one {# tile} other {# tiles}}", { label, n: changes.length }) + keptNote(spared.kept));
+    commitTerrain(scn, { label, tool: "fill", changes }, t("{label} — {n, plural, one {# tile} other {# tiles}}", { label, n: changes.length }) + keptNote(spared.kept));
   }, [store, loaded, currentTerrain, commitTerrain, setStatus]);
 
   /**
@@ -619,7 +623,7 @@ export function useTerrainTools() {
     }
     applyChanges(scn, changes);
     if (isom && isom.length > 0) applyIsomChanges(scn, isom);
-    commitTerrain(scn, { label, changes, isom: isom && isom.length > 0 ? isom : undefined }, t("{label} — {n, plural, one {# tile} other {# tiles}}", { label, n: changes.length }) + keptNote(kept));
+    commitTerrain(scn, { label, tool: "fillMap", changes, isom: isom && isom.length > 0 ? isom : undefined }, t("{label} — {n, plural, one {# tile} other {# tiles}}", { label, n: changes.length }) + keptNote(kept));
   }, [store, loaded, currentTerrain, commitTerrain, setStatus]);
 
   /**
@@ -647,7 +651,7 @@ export function useTerrainTools() {
     };
     const label = t("Replace {from} with {to}", { from: name(from), to: name(to) });
     applyChanges(scn, changes);
-    commitTerrain(scn, { label, changes }, (rect ? t("{label} — {n, plural, one {# tile} other {# tiles}} in the marked area", { label, n: changes.length }) : t("{label} — {n, plural, one {# tile} other {# tiles}}", { label, n: changes.length })) + keptNote(spared.kept));
+    commitTerrain(scn, { label, tool: "replace", changes }, (rect ? t("{label} — {n, plural, one {# tile} other {# tiles}} in the marked area", { label, n: changes.length }) : t("{label} — {n, plural, one {# tile} other {# tiles}}", { label, n: changes.length })) + keptNote(spared.kept));
     return changes.length;
   }, [store, loaded, terrainOf, commitTerrain, setStatus]);
 
@@ -674,7 +678,7 @@ export function useTerrainTools() {
     applyChanges(scn, changes);
     const after = shownSeams(scn, loaded.tileset, cells);
     const label = t("Heal seams");
-    commitTerrain(scn, { label, changes }, t("Healed {n, plural, one {# tile} other {# tiles}}: {before} joins showed, {after} still do", { n: changes.length, before, after }));
+    commitTerrain(scn, { label, tool: "healArea", changes }, t("Healed {n, plural, one {# tile} other {# tiles}}: {before} joins showed, {after} still do", { n: changes.length, before, after }));
     return changes.length;
   }, [store, loaded, commitTerrain, setStatus]);
 
@@ -707,7 +711,7 @@ export function useTerrainTools() {
     const now = countPins(store.get(pinnedTilesAtom));
     const n = Math.abs(now - before);
     const label = on ? t("Pin tiles") : t("Unpin tiles");
-    commitTerrain(scn, { label, changes: [], pins: part }, on
+    commitTerrain(scn, { label, tool: what === "handLaid" ? "pinHandLaid" : on ? "pinArea" : "unpinArea", changes: [], pins: part }, on
       ? t("Pinned {n, plural, one {# tile} other {# tiles}}; {total} pinned in all", { n, total: now })
       : t("Unpinned {n, plural, one {# tile} other {# tiles}}; {total} still pinned", { n, total: now }));
     return n;

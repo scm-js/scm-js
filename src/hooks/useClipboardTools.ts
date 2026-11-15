@@ -105,7 +105,7 @@ export function useClipboardTools() {
     if (n === 0) return 0;
     const edit = removeObjects(scn, sel, catalogue, tileset);
     clearObjectSelections();
-    commit({ label: kind === "cut" ? t("Cut {n, plural, one {# object} other {# objects}}", { n }) : t("Delete {n, plural, one {# object} other {# objects}}", { n }), ...edit });
+    commit({ label: kind === "cut" ? t("Cut {n, plural, one {# object} other {# objects}}", { n }) : t("Delete {n, plural, one {# object} other {# objects}}", { n }), tool: kind, ...edit });
     return n;
   }, [store, graphics, commit, clearObjectSelections]);
 
@@ -210,7 +210,7 @@ export function useClipboardTools() {
         return false;
       }
       clearObjectSelections();
-      commit({ label: t("Paste {clipSummary}, stretched", { clipSummary: clipSummary(whole) }), ...result.edit });
+      commit({ label: t("Paste {clipSummary}, stretched", { clipSummary: clipSummary(whole) }), tool: "pasteStretch", ...result.edit });
       setSelection({ x0: Math.max(0, x), y0: Math.max(0, y), x1: Math.min(scn.width, x + long.width), y1: Math.min(scn.height, y + long.height) });
       const steps = Math.abs(stretched.steps);
       const notes = [...result.notes];
@@ -229,7 +229,7 @@ export function useClipboardTools() {
       return false;
     }
     clearObjectSelections();
-    commit({ label: t("Paste {clipSummary}", { clipSummary: clipSummary(clip) }), ...result.edit });
+    commit({ label: t("Paste {clipSummary}", { clipSummary: clipSummary(clip) }), tool: "paste", ...result.edit });
     setSelection({ x0: Math.max(0, tx), y0: Math.max(0, ty), x1: Math.min(scn.width, tx + clip.width), y1: Math.min(scn.height, ty + clip.height) });
     const bits = [
       c.tiles > 0 ? t("{n, plural, one {# tile} other {# tiles}}", { n: c.tiles }) : null,

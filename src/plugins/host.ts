@@ -27,6 +27,7 @@ import { learnedPiecesAtom, providedPiecesAtom } from "../atoms/pieceAtoms";
 import { layBlock, layPattern } from "../editor/tileSheet";
 import { checkedBlock, copyBlock, pieceCalls } from "./pieces";
 import { borrowCalls, paintBorrowedIn } from "./borrow";
+import { copyCalls, paintCopyIn } from "./copies";
 import { claimBadge, locateClaims } from "./claims";
 import { cameraOfMap, mapLookAt, mapViewSwitch, offerMapView, pruneMapViews, showMapView, wheelStep } from "./mapViews";
 import { zoomToAtom } from "../atoms/zoomAtoms";
@@ -368,6 +369,7 @@ export function runTransaction(store: Store, label: string, build: (tx: EditTran
       return true;
     },
     paintBorrowed: (diamonds, terrainId) => paintBorrowedIn(store, scn, diamonds ?? [], terrainId, pinned(), applyTiles, membersBefore, notes),
+    paintCopy: (diamonds, terrainId) => paintCopyIn(store, scn, diamonds ?? [], terrainId, pinned(), applyTiles, (applied, isomChanges) => { tiles.add(applied); isom.add(isomChanges); }, membersBefore, notes),
     rebuildIsom: () => {
       if (!loaded) { notes.push(t("rebuilding the ISOM needs the tileset graphics")); return null; }
       const rebuilt = rebuildIsomFromTiles(scn, loaded.tileset);
@@ -633,7 +635,7 @@ export function runTransaction(store: Store, label: string, build: (tx: EditTran
   let isomChanges: TileChange[] = [];
   let fogChanges: TileChange[] = [];
   const finishEntry = (): HistoryEntry => {
-    const entry: HistoryEntry = { label, changes: tiles.finish() };
+    const entry: HistoryEntry = { label, tool: "plugin", changes: tiles.finish() };
     isomChanges = isom.finish();
     fogChanges = fog.finish();
     if (isomChanges.length > 0) entry.isom = isomChanges;
@@ -2436,6 +2438,7 @@ export function createPluginApi(store: Store, info: PluginInfo, bag: Contributio
       },
       ...pieceCalls(store, info.id, bag),
       ...borrowCalls(store, info.id, bag),
+      ...copyCalls(store, info.id, bag),
       floodRegion: (x, y, match = "terrain") => {
         const scn = scenario();
         if (!scn || x < 0 || y < 0 || x >= scn.width || y >= scn.height) return [];

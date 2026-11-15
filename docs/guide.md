@@ -635,6 +635,7 @@ What the tileset's files say about the added tiles decides which brush lays them
 | --- | --- |
 | Flat ground: mud on high ground, a swamp, asphalt | The Rect brush ([Ground a mod adds](#ground-a-mod-adds)) |
 | Pictures drawn across many tiles: ruins, buildings, walls, roads | The Tile brush, a block or a piece at a time ([Pictures a mod adds](#pictures-a-mod-adds)) |
+| One of its own terrains again at another height, with edges drawn for it: Mud on high ground | The isometric brush ([Copied terrain](#copied-terrain)) |
 | Another tileset's terrain copied in: Installation's floors inside a Badlands | The isometric brush ([Terrain from other tilesets](#terrain-from-other-tilesets)) |
 
 A mod can also say all of this in a file it ships, and then nothing has to be found or
@@ -688,6 +689,51 @@ Tile brush:
 With *Added by* chosen, the grid and the pieces leave out what the mod repeats from the
 game's own part of the table. The seams around a picture are the mod's own tiles too: pick
 them from the sheet, or let the Blend brush find the tiles that continue an edge.
+
+### Copied terrain
+
+A tileset made for a mod sometimes holds one of its own terrains again at another height:
+the same Mud, say, on mid and on high ground. The Rect tab already offers such a copy
+("Mud (mid ground)", as [Ground a mod adds](#ground-a-mod-adds) says). Often the mod also
+drew that terrain's edges again at that height: the pieces that join Mud to the ground
+around it, Mud kept as it was and the other side repainted as the ground the copy is meant
+to sit on. The isometric brush cannot use those pieces from the tileset's tables, because
+they have no terrain type.
+
+When a tileset holds a copy, the editor looks through it once, by itself, for such pieces:
+the Isometric tab says so in a quiet line while it does, and lists what it found under
+**Copied terrain**, named as the Rect tab names the copy. It finds them by their pictures
+(each keeps the original edge piece's picture where that piece shows the terrain), their
+flags (raised as the copy is) and the way the pieces are laid out in the tileset, never by
+where a particular mod put them. What it found is kept in the browser, so the next time a
+map on the same tileset files opens, the list is there at once.
+
+Painting a copied terrain works as the isometric brush does: the brush size, symmetry and
+pinned tiles apply, and a stroke is one step to undo. The terrain is laid by the tileset's
+own brush and each tile is written as the tile the mod drew for it. A tileset may hold the
+same pieces several times, each set drawn to sit on a different ground (Mud against High
+Dirt, Mud against Raised Jungle); the stroke takes the set that joins the ground under it
+best. Where that ground is one of the tileset's terrains, the brush lays it under the
+stroke first, so a copy painted elsewhere gets its own ground and that ground's usual
+cliffs or edges around it. Where the pieces are drawn for ground the tileset has no
+terrain type for, the stroke lays only where that ground already is, and the status line
+says how many diamonds it left.
+
+The editor keeps where copied terrain was painted as a small file inside the map
+(`scmjs\copies.bin`), saved with it, moved by Resize, undone with the stroke and shared on
+a shared map; the game never reads it. When another isometric stroke cuts into a patch,
+the patch is laid again in the same step: the part the ground still holds stays with its
+edges, and what the other stroke took is given to that stroke's ground. A few joins can
+still show where the patch was cut, and a small patch close to the cut can be given up
+entirely; the status line says how many diamonds were given up and how many joins show. A
+tile laid by hand over a patch is left where it is.
+
+A terrain is listed only when its pieces walk and build as the original terrain does at
+the copy's height. One whose tileset lacks some of the edge's shapes is listed after the
+complete ones, marked **incomplete**, with a hover that says how many shapes are missing;
+the brush lays the tile that joins best in those places, and the status line counts those
+cells. Cliffs are not offered this way: their faces carry heights of their own that a copy
+does not raise the same way.
 
 ### Terrain from other tilesets
 
@@ -2274,15 +2320,15 @@ Preferences (Ctrl+,) are kept in the browser. Nothing is written until OK or App
   how often.
 - **Privacy** (the editor at scmjs.dev only): whether to count which parts of the editor
   are used. It is on unless you turn it off. When you use a feature, the editor sends its
-  name and a few words about it, such as which dialog opened, which layer an edit was on,
-  the type of each unit placed, or the tileset and size of a map opened. When something
-  goes wrong, it sends where in the editor's code the error happened (the file, line and
-  function) and whether the browser was translating the page, but never the error's
-  message. It never sends the map itself, its name, a file name, its text or anything you
-  typed, and nothing that identifies you. Turning it off also stops the visit count for
-  this browser, and the site's [privacy page](https://scmjs.dev/privacy.html) has the same
-  switch and the details. The desktop app and copies of the editor hosted elsewhere count
-  nothing.
+  name and a few words about it, such as which dialog opened, which layer an edit was on
+  and which tool made it, which overlay or layer was shown or hidden, the type of each
+  unit placed, or the tileset and size of a map opened. When something goes wrong, it
+  sends where in the editor's code the error happened (the file, line and function) and
+  whether the browser was translating the page, but never the error's message. It never
+  sends the map itself, its name, a file name, its text or anything you typed, and nothing
+  that identifies you. Turning it off also stops the visit count for this browser, and the
+  site's [privacy page](https://scmjs.dev/privacy.html) has the same switch and the
+  details. The desktop app and copies of the editor hosted elsewhere count nothing.
 
 **Editing**: the grid's spacing, colour and style, and what snaps to it (View ▸ Grid
 Settings… opens this page); what the palettes start on (the owner of placed units, the
@@ -2454,14 +2500,15 @@ rely on a feature.
 
 - The isometric brush needs the map's isometric record. The Repair plugin, on by default,
   rebuilds one a protected map had stripped.
-- The isometric brush lays terrain types only. On a mod's tileset that includes another
-  tileset's terrain the mod copied in, but not the flat ground and the pictures the mod
-  adds: those are laid with the Rect and Tile brushes ([Mod terrain](#mod-terrain)).
+- The isometric brush lays terrain types only. On a mod's tileset that includes a terrain
+  the mod drew again at another height and another tileset's terrain it copied in, but not
+  the flat ground and the pictures the mod adds: those are laid with the Rect and Tile
+  brushes ([Mod terrain](#mod-terrain)).
 - A stretched ramp or bridge goes down as tiles, not as a doodad, so it cannot be selected
   or moved afterwards. Undo is the way back.
-- Pins, and the record of terrain painted from another tileset, are kept in files inside
-  the map that only scmJS reads. The game ignores them, and another editor will not keep
-  them when it saves the map.
+- Pins, and the records of copied terrain and of terrain painted from another tileset, are
+  kept in files inside the map that only scmJS reads. The game ignores them, and another
+  editor will not keep them when it saves the map.
 - Symmetry does not mirror the Blend brush, a block on the Tile brush, or pasting. The
   Tile brush copies the same tile to each image, so an edge tile faces the same way on
   both sides; use the isometric brush for cliffs and shores.

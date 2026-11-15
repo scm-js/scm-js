@@ -209,8 +209,9 @@ export function useDoodadTools() {
     const label = placed === 1 ? t("Place {name}", { name: doodadLabel(ghost.def) }) : t("Place {n} × {name}", { n: placed, name: doodadLabel(ghost.def) });
     // Terrain laid as a piece is pinned, so a brush stroke beside it does not take it apart.
     const pins = asTerrain && opts.pin && laid.length > 0 ? store.set(pinCellsAtom, { cells: laid, on: true }) ?? undefined : undefined;
-    commit(long ? { label: t("{label}, stretched", { label }), changes: tiles, sprites, pins }
-      : asTerrain ? { label: t("{label} as terrain", { label }), changes: tiles, sprites, pins } : entryFor(label, { tiles, doodads, sprites }));
+    commit(long ? { label: t("{label}, stretched", { label }), tool: "stretch", changes: tiles, sprites, pins }
+      : asTerrain ? { label: t("{label} as terrain", { label }), tool: "asTerrain", changes: tiles, sprites, pins }
+        : { ...entryFor(label, { tiles, doodads, sprites }), ...(twin ? { tool: "twin" as const } : {}) });
     const what = placed === 1 ? doodadLabel(ghost.def) : t("{n} × {name}", { n: placed, name: doodadLabel(ghost.def) });
     const where = { what, w: ghost.def.width, h: ghost.def.height, x: ghost.x, y: ghost.y };
     // Across the mirror stands the doodad's twin. Say so, and say when the game's two do not play alike.

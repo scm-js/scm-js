@@ -17,6 +17,7 @@
 import type { getDefaultStore } from "jotai";
 import { providedBorrowAtom, type ProvidedBorrow } from "../atoms/borrowAtoms";
 import { providedBordersAtom, type ProvidedBorder } from "../atoms/borderAtoms";
+import { providedCopiesAtom, type ProvidedCopy } from "../atoms/copyAtoms";
 import { scenarioAtom, tilesetFileNameAtom } from "../atoms/documentAtoms";
 import { gameDataRevisionAtom, gameDataSourceAtom } from "../atoms/gameDataAtoms";
 import { providedPiecesAtom, providedTypesAtom } from "../atoms/pieceAtoms";
@@ -94,6 +95,7 @@ export async function applyDataSetTerrain(store: Store, deps: { db?: PieceStore;
   const types: TypeRow[] = [];
   const borrow: ProvidedBorrow[] = [];
   const borders: ProvidedBorder[] = [];
+  const copies: ProvidedCopy[] = [];
   if (id && file) {
     const name = source!.profile.name;
     const provider = `${DATA_SET_KEY}${id}`;
@@ -119,6 +121,7 @@ export async function applyDataSetTerrain(store: Store, deps: { db?: PieceStore;
       }
       if (section.terrains.length > 0) types.push({ key: `${provider}:${tileset}`, source: provider, tileset, types: section.terrains.map((x) => ({ ...x })) });
       for (const b of section.borrow) borrow.push({ key: `${provider}:${tileset}:${b.source}`, tileset, source: b.source, pairs: b.pairs, ...(b.standIns ? { standIns: b.standIns } : {}) });
+      (section.copies ?? []).forEach((c, i) => copies.push({ key: `${provider}:${tileset}:copies:${i}`, tileset, source: c.terrain, height: c.height, outer: c.ground, pieces: c.pieces }));
       for (const b of section.borders) borders.push({ key: `${provider}:${tileset}:${b.source}:${b.terrain}:${b.ground}`, tileset, source: b.source, terrain: b.terrain, ground: b.ground, shapes: b.shapes });
     }
   }
@@ -127,10 +130,11 @@ export async function applyDataSetTerrain(store: Store, deps: { db?: PieceStore;
   store.set(providedTypesAtom, [...store.get(providedTypesAtom).filter((r) => !isDataSetKey(r.key)), ...types]);
   store.set(providedBorrowAtom, [...store.get(providedBorrowAtom).filter((r) => !isDataSetKey(r.key)), ...borrow]);
   store.set(providedBordersAtom, [...store.get(providedBordersAtom).filter((r) => !isDataSetKey(r.key)), ...borders]);
+  store.set(providedCopiesAtom, [...store.get(providedCopiesAtom).filter((r) => !isDataSetKey(r.key)), ...copies]);
   // The borrowed terrains of the map in front follow at once.
   const scn = store.get(scenarioAtom), host = peekTileset(store.get(tilesetFileNameAtom))?.tileset;
   if (scn && host) await refreshProvided(store, tilesetIndex(scn), host).catch(() => undefined);
-  if (id && file) logInfo("gamedata", "The data set's terrain file is in force", { set: id, used: used.join(" ") || undefined, mismatched: mismatched.join(" ") || undefined, pieces: pieces.reduce((n, p) => n + p.pieces.length, 0), terrains: types.reduce((n, x) => n + x.types.length, 0), borrow: borrow.length, borders: borders.length });
+  if (id && file) logInfo("gamedata", "The data set's terrain file is in force", { set: id, used: used.join(" ") || undefined, mismatched: mismatched.join(" ") || undefined, pieces: pieces.reduce((n, p) => n + p.pieces.length, 0), terrains: types.reduce((n, x) => n + x.types.length, 0), borrow: borrow.length, borders: borders.length, copies: copies.length });
   return id ? { id, used, mismatched } : null;
 }
 

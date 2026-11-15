@@ -111,7 +111,9 @@ when the chrome changes, and never commit a picture that shows anything but the 
 `scripts/cli-screenshots.mjs` (2026-11-07) is its sibling for `docs/cli.md`'s `cli-*.webp`: it runs the built
 `scmjs` with `FORCE_COLOR=1`/`COLORTERM=truecolor` on `tests/maps/*`, maps `map generate` makes and the engine's
 replays, plays the output into a small terminal emulator (SGR, CR/LF, cursor up/down, `2K`, OSC/APC skipped; ▀▄█
-painted as two-colour gradients so half-block pictures have no seams), renders the cells in DejaVu Sans Mono and
+painted as two-colour gradients so half-block pictures have no seams; braille painted as dots on the cell's 2 × 4
+grid, since DejaVu Sans Mono has none and Chromium's fallback, DejaVu Sans, draws them 10px wide in an 8.43px cell,
+which cut the overview globe's right edge off and shifted its rows, 2026-11-14), renders the cells in DejaVu Sans Mono and
 screenshots them at 2× in headless Chromium. WebP comes from the page's own `canvas.toDataURL("image/webp", 1)`,
 which Chromium writes lossless (VP8L) at quality 1, so the script needs only Playwright, not sharp; the coloured-cell
 pictures (`map preview`, `replay watch`) and the PNGs commands write go at 0.9. `replay watch` runs under

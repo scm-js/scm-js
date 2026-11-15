@@ -123,7 +123,7 @@ describe("the terrain file, read and written", () => {
     expect(Object.keys(back.tilesets)).toEqual(["badlands", "jungle"]);
     expect(back.tilesets.badlands).toEqual(file.tilesets.badlands);
     expect(back.extra).toEqual({ maker: "made by hand" });
-    expect(terrainFileCounts(back).jungle).toEqual({ terrains: 1, pieces: 0, borrow: [], borders: [] });
+    expect(terrainFileCounts(back).jungle).toEqual({ terrains: 1, pieces: 0, borrow: [], borders: [], copies: [] });
   });
 
   it("says what the table cannot use", () => {
@@ -264,7 +264,7 @@ describe("a terrain file on the command line", () => {
     put("terrain.json", JSON.stringify({ ...GOOD, tilesets: { ...GOOD.tilesets, jungle: { table: "otherhash", pieces: [{ cols: 1, rows: 1, tiles: [1] }] }, ice: { table: TABLE, terrains: [{ name: "", group: 2 }] } } }));
     const source = await openMod(dir, null);
     const info = modInfo(source);
-    expect(info.terrain?.tilesets.badlands).toEqual({ terrains: 1, pieces: 2, borrow: [{ source: "install", pairs: 2 }], borders: [] });
+    expect(info.terrain?.tilesets.badlands).toEqual({ terrains: 1, pieces: 2, borrow: [{ source: "install", pairs: 2 }], borders: [], copies: [] });
     expect(info.terrain?.dropped).toBe(1);
     expect(printModInfo(info).join("\n")).toMatch(/badlands.*1 terrain, 2 pieces, 2 pairs from install/);
     const r = await checkModSource(source, null);

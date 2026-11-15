@@ -27,6 +27,9 @@ import { FOG_PLAYERS, fogCount, fogPlayersAt, playerBit } from "../../editor/fog
 import { fogPlayersLabel } from "../../hooks/useFogTools";
 import { terrainName, TILESET_BY_ID } from "../../data/tilesets";
 import { isBorrowedTerrain } from "../../editor/borrow";
+import { isCopiedTerrain } from "../../editor/terrainCopyLattice";
+import { copyHostsAtom } from "../../atoms/copyAtoms";
+import { copyHostKey } from "../../services/terrainCopies";
 import { borrowedIdLabel } from "../../hooks/useTerrainTools";
 import { unitLabel } from "../../data/units";
 import { useTileset } from "../../hooks/useTileset";
@@ -37,7 +40,7 @@ import { spriteKind } from "../../editor/sprites";
 import { SpriteFlag } from "../../formats/chk/sections/objects";
 import { doodadOrigin } from "../../formats/tileset/doodads";
 import { DoodadThumb } from "./DoodadThumb";
-import { heightLabel, hexTile, isPairTerrain, terrainLabel, terrainOf, tileGroupLabel, tileInfo } from "../../formats/tileset/palette";
+import { heightLabel, hexTile, isPairTerrain, pairTerrain, terrainLabel, terrainOf, tileGroupLabel, tileInfo } from "../../formats/tileset/palette";
 import { UnitUsed } from "../../editor/units";
 import type { UnitRecord } from "../../formats/chk/sections/objects";
 import { Button, Check, NumberInput } from "../ui";
@@ -78,12 +81,18 @@ function TerrainProps() {
     ? (loaded ? declaredTerrains(loaded.tileset, info.terrain, declared.filter((d) => d.tileset === info.id).flatMap((d) => d.types)).find((d) => d.id === terrain) : undefined) ?? terrainOf(loaded?.tileset ?? null, info.terrain, terrain)
     : null;
   const dash = <span className="faint">—</span>;
+  // A copied terrain (terrainCopyLattice.ts) by the Rect tab's name of its copy.
+  const copyHosts = useAtomValue(copyHostsAtom);
+  const copied = isCopiedTerrain(terrain) && loaded && scenario
+    ? copyHosts.get(copyHostKey(tilesetIndex(scenario), loaded.tileset))?.terrains.find((c) => c.id === terrain)
+    : undefined;
+  const copiedType = copied && loaded ? pairTerrain(loaded.tileset, info.terrain, copied.flat) : null;
 
   return (
     <div className="props">
       <Row k={t("Brush")}>
         {mode === "isom" || mode === "rect"
-          ? <>{brushTerrain ? terrainLabel(brushTerrain) : mode === "isom" && isBorrowedTerrain(terrain) ? borrowedIdLabel(terrain) : translate(terrainName(info, terrain))}{mode === "rect" && variation >= 0 ? <span className="faint"> {t("· var {variation}", { variation })}</span> : null}</>
+          ? <>{brushTerrain ? terrainLabel(brushTerrain) : mode === "isom" && isBorrowedTerrain(terrain) ? borrowedIdLabel(terrain) : mode === "isom" && copiedType ? terrainLabel(copiedType) : translate(terrainName(info, terrain))}{mode === "rect" && variation >= 0 ? <span className="faint"> {t("· var {variation}", { variation })}</span> : null}</>
           : mode === "heal" ? t("joins that show")
           : mode === "pin" ? t("tiles to keep")
           : <span className="row" style={{ gap: 6 }}><TileThumb loaded={loaded} id={tile} size={16} /><span className="mono">{hexTile(tile)}</span></span>}

@@ -98,6 +98,17 @@ export {
   BorrowStroke, borrowMember, BORROW_MEMBERS, encodeBorrowLattice, decodeBorrowLattice, latticeOf, baseLattice, resizeBorrowMember, borrowedCells,
   type BorrowContext, type BorrowStrokeResult,
 } from "../../src/editor/borrowLattice";
+// Copied terrain: a terrain of the tileset held again at another height, with the edge pieces it holds for it there,
+// found from the tileset's files and laid by the isometric brush through a shadow lattice.
+export {
+  findCopyBlocks, gateBlock, edgeSetsOf, blockKey, encodeCopyBlocks, decodeCopyBlocks, KEPT_BLOCKS, GATE_FLAGS,
+  type CopyBlock, type CopySource, type CopyStatus, type EdgeSetInfo,
+} from "../../src/editor/terrainCopyTable";
+export {
+  CopyStroke, copyTable, relayCopies, paintCount, rankGrounds, chooseOuter, groundUnder, groundsOf, patchAt,
+  COPY_MEMBER, encodeCopyMember, decodeCopyMember, resizeCopyMember, COPIED_TERRAIN, copiedTerrainId, isCopiedTerrain, copiedParts,
+  type CopyTable, type CopyGround, type RankedGround, type CopyPatch, type CopyStrokeResult, type RelayResult,
+} from "../../src/editor/terrainCopyLattice";
 // Drawn borders: where borrowed ground meets the tileset's own, the tileset's border pieces, learned from maps or given.
 export {
   badlandsStandIns, BADLANDS_STANDIN, standInShapes, diamondsOf, patternKey, flatTerrainsOf, BORDER_MODES,
@@ -209,7 +220,7 @@ export { sameRaces, raceLabel, raceChoices, hasRaceCandidates, racePlaysAs, GAME
 export {
   readTerrainFile, writeTerrainFile, withTerrainSection, sectionAgainstTable, terrainFileCounts, isTerrainFilePath, terrainFileOf,
   emptyTerrainFile, emptyTerrainSection, TERRAIN_FILE, TERRAIN_FORMAT, TERRAIN_LIMITS,
-  type TerrainFile, type TerrainFileSection, type TerrainFilePiece, type TerrainFileTerrain, type TerrainFileBorrow, type TerrainFileBorder, type TerrainDrop, type TerrainDropReason, type TerrainFileRead,
+  type TerrainFile, type TerrainFileSection, type TerrainFilePiece, type TerrainFileTerrain, type TerrainFileBorrow, type TerrainFileBorder, type TerrainFileCopy, type TerrainDrop, type TerrainDropReason, type TerrainFileRead,
 } from "../../src/formats/mod/terrain";
 export { normalizeRaces, raceCandidates, MAX_RACE_NAME as RACE_NAME_MAX, GAME_NETWORK_TBL_ENTRIES, type DataSetRace, type RaceCandidates } from "@scm-js/mod";
 

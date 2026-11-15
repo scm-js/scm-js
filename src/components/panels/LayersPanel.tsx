@@ -5,6 +5,7 @@ import { pluginOverlaysAtom, setOverlayVisibleAtom } from "../../atoms/pluginAto
 import { PluginIconView } from "../ui/PluginIconView";
 import { RAIL_ICON } from "./PalettePanel";
 import { pluginText, translate } from "../../i18n";
+import { countView } from "../../services/usage";
 import { useT } from "../../i18n/react";
 import { LAYERS } from "../chrome/MenuBar";
 
@@ -44,6 +45,7 @@ export default function LayersPanel() {
                   title={visible ? t("Hide layer") : t("Show layer")}
                   onClick={(e) => {
                     e.stopPropagation();
+                    countView(r.flag!, !visible, "layers");
                     setFlags({ ...flags, [r.flag!]: !visible });
                     if (r.flag === "locations") setLocationsAutoHidden(false);
                   }}

@@ -14,6 +14,7 @@ import type { Tileset } from "../formats/tileset/decode";
 import { decodeBorrowTable, tilesetHash, type BorrowTable } from "../editor/borrowTable";
 import { tilesetParts, type BorrowWorkerRequest, type BorrowWorkerResponse, type TilesetParts } from "../editor/borrowWorker";
 import type { BorrowTableMaker } from "./borrow";
+import { decodeCopyBlocks, type CopyBlock, type CopySource } from "../editor/terrainCopyTable";
 
 /** The worker could not start, or failed: the caller works the table out itself. */
 export class WorkerUnavailableError extends Error {
@@ -64,7 +65,7 @@ function post(slot: Slot, message: BorrowWorkerRequest) {
   const started = performance.now();
   slot.worker.postMessage(message);
   borrowWorkerStats.postMs += performance.now() - started;
-  borrowWorkerStats.bytes += message.kind === "host" ? partsBytes(message.host) : partsBytes(message.source);
+  borrowWorkerStats.bytes += message.kind === "host" ? partsBytes(message.host) : message.kind === "table" ? partsBytes(message.source) : partsBytes(message.tileset);
 }
 
 function startWorker(): Slot | null {
@@ -81,6 +82,7 @@ function startWorker(): Slot | null {
     const job = slot.job;
     if (!job || e.data.id !== slot.id) return;
     if (e.data.kind === "progress") { job.progress(e.data.done / Math.max(1, e.data.total)); return; }
+    if (e.data.kind === "copies") return; // (answered to a worker of its own: `workerCopyScan`)
     slot.job = null;
     if (e.data.kind === "table") {
       borrowWorkerStats.tables.push({ ms: e.data.ms });
@@ -154,4 +156,37 @@ export function resetBorrowWorkerClient(): void {
   stopAll(new WorkerUnavailableError("reset"));
   broken = false;
   Object.assign(borrowWorkerStats, { workers: 0, hostPosts: 0, postMs: 0, bytes: 0, tables: [] });
+}
+
+/**
+ * The copied-terrain scan (`editor/terrainCopyTable.ts#findCopyBlocks`) of `tileset`, in a worker of its own started for
+ * it and ended after it. Rejects with `WorkerUnavailableError` when no worker can run it (the caller works it out on
+ * the page), with an `AbortError` when `signal` stops it.
+ */
+export function workerCopyScan(tileset: Tileset, era: number, copies: CopySource[], signal?: AbortSignal): Promise<CopyBlock[]> {
+  return new Promise<CopyBlock[]>((resolve, reject) => {
+    if (signal?.aborted) { reject(stoppedError()); return; }
+    if (broken || typeof Worker === "undefined") { reject(new WorkerUnavailableError()); return; }
+    let worker: Worker;
+    try {
+      worker = new Worker(new URL("./borrowTable.worker.ts", import.meta.url), { type: "module" });
+    } catch {
+      broken = true;
+      reject(new WorkerUnavailableError());
+      return;
+    }
+    const done = () => { worker.terminate(); signal?.removeEventListener("abort", stop); };
+    const stop = () => { done(); reject(stoppedError()); };
+    signal?.addEventListener("abort", stop, { once: true });
+    worker.onmessage = (e: MessageEvent<BorrowWorkerResponse>) => {
+      if (e.data.kind === "copies") { done(); const blocks = decodeCopyBlocks(e.data.blocks); if (blocks) resolve(blocks); else reject(new WorkerUnavailableError("the worker's blocks did not read back")); }
+      else if (e.data.kind === "error") { done(); reject(new WorkerUnavailableError(e.data.message)); }
+    };
+    worker.onerror = (e) => { e.preventDefault?.(); broken = true; done(); reject(new WorkerUnavailableError(e.message || "the scan's worker failed")); };
+    const started = performance.now();
+    const parts = partsOf(tileset);
+    worker.postMessage({ kind: "copies", id: ++seq, tileset: parts, era, copies } satisfies BorrowWorkerRequest);
+    borrowWorkerStats.postMs += performance.now() - started;
+    borrowWorkerStats.bytes += partsBytes(parts);
+  });
 }

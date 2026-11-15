@@ -2,14 +2,14 @@
  * A terrain file's section for one tileset (`formats/mod/terrain.ts`), from what the editor knows of it: the pieces as
  * the Pieces view lists them (named sets first, then the cut pieces with their copies folded), the flat ground declared
  * for it, the borrow tables scanned or given, as exact pairs, so the mod's users skip the scan, and the drawn borders
- * known (learned or given), so they skip learning. Pure.
+ * known (learned or given), so they skip learning, and the blocks of copied terrain the brush offers. Pure.
  */
 import type { BorrowTable } from "./borrowTable";
 import type { BorderPairTable } from "./borderTable";
 import type { DeclaredTerrain, PieceSection } from "./pieceList";
-import { emptyTerrainSection, TERRAIN_LIMITS, type TerrainFileSection } from "../formats/mod/terrain";
+import { emptyTerrainSection, TERRAIN_LIMITS, type TerrainFileCopy, type TerrainFileSection } from "../formats/mod/terrain";
 
-export function terrainFileSection(table: string, sections: readonly PieceSection[], declared: readonly DeclaredTerrain[], borrow: readonly { source: string; table: BorrowTable }[], borders: readonly { source: string; table: BorderPairTable }[] = []): TerrainFileSection {
+export function terrainFileSection(table: string, sections: readonly PieceSection[], declared: readonly DeclaredTerrain[], borrow: readonly { source: string; table: BorrowTable }[], borders: readonly { source: string; table: BorderPairTable }[] = [], copies: readonly TerrainFileCopy[] = []): TerrainFileSection {
   const out = emptyTerrainSection(table);
   const seen = new Set<string>();
   for (const s of sections) {
@@ -41,5 +41,6 @@ export function terrainFileSection(table: string, sections: readonly PieceSectio
     }
     if (Object.keys(shapes).length > 0) out.borders.push({ source, terrain: b.x, ground: b.y, shapes });
   }
+  for (const c of copies.slice(0, TERRAIN_LIMITS.copies)) out.copies.push({ terrain: c.terrain, height: c.height, ground: { ...c.ground }, pieces: c.pieces.map(([a, b]) => [a, b] as [number, number]) });
   return out;
 }

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { count, countError, countPlacedUnits, countingWanted, countPluginUse, countReplays, errorKind, extOf, flushCounts, gameDataOf, messageKind, noteModuleSource, OFF_KEY, pluginCountName, resetCountsForTests, setCounting, stackProps, waitingCounts } from "../src/services/usage";
+import { count, countError, countPlacedUnits, countView, countingWanted, countPluginUse, countReplays, errorKind, extOf, flushCounts, gameDataOf, messageKind, noteModuleSource, OFF_KEY, pluginCountName, resetCountsForTests, setCounting, stackProps, waitingCounts } from "../src/services/usage";
 import { logError, logRenderError, resetLogForTests } from "../src/editor/log";
 import { createStore } from "jotai";
 import { activatePlugin, runCommand } from "../src/plugins/host";
@@ -9,6 +9,10 @@ import { changedPreferences, DEFAULT_PREFERENCES } from "../src/editor/preferenc
 import type { AssetSource } from "../src/gamedata/source";
 import { DEFAULT_PROFILE } from "../src/gamedata/profiles";
 import type { UnitRecord } from "../src/formats/chk/sections/objects";
+import { createScenario } from "../src/formats/chk/create";
+import { commitEditAtom, loadDocumentAtom } from "../src/atoms/documentAtoms";
+import { activeLayerAtom, terrainModeAtom, viewFlagsAtom } from "../src/atoms/editorAtoms";
+import { toggleFlagAtom } from "../src/atoms/viewModeAtoms";
 
 type Tracked = { name: string; props?: Record<string, unknown> };
 
@@ -79,6 +83,45 @@ describe("feature counts", () => {
       { name: "unit.place", props: { unit: 37 }, n: 2 },
       { name: "unit.place", props: { unit: 176 }, n: 1 },
       { name: "unit.place", props: { unit: "other" }, n: 1 },
+    ]);
+  });
+
+  it("says which tool made an edit, where the layer and the terrain tab do not", () => {
+    const store = createStore();
+    const scn = createScenario({ width: 16, height: 16, era: 0, name: "p" });
+    store.set(loadDocumentAtom, { scenario: scn, extras: new Map(), fileName: "p.scx" });
+    resetCountsForTests(true);
+    const tile = (at: number) => ({ at, before: scn.tiles[at], after: scn.tiles[at] });
+    store.set(terrainModeAtom, "heal");
+    store.set(commitEditAtom, { label: "Heal seams", tool: "healArea", changes: [tile(0)] });
+    store.set(commitEditAtom, { label: "Heal seams", changes: [tile(1)] });
+    store.set(terrainModeAtom, "pin");
+    store.set(commitEditAtom, { label: "Unpin tiles", tool: "unpin", changes: [], pins: { before: new Uint8Array(1), after: null } });
+    store.set(activeLayerAtom, "clipboard");
+    store.set(commitEditAtom, { label: "Paste a map's name, stretched", tool: "pasteStretch", changes: [tile(2)] });
+    expect(waitingCounts().filter((l) => l.name === "edit").map((l) => l.props)).toEqual([
+      { layer: "terrain", part: "terrain", mode: "heal", tool: "healArea" },
+      { layer: "terrain", part: "terrain", mode: "heal" },
+      { layer: "terrain", part: "pins", mode: "pin", tool: "unpin" },
+      { layer: "clipboard", part: "terrain", tool: "pasteStretch" },
+    ]);
+    // The label is the person's words (a doodad's name, a clip's summary) and is never sent.
+    expect(JSON.stringify(waitingCounts())).not.toContain("stretched");
+  });
+
+  it("counts a View tick the person switched, and where they switched it", () => {
+    const store = createStore();
+    store.set(toggleFlagAtom, "seams");
+    store.set(toggleFlagAtom, "seams");
+    store.set(toggleFlagAtom, "pins", true);
+    countView("asymmetry", true, "dialog");
+    // The editor's own switches write the flags and are not the person's.
+    store.set(viewFlagsAtom, { ...store.get(viewFlagsAtom), elevation: true });
+    expect(waitingCounts()).toEqual([
+      { name: "view", props: { flag: "seams", on: true, via: "view" }, n: 1 },
+      { name: "view", props: { flag: "seams", on: false, via: "view" }, n: 1 },
+      { name: "view", props: { flag: "pins", on: true, via: "view" }, n: 1 },
+      { name: "view", props: { flag: "asymmetry", on: true, via: "dialog" }, n: 1 },
     ]);
   });
 

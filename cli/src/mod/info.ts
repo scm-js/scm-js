@@ -49,7 +49,7 @@ export interface ModInfo {
   races: DataSetRace[];
   /**
    * The terrain the mod declares (`terrain.json` beside mod.json): where it is, per tileset its named terrains, pieces
-   * borrow tables (pairs each) and drawn borders (shapes each), and how many rows the reader left out. Null when the mod has none.
+   * borrow tables (pairs each), drawn borders (shapes each) and blocks of copied terrain (pieces each), and how many rows the reader left out. Null when the mod has none.
    */
   terrain: ReturnType<typeof terrainInfo>;
   duplicates: string[];
@@ -231,6 +231,7 @@ function terrainRows(terrain: ModInfo["terrain"]): [string, string | null][] {
       t("{n, plural, one {# piece} other {# pieces}}", { n: c.pieces }),
       ...borrow,
       ...(c.borders.length > 0 ? [t("{n, plural, one {# drawn border} other {# drawn borders}} ({shapes, plural, one {# shape} other {# shapes}})", { n: c.borders.length, shapes: c.borders.reduce((a, b) => a + b.shapes, 0) })] : []),
+      ...((c.copies ?? []).length > 0 ? [t("{n, plural, one {# block of copied terrain} other {# blocks of copied terrain}}", { n: c.copies.length })] : []),
     ].join(", ")}`;
   });
   const dropped = terrain.dropped ? pc.dim(` ${t("({n, plural, one {# row} other {# rows}} left out: mod check lists them)", { n: terrain.dropped })}`) : "";

@@ -77,6 +77,7 @@ import { useDoodadTools } from "../../hooks/useDoodadTools";
 import { useClipboardTools } from "../../hooks/useClipboardTools";
 import { ALL_CLIP_PARTS, CLIP_PARTS, clipSummary, DEFAULT_CLIP_PARTS, type ClipPart } from "../../editor/clipboard";
 import { msg, t, translate } from "../../i18n";
+import { countView } from "../../services/usage";
 
 /* ── Layer rail ─────────────────────────────────────────── */
 
@@ -669,7 +670,7 @@ function FogPalette() {
           {Array.from({ length: FOG_PLAYERS }, (_, i) => <option key={i} value={i}>{t("Player {v}", { v: i + 1 })}</option>)}
         </select>
         <span className="grow" />
-        <Check label={t("Show")} title={t("Draw the fog overlay (View ▸ Fog of War)")} checked={flags.fog} onChange={(e) => setFlags({ ...flags, fog: e.target.checked })} />
+        <Check label={t("Show")} title={t("Draw the fog overlay (View ▸ Fog of War)")} checked={flags.fog} onChange={(e) => { countView("fog", e.target.checked, "palette"); setFlags({ ...flags, fog: e.target.checked }); }} />
       </div>
       <div className="palette-scroll">
         <div className="fog-actions">

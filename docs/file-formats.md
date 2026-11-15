@@ -78,9 +78,10 @@ map uses what it is for. The game never opens them.
 | `scmjs\pins.bin` | Which tiles are pinned ([Pin](guide.md#pin)), a bit for each tile. |
 | `scmjs\borrowed-<tileset>.bin` | For terrain painted from another tileset ([Terrain from other tilesets](guide.md#terrain-from-other-tilesets)): that tileset's isometric record of what was painted. One member for each tileset painted from, such as `scmjs\borrowed-install.bin` for Installation. |
 | `scmjs\borders-<tileset>.bin` | Beside it: where that brush painted, and the tile each cell had before, so the ground can be given back and its borders laid again. |
+| `scmjs\copies.bin` | Where [copied terrain](guide.md#copied-terrain) was painted, so a later stroke that cuts into a patch can lay it again. |
 | `scmjs\dataset.json` | The data set the map was made with ([A map remembers its data set](game-data.md#a-map-remembers-its-data-set)). |
 
-Every save keeps them, *Smallest that plays* included. The first three follow undo and
+Every save keeps them, *Smallest that plays* included. All but the last follow undo and
 Resize, and a change to one reaches everyone on a shared map. The pins and the borrowed
 record are checked against the map's size when read, and one left at another size is read
 as absent. An editor that writes the map without these members loses the pins and the

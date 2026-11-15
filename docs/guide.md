@@ -1777,6 +1777,22 @@ replay: the original up to your moment, and what you played after it. **Try Agai
 Here** in the Watch Replay menu goes back to the moment you took over, with the same bot
 on the other side, and the end of the game offers it too.
 
+### Sharing a replay
+
+**Share** on the replay's timeline makes a link to the replay. Choose **From the start**
+or the time under the playhead, and for a time, whether whoever opens the link **Watches**
+or **Plays as** one of the replay's players. **Copy link** copies it.
+
+A link needs the replay on your scmjs.dev account. The first time you share a replay the
+button reads **Keep and copy link** and keeps it there; a replay the account already has
+is not sent again. Signed out, the button asks you to sign in first and the link is ready
+when you have. Anyone with the link can open it.
+
+A link with a time opens the replay at that moment, paused. A link that says to play opens
+the play page instead, on a card that names the moment and the player: **Play from here**
+runs the game to the moment and stands you in it, paused, with a **Start** button. Someone
+whose browser has no StarCraft yet chooses the folder on that card.
+
 > **Note.** In the desktop app and an editor hosted elsewhere, Aftermath works from the
 > players' orders alone: there is no Replay view and no analysis.
 

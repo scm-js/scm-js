@@ -51,11 +51,11 @@ export interface DefaultPlugin {
  * item's `after:` finds another plugin's item whichever of the two started first.
  */
 export const DEFAULT_REMOTE_PLUGINS: readonly DefaultPlugin[] = [
-  { spec: "github:scm-js/plugin-aftermath@v0.26.0", enabled: true },
+  { spec: "github:scm-js/plugin-aftermath@v0.27.0", enabled: true },
   { spec: "github:scm-js/plugin-paint@v1.1.0", enabled: true },
   { spec: "github:scm-js/plugin-repair@v1.6.3", enabled: true },
   { spec: "github:scm-js/plugin-scm-sim@v0.21.0", enabled: true },
-  { spec: "github:scm-js/plugin-scmjs-dev@v1.40.0", enabled: true },
+  { spec: "github:scm-js/plugin-scmjs-dev@v1.41.0", enabled: true },
   { spec: "github:scm-js/plugin-scm-scx@v1.4.0", enabled: true },
   { spec: "github:scm-js/plugin-stamp-library@v1.2.0", enabled: true },
   { spec: "github:scm-js/plugin-image-to-terrain@v1.1.0", enabled: true },

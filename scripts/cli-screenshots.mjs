@@ -222,6 +222,24 @@ function mix(a, b, t) {
 }
 
 /** The cells as a page: each run of one style a span, the half and full blocks painted rather than drawn as glyphs. */
+const isBraille = (ch) => ch >= "\u2800" && ch <= "\u28ff";
+
+/**
+ * A braille character's dots as CSS background layers: bit 0–2 are the left column's top three, 3–5 the right
+ * column's, 6 and 7 the bottom row. The centres sit a quarter and three quarters across the cell and at eighths down
+ * it, so the dots of neighbouring cells are as far apart as the dots within one.
+ */
+function brailleDots(bits, color) {
+  const AT = [[0, 0], [0, 1], [0, 2], [1, 0], [1, 1], [1, 2], [0, 3], [1, 3]];
+  const dots = [];
+  for (let b = 0; b < 8; b++) {
+    if (!(bits & (1 << b))) continue;
+    const [col, row] = AT[b];
+    dots.push(`radial-gradient(circle at ${25 + col * 50}% ${12.5 + row * 25}%,${color} 1.05px,transparent 1.55px)`);
+  }
+  return dots;
+}
+
 function terminalHtml(grid) {
   const cols = Math.max(40, ...grid.map((r) => r.length));
   const cellStyle = (c) => {
@@ -244,6 +262,15 @@ function terminalHtml(grid) {
         i++;
         continue;
       }
+      // Braille: the dots painted on the cell's own 2 × 4 grid. DejaVu Sans Mono has none, and the font the browser
+      // falls back to draws them wider than a cell, so a picture made of them would lose its right edge and its rows
+      // would not line up.
+      if (isBraille(c.ch)) {
+        const dots = brailleDots(c.ch.codePointAt(0) - 0x2800, fg);
+        html += `<i style="width:1ch;background:${[...dots, bg ?? "transparent"].join(",")}"></i>`;
+        i++;
+        continue;
+      }
       if (c.w === 2) {
         html += `<i style="width:2ch;color:${fg};${bg ? `background:${bg};` : ""}${c.bold ? "font-weight:bold;" : ""}">${escapeHtml(c.ch)}</i>`;
         i += 2;
@@ -251,7 +278,7 @@ function terminalHtml(grid) {
       }
       let text = "", j = i;
       const key = JSON.stringify([fg, bg, c.bold, c.italic, c.underline]);
-      while (j < r.length && r[j].w === 1 && !"▀▄█".includes(r[j].ch)) {
+      while (j < r.length && r[j].w === 1 && !"▀▄█".includes(r[j].ch) && !isBraille(r[j].ch)) {
         const s = cellStyle(r[j]);
         if (JSON.stringify([s.fg, s.bg, r[j].bold, r[j].italic, r[j].underline]) !== key) break;
         text += r[j].ch;

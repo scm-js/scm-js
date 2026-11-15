@@ -1,26 +1,76 @@
 # Bots
 
-A bot is a computer player you write in JavaScript. It is one ES module: the game calls it
-every few frames with what its player can see, and it answers with orders. It plays on
-StarCraft 1.16.1's own engine, the one the play page at
-[scmjs.dev/play](https://scmjs.dev/play/) runs in your browser, and the same engine plays
-it from a terminal with [`scmjs bot run`](cli.md#playing-a-bot). It can take a computer
-seat against you, against the game's own computer players, or against other bots.
+A bot is a computer player somebody wrote. On the play page at
+[scmjs.dev/play](https://scmjs.dev/play/), which runs StarCraft 1.16.1's own engine in
+your browser, a bot takes a computer's seat against you. From a terminal,
+[`scmjs bot`](cli.md#bots) plays bots on the same engine with no page open, against the
+game's own computer players and against each other.
 
-Underneath, a bot plays as a client of [BWAPI](https://github.com/bwapi/bwapi) 4.4.0, the
-library the StarCraft bot tournaments use. You do not need to know BWAPI to write one.
-What it means for you is that unit types have BWAPI's names (`Terran_Marine`), and that an
-order goes into the game as a player's click would, so the game checks it the same way. A
-BWAPI bot written in C++ plays on the same engine too: it is built with the scmbot
-toolchain, as [the command line guide](cli.md#bots) describes.
+Two kinds of bot play here. One is written in JavaScript: a single file, with nothing to
+build. The other is a [BWAPI](https://github.com/bwapi/bwapi) bot in C++, the kind the
+StarCraft bot tournaments play, built from its source into one file.
 
-There are two ways to write a bot. The short way is an `onFrame(game)` function: units are
+| You want to | Start at |
+| --- | --- |
+| Play against a bot | [Playing against a bot](#playing-against-a-bot) |
+| Write a bot | [A first bot](#a-first-bot): JavaScript, about fifty lines, playing within minutes |
+| Play a BWAPI bot, yours or someone else's | [Bringing a BWAPI bot](#bringing-a-bwapi-bot) |
+| Make a bot for a mod | [Bots for mods](#bots-for-mods) |
+| Know what bots cannot do here yet | [What is not there yet](#what-is-not-there-yet) |
+| Look something up | [The short way](#the-short-way) and [the interface underneath](#the-interface-underneath), the two references for JavaScript bots |
+
+## Playing against a bot
+
+On the play page a bot is chosen where a computer player is: in a computer's row of the
+setup screen.
+
+Open [scmjs.dev/play](https://scmjs.dev/play/). The game runs from your own StarCraft
+files, so the first time the page asks for the folder StarCraft is installed in. Then open
+a map with **Open a Map File…**, or drop one on the page. Under **Players**, every
+computer row has a list of who plays it, and a race beside it:
+
+![The play page's setup screen: a generated map, the person as Protoss, and a computer row with starter (your file) chosen as Terran](images/bot-setup.webp)
+
+| In the list | What it is |
+| --- | --- |
+| **Computer** | StarCraft's own computer player |
+| **Vanta**, **Starter** and **Gather**, marked "(JavaScript)" | The page's own bots, written in JavaScript. Vanta is the strongest, Starter is the one this guide teaches from, and Gather is a small example ([how good the sample bots are](#how-good-the-sample-bots-are)) |
+| **McRave**, **UAlbertaBot** | Two BWAPI bots, built from their authors' source as it is. They need a [scmjs.dev account](guide.md#your-scmjsdev-account): signed out, their names end "(sign in to play)" |
+| **Cosmonarchy Example** | A small BWAPI bot made for the Cosmonarchy BW mod ([bots for mods](#bots-for-mods)). It needs an account too |
+| *name* **(your file)** | A bot you added from a file: a JavaScript bot or a built BWAPI bot ([running a bot](#on-the-play-page)) |
+| **Closed** | Nobody |
+
+Press **Start Game**. One bot plays in a game; the other computer rows are StarCraft's
+own.
+
+A BWAPI bot may write files at the end of a game, such as which openings won against you.
+The page keeps them in this browser and hands them back at the start of the bot's next
+game, as the tournaments do. **Options ▸ Community bots** says how much is kept, and
+**Forget** clears it.
+
+A bot can play in other games than one you set up alone:
+
+- **A game between people.** The host chooses the bot in a computer row of the lobby. The
+  host's page runs it, and the other pages see one more player.
+- **A replay taken over.** [Play From Here](guide.md#play-from-here) in the editor stops a
+  replay at a moment and lets you play on from it, with a bot on the other side.
+- **A map you are making.** With *Choose on the play page* as the game type of [Test
+  Map](guide.md#test-map), the map opens on this setup screen.
+- **A mod.** Choose it under **Mods** first: the bot then plays the mod's units by the
+  mod's rules ([bots for mods](#bots-for-mods)).
+
+## A first bot
+
+A bot in JavaScript is one ES module. The game calls it every few frames with what its
+player can see, and it answers with orders.
+
+There are two ways to write one. The short way is an `onFrame(game)` function: units are
 objects with their orders on them, counts include what is on its way, and a building you
 ask for finds its own money, builder and site. Start there. The interface underneath is
 `create(init)` and `onFrame(view, api)`: a plain view of the game and a list of orders,
-for a bot that wants to keep its own books. The short way is written on it.
-
-## A first bot
+for a bot that wants to keep its own books. The short way is written on it. In the types
+your editor shows, a bot written the short way is an `EasyBot`, and one written on the
+interface underneath is a `BotModule`.
 
 [Download
 `starter.mjs`](https://github.com/scm-js/scmbot/blob/main/examples/starter/starter.mjs)
@@ -83,15 +133,23 @@ export default {
 
 To play against it, open [scmjs.dev/play](https://scmjs.dev/play/), go to **Options**, and
 under **Community bots** choose **Add a bot from a file…** and pick `starter.mjs`. The
-page keeps the file and lists it there:
+page keeps the file and lists it there. The line above it, "Nothing kept yet", is about
+the files BWAPI bots write between games:
 
 ![The play page's Options, with starter.mjs added under Community bots](images/bot-options.webp)
 
 Back on the setup screen, choose **starter (your file)** in a computer row, pick its race,
-and start the game. The bot is named after its file, so it sits in the list beside the
-page's own copy, **Starter (JavaScript)**:
+and start the game; the picture under [playing against a bot](#playing-against-a-bot)
+shows that row. The bot is named after its file, so it sits in the list beside the page's
+own copy, **Starter (JavaScript)**.
 
-![A computer row of the setup screen with starter (your file) chosen, playing Terran](images/bot-setup.webp)
+To watch the bot instead of fighting it, turn **Fog of war** off in Options, which shows
+the whole map, and scroll to its base:
+
+![A terran base on the play page: workers on the minerals beside a command centre, three barracks, marines setting off, and a chat line reading "starter: a wave of 12 goes to 3456,3056"](images/bot-playing.webp)
+
+*Starter as terran, four minutes into a game: its first twelve marines leave for the other
+base. The line at the left is the bot's own, from the `game.log` call in step 5.*
 
 With the [command line](cli.md#getting-started) and your own copy of StarCraft installed,
 this plays it against the game's computer on a map of yours:
@@ -141,6 +199,299 @@ spend every mineral as it comes in. Whether a change helps is found out by playi
 a line, play a ladder against the game's computer, and keep what wins ([how good the
 sample bots are](#how-good-the-sample-bots-are)).
 
+## Running a bot
+
+A bot's file plays in two places: on the play page against you, and from a terminal
+against the game's computer and other bots.
+
+### On the play page
+
+Under **Options**, **Community bots**, **Add a bot from a file…** takes a JavaScript bot
+(a `.js` or `.mjs` file) or a built BWAPI bot (a `.scmbot` file); dropping the file on the
+page does the same. The bot is kept in this browser, needs no account, and is offered in
+every computer row of the setup screen as "*name* (your file)", where *name* is the file's
+name, beside [the bots the page has already](#playing-against-a-bot). One bot plays in a
+game.
+
+Options lists the bots you have added, each with **Remove**. Adding a file of the same
+name again replaces the one kept, which is how you play a changed bot. In a game between
+people, the host's page runs the bot and sends its orders, and the other pages see one
+more player.
+
+### From the command line
+
+`scmjs bot run starter.mjs "(2)Jungle Duel.scx"` plays the bot against the game's own
+computer on the same engine as the page, with no page open. A `.scmbot` file is played the
+same way. The command needs [your own copy of
+StarCraft](cli.md#commands-that-need-starcraft). `--race`, `--opponents`, `--seed`,
+`--frames` and `--mod` are described in [the command line guide](cli.md#playing-a-bot);
+the same seed, bot and map play the same game, because the command waits for the bot's
+answer every frame.
+
+The command prints a line every thousand frames with each side's minerals, gas and supply,
+and the bot's own `game.log` lines as they come. Starter as protoss against the zerg
+computer, on a map made by `scmjs map generate`:
+
+```
+starter on (2)Jungle Duel.scx 128 × 128, jungle · bot protoss vs computer zerg · seed 1 · 1.16.1 files
+  BWAPI: Connected to AI Client process
+  starter: BWAPI 4.4.0.0 RELEASE is now live using "<Client Connection>".
+  frame   1000  P1 bot P 24/0 7/9  |  P2 computer Z 42/0 8/9
+  frame   2000  P1 bot P 36/0 10/17  |  P2 computer Z 260/0 9/17
+  …
+  frame   7000  P1 bot P 226/0 44/49  |  P2 computer Z 96/234 21/26
+  Starter: a wave of 12 goes to 3456,3056
+  frame   8000  P1 bot P 58/0 56/65  |  P2 computer Z 107/251 28/34
+  …
+  frame  45000  P1 bot P 12/0 0/0  |  P2 computer Z 167/887 93/94
+▲ the bot lost at frame 45029 · 316 KB of orders · 0.27 ms a frame game, 0.27 bot · 25.8 s
+```
+
+The game ran at about 1,700 frames a second, a little over 30 minutes of play in 26
+seconds. `scmjs bot ladder` plays bots against each other and against the game's computer
+of each race, on every map you name, and keeps a replay of every game:
+
+```sh
+scmjs bot ladder starter.mjs computer --maps "(2)Jungle Duel.scx" "(4)Crossing.scx" --races tzp
+```
+
+JavaScript bots, BWAPI bots and the game's computer play in one ladder. A ladder run again
+after you change your bot shows what the change did. [A ladder for
+bots](cli.md#a-ladder-for-bots) has the options and what the results mean.
+
+### Watching what it does
+
+On the page:
+
+- **Fog of war** off, under Options, shows the whole map and the bot's base with it.
+  **Game speed** there goes up to 16×.
+- `game.log(text)` puts a line in the game's chat under the bot's name.
+- Opened as `scmjs.dev/play/?debug`, the page adds its own read-outs. One of them is a
+  line for each bot with the time its last frame took and how many views it was not given
+  because it was still busy with an earlier one.
+- A bot that throws an error is stopped: the page shows the error with the bot's name, its
+  units stay where they are, and the game goes on without it.
+
+From a terminal:
+
+- The bot's `game.log` lines are printed as they come, between the progress lines. A bot
+  that printed errors makes the command exit with 1; a loss alone does not.
+- `--seed` plays the same game again, so after a change to the bot, the change is the only
+  thing that differs.
+- A ladder keeps a replay of every game. `scmjs replay watch` plays one in the terminal,
+  and the editor opens one with its timeline and graphs ([Replays](guide.md#replays)).
+
+## Bringing a BWAPI bot
+
+[BWAPI](https://github.com/bwapi/bwapi) is the library the StarCraft bot tournaments are
+played with: a bot is C++ code that BWAPI calls every frame inside StarCraft 1.16.1. Here
+BWAPI 4.4.0 runs beside the game as it does there, so a bot is told what it would be told
+in the real game and plays the way it plays in the tournaments. McRave and UAlbertaBot on
+the play page are built this way from their authors' repositories, with no change to their
+code.
+
+A bot is built from its source into one `.scmbot` file, which the play page and
+`scmjs bot` both play. The build is the only step that differs from a JavaScript bot.
+
+### What plays and what does not
+
+| You have | Does it play? |
+| --- | --- |
+| The C++ source of an AI module for BWAPI 4.4.0: the usual kind, a DLL project whose code defines `newAIModule` | Yes |
+| The C++ source of a client program: an `.exe` with its own `main` that connects to BWAPI, as UAlbertaBot is | Yes. The build writes the module around the bot's class |
+| Only a compiled `.dll` or `.exe` | No. A browser does not run Windows code, so the bot has to be built from its source |
+| A bot in Java, Python or another language | No. The toolchain compiles C++ |
+| Source written for another version of BWAPI | It is compiled against BWAPI 4.4.0's headers, and plays if it compiles against them |
+| A bot that uses BWEM or BWEB | Yes. They come as source and are built with the bot |
+| A bot that uses BWTA2 | No. BWTA2 comes as a Windows library |
+
+Most bots were only ever compiled by Visual Studio, which takes some C++ that other
+compilers refuse. The toolchain reads the bot's Visual Studio project and compiles the
+code as Visual Studio would. What still does not compile it rewrites in a copy, and says
+which lines it changed; your files stay as they are.
+
+### Building it
+
+You need [Docker](https://docs.docker.com/get-docker/), [the `scmjs` command
+line](cli.md#getting-started), and the bot's source. In the bot's folder:
+
+```sh
+scmjs bot init      # scmbot.json, read from the bot's Visual Studio project
+scmjs bot build     # out/<key>.scmbot
+```
+
+`bot init` finds the bot's Visual Studio project and writes `scmbot.json` from it: the
+sources, the include folders, the defines, and the libraries the bot links. Read it over,
+since it is a starting point. `bot build` writes `out/<key>.scmbot`. The first build
+downloads the toolchain, a Docker image of a few GB; after that a build takes seconds and
+compiles only the files that changed.
+
+A build needs a licence file in the bot's folder (`LICENSE`, with any licence you choose).
+Its text goes into the `.scmbot` file and is shown with the bot, beside BWAPI's own.
+
+With no bot yet, `scmjs bot new` writes a small one in C++ to start from: its workers
+mine, its base trains more, and it builds supply.
+
+The toolchain has a guide of its own at
+[github.com/scm-js/scmbot](https://github.com/scm-js/scmbot): every field of
+`scmbot.json`, what is done for code written for Visual Studio, client programs, and the
+toolchain without `scmjs`, as a Docker command. [Building a bot](cli.md#building-a-bot) in
+the command line guide has the commands' own details.
+
+### Playing it
+
+A `.scmbot` file is played like a JavaScript bot's file ([running a bot](#running-a-bot)):
+
+- **On the play page**, add it under **Options ▸ Community bots ▸ Add a bot from a
+  file…**, or drop it on the page, and choose it in a computer row. A bot you built needs
+  no account. Building again and adding the new file replaces the old one.
+- **From a terminal**, `scmjs bot run out/mybot.scmbot "(2)Jungle Duel.scx"` plays it
+  against the game's computer, and `scmjs bot ladder` plays it against other bots.
+
+What the bot writes to `bwapi-data/write/` during a game is given back to it in
+`bwapi-data/read/` at the start of the next: by the page, up to 1 MB a file and 8 MB a
+bot, and by the command line in the folder `--data` names.
+
+In a mod's game BWAPI's types are the mod's: its prices, its tech tree, and its unit types
+past the game's 228. A bot written for the game's own units still runs there; one made for
+the mod is written against the mod's names, which `scmjs mod header --bot` writes as a C++
+header ([a bot for your mod](mods.md#a-bot-for-your-mod)).
+
+### What is different from Windows
+
+- **One BWAPI bot a game.** Every build keeps its memory at the same place. Two BWAPI bots
+  play each other in [a ladder](cli.md#a-ladder-for-bots), which runs a copy of the game
+  for each and keeps the two in step.
+- **No threads and no network.** A bot cannot start a thread or open a connection.
+- **The clock is the real one.** A bot that stops searching after so many milliseconds
+  plays a little differently from game to game, as it does on Windows. A bot that does not
+  look at the clock plays the same game again from the same seed.
+- **It runs slower than on Windows.** The bot is WebAssembly beside a game that is itself
+  translated code. The ladder counts the frames that took over the 55 milliseconds the
+  tournaments allow, and does not enforce the limit.
+- **On the page the bot runs inside the game's frame.** A slow frame of the bot's slows
+  the game for everyone in it.
+
+## Bots for mods
+
+On the play page and under `scmjs bot run --mod`, a bot plays a mod as it plays the game.
+Its view and its tables are the mod's, read from the game when the match starts: the mod's
+prices, its tech tree, its types past the game's 228. It is told which mod it is in
+`game.init.mod` (`{ name, hash }`), and every unit type is called by the mod's own name,
+made an identifier. In Cosmonarchy BW the terran worker is `Terran_Mason`, so
+`game.want("Terran_Mason", 14)`, or `game.want("Mason", 14)`, trains Masons. BWAPI's names
+for the game's types stay as second names for the same types (`Terran_SCV` is the Mason
+there too), so a bot written for the game's own units still runs. The names are the ones
+`scmjs mod header` writes, by the rules [the command line
+guide](cli.md#a-bot-made-for-a-mod) gives; `scmjs mod header "<mod>" --js` writes them as
+a module, for your editor's completion. Weapons, upgrades and techs keep BWAPI's names
+while the game runs.
+
+This bot is made for Cosmonarchy BW. Its Masons mine, the Ministry trains more of them, a
+Mason puts up a Stockade (and more of them, up to four, while minerals pile up), the
+Stockades train Mavericks, and every six Mavericks attack:
+
+```js
+const WORKERS = 14, WAVE = 6, STOCKADES = 4;
+
+export default {
+  name: "Cosmonarchy Example (JavaScript)",
+
+  onStart(game) {
+    const mod = game.init.mod;
+    if (mod?.name !== "Cosmonarchy BW") game.log(`made for Cosmonarchy BW, playing ${mod ? mod.name : "the game's own units"}: the names below may mean nothing here`);
+    if (game.race.name !== "Terran") game.log("I play Cosmonarchy's terrans only: my workers will mine, nothing more");
+  },
+
+  onFrame(game) {
+    game.mine();
+    if (game.race.name !== "Terran") return;
+
+    game.want("Terran_Mason", WORKERS);
+
+    const stockades = game.count("Terran_Stockade");
+    const more = stockades === 0 || (stockades < STOCKADES && game.minerals >= 2 * game.info("Terran_Stockade").mineralPrice);
+    if (more && game.planned("Terran_Stockade") === 0) game.build("Terran_Stockade");
+
+    game.want("Terran_Maverick", 200);
+
+    const target = game.enemyBase();
+    const atHome = game.army.of("Terran_Maverick").filter((u) => !u.memory.out);
+    if (atHome.length >= WAVE && target) {
+      for (const u of atHome) u.memory.out = true;
+      atHome.attack(target);
+    }
+    game.army.filter((u) => u.memory.out).idle.attack(target);
+  },
+
+  onEnd(result, game) {
+    game.log(result.result === "victory" ? "gg: a win for Cosmonarchy BW" : "gg");
+  },
+};
+```
+
+On the play page, choose the mod under **Mods**, then add the file as a bot. From a
+terminal, `scmjs bot run cosmonarchy.mjs "(4)Exodus 1.0.scx" --mod "Cosmonarchy BW"` plays
+it with the mod's plugins ([a bot on a mod](cli.md#a-bot-on-a-mod)). The [mods
+guide](mods.md#a-bot-for-your-mod) has more on bots made for a mod.
+
+## How good the sample bots are
+
+Vanta and Starter, two of the play page's own bots, played against the game's own computer
+as each race against each race, on Boxer, Challenger, Astral Balance, Lost Civilization
+and Frenzy with two seeds each: 90 games a bot. A game still going at 30 minutes counts as
+a draw.
+
+| Bot | Won | Drawn | Lost | As terran | As protoss | As zerg |
+| --- | --- | --- | --- | --- | --- | --- |
+| Vanta | 53 | 18 | 19 | 17-7-6 | 25-3-2 | 11-8-11 |
+| Starter | 50 | 18 | 22 | 16-9-5 | 24-4-2 | 10-5-15 |
+
+The race columns are won-drawn-lost. Starter is the one to read and copy; Vanta is longer.
+It has a plan for each race as data: what to build, research and upgrade once the supply
+reaches a number. Terran masses marines and medics with stim packs, protoss masses zealots
+from as many gateways as the money keeps busy, and zerg makes zerglings and hydralisks
+from four hatcheries. Terran and protoss send a dozen at a time and keep going; zerg
+gathers at a rally in front of its base in waves that grow, and turns on whatever comes to
+it. Vanta's army comes ahead of its workers while the base is under attack.
+
+Each of those choices was measured against the others on the same 90 games. Medics with
+stim beat marines alone. Zealots alone beat zealots with dragoons and upgrades. Sending
+reinforcements in small groups did worse than waiting for the next wave, and pulling a
+beaten wave back made no difference. Zerg is the weak race of both bots: about a third of
+its games won.
+
+Gather, the page's third bot of its own, is written on the interface underneath as an
+example of it: it mines, keeps supply, trains fourteen workers, puts up one production
+building and sends every four fighters to the enemy's start.
+
+## What is not there yet
+
+These are the things a bot cannot do here yet, listed so that nobody plans around one.
+
+- **Teams.** Every other player is an enemy. There are no allies and no shared vision.
+- **Two bots in a game on the page.** The page plays one bot a game. Bots play each other
+  in `scmjs bot ladder`, and the replays it keeps are how you watch those games.
+- **Memory between games for a JavaScript bot.** A BWAPI bot has its `bwapi-data` folders;
+  the JavaScript interface has nothing of the kind, so a JavaScript bot starts every game
+  knowing only what is in its file.
+- **More than one file on the page.** The page keeps a JavaScript bot as the one file you
+  added, so it cannot import others there. The command line runs a bot from your disk,
+  where imports work.
+- **Drawing on the screen.** A JavaScript bot can say things with `game.log`. It cannot
+  draw on the map.
+- **A starter folder for a JavaScript bot.** `scmjs bot new` writes a C++ bot. For
+  JavaScript, download Starter ([a first bot](#a-first-bot)).
+- **Help beyond the economy.** The short way looks after money, supply, builders and
+  sending groups out. Scouting, defending a base, casting spells well and anything about
+  the map's shape, such as chokes or the distance on foot between two points, is code you
+  write yourself from what the bot is shown.
+- **A strong zerg.** Both sample bots win about a third of their zerg games against the
+  game's computer ([how good the sample bots are](#how-good-the-sample-bots-are)).
+
+The sample bots have been measured against the game's own computer only, not against the
+BWAPI bots.
+
 ## The short way
 
 A module whose default export has `onFrame` and no `create` is written the short way. Its
@@ -164,12 +515,12 @@ thinking about the last one is skipped, and the next call sees the game as it is
 
 ### Names
 
-A unit type can be named the way BWAPI names it or more loosely: `"Terran_Marine"`,
-`"Marine"`, `"marine"` and `"Siege Tank"` all work, the bot's own race first. Techs and
-upgrades go by BWAPI's names too, as loosely: `"Stim_Packs"`, `"Protoss_Ground_Weapons"`.
-A name the game does not know throws, so a typo stops the bot with an error that names it.
-A type of another race (`"Barracks"` for a protoss) is said once in the log, and nothing
-is ordered. Anywhere a type is taken, its number works too.
+A unit type can be named the way [BWAPI](https://github.com/bwapi/bwapi) names it or more
+loosely: `"Terran_Marine"`, `"Marine"`, `"marine"` and `"Siege Tank"` all work, the bot's
+own race first. Techs and upgrades go by BWAPI's names too, as loosely: `"Stim_Packs"`,
+`"Protoss_Ground_Weapons"`. A name the game does not know throws, so a typo stops the bot
+with an error that names it. A type of another race (`"Barracks"` for a protoss) is said
+once in the log, and nothing is ordered. Anywhere a type is taken, its number works too.
 
 `game.type(name)` turns a name into its number, and `game.info(type)` is the type's entry
 in the game's tables: `mineralPrice`, `gasPrice`, `supplyRequired`, `maxHitPoints`,
@@ -345,162 +696,16 @@ the one file.
 The package's major version is the interface's (`BOT_API`, now 1). The interface only
 grows: a field or a call that exists keeps its meaning.
 
-## Bots for mods
-
-On the play page and under `scmjs bot run --mod`, a bot plays a mod as it plays the game.
-Its view and its tables are the mod's, read from the game when the match starts: the mod's
-prices, its tech tree, its types past the game's 228. It is told which mod it is in
-`game.init.mod` (`{ name, hash }`), and every unit type is called by the mod's own name,
-made an identifier. In Cosmonarchy BW the terran worker is `Terran_Mason`, so
-`game.want("Terran_Mason", 14)`, or `game.want("Mason", 14)`, trains Masons. BWAPI's names
-for the game's types stay as second names for the same types (`Terran_SCV` is the Mason
-there too), so a bot written for the game's own units still runs. The names are the ones
-`scmjs mod header` writes, by the rules [the command line
-guide](cli.md#a-bot-made-for-a-mod) gives; `scmjs mod header "<mod>" --js` writes them as
-a module, for your editor's completion. Weapons, upgrades and techs keep BWAPI's names
-while the game runs.
-
-This bot is made for Cosmonarchy BW. Its Masons mine, the Ministry trains more of them, a
-Mason puts up a Stockade (and more of them, up to four, while minerals pile up), the
-Stockades train Mavericks, and every six Mavericks attack:
-
-```js
-const WORKERS = 14, WAVE = 6, STOCKADES = 4;
-
-export default {
-  name: "Cosmonarchy Example (JavaScript)",
-
-  onStart(game) {
-    const mod = game.init.mod;
-    if (mod?.name !== "Cosmonarchy BW") game.log(`made for Cosmonarchy BW, playing ${mod ? mod.name : "the game's own units"}: the names below may mean nothing here`);
-    if (game.race.name !== "Terran") game.log("I play Cosmonarchy's terrans only: my workers will mine, nothing more");
-  },
-
-  onFrame(game) {
-    game.mine();
-    if (game.race.name !== "Terran") return;
-
-    game.want("Terran_Mason", WORKERS);
-
-    const stockades = game.count("Terran_Stockade");
-    const more = stockades === 0 || (stockades < STOCKADES && game.minerals >= 2 * game.info("Terran_Stockade").mineralPrice);
-    if (more && game.planned("Terran_Stockade") === 0) game.build("Terran_Stockade");
-
-    game.want("Terran_Maverick", 200);
-
-    const target = game.enemyBase();
-    const atHome = game.army.of("Terran_Maverick").filter((u) => !u.memory.out);
-    if (atHome.length >= WAVE && target) {
-      for (const u of atHome) u.memory.out = true;
-      atHome.attack(target);
-    }
-    game.army.filter((u) => u.memory.out).idle.attack(target);
-  },
-
-  onEnd(result, game) {
-    game.log(result.result === "victory" ? "gg: a win for Cosmonarchy BW" : "gg");
-  },
-};
-```
-
-On the play page, choose the mod under **Mods**, then add the file as a bot. From a
-terminal, `scmjs bot run cosmonarchy.mjs "(4)Exodus 1.0.scx" --mod "Cosmonarchy BW"` plays
-it with the mod's plugins ([a bot on a mod](cli.md#a-bot-on-a-mod)). The [mods
-guide](mods.md#a-bot-for-your-mod) has more on bots made for a mod.
-
-## Running a bot
-
-### On the play page
-
-Under **Options**, **Community bots**, **Add a bot from a file…** takes a `.js` or `.mjs`
-file; dropping the file on the page does the same. The bot is kept in this browser, needs
-no account, and is offered in every computer row of the setup screen as "*name* (your
-file)", where *name* is the file's name. The same list has the page's own bots (Vanta,
-Starter and Gather, marked "JavaScript"), StarCraft's own computer, and the BWAPI bots of
-the catalogue, which need a scmjs.dev account. One community bot plays in a game.
-
-Options lists the bots you have added, each with **Remove**. Adding a file of the same
-name again replaces the one kept, which is how you play a changed bot. In a game between
-people, the host's page runs the bot and sends its orders, and the other pages see one
-more player.
-
-A bot that throws an error is stopped: the page shows the error with the bot's name, its
-units stay where they are, and the game goes on without it.
-
-### From the command line
-
-`scmjs bot run starter.mjs "(2)Jungle Duel.scx"` plays the bot against the game's own
-computer on the same engine as the page, with no page open. It needs your own copy of
-StarCraft. `--race`, `--opponents`, `--seed`, `--frames` and `--mod` are described in [the
-command line guide](cli.md#playing-a-bot); the same seed, bot and map play the same game,
-because the command waits for the bot's answer every frame.
-
-The command prints a line every thousand frames with each side's minerals, gas and supply,
-and the bot's own `game.log` lines as they come. Starter as protoss against the zerg
-computer, on a map made by `scmjs map generate`:
-
-```
-starter on (2)Jungle Duel.scx 128 × 128, jungle · bot protoss vs computer zerg · seed 1 · 1.16.1 files
-  BWAPI: Connected to AI Client process
-  starter: BWAPI 4.4.0.0 RELEASE is now live using "<Client Connection>".
-  frame   1000  P1 bot P 24/0 7/9  |  P2 computer Z 42/0 8/9
-  frame   2000  P1 bot P 36/0 10/17  |  P2 computer Z 260/0 9/17
-  …
-  frame   7000  P1 bot P 226/0 44/49  |  P2 computer Z 96/234 21/26
-  Starter: a wave of 12 goes to 3456,3056
-  frame   8000  P1 bot P 58/0 56/65  |  P2 computer Z 107/251 28/34
-  …
-  frame  45000  P1 bot P 12/0 0/0  |  P2 computer Z 167/887 93/94
-▲ the bot lost at frame 45029 · 316 KB of orders · 0.27 ms a frame game, 0.27 bot · 25.8 s
-```
-
-The game ran at about 1,700 frames a second, a little over 30 minutes of play in 26
-seconds. `scmjs bot ladder` plays bots against each other and against the game's computer
-of each race, on every map you name, and keeps a replay of every game:
-
-```sh
-scmjs bot ladder starter.mjs computer --maps "(2)Jungle Duel.scx" "(4)Crossing.scx" --races tzp
-```
-
-JavaScript bots, BWAPI bots and the game's computer play in one ladder. A ladder run again
-after you change your bot shows what the change did. [A ladder for
-bots](cli.md#a-ladder-for-bots) has the options and what the results mean.
-
-## How good the sample bots are
-
-Vanta and Starter, two of the play page's own bots, played against the game's own computer
-as each race against each race, on Boxer, Challenger, Astral Balance, Lost Civilization
-and Frenzy with two seeds each: 90 games a bot. A game still going at 30 minutes counts as
-a draw.
-
-| Bot | Won | Drawn | Lost | As terran | As protoss | As zerg |
-| --- | --- | --- | --- | --- | --- | --- |
-| Vanta | 53 | 18 | 19 | 17-7-6 | 25-3-2 | 11-8-11 |
-| Starter | 50 | 18 | 22 | 16-9-5 | 24-4-2 | 10-5-15 |
-
-The race columns are won-drawn-lost. Starter is the one to read and copy; Vanta is longer.
-It has a plan for each race as data: what to build, research and upgrade once the supply
-reaches a number. Terran masses marines and medics with stim packs, protoss masses zealots
-from as many gateways as the money keeps busy, and zerg makes zerglings and hydralisks
-from four hatcheries. Terran and protoss send a dozen at a time and keep going; zerg
-gathers at a rally in front of its base in waves that grow, and turns on whatever comes to
-it. Vanta's army comes ahead of its workers while the base is under attack.
-
-Each of those choices was measured against the others on the same 90 games. Medics with
-stim beat marines alone. Zealots alone beat zealots with dragoons and upgrades. Sending
-reinforcements in small groups did worse than waiting for the next wave, and pulling a
-beaten wave back made no difference. Zerg is the weak race of both bots: about a third of
-its games won.
-
-Gather, the page's third bot of its own, is written on the interface underneath as an
-example of it: it mines, keeps supply, trains fourteen workers, puts up one production
-building and sends every four fighters to the enemy's start.
-
 ## The interface underneath
 
 The short way is built on this interface, and a bot may use it directly: a module whose
 default export has `create` is given the plain view and a list of orders, and keeps its
 own books.
+
+A JavaScript bot plays as a client of BWAPI 4.4.0, the library [BWAPI
+bots](#bringing-a-bwapi-bot) are written for. You do not need to know BWAPI to write one.
+What it means for you is that unit types have BWAPI's names (`Terran_Marine`), and that an
+order goes into the game as a player's click would, so the game checks it the same way.
 
 ### The module
 
@@ -736,6 +941,10 @@ other script from whoever gave it to you; the page says so where a bot is added.
 command line runs a bot inside its own Node.js process, with Node's privileges: your files
 and your network.
 
+A built BWAPI bot is WebAssembly. On the page it runs as part of the page, with the page's
+access to this browser, and it cannot start threads or open connections of its own. Add
+only a `.scmbot` file you built or trust.
+
 The game's whole state is in the page, so the rule that a bot sees only what its player
 would see is a rule of the interface, kept by BWAPI, and not a security boundary.
 
@@ -743,7 +952,9 @@ would see is a rule of the interface, kept by BWAPI, and not a security boundary
 
 For developers. The bot interface and the engine are written in the play page's
 repository, which is not public; this repository holds a copy of the interface's two files
-for the types package, and the command line's side of running a bot.
+for the types package, and the command line's side of running a bot. The toolchain that
+builds a BWAPI bot is a repository of its own,
+[github.com/scm-js/scmbot](https://github.com/scm-js/scmbot).
 
 | File | Does |
 | --- | --- |
@@ -752,6 +963,7 @@ for the types package, and the command line's side of running a bot.
 | `bot/package.json`, `bot/README.md` | The `@scm-js/bot` package: the declarations of both files, as one `index.d.ts` |
 | `scripts/build-bot-types.mjs` | Copies the two files in from the engine's repository, and builds the declarations |
 | `tests/bot-package.test.ts` | That the two files import only each other, that the package builds, and that the bots on this page type-check against it |
+| `cli/src/bot.ts` | `scmjs bot new`, `init`, `build` and `update`: the toolchain's image, run through Docker |
 | `cli/src/botrun.ts`, `cli/src/ladder.ts` | `scmjs bot run` and `scmjs bot ladder` |
 | `cli/src/files.ts` | Telling a JavaScript bot from a built `.scmbot` file |
 | `cli/src/mod/header.ts` | `scmjs mod header --js` |

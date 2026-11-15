@@ -76,8 +76,8 @@ export const SOURCES = [
     id: "bots",
     file: "docs/bots.md",
     title: "Bots",
-    blurb: "A computer player written in JavaScript that plays on the game's own engine, on the play page or from the command line: a first bot, the short way, bots for mods, and the interface underneath.",
-    pageTitle: "StarCraft bots in JavaScript",
+    blurb: "Computer players on the game's own engine, on the play page or from the command line: playing against one, writing one in JavaScript, bringing a BWAPI bot, bots for mods, and the reference.",
+    pageTitle: "StarCraft bots in JavaScript and BWAPI",
   },
   {
     id: "mods",

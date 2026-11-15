@@ -3349,7 +3349,9 @@ has no such characters, so there it is drawn with `#`, twice as wide.
 
 `scmjs bot` builds a [BWAPI](https://github.com/bwapi/bwapi) 4.4.0 bot, the C++ AI modules
 of the bot tournaments, into one `.scmbot` file, and plays it. It also plays a bot written
-in JavaScript, which needs no build; [the bot guide](bots.md) is about writing one.
+in JavaScript, which needs no build. [The bot guide](bots.md) starts from the bot rather
+than the command: [which BWAPI bots play here](bots.md#bringing-a-bwapi-bot), and [a first
+bot in JavaScript](bots.md#a-first-bot).
 
 ### Building a bot
 

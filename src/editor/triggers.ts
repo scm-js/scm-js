@@ -21,7 +21,7 @@ import { currentLoadedNames, UNIT_NAMES, UNIT_TYPE_COUNT, unitName, unitTypeCoun
 import { PALETTE_AVAILABILITY, type UnitsDat } from "../formats/dat/dat";
 import { locationName } from "./locations";
 import { internString, unitCustomName } from "./settings";
-import type { TriggerNames } from "../formats/triggers/text";
+import { parseTriggers, type TextTrigger, type TriggerNames } from "../formats/triggers/text";
 
 /* ── Names ───────────────────────────────────────────────── */
 
@@ -62,9 +62,11 @@ function unitNameIndex(): Map<string, number[]> {
 
 /**
  * A `TriggerNames` over the scenario. `intern` appends to the string table (marking it
- * dirty), so parsing text into a scenario changes it even before the triggers are applied;
- * strings are never removed, so that is harmless for a parse, which interns each string
- * once. An editor that interns as the user types wants `draftTriggerNames` instead.
+ * dirty) the moment it is called, and strings are never removed. So it is for printing, and
+ * for a caller that means every string it interns to stay. Parsing text does not: the
+ * parser interns as it reads, and a text with a mistake on a later line has by then added
+ * the strings of the lines before it — `parseTriggerText` is the way to parse. An editor
+ * that interns as the user types wants `draftTriggerNames` for the same reason.
  */
 export function triggerNames(scn: Scenario): TriggerNames {
   const lower = (s: string) => s.trim().toLowerCase();
@@ -177,6 +179,17 @@ export function resolveDraftStrings(scn: Scenario, list: TriggerRecord[], drafts
     return { ...t, actions: t.actions.map((a) => (a.text < 0 || a.wav < 0 ? { ...a, text: real(a.text), wav: real(a.wav) } : a)) };
   });
   return changed ? next : list;
+}
+
+/**
+ * Parse TrigEdit text against the map's names without touching its string table: a string
+ * the map lacks comes back as a draft, for `resolveDraftStrings` to add once the triggers
+ * are going into the map. Throws `TriggerTextError` with the line, and then nothing was
+ * added — through `triggerNames` the strings ahead of the mistake stayed in the map, with
+ * no entry on the undo stack to take them back.
+ */
+export function parseTriggerText(scn: Scenario, text: string, briefing: boolean, drafts: StringDrafts): TextTrigger[] {
+  return parseTriggers(text, draftTriggerNames(scn, triggerNames(scn), drafts), briefing);
 }
 
 /* ── Working copies ──────────────────────────────────────── */

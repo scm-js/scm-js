@@ -15,8 +15,8 @@
 import { markDirty, strSectionName, type Scenario } from "../formats/chk/scenario";
 import { setString, type StringTable } from "../formats/chk/sections/strings";
 import { ConditionType, decodeTriggers, encodeTriggers, MAX_CONDITIONS, TRIGGER_STRIDE, type ReadonlyTrigger, type TriggerRecord } from "../formats/chk/sections/triggers";
-import { formatTriggers, parseTriggers } from "../formats/triggers/text";
-import { newCondition, triggerNames } from "./triggers";
+import { formatTriggers } from "../formats/triggers/text";
+import { newCondition, newStringDrafts, parseTriggerText, resolveDraftStrings, triggerNames, type StringDrafts } from "./triggers";
 import { t } from "../i18n";
 
 /* ── Triggers ────────────────────────────────────────────── */
@@ -37,9 +37,16 @@ export function triggersToText(scn: Scenario, triggers: TriggerRecord[], briefin
   return formatTriggers(triggers, triggerNames(scn), briefing);
 }
 
-/** Parse TrigEdit text against the map's names; throws `TriggerTextError` with the line. */
-export function triggersFromText(scn: Scenario, text: string, briefing = false): TriggerRecord[] {
-  const triggers = parseTriggers(text, triggerNames(scn), briefing).map((t) => t.trigger);
+/**
+ * Parse TrigEdit text against the map's names; throws `TriggerTextError` with the line.
+ * The strings the text mentions are added to the map only once all of it has parsed, so a
+ * text with a mistake in it leaves the string table as it was. With `drafts` they are not
+ * added at all: the ones the map lacks come back as drafts, for `resolveDraftStrings` to
+ * add when the triggers are applied (Import Triggers reads the file before Import is pressed).
+ */
+export function triggersFromText(scn: Scenario, text: string, briefing = false, drafts?: StringDrafts): TriggerRecord[] {
+  const held = drafts ?? newStringDrafts();
+  const triggers = parseTriggerText(scn, text, briefing, held).map((t) => t.trigger);
   // The game plays a briefing only when its first condition is Mission Briefing, which
   // StarEdit always writes and briefing text usually leaves out.
   if (briefing) {
@@ -48,7 +55,7 @@ export function triggersFromText(scn: Scenario, text: string, briefing = false):
       trig.conditions = [newCondition(ConditionType.Briefing), ...trig.conditions].slice(0, MAX_CONDITIONS);
     }
   }
-  return triggers;
+  return drafts ? triggers : resolveDraftStrings(scn, triggers, held);
 }
 
 export type TriggerFileFormat = "trg" | "txt";
@@ -58,10 +65,10 @@ export function triggerFormatOf(fileName: string): TriggerFileFormat {
   return /\.trg$/i.test(fileName) ? "trg" : "txt";
 }
 
-/** Read either kind of trigger file. */
-export function readTriggerFile(scn: Scenario, fileName: string, bytes: Uint8Array, briefing = false): TriggerRecord[] {
+/** Read either kind of trigger file. `drafts` as for `triggersFromText`; a `.trg` holds indices, not strings, and has none. */
+export function readTriggerFile(scn: Scenario, fileName: string, bytes: Uint8Array, briefing = false, drafts?: StringDrafts): TriggerRecord[] {
   if (triggerFormatOf(fileName) === "trg") return decodeTrg(bytes);
-  return triggersFromText(scn, new TextDecoder("latin1").decode(bytes), briefing);
+  return triggersFromText(scn, new TextDecoder("latin1").decode(bytes), briefing, drafts);
 }
 
 /* ── Strings ─────────────────────────────────────────────── */

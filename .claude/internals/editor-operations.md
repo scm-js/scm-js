@@ -46,7 +46,8 @@ which parks the action in `confirmClose`'s payload while the map is modified. `t
 
 `editor/exchange.ts` is the pure file-format layer behind File ▸ Import / Export: `.trg` is the raw
 2400-byte TRIG records (SCMDraft-compatible, string indices are the map's own), text triggers go
-through `formats/triggers/text.ts` with `triggerNames(scn)`, and strings are `index<TAB>text` with
+through `formats/triggers/text.ts` (printed with `triggerNames(scn)`, parsed with `parseTriggerText` so
+a text that fails, or a file picked and not imported, adds no string — `triggers.md`), and strings are `index<TAB>text` with
 `<XX>` control bytes (`applyStringImport` sets indices in place and appends past the end). Import
 Triggers appends or replaces through `applyTriggers` / `applyBriefing` + `commitTriggersAtom`; Import
 Strings and the String Editor re-sync `mapNameAtom` / `mapDescriptionAtom` after apply because the

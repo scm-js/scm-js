@@ -10,7 +10,7 @@ import {
   applyStringImport, decodeTrg, encodeTrg, escapeStringText, formatStringTable, parseStringTable, readTriggerFile, triggerFormatOf, triggersFromText, triggersToText, unescapeStringText,
 } from "../src/editor/exchange";
 import { internString } from "../src/editor/settings";
-import { newAction, newTrigger } from "../src/editor/triggers";
+import { newAction, newStringDrafts, newTrigger, resolveDraftStrings } from "../src/editor/triggers";
 import { loadMap } from "../src/formats/mpq/scm";
 
 function fresh() {
@@ -52,6 +52,39 @@ describe("trigger files", () => {
     try { triggersFromText(scn, "Trigger(\"Player 1\"){\nConditions:\nActions:\n  Bogus Action(1);\n}"); } catch (e) { err = e; }
     expect(err).toBeInstanceOf(TriggerTextError);
     expect((err as TriggerTextError).line).toBeGreaterThan(0);
+  });
+
+  // The parser interns each string as it reads it. Through the map's own names, the
+  // strings ahead of a mistake stayed in the table with nothing on the undo stack for them.
+  it("adds no string when the text has a mistake after one", () => {
+    const { scn } = sample();
+    const before = scn.strings.strings.slice();
+    scn.dirty.clear();
+    const bad = "Trigger(\"Player 1\"){\nConditions:\n\tAlways();\nActions:\n\tDisplay Text Message(Always Display, \"Only in the bad file\");\n\tBogus Action(1);\n}";
+    expect(() => triggersFromText(scn, bad)).toThrow(TriggerTextError);
+    expect(() => readTriggerFile(scn, "bad.txt", new TextEncoder().encode(bad))).toThrow(TriggerTextError);
+    expect(scn.strings.strings).toEqual(before);
+    expect(scn.dirty.size).toBe(0);
+  });
+
+  it("holds a file's new strings as drafts until the triggers are applied", () => {
+    const { scn } = sample();
+    const before = scn.strings.strings.slice();
+    scn.dirty.clear();
+    const text = "Trigger(\"Player 1\"){\nConditions:\n\tAlways();\nActions:\n\tDisplay Text Message(Always Display, \"Read, not imported\");\n\tPlay WAV(\"sound\\\\draft.wav\", 0);\n}";
+    const drafts = newStringDrafts();
+    const read = readTriggerFile(scn, "new.txt", new TextEncoder().encode(text), false, drafts);
+    // Read and then closed without importing: the map is as it was.
+    expect(read[0].actions[0].text).toBeLessThan(0);
+    expect(read[0].actions[1].wav).toBeLessThan(0);
+    expect(scn.strings.strings).toEqual(before);
+    expect(scn.dirty.size).toBe(0);
+    // Import: now they go in.
+    const resolved = resolveDraftStrings(scn, read, drafts);
+    expect(getString(scn.strings, resolved[0].actions[0].text)).toBe("Read, not imported");
+    expect(getString(scn.strings, resolved[0].actions[1].wav)).toBe("sound\\draft.wav");
+    // Without drafts the answer is the same records, with the strings in the map at once.
+    expect(triggersFromText(scn, text)).toEqual(resolved);
   });
 
   it("picks the format by extension", () => {

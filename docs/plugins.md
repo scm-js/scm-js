@@ -2210,7 +2210,8 @@ Reading triggers and everything needed to show one. Writing is `document.update`
 
 **To generate triggers, write text.** `tx.triggers.fromText` parses the text format,
 interns its strings and resolves names against the open map. That is easier than filling
-records field by field:
+records field by field, and text with a mistake in it throws with the line and changes
+nothing:
 
 ```ts
 const source = `

@@ -60,13 +60,31 @@ a map with programs. The file then holds two scenarios:
 - `scmjs\build.json` records which steps ran, which archive members they added, and the
   SHA-256 of the built scenario.
 
-The two `scmjs\` members are always zlib-compressed, since the game never opens them.
+Those two members are always zlib-compressed, since the game never opens them.
 
 Opening such a file gives back the map from `scmjs\source.chk`, so the trigger list shows
 your triggers and not the generated ones. That only happens while the built scenario still
 has the recorded hash. If another editor or a protector has changed it since, the editor
 cannot tell which of the two you mean, so it opens the file as it stands, says so, and
 leaves both members where they are. A bare `.chk` is never built.
+
+### What the editor adds to a map
+
+The editor keeps a few small files of its own in the archive, each written only when the
+map uses what it is for. The game never opens them.
+
+| Member | Holds |
+| --- | --- |
+| `scmjs\pins.bin` | Which tiles are pinned ([Pin](guide.md#pin)), a bit for each tile. |
+| `scmjs\borrowed-<tileset>.bin` | For terrain painted from another tileset ([Terrain from other tilesets](guide.md#terrain-from-other-tilesets)): that tileset's isometric record of what was painted. One member for each tileset painted from, such as `scmjs\borrowed-install.bin` for Installation. |
+| `scmjs\borders-<tileset>.bin` | Beside it: where that brush painted, and the tile each cell had before, so the ground can be given back and its borders laid again. |
+| `scmjs\dataset.json` | The data set the map was made with ([A map remembers its data set](game-data.md#a-map-remembers-its-data-set)). |
+
+Every save keeps them, *Smallest that plays* included. The first three follow undo and
+Resize, and a change to one reaches everyone on a shared map. The pins and the borrowed
+record are checked against the map's size when read, and one left at another size is read
+as absent. An editor that writes the map without these members loses the pins and the
+record, not the terrain: the tiles are in the scenario like any others.
 
 ## The scenario
 

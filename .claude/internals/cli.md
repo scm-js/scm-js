@@ -1478,6 +1478,11 @@ advanced, and actually offers something useful". `scmjs map open --live <map>` a
   the MCP server over stdio: `editor_open`, `editor_state`, a trigger import, `editor_show`,
   `editor_picture` (127 KB PNG of the 64 × 64 test map at 25 px a tile), `editor_save`,
   `editor_close`. Tests: `tests/link.test.ts` (9), `e2e/link.spec.ts` (builds the CLI first).
+  The spec passes over one page error by its exact text, `Failed to execute 'open' on 'Window': The
+  provided callback is no longer runnable.`: Chromium reports it now and then from inside the link
+  page's `window.open` while Playwright holds the new window at its first line. The call still
+  returns the window and the link goes on (CI, 2026-11-16: both tries of one run, after six clean
+  runs). No browser without a debugger attached shows it.
 - **Not done**: the desktop app (`--live` always uses the browser; the app needs a channel from
   main to the renderer and a release); a file changed on disk by something else (git checkout)
   reaching the editor; the editor's own edits as events to the command; terminal commands for

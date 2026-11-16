@@ -5,16 +5,19 @@
  * for the provider's address itself (`POST /v1/auth/start { cli: true }`, no Origin), so the page never calls the
  * server and needs nothing of CORS; the server returns a `cli` sign-in to a loopback origin only (ai-server 0.36.0).
  * The session is kept in a file of the person's own (`sessionPath`, mode 600) with the server it belongs to.
+ *
+ * Where the browser cannot reach this computer (SSH, a container), `login --device` signs in by code instead
+ * (`loginByCode`, ai-server 0.40.0): the person allows a code on the server's own `/device` page from any device.
  */
 import { randomBytes } from "node:crypto";
-import { chmodSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type IncomingMessage } from "node:http";
-import { homedir } from "node:os";
+import { homedir, hostname } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { openBrowser } from "./open";
 import { qrFor } from "./qr";
 import { t } from "./i18n";
-import { CliError, dot, gameText, pc, rows, size, table } from "./ui";
+import { CliError, dot, gameText, mark, pc, print, rows, size, table } from "./ui";
 
 /** The scmjs.dev service the editor's scmjs.dev plugin talks to. */
 export const DEFAULT_SERVER = "https://api.scmjs.dev";
@@ -301,6 +304,125 @@ function go() { win = open(provider, "scmjs-signin", "width=540,height=720,popup
 if (!go()) { say(said.blocked); document.getElementById("go").hidden = false; }
 document.getElementById("go").onclick = go;
 </script>`;
+}
+
+/* ── Signing in by code ──────────────────────────────────────────── */
+
+/** What `POST /v1/auth/device` answers (ai-server 0.40.0). */
+export interface DeviceStart { deviceCode: string; userCode: string; verificationUri: string; verificationUriComplete: string; expiresIn: number; interval: number }
+type DevicePoll = { status: "pending"; interval: number } | { status: "slow_down"; interval: number } | { status: "denied" } | { status: "expired" } | { status: "approved"; session: string; account: AccountView };
+
+/**
+ * Why this terminal clearly has no browser of its own, or null: an SSH session, or a container, with no display a
+ * browser could open on (`ssh -X` sets one, and then the loopback page works). Anything less clear keeps the browser.
+ */
+export function noLocalBrowser(env: NodeJS.ProcessEnv = process.env, platform: NodeJS.Platform = process.platform, inContainer = () => existsSync("/.dockerenv")): string | null {
+  if (env.DISPLAY || env.WAYLAND_DISPLAY) return null;
+  if (env.SSH_CONNECTION || env.SSH_TTY || env.SSH_CLIENT) return t("an SSH session");
+  if (platform === "linux" && (env.container || inContainer())) return t("a container");
+  return null;
+}
+
+export interface DeviceLoginOptions {
+  server?: string;
+  file?: string;
+  fetchImpl?: typeof fetch;
+  /** What the page calls this program: `scmjs on <hostname>`. */
+  client?: string;
+  /** Told the address and the code once the server has given them. */
+  say?: (d: DeviceStart) => void;
+  /** Told the time left, every second while waiting. */
+  tick?: (leftMs: number) => void;
+  /** Ctrl+C: stops waiting. */
+  signal?: AbortSignal;
+}
+
+/**
+ * The sign-in by code, for a terminal whose browser cannot reach a page on this computer: the server gives a code and an
+ * address, the person opens it on any device, signs in and allows the code, and the command, polling at the server's
+ * pace, gets a session — the same kind the browser sign-in gets. A server without it (before ai-server 0.40.0) answers 404.
+ */
+export async function loginByCode(o: DeviceLoginOptions = {}): Promise<LoginOutcome> {
+  const server = (o.server ?? serverUrl()).replace(/\/+$/, "");
+  const file = o.file ?? sessionPath();
+  const client = new Client({ server, fetchImpl: o.fetchImpl });
+  const start = await client.request<DeviceStart | null>("POST", "/v1/auth/device", { client: o.client ?? `scmjs on ${hostname()}` }, { missingOk: true });
+  if (!start) throw new CliError(t("{server} does not offer sign-in by code", { server: serverLabel(server) }), t("Sign in on a computer with a browser: scmjs login"));
+  o.say?.(start);
+  const deadline = Date.now() + start.expiresIn * 1000;
+  let interval = Math.max(0.2, start.interval);
+  let failures = 0;
+  const cancelled = () => new CliError(t("Cancelled; nothing was signed in"), null, 130);
+  for (;;) {
+    await waitFor(interval * 1000, deadline, o.tick, o.signal);
+    if (o.signal?.aborted) throw cancelled();
+    if (Date.now() >= deadline) throw new CliError(t("The code expired before it was allowed"), t("scmjs login --device gives a new one."));
+    let r: DevicePoll;
+    try {
+      r = await client.request<DevicePoll>("POST", "/v1/auth/device/token", { deviceCode: start.deviceCode });
+      failures = 0;
+    } catch (e) {
+      // A dropped connection on the way is no reason to give up a code that is still good; three in a row are.
+      if (++failures >= 3) throw e;
+      continue;
+    }
+    if (o.signal?.aborted) throw cancelled();
+    if (r.status === "denied") throw new CliError(t("The sign-in was denied on the page"), t("Nothing was signed in. scmjs login --device starts again."));
+    if (r.status === "expired") throw new CliError(t("The code expired before it was allowed"), t("scmjs login --device gives a new one."));
+    // pending, or slow_down: at the pace the server now asks for.
+    if (r.status !== "approved") { interval = Math.max(0.2, r.interval); continue; }
+    if (r.account.kind !== "account") throw new CliError(t("The server gave a trial session, not an account"), t("Run scmjs login again."));
+    saveSession({ server, session: r.session, name: r.account.name ?? null, provider: r.account.providers[0] ?? "", savedAt: new Date().toISOString() }, file);
+    return { server, file, provider: r.account.providers[0] ?? "", account: r.account };
+  }
+}
+
+/** Waits `ms` (not past `deadline`), telling `tick` the time left each second; returns early on `signal`. */
+function waitFor(ms: number, deadline: number, tick: ((leftMs: number) => void) | undefined, signal: AbortSignal | undefined): Promise<void> {
+  return new Promise((done) => {
+    if (signal?.aborted) return done();
+    const end = Math.min(Date.now() + ms, deadline);
+    const stop = () => { clearInterval(each); clearTimeout(timer); signal?.removeEventListener("abort", stop); done(); };
+    const each = setInterval(() => tick?.(deadline - Date.now()), 1000);
+    const timer = setTimeout(stop, Math.max(0, end - Date.now()));
+    signal?.addEventListener("abort", stop);
+    tick?.(deadline - Date.now());
+  });
+}
+
+/**
+ * `scmjs login --device` in the terminal: the address and the code (and the address with the code as a QR code with
+ * `--qr`), a line counting down while it waits (one line, rewritten, on a terminal), and Ctrl+C to stop.
+ */
+export async function loginByCodeHere(o: { qr?: boolean; why?: string | null } & Pick<DeviceLoginOptions, "server" | "file" | "fetchImpl"> = {}): Promise<LoginOutcome> {
+  const out = process.stderr;
+  const live = !!out.isTTY;
+  const stop = new AbortController();
+  const onInt = () => stop.abort();
+  process.on("SIGINT", onInt);
+  let drawn = false;
+  const clear = () => { if (drawn) { out.write("\r\x1b[K"); drawn = false; } };
+  if (o.why) print(`${mark.info} ${t("This terminal has no browser of its own ({why}), so the sign-in is by code.", { why: o.why })}`, pc.dim(`  ${t("--no-device signs in through a browser on this computer instead.")}`));
+  try {
+    return await loginByCode({
+      ...o,
+      signal: stop.signal,
+      say: (d) => {
+        print(`${mark.info} ${t("On any device with a browser, open {url} and enter this code:", { url: pc.cyan(d.verificationUri) })}`, "", `    ${pc.bold(d.userCode)}`, "");
+        if (o.qr) print(pc.dim(`  ${t("Or scan this, which opens the page with the code filled in:")}`), ...qrFor(d.verificationUriComplete).map((l) => `  ${l}`), "");
+        if (!live) print(pc.dim(`  ${t("Waiting for you to allow it; the code expires in {n, plural, one {# minute} other {# minutes}}.", { n: Math.round(d.expiresIn / 60) })}`));
+      },
+      tick: (left) => {
+        if (!live) return;
+        const s = Math.max(0, Math.ceil(left / 1000));
+        out.write(`\r\x1b[K${pc.dim(`  ${t("Waiting for you to allow it · {left} left · Ctrl+C cancels", { left: `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}` })}`)}`);
+        drawn = true;
+      },
+    });
+  } finally {
+    clear();
+    process.off("SIGINT", onInt);
+  }
 }
 
 /* ── Signing out, and the account ────────────────────────────────── */

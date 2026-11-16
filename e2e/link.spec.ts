@@ -40,8 +40,11 @@ test("commands change a linked map in the editor, undo takes them back, and Save
   // The editor as CI has it (support/editor.ts), for every page of this context: no game data, no network but
   // the server under test and the command's own page.
   const errors: string[] = [];
+  // Playwright holds a new window at its first line, and Chromium now and then reports that from inside the
+  // `window.open` that made it: the call returns the window and the link goes on, as the rest of this test shows.
+  const OPEN_NOISE = "Failed to execute 'open' on 'Window': The provided callback is no longer runnable.";
   const watch = (page: Page) => {
-    page.on("pageerror", (err) => errors.push(`uncaught: ${err.message}`));
+    page.on("pageerror", (err) => { if (err.message !== OPEN_NOISE) errors.push(`uncaught: ${err.message}`); });
     page.on("console", (msg) => { if (msg.type() === "error") errors.push(`console: ${msg.text()}`); });
   };
   context.on("page", watch);

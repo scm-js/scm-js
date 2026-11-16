@@ -1262,6 +1262,59 @@ A map file is binary, so git on its own can only say that it changed, and cannot
 changes to it. scmjs gives git a way to read maps as text and to merge them part by part,
 and gives a pull request Check Map's findings.
 
+### A map in git, and an old version back
+
+In the folder that holds your maps:
+
+```sh
+scmjs init --git                  # once: makes the folder a git repository that reads maps as text
+git add .
+git commit -m "Ridge as it was sent"
+```
+
+Edit and save the map as usual, in the editor or with scmjs, then see what changed and
+commit it:
+
+```
+$ git diff
+@@ -1,7 +1,7 @@
+ # scmjs map dump 2
+
+ ## Map
+-  Name         Ridge
++  Name         Ridge, revised
+…
+$ git commit -am "Rename to Ridge, revised"
+$ scmjs map log ridge.scx
+ridge.scx · 2 commits
+
+8358aac  2026-11-15 23:33  Rae  Rename to Ridge, revised
+         name changed
+
+74dca6f  2026-11-15 23:33  Rae  Ridge as it was sent
+         map added: 64 × 64 Jungle World, 16 units, 1 location, 0 triggers
+```
+
+To get an earlier version back, name its commit: the short hash `map log` shows
+(`74dca6f`), or `HEAD~1` for the one before the last commit.
+
+```sh
+scmjs map diff ridge.scx --rev 74dca6f            # what going back would change
+git restore --source=74dca6f ridge.scx            # the map as it was then, in place of yours
+git show 74dca6f:ridge.scx > ridge-as-sent.scx    # or as a copy beside it
+```
+
+`git restore` replaces only the file. Every version stays in the history, so
+`git restore ridge.scx` brings the newest back again, and committing the restored map
+makes the old version the newest. If the map is open in the editor, close it before you
+restore, or the next Save writes the open copy over the one you brought back.
+
+That is all one person needs. The sections below cover what `init` set up and the rest:
+[checks on GitHub](#checking-maps-on-github), [diffs](#reading-maps-in-git-diff), [a map's
+history](#a-maps-history), [merging two people's changes](#merging-in-git), and keeping a
+map [as a folder of text](#a-map-as-a-folder-of-text) in place of the map file, which
+`scmjs map pack` builds back into the map.
+
 ### Setting up a folder of maps
 
 `scmjs init` sets a folder of maps up for git and GitHub in one command. Run it in the

@@ -54,7 +54,7 @@ describe("scmjs mcp", () => {
   it("lists the tools with what each is for, and says how they fit together", async () => {
     const { tools } = await client.listTools();
     const names = tools.map((t) => t.name).sort();
-    expect(names).toEqual(["doctor", "editor_close", "editor_open", "editor_picture", "editor_save", "editor_show", "editor_state", "map_analyze", "map_balance", "map_build", "map_check", "map_cost", "map_coverage", "map_diff", "map_dump", "map_edit", "map_find", "map_info", "map_locations", "map_new", "map_optimize", "map_preview", "map_resize", "map_run", "map_set", "map_strings_export", "map_strings_import", "map_strings_prune", "map_trace", "map_triggers_export", "map_triggers_import", "map_units", "mod_check", "mod_diff", "mod_header", "mod_info", "mod_new", "mod_pack", "mod_play", "mod_unpack", "replay_info", "replay_map"]);
+    expect(names).toEqual(["account_info", "doctor", "editor_close", "editor_open", "editor_picture", "editor_save", "editor_show", "editor_state", "library_get", "library_list", "library_remove", "library_set", "library_unlink", "map_analyze", "map_balance", "map_build", "map_check", "map_cost", "map_coverage", "map_diff", "map_dump", "map_edit", "map_find", "map_info", "map_locations", "map_new", "map_optimize", "map_preview", "map_resize", "map_run", "map_set", "map_strings_export", "map_strings_import", "map_strings_prune", "map_trace", "map_triggers_export", "map_triggers_import", "map_units", "mod_check", "mod_diff", "mod_header", "mod_info", "mod_new", "mod_pack", "mod_play", "mod_unpack", "replay_info", "replay_map", "replay_sync", "share"]);
     for (const t of tools) {
       expect(t.description?.length ?? 0, t.name).toBeGreaterThan(60);
       expect((t.inputSchema as { properties?: object }).properties, t.name).toBeDefined();
@@ -529,7 +529,7 @@ describe("scmjs mcp: map_units, map_locations, map_edit", () => {
 
   it("lists them: the two readers read only, the editor writes, and an edit is one flat object", async () => {
     const { tools } = await client.listTools();
-    expect(tools).toHaveLength(42);
+    expect(tools).toHaveLength(50);
     for (const name of ["map_units", "map_locations"]) expect(tools.find((t) => t.name === name)?.annotations?.readOnlyHint, name).toBe(true);
     const edit = tools.find((t) => t.name === "map_edit")!;
     expect(edit.annotations?.destructiveHint).toBe(true);

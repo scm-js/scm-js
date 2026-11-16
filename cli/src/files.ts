@@ -1,5 +1,6 @@
 /** Reading what the person named: what kind of file it is, and a map or replay out of it, as the editor reads them. */
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { linkedRead } from "./link";
 import { basename, dirname } from "node:path";
 import type { Readable } from "node:stream";
 import { openMapBytes, type OpenedMap } from "../../src/editor/mapFile";
@@ -10,7 +11,11 @@ import { CliError } from "./ui";
 
 export type FileKind = "map" | "replay" | "bot";
 
-export interface Input { path: string; name: string; bytes: Uint8Array; kind: FileKind | null }
+export interface Input {
+  path: string; name: string; bytes: Uint8Array; kind: FileKind | null;
+  /** Read from the editor the file is linked to, not from disk (link.ts). */
+  live?: boolean;
+}
 
 /** The path that means standard input (as a file to read) or standard output (as a file to write), as `-` does in Unix tools. */
 export const STDIO = "-";
@@ -33,6 +38,9 @@ export async function readInput(path: string, stdin: Readable = process.stdin): 
     const ext = kind === "replay" ? "rep" : kind === "bot" ? "scmbot" : looksLikeMpq(bytes) ? "scx" : "chk";
     return { path: STDIO, name: `stdin.${ext}`, bytes, kind };
   }
+  // A map linked to the editor is read from there: what the editor has now, unsaved changes included (link.ts).
+  const live = await linkedRead(path);
+  if (live) return { path, name: basename(path), bytes: live, kind: kindOf(basename(path), live), live: true };
   let bytes: Uint8Array;
   try {
     if ((await stat(path)).isDirectory()) throw new CliError(t("{path} is a folder", { path }), t("Name a map (.scm, .scx, .chk) or a replay (.rep)."), 2);

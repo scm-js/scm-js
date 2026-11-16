@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { useStore } from "jotai";
 import { pluginsStartedAtom } from "../atoms/pluginAtoms";
 import { handFilesToPlugins } from "../plugins/fileTypes";
-import { guardedAction, openFileInto } from "./useMapFileActions";
+import { guardedAction, openFileInto, saveDocument } from "./useMapFileActions";
 import type { MapFileHandle } from "../services/mapIo";
 import { takeInbox } from "../services/inbox";
 
@@ -42,6 +42,29 @@ export async function openGivenFiles(store: Store, files: File[], handle: MapFil
 }
 
 /**
+ * A map handed over to stay linked (services/editorLink.ts, loaded only now): it opens with a handle that writes
+ * through the link, and from then on the page's `scmjs.link` messages are the command's requests. The page hears
+ * `linked` beside `scmjs.taken` when the link holds; when the open was refused (a plugin took the file, the person
+ * kept the map they had), the map is not linked and the page is told so.
+ */
+async function openLinked(store: Store, opener: Window, origin: string, file: File): Promise<void> {
+  const { createEditorLink } = await import("../services/editorLink");
+  const link = createEditorLink(store, { post: (m, transfer) => opener.postMessage(m, origin, transfer ?? []) }, file.name, saveDocument);
+  const onLink = (e: MessageEvent) => {
+    if (e.source !== opener || e.origin !== origin) return;
+    const type = (e.data as { type?: unknown } | null)?.type;
+    if (type === "scmjs.link" || type === "scmjs.link.reply") link.receive(e.data);
+  };
+  window.addEventListener("message", onLink);
+  // The page reloading or closing ends the link; the command hears it at once instead of waiting for silence.
+  window.addEventListener("pagehide", () => link.end("closed"));
+  try { await openGivenFiles(store, [file], link.handle); } catch { /* said by the open itself */ }
+  const linked = link.attach();
+  if (!linked) { link.end("not opened"); window.removeEventListener("message", onLink); }
+  opener.postMessage({ type: "scmjs.taken", linked: linked ? "yes" : "no" }, origin);
+}
+
+/**
  * `scmjs map open` / `scmjs replay open` in a browser (cli/src/open.ts): the command serves a page on the loopback
  * address that opens the editor with `?handoff`; the editor says it is ready, the page posts it the file, and the
  * editor opens it as a dropped file. The site's play page does the same with a game saved as a replay ("Analyse in
@@ -64,6 +87,8 @@ export function useOpenerHandoff() {
       if (!files.length || handedOver) return;
       handedOver = true;
       window.removeEventListener("message", onMessage);
+      // `scmjs map open --live`: the page stays on the other end, and the map is linked to the command through it.
+      if ((data as { link?: unknown }).link === true && LOOPBACK.test(e.origin)) { void openLinked(store, opener, e.origin, files[0]); return; }
       void openGivenFiles(store, files).finally(() => opener.postMessage({ type: "scmjs.taken" }, e.origin));
     };
     window.addEventListener("message", onMessage);

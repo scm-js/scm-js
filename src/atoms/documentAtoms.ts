@@ -36,7 +36,7 @@ import { encodePins, pinCells, PINS_MEMBER, pinsOf, resizePins, withPinsMember }
 import { BORROW_MEMBERS, resizeBorrowMember, withMember } from "../editor/borrowLattice";
 import { BORDER_MEMBERS, resizeBorderRecord } from "../editor/borderRecord";
 import { COPY_MEMBER, resizeCopyMember } from "../editor/terrainCopyLattice";
-import { ALL_PARTS, applyEntry, entryArea, entryParts, hasEdits, hasMembers, NO_PARTS, swapWholeState, takeWholeState, touchesDoodads, touchesGround, type CommitNotice, type HistoryEdit, type HistoryEntry, type WholeState } from "../editor/history";
+import { ALL_PARTS, applyEntry, entryArea, entryParts, hasEdits, hasMembers, NO_PARTS, swapWholeState, takeWholeState, touchesDoodads, touchesGround, type CommitNotice, type DocumentSide, type HistoryEdit, type HistoryEntry, type WholeState } from "../editor/history";
 import { applyTables, followTables, rebaseAfterTables, rebaseStrings, rebaseTables, TABLES_BUDGET, tablesKind, tablesWeight, takeTablesEdit, type TablesEdit } from "../editor/tableHistory";
 import { applyLocationChanges, boundsOf, isInverted, LOCATION_MIRROR_PX, locationName, moveLocationsMirrored, placedLocations, removeLocations, scrambledLocations, usedLocations } from "../editor/locations";
 import { mirrorMoves } from "../editor/symmetry";
@@ -760,6 +760,48 @@ export const replaceScenarioAtom = atom(null, (get, set, scenario: Scenario, opt
   set(noticeWholeAtom, { reason: "whole", label: t("Edit sections") });
 });
 
+/** The open document's side of a `document` step, as it stands. */
+function documentSide(get: Getter): DocumentSide {
+  return { scenario: get(scenarioAtom)!, extras: get(archiveExtrasAtom), stored: get(archiveStoredAtom) };
+}
+
+/**
+ * Put `side` in place of the open document: the same file, handle, save options, view and
+ * history (the caller has already arranged the stacks), another scenario object. Every
+ * selection is cleared and every revision bumped, as for any document installed.
+ */
+function putDocumentSide(get: Getter, set: Setter, side: DocumentSide) {
+  installRegisters(get, set, {
+    scenario: side.scenario, extras: side.extras, stored: side.stored,
+    fileName: get(mapFilePathAtom), handle: get(mapFileHandleAtom), origin: get(mapOriginAtom), builtBy: get(builtByAtom),
+    saveOptions: get(saveOptionsAtom), modified: true, blankFill: get(blankFillAtom),
+    undo: get(undoStackAtom), redo: get(redoStackAtom), selected: { units: [], doodads: [], sprites: [], locations: [] }, clipSelection: null,
+    zoom: get(zoomAtom), center: null, viewOnly: get(viewOnlyAtom),
+  }, "replace");
+}
+
+/**
+ * Put a document read again from bytes in place of the open one, as one undo step: what a
+ * linked `scmjs` command does (services/editorLink.ts). Unlike `replaceScenarioAtom` the
+ * history is kept — the step holds the document it replaced, object and all, and undo puts
+ * that object back, so the steps beneath it still apply to what they were recorded on. On
+ * a shared map the change goes to everyone as a whole-map change and every history starts
+ * again, as with Resize. False when the map cannot be edited (view only).
+ */
+export const applyDocumentAtom = atom(null, (get, set, next: DocumentSide, label: string): boolean => {
+  if (!get(scenarioAtom) || !canEdit(get, set)) return false;
+  const tap = get(syncTapAtom);
+  const shared = tap?.owns(get) === true;
+  tap?.beforeWhole(get);
+  const entry: HistoryEntry = { label, changes: [], document: documentSide(get) };
+  set(undoStackAtom, shared ? [] : withinTablesBudget([...get(undoStackAtom), entry].slice(-Math.max(1, get(preferencesAtom).undoLevels))));
+  set(redoStackAtom, []);
+  putDocumentSide(get, set, next);
+  tap?.whole(get, set, label);
+  set(noticeWholeAtom, { reason: "whole", label });
+  return true;
+});
+
 /**
  * Bring a parked map to the front: the front map is parked as it stands — its history,
  * selections, marked area and view included — and `id`'s record goes into the registers,
@@ -1036,6 +1078,23 @@ function stepWhole(get: Getter, set: Setter, scn: Scenario, entry: HistoryEntry,
   noticeEntry(get, set, direction === "do" ? "redo" : "undo", entry, entry.label);
 }
 
+/**
+ * Undo or redo a `document` step: the document the entry holds goes in place of the open
+ * one, and the entry keeps what it took out. The caller has already moved the entry to the
+ * other stack. On a shared map every history starts again, as with a whole-map step.
+ */
+function stepDocument(get: Getter, set: Setter, entry: HistoryEntry, direction: "do" | "undo") {
+  const tap = get(syncTapAtom);
+  const shared = tap?.owns(get) === true;
+  tap?.beforeWhole(get);
+  const other = entry.document!;
+  entry.document = documentSide(get);
+  if (shared) { set(undoStackAtom, []); set(redoStackAtom, []); }
+  putDocumentSide(get, set, other);
+  tap?.whole(get, set, entry.label);
+  noticeEntry(get, set, direction === "do" ? "redo" : "undo", entry, entry.label);
+}
+
 export const undoAtom = atom(
   (get) => get(undoStackAtom).at(-1)?.label ?? null,
   (get, set) => {
@@ -1044,6 +1103,12 @@ export const undoAtom = atom(
     const entry = stack.at(-1);
     if (!scn || !entry || !canEdit(get, set)) return null;
     count("undo");
+    if (entry.document) {
+      set(undoStackAtom, stack.slice(0, -1));
+      set(redoStackAtom, [...get(redoStackAtom), entry]);
+      stepDocument(get, set, entry, "undo");
+      return entry.label;
+    }
     if (entry.whole) {
       set(undoStackAtom, stack.slice(0, -1));
       set(redoStackAtom, [...get(redoStackAtom), entry]);
@@ -1113,6 +1178,12 @@ export const redoAtom = atom(
     const entry = stack.at(-1);
     if (!scn || !entry || !canEdit(get, set)) return null;
     count("redo");
+    if (entry.document) {
+      set(redoStackAtom, stack.slice(0, -1));
+      set(undoStackAtom, [...get(undoStackAtom), entry]);
+      stepDocument(get, set, entry, "do");
+      return entry.label;
+    }
     if (entry.whole) {
       set(redoStackAtom, stack.slice(0, -1));
       set(undoStackAtom, [...get(undoStackAtom), entry]);

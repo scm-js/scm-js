@@ -2,9 +2,10 @@ import { useAtomValue } from "jotai";
 import { activeLayerAtom, cursorPixelAtom, cursorTileAtom, mapHeightAtom, mapTilesetAtom, mapVersionAtom, mapWidthAtom, symmetryAtom, viewOnlyAtom } from "../../atoms/editorAtoms";
 import { shownZoomAtom } from "../../atoms/zoomAtoms";
 import { chromeModeAtom, mapInFront } from "../../atoms/viewModeAtoms";
-import { scenarioAtom, terrainRevisionAtom, tilesetFileNameAtom } from "../../atoms/documentAtoms";
+import { activeDocumentIdAtom, scenarioAtom, terrainRevisionAtom, tilesetFileNameAtom } from "../../atoms/documentAtoms";
 import { peekTileset } from "../../formats/tileset/load";
 import { folderReadsAtom, statusMessageAtom } from "../../atoms/uiAtoms";
+import { linkedDocumentAtom } from "../../atoms/linkAtoms";
 import { pluginStatusItemsAtom } from "../../atoms/pluginAtoms";
 import { statusBarCellsAtom } from "../../atoms/preferencesAtoms";
 import { PluginIconView } from "../ui/PluginIconView";
@@ -30,6 +31,8 @@ export default function StatusBar() {
   const status = useAtomValue(statusMessageAtom);
   const version = useAtomValue(mapVersionAtom);
   const viewOnly = useAtomValue(viewOnlyAtom);
+  const linked = useAtomValue(linkedDocumentAtom);
+  const frontId = useAtomValue(activeDocumentIdAtom);
   const scenario = useAtomValue(scenarioAtom);
   const symmetry = useAtomValue(symmetryAtom);
   const pluginItems = useAtomValue(pluginStatusItemsAtom);
@@ -121,6 +124,11 @@ export default function StatusBar() {
           <span>{item.spec.text}</span>
         </span>
       ))}
+      {linked !== null && linked.id === frontId && (
+        <span className="status-cell" title={t("This map is linked to scmjs on this computer: its commands and AI tools change the map here, one undo step each, and Save writes the file. Closing the map ends the link.")}>
+          <span className="badge teal">{t("Linked")}</span>
+        </span>
+      )}
       {viewOnly && (
         <span className="status-cell" title={t("This map is open to look at; File ▸ Edit a Copy opens one you can change.")}>
           <span className="badge">{viewOnly.label ? t("{label} · view only", { label: viewOnly.label }) : t("View only")}</span>

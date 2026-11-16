@@ -11,7 +11,7 @@
  */
 
 import { SHARED_NIGHTLY } from "../site";
-import { revivedHandle, storableHandle } from "./diskFiles";
+import { isTransientHandle, revivedHandle, storableHandle } from "./diskFiles";
 
 /** (The hosted nightly shares its origin with the stable editor, and keeps a database of its own: `site.ts`.) */
 const DB_NAME = SHARED_NIGHTLY ? "scmjs-nightly" : "scmjs";
@@ -82,6 +82,8 @@ function request<T>(mode: IDBTransactionMode, run: (store: IDBObjectStore) => ID
 /** Keep a handle under `key`; a failure (quota, a browser that refuses to clone it) is swallowed — the handle simply will not come back next time. */
 /** Keep a handle under `key`. A desktop map handle is kept as its path (`services/diskFiles.ts`). */
 export async function storeHandle(key: string, value: unknown): Promise<boolean> {
+  // A linked map's handle is the link itself (services/editorLink.ts): nothing of it outlives the page.
+  if (isTransientHandle(value)) return false;
   const handle = storableHandle(value);
   if (!hasIdb()) { memory.set(key, handle); return false; }
   try {

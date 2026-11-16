@@ -48,7 +48,7 @@ reach, and the traps in them are not visible from the code.
 | `src/components/**`, `MapViewport`, dialogs, hotkeys, drops, the close guard, `services/mapImage.ts` | `viewport-ui.md` |
 | `services/preload.ts`, `usePreload`, the splash, `devReactTracks.ts` | `startup.md` |
 | `e2e/**`, `playwright.config.ts` — the browser tests | `e2e.md` |
-| `cli/**`, `scripts/build-cli.mjs`, `useOpenerHandoff` — the `scmjs` command; `bot/**`, `scripts/build-bot-types.mjs` — the `@scm-js/bot` types | `cli.md` |
+| `cli/**`, `scripts/build-cli.mjs`, `useOpenerHandoff`, `services/editorLink.ts` (a map linked to `scmjs`) — the `scmjs` command; `bot/**`, `scripts/build-bot-types.mjs` — the `@scm-js/bot` types | `cli.md` |
 | `core/**`, `scripts/build-core.mjs`, `src/editor/mapFile.ts` — the `@scm-js/core` package; adding an export, what may not reach the UI | `core.md` |
 | `src/formats/mod/**`, `cli/src/mod/**`, the `mod_*` MCP tools — the mod folder, `scmjs mod` | `mods.md` |
 

@@ -54,7 +54,7 @@ describe("scmjs mcp", () => {
   it("lists the tools with what each is for, and says how they fit together", async () => {
     const { tools } = await client.listTools();
     const names = tools.map((t) => t.name).sort();
-    expect(names).toEqual(["doctor", "map_analyze", "map_balance", "map_build", "map_check", "map_cost", "map_coverage", "map_diff", "map_dump", "map_find", "map_info", "map_new", "map_optimize", "map_preview", "map_resize", "map_run", "map_set", "map_strings_export", "map_strings_import", "map_strings_prune", "map_trace", "map_triggers_export", "map_triggers_import", "mod_check", "mod_diff", "mod_header", "mod_info", "mod_new", "mod_pack", "mod_play", "mod_unpack", "replay_info", "replay_map"]);
+    expect(names).toEqual(["doctor", "editor_close", "editor_open", "editor_picture", "editor_save", "editor_show", "editor_state", "map_analyze", "map_balance", "map_build", "map_check", "map_cost", "map_coverage", "map_diff", "map_dump", "map_find", "map_info", "map_new", "map_optimize", "map_preview", "map_resize", "map_run", "map_set", "map_strings_export", "map_strings_import", "map_strings_prune", "map_trace", "map_triggers_export", "map_triggers_import", "mod_check", "mod_diff", "mod_header", "mod_info", "mod_new", "mod_pack", "mod_play", "mod_unpack", "replay_info", "replay_map"]);
     for (const t of tools) {
       expect(t.description?.length ?? 0, t.name).toBeGreaterThan(60);
       expect((t.inputSchema as { properties?: object }).properties, t.name).toBeDefined();

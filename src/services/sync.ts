@@ -41,7 +41,7 @@ type Store = ReturnType<typeof createStore>;
 export type { SyncHold, SyncReport, SyncSession, SyncStartOptions } from "../plugins/api";
 
 /** Dialogs that hold indices into the map or a working copy of its tables: other people's changes wait while one is open. */
-const HOLDING_DIALOGS: ReadonlySet<DialogId> = new Set<DialogId>([
+export const HOLDING_DIALOGS: ReadonlySet<DialogId> = new Set<DialogId>([
   "mapProperties", "resizeMap", "mapRevision", "playerSettings", "forceSettings", "playerColors", "unitSettings", "upgradeSettings", "techSettings",
   "stringEditor", "soundEditor", "switches", "locationList", "unitProperties", "locationProperties", "spriteProperties", "triggerEditor",
   "missionBriefing", "cuwpEditor", "replaceTerrain", "autoStarts", "importTriggers", "importStrings",

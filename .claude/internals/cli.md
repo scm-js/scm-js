@@ -1403,6 +1403,79 @@ Phase one of "share links from files on disk". Server half: ai-server 0.36.0 (`P
 - `tests/cli-replay-share.test.ts` (3) against a stand-in server parsing the multipart with `Request.formData()`.
   Not run against the real server here (ai-server #18 was open); the agent that built #18 drove the editor end.
 
+## A map linked to the editor (`cli/src/link.ts`, `src/services/editorLink.ts`, `openLinked` in `useOpenerHandoff.ts`) — 2026-11-16
+
+The user asked what the MCP work's integration with the editor was (none: the tools wrote files the
+open editor never looked at) and then for "some kind of editor integration with cli … clean,
+advanced, and actually offers something useful". `scmjs map open --live <map>` and the MCP server's
+`editor_open` hand the map over as `map open` does and keep the loopback page open as a relay.
+
+- **The whole design is two hooks.** `readInput` (files.ts) asks `linkedRead(path)` first and
+  `writeOutput` (exchange.ts) asks `linkedWrite(path, bytes)` first. So every command and every MCP
+  tool that reads or writes a map works on a linked one with no code of its own: the map as the
+  editor has it, unsaved changes included, and a changed map put back as **one undo step**
+  (`applyDocumentAtom`, `clipboard.md` "Whole-document undo"). `--out` writes a file as always.
+  `Input.live` / `Written.live` say which happened; `outName` and the MCP `written()` word it.
+- **Three parties.** The *owner* (`LinkOwner`) is the process that opened the link: an HTTP server
+  on 127.0.0.1 and a line in `<cache>/links/<sha256(path)>.json` (`{ path, port, key, pid }`,
+  mode 600). The *page* (`linkPage`) relays: the owner's requests come down an event stream
+  (`/<token>/events`, a map's bytes fetched from `/<token>/blob/<id>`) and go to the editor by
+  `postMessage`; the editor's answers and its own requests go up by POST (`/<token>/up`, a line of
+  JSON then the bytes, and the response is the answer). A *peer* is any other scmjs process: it
+  finds the line by the file's path and POSTs `/rpc` with the key in a header. `linkFor` checks
+  this process's own links, then the line, and drops a line whose owner no longer answers `alive`.
+- **Why the page and not a socket from the editor.** The reasons under "Opening" still hold: a
+  hosted page reaching for localhost meets Chrome's local-network prompt and Safari's mixed-content
+  block; the page the command served talking to its own origin and posting to the window it opened
+  meets neither. The page holds a Web Lock so a background tab is not frozen, and says so when the
+  link ends. Its event stream closing (the tab closed) ends the link on the owner's side.
+- **The editor's end** is loaded only when a hand-over carries `link: true` from a loopback origin
+  (`await import`, so it is not in the startup chunk). The map opens with a `MapFileHandle` whose
+  `createWritable` sends the bytes to the owner (`write`), so **File ▸ Save writes the file on disk
+  with no download**; `getFile` asks for the file as it is on disk (previous versions). The handle
+  is marked `TRANSIENT` (diskFiles.ts) and `storeHandle` refuses it: it is a channel, not something
+  IndexedDB can keep. Requests: `read`, `apply { label, base }`, `state`, `show`, `picture`, `save`,
+  `ping`; either side may send `ended`.
+- **Scoped to the document that came through it.** Every request is answered for that map alone
+  and only while it is in front (`behind` otherwise: the registers hold only the front map). So a
+  local page that opens the editor and links a map gains nothing it did not hand over itself,
+  which is why there is no consent prompt. Nothing is evaluated; the methods are the list above.
+- **Stale writes are refused, not merged.** The editor counts commits to the linked map (`rev`:
+  `commitNoticeAtom` and the extras atom). `read` answers the count, the command remembers it per
+  path (`readAt`) and sends it back as `base`; a different count is `changed` ("The map changed in
+  the editor while the command ran"). The MCP `tool()` wrapper runs the tool once more on
+  `changed`; a terminal command says to run it again. A write with no read before it (`map new`
+  over the file) carries no base and is taken as it is.
+- **Holds.** `apply` waits up to 20 s while a stroke is under way or one of sync's
+  `HOLDING_DIALOGS` is open (now exported), then `busy`. The owner waits 45 s for any answer.
+- **Undo labels.** `setLinkLabel`: `scmjs map triggers import` from commander's `preAction` hook,
+  `scmjs map triggers import` from the tool's name with its underscores as spaces.
+- **An older editor** (scmjs.dev before the release that carries this) ignores `link`, opens a
+  copy and answers a plain `scmjs.taken`; the page reports `linked: "old"` and the command says the
+  editor cannot link yet. A refused open (the unsaved-changes gate) is `linked: "no"`.
+- **The MCP tools** `editor_open`, `editor_state` (layer, zoom, the view in tiles, selected units
+  with type / player / pixels, locations, doodads, sprites, the marked area), `editor_show`
+  (`viewApi.reveal` + `flashOnMap`, selects), `editor_picture` (`exportMapImage` with the editor's
+  own game data, at most ~1,600 px on the long side), `editor_save`, `editor_close`. `path` may be
+  left out when one map is linked (`allLinks`). They have no terminal commands. `serveStdio` ends
+  the links it owns when the client goes.
+- **Traps.** (1) The event stream's headers do not leave Node until something is written, so the
+  owner writes a comment at once; without it a stand-in page using `fetch` waited for ever (the
+  browser's `EventSource` did not care). (2) In the Playwright spec the pages' requests are routed
+  through the test's own process (`context.route`), so the command must be run with `execFile`,
+  never `execFileSync`: the blocking form deadlocks with "The editor did not answer". (3) The
+  spec's init script runs in the blank window the page opens first, where `localStorage` throws.
+- **Checked** 2026-11-16 with the built command, `vite preview` and headless Chromium: link, `map
+  info` reading the editor, `map set` as one undo step with the file untouched, undo and redo seen
+  by the next read, Ctrl+S writing the file, the tab closing ending the command with exit 0; and
+  the MCP server over stdio: `editor_open`, `editor_state`, a trigger import, `editor_show`,
+  `editor_picture` (127 KB PNG of the 64 × 64 test map at 25 px a tile), `editor_save`,
+  `editor_close`. Tests: `tests/link.test.ts` (9), `e2e/link.spec.ts` (builds the CLI first).
+- **Not done**: the desktop app (`--live` always uses the browser; the app needs a channel from
+  main to the renderer and a release); a file changed on disk by something else (git checkout)
+  reaching the editor; the editor's own edits as events to the command; terminal commands for
+  `state` / `show` / `picture`; a reload of the editor's tab re-linking.
+
 ## Opening (`cli/src/open.ts`)
 
 - **Desktop app**: `SCMJS_APP`, else the installers' places (Windows `%LOCALAPPDATA%\Programs\scmJS\scmJS.exe` and

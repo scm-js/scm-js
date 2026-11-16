@@ -426,6 +426,23 @@ const SHOTS = [
     },
   },
   {
+    // The guide's worked example of painting terrain (docs/cli.md "Painting terrain and placing doodads"): the same
+    // four edits on a new flat map. The terrain is the same every run; the brush's choice of variations is not.
+    name: "cli-map-edit-terrain", needs: ["starcraft"],
+    async run() {
+      scmjs(["map", "new", "ridge.scx", "--size", "64x64", "--tileset", "jungle", "--players", "2", "--force"], { allowFail: false });
+      writeFileSync(join(WORK, "terrain.json"), JSON.stringify([
+        { op: "paint_terrain", terrain: "Water", cover: 0.12, grain: 10, seed: 7, symmetry: "rot180" },
+        { op: "paint_terrain", terrain: "High Dirt", tiles: { x0: 20, y0: 16, x1: 44, y1: 40 }, shape: "ellipse" },
+        { op: "place_doodad", doodad: "ramp", tileX: 30, tileY: 38, within: 8 },
+        { op: "scatter_doodads", doodad: "Dirt", density: 0.03, seed: 3 },
+      ]));
+      scmjs(["map", "edit", "ridge.scx", "--edits", "terrain.json"], { allowFail: false });
+      scmjs(["map", "preview", "ridge.scx", "--out", "ridge.png", "--scale", "8"], { allowFail: false });
+      await picture("cli-map-edit-terrain", "ridge.png");
+    },
+  },
+  {
     name: "cli-map-diff", needs: ["starcraft"],
     async run() {
       generate("(2)Jungle Duel.scx", ["--seed", "1207"]);

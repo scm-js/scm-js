@@ -298,3 +298,30 @@ way — the brush dragged, the prompts answered — before they were written dow
 to its GitHub blob page (the site does not copy it). The reference's SVG pictures live in
 `docs/images/` like the guide's webp shots but are generated, not screenshots — see
 `chk-format.md`.
+
+### The AI tools guide (`docs/ai-tools.md`, 2026-11-16)
+
+The user, on what the MCP server could do: "Docs seem to not highlight MCP and its power
+properly", then "make sure its not a wall of text, its clear, concise, screenshots if needed only
+if it adds clarity". The chapter was the thirteenth of the command line guide; it is a guide of its
+own now (site id `ai-tools`, after `cli` in `SOURCES`), linked from the README's feature list and
+from "The AI" in the user guide, which covers the editor's own assistant. `docs/cli.md` keeps a
+short `## AI tools` with the one line that sets it up and a pointer, so `/cli/ai-tools/` is still a
+page; the `###` sections that lived under it have no redirect (a fragment cannot be forwarded).
+
+- **What lives where.** The guide has the reader's path: setting up, a first request, what to ask,
+  working in the editor, changing a map, the tools, files and the game. The commands themselves
+  (`map open --live`, `map edit`, `map units`) stay in `docs/cli.md` and are linked, not repeated;
+  the guide's table of what a linked map does is the tools' wording of the command's table.
+- **Every example is real output**: `map_check` on `tests/maps/ums.scx`, the trigger round trip,
+  and the `map_edit` call with its answer from a run against a linked editor.
+- **One picture**, `ai-linked.webp`: Big Game Hunters linked to the MCP server after one `map_edit`
+  (six Marines and a location), the Edit menu open on "Undo scmjs map edit" and **Linked** in the
+  status bar. Made by hand, not by `guide-screenshots.mjs`: the built command's `mcp` driven over
+  stdio (`editor_open`, `map_units`, `map_edit`, `editor_show`), `vite preview` with the game data,
+  headless Chromium at 1280 × 760 and 2×, then drawn to a 1,920-wide canvas and written as WebP at
+  0.82 (245 KB). Retake it when the chrome changes; a scene in the script would need the command
+  built and a second page, which no scene has yet.
+- A new guide means: the `SOURCES` entry, `GUIDES` in `tests/docs.test.ts` (it ends with "In the
+  source"), the count in `CLAUDE.md` and twice in `docs/development.md`, and the README's table.
+

@@ -34,6 +34,8 @@ free of AI-sounding prose; it was current but for a handful of stale examples, a
   tells whom ("the command tells you", "is reported", "is an error"). An option's old name is not mentioned where the
   option is described; all seven are in "Renamed options" under For developers. No notes on what an earlier version
   of the guide said.
+- *Since 2026-11-16 AI tools is a guide of its own*, `docs/ai-tools.md` (`docs-site.md`, "The AI tools guide"); what
+  follows is how the chapter was first made a page. A new tool gets a row in that guide's table now.
 - *AI tools is a page of its own* (the user: "i want mcp better documented, seems like a powerful feature"), no
   longer a `###` of For developers: setting it up (Claude Code with `--scope project`, Cursor's `.cursor/mcp.json`
   with `"type": "stdio"`, Claude Desktop's config through Settings ▸ Developer ▸ Edit Config — checked against each

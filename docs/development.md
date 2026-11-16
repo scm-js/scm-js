@@ -718,7 +718,7 @@ ruleset.
 ## Docs site and screenshots
 
 [docs.scmjs.dev](https://docs.scmjs.dev) is built by `npm run build:docs`. The guides are
-the fifteen `docs/*.md` files, split at their `##` headings into pages, with the `###`
+the sixteen `docs/*.md` files, split at their `##` headings into pages, with the `###`
 beneath as each page's contents. The API reference is generated from the bundled plugin
 typings, so a doc comment in `src/plugins/api.ts` is a paragraph on the site.
 
@@ -802,7 +802,7 @@ so that picture is taken on Linux.
 
 ## Contributing
 
-- **Keep the documents current.** The fifteen guides under `docs/` are the documentation
+- **Keep the documents current.** The sixteen guides under `docs/` are the documentation
   site and `README.md` is the repository's front page; a behaviour change that is not in
   them is undocumented. Write them for their readers, with `src/` paths only in a guide's
   closing *In the source* section. Keep the matching note in `.claude/internals/` in step

@@ -67,8 +67,8 @@ export function rootHelp(cmd: Command, helper: Help, version: string, opts: { as
   ], { width: helper.helpWidth ?? 80, ...opts });
   // No blank line here: the globe's own bottom row, below the text, keeps the groups off the title, and the overview
   // is held to 23 lines (a 24-row terminal keeps the globe on screen).
-  // The groups follow one another with no blank line between (each row is a command the 23 lines have room for
-  // only then); the one blank line is before Options.
+  // The groups follow one another with no blank line between, and Options follows the last group with none either
+  // (each row is a command the 23 lines have room for only then; the blank line before Options went for `library`).
   const groups = helper.groupItems([...cmd.commands], helper.visibleCommands(cmd), (sub) => sub.helpGroup() || "Commands:");
   // The commands hidden to keep the 23 lines (`about`, `lsp`, `completion`, `login`, `logout`) are named on the last
   // group's heading line, which has the room: the guide documents each, and `scmjs help <command>` shows it.
@@ -84,7 +84,6 @@ export function rootHelp(cmd: Command, helper: Help, version: string, opts: { as
     }
     out.push(...list);
   });
-  out.push("");
   out.push(`${helper.styleTitle("Options:")} ${helper.visibleOptions(cmd).map((o) => helper.styleOptionTerm(helper.optionTerm(o))).join("   ")}`, "");
   return out.join("\n");
 }

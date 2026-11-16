@@ -9,6 +9,7 @@ import { existsSync, statSync } from "node:fs";
 import { basename, dirname, resolve } from "node:path";
 import type { OpenedMap } from "../../src/editor/mapFile";
 import { kindOf, loadMapInput } from "./files";
+import { isWebAddress } from "./weblink";
 import { t } from "./i18n";
 import { CliError } from "./ui";
 
@@ -22,6 +23,7 @@ const git = (args: string[], input?: string) => spawnSync("git", args, { maxBuff
  * symbolic link still gives the path git knows; works from any folder of the repository.
  */
 export function locate(file: string): GitFile {
+  if (isWebAddress(file)) throw new CliError(t("{file} is a link, and a link has no git history", { file }), t("A map's history is read from the git repository it is kept in; scmjs library get downloads the map."), 2);
   // A folder has a history too, which git would list as the map's ("map removed" in each commit).
   if (existsSync(file) && statSync(file).isDirectory()) throw new CliError(t("{file} is a folder, not a map", { file }), t("Name a map in it (.scm, .scx, .chk)."), 2);
   const dir = dirname(resolve(file));

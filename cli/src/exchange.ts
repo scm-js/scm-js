@@ -14,6 +14,7 @@ import { applyStringImport, encodeTrg, formatStringTable, parseStringTable, read
 import { defaultSaveOptions, formatOf, type MapFormat } from "../../src/editor/save";
 import { STDIO, toStdout, writeFileMade } from "./files";
 import { linkedWrite } from "./link";
+import { isWebAddress, linkWriteError } from "./weblink";
 import { t } from "./i18n";
 import { CliError } from "./ui";
 
@@ -149,6 +150,8 @@ export async function writeOutput(bytes: Uint8Array, path: string, stdout: Writa
     await new Promise<void>((resolve, reject) => stdout.write(bytes, (e) => (e ? reject(e) : resolve())));
     return { path, bytes: bytes.length };
   }
+  // A scmjs.dev link is read through, never written to: the change goes to a file named with --out.
+  if (isWebAddress(path)) throw linkWriteError(path);
   // A map linked to the editor goes there, as one undo step; the editor's Save writes the file (link.ts).
   if (await linkedWrite(path, bytes)) return { path, bytes: bytes.length, live: true };
   await writeFileMade(path, bytes);

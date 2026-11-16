@@ -1,7 +1,7 @@
 # The `scmjs` command line
 
-`cli/` is the npm package **`@scm-js/cli`** (its command is `scmjs`): `scmjs about | doctor | info | mcp | lsp | map info|check|open|new|generate|dump|find|fetch|set|resize|units|locations|edit|triggers|strings|sounds|diff|log|blame|merge|build|run|unpack|pack|trace|cost|rush|balance|test [record]|preview|heatmap|coverage|optimize|analyze |
-replay info|map|open|watch|export|share | mod info|unpack|pack|check|diff|new|build|play|test | plugin new|check|dev | bot new|init|build|update|run|ladder`, or `npx @scm-js/cli …`. npm refused the plain name `scmjs` on the first publish (2026-11-06,
+`cli/` is the npm package **`@scm-js/cli`** (its command is `scmjs`): `scmjs about | doctor | info | share | mcp | lsp | map info|check|open|new|generate|dump|find|fetch|set|resize|units|locations|edit|triggers|strings|sounds|diff|log|blame|merge|build|run|unpack|pack|trace|cost|rush|balance|test [record]|preview|heatmap|coverage|optimize|analyze |
+replay info|map|open|watch|export|share|sync | library maps|replays|shared|get|rm|unlink|rename|note | mod info|unpack|pack|check|diff|new|build|play|test | plugin new|check|dev | bot new|init|build|update|run|ladder`, or `npx @scm-js/cli …`. npm refused the plain name `scmjs` on the first publish (2026-11-06,
 E403 "too similar to scss, sockjs"), so the user chose the scope beside @scm-js/replay and @scm-js/plugin-api. The reader's page is `docs/cli.md`. The shape was the user's (2026-11-05): one command, a noun for
 each kind of thing (`map`, `replay`, `plugin`, `bot`), "an impressive UX tool … not overly engineered".
 
@@ -1391,12 +1391,54 @@ Phase one of "share links from files on disk". Server half: ai-server 0.36.0 (`P
   against an `http.createServer` stand-in. Not built: an MCP tool for sharing, a `--follow` link (the newest
   revision), listing or removing links and maps (`account maps`), ending a shared room from the terminal.
 
+## Sign-in by code: `login --device` (`account.ts`) — 2026-11-16
+
+Server half: ai-server 0.40.0 (`POST /v1/auth/device`, `POST /v1/auth/device/token`, the server-rendered `/device`
+page). For a terminal whose browser cannot reach the loopback page (SSH, a container). RFC 8628 in spirit, JSON shapes
+of the server's own (camelCase, `status` in a 200 rather than RFC error codes, so `Client.request` needs no special case).
+
+- **Flow** (`loginByCode`): start with `{ client: "scmjs on <hostname()>" }` (`missingOk`: a 404 = a server before 0.40.0
+  → "{server} does not offer sign-in by code", hint "Sign in on a computer with a browser: scmjs login"); `say` gets
+  `{ deviceCode, userCode, verificationUri, verificationUriComplete, expiresIn: 600, interval: 5 }`; then poll
+  `/v1/auth/device/token { deviceCode }` every `interval` s (floored at 0.2 s so the tests can run fast; the server
+  never sends under 5): `pending`/`slow_down` carry the new interval, `denied` / `expired` are CliErrors, `approved`
+  carries `{ session, account }` — no `GET /v1/account` round as the loopback flow does, the account comes with it.
+  `provider` in the session file = `account.providers[0]`. Three poll failures in a row end it (one dropped connection
+  does not). The deadline is the command's own clock (`expiresIn`), so a server that keeps saying pending still ends.
+- **Terminal** (`loginByCodeHere`): the address + the code indented on its own line, `--qr` draws
+  `verificationUriComplete` (`qrFor`), the countdown is one stderr line rewritten each second (`\r\x1b[K`) only on a
+  TTY; piped, one "expires in 10 minutes" line instead. **Ctrl+C**: its own SIGINT listener (lifecycle's `onSignal`
+  defers to any other listener) aborts the wait → `CliError("Cancelled; nothing was signed in", null, 130)`; the line is
+  cleared in `finally`.
+- **Automatic** (`noLocalBrowser`): `SSH_CONNECTION|SSH_TTY|SSH_CLIENT`, or on Linux `$container` / `/.dockerenv`, and
+  neither `DISPLAY` nor `WAYLAND_DISPLAY` (`ssh -X` gives a display, and then the loopback page works). Commander's
+  `--device` + `--no-device` pair leaves `o.device` undefined unless given, which is when the detection runs; the one
+  line names why and `--no-device`. WSL is not "no browser" (open.ts starts Windows' browser). The doctor's scmjs.dev
+  row's fix becomes `scmjs login --device` under the same test (`scmjsDevCheck(file, server, headless)`).
+- **Server decisions** (ai-server README "Signing in by code"): device code `dev_` + 32 bytes, stored sha256; user
+  code 8 of RFC 8628's 20 consonants (no vowels, no digit look-alikes); 10 min; spent by the poll that hands the
+  session (`UPDATE … status='done' WHERE status='approved' RETURNING`, atomic); `slow_down` +5 s when a poll comes sooner
+  than interval − 1 s; 10 starts per address per 10 min; a start with an `Origin` refused (as `cli: true`); the page
+  turns away an address after 20 codes that led nowhere in 10 min (in memory); the page shows the client's self-given
+  name *as* self-given, the starting address and age, and the code to compare, with Allow / Deny posted same-origin;
+  `frame-ancestors 'none'` + `X-Frame-Options: DENY`; **`Referrer-Policy: same-origin`, not `no-referrer`** — under
+  `no-referrer` Chromium sends `Origin: null` with the page's own form posts and the same-origin check refused the
+  sign-in button (found only in the browser run). A provider sign-in started from `/device` stores the user code on
+  `oauth_states.user_code` and the callback 303s back to `/device?code=…` (or shows the sign-up notice with Continue).
+- **Verified end to end (2026-11-16)**: a local ai-server (PGlite, a stand-in Discord through `fetch`) on 127.0.0.1;
+  the built command under `script` (a pty) with `SSH_CONNECTION` set and no display chose the code by itself; headless
+  Chromium opened the address, typed the code lower-case without the dash, pressed Sign in with Discord (a
+  `ctx.route` on `/device/signin/**` rewrote the 303 to Discord into the callback — **a route on `discord.com/**` does
+  not see a redirect's target, and the real Discord page loads**), Allow → the command printed "Signed in … as Ann",
+  file 600; Deny → "The sign-in was denied on the page", no file; Ctrl+C → exit 130; a 404 server → the message;
+  `--no-device` over SSH → the loopback flow. `tests/cli-login-device.test.ts` does the same against a stand-in.
+
 ## `replay share` (`cli/src/replayshare.ts`) — 2026-11-07, on the sign-in branch
 
 - One request: `POST /v1/replays` multipart `file` + `fileName` + `note?` + `picture?` + `link=1`, which answers
   the stored replay's facts (`ReplayView`: map, players, matchup, frames, game type, when) **and its first link**
   (ai-server #18 made `link=1` for this); the same bytes again answer 200 `existing: true` with the link that is
-  there. `linkTo("replay", token)` → `https://scmjs.dev/editor/replay/<token>` (the editor's scmjs.dev plugin v1.40.0
+  there. `linkTo("replay", token)` → `https://scmjs.dev/editor/replay/<token>` (since 2026-11-16 `scmjs.dev/replay/<token>`, below; the editor's scmjs.dev plugin v1.40.0
   opens it in Aftermath by a synthetic drop; the Worker's card from `/v1/previews/replay/:token`). Limits are the
   server's (8 MB a replay, 500 replays, the account's storage cap): their messages are printed as they come.
 - **The map's picture for the card** is drawn here, not on the server (it has no game graphics): `parseScenario(rep.chk)`
@@ -1404,6 +1446,198 @@ Phase one of "share links from files on disk". Server half: ai-server 0.36.0 (`P
   of the game, `--no-picture` to skip. A replay from `-` is named `replay.rep`.
 - `tests/cli-replay-share.test.ts` (3) against a stand-in server parsing the multipart with `Request.formData()`.
   Not run against the real server here (ai-server #18 was open); the agent that built #18 drove the editor end.
+
+## Moment links, `scmjs share`, `--copy`, `--no-link` (`replayshare.ts`, `sharefiles.ts`, `clipboard.ts`) — 2026-11-16
+
+One slice of the "account features from the command line" round (parallel agents: library, replay sync, device
+sign-in). The link forms are the shared spec's (`~/.cache/scmjs-redesign/share-spec.md`), live on scmjs.dev.
+
+- **Replay links are `https://scmjs.dev/replay/<token>` now** (`linkTo("replay")` → `SITE`), not `/editor/replay/`:
+  the front-door worker (`cloudflare-link-previews` `replayPlace`) 302s it on to `/editor/replay/<token>` with the
+  query kept, or to `/play/?replay=<token>&…` when `play` is among the parameters (`URLSearchParams.has`, so a bare
+  `play` counts). Map and share links are unchanged (`WEB_EDITOR`). `SCMJS_SERVER` still adds `?scmjs-server=`, and
+  the moment goes after it (`&t=…`); **the play page ignores `scmjs-server`** (scm-sim `web/account.ts`
+  `accountServer()` is the browser's stored setting), so a `--play` link made against a local server reaches it only
+  where the play page is set to it — said in docs/cli.md's Settings row, not refused.
+- **`--at <time>`**: `parseMomentTime` — `m:ss`, `h:mm:ss`, whole seconds (decimals refused, unlike the spec's reader,
+  to keep `t` a clock). `frame = ceil(s*1000/42)` (the spec's rule since 2026-11-15); refused past `rep.header.frames`
+  with the length as `floor(frames*42/1000)` seconds (10:08 for 14,482 frames; `--at 10:08` → frame 14,477 is fine).
+  Written as `duration(seconds*1000)` (`402` → `6:42`); `0` writes no `t`.
+- **`--play [player]`** (optional value): a **slot number** (`ReplayPlayer.slot`, the lobby slot — what Aftermath's
+  Share and Play From Here hand over and the play card matches `p.slot` against; 0 and 2 in a usual 1v1) or a name
+  (case aside, whole, or the start of exactly one). Players offered are types 1, 2, 5, 6 (the play page's
+  `isPlayingType`), computers included. **Not** `--follow`'s "number as replay info lists them, from 1": the number
+  typed is the number in the link; the refusal lists `slot name` pairs. No value → bare `play` (the person chooses
+  on the card); without `--at` → from the start (the card's `seconds === null` → frame 0). Checked before any
+  request (`replayMoment`), so a mistake sends nothing.
+- **One link per replay**: the server answers the same bytes with `existing: true` and its first link (`link=1`), so a
+  moment is only the query; `withMoment` appends after any query. The outcome gains `moment` (`t`, `seconds`,
+  `frame`, `play`: `{slot,name}` | `"choose"` | null); the dim third line says what the link does.
+- **`--no-link`**: `keepReplay` (upload without `link=1`) and `keepMap` (the same `store()` as `shareMap`, returning
+  before `POST /v1/maps/:id/links`); both return the outcome with `link: null` (`ReplayKeepOutcome`,
+  `MapKeepOutcome`) so `shareReplay`/`shareMap` keep `link: string` — the replay sync agent may call `shareReplay`.
+  Output: the facts line first (no link to put there) and "Not linked: …". Refused with `--edit`, `--keep`, `--at`,
+  `--play`, `--copy`, `--qr` (`checkShareOptions`); `shareMap({link:false})`/`keepMap({edit})` refuse too.
+- **`scmjs share <files...>`**: every input read and `expectKind(map|replay)` first (a bot or unreadable file stops it
+  before anything is sent), then `checkShareOptions` (map-only `--name --edit --keep --new`, replay-only `--at
+  --play` refused only when **no** file is of that kind; `--name` with two maps refused), then each file in turn
+  through `shareFile` → `SharedFile` `{ file, kind, link, map | replay }` (not flattened: the map outcome has its
+  own `kind` copy/edit). A failing file is `fail()`ed and the rest go on, exit = max. JSON: one object or a list.
+  `map share --json` / `replay share --json` are unchanged (the outcome itself).
+- **`--copy`** (`clipboard.ts`): `clip.exe` on win32 and WSL (`WSL_DISTRO_NAME`/`WSL_INTEROP` or `/proc/version`; then
+  `/mnt/c/Windows/System32/clip.exe` for a PATH without Windows' folders), `pbcopy`, `wl-copy` under
+  `WAYLAND_DISPLAY`, `xclip -selection clipboard`, `xsel --clipboard --input`. First that exits 0 wins; ENOENT →
+  next; none → `▲ Not copied: …` on stderr, exit unchanged. **Trap:** xclip/wl-copy fork a process that keeps the
+  clipboard and the stderr pipe — wait on `exit`, not `close`, then destroy the pipe and `unref`, or the command
+  hangs. Tests use a `node -e` stand-in tool; nothing in the suite touches the real clipboard (an in-process
+  `--copy` on WSL would reach clip.exe by its full path even with PATH emptied — that test was dropped).
+- **Overview**: `share <files...>` took a row under "Maps and replays:"; the 23 lines held by hiding **`init`**
+  (it moves to the "also …" list: `also about, completion, init, login, logout, lsp` fits 80 at column 30; in
+  Korean the "also" list never fitted, so init is simply not on the Korean overview). This reverses 6fb3ba4's "init
+  is a row"; `scmjs map --help` and docs name init. `tests/cli-init.test.ts` now asserts it hidden.
+  `docs/images/cli-overview.webp` still shows the init row (not regenerated).
+- Checked against a throwaway ai-server (origin/main extracted to the scratchpad, PGlite, fake Discord, a session
+  file made by the server itself, `SCMJS_SERVER=http://127.0.0.1:<port>`): every case above but `--edit` (no rooms
+  set up there; the stand-in test has it), the copy read back with
+  PowerShell's Get-Clipboard. Not run against api.scmjs.dev. Not opened in a browser (the forms are the spec's and
+  the worker's tests'). Tests: `tests/cli-share-files.test.ts` (8), additions to `cli-replay-share` and `cli-share`.
+- For the MCP agent: the data functions are `shareMap`/`keepMap`, `shareReplay`/`keepReplay`, `shareFile`,
+  `replayMoment`/`withMoment`, `checkShareOptions`, `copyToClipboard` — none prints.
+
+## The account's library and links as input (`library.ts`, `librarycmd.ts`, `weblink.ts`) — 2026-11-16, branch `cli-library`
+
+One slice of a round making the account features easy from the terminal (four agents in parallel: this one,
+a top-level `scmjs share` with moment links, `scmjs replay sync`, `scmjs login --device`).
+
+- **`library.ts` returns data and prints nothing** (`libraryReport`, `findInLibrary`, `getFromLibrary`,
+  `planRemoval`/`removeFromLibrary`, `planUnlink`/`unlink`, `renameMap`, `noteRevision`, `confirmed`), with
+  `print*` making lines, so an MCP wrapper calls the same functions. Every function takes `{ server, file,
+  fetchImpl }` as `share.ts` does. The commander side is `librarycmd.ts` (`addLibraryCommands(program, group)`, one
+  line in main.ts) so main.ts, which the other agents also touch, gained two lines.
+- **The list**: `GET /v1/rooms/mine` first (a kept room's id *is* its stored map's id, so the map row says "shared
+  for editing" with the invite), `GET /v1/maps`, then `GET /v1/maps/:id` **only for a map whose summary has
+  `links > 0`** (the list carries the count, not the tokens), six at a time; `GET /v1/replays` (its links come
+  inline, with `opens`). `missingOk` turns a server without a part into `missing: [...]`, said dimly. `library
+  shared` alone asks `GET /v1/storage` for the storage line. **Decision: `account` stays "who + storage"**; its
+  output is unchanged except a dim last line pointing at `scmjs library` (its shared-maps table and `--qr` were
+  left, since scripts read `account --json`'s `shared`). The library shows shared maps too, as their own part.
+- **Naming one thing** (`findInLibrary`): a link (the token looked up in the maps' `linkList`s, the replays'
+  `links`, or `rooms/mine`'s invites; a link on another server than the session's is refused, naming both), an
+  id prefix of ≥ 6 hex characters (ids are UUIDs; the list shows the first 8, dashes dropped), else a map's name
+  or head file name or a replay's file name, case-insensitive. Several hits → an error listing them with ids.
+- **`get`**: a map or replay link → the public routes (`GET /v1/links/:token` for the name, owner and revision,
+  then `/file`), **no session sent even when signed in**; `--revision` with a link is refused (a link opens the
+  revision it was made for). A share link → the owner's kept map's head revision; a live room is refused (nothing
+  stored). Else the account's routes with the bearer (`/v1/maps/:id/revisions/:n/file`, `/v1/replays/:id/file`).
+  The file's name is the `Content-Disposition`'s `filename*` (then `filename`), made safe by `safeFileName`
+  (folders and characters Windows refuses dropped: a server could name a file `../x`). Written through
+  `writeOutput`, so `-o -` is standard output (the line then goes to stderr) and a linked map gets the bytes as
+  an undo step; an existing file needs `--force`, as `replay map`.
+- **`rm` / `unlink`** plan first (what goes: revisions, links with their opens, a kept room, the bytes) and
+  print the plan's sentences (`removalLines`, `unlinkLines`) before `confirmed()`: `--yes`, else a y/N question when
+  stdin **and** stdout are terminals (`y`, `yes`, `예`, `네`, `ㅇ`), else exit 2 "no terminal to ask on". `--dry-run`
+  stops after the sentences; `--json` puts them on stderr and prints `{ plan, done }`. A "no" is exit 1. The last
+  revision is refused before asking (the server refuses it too). Deleting the head revision says links to "the
+  newest" will open the one before. Unlinking a share link is `DELETE /v1/rooms/mine/:id`: a live room's people
+  are sent out and nothing is kept; a kept room writes a last revision and stays a map (ai-server's `finishKept`).
+- **`rename`** (`PATCH /v1/maps/:id { name }`) and **`note`** (`PATCH /v1/maps/:id/revisions/:n { note }`, the head
+  by default) are maps only: replays have no PATCH route.
+- **Links as input** (`weblink.ts`): `readInput` asks `isWebAddress(path)` (`^https?://`, so a file named
+  `scmjs.dev/...` is still a file) before `linkedRead`, and `readWebLink` returns an `Input` whose **`path` stays the
+  link** and `link` is set. `writeOutput` refuses a web address (exit 2, "Name a file to write with -o"), so every
+  command that writes back over its input refuses without code of its own. Accepted: hosts `scmjs.dev`,
+  `*.scmjs.dev`, localhost/127.0.0.1/[::1] and `SCMJS_EDITOR_URL`'s; paths ending `/(map|replay|share)/<token>` (so
+  `/editor/…`, `/replay/…`, `/nightly/map/…`) and `/play/?replay=<token>`; tokens `[A-Za-z0-9_-]{8,128}`. The
+  server: the link's `?scmjs-server=` (http/https only), else `SCMJS_SERVER`, else api.scmjs.dev. A 404 is exit 2
+  (a file that is not there). **Each read counts an open** and is under the server's per-address limit
+  (`linkOpensPerMinute`): `map info <link>` is an open, as the editor's is.
+- **What a link input changed elsewhere**: `besideInput(input)` (files.ts) is the path a neighbouring file is named
+  from — the input, or its server name in the current folder for a link or a pipe; `replay map`, `replay export`
+  and the MCP `replay_map` use it. `fileOnDisk(input)` writes a link's or pipe's bytes to a temporary folder for a
+  runner that reads by name (`replay watch`; `replay export`'s `gameMoments` already did this). `map open <link>` / `replay open <link>` open the link itself in the browser (no download, no
+  extra open counted); `--live` with a link is refused. `history.ts#locate` refuses a link before git's own
+  "cannot change to 'https:/…'".
+- **MCP**: a link is refused by a server kept to a folder (`webLinkArg` in `tool()`, checked before
+  `outsideRoot`, which would otherwise have taken `https://…` as a relative path *inside* the folder). Why: the
+  folder is the promise the person made when adding the server, network access is a new kind of reach, and a
+  model told by a page it read to fetch a link would do it. `--allow-outside` lifts both, and its option text says
+  so; `plugin` keeps its own `https:` sources.
+- **The overview**: `library` is a row under "Maps and replays:"; the line for it came from **dropping the blank
+  line before Options** (see "The overview's rows"). The `share` agent's top-level row needs another line found.
+- **Tests**: `tests/cli-library.test.ts` (12) against `tests/support/libraryServer.ts`, a stand-in of the maps,
+  replays, rooms and public link routes (shapes from ai-server's `protocol.ts` at origin/main a303e3b). It also runs
+  by itself (`node tests/support/libraryServer.ts <map> <replay> <port>`), which is how the built command was
+  driven by hand (`SCMJS_SERVER`, a session file with `sess-ok`). **Not run against the real ai-server.**
+- **Not done**: MCP tools for the library (the functions are ready); `library get` of a whole map with every
+  revision; replays renamed or noted (no server route); `--qr` on `library`.
+
+## `replay sync` (`cli/src/replaysync.ts`) — 2026-11-16, branch `cli-replay-sync`
+
+One of four parallel slices making the account easy from the terminal (with `share`, `library`, `login --device`).
+`scmjs replay sync [folders…] [--watch] [--since d|Nd] [--all] [--dry-run] [--link [--no-picture] [--starcraft]] [--json]`.
+
+- **The folders found** (`usualReplayFolders`): `StarCraft/Maps/Replays` (any case) under each Documents folder —
+  Windows: `%USERPROFILE%\Documents`, `%OneDrive%|OneDriveConsumer|OneDriveCommercial\Documents`, `OneDrive*` in the
+  profile; WSL: every `/mnt/c/Users/<u>/Documents` and `…/OneDrive*/Documents` (not Public, Default, Default User,
+  All Users, WsiAccount); Linux `~/Documents` and Wine's `drive_c/users/*/(My )Documents`; macOS `~/Library/Application
+  Support/Blizzard/StarCraft/…` and `~/Documents` (**the Mac path is unverified**) — then each `usualGameFolders()`
+  copy's `maps/replays` (1.16.1). **Measured on the user's machine (2026-11-16)**: Documents is OneDrive's
+  (`/mnt/c/Users/<name>/OneDrive/Documents/StarCraft/Maps/Replays`, plain `Documents` holds only `My Games`), and the
+  folder is `LastReplay.rep`, a game saved by name at the top, and `AutoSave/<yyyymmdd>/<hhmmss>,<map>.rep` (75 files,
+  2.7 s for a full `--all --dry-run` from WSL). No per-account or Multiplayer sub-folders there; the walk takes any.
+  The Remastered install (`Program Files (x86)/StarCraft`) has `Maps` but no replays.
+- **What is on the account** is `GET /v1/replays`, read once a run: ai-server's `ReplayView` carries `sha256`, so a
+  replay the account has is never sent (not even the first time this command sees it). The server dedups by hash per
+  account too (`existing: true`), the backstop. A server without replays (404) is an error.
+- **The state** (`syncStatePath`: `replay-sync.json` beside `sessionPath()`, or `SCMJS_REPLAY_SYNC`), written via
+  `.part` + rename after every upload so Ctrl+C loses nothing: `servers[server] = { since, firstSync, uploaded{sha →
+  file,name,at,id,link?}, refused{sha → server message} }` and `files[path] = { size, mtimeMs, sha256 | skip }`. The
+  file memo means a second run reads no file it read before (a test makes the file unreadable and still counts it as
+  on the account); an old file with a memo whose hash is known counts as "already", not as "older".
+- **The first run's start** (the user's worry: years of replays into 250 MB): no state for this server → `since` =
+  now, stored; on a TTY (not `--json`/`--dry-run`/`--since`/`--all`) the command asks with the count and size of the
+  older `.rep` files (by stat, nothing read) — yes stores `since: null`. `--since X` or `--all` on the first run store
+  that instead. Later runs' `--since`/`--all` apply to that run only. The cut is the file's mtime (no read needed),
+  not the header's start time. `--dry-run` writes no state at all.
+- **`LastReplay.rep`** is one more path whose hash changes; it is named `<yyyy-mm-dd> <hhmmss>,<map>.rep` by its
+  mtime in local time (the AutoSave form with the date), and each pass takes it **after** the other files, so when
+  the game also saved an AutoSave copy (same bytes) that name wins and LastReplay counts as already there.
+- **Refusals** are told apart by the server's code, read off a fetch wrapped round the client's (`res.clone()`), so
+  `account.ts` is untouched: `invalid_input` for this file (not a replay, too large, unreadable) → skipped and
+  remembered in `refused`; `storage_full`, `invalid_input` "at most N replays", 401 → the run stops, the summary
+  printed, then the CliError (exit 1, 2 for the session) with a My Maps hint. A fetch that throws while watching is a
+  warning and the file is tried on the next pass; in a single run it stops. Files over 8 MB are not read
+  (`MAX_REPLAY_BYTES`, the server's default) and files that `detectFormat`/`parseReplay` refuse are skipped locally.
+- **Settling**: a file is taken when `now - mtime >= 2 s`, or when it has been seen unchanged for 2 s (Windows' and
+  WSL's clocks can differ, and an mtime ahead of this clock would never pass the first test). A single run waits once
+  for the files not settled, then leaves the rest (`unsettled` in the summary); a file that changed while read is
+  left too.
+- **`--watch`** (`ReplayFolders`): one full walk, then every 5 s `changed()` stats each known folder and re-lists only
+  those whose mtime moved (new sub-folders walked), stats the files not yet settled and every `LastReplay.rep` (an
+  overwrite in place does not move its folder's mtime). **Checked on `/mnt/c` (2026-11-16)**: creating a file moves
+  its folder's mtime and not the parent's; rewriting a file moves neither. inotify does not fire on drvfs, hence
+  polling. Ctrl+C: `process.once("SIGINT"|"SIGTERM")` aborts a controller (lifecycle.ts then leaves the signal to
+  us, as for `plugin dev`), the loop ends between files (an upload in flight finishes), the summary prints, exit 0;
+  a single run stopped that way exits 130. A second Ctrl+C has no listener left and kills at once.
+- **Stored, not linked** (decided here): a link is public to whoever holds it, and the share agent's `--no-link` for
+  `replay share` is the same idea; `--link` asks `link=1` per upload and draws the card picture with `replayPicture`
+  (imported from `replayshare.ts`, which this slice does not edit; the upload form is built here). `replay share` on
+  a stored replay later answers its first link, since the same bytes are the same replay.
+- **Output**: a line per upload `✔ <name> · <map> · <matchup> <players ≤ 4> · <length> · stored|<link>` (`ℹ … would
+  upload` for a dry run), facts from the local parse (`matchupOf` copies the server's rule); the summary (uploaded,
+  already, skipped with the first five named, still being written, older left with the `--since`/`--all` hint,
+  storage). The folders and "Watching…" go to stderr. `--json`: one object at the end; with `--watch`, a
+  `{"type":"upload",…}` line each and a `{"type":"summary",…}` line.
+- **For an MCP tool later**: `usualReplayFolders`, `syncReplays(folders, o, deps)` and `watchReplays` return the
+  `SyncReport`; deps take `server`, `file`, `stateFile`, `fetchImpl`, `now`, `settleMs`, `ask`, `onUpload`, `signal`.
+- **Verified**: `tests/cli-replay-sync.test.ts` (13) against a fake fetch; the built command against a throwaway
+  ai-server 0.39.0 (origin/main via `git archive`, PGlite, a session made through the fake-Discord callback) with
+  copies of the user's replays in a temp folder: first run left 7, `--since`, `--all --json`, `--link` (link and
+  card picture from the Remastered install), a 0.1 MB cap stopping with the server's message (exit 1), the TTY
+  question through `script`, and `--watch` picking up a new AutoSave file, a rewritten `LastReplay.rep` and a game
+  saved by name, then SIGINT → summary, exit 0. `--all --dry-run` read the real OneDrive folder (read only).
+  **Not run**: native Windows (`%USERPROFILE%`/OneDrive env paths), a Mac, a real 1.16.1 `maps\replays`, the live
+  server.
 
 ## A map linked to the editor (`cli/src/link.ts`, `src/services/editorLink.ts`, `openLinked` in `useOpenerHandoff.ts`) — 2026-11-16
 
@@ -1598,8 +1832,8 @@ and `core`. 0.8.8 was published by hand (security key: own terminal, `--browser=
 
 ## The overview's rows (`cli/src/banner.ts`) — 2026-11-07
 
-`rootHelp` prints the three groups **with no blank line between them**; the one blank line is before Options. That
-freed two of the 23 rows (a 24-row terminal keeps the globe on screen; `tests/cli.test.ts` holds the count), which
+`rootHelp` prints the three groups **with no blank line between them**, and since 2026-11-16 (`library`) none before
+Options either. The first change freed two of the 23 rows (a 24-row terminal keeps the globe on screen; `tests/cli.test.ts` holds the count), which
 `init [folder]` and `account show|login|logout` took. A new top-level row now needs a line freed again: a one-line
 description is the first rule (commander wraps a long one onto a second row, which the count sees), and a hidden
 command (`{ hidden: true }`: `completion`, `login`, `logout`, `help`) is the fallback.

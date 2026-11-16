@@ -23,7 +23,8 @@ import { exportStrings, exportTriggers, importStrings, importTriggers, writeBack
 import { optimizeJson, optimizeMap, printOptimize } from "./optimize";
 import { balanceJson, printBalance, runBalance } from "./balance";
 import { parseRaces } from "./ladder";
-import { expectKind, loadMapInput, loadReplayInput, readInput, type Input } from "./files";
+import { isWebAddress } from "./weblink";
+import { besideInput, expectKind, loadMapInput, loadReplayInput, readInput, type Input } from "./files";
 import { findInMap, KINDS, parseKinds, printHits } from "./find";
 import { baselineLine, issueLine, mapReport, printIssues, printMapInfo } from "./map";
 import { mapKey, matchBaseline, readBaseline } from "./baseline";
@@ -135,12 +136,28 @@ export function outsideRoot(args: Record<string, unknown>, root: string): string
   return null;
 }
 
+/**
+ * A scmjs.dev link given where a file is named (`plugin` takes a URL of its own). A server kept to a folder reads no
+ * links: reaching the network is a reach beyond that folder, and a model would otherwise fetch whatever a page it
+ * read told it to. Started with --allow-outside, the tools read links as the commands do.
+ */
+export function webLinkArg(args: Record<string, unknown>): string | null {
+  for (const key of PATH_ARGS) {
+    if (key === "plugin") continue;
+    const v = args[key];
+    for (const p of Array.isArray(v) ? v : [v]) if (typeof p === "string" && isWebAddress(p)) return p;
+  }
+  return null;
+}
+
 type Extra = RequestHandlerExtra<ServerRequest, ServerNotification>;
 /** Runs `fn` as a tool: its lines become the result, a CliError the error text. */
 const tool = <T>(fn: (args: T, extra: Extra) => Promise<CallToolResult>, root: string | null = null) => async (args: T, extra: Extra): Promise<CallToolResult> => {
   try {
     const a = args as { path?: string; out?: string; a?: string; b?: string; paths?: string[] };
     noPipe(a.path, a.out, a.a, a.b, ...(a.paths ?? []));
+    const web = root === null ? null : webLinkArg(args as Record<string, unknown>);
+    if (web !== null) throw new CliError(`${web} is a link, and the tools read files in the folder the server was started in (${root})`, "The person can download it with scmjs library get, or start the server with scmjs mcp --allow-outside, which lets the tools read scmjs.dev links too.", 2);
     const outside = root === null ? null : outsideRoot(args as Record<string, unknown>, root);
     if (outside !== null) throw new CliError(`${outside} is outside the folder the server was started in (${root})`, "The tools read and write files in that folder only; the person can start the server with scmjs mcp --allow-outside to lift that.", 2);
     try {
@@ -797,7 +814,7 @@ export function createMcpServer(options: McpOptions = {}): { server: McpServer; 
   }, tool(async ({ path: file, out: to, force }) => {
     const input = await readInput(file);
     expectKind(input, "replay");
-    const out = to ?? mapFileFor(input.path);
+    const out = to ?? mapFileFor(besideInput(input));
     if (existsSync(out) && !force) throw new CliError(`${out} is there already`, "force overwrites it, out names another file.", 2);
     const r = await writeReplayMap(await loadReplayInput(input), out);
     return ok([`${r.name || "Untitled"}: ${r.width} × ${r.height}, from ${input.name}`, written(r.written)], { file: input.name, ...r });

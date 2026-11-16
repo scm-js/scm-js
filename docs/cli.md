@@ -196,6 +196,9 @@ scmjs replay watch game.rep                     # a replay in the terminal
 scmjs map heatmap map.scx replays/ --out h.png  # where units died in those games
 scmjs replay export game.rep --to 0:30          # its first half minute, as game.webm
 scmjs map share map.scx --qr                    # a link, and a code for a phone
+scmjs library                                   # your maps and replays on scmjs.dev, with their links
+scmjs replay info https://scmjs.dev/replay/…    # any command reads a link as a file
+scmjs replay sync --watch                       # each game's replay to your account as it is saved
 scmjs init                                      # this folder of maps, ready for git
 scmjs map unpack map.scx --text                 # the map as text files, to keep in git
 scmjs mod unpack MyMod.mpq mymod                # a mod as text and pictures; mod pack puts it back
@@ -205,12 +208,13 @@ scmjs bot run mybot.js map.scx                  # a bot against the game's compu
 ### The commands
 
 `scmjs` on its own, or `scmjs --help`, prints the overview pictured at the top of this
-guide. Most commands sit under a noun: `map`, `replay`, `mod`, `plugin`, `bot` and
-`account`. `scmjs map` (or `scmjs map --help`) lists the map commands, grouped by task
+guide. Most commands sit under a noun: `map`, `replay`, `mod`, `plugin`, `bot`, `library`
+and `account`. `scmjs map` (or `scmjs map --help`) lists the map commands, grouped by task
 much as this guide's chapters are, and every command has its own `--help` with its options
 and examples; `scmjs help map diff` is the same as `scmjs map diff --help`. The overview's
-last group names the commands it has no row for: `about`, `completion`, `login`, `logout`
-and `lsp`. The [command reference](#command-reference) lists them all on one page.
+last group names the commands it has no row for: `about`, `completion`, `init`, `login`,
+`logout` and `lsp`. The [command reference](#command-reference) lists them all on one
+page.
 
 A command that takes several files takes as many as you name, so a shell pattern works:
 
@@ -304,7 +308,7 @@ What it looks for:
 | Docker | `bot new`, `bot init`, `bot build` and `bot update` |
 | Desktop app | `map open` and `replay open`, which use the browser without it |
 | Claude Code | `scmjs mcp`, when you use it from Claude Code |
-| scmjs.dev | `map share` and `replay share`; `map play` signs in on the play page instead |
+| scmjs.dev | `share`, `map share` and `replay share`; `map play` signs in on the play page instead |
 | Browser | `replay export` and `map test --clips`, which draw their clips in Chrome, Chromium or Edge |
 | ffmpeg | `replay export` to an `.mp4`; a `.webm` or a `.gif` does without it |
 | StarCraft | `map preview`, `map analyze`, `map generate` and every command that runs the game |
@@ -3468,8 +3472,9 @@ and attacks with Mavericks, is in the scmbot repository's `examples/cosmonarchy`
 
 ## Sharing from the terminal
 
-These commands use your [scmjs.dev account](guide.md#your-scmjsdev-account). Nothing else
-in `scmjs` talks to scmjs.dev.
+These commands use your [scmjs.dev account](guide.md#your-scmjsdev-account). Besides them,
+only a command given a [scmjs.dev link](#links-in-place-of-files) in place of a file talks
+to scmjs.dev, and it needs no account.
 
 ### Signing in
 
@@ -3478,6 +3483,33 @@ does (`--provider google` or `battlenet` for the others). The command says who s
 once you have approved it. It waits two minutes. With `BROWSER=none` it prints the page's
 address for you to open.
 
+Over SSH, in a container, or anywhere else the browser cannot reach the computer the
+command runs on, sign in by code instead with `scmjs login --device`. The command prints
+an address and a code:
+
+```
+$ scmjs login --device
+ℹ On any device with a browser, open https://api.scmjs.dev/device and enter this code:
+
+    WDJB-MJHT
+
+  Waiting for you to allow it · 9:41 left · Ctrl+C cancels
+```
+
+Open the address on your phone or another computer, enter the code, and sign in there with
+Discord, Google or Battle.net. The page then shows which computer asks
+(`scmjs on <its name>`) and the code again: check that it is the one in your terminal and
+press **Allow**, and the command says who signed in. **Deny** tells the command no. Allow
+only a code you started yourself: whoever holds the session can use your account's maps,
+replays and links, and its balance for AI features. The code expires after ten minutes.
+`--qr` also draws the address with the code filled in as a [QR code](#qr-codes), so a
+phone can open it without typing.
+
+You often need not ask: in an SSH session with no display, or in a container,
+`scmjs login` signs in by code by itself and says so in one line; `--no-device` keeps the
+browser sign-in, for example when you forward the port yourself. A server that does not
+offer sign-in by code says so, and then you sign in on a computer with a browser.
+
 The session is kept in a file only you can read: `~/.config/scmjs/session.json`, or
 `%APPDATA%\scmjs\session.json` on Windows. `scmjs logout` ends the session on scmjs.dev
 and deletes the file.
@@ -3485,12 +3517,14 @@ and deletes the file.
 `scmjs account` (or `scmjs account show`) says who you are signed in as, how much of your
 storage is in use, and the maps you are sharing for editing with their links, each also as
 a QR code with `--qr`. `--json` prints it as JSON. `scmjs account login` and
-`scmjs account logout` are the same as `scmjs login` and `scmjs logout`.
+`scmjs account logout` are the same as `scmjs login` and `scmjs logout`. What the account
+keeps, with every link, is [`scmjs library`](#your-library).
 
 When scmjs.dev refuses something, for instance because your storage is full or you are
 sharing too many maps at once, the command shows scmjs.dev's own message. Until you sign
-in, `map share`, `replay share` and `account` say "Sign in first: scmjs login" and exit
-with 2. `map play` does not need it: the play page asks you to sign in there.
+in, `share`, `map share`, `replay share`, `replay sync`, `account` and `library` say "Sign
+in first: scmjs login" and exit with 2 (`library get` with a link needs no sign-in).
+`map play` does not need it: the play page asks you to sign in there.
 
 ### A link to a map
 
@@ -3520,6 +3554,8 @@ share the map again.
 | `--note` | The revision's note |
 | `--new` | A new map on the account, even when one has this file name |
 | `--qr` | A [QR code](#qr-codes) of the link under it |
+| `--copy` | The link on the clipboard too ([Copying the link](#copying-the-link)) |
+| `--no-link` | The map on your account and no link ([Keeping a file without a link](#keeping-a-file-without-a-link)) |
 | `--no-picture` | No picture for the link's card |
 
 With a copy of StarCraft on the computer, as for `map preview`, the command draws the
@@ -3547,12 +3583,294 @@ Anyone with the link edits the map with you in their editor, without signing in.
 ### A link to a replay
 
 `scmjs replay share game.rep` stores the replay on your account (My Maps ▸ Replays; up to
-8 MB each, counted with your maps) and prints `https://scmjs.dev/editor/replay/<token>`.
-Anyone opens that link to watch the replay in the editor's replay viewer, and where links
-get a card, it shows the map and the players. The map's picture on the card is drawn from
-the map in the replay when your copy of the game is on the computer. `--note` adds a note,
-`--no-picture` leaves the picture out, and `--qr` draws a QR code. The same replay shared
-again gives the link it already has.
+8 MB each, counted with your maps) and prints its link,
+`https://scmjs.dev/replay/<token>`. Anyone opens that link to watch the replay in the
+editor's analysis, and where links get a card, it shows the map and the players. The map's
+picture on the card is drawn from the map in the replay when your copy of the game is on
+the computer. `--note` adds a note, `--no-picture` leaves the picture out, and `--qr`
+draws a QR code. The same replay shared again gives the link it already has.
+
+```
+$ scmjs replay share game.rep
+https://scmjs.dev/replay/xU9wy1hINIMnnVb5EU3JzdNn
+투혼 1.3 · PvT · Question vs Drywater · 10:08 · 151 KB · stored on your account
+Anyone with the link watches it in the editor, without signing in.
+```
+
+### A moment in a replay
+
+`--at` makes the link open at a moment of the game, as **Share** on the analysis's
+timeline does. Whoever opens it finds the replay paused there. The time is game time, as
+the timeline shows it: `6:42`, `1:02:03`, or a number of seconds.
+
+```
+$ scmjs replay share game.rep --at 6:42
+https://scmjs.dev/replay/xU9wy1hINIMnnVb5EU3JzdNn?t=6:42
+투혼 1.3 · PvT · Question vs Drywater · 10:08 · 151 KB · already on your account
+Anyone with the link watches it from 6:42 in the editor, without signing in.
+```
+
+`--play` sends whoever opens the link to the play page instead, to play on from that
+moment as one of the replay's players: the card there runs the game to the moment and
+seats them, as the user guide's [Sharing a replay](guide.md#sharing-a-replay) describes.
+They need their own StarCraft files, as the play page always does. Name the player by name
+(the start of one is enough when only one player's name starts that way) or by the slot
+number the game gave them. `--play` with no player lets the person choose on the card, and
+`--play` without `--at` plays from the start.
+
+```
+$ scmjs replay share game.rep --at 6:42 --play Drywater
+https://scmjs.dev/replay/xU9wy1hINIMnnVb5EU3JzdNn?t=6:42&play=2
+투혼 1.3 · PvT · Question vs Drywater · 10:08 · 151 KB · already on your account
+Anyone with the link plays on from 6:42 as Drywater on the play page, with their own copy of StarCraft.
+```
+
+A replay has one link, and the moment is part of the address, so sharing it again at
+another moment stores nothing and makes no second link. A time past the end of the game,
+or a player the replay does not have, is refused with exit 2 and a line that says how long
+the game is or who played it, by slot:
+
+```
+$ scmjs replay share game.rep --play 1
+✖ --play 1: no player of game.rep is in slot 1
+  Its players, by slot: 0 Question, 2 Drywater.
+```
+
+| Option | What it does |
+| --- | --- |
+| `--at` | The moment the link opens at: `m:ss`, `h:mm:ss` or seconds |
+| `--play` | Whoever opens the link plays on as this player: a name or a slot; with no player, they choose |
+| `--note` | A note, as My Maps shows it |
+| `--qr` | A [QR code](#qr-codes) of the link under it |
+| `--copy` | The link on the clipboard too ([Copying the link](#copying-the-link)) |
+| `--no-link` | The replay on your account and no link ([Keeping a file without a link](#keeping-a-file-without-a-link)) |
+| `--no-picture` | No map picture for the link's card |
+
+### Sharing several files at once
+
+`scmjs share` takes maps and replays together and gives each its link, telling a map from
+a replay as `scmjs info` does. A map is shared as `map share` shares it and a replay as
+`replay share` does. Each file's link is the first of its lines, with a blank line between
+files, so `scmjs share ridge.scx | head -1` is still just the link.
+
+```
+$ scmjs share ridge.scx game.rep --at 6:42
+https://scmjs.dev/editor/map/sJ5Z3w12SFSoLCD6zej-b46a
+Ridge · 128 × 128 · 61 KB · revision 1, already on your account as it is
+Anyone with the link opens a copy in their editor, without signing in.
+
+https://scmjs.dev/replay/xU9wy1hINIMnnVb5EU3JzdNn?t=6:42
+투혼 1.3 · PvT · Question vs Drywater · 10:08 · 151 KB · already on your account
+Anyone with the link watches it from 6:42 in the editor, without signing in.
+```
+
+It takes both commands' options. `--name`, `--edit`, `--keep` and `--new` apply to the
+maps and `--at` and `--play` to the replays; one given when none of the files is of its
+kind is refused with exit 2, and so is `--name` with more than one map. A file that fails,
+for instance because your storage is full, is said on standard error and the others go on;
+the command then exits with 1. `--json` prints each file's result with its `link` at the
+top (`null` with `--no-link`), one object for one file and a list for several.
+
+### Copying the link
+
+`--copy` on `share`, `map share` and `replay share` puts the link on the clipboard as well
+as printing it, one link a line when there are several. It uses the system's own tool:
+`clip.exe` on Windows and in WSL, `pbcopy` on macOS, and on Linux `wl-copy`, `xclip` or
+`xsel`, whichever is installed. Without one the command says so on standard error and goes
+on; the link is printed either way.
+
+### Keeping a file without a link
+
+`--no-link` saves the map or replay to your account and makes no link, for files you want
+kept on scmjs.dev without handing them to anyone. A map is saved as a new map or as the
+next revision of the one with the same file name, as for a link. The output says that
+nothing was linked:
+
+```
+$ scmjs share ridge.scx --no-link
+Ridge · 128 × 128 · 61 KB · revision 2, a new revision of Ridge
+Not linked: nothing was made for anyone to open. scmjs map share gives it a link.
+```
+
+Sharing the file later makes its link then, without storing it again. `--no-link` cannot
+go with what only a link has: `--edit`, `--keep`, `--at`, `--play`, `--copy` and `--qr`.
+
+### Your library
+
+`scmjs library` lists what your account keeps, as the site's Library page and the editor's
+**Account ▸ My Maps…** do: your maps with their revisions and copy links, your replays
+with theirs, and the maps you are sharing for editing. Each link is printed whole, so you
+can copy it, with how many times it has been opened:
+
+```
+$ scmjs library
+Maps
+  Ridge     3 revisions · 2.8 KB · 64 × 64 · 2026-11-14  3f2a9c1e
+    https://scmjs.dev/editor/map/sJ5Z3w12SFSoLCD6zej-b46a · revision 3, opened 12 times
+    https://scmjs.dev/editor/map/Qm8vT0aYc2LrXk1pWd7eNf3h · the newest revision, not opened yet
+    https://scmjs.dev/editor/share/49vlCkKoYvMJGzIah5I0Vo_y · shared for editing
+  Test map  1 revision · 2.8 KB · 64 × 64 · 2026-11-10  a81b22c0
+
+Replays
+  Fighting Spirit · PvT  Ann vs Bob · 12:34 · 33 KB · 2026-11-12  77aa01bc
+    https://scmjs.dev/replay/pX4nR8Lq0Tz6Vw2yBc9dFg1J · opened 3 times
+
+Shared for editing  2 of 3 at once
+  Ridge   kept open for a week · nobody in it
+    https://scmjs.dev/editor/share/49vlCkKoYvMJGzIah5I0Vo_y
+  Sketch  open until everyone leaves · 2 people in it
+    https://scmjs.dev/editor/share/Hk2mP7sQ9rT4uW6xZ8bD0fG3
+
+Storage  44 KB of 250.0 MB · 2 maps, 4 revisions, 1 replay
+```
+
+`scmjs library maps`, `library replays` and `library shared` list one part. `--json`
+prints the list as JSON, every link with its token, revision and count of opens.
+
+The other `library` commands name one map or replay in any of these ways: a link to it,
+its id (the eight characters at the end of its row, or more), a map's name or file name,
+or a replay's file name. Names are matched without regard to case. When a name fits more
+than one, the command lists them with their ids and you name one by its id.
+
+`scmjs library get Ridge` downloads the map's newest revision into the current folder,
+under the file name it has on the account; `--revision 1` an older one, `-o` another file,
+`-o -` standard output. It does not write over a file that is there unless you add
+`--force`. Given a map or replay link, it downloads that, whoever's it is and whether or
+not you are signed in:
+
+```
+$ scmjs library get Ridge --revision 1 -o ridge-1.scx
+✔ Ridge, revision 1 · from your account · written to ridge-1.scx · 2.8 KB
+$ scmjs library get https://scmjs.dev/replay/pX4nR8Lq0Tz6Vw2yBc9dFg1J
+✔ Fighting Spirit · PvT · Ann vs Bob · from the link · written to game.rep · 33 KB
+```
+
+A link to edit a map together is not a file. You get the map through it only when the map
+is yours and kept open; then it is the map's newest revision.
+
+| Command | What it does |
+| --- | --- |
+| `scmjs library rm <map or replay>` | Deletes the map with all its revisions and links, or the replay with its links |
+| `scmjs library rm <map> --revision 2` | Deletes one revision of a map, and the links to that revision |
+| `scmjs library unlink <link>` | Makes one link stop working: a copy link, a replay's link, or a map shared for editing |
+| `scmjs library rename <map> <name>` | Gives a map another name on the account |
+| `scmjs library note <map> <note>` | The note on the newest revision, or on `--revision n`; `""` clears it |
+
+`rm` and `unlink` cannot be undone, so each says first what goes, and who loses what:
+
+```
+$ scmjs library rm Ridge
+Deletes the map Ridge: its 3 revisions (8.5 KB) and its 2 links.
+People with those links can no longer open it.
+It is shared for editing too: that link stops working and anyone in it is sent out.
+Delete it? [y/N]
+```
+
+Then it asks. Where there is no terminal to ask on, in a script or a pipe, the command
+stops with exit code 2 unless you add `--yes`. `--dry-run` says what would go and changes
+nothing. A map keeps its last revision: delete the map instead. Deleting the newest
+revision makes the links to "the newest revision" open the one before it. Unlinking a map
+shared for editing ends the sharing: the people in it are sent out, and a map kept open
+stays on your account as it was last edited, while one shared until everyone leaves is not
+kept anywhere.
+
+### Links in place of files
+
+Every command that reads a map or a replay also takes a scmjs.dev link to one, and reads
+it as if it were the file:
+
+```sh
+scmjs replay info https://scmjs.dev/replay/pX4nR8Lq0Tz6Vw2yBc9dFg1J
+scmjs map preview https://scmjs.dev/editor/map/sJ5Z3w12SFSoLCD6zej-b46a
+scmjs map diff https://scmjs.dev/editor/map/sJ5Z3w12SFSoLCD6zej-b46a ridge.scx
+```
+
+The file is downloaded the way the editor opens the link, without signing in, and counts
+as one open of the link. Each form of link the site gives works: `/editor/map/…`,
+`/replay/…` and `/editor/replay/…` (a moment such as `?t=6:42` is ignored; the whole
+replay is read), and the play page's `/play/?replay=…`. A link to edit a map together is
+not a file, and is refused.
+
+A link is never written to. A command that would write the map back over its input, such
+as `map set` or `map triggers import`, asks for a file with `-o` instead, and one that
+writes a file beside its input, such as `replay map`, writes it in the current folder.
+`map open` and `replay open` open the link itself in your browser. `map log`, `map blame`
+and `map diff --rev` read git's history, which a link does not have.
+
+### Your replays on your account
+
+`scmjs replay sync` stores the replays of your games on your scmjs.dev account, so they
+are in My Maps ▸ Replays wherever you sign in. With `--watch` it keeps running and stores
+each game as soon as StarCraft saves its replay:
+
+```
+$ scmjs replay sync --watch
+Replays in /mnt/c/Users/ann/OneDrive/Documents/StarCraft/Maps/Replays
+ℹ Watching for new games. Ctrl+C stops.
+✔ 143500,(2)Bottleneck.rep · Bottleneck · TvP Ann vs Auriga Tribe · 0:39 · stored
+✔ 2026-11-16 133639,Twin Lanes of Char.rep · Twin Lanes of Char · TvZ Ann vs Garm Brood · 1:59 · stored
+^C
+✔ Uploaded 2 replays (91 KB) · 6 already on your account
+Storage: 1.1 MB of 250.0 MB
+```
+
+Each replay gets one line: its file, the map, the matchup and players, the game's length,
+and `stored`. Without `--watch` the command stores what is new and stops.
+
+**Where it looks.** With no folders named, the command looks where StarCraft saves
+replays:
+
+- StarCraft: Remastered keeps them in your Documents folder, under
+  `StarCraft\Maps\Replays`. Games saved by name are at the top, the copies saved
+  automatically are in `AutoSave`, in a folder for each day, and the last game is always
+  `LastReplay.rep`. When Windows keeps Documents in OneDrive, the folder is under
+  `OneDrive\Documents` instead, and that is looked at too.
+- StarCraft 1.16.1 keeps them in its installation's `maps\replays` folder.
+
+From WSL the command looks in the Windows users' Documents under `/mnt/c/Users`. Every
+`.rep` file in the folders and their sub-folders counts. Name the folders yourself, as in
+`scmjs replay sync D:\Replays`, to look somewhere else.
+
+**The first sync.** The first time you sync, the replays already in the folders are left
+where they are, so years of games do not fill your storage at once. In a terminal the
+command asks first, with how many there are and their size. From then on, every game saved
+after that first sync is stored. `--since 2026-11-01` takes the replays from that date on,
+`--since 7d` those of the last week, and `--all` every one; `--dry-run` lists what would
+be stored without storing anything.
+
+**What is not sent twice.** A replay your account has already is not sent again, whatever
+its file is called. `LastReplay.rep` holds a different game each time you play, and each
+of those games is stored once, under the date and time it was saved and the map's name.
+When StarCraft has also saved the game in `AutoSave`, it is stored under that name
+instead. The command remembers what it has read in `replay-sync.json`, next to your
+session file, so a second run reads only the replays that are new or changed.
+
+A file that is not a replay, or is larger than the 8 MB scmjs.dev takes, is skipped and
+named in the summary. A replay StarCraft is still writing is taken once it stops changing.
+When your storage is full, or the account has as many replays as it may keep, the command
+stops with scmjs.dev's message. Delete replays or old map revisions in My Maps, then run
+it again.
+
+**Links.** The replays are stored, not shared: nobody sees them until you share one.
+`scmjs replay share` on a stored replay gives it a link, since the same replay is not
+stored twice. `--link` makes a link for each replay as it is stored, printed in place of
+`stored`, with the map's picture for its card when your copy of the game is on the
+computer.
+
+| Option | What it does |
+| --- | --- |
+| `--watch`, `-w` | Keeps running and stores each game as it is saved, until Ctrl+C |
+| `--since <date>` | Replays from that date on (`2026-11-01`), or from that many days back (`7d`) |
+| `--all` | Every replay in the folders, however old |
+| `--dry-run` | Lists what would be stored, and stores nothing |
+| `--link` | A link for each replay too |
+| `--no-picture` | With `--link`, no map picture for the links' cards |
+| `--starcraft <folder>` | Your installation of StarCraft, for the pictures |
+| `--json` | One JSON object at the end; with `--watch`, a JSON line for each replay as it is stored, then one for the summary |
+
+In `--watch`, the command looks at the folders every five seconds. It checks only whether
+the folders and `LastReplay.rep` have changed, and reads a replay only when one has, so it
+stays light on a folder of thousands of replays and on a Windows drive seen from WSL.
 
 ### A game with other people
 
@@ -3577,9 +3895,10 @@ and the command prints the page's address for you to open.
 
 ### QR codes
 
-`--qr` on `map share`, `replay share`, `map play` and `account` draws each link as a QR
-code under it, for the people next to you to open on a phone. The link stays the first
-line.
+`--qr` on `share`, `map share`, `replay share`, `map play` and `account` draws each link
+as a QR code under it, for the people next to you to open on a phone. The link stays the
+first line. On `login --device` it draws the sign-in page's address with the code filled
+in.
 
 ![A QR code drawn in the terminal under a map link](images/cli-qr.webp)
 
@@ -3595,7 +3914,8 @@ has no such characters, so there it is drawn with `#`, twice as wide.
 | Setting | Effect |
 | --- | --- |
 | `SCMJS_SESSION` | Another file for the session |
-| `SCMJS_SERVER` | Another server than `https://api.scmjs.dev`, such as one of your own; its links carry its address for the editor |
+| `SCMJS_REPLAY_SYNC` | Another file for what `replay sync` remembers (`replay-sync.json` next to the session otherwise) |
+| `SCMJS_SERVER` | Another server than `https://api.scmjs.dev`, such as one of your own; its links carry its address for the editor, and a link that carries none is downloaded from it. The play page does not read that address, so a `--play` link made this way opens only where the play page is set to the same server |
 
 ## Bots
 
@@ -4096,8 +4416,14 @@ gives its options.
 | [`scmjs map rush <map>`](#rush-distances) | The time to walk between the start locations, by the game's own pathing |
 | [`scmjs map balance <map> --bots <bots…>`](#is-the-map-fair-to-every-start) | Games played on the map with your bots, a row a start location: win rate, length, first contact, rush distance, resources, and a verdict |
 | [`scmjs map heatmap <map> <replays…>`](#where-things-happened-across-many-games) | Where units died, buildings went up or armies walked in many replays, as heat over the map |
-| [`scmjs map share <map>`](#a-link-to-a-map) | A link to the map on scmjs.dev; `--edit` to edit it together |
+| [`scmjs map share <map>`](#a-link-to-a-map) | A link to the map on scmjs.dev; `--edit` to edit it together, `--no-link` to keep it without one |
 | [`scmjs map play <map>`](#a-game-with-other-people) | A lobby on the play page with the map, and its invite link |
+
+### `scmjs share`
+
+| Command | What it does |
+| --- | --- |
+| [`scmjs share <files…>`](#sharing-several-files-at-once) | A link for each map and replay, as `map share` and `replay share` make them; `--copy` puts them on the clipboard, `--no-link` keeps the files without one |
 
 ### `scmjs init`
 
@@ -4115,7 +4441,8 @@ gives its options.
 | [`scmjs replay watch <replay>`](#watching-a-replay-in-the-terminal) | Plays the replay in the terminal; `--cells` the picture's size, `--every` a pipe's lines |
 | [`scmjs replay export <replay>`](#a-video-or-gif-of-a-replay) | A video or GIF of the replay with the game's own pictures; `--resolution` its size, `--whole-map` the camera |
 | [`scmjs replay open <replay>`](#opening-a-replay-in-scmjs) | Opens the replay in scmJS's replay viewer |
-| [`scmjs replay share <replay>`](#a-link-to-a-replay) | A link that opens the replay in the editor |
+| [`scmjs replay share <replay>`](#a-link-to-a-replay) | A link that opens the replay in the editor; `--at` [at a moment](#a-moment-in-a-replay), `--play` to play on from it |
+| [`scmjs replay sync [folders…]`](#your-replays-on-your-account) | Your new replays stored on your scmjs.dev account; `--watch` stores each game as it is saved, `--since` and `--all` older ones |
 
 ### `scmjs mod`
 
@@ -4148,11 +4475,14 @@ gives its options.
 
 | Command | What it does |
 | --- | --- |
-| [`scmjs login`, `scmjs logout`](#signing-in) | Signs in to scmjs.dev in the browser, and out again |
+| [`scmjs login`, `scmjs logout`](#signing-in) | Signs in to scmjs.dev in the browser, or by code with `--device`, and out again |
 | [`scmjs account`](#signing-in) | Who you are signed in as, your storage, the maps you are sharing |
+| [`scmjs library [maps\|replays\|shared]`](#your-library) | Your maps, replays and maps shared for editing on scmjs.dev, with every link and its opens |
+| [`scmjs library get <what>`](#your-library) | Downloads a map (a revision with `--revision`) or replay from your account, or from anyone's link |
+| [`scmjs library rm\|unlink\|rename\|note`](#your-library) | Deletes a map, revision or replay, removes one link, renames a map, sets a revision's note; asks first, `--yes` in scripts |
 | [`scmjs doctor`](#checking-your-setup) | What this computer has for each command, and what is missing |
 | [`scmjs about`](#updating) | This version, whether there is a newer one, and the links |
-| [`scmjs mcp`](ai-tools.md) | The map commands as an MCP server for AI tools, kept to the folder it starts in unless `--allow-outside` |
+| [`scmjs mcp`](ai-tools.md) | The map commands as an MCP server for AI tools, kept to the folder it starts in (and to files, not links) unless `--allow-outside` |
 | [`scmjs lsp`](#trigscript-in-your-text-editor) | A TrigScript language server for your text editor: errors, completions, hovers, go to definition |
 | [`scmjs completion <shell>`](#shell-completion) | A completion script for bash, zsh or fish |
 
@@ -4204,9 +4534,12 @@ from a clone with `npm run cli -- <command>`, or build it with `npm run build:cl
 | `cli/src/link.ts` | A map linked to the editor: the page between the command and the editor, how other commands find the link, and the reads and writes that go through it |
 | `src/services/editorLink.ts` | The editor's end of a link: the map handed over, a changed one taken back as an undo step, the selection and the view |
 | `cli/src/open.ts` | Finding the desktop app, handing a file to the editor in a browser, and a lobby asked of the play page the same way |
-| `cli/src/account.ts` | The scmjs.dev sign-in through a page on the loopback address, the session file, and the account |
+| `cli/src/account.ts` | The scmjs.dev sign-in through a page on the loopback address or by code, the session file, and the account |
 | `cli/src/share.ts` | A map saved to the account and linked, or opened for editing together, with its facts and picture |
 | `cli/src/replayshare.ts` | A replay stored on the account and linked, with the map's picture for the card |
+| `cli/src/library.ts`, `cli/src/librarycmd.ts` | `scmjs library`: the account's maps, replays and shared maps with their links, one of them found by link, id or name, and what a removal takes with it; the commands and their questions |
+| `cli/src/weblink.ts` | A scmjs.dev link read as a file: its forms, the server it belongs to, the public download and the file's name |
+| `cli/src/replaysync.ts` | `replay sync`: StarCraft's replay folders found, the first sync's start, what the account has by hash, `LastReplay.rep` named after its game, the state file, the folders looked at again while watching |
 | `cli/src/bot.ts` | Running the bot toolchain's image in the bot's folder |
 | `cli/src/engine.ts` | The game engine the playing commands share: the play page's current build fetched into the cache with its runners, the copy of the game found, a runner started |
 | `cli/src/replaymod.ts` | A replay's mod: the mod named with `--mod` checked against the one the replay names, the names and costs from the mod's tables, and the refusal to play a mod's replay with the game's own files |

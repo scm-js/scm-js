@@ -10,13 +10,12 @@
  * Not a terminal (a pipe, a file): a line per player at intervals instead, or JSON lines with `--json`.
  */
 import { existsSync } from "node:fs";
-import { resolve } from "node:path";
 import { createInterface } from "node:readline";
 import type { ChildProcess } from "node:child_process";
 import { FRAME_MS, type Command, type Replay } from "@scm-js/replay";
 import { ensureEngine, findGameCopy, runnerFor, startRunner } from "./engine";
 import { atExit } from "./lifecycle";
-import type { Input } from "./files";
+import { fileOnDisk, STDIO, type Input } from "./files";
 import { t, translate } from "./i18n";
 import { CliError, columns, dot, duration, gameText, mark, num, pc, truecolor, unicode, visible } from "./ui";
 import { debug, plainReason, plainRunnerError } from "./runnerwords";
@@ -372,14 +371,14 @@ class Runner {
  * free, for a pipe) and the picture drawn as it goes. Resolves when the replay ends or a key stops it.
  */
 export async function watchReplay(input: Input, replay: Replay, o: WatchOptions = {}): Promise<WatchOutcome> {
-  if (!existsSync(input.path)) throw new CliError(t("No file {path}", { path: input.path }), null, 2);
+  if (!input.link && input.path !== STDIO && !existsSync(input.path)) throw new CliError(t("No file {path}", { path: input.path }), null, 2);
   const out = o.out ?? ((text: string) => process.stdout.write(text));
   const tty = o.tty ?? !!process.stdout.isTTY;
   const game = findGameCopy(o.starcraft);
   const engine = await ensureEngine(o.engine, undefined, (l) => out(l + "\n"));
   const runner = runnerFor(engine, "replay");
   const paced = tty && !o.json;
-  const args = [resolve(input.path), "--engine", engine.dir, "--starcraft", game.folder];
+  const args = [fileOnDisk(input, "scmjs-watch-"), "--engine", engine.dir, "--starcraft", game.folder];
   if (o.from) args.push("--from", String(o.from));
   // (a line each minute: the runner is asked every half second of the game, and the first frame whose clock reads the
   // next whole minute is said; 0: none at all, the runner asked past the end)

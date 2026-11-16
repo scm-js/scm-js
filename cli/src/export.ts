@@ -23,7 +23,7 @@ import { START_LOCATION } from "../../src/data/units";
 import { findBrowser, launchBrowser, NO_BROWSER, type Launched } from "./browser";
 import { actionTrack, followTrack, type Sample, type Track } from "./camera";
 import { cacheRoot, ensureEngine, findGameCopy, PLAY_URL, runnerFor, startRunner } from "./engine";
-import type { Input } from "./files";
+import { besideInput, type Input } from "./files";
 import { openGameFiles, type GameFiles } from "./gamefiles";
 import { GifWriter } from "./gif";
 import { parseClock } from "./watch";
@@ -147,7 +147,7 @@ export function rowsFor(height: number): number {
 
 /** The clip from the options and the replay; nothing is looked for on the computer yet. */
 export function planClip(input: Input, rep: Replay, o: ExportOptions, map: { width: number; height: number }): ClipPlan {
-  const out = resolve(o.out ?? join(input.path === "-" ? "." : dirname(input.path), `${basename(input.name, extname(input.name)) || "replay"}.webm`));
+  const out = resolve(o.out ?? join(dirname(besideInput(input)), `${basename(input.name, extname(input.name)) || "replay"}.webm`));
   const format = clipFormat(out);
   const d = format === "gif" ? DEFAULTS.gif : DEFAULTS.video;
   const asked = o.resolution ?? o.size;
@@ -367,7 +367,7 @@ export async function gameMoments(input: Input, from: number, to: number, o: { p
   const runner = runnerFor(engine, "replay");
   const copy = findGameCopy(o.starcraft);
   let file = resolve(input.path), work: string | null = null;
-  if (!existsSync(file)) { work = tempFolder("scmjs-export-"); file = join(work, "replay.rep"); writeFileSync(file, input.bytes); }
+  if (input.link || !existsSync(file)) { work = tempFolder("scmjs-export-"); file = join(work, "replay.rep"); writeFileSync(file, input.bytes); }
   try {
     const child = startRunner(runner, [file, "--engine", engine.dir, "--starcraft", copy.folder, "--every", String(SAMPLE_EVERY), "--from", String(Math.max(0, from)), "--to", String(to)]);
     let said = "";

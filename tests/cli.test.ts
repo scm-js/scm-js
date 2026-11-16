@@ -285,7 +285,7 @@ describe("scmjs: the overview", () => {
     // A noun with more verbs than fit beside its description shows the first few and an ellipsis; its own help has them all.
     expect(lines.some((l) => /^ {2}map info\|check\|open\|(\w+\|)*…/.test(l))).toBe(true);
     // The hidden commands are named on the last group's heading line, not given rows of their own.
-    expect(lines.filter((l) => l.includes("completion"))).toEqual(["This tool:                    also about, completion, login, logout, lsp"]);
+    expect(lines.filter((l) => l.includes("completion"))).toEqual(["This tool:                    also about, completion, init, login, logout, lsp"]);
     expect(lines.some((l) => l.includes("scmjs 0.0.0-dev"))).toBe(true);
     expect(lines.at(-1)).toBe("Options: -v, --version   --no-color   --lang <code>   -h, --help");
     expect(lines.length, "a line left for the prompt").toBeLessThanOrEqual(23);

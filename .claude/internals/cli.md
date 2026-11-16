@@ -3576,8 +3576,15 @@ encoding only, and `map dump` to read the rest. 46 tools now.
   `readSwitchNames` (the API has no read for them outside a transaction).
 - **The docs test** reads `useDefault` as a hook name (`use[A-Z]\w+`); it joined the two bot-interface names in
   `tests/docs.test.ts`'s list rather than the field being renamed, since the plugin API and plugin-ai call it that.
-- The tool list is 78.8 KB for 46 tools (was 69.0); `map_set` 9.2 KB. Getting large: the `starcraft` argument's
-  description is repeated on a dozen tools, and the area arguments on five.
+- The tool list was 78.8 KB for 46 tools (69.0 before settings); `map_set` 9.2 KB. With #281's eight account tools
+  merged in it is 54 tools and 90.2 KB. **Where the weight is, measured** (the SDK client's `tools/list`,
+  2026-11-16): descriptions 33.5 KB, schemas 47.4 KB; by family `map_*` 57.3 KB, `mod_*` 11.8, the account tools
+  11.4, `editor_*` 5.3, `replay_*` 2.3. The guess that repeated argument descriptions were the fat was wrong:
+  one `starcraftArg` said briefly on the six tools that had the long sentence, and a shorter `path`, took it to
+  88.9 KB (1.5 %). `"$schema"` is 2.8 KB (54 copies, the SDK's), numeric bounds about 1 KB a large tool. What is
+  left is description that carries instruction (`map_edit` 4.5 KB) and schema that carries shape, so shaving will
+  not move it; a server started with a subset of the families (`scmjs mcp --tools map,editor`) would, and is
+  proposed, not built.
 - Tests: `tests/cli-settings.test.ts` (11; two need a copy of the game): the listing and one row by name, the
   shape and `needsTables`, every kind of setting written and read back, names checked first, a number refused
   without tables, the commands (`--dry-run`, with `--name`, `--json`, not JSON, nothing to set), the two tools

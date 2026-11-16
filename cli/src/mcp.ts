@@ -72,7 +72,7 @@ import { CliError, gameText, plural, size, visible } from "./ui";
 /** Where a tool's words go while the server runs: standard error, since standard output is the protocol. */
 export const STDERR = (line: string) => process.stderr.write(`${line}\n`);
 
-const path = z.string().describe("the map file: .scm, .scx or .chk, a path on this computer");
+const path = z.string().describe("the map file: .scm, .scx or .chk");
 const out = z.string().optional().describe("write the result to this file instead of over the map");
 
 /** The result as the model reads it: text lines (without colour), and the command's JSON shape beside them. */
@@ -248,7 +248,8 @@ export function createMcpServer(options: McpOptions = {}): { server: McpServer; 
   const toolError = (server as unknown as { createToolError: (text: string) => CallToolResult }).createToolError.bind(server);
   (server as unknown as { createToolError: (text: string) => CallToolResult }).createToolError = (text) => toolError(argumentError(text));
 
-  const starcraftArg = z.string().optional().describe("the folder of the person's StarCraft installation, when doctor did not find one in the usual places");
+  /** The copy of the game, named: the same argument on every tool that reads one, so said briefly. */
+  const starcraftArg = z.string().optional().describe("the person's StarCraft folder, when doctor found none");
 
   reg("map_info", {
     title: "What a map holds",
@@ -605,7 +606,7 @@ export function createMcpServer(options: McpOptions = {}): { server: McpServer; 
     replay: z.string().optional().describe("play a replay's game instead (the command's --replay): its players' commands, on its own map or on `path`"),
     order: z.boolean().optional().describe("with `replay`, list every firing in the order the game ran it"),
     seed: z.number().int().min(0).optional().describe("the game's seed, 1 by default; the same seed and map give the same run"),
-    starcraft: z.string().optional().describe("the folder of the person's StarCraft installation, when doctor did not find one in the usual places"),
+    starcraft: starcraftArg,
     all: z.boolean().optional().describe("list every trigger; a long list is cut otherwise (the data has them all)"),
     mod: z.string().optional().describe("lay a mod over the game (the command's --mod): a mod folder, an .mpq, a mod's .exe or .zip; needs a play page whose engine takes a mod"),
   });
@@ -680,7 +681,7 @@ export function createMcpServer(options: McpOptions = {}): { server: McpServer; 
       tests: z.boolean().optional().describe("count the games of the map's tests (<map>.tests.json beside it) too"),
       anyMap: z.boolean().optional().describe("take replays played on another map too (the command's --any-map)"),
       force: z.boolean().optional().describe("the same as anyMap, its older name"),
-      starcraft: z.string().optional().describe("the folder of the person's StarCraft installation, when doctor did not find one in the usual places"),
+      starcraft: starcraftArg,
       all: z.boolean().optional().describe("list every trigger, those no player in the games owned too"),
     },
     annotations: { readOnlyHint: true },
@@ -703,7 +704,7 @@ export function createMcpServer(options: McpOptions = {}): { server: McpServer; 
       games: z.number().int().min(1).max(50).optional().describe("rounds, a seed each: 8 by default"),
       frames: z.number().int().min(1000).max(50000).optional().describe("stop a game nobody has won after this many frames, 30,000 by default"),
       parallel: z.number().int().min(1).max(8).optional().describe("games at once"),
-      starcraft: z.string().optional().describe("the folder of the person's StarCraft installation, when doctor did not find one in the usual places"),
+      starcraft: starcraftArg,
     },
     annotations: { readOnlyHint: true },
   }, tool(async (a) => {
@@ -869,7 +870,7 @@ export function createMcpServer(options: McpOptions = {}): { server: McpServer; 
       scale: z.number().int().min(1).max(8).optional().describe("pixels a tile: 1, 2, 4 or 8 (4 by default)"),
       marks: z.boolean().optional().describe("units, resources and start locations over the terrain (the default); false for the terrain alone"),
       units: z.boolean().optional().describe("the command's --no-units as units: false; the same as marks"),
-      starcraft: z.string().optional().describe("the folder of the person's StarCraft installation, when doctor did not find one in the usual places"),
+      starcraft: starcraftArg,
     },
     annotations: { readOnlyHint: true },
   }, tool(async ({ path: file, scale, marks: drawMarks, units, starcraft }) => {
@@ -894,7 +895,7 @@ export function createMcpServer(options: McpOptions = {}): { server: McpServer; 
       all: z.boolean().optional().describe("every pair of starts and every base in the text, not only the shortest and longest pair on a map of five starts or more"),
       picture: z.boolean().optional().describe("also return the map as a PNG with the walks, naturals and narrow points drawn on it"),
       scale: z.number().int().min(1).max(8).optional().describe("the picture's pixels a tile: 1, 2, 4 or 8 (4 by default)"),
-      starcraft: z.string().optional().describe("the folder of the person's StarCraft installation, when doctor did not find one in the usual places"),
+      starcraft: starcraftArg,
     },
     annotations: { readOnlyHint: true },
   }, tool(async ({ path: file, all, picture, scale, starcraft }) => {

@@ -1,8 +1,9 @@
 /**
  * A stand-in of the scmjs.dev server's library routes (ai-server's maps, replays and rooms routes, the parts
- * `scmjs library` and links as input call), on the loopback address with what it keeps in memory. A session is
- * `Bearer sess-ok`; the public link routes take none. `tests/cli-library.test.ts` uses it, and it can be run by
- * itself (`node tests/support/libraryServer.ts <map> <replay>`) to drive the built command by hand.
+ * `scmjs library`, links as input and the MCP account tools call, uploads included), on the loopback address with
+ * what it keeps in memory. A session is `Bearer sess-ok`; the public link routes take none. `tests/cli-library.test.ts`
+ * and `tests/cli-mcp-account.test.ts` use it, and it can be run by itself (`node tests/support/libraryServer.ts <map>
+ * <replay>`) to drive the built command by hand.
  */
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
@@ -72,10 +73,11 @@ export async function startStandIn(data: { maps: StandInMap[]; replays: StandInR
   self.server = createServer((req, res) => {
     const url = new URL(req.url ?? "/", "http://x");
     const auth = req.headers.authorization ?? null;
-    let raw = "";
-    req.setEncoding("utf8");
-    req.on("data", (c: string) => { raw += c; });
-    req.on("end", () => {
+    const chunks: Buffer[] = [];
+    req.on("data", (c: Buffer) => { chunks.push(c); });
+    req.on("end", async () => {
+      const buf = Buffer.concat(chunks);
+      const raw = buf.toString("utf8");
       const route = `${req.method} ${url.pathname}`;
       self.seen.push({ route, auth });
       const send = (status: number, v: unknown) => { res.writeHead(status, { "content-type": "application/json" }); res.end(JSON.stringify(v)); };
@@ -104,7 +106,43 @@ export async function startStandIn(data: { maps: StandInMap[]; replays: StandInR
         return send(200, { replay: { ...facts, token: l.token } });
       }
       if (auth !== "Bearer sess-ok") return send(401, { error: { code: "unauthorized", message: "Sign in before using map storage." } });
+      if (route === "GET /v1/account") return send(200, { account: { kind: "account", name: "Ann", role: "free", providers: ["discord"], storage: storage() } });
       if (route === "GET /v1/storage") return send(200, { storage: storage() });
+      // Uploads (`map share`, `replay share`, the MCP `share`): the multipart form as ai-server reads it.
+      const form = async () => {
+        const f = await new Request("http://x", { method: "POST", headers: { "content-type": req.headers["content-type"] ?? "" }, body: buf }).formData();
+        const file = f.get("file") as File;
+        return { f, bytes: new Uint8Array(await file.arrayBuffer()) };
+      };
+      if (route === "POST /v1/maps" || (p[1] === "maps" && p[3] === "revisions" && p.length === 4 && req.method === "POST")) {
+        const { f, bytes } = await form();
+        const fileName = String(f.get("fileName"));
+        let m = self.maps.find((x) => x.id === p[2]);
+        if (route === "POST /v1/maps") {
+          m = { id: `0000000${self.maps.length + 1}-aaaa-4bbb-8ccc-dddddddddddd`, name: String(f.get("name") ?? fileName), description: "", createdAt: T0, updatedAt: T0, revisions: [], links: [] };
+          self.maps.push(m);
+        }
+        if (!m) return notFound("There is no map with that id on this account.");
+        const number = m.revisions.reduce((n, r) => Math.max(n, r.number), 0) + 1;
+        m.revisions.push({ number, note: String(f.get("note") ?? ""), fileName, sizeBytes: bytes.length, createdAt: T0, bytes, meta: JSON.parse(String(f.get("meta") ?? "{}")) as Record<string, unknown> });
+        return send(201, { map: detail(m), storage: storage() });
+      }
+      if (p[1] === "maps" && p[3] === "links" && p.length === 4 && req.method === "POST") {
+        const m = self.maps.find((x) => x.id === p[2]);
+        if (!m) return notFound("There is no map with that id on this account.");
+        const l = { token: `maplink${String(self.maps.flatMap((x) => x.links).length + 1).padStart(4, "0")}`, revision: (body().revision as number | null) ?? null, opens: 0, createdAt: T0 };
+        m.links.push(l);
+        return send(201, { link: l, map: detail(m) });
+      }
+      if (route === "POST /v1/replays") {
+        const { f, bytes } = await form();
+        const sha = createHash("sha256").update(bytes).digest("hex");
+        const had = self.replays.find((r) => createHash("sha256").update(r.bytes).digest("hex") === sha);
+        const r: StandInReplay = had ?? { id: `replay-${sha.slice(0, 8)}`, fileName: String(f.get("fileName")), note: String(f.get("note") ?? ""), bytes, uploadedAt: T0, mapName: "Stand-in", matchup: "", players: [], durationSec: 600, gameTypeName: "Melee", playedAt: null, links: [] };
+        if (!had) self.replays.push(r);
+        if (f.get("link") === "1" && !r.links.length) r.links.push({ token: `replaylink${String(self.replays.length).padStart(4, "0")}`, opens: 0, createdAt: T0 });
+        return send(had ? 200 : 201, { replay: replayView(r), storage: storage(), ...(f.get("link") === "1" ? { link: r.links[0] } : {}), ...(had ? { existing: true } : {}) });
+      }
       if (route === "GET /v1/maps") return send(200, { maps: [...self.maps].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).map(summary), storage: storage() });
       if (route === "GET /v1/replays") return send(200, { replays: self.replays.map(replayView), storage: storage() });
       if (route === "GET /v1/rooms/mine") return send(200, { rooms: self.rooms.map(roomView), limit: 3 });

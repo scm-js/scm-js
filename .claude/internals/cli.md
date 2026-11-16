@@ -1,6 +1,6 @@
 # The `scmjs` command line
 
-`cli/` is the npm package **`@scm-js/cli`** (its command is `scmjs`): `scmjs about | doctor | info | mcp | lsp | map info|check|open|new|generate|dump|find|fetch|set|resize|units|locations|edit|triggers|strings|sounds|diff|log|blame|merge|build|run|unpack|pack|trace|cost|rush|balance|test [record]|preview|heatmap|coverage|optimize|analyze |
+`cli/` is the npm package **`@scm-js/cli`** (its command is `scmjs`): `scmjs about | doctor | info | share | mcp | lsp | map info|check|open|new|generate|dump|find|fetch|set|resize|units|locations|edit|triggers|strings|sounds|diff|log|blame|merge|build|run|unpack|pack|trace|cost|rush|balance|test [record]|preview|heatmap|coverage|optimize|analyze |
 replay info|map|open|watch|export|share | mod info|unpack|pack|check|diff|new|build|play|test | plugin new|check|dev | bot new|init|build|update|run|ladder`, or `npx @scm-js/cli …`. npm refused the plain name `scmjs` on the first publish (2026-11-06,
 E403 "too similar to scss, sockjs"), so the user chose the scope beside @scm-js/replay and @scm-js/plugin-api. The reader's page is `docs/cli.md`. The shape was the user's (2026-11-05): one command, a noun for
 each kind of thing (`map`, `replay`, `plugin`, `bot`), "an impressive UX tool … not overly engineered".
@@ -1396,7 +1396,7 @@ Phase one of "share links from files on disk". Server half: ai-server 0.36.0 (`P
 - One request: `POST /v1/replays` multipart `file` + `fileName` + `note?` + `picture?` + `link=1`, which answers
   the stored replay's facts (`ReplayView`: map, players, matchup, frames, game type, when) **and its first link**
   (ai-server #18 made `link=1` for this); the same bytes again answer 200 `existing: true` with the link that is
-  there. `linkTo("replay", token)` → `https://scmjs.dev/editor/replay/<token>` (the editor's scmjs.dev plugin v1.40.0
+  there. `linkTo("replay", token)` → `https://scmjs.dev/editor/replay/<token>` (since 2026-11-16 `scmjs.dev/replay/<token>`, below; the editor's scmjs.dev plugin v1.40.0
   opens it in Aftermath by a synthetic drop; the Worker's card from `/v1/previews/replay/:token`). Limits are the
   server's (8 MB a replay, 500 replays, the account's storage cap): their messages are printed as they come.
 - **The map's picture for the card** is drawn here, not on the server (it has no game graphics): `parseScenario(rep.chk)`
@@ -1404,6 +1404,63 @@ Phase one of "share links from files on disk". Server half: ai-server 0.36.0 (`P
   of the game, `--no-picture` to skip. A replay from `-` is named `replay.rep`.
 - `tests/cli-replay-share.test.ts` (3) against a stand-in server parsing the multipart with `Request.formData()`.
   Not run against the real server here (ai-server #18 was open); the agent that built #18 drove the editor end.
+
+## Moment links, `scmjs share`, `--copy`, `--no-link` (`replayshare.ts`, `sharefiles.ts`, `clipboard.ts`) — 2026-11-16
+
+One slice of the "account features from the command line" round (parallel agents: library, replay sync, device
+sign-in). The link forms are the shared spec's (`~/.cache/scmjs-redesign/share-spec.md`), live on scmjs.dev.
+
+- **Replay links are `https://scmjs.dev/replay/<token>` now** (`linkTo("replay")` → `SITE`), not `/editor/replay/`:
+  the front-door worker (`cloudflare-link-previews` `replayPlace`) 302s it on to `/editor/replay/<token>` with the
+  query kept, or to `/play/?replay=<token>&…` when `play` is among the parameters (`URLSearchParams.has`, so a bare
+  `play` counts). Map and share links are unchanged (`WEB_EDITOR`). `SCMJS_SERVER` still adds `?scmjs-server=`, and
+  the moment goes after it (`&t=…`); **the play page ignores `scmjs-server`** (scm-sim `web/account.ts`
+  `accountServer()` is the browser's stored setting), so a `--play` link made against a local server reaches it only
+  where the play page is set to it — said in docs/cli.md's Settings row, not refused.
+- **`--at <time>`**: `parseMomentTime` — `m:ss`, `h:mm:ss`, whole seconds (decimals refused, unlike the spec's reader,
+  to keep `t` a clock). `frame = ceil(s*1000/42)` (the spec's rule since 2026-11-15); refused past `rep.header.frames`
+  with the length as `floor(frames*42/1000)` seconds (10:08 for 14,482 frames; `--at 10:08` → frame 14,477 is fine).
+  Written as `duration(seconds*1000)` (`402` → `6:42`); `0` writes no `t`.
+- **`--play [player]`** (optional value): a **slot number** (`ReplayPlayer.slot`, the lobby slot — what Aftermath's
+  Share and Play From Here hand over and the play card matches `p.slot` against; 0 and 2 in a usual 1v1) or a name
+  (case aside, whole, or the start of exactly one). Players offered are types 1, 2, 5, 6 (the play page's
+  `isPlayingType`), computers included. **Not** `--follow`'s "number as replay info lists them, from 1": the number
+  typed is the number in the link; the refusal lists `slot name` pairs. No value → bare `play` (the person chooses
+  on the card); without `--at` → from the start (the card's `seconds === null` → frame 0). Checked before any
+  request (`replayMoment`), so a mistake sends nothing.
+- **One link per replay**: the server answers the same bytes with `existing: true` and its first link (`link=1`), so a
+  moment is only the query; `withMoment` appends after any query. The outcome gains `moment` (`t`, `seconds`,
+  `frame`, `play`: `{slot,name}` | `"choose"` | null); the dim third line says what the link does.
+- **`--no-link`**: `keepReplay` (upload without `link=1`) and `keepMap` (the same `store()` as `shareMap`, returning
+  before `POST /v1/maps/:id/links`); both return the outcome with `link: null` (`ReplayKeepOutcome`,
+  `MapKeepOutcome`) so `shareReplay`/`shareMap` keep `link: string` — the replay sync agent may call `shareReplay`.
+  Output: the facts line first (no link to put there) and "Not linked: …". Refused with `--edit`, `--keep`, `--at`,
+  `--play`, `--copy`, `--qr` (`checkShareOptions`); `shareMap({link:false})`/`keepMap({edit})` refuse too.
+- **`scmjs share <files...>`**: every input read and `expectKind(map|replay)` first (a bot or unreadable file stops it
+  before anything is sent), then `checkShareOptions` (map-only `--name --edit --keep --new`, replay-only `--at
+  --play` refused only when **no** file is of that kind; `--name` with two maps refused), then each file in turn
+  through `shareFile` → `SharedFile` `{ file, kind, link, map | replay }` (not flattened: the map outcome has its
+  own `kind` copy/edit). A failing file is `fail()`ed and the rest go on, exit = max. JSON: one object or a list.
+  `map share --json` / `replay share --json` are unchanged (the outcome itself).
+- **`--copy`** (`clipboard.ts`): `clip.exe` on win32 and WSL (`WSL_DISTRO_NAME`/`WSL_INTEROP` or `/proc/version`; then
+  `/mnt/c/Windows/System32/clip.exe` for a PATH without Windows' folders), `pbcopy`, `wl-copy` under
+  `WAYLAND_DISPLAY`, `xclip -selection clipboard`, `xsel --clipboard --input`. First that exits 0 wins; ENOENT →
+  next; none → `▲ Not copied: …` on stderr, exit unchanged. **Trap:** xclip/wl-copy fork a process that keeps the
+  clipboard and the stderr pipe — wait on `exit`, not `close`, then destroy the pipe and `unref`, or the command
+  hangs. Tests use a `node -e` stand-in tool; nothing in the suite touches the real clipboard (an in-process
+  `--copy` on WSL would reach clip.exe by its full path even with PATH emptied — that test was dropped).
+- **Overview**: `share <files...>` took a row under "Maps and replays:"; the 23 lines held by hiding **`init`**
+  (it moves to the "also …" list: `also about, completion, init, login, logout, lsp` fits 80 at column 30; in
+  Korean the "also" list never fitted, so init is simply not on the Korean overview). This reverses 6fb3ba4's "init
+  is a row"; `scmjs map --help` and docs name init. `tests/cli-init.test.ts` now asserts it hidden.
+  `docs/images/cli-overview.webp` still shows the init row (not regenerated).
+- Checked against a throwaway ai-server (origin/main extracted to the scratchpad, PGlite, fake Discord, a session
+  file made by the server itself, `SCMJS_SERVER=http://127.0.0.1:<port>`): every case above but `--edit` (no rooms
+  set up there; the stand-in test has it), the copy read back with
+  PowerShell's Get-Clipboard. Not run against api.scmjs.dev. Not opened in a browser (the forms are the spec's and
+  the worker's tests'). Tests: `tests/cli-share-files.test.ts` (8), additions to `cli-replay-share` and `cli-share`.
+- For the MCP agent: the data functions are `shareMap`/`keepMap`, `shareReplay`/`keepReplay`, `shareFile`,
+  `replayMoment`/`withMoment`, `checkShareOptions`, `copyToClipboard` — none prints.
 
 ## A map linked to the editor (`cli/src/link.ts`, `src/services/editorLink.ts`, `openLinked` in `useOpenerHandoff.ts`) — 2026-11-16
 

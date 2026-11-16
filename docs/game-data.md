@@ -199,15 +199,18 @@ some of them replaced, such as its own `units.dat`, graphics, sounds or `stat_tx
 Remastered installation added beside a classic copy is a data set too.
 
 To add one, open Help ▸ Game Data…, choose **Add a data set…**, give it a name and pick a
-folder. The folder holds the mod's own files, and either the game's two archives, which
-the mod's files are laid over, or nothing else, in which case they are laid over the copy
-you are drawing from now:
+folder. The folder holds the mod's own files, and either the game's archives, which the
+mod's files are laid over, or nothing else, in which case they are laid over the copy you
+are drawing from now. A folder with `StarDat.mpq` and `BrooDat.mpq` but no `patch_rt.mpq`
+is laid over the game's own copy instead, when that has the patch: the two alone hold the
+tables from before the game's patches, and every table the mod does not replace would be
+those. With no such copy the data set is made over the two, and the editor says so:
 
 ```
 MyMod/
   StarDat.mpq          the game's archives (or leave them out: the copy in use is the base)
   BrooDat.mpq
-  patch_rt.mpq         applied over the two, if present
+  patch_rt.mpq         applied over the two
   mymod.mpq            a mod's own archive
   My Mod.exe           a mod's self-executing loader: its archive is read, nothing is run
   plugins/gptp.qdp     its plugins, libraries and FireGraft project: never run, part of its hash

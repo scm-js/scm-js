@@ -32,6 +32,18 @@
  * `SCM_MOD_MAPS`) a folder of maps made for it, which Learn from Maps… reads. They were
  * taken with Cosmonarchy's Badlands; without the options that scene is skipped.
  *
+ * The replay pictures need what scmjs.dev has: `--base` an editor served under `/editor/`
+ * with scm-sim's play page beside it at `/play/` (the plain dev server has no play page,
+ * so no Replay view and no analysis), `--starcraft` (or `SCMJS_STARCRAFT`) a StarCraft
+ * 1.16.1 folder (StarDat, BrooDat and patch_rt.mpq: without patch_rt the analysis parts
+ * from the replay a few minutes in), installed through the first-use Game Data dialog as a
+ * user would, and `--replays` a folder of replays of one map. They were taken with six games
+ * on Crescent Moon from `scmjs bot ladder` (seeds 1–3), Starter as protoss (scmbot's
+ * `examples/starter/starter.mjs`) against Vanta as terran (scm-sim's
+ * `src/bot/samples/vanta.ts`, its type import pointed at `@scm-js/bot`); `--replay` names
+ * the one in front and `--replay-at` the moment shown. Without the options the scene is
+ * skipped.
+ *
  * Coordinates are for a 1400×900 window with the default panel widths: the map area is
  * x 292..1150, y 85..870, which is why the strokes below are written against (292, 85).
  *
@@ -41,8 +53,8 @@
  * recipe answers are canned for the fixture maps. What those pictures show is the
  * editor's chrome around example content, not a model's output.
  */
-import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { basename, isAbsolute, join, resolve } from "node:path";
 import { startMock } from "./lib/guide-scmjs-mock.mjs";
 
 const root = resolve(import.meta.dirname, "..");
@@ -68,6 +80,12 @@ const MOD = opt("--mod", process.env.SCM_MOD_DIR ?? "");
 const MOD_MAPS = opt("--mod-maps", process.env.SCM_MOD_MAPS ?? "");
 /** The data set's name, which the Tile tab's filter shows ("Added by …"). */
 const MOD_NAME = opt("--mod-name", process.env.SCM_MOD_NAME ?? "Cosmonarchy");
+/** A StarCraft 1.16.1 folder and a folder of replays of one map, for the replay scene. */
+const STARCRAFT = opt("--starcraft", process.env.SCMJS_STARCRAFT ?? "");
+const REPLAYS = opt("--replays", "");
+/** The replay in front (a file in `--replays`), and the moment of it the pictures show. */
+const REPLAY = opt("--replay", "vanta-vs-starter_crescent-moon_TvP_seed2.rep");
+const REPLAY_AT = opt("--replay-at", "10:15");
 
 const { chromium } = await load("playwright");
 const sharp = (await load("sharp")).default;
@@ -536,6 +554,54 @@ const SCENES = [
     await p.menu("Triggers", /^Mission Briefing/); await p.wait(1200);
     await p.page.locator(".dlg .trig-list .item").nth(0).click().catch(() => {}); await p.wait(600);
     await p.dialog("briefing");
+  }),
+
+  scene("replays", "", async (p) => {
+    if (!STARCRAFT || !REPLAYS) { console.log("replays: skipped — no --starcraft <1.16.1 folder> --replays <folder>"); return; }
+    // As on scmjs.dev, where nothing is bundled: the first-use Game Data dialog, given the
+    // game's folder. The badge in the menu bar then says what the browser keeps.
+    const editorPath = new URL(BASE).pathname.replace(/\/$/, "");
+    await p.page.route(new RegExp(`${editorPath}/(tileset|unit)/manifest\\.json(\\?.*)?$`), (route) => route.abort());
+    await p.goto("");
+    const [chooser] = await Promise.all([p.page.waitForEvent("filechooser"), p.page.locator(".dlg button", { hasText: "Choose the StarCraft folder" }).click()]);
+    await chooser.setFiles(STARCRAFT);
+    await p.page.locator(".toast", { hasText: /ready/i }).waitFor({ timeout: 300_000 });
+    await p.goto("");
+
+    // Every replay of the map, the one in front last; each is analysed in the background.
+    const files = readdirSync(REPLAYS).filter((f) => f.endsWith(".rep") && f !== REPLAY).sort();
+    for (const f of [...files, REPLAY]) await p.drop(join(REPLAYS, f));
+    await p.page.locator(".afm", { hasText: / won\b|cannot be told/ }).waitFor({ timeout: 600_000 });
+    await p.page.locator(".afm-tl button", { hasText: `Map stats · ${files.length + 1}` }).waitFor({ timeout: 600_000 });
+    await p.wait(3000);
+
+    // The moment: a press on the timeline's graph, which spans the whole game.
+    const seconds = (s) => s.split(":").reduce((a, b) => a * 60 + Number(b), 0);
+    const length = seconds((await p.page.locator(".afm-time").innerText()).split(" / ")[1]);
+    const graph = await p.page.locator(".afm-tl canvas").last().boundingBox();
+    await p.page.mouse.click(graph.x + graph.width * (seconds(REPLAY_AT) / length), graph.y + graph.height * 0.5);
+    await p.page.mouse.move(1280, 620); // off the timeline, whose hover card would cover the map
+    await p.wait(8000);
+    await p.quiet();
+    await p.take("replay-view");
+
+    await p.page.locator("button", { hasText: /^Map$/ }).first().click(); await p.wait(3000);
+    await p.quiet();
+    await p.take("replay-map");
+
+    await p.page.locator(".afm-tl button", { hasText: /^Analysis$/ }).click(); await p.wait(5000);
+    const win = p.page.locator(".plugin-panel[aria-label='Replay Analysis']");
+    const box = await win.boundingBox();
+    await p.take("replay-analysis", { x: box.x - 12, y: box.y - 12, width: box.width + 24, height: box.height + 24 }, { lossless: false });
+    await win.locator("button[aria-label='Close']").click(); await p.wait(500);
+
+    // Map stats: every game at once, the whole map in view.
+    await p.page.locator(".afm-tl button", { hasText: /^Map stats/ }).click(); await p.wait(4000);
+    await p.menu("View", /^Zoom to Fit/); await p.wait(3000);
+    await p.page.mouse.move(1280, 620);
+    await p.page.evaluate(() => document.activeElement?.blur());
+    await p.quiet();
+    await p.take("replay-map-stats");
   }),
 
   /* ── scmjs.dev: the account, the maps, the AI ─────────────────────────────────── */
@@ -1134,14 +1200,14 @@ function driver(page, mock, other) {
       await p.take(name, { x, y, width: Math.min(1400 - x, box.width + 2 * pad), height: Math.min(900 - y, box.height + 2 * pad) }, { lossless: true });
     },
     async drop(file) {
-      const path = join(FIXTURES, file);
+      const path = isAbsolute(file) ? file : join(FIXTURES, file);
       if (!existsSync(path)) throw new Error(`fixture map missing: ${path}`);
       const b64 = readFileSync(path).toString("base64");
       const dt = await page.evaluateHandle(({ b64, name }) => {
         const bin = atob(b64); const arr = new Uint8Array(bin.length);
         for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
         const dt = new DataTransfer(); dt.items.add(new File([arr], name)); return dt;
-      }, { b64, name: file });
+      }, { b64, name: basename(file) });
       await page.dispatchEvent(".app", "drop", { dataTransfer: dt });
       await wait(3000);
     },

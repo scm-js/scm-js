@@ -1726,6 +1726,8 @@ the chat and the rest. On the map, each player's buildings and orders are drawn 
 colour as the timeline moves. The [Aftermath
 README](https://github.com/scm-js/plugin-aftermath#use) describes every part.
 
+![Six replays of Crescent Moon open, each in a tab with an eye. The one in front shows its Map at ten minutes: buildings outlined in their player's colour, a fight boxed and labelled Turning point, the timeline underneath with the fights marked in red over a graph of who was ahead, and Aftermath's column on the right](images/replay-map.webp)
+
 ### The Replay view
 
 In the editor at scmjs.dev, a replay's tab opens on the **Replay**: the game itself
@@ -1733,6 +1735,8 @@ replaying in the map's place, from the game's files you installed. Blizzard's ma
 download is enough for this. A switch in the top-left corner goes between the Replay and
 the **Map**, the overhead view with Aftermath's marks and heat maps. The timeline drives
 whichever is shown.
+
+![The same moment on the Replay: the game's own picture of the fight, with the Map and Replay switch in the top-left corner and the Vision menu under it in the timeline](images/replay-view.webp)
 
 While the Replay is shown, the editor keeps what still makes sense there:
 
@@ -1760,9 +1764,13 @@ lost, the fights and the key moments, and a camera (*Spectate*) that follows the
 **View ▸ Replay Analysis** opens a larger window with each player's economy and tech over
 the game.
 
+![The Replay Analysis window on its Economy tab: each player's income a minute, what they left unspent and how long they were supply blocked, over a chart of income through the game](images/replay-analysis.webp)
+
 Open several replays of one map and **Map stats** takes them together: how each start
 location did, which bases were taken and when, where the fights happened, and the ground
 no unit ever entered.
+
+![Map stats over six games of Crescent Moon, the whole map in view: a heat map of where units were lost along the paths between the bases, circles where fights happened with how many, and each start and base marked with how often it won or was taken](images/replay-map-stats.webp)
 
 ### Play From Here
 

@@ -338,12 +338,13 @@ program carries its own).
 `map preview` draws a map with the game's graphics, `map analyze` reads which ground is
 walkable from the game's tilesets, and `map generate` lays its ground with them.
 `map terrain` and `map doodads` read a map's terrain and doodads from the tileset, and
-`map edit` paints terrain and places doodads with it. `map set --settings` fills in a
-unit's, upgrade's or technology's numbers from the game's tables. `map run` gives a plugin
-the game's data when a copy is there, and runs without when it is not. `map trace`,
-`map cost`, `map coverage`, `map rush`, `map test`, `map heatmap`, `map balance`,
-`replay watch`, `replay export`, `bot run` and `bot ladder` run the game itself. They need
-two things on your computer:
+`map edit` paints terrain and places doodads with it (on [a map linked to the
+editor](#keeping-a-map-linked-to-the-editor), with the editor's own game data instead).
+`map set --settings` fills in a unit's, upgrade's or technology's numbers from the game's
+tables. `map run` gives a plugin the game's data when a copy is there, and runs without
+when it is not. `map trace`, `map cost`, `map coverage`, `map rush`, `map test`,
+`map heatmap`, `map balance`, `replay watch`, `replay export`, `bot run` and `bot ladder`
+run the game itself. They need two things on your computer:
 
 - Your copy of StarCraft, Remastered or 1.16.1. It is found in the usual places; otherwise
   name its folder with `--starcraft <folder>` or the `SCMJS_STARCRAFT` setting. When
@@ -824,8 +825,14 @@ selection is cleared; the view stays where it is.
 - **Ending the link.** Close the map or its tab, close the small scmjs tab that opened
   beside it, or press Ctrl+C in the terminal. The map stays open in the editor.
 - **The small tab carries the messages** between the command and the editor. Keep it open.
+- **The editor's game data serves the commands too.** A command that paints terrain,
+  places doodads or sets a unit's numbers on a linked map reads the tileset and the tables
+  from the editor, so it lays the ground with what you are looking at, a mod's tileset
+  included, and needs no copy of StarCraft of its own. When the editor has no game data,
+  or `--starcraft` names a folder, your installation is used as for a file.
 - **Nothing leaves your computer.** The command listens on 127.0.0.1 only, and the editor
-  answers only the page that opened it, for the one map that page handed it.
+  answers only the page that opened it, for the one map that page handed it and the game's
+  tables a change to that map takes. It hands over no pictures of units and no sounds.
 - **The browser, not the app.** `--live` opens the editor in your browser even when the
   desktop app is installed, which does not link yet.
 - **An editor older than this command** opens the map as a copy, and the command says it

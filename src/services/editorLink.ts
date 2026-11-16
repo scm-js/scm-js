@@ -7,6 +7,11 @@
  * The link belongs to the document that came through it and reaches nothing else: every request is answered for
  * that map alone, and only while it is the map in front. Messages are plain objects over a `LinkPort` (the opener's
  * `postMessage`, in `useOpenerHandoff`); a request carries an id and is answered once, in either direction.
+ *
+ * One thing that is not the map's goes over it: the game's tables the command needs to change that map's terrain
+ * and unit settings as the editor would (`gamedata`, `gamefile`), read from the data set the editor is drawing
+ * with. The command then needs no installation of its own and lays a mod's ground with the mod's tileset. Only the
+ * files in `GAME_FILE` are answered: tables, never a unit's pictures or a sound.
  */
 import type { createStore } from "jotai";
 import { linkedDocumentAtom } from "../atoms/linkAtoms";
@@ -23,6 +28,9 @@ import { locationName } from "../editor/locations";
 import { openMapBytes } from "../editor/mapFile";
 import { DEFAULT_SAVE_OPTIONS, defaultSaveOptions, type SaveOptions } from "../editor/save";
 import { ensureTileset } from "../formats/tileset/load";
+import { gameDataSourceAtom } from "../atoms/gameDataAtoms";
+import { cleanStoredPath } from "../gamedata/paths";
+import { currentAssetSource, readFrom } from "../gamedata/source";
 import { t } from "../i18n";
 import { flashOnMap, viewApi } from "../plugins/host";
 import { DEFAULT_IMAGE_OPTIONS, exportMapImage } from "./mapImage";
@@ -58,6 +66,13 @@ export class LinkRefusal extends Error {
 
 
 const LINK = TRANSIENT;
+
+/**
+ * The game's files a command may ask for through a link, by stored path: what the plugin host loads to lay terrain
+ * and read unit tables (`plugins/headless.ts#loadGameCopy`) — a tileset's tables and megatiles, its doodad table,
+ * the shared names, the unit tables and their scripts, and the list of what the copy holds.
+ */
+export const GAME_FILE = /^(?:tileset\/[a-z]+\.(?:cv5|vf4|vr4|vx4|vx4ex|wpe|dddata\.bin)|tileset\/stat_txt\.tbl|arr\/[a-z_]+\.(?:dat|datex|txt|tbl)|rez\/[a-z_]+\.(?:tbl|txt)|scripts\/iscript\.bin|game\/tunit\.pcx|unit\/manifest\.json)$/;
 
 /** Whether a handle is a linked map's: it writes through the link, and means nothing once the page is gone. */
 export function isLinkHandle(handle: unknown): boolean {
@@ -264,6 +279,26 @@ export function createEditorLink(store: Store, port: LinkPort, name: string, sav
     return { result: { modified: store.get(mapModifiedAtom) } };
   }
 
+  /** The data set the editor is drawing with; null before one is resolved, which a map in front rules out. */
+  const gameSource = () => store.get(gameDataSourceAtom) ?? currentAssetSource();
+
+  /** What game data the editor has, so the command knows whether it can borrow it. */
+  function gamedata() {
+    front();
+    const source = gameSource();
+    return { result: { kind: source?.kind ?? "none", profile: source?.profile.id ?? null, name: source?.profile.name ?? null, hash: source?.stored?.hash ?? source?.reader?.hash ?? null } };
+  }
+
+  /** One of the game's tables (`GAME_FILE`) from the editor's data set, for the command's own plugin host. */
+  async function gamefile(params: Record<string, unknown>) {
+    front();
+    const path = typeof params.path === "string" ? cleanStoredPath(params.path) : "";
+    if (!GAME_FILE.test(path)) throw new LinkRefusal("failed", `The link carries the game's tables only, not ${path || "a file with no name"}.`);
+    const bytes = await readFrom(gameSource(), path);
+    // A copy of its own: the answer's buffer is handed over, and a data set in memory keeps its files.
+    return bytes ? { result: { found: true }, bytes: bytes.slice() } : { result: { found: false } };
+  }
+
   async function answer(m: LinkMessage): Promise<{ result?: unknown; bytes?: Uint8Array }> {
     const params = m.params ?? {};
     switch (m.method) {
@@ -274,6 +309,8 @@ export function createEditorLink(store: Store, port: LinkPort, name: string, sav
       case "show": return show(params);
       case "picture": return picture(params);
       case "save": return save();
+      case "gamedata": return gamedata();
+      case "gamefile": return gamefile(params);
       default: throw new LinkRefusal("unknown", `The editor does not know "${m.method}". It may be older than this scmjs.`);
     }
   }

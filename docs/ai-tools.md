@@ -123,6 +123,9 @@ The model can also use what is on your screen:
   locations it names selected.
 - **A picture.** `editor_picture` is the map as the editor draws it, with the editor's own
   game data, so the model needs no copy of StarCraft to look at the map.
+- **The editor's game data.** Terrain, doodads and a unit's numbers on a linked map are
+  laid with the tileset and tables the editor has, a mod's included, so `map_edit`,
+  `map_terrain`, `map_doodads` and `map_set` need no copy of StarCraft on a linked map.
 
 If you edit the map while a tool is working on it, the tool starts again from what the
 editor has now, and your edit is kept. The status bar shows **Linked** while the map is
@@ -248,9 +251,10 @@ go. [Painting terrain and placing doodads](cli.md#painting-terrain-and-placing-d
 has every field: shapes, patches placed by a seed, symmetry, scattering doodads over an
 area.
 
-These edits read the tileset from [your copy of the game](#the-tools-that-need-the-game).
-Painting does not move what stands on the ground, so ask the model to look at the result
-(`map_preview`, or `editor_picture` on a linked map) and to run `map_check`.
+These edits read the tileset from [your copy of the game](#the-tools-that-need-the-game),
+or from the editor when the map is [linked](#working-in-the-editor). Painting does not
+move what stands on the ground, so ask the model to look at the result (`map_preview`, or
+`editor_picture` on a linked map) and to run `map_check`.
 
 For a whole map to start from, `map_generate` writes a symmetric melee map from a seed:
 mains on high ground with a ramp each, naturals, free bases and a middle, walked and
@@ -484,13 +488,14 @@ copy of StarCraft.
 `map_cost`, `map_coverage` and `map_balance` need [your copy of the
 game](cli.md#commands-that-need-starcraft), and the ones that run it fetch the engine the
 first time. `map_edit` needs it for terrain, doodads, `snap` and `check`, and for nothing
-else; `map_set` needs it for a unit's, upgrade's or technology's numbers. `map_run` gives
-a script the game's data when a copy is there, and runs without when it is not: the
-terrain and doodad parts of the plugin API then do nothing and say so. `doctor` tells the
-model whether the game and the engine are there and what you would need to install, so it
-can tell you instead of failing. When the game is not in one of the usual places, the
-model can pass its folder as `starcraft`, or you can set `SCMJS_STARCRAFT` in the tool's
-MCP settings.
+else; `map_set` needs it for a unit's, upgrade's or technology's numbers. On a map linked
+to the editor these read the editor's game data and need no copy here. `map_run` gives a
+script the game's data when a copy is there, and runs without when it is not: the terrain
+and doodad parts of the plugin API then do nothing and say so. `doctor` tells the model
+whether the game and the engine are there and what you would need to install, so it can
+tell you instead of failing. When the game is not in one of the usual places, the model
+can pass its folder as `starcraft`, or you can set `SCMJS_STARCRAFT` in the tool's MCP
+settings.
 
 A trace or cost run takes a few seconds and plays at most ten minutes of game.
 `map_coverage` plays whole replays and `map_balance` whole games, so they take as long as

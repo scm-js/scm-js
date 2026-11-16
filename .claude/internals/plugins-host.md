@@ -577,7 +577,8 @@ averages with `image: null` when there is no `ImageData` (tileset.md). `dropGame
 (`dropDecodedData` and a `none` source) for the caller that runs many maps in one process: the decoded data is
 module state, so without it one call's copy would change what the next call does (cli.md "Terrain and doodads for a
 model"). Identity of the copy object decides whether anything is dropped: the same object again only loads a
-tileset not yet in memory. `tests/cli-terrain.test.ts` covers a copy that holds nothing (the loaders ask for
+tileset not yet in memory. A copy may answer by the loaders' own paths instead (`readStored`): the editor's data
+set lent through a link is already an extraction (cli.md "The editor lends its game data"). `tests/cli-terrain.test.ts` covers a copy that holds nothing (the loaders ask for
 `arr\units.dat` and the tileset's `.cv5` by the game's names; both parts false; the host as before).
 
 ### Data sets for mods (M4, 2026-11-08)

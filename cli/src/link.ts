@@ -389,6 +389,55 @@ export async function linkedWrite(path: string, bytes: Uint8Array): Promise<bool
   return true;
 }
 
+/* ── The editor's game data ─────────────────────────────── */
+
+/** The editor's own data set, lent through a link: files by the path the editor's loaders ask for. */
+export interface LentGame {
+  /** What it is, for a person: "the editor's game data (StarCraft: Brood War)". */
+  label: string;
+  readStored(path: string): Promise<Uint8Array | null>;
+}
+
+const lent = new Map<string, { stamp: string; game: LentGame }>();
+
+/**
+ * The game data of the editor a file is linked to, for this process's plugin host (`run.ts#giveHostGame`): the
+ * tables of the data set the editor is drawing the map with, so terrain is laid with the tileset the person sees,
+ * a mod's among them, and no installation is needed here. Null when the file is not linked, the editor has no game
+ * data, or it is an editor from before this (it answers `unknown`).
+ *
+ * The same object is answered while the editor's data set is the same one, so the host keeps what it decoded and
+ * each file crosses the link once; a data set in memory with no digest (a mod being edited) is asked afresh.
+ */
+export async function linkedGame(path: string): Promise<LentGame | null> {
+  const link = await linkFor(path);
+  if (!link) return null;
+  let info: Record<string, unknown>;
+  try { info = (await link.call("gamedata")).result; } catch (e) {
+    if (e instanceof LinkError && e.code === "unknown") return null;
+    throw e;
+  }
+  if (typeof info.kind !== "string" || info.kind === "none") return null;
+  const stamp = `${info.kind}|${String(info.profile)}|${String(info.hash ?? "")}`;
+  const had = lent.get(link.path);
+  if (had && had.stamp === stamp && (info.kind !== "reader" || info.hash)) return had.game;
+  const files = new Map<string, Promise<Uint8Array | null>>();
+  const game: LentGame = {
+    label: t("the editor's game data ({name})", { name: String(info.name ?? info.profile ?? "") }),
+    readStored: (file) => {
+      let reading = files.get(file);
+      if (!reading) {
+        // A file the link does not carry (a picture the loaders probe for) is one the copy does not have.
+        reading = link.call("gamefile", { path: file }).then((a) => a.bytes ?? null, (e) => { if (e instanceof LinkError && e.code === "failed") return null; throw e; });
+        files.set(file, reading);
+      }
+      return reading;
+    },
+  };
+  lent.set(link.path, { stamp, game });
+  return game;
+}
+
 /* ── The page ───────────────────────────────────────────── */
 
 /** The page between the command and the editor: it opens the editor, hands it the map, then carries the link's messages. */

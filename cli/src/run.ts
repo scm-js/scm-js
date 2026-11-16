@@ -31,6 +31,9 @@ const copies = new Map<string, Promise<GameFiles>>();
 
 /** What the host was given of the person's copy of the game. */
 export interface HostGame {
+  /** Whose copy it is: the person's installation on this computer, or the data set of the editor the map is linked to. */
+  from: "installation" | "editor";
+  /** The installation's folder; empty for the editor's data. */
   folder: string;
   /** What the copy is, for a person: "StarCraft: Remastered 1.23.10.13515". */
   label: string;
@@ -45,8 +48,18 @@ export interface HostGame {
  * opened over it: the copy named with `--starcraft` (or `SCMJS_STARCRAFT`), else the first in the usual places.
  * Null when there is none and none was named: the host then has no game data, and what needs the game's files says
  * so. A named folder that is no copy is the person's mistake, and thrown.
+ *
+ * A map read through a link to the editor takes the editor's own game data first (`link.ts#linkedGame`), unless a
+ * folder was named: it is what the person is looking at, a mod's tileset among it, and it is there on a computer
+ * with no installation. When the editor has none, or not this map's tileset, the installation is used as for a file.
  */
 export async function giveHostGame(doc: OpenedMap, starcraft?: string): Promise<HostGame | null> {
+  const linked = starcraft ? null : livePathOf(doc);
+  const lent = linked ? await linkedGame(linked) : null;
+  if (lent) {
+    const loaded = await loadGameCopy(lent, doc);
+    if (loaded.tileset) return { from: "editor", folder: "", label: lent.label, ...loaded };
+  }
   let copy: ReturnType<typeof findGameCopy>;
   try { copy = findGameCopy(starcraft, { pictures: true }); } catch (e) { if (starcraft || !(e instanceof CliError)) throw e; return null; }
   let opening = copies.get(copy.folder);
@@ -56,7 +69,7 @@ export async function giveHostGame(doc: OpenedMap, starcraft?: string): Promise<
     opening.catch(() => copies.delete(copy.folder));
   }
   const files = await opening;
-  return { folder: files.folder, label: files.label, ...(await loadGameCopy(files, doc)) };
+  return { from: "installation", folder: files.folder, label: files.label, ...(await loadGameCopy(files, doc)) };
 }
 
 /**
@@ -83,7 +96,8 @@ export function openHost(doc: OpenedMap, name: string): HeadlessApi {
   }
 }
 import { writeBack } from "./exchange";
-import { toStdout } from "./files";
+import { livePathOf, toStdout } from "./files";
+import { linkedGame } from "./link";
 
 export interface NodeLoaderOptions {
   /** TypeScript, for a plugin that is source with `.ts` files; absent, such a file is refused with the reason. */

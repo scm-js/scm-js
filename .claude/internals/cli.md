@@ -1782,6 +1782,29 @@ advanced, and actually offers something useful". `scmjs map open --live <map>` a
   page's `window.open` while Playwright holds the new window at its first line. The call still
   returns the window and the link goes on (CI, 2026-11-16: both tries of one run, after six clean
   runs). No browser without a debugger attached shows it.
+- **The editor lends its game data (same day, later; branch `mcp-live-game`).** Two more methods, `gamedata` and
+  `gamefile { path }`: the first thing over the link that is not the map's. A command's plugin host needs a
+  tileset and the unit tables to paint terrain or seed a unit's row ("Terrain and doodads for a model" below), and
+  on a linked map the right ones are the editor's: what the person sees (a mod's tileset, a data set in memory) and
+  there with no installation. `link.ts#linkedGame(path)` asks `gamedata` (`kind`, `profile`, `name`, `hash`),
+  answers a `LentGame` whose `readStored(path)` is `gamefile`, each file asked once and kept as a promise;
+  `run.ts#giveHostGame` takes it first for a map read through a link (`files.ts#livePathOf`, a `WeakMap` from the
+  `OpenedMap` that `loadMapInput` made of a live input) unless `--starcraft` names a folder, and falls back to the
+  installation when the editor has none or the lent copy has not this map's tileset. `headless.ts#GameCopy` gained
+  `readStored`, since the editor's copy is an extraction: the loaders' own paths go straight through, the
+  extraction's `unit/manifest.json` among them. The same `LentGame` object is answered while the stamp
+  (`kind|profile|hash`) is the same, so `loadGameCopy` keeps what it decoded; a `reader` source with no hash is
+  asked afresh every call. **Scope**: the editor answers only `GAME_FILE` (tileset tables and megatiles, the doodad
+  table, `stat_txt.tbl`, `arr/*.dat|datex|txt|tbl`, `rez/*.tbl|txt`, `iscript.bin`, `tunit.pcx`,
+  `unit/manifest.json`) — no GRP, no sound, no 2x file — and answers a **copy** of the bytes, because the reply
+  transfers its buffer and a data set in memory would lose its own file. An editor from before this answers
+  `unknown`, which is "nothing to borrow", not an error. Measured through the stand-in page (the whole relay, on
+  loopback, the files read from Remastered behind it): opening the link, `map_edit` painting a 64 × 64 map with
+  the lent Jungle tileset and `map_terrain` reading it back, 0.83 s in all; the files are the 4.4 MB the loaders
+  ask for (`jungle.vr4` 3.6 MB of it). Not measured with a real browser page between. Tests: `tests/link.test.ts`
+  (+3: the editor's end with a data set in memory and the refusals; `linkedGame` over the stand-in, each file
+  once; with a copy of the game, `map_edit` and `map_terrain` on a linked map saying `from: "editor"`).
+  **Takes effect with the next editor release**: scmjs.dev's editor has to know the two methods.
 - **Not done**: the desktop app (`--live` always uses the browser; the app needs a channel from
   main to the renderer and a release); a file changed on disk by something else (git checkout)
   reaching the editor; the editor's own edits as events to the command; terminal commands for

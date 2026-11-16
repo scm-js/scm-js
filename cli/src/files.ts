@@ -115,9 +115,17 @@ export class MapReadError extends CliError {
   constructor(name: string, reason: string) { super(t("{name} is not a map this can read: {reason}", { name, reason }), null, 2); this.reason = reason; }
 }
 
+/** The maps read through a link to the editor, with the file each is: so a later step can ask the editor for more. */
+const liveMaps = new WeakMap<OpenedMap, string>();
+
+/** The file a map was read through a link for; null for a map read from disk. */
+export const livePathOf = (doc: OpenedMap): string | null => liveMaps.get(doc) ?? null;
+
 export async function loadMapInput(input: Input): Promise<OpenedMap> {
   try {
-    return await openMapBytes(input.bytes, input.name);
+    const doc = await openMapBytes(input.bytes, input.name);
+    if (input.live) liveMaps.set(doc, input.path);
+    return doc;
   } catch (e) {
     throw new MapReadError(input.name, e instanceof Error ? e.message : String(e));
   }

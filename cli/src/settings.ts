@@ -215,7 +215,12 @@ export async function applySettings(doc: OpenedMap, s: MapSettings, options: { s
     game = await giveHostGame(doc, options.starcraft);
     const why = t("A number for a unit, upgrade or technology takes it off the game's defaults, and the rest of its row is filled in from your installation's tables");
     if (!game) throw new CliError(t("No copy of StarCraft was found on this computer."), t("{why}: name its folder with --starcraft (or SCMJS_STARCRAFT).", { why }), 2);
-    if (!game.units) throw new CliError(t("{copy} in {folder} has no unit tables to read.", { copy: game.label, folder: game.folder }), t("{why}. A 1.16 folder needs patch_rt.mpq beside StarDat.mpq and BrooDat.mpq.", { why }));
+    if (!game.units) {
+      throw new CliError(
+        game.from === "editor" ? t("{copy} has no unit tables to read.", { copy: game.label }) : t("{copy} in {folder} has no unit tables to read.", { copy: game.label, folder: game.folder }),
+        game.from === "editor" ? t("{why}: name your installation's folder with --starcraft (or SCMJS_STARCRAFT).", { why }) : t("{why}. A 1.16 folder needs patch_rt.mpq beside StarDat.mpq and BrooDat.mpq.", { why }),
+      );
+    }
   } else noHostGame();
   const host = openHost(doc, "map set");
   try {

@@ -103,7 +103,13 @@ export function attachSinks(store: Store, sinks: HeadlessSinks): () => void {
 export interface GameCopy {
   /** What the copy is, for a person: the source's label. */
   label: string;
-  read(member: string): Promise<Uint8Array | null>;
+  read?(member: string): Promise<Uint8Array | null>;
+  /**
+   * In place of `read`, for a copy that is already an extraction (the editor's own data set, lent through a link):
+   * a file by the path the loaders ask for (`tileset/jungle.cv5`, `unit/manifest.json`), the lists the extraction
+   * wrote among them.
+   */
+  readStored?(path: string): Promise<Uint8Array | null>;
 }
 
 /** What of a copy is in memory for a map: its tileset's tables and doodads, and the unit tables. */
@@ -126,7 +132,7 @@ let copyInUse: GameCopy | null = null;
 export async function loadGameCopy(copy: GameCopy, doc: OpenedMap): Promise<GameCopyLoaded> {
   if (copyInUse !== copy) {
     dropDecodedData();
-    setAssetSource({ kind: "reader", profile: DEFAULT_PROFILE, label: copy.label, tried: [], reader: { base: null, read: (_path, context) => (context.member ? copy.read(context.member) : null) } });
+    setAssetSource({ kind: "reader", profile: DEFAULT_PROFILE, label: copy.label, tried: [], reader: { base: null, read: (path, context) => (copy.readStored ? copy.readStored(path) : context.member && copy.read ? copy.read(context.member) : null) } });
     copyInUse = copy;
   }
   const [tileset, units] = await Promise.all([

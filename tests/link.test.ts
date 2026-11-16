@@ -23,12 +23,17 @@ import { mapFileHandleAtom, mapModifiedAtom, mapNameAtom, selectedUnitsAtom, vie
 import { linkedDocumentAtom } from "../src/atoms/linkAtoms";
 import { openMapBytes } from "../src/editor/mapFile";
 import { applyUnitChanges, makeUnit } from "../src/editor/units";
-import { createEditorLink, isLinkHandle, type LinkMessage } from "../src/services/editorLink";
+import { createEditorLink, GAME_FILE, isLinkHandle, type LinkMessage } from "../src/services/editorLink";
+import { gameDataSourceAtom } from "../src/atoms/gameDataAtoms";
+import { memberOfStored } from "../src/gamedata/paths";
+import { writeNewMap } from "../cli/src/create";
+import { findGameCopy } from "../cli/src/engine";
+import { archiveFiles, storageFiles } from "../cli/src/gamefiles";
 import { storeHandle, loadHandle } from "../src/services/handleStore";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { createMcpServer } from "../cli/src/mcp";
-import { allLinks, linkedRead, linkedWrite, linkFor, LinkError, LinkOwner, setLinkLabel } from "../cli/src/link";
+import { allLinks, linkedGame, linkedRead, linkedWrite, linkFor, LinkError, LinkOwner, setLinkLabel } from "../cli/src/link";
 
 type Store = ReturnType<typeof createStore>;
 
@@ -181,6 +186,29 @@ describe("the editor's end of a link", () => {
     expect(posted.some((m) => m.method === "ended")).toBe(false);
   });
 
+  it("lends the game's tables of its data set, and nothing else of it", async () => {
+    const { store, request } = await linked();
+    expect((await request("gamedata")).result).toEqual({ kind: "none", profile: null, name: null, hash: null });
+    expect((await request("gamefile", { path: "arr/units.dat" })).result).toEqual({ found: false });
+    // A data set in memory, as a mod being edited is: its files are answered by stored path.
+    const units = new Uint8Array([1, 2, 3, 4]);
+    const asked: string[] = [];
+    store.set(gameDataSourceAtom, { kind: "reader", profile: { id: "mymod", name: "My Mod" }, label: "My Mod", tried: [], reader: { base: null, hash: "h1", read: (path) => { asked.push(path); return path === "arr/units.dat" ? units : null; } } });
+    expect((await request("gamedata")).result).toEqual({ kind: "reader", profile: "mymod", name: "My Mod", hash: "h1" });
+    const file = await request("gamefile", { path: "arr\\Units.dat" });
+    expect([file.ok, file.result, Array.from(file.bytes!)]).toEqual([true, { found: true }, [1, 2, 3, 4]]);
+    // The answer is a copy: handing its buffer over leaves the data set's own file whole.
+    expect(file.bytes).not.toBe(units);
+    expect((await request("gamefile", { path: "tileset/jungle.cv5" })).result).toEqual({ found: false });
+    expect(asked).toEqual(["arr/units.dat", "tileset/jungle.cv5"]);
+    for (const path of ["unit/terran/marine.grp", "sound/terran/marine/tmawht00.wav", "../arr/units.dat", "arr/units.dat/../../x", "", "tileset/jungle.hd.vr4"]) {
+      const refused = await request("gamefile", { path });
+      expect([path, refused.ok, refused.error?.code]).toEqual([path, false, "failed"]);
+    }
+    expect(asked).toHaveLength(2);
+    for (const path of ["tileset/ice.vx4ex", "tileset/stat_txt.tbl", "arr/images.tbl", "arr/weapons.datex", "rez/stat.txt", "scripts/iscript.bin", "game/tunit.pcx", "unit/manifest.json"]) expect(GAME_FILE.test(path), path).toBe(true);
+  });
+
   it("has a handle that is never kept between sessions", async () => {
     const { store } = await linked();
     const handle = store.get(mapFileHandleAtom);
@@ -214,7 +242,7 @@ describe("the command's end of a link", () => {
     process.env.BROWSER = "none";
     const file = join(dir, "a.scx");
     writeFileSync(file, map);
-    const editor = { held: map, rev: 0, labels: [] as string[] };
+    const editor = { held: map, rev: 0, labels: [] as string[], game: null as null | { name: string; read: (path: string) => Promise<Uint8Array | null> | Uint8Array | null; asked: string[] } };
     const owner = new LinkOwner(file, readFileSync(file));
     owners.push(owner);
     let base = "";
@@ -234,13 +262,18 @@ describe("the command's end of a link", () => {
           const line = text.slice(0, at);
           text = text.slice(at + 2);
           if (!line.startsWith("data: ")) continue;
-          const m = JSON.parse(line.slice(6)) as { id?: string; method: string; params: { label?: string; base?: number }; blob?: boolean };
+          const m = JSON.parse(line.slice(6)) as { id?: string; method: string; params: { label?: string; base?: number; path?: string }; blob?: boolean };
           if (!m.id) continue;
           const bytes = m.blob ? new Uint8Array(await (await fetch(`${base}/blob/${m.id}`)).arrayBuffer()) : null;
           if (m.method === "read") await up({ type: "scmjs.link.reply", id: m.id, ok: true, result: { name: "a.scx", rev: editor.rev, modified: editor.rev > 0 } }, editor.held);
           else if (m.method === "apply" && m.params.base !== undefined && m.params.base !== editor.rev) await up({ type: "scmjs.link.reply", id: m.id, ok: false, error: { code: "changed", message: "changed" } });
           else if (m.method === "apply") { editor.held = bytes!; editor.rev++; editor.labels.push(m.params.label ?? ""); await up({ type: "scmjs.link.reply", id: m.id, ok: true, result: { rev: editor.rev } }); }
-          else await up({ type: "scmjs.link.reply", id: m.id, ok: false, error: { code: "unknown", message: "?" } });
+          else if (m.method === "gamedata" && editor.game) await up({ type: "scmjs.link.reply", id: m.id, ok: true, result: { kind: "stored", profile: "starcraft", name: editor.game.name, hash: "abc" } });
+          else if (m.method === "gamefile" && editor.game) {
+            editor.game.asked.push(m.params.path!);
+            const file = await editor.game.read(m.params.path!);
+            await up({ type: "scmjs.link.reply", id: m.id, ok: true, result: { found: !!file } }, file ?? undefined);
+          } else await up({ type: "scmjs.link.reply", id: m.id, ok: false, error: { code: "unknown", message: "?" } });
         }
       }
     };
@@ -336,6 +369,53 @@ describe("the command's end of a link", () => {
     expect(await linkFor(file)).toBeNull();
     await client.close();
   });
+
+  it("borrows the editor's game data when it has some, each file once", async () => {
+    const { file, editor, opening } = await open();
+    await opening;
+    // An editor from before this answers `unknown`: nothing to borrow, and that is not an error.
+    expect(await linkedGame(file)).toBeNull();
+    expect(await linkedGame(join(tmpdir(), "not-linked.scx"))).toBeNull();
+    editor.game = { name: "StarCraft: Brood War", asked: [], read: (path) => (path === "arr/units.dat" ? new Uint8Array([9, 8, 7]) : null) };
+    const game = (await linkedGame(file))!;
+    expect(game.label).toBe("the editor's game data (StarCraft: Brood War)");
+    expect(Array.from((await game.readStored("arr/units.dat"))!)).toEqual([9, 8, 7]);
+    expect(await game.readStored("arr/weapons.dat")).toBeNull();
+    await game.readStored("arr/units.dat");
+    expect(editor.game.asked).toEqual(["arr/units.dat", "arr/weapons.dat"]);
+    // The same data set again is the same copy, so what was decoded from it is kept.
+    expect(await linkedGame(file)).toBe(game);
+  });
+
+  const copy = (() => { try { return findGameCopy(process.env.SCMJS_STARCRAFT, { pictures: true }); } catch { return null; } })();
+
+  it.skipIf(!copy)("paints a linked map's terrain with the editor's tileset, not the installation's", async () => {
+    const made = mkdtempSync(join(tmpdir(), "scmjs-link-map-"));
+    dirs.push(made);
+    await writeNewMap(join(made, "flat.scx"), { width: 64, height: 64, tileset: "jungle", name: "flat", description: "", version: "broodwar", players: 2, layout: "ring" });
+    const { file, editor, opening } = await open("yes", new Uint8Array(readFileSync(join(made, "flat.scx"))));
+    await opening;
+    // The stand-in editor's data set is this computer's copy of the game, asked for by the editor's own paths.
+    const files = copy!.kind === "remastered" ? await storageFiles(copy!.folder) : archiveFiles(copy!.folder);
+    editor.game = { name: "StarCraft: Brood War", asked: [], read: async (path) => { const member = memberOfStored(path); return member ? files.read(member) : null; } };
+    const client = new Client({ name: "test", version: "0" });
+    const { server } = createMcpServer();
+    const [a, b] = InMemoryTransport.createLinkedPair();
+    await Promise.all([server.connect(a), client.connect(b)]);
+    try {
+      const r = (await client.callTool({ name: "map_edit", arguments: { path: file, edits: [{ op: "paint_terrain", terrain: "High Dirt", tiles: { x0: 20, y0: 16, x1: 44, y1: 40 }, shape: "ellipse" }] } })) as { content: { text?: string }[]; structuredContent?: { game: { from: string; label: string; tileset: boolean; folder: string } }; isError?: boolean };
+      expect(r.isError, r.content[0]?.text).toBeFalsy();
+      expect(r.structuredContent!.game).toMatchObject({ from: "editor", label: "the editor's game data (StarCraft: Brood War)", tileset: true, folder: "" });
+      expect(r.content[0].text).toMatch(/paint_terrain {2}High Dirt · [\d,]+ tiles changed\n.*written to the editor, as one undo step/s);
+      expect(editor.game.asked).toEqual(expect.arrayContaining(["tileset/jungle.cv5", "tileset/jungle.vr4", "tileset/jungle.dddata.bin"]));
+      // The change went to the editor as one step, and the file on disk is as it was.
+      expect([editor.rev, editor.labels]).toEqual([1, ["scmjs map edit"]]);
+      expect(readFileSync(file).equals(readFileSync(join(made, "flat.scx")))).toBe(true);
+      const terrain = (await client.callTool({ name: "map_terrain", arguments: { path: file, grid: false } })) as { structuredContent?: { game: string; terrains: { name: string; tiles: number }[] } };
+      expect(terrain.structuredContent!.game).toBe("the editor's game data (StarCraft: Brood War)");
+      expect(terrain.structuredContent!.terrains.find((x) => x.name === "High Dirt")!.tiles).toBeGreaterThan(200);
+    } finally { await client.close(); }
+  }, 30_000);
 
   it("says why when the editor did not link the map", async () => {
     const refused = await open("no");

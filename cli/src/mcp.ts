@@ -36,6 +36,8 @@ import { analyzeLayout, layoutLines, layoutPicture, layoutReport, loadLayoutFile
 import { encodePng } from "./png";
 import { DEFAULT_PNG_SCALE, loadGraphics, previewPng, tilesetOf } from "./preview";
 import { printRun, runOnMap } from "./run";
+import { EDIT_ARGUMENT, editMap, parseEdits, printEdits } from "./mapedit";
+import { listLocations, listUnits, printLocations, printUnits, UNIT_ROWS } from "./objects";
 import { costJson, gameMap, printCost, printTrace, removeGameMap, replayRun, runMapInGame, traceJson, type MapRunOptions } from "./trace";
 import { checkModSource, printModCheck } from "./mod/check";
 import { diffModSources, printModDiff } from "./mod/diff";
@@ -173,7 +175,7 @@ export interface McpOptions {
 }
 
 /** What the client is told once, with the tool list: how the tools fit together. */
-export const INSTRUCTIONS = `scmJS: StarCraft: Brood War maps on this computer. Paths are files here, relative to the working directory. Start with map_info or map_dump to see what a map holds; map_check is Check Map (errors and warnings, as the editor's). Triggers and strings travel as text: map_triggers_export gives the trigger window's text form (https://docs.scmjs.dev/triggers/), which map_triggers_import takes back; strings are "<number><TAB><text>" lines. Tools that change a map write over it unless given "out"; they never renumber strings. Map text is never translated. map_preview shows the map as a picture, map_analyze reads a melee map's layout (starts, naturals, walks between starts, chokes) in a second, map_trace and map_cost run it in the game itself, and map_coverage counts which triggers fired over many replays; these need a copy of StarCraft on this computer, and doctor says whether one is there and what to install if not. replay_map writes the map a replay was played on. map_optimize makes a map smaller without changing what the game plays (a dry run unless told to write); map_balance plays games on a melee map with the person's own bots to see whether its start locations are fair, which takes minutes. Mods: mod_info says what a mod is, mod_unpack writes it as a folder of text and PNG sheets the person or you can edit, mod_check lints it, mod_diff reads two as a changelog (or one against the game), mod_pack makes the MPQ back, mod_new starts an empty one, mod_header writes a mod's ids by name for a bot made for it, and mod_play hands a mod (with a map and a bot) to the play page in the person's browser. map_trace and map_cost take a mod too. The editor: editor_open opens a map in the scmJS editor in the person's browser and keeps it linked, so they watch the work and can undo it; while it is linked every tool here reads and changes the map in the editor instead of the file (one undo step a change), editor_state says what they have selected and where they are looking, editor_show points at a place, editor_picture is the map as the editor draws it, and editor_save writes the file. Offer it when the person wants to see changes as you make them.`;
+export const INSTRUCTIONS = `scmJS: StarCraft: Brood War maps on this computer. Paths are files here, relative to the working directory. Start with map_info or map_dump to see what a map holds; map_check is Check Map (errors and warnings, as the editor's). Triggers and strings travel as text: map_triggers_export gives the trigger window's text form (https://docs.scmjs.dev/triggers/), which map_triggers_import takes back; strings are "<number><TAB><text>" lines. map_units and map_locations list a map's units (with the index each has) and locations, filtered by type, player or area, and map_edit places, moves, changes and removes units, locations and sprites and sets fog, a list of edits applied together or not at all. Tools that change a map write over it unless given "out"; they never renumber strings. Map text is never translated. map_preview shows the map as a picture, map_analyze reads a melee map's layout (starts, naturals, walks between starts, chokes) in a second, map_trace and map_cost run it in the game itself, and map_coverage counts which triggers fired over many replays; these need a copy of StarCraft on this computer, and doctor says whether one is there and what to install if not. replay_map writes the map a replay was played on. map_optimize makes a map smaller without changing what the game plays (a dry run unless told to write); map_balance plays games on a melee map with the person's own bots to see whether its start locations are fair, which takes minutes. Mods: mod_info says what a mod is, mod_unpack writes it as a folder of text and PNG sheets the person or you can edit, mod_check lints it, mod_diff reads two as a changelog (or one against the game), mod_pack makes the MPQ back, mod_new starts an empty one, mod_header writes a mod's ids by name for a bot made for it, and mod_play hands a mod (with a map and a bot) to the play page in the person's browser. map_trace and map_cost take a mod too. The editor: editor_open opens a map in the scmJS editor in the person's browser and keeps it linked, so they watch the work and can undo it; while it is linked every tool here reads and changes the map in the editor instead of the file (one undo step a change), editor_state says what they have selected and where they are looking, editor_show points at a place, editor_picture is the map as the editor draws it, and editor_save writes the file. Offer it when the person wants to see changes as you make them.`;
 
 /**
  * The server with every tool registered, and their names; `connect` it to a transport (stdio for the command, in
@@ -405,6 +407,68 @@ export function createMcpServer(options: McpOptions = {}): { server: McpServer; 
     const { input, doc } = await openMap(file);
     const r = await runOnMap(doc, input.path, input.bytes, plugin, { command, args: args ?? arg, out: to ?? null, dryRun: !!dryRun });
     return ok(printRun(input.name, r, { events: true, dryRun: !!dryRun }), { file: input.name, ...r });
+  }));
+
+  const unitArg = z.union([z.string(), z.number().int().min(0)]);
+  const locationArg = z.union([z.string(), z.number().int().min(1)]);
+  const rectArg = z.strictObject({ left: z.number().int().min(0), top: z.number().int().min(0), right: z.number().int().min(0), bottom: z.number().int().min(0) });
+  const tilesArg = z.strictObject({ x0: z.number().int().min(0), y0: z.number().int().min(0), x1: z.number().int().min(0), y1: z.number().int().min(0) });
+
+  reg("map_units", {
+    title: "The map's units",
+    description: `The units placed on the map, a row each (scmjs map units): its index (its place in the file, from 0, which map_edit takes), type, player (1 to 12; 12 is neutral), position in pixels and in tiles, and the properties its record sets (resources, hit points, shields and energy in percent, hangar, and the states cloaked, burrowed, lifted, hallucinated, invincible). The filters narrow the list and all of them must hold; a unit is inside an area when its centre is. The text is cut at ${UNIT_ROWS} rows unless \`all\`; the data has every row that matched.`,
+    inputSchema: {
+      path,
+      unit: unitArg.optional().describe("only this type: a name (\"Terran Marine\", \"Zergling\") or a units.dat id"),
+      player: z.number().int().min(1).max(12).optional().describe("only this player's units; 12 is neutral"),
+      location: locationArg.optional().describe("only units inside this location: its name, or its number as map_locations lists it"),
+      rect: rectArg.optional().describe("only units inside this rectangle, in pixels; right and bottom are just outside it"),
+      tiles: tilesArg.optional().describe("only units inside this rectangle, in tiles; x1 and y1 are just outside it"),
+      all: z.boolean().optional().describe("every row in the text"),
+    },
+    annotations: { readOnlyHint: true },
+  }, tool(async ({ path: file, unit, player, location, rect, tiles, all }) => {
+    const { input, doc } = await openMap(file);
+    const r = listUnits(doc, input.name, { unit, player, location, rect, tiles });
+    return ok(printUnits(input.name, r, !!all), r);
+  }));
+
+  reg("map_locations", {
+    title: "The map's locations",
+    description: "The map's locations, a row each (scmjs map locations): its number as triggers, map_dump and map_diff count it (from 1, which map_edit takes, as it takes the name), its name, its box in pixels (right and bottom are just outside it), the tiles the box touches, and how many units have their centre inside. Anywhere is listed and cannot be changed. `index` in the data is the slot in the file, the number less one.",
+    inputSchema: { path },
+    annotations: { readOnlyHint: true },
+  }, tool(async ({ path: file }) => {
+    const { input, doc } = await openMap(file);
+    const r = listLocations(doc, input.name);
+    return ok(printLocations(input.name, r), r);
+  }));
+
+  reg("map_edit", {
+    title: "Change units, locations, sprites and fog",
+    description: [
+      "Apply a list of edits to a map's units, locations, sprites and fog as one step (scmjs map edit). All of them are applied or none: when one cannot be done nothing is written, and the error names it by its place in the list (edits[2] is the third) with what is wrong. Each edit is an object with `op` and its fields:",
+      "- place_unit: unit, player, a position, and any unit properties.",
+      "- move_units: units, then a position (for one unit) or dx, dy in pixels (for any number).",
+      "- update_units: units, then player (the new owner) and any unit properties; only what is given changes.",
+      "- remove_units: units.",
+      "- add_location: name, and rect or tiles.",
+      "- edit_location: location, then name (the new one), rect or tiles.",
+      "- remove_locations: locations, a list.",
+      "- place_sprite: sprite (a sprites.dat id: a picture only) or unit (a unit drawn as a sprite, which the game makes a unit of: a door, a trap), then player (1 when left out), a position, flipped, disabled (a unit sprite that starts disabled).",
+      "- remove_sprites: indices (the sprites in the order map_dump lists them, from 0) or where {sprite, unit, player, an area}.",
+      "- set_fog: players (a list of 1 to 8), mode (\"fog\" hides the area at the start, \"clear\" shows it), and an area (the whole map without one).",
+      "A unit type is a name (\"Terran Marine\", \"Zergling\") or a units.dat id. A player is 1 to 12; 12 is neutral. A position is x, y in pixels or tileX, tileY (the centre of that tile). An area is one of rect {left, top, right, bottom} in pixels, tiles {x0, y0, x1, y1} or location; right, bottom, x1 and y1 are just outside it, and a unit is inside when its centre is. A location is its name, or its number as map_locations lists it. Units are named by `indices` (as map_units lists them, counted before this call, so a removal earlier in the list does not shift them) or by `where` {unit, player, an area}: all must hold, and matching nothing is not an error. Unit properties: hitPoints, shields, energy (percent), resources (a mineral field's or geyser's amount), hangar (interceptors or scarabs aboard), and the states cloaked, burrowed, lifted (a Terran building in the air), hallucinated, invincible (true or false).",
+      "The answer lists what each edit did, with the index a placed unit or sprite got and the number a new location got, then the change as map_diff reports it. Positions are taken as given: nothing is checked against the terrain, and a building is not snapped to the building grid (give its centre in pixels), because the game's files are not read. Doodads are not offered for the same reason. `dryRun` says what would change and writes nothing; map_check afterwards says what the editor's Check Map makes of the result.",
+    ].join("\n"),
+    inputSchema: { path, edits: z.array(EDIT_ARGUMENT).min(1).describe("the edits, applied in order"), out, dryRun: z.boolean().optional().describe("say what would change and write nothing"), all: z.boolean().optional().describe("list every edit and every change in the text; long lists are cut otherwise") },
+    annotations: { destructiveHint: true },
+  }, tool(async ({ path: file, edits, out: to, dryRun, all }) => {
+    // Each edit held to the fields of its kind, before anything is opened.
+    const list = parseEdits(edits);
+    const { input, doc } = await openMap(file);
+    const r = await editMap(input, doc, list, { out: to ?? null, dryRun: !!dryRun });
+    return ok(printEdits(input.name, r, { dryRun: !!dryRun, all: !!all }), { file: input.name, ...r, dryRun: !!dryRun });
   }));
 
   /** The game tools' arguments: the map, how long, the seed, the copy of the game. */

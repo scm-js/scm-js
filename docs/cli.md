@@ -1006,6 +1006,150 @@ the command names a location that came out of that with no width or height, or, 
 `--no-clamp`, one left past the edge. New ground is the tileset's base terrain.
 `--dry-run` says what would happen and writes nothing.
 
+### Listing units and locations
+
+`scmjs map units` lists the units placed on a map, and `scmjs map locations` its
+locations. They are the lists to read before
+[`map edit`](#editing-units-locations-sprites-and-fog): a unit is named there by its
+index, a location by its name or number.
+
+```
+$ scmjs map units ums.scx --player 1
+ums.scx  5 of 21 units
+  index  unit                   player    x,y       tile
+  0      Start Location         Player 1  336,1744  10,54
+  16     Terran Command Center  Player 1  336,1744  10,54
+  17     Terran Marine          Player 1  464,1616  14,50  hp 50%
+  18     Terran Ghost           Player 1  496,1616  15,50  energy 75%, cloaked
+  19     Protoss Carrier        Player 1  592,1552  18,48  hangar 4
+
+$ scmjs map locations ums.scx
+ums.scx  3 locations, and Anywhere
+  number  name      pixels             tiles        units
+  1       Base      192,1600–512,1856  6,50–16,58   4
+  2       Nest      1536,192–1856,512  48,6–58,16   2
+  3       Middle    896,896–1152,1152  28,28–36,36  0
+  64      Anywhere  0,0–2048,2048      0,0–64,64    21
+```
+
+| Option of `map units` | What it does |
+| --- | --- |
+| `--unit <name>` | Only this type: a name such as "Terran Marine" or Zergling, or a units.dat id |
+| `--player <n>` | Only this player's units, 1 to 12; 12 is neutral |
+| `--location <name>` | Only units inside this location, by name or number |
+| `--rect <l,t,r,b>` | Only units inside this rectangle, in pixels |
+| `--tiles <x0,y0,x1,y1>` | Only units inside this rectangle, in tiles |
+| `--all` | Every row; a long list is cut at 40 otherwise |
+| `--json` | The rows as data, never cut |
+
+A unit's index is its place in the file, counted from 0. A location's number is the one
+triggers and `map dump` use, counted from 1. A unit is inside an area when its centre is,
+and the right and bottom edges of a rectangle are just outside it. The last column holds
+what the unit's record sets: resources, hit points, shields and energy in percent, the
+hangar, and the states cloaked, burrowed, lifted, hallucinated and invincible. With
+several filters, a unit must pass all of them. `map locations` has no options but
+`--json`; its last column counts the units inside each location.
+
+### Editing units, locations, sprites and fog
+
+`scmjs map edit` applies a list of edits to a map's units, locations, sprites and fog of
+war. The list is a JSON file, so it suits a script or an [AI tool](#ai-tools) more than
+typing by hand. The edits are applied together: when one of them cannot be done, nothing
+is written.
+
+```json
+[
+  { "op": "place_unit", "unit": "Terran Marine", "player": 1, "x": 400, "y": 1700 },
+  { "op": "update_units", "where": { "unit": "Terran Marine", "location": "Base" }, "invincible": true },
+  { "op": "remove_units", "indices": [20] },
+  { "op": "add_location", "name": "Ramp", "tiles": { "x0": 20, "y0": 40, "x1": 24, "y1": 44 } },
+  { "op": "edit_location", "location": "Middle", "name": "Centre" }
+]
+```
+
+```
+$ scmjs map edit ums.scx --edits edits.json --out ums-edited.scx
+  0  place_unit     Terran Marine · Player 1 · 400,1700 · unit 20
+  1  update_units   2 units changed
+  2  remove_units   1 unit removed
+  3  add_location   4  Ramp · 640,1280–768,1408
+  4  edit_location  3  Centre · 896,896–1152,1152
+✔ ums.scx: 5 edits · 1 setting changed, 2 units added, 2 units removed, 1 location added, 1 location changed, 2 strings added · written to ums-edited.scx · 4.0 KB
+```
+
+Each line is one edit: its place in the list, its kind, and what it did. A placed unit or
+sprite is shown with the index it has in the written map, a new location with its number.
+The last line counts the change as [`map diff`](#comparing-two-maps) does, where a changed
+unit counts as one removed and one added.
+
+| Option | What it does |
+| --- | --- |
+| `--edits <file>` | The edits: a JSON list, or an object with the list as `edits`; `-` reads it from standard input |
+| `--out <map>` | Write the result here instead of over the map; `-` for standard output |
+| `--dry-run` | Print the change as `map diff` prints it, and write nothing |
+| `--all` | List every edit and every change; long lists are cut otherwise |
+| `--json` | What each edit did and the comparison, as data |
+
+| Kind of edit (`op`) | Its fields |
+| --- | --- |
+| `place_unit` | `unit`, `player`, a position, and any unit properties |
+| `move_units` | Units, then a position (for one unit) or `dx` and `dy` in pixels (for any number) |
+| `update_units` | Units, then `player` (the new owner) and any unit properties |
+| `remove_units` | Units |
+| `add_location` | `name`, and `rect` or `tiles` |
+| `edit_location` | `location`, then `name`, `rect` or `tiles` |
+| `remove_locations` | `locations`, a list of names or numbers |
+| `place_sprite` | `sprite` (a sprites.dat id) or `unit` (a unit drawn as a sprite), then `player`, a position, `flipped`, `disabled` |
+| `remove_sprites` | `indices`, or `where` with any of `sprite`, `unit`, `player` and an area |
+| `set_fog` | `players` (a list of 1 to 8), `mode` (`fog` or `clear`), and an area; the whole map without one |
+
+- **A unit type** is a name ("Terran Marine", "Zergling") or a units.dat id. **A player**
+  is 1 to 12; 12 is neutral.
+- **A position** is `x` and `y` in pixels, or `tileX` and `tileY` for the centre of a
+  tile.
+- **An area** is one of `rect` (`left`, `top`, `right`, `bottom` in pixels), `tiles`
+  (`x0`, `y0`, `x1`, `y1`) or `location` (a name or number).
+- **Units** are named by `indices`, as `map units` lists them, or by `where`: any of
+  `unit`, `player` and an area, all of which must hold.
+- **Unit properties** are `hitPoints`, `shields` and `energy` in percent, `resources`,
+  `hangar`, and the states `cloaked`, `burrowed`, `lifted`, `hallucinated` and
+  `invincible`, each true or false. Only what you give is changed.
+
+An index always means the map as it was before the edits, so removing unit 3 early in the
+list does not shift what `"indices": [17]` means later in it. A `where` looks at the map
+as the earlier edits left it, units placed by them included. A `where` that matches
+nothing is not an error; the edit's line says "no unit matches".
+
+An edit that cannot be done stops the list. The error names it by its place in the list,
+counted from 0, and the map is left alone:
+
+```
+$ scmjs map edit ums.scx --edits bad.json
+✖ edits[1] (remove_units): there is no unit 99: the map's units are 0 to 20
+  Nothing was changed: the edits are applied together or not at all.
+```
+
+Edits that are refused include a unit or location name the map does not have, an index
+past the end or already removed by an earlier edit, a position or rectangle off the map, a
+field the kind of edit does not take, a second location with a name already in use, and
+any change to Anywhere. A file that is not JSON, or an entry that is not an edit, exits 2;
+an edit the map refuses exits 1.
+
+The command does not read the game's files, which sets three limits:
+
+- A position is used as given. Nothing is checked against the terrain or other units, so
+  run [`map check`](#checking-a-map) afterwards.
+- A building is not snapped to the building grid. Give its centre in pixels: a Command
+  Center is 4 by 3 tiles, so with its top-left corner at tile 8,52 its centre is 320,1712.
+- Doodads are not offered. Placing or removing one changes terrain tiles that only the
+  tileset's files describe; use the editor, or a plugin with
+  [`map run`](#running-a-plugin-over-a-map).
+
+A sprite is placed by its sprites.dat id, or as a unit sprite by the unit's name. Fog is
+set per tile, so an area in pixels covers every tile it touches. The edits go through the
+editor's own plugin host, the one `map run` uses, so a unit or location is written as a
+plugin's `api.document.edit` would write it.
+
 ### Triggers and strings as text
 
 A map's triggers and strings can live beside it as text files. In git a change to them
@@ -3730,6 +3874,7 @@ these are the ones each request is for.
 | "What are the units I have selected for?" | `editor_state`, `map_find` |
 | "Change the opening message to 'Hold the ridge.' and show me what changed." | `map_triggers_export`, `map_triggers_import`, `map_diff` |
 | "Which of my maps still mention the Marine?" | `map_find` |
+| "Give Player 1 six more Marines in the Base location and make the Ghost invincible." | `map_units`, `map_locations`, `map_edit` |
 | "Show me the map." | `map_preview`, which answers with the picture |
 | "Is this melee map fair? Where are the chokes?" | `map_analyze` |
 | "Do the triggers slow the game down?" | `map_cost` |
@@ -3792,7 +3937,7 @@ The old message is still in the string table, as after any trigger import, until
 
 ### The tools
 
-There are 39. Each but the `editor_` tools is a command of this guide, and its arguments
+There are 42. Each but the `editor_` tools is a command of this guide, and its arguments
 are the command's options by name: `--dry-run` is `dryRun`, `--in` is `in`. A tool answers
 with the command's text and, beside it, the command's `--json` data.
 
@@ -3801,6 +3946,8 @@ with the command's text and, beside it, the command's `--json` data.
 | `map_info`, `map_check`, `map_dump`, `map_find`, `map_diff` | Read, check, search and compare maps. `map_check` takes a `baseline` file and lists only the findings it does not hold | No |
 | `map_triggers_export`, `map_strings_export` | The triggers and the strings as text, in the [trigger window's text form](triggers.md) and as `<number><TAB><text>` lines | No |
 | `map_triggers_import`, `map_strings_import`, `map_strings_prune` | The text back into the map, passed inline, and the unused strings dropped | Yes |
+| `map_units`, `map_locations` | [The units and the locations as rows](#listing-units-and-locations): a unit's index, type, player and position, filtered by type, player or area; a location's number, name and bounds | No |
+| `map_edit` | [A list of edits](#editing-units-locations-sprites-and-fog) to units, locations, sprites and fog, applied together or not at all | Yes |
 | `map_set`, `map_resize`, `map_new`, `map_build`, `map_run` | The Scenario menu's edits, a new map, the TrigScript build, a plugin run over the map | Yes |
 | `map_optimize` | The map made smaller | Only with `write: true` |
 | `map_preview` | The map as a picture: the answer is the PNG itself, so a model that can see images sees the map | No |
@@ -3823,6 +3970,10 @@ A few tools differ from their commands:
 - `map_trace` and `map_cost` take `mod`, `replay`, `order` and `every`, as the commands
   take `--mod`, `--replay`, `--order` and `--every`. With `replay`, the map's `path` may
   be left out.
+- `map_edit` takes the list itself as `edits`, where the command takes a file. An edit
+  that cannot be done comes back as an error naming it, such as
+  `edits[1] (remove_units): there is no unit 99: the map's units are 0 to 20`, and nothing
+  is written.
 - `mod_play` waits `wait` seconds for the page, 300 by default.
 - The tools answer in English whatever the language of the commands, since the model reads
   them.
@@ -4137,6 +4288,8 @@ gives its options.
 | [`scmjs map generate <map>`](#a-melee-map-from-a-seed) | A symmetric melee map from a seed, walked and checked before it is written |
 | [`scmjs map set <map>`](#name-description-and-revision) | The name, description, revision or text encoding; `--dry-run` |
 | [`scmjs map resize <map>`](#resizing) | Scenario ▸ Resize: another size, anchored, with what it drops listed; `--dry-run` |
+| [`scmjs map units <map>`, `scmjs map locations <map>`](#listing-units-and-locations) | The units with their index, type, player and position, filtered by type, player or area; the locations with their number, name and bounds |
+| [`scmjs map edit <map> --edits <file>`](#editing-units-locations-sprites-and-fog) | A JSON list of edits to units, locations, sprites and fog, applied together or not at all; `--dry-run` |
 | [`scmjs map triggers export\|import\|edit`](#triggers-and-strings-as-text) | The triggers as a text or `.trg` file and back (`-` for standard input, `--allow-empty`, `--dry-run`); `edit` opens them in your editor |
 | [`scmjs map strings export\|import\|edit\|prune`](#triggers-and-strings-as-text) | The strings as a text file and back; `prune` removes the unused ones |
 | [`scmjs map optimize <map>`](#making-a-map-smaller) | The map made smaller: unused sounds, files and strings out, compressed again; `--strip-editor` drops the editor-only sections too |
@@ -4236,6 +4389,8 @@ from a clone with `npm run cli -- <command>`, or build it with `npm run build:cl
 | `cli/src/blame.ts` | `map blame`: the items of each kind, matched between versions as `map diff` matches them, and git blame's walk from the newest version back |
 | `cli/src/merge.ts` | The three-way merge: each part's rule, the ordered list merge for triggers, units matched without ids, the string table numbered again; git's three versions of a stopped file |
 | `cli/src/edit.ts` | The header set, the map resized and the unused strings dropped, over the open document |
+| `cli/src/objects.ts` | `map units` and `map locations`: the rows, the filters, and a unit type, location or area read from a name, a number or a rectangle |
+| `cli/src/mapedit.ts` | `map edit`: the shape of an edit, the list applied in one transaction of the plugin host, what an index means while units come and go, and the lines printed |
 | `cli/src/optimize.ts` | `map optimize`: what refers to each member, the steps each measured as the file it leaves, the compression chosen |
 | `cli/src/report.ts` | Check Map's findings, a map test's failures and the triggers `map coverage` never saw fire, as GitHub annotations, JUnit XML and SARIF |
 | `cli/src/baseline.ts` | `map check --baseline`: a finding's identity (a trigger by its text, counts left out), the known findings matched one for one, the file read and written |
@@ -4254,7 +4409,7 @@ from a clone with `npm run cli -- <command>`, or build it with `npm run build:cl
 | `cli/src/texteditor.ts` | `triggers edit` and `strings edit`: the editor chosen and started, the file kept when the text does not read |
 | `cli/src/sounds.ts` | The map's sounds: the WAV table joined with the archive's members, their lengths, the files written |
 | `cli/src/qr.ts` | The QR encoder for `--qr` and its drawing in the terminal |
-| `cli/src/run.ts`, `src/plugins/headless.ts` | A plugin run over a map: the editor's plugin host with a store, a document and no page, its status, toasts and log reported instead of shown |
+| `cli/src/run.ts`, `src/plugins/headless.ts` | A plugin run over a map: the editor's plugin host with a store, a document and no page, its status, toasts and log reported instead of shown; the same host with no plugin, for `map edit` |
 | `cli/src/build.ts` | The TrigScript build: finding TypeScript, compiling against the map's names, applying the block, laying the programs in and packing the file |
 | `cli/src/completion.ts` | The bash, zsh and fish scripts, generated from the command tree |
 | `cli/src/mcp.ts` | The MCP server: each tool a command's functions, its text and JSON as the result |

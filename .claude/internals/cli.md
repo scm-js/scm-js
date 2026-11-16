@@ -1,6 +1,6 @@
 # The `scmjs` command line
 
-`cli/` is the npm package **`@scm-js/cli`** (its command is `scmjs`): `scmjs about | doctor | info | mcp | lsp | map info|check|open|new|generate|dump|find|fetch|set|resize|triggers|strings|sounds|diff|log|blame|merge|build|run|unpack|pack|trace|cost|rush|balance|test [record]|preview|heatmap|coverage|optimize|analyze |
+`cli/` is the npm package **`@scm-js/cli`** (its command is `scmjs`): `scmjs about | doctor | info | mcp | lsp | map info|check|open|new|generate|dump|find|fetch|set|resize|units|locations|edit|triggers|strings|sounds|diff|log|blame|merge|build|run|unpack|pack|trace|cost|rush|balance|test [record]|preview|heatmap|coverage|optimize|analyze |
 replay info|map|open|watch|export|share | mod info|unpack|pack|check|diff|new|build|play|test | plugin new|check|dev | bot new|init|build|update|run|ladder`, or `npx @scm-js/cli …`. npm refused the plain name `scmjs` on the first publish (2026-11-06,
 E403 "too similar to scss, sockjs"), so the user chose the scope beside @scm-js/replay and @scm-js/plugin-api. The reader's page is `docs/cli.md`. The shape was the user's (2026-11-05): one command, a noun for
 each kind of thing (`map`, `replay`, `plugin`, `bot`), "an impressive UX tool … not overly engineered".
@@ -3037,3 +3037,96 @@ and `mod_info` gained `terrain`; `mod check` / `mod_check` warnings `terrain-fil
 mod declares"); `mod unpack` keeps a folder's file through `modTarget#earlierTerrain`. On Cosmonarchy's copy with the
 editor's file: `mod info` lists badlands' 3,373 pieces and seven borrow tables, `mod check` finds nothing in it; a copy
 with a wrong `table` and a bad piece gets both warnings.
+
+## Objects for a model: `map units`, `map locations`, `map edit` (`cli/src/objects.ts`, `mapedit.ts`) — 2026-11-16, branch `map-edit`
+
+The gap: `scmjs mcp` let a model change triggers, strings, the header and the size, and everything placed on the map
+only through `map_run`, where it had to write a plugin script. The in-editor assistant (plugin-ai, `tools/objects.ts`)
+has `place_units`, `update_units`, `add_location` and the rest; this is the same reach from the command line. 36 tools.
+
+- **`map edit <map> --edits <file> [--out] [--dry-run] [--all] [--json]`** and the tool `map_edit { path, edits, out,
+  dryRun, all }`. The list is JSON (a list, or `{ "edits": [...] }`, so the tool's argument and the command's file
+  are one shape; `--edits -` reads standard input, refused when the map is `-` too). Ten kinds by `op`: `place_unit`,
+  `move_units`, `update_units`, `remove_units`, `add_location`, `edit_location`, `remove_locations`, `place_sprite`,
+  `remove_sprites`, `set_fog`. One per placed thing rather than plugin-ai's lists inside a tool: the list *is* the batch.
+- **Through the plugin host, with no plugin.** `src/plugins/headless.ts#headlessApi(doc, name, sinks)` is the host for
+  a function: a store with the document, `createPluginApi` with an info made from the name, nothing loaded or
+  activated. `run.ts#openHost` wraps it (console to stderr until `dispose`) and re-exports the `PluginApi` /
+  `EditTransaction` types, so `mapedit.ts` imports the host from `./run` and the layering test's one exception
+  (`run.ts` → `headless.ts`) stands. The whole list is one `api.document.edit("map edit", tx => …)`.
+- **All or nothing.** An edit that cannot be done throws inside the builder; `runTransaction` rolls the earlier
+  edits back and rethrows, and `editMap` turns it into `edits[2] (remove_units): …` with the reason's own hint first
+  (the locations the map has, how a unit is named). Nothing is written because `writeBack` is never reached; the
+  rollback is belt and braces (the document is thrown away). Exit 1 for an edit the map refuses, 2 for a file that
+  is not JSON or an entry that is not an edit (`parseEdits`), as trigger text is 1 and a strings file with no strings 2.
+- **Read and written by the usual two.** `editMap(input, doc, …)` takes what `openForEdit`/`openMap` returned, reads
+  the "before" side of the diff with `loadMapInput(input)` once more (before the edits; `run.ts` uses `openMapBytes`
+  on the bytes, which this avoids on purpose — the user is routing the loader and `writeBack` to a live editor) and
+  writes with `writeBack` only.
+- **An index means the map before the call** (units, sprites). A model lists once and then removes and updates; a
+  removal early in the list must not shift what a later `indices` means. `Tracker` tags every record with its index
+  at the start in a `WeakMap` by identity: removing splices and leaves the other records the objects they were;
+  `updateUnits` makes a new object in place, so the update is wrapped in `carry`, which moves the tag across. A
+  placed record's tag holds its result, and `settle()` at the end writes the index it has in the finished map (null
+  when a later edit removed it). `where` looks at the map as it stands at that edit, earlier placements included.
+  An index past the end and one an earlier edit removed are errors (`unit 3 was removed by edits[0]`); a `where`
+  that matches nothing is not (a shell loop over many maps removing Map Revealers must not fail on a map with none),
+  and its line says "no unit matches". An empty `where` is refused: it would be every unit.
+- **Locations by name or number, the number from 1.** plugin-ai and the plugin API count slots from 0; `map dump`,
+  `map diff`, `map blame` and triggers count from 1, and the tool's own answer carries `printDiff` lines (`+ 4  Ramp`).
+  One numbering in everything the model reads beat matching the plugin API, so `map_locations` lists `number` (with
+  `index` beside it in the data) and `location: 4` means that. A name is matched whole, then without case; two
+  locations with the name → an error listing their numbers. `add_location` / a rename onto a name another location
+  has is refused, so that names go on meaning one location. Anywhere cannot be changed or removed. No elevation
+  flags yet (plugin-ai has `excludeLowGround…`); not asked for.
+- **Units.** A type is `rush.ts#unitByName` (the editor's name, without the race, a unique prefix, or an id), a
+  player 1 to 12. `place_unit` is `tx.makeUnit` + `tx.addUnits`, *not* `tx.placeUnit`: that snaps to a tile's centre
+  with the palette's snap on (measured: 100,100 → 112,112), and pixels were asked for. Properties follow plugin-ai's
+  `update_units`: a vital sets its `validStates` bit, a state sets or clears its `stateFlags` bit and sets the
+  `validProperties` bit and `State`; the owner is set without the Owner bit (the game does not read it).
+  `move_units` takes a position for exactly one unit or `dx`/`dy` for any number; leaving the map is an error.
+- **Sprites and fog.** `place_sprite` takes `sprite` (a sprites.dat id, 0–516, pure) or `unit` (a unit sprite, by
+  name), `player` 1 by default, `flipped`, `disabled` (unit sprites only; the editor's default, off, not plugin-ai's
+  on). `remove_sprites` by `indices` (the order `map dump` lists them; `map_find`'s data has them too) or `where`.
+  `set_fog` is `tx.setFog` over the tiles an area touches, players 1–8. `map diff` has no group for sprites or fog,
+  so they show as the THG2 / MASK sections; the edit's own line says what was done.
+- **No game data, measured** (`map run` with a probe script, the built CLI, 2026-11-16): the headless host's
+  `api.gameData.source()` is `none` and `api.tileset.load()` answers false under Node — nothing feeds it a copy of
+  the game, with or without one installed. So: `tx.placeDoodad` → −1 with "doodad N is not in this tileset";
+  `removeDoodads` with the empty catalogue would drop the records and leave their tiles in MTXM (wrong, silently);
+  `tx.canPlaceUnit` is always false; `unitGeometry` is the fallback, so a building is not snapped to the build grid;
+  `makeUnit(null, …)` writes 100% hit points and the resource amount of a field, geyser or gas building, and leaves
+  the shields/energy "used" bits and the cloak/burrow "valid" bits off (the game then takes its defaults). Hence:
+  **doodads are not offered** (`op: "place_doodad"` gets "doodads are not among them: they need the game's tileset
+  files"), positions are taken as given, and the description tells the model to give a building's centre in pixels.
+  Feeding the host from `openGameFiles` (a `reader` asset source) would lift all three; not done.
+- **The schema a model is shown.** First cut: `z.discriminatedUnion` of ten strict objects with a description on
+  every field — `map_edit` was 16.3 KB of schema, 13.6 KB after the descriptions went, of a 58 KB tool list
+  (`rect`, `tiles` and `where` repeated in every kind). Now `EDIT_ARGUMENT` is one flat strict object with every
+  field once and `op` an enum: `map_edit` is 7.7 KB in all (2.7 KB of it the description, which says which kind
+  takes which fields), the list 52 KB, and no `oneOf`, which not every client reads. `parseEdits` then holds each
+  edit to its kind with the strict union (`EDIT`), for the command's file and the tool alike, so the words are the
+  same: `` edits[0] (place_unit): `dx` is not a field of place_unit: it takes … ``. What the SDK's own validation
+  catches first (a wrong type, a field no kind has, an unknown `op`) reads `` map_edit: `edits[0].x` takes a number,
+  not a string `` — the same `edits[N]` (from 0, as JSON counts) on purpose. The printed rows are numbered from 0 too.
+- **`map units [--unit --player --location --rect --tiles --all]`, `map locations`** and `map_units` / `map_locations`,
+  added because `map_dump` lists units without indices (and is the whole map, triggers and strings included) and
+  `map_info` only counts. Rows: index, type, player, pixels, tile, and what the record sets (by `validStates`, with
+  the states by name); the text is cut at 40 (`all`), the data never. `objects.ts` holds what `mapedit.ts` shares:
+  `unitType`, `locationIndex`, `areaRect` (rect / tiles / location, one of them; empty, inverted and off-map
+  refused), `unitsWhere`. Found on the way: `dump.ts#unitLine` tests `validProperties` for the hit points, shields
+  and energy bits, which are `validStates` bits, so `map dump` leaves out ums.scx's Marine at 50% (not fixed here:
+  it changes the dump's text, which git diffs).
+- **The guide** has both sections on *Changing a map* (the user's placement; `COMMAND_GROUPS` follows, so `units`
+  and `locations` stand before `edit` in `map --help`), rows in the reference, the tools table and What to ask.
+- **Core**: `UnitState` joins `UnitUsed` on the entry (the states by name in a unit row).
+- Measured: `map edit` with five edits on ums.scx 0.22 s wall, `map units` 0.19 s (`map set --dry-run` 0.18 s: Node
+  starting is nearly all of it). `cli/dist/scmjs.mjs` 7,414,218 bytes; the size before was not measured.
+- Tests: `tests/cli-map-edit.test.ts` (17: the listings and their filters, each kind of edit read back from the
+  written file, indices across removals, 22 refusals each leaving the file as it was, a throwing transaction on
+  `headlessApi`, dry run, `--out`, `parseEdits`, the three commands through `run`), `tests/cli-mcp.test.ts` (+6, 35:
+  the listing with the flat schema and its size, the two readers, every kind in one call to `out`, dry run, all or
+  nothing, arguments and fields refused). By hand: the built `scmjs mcp` over stdio (initialize, tools/list, calls).
+- **Not done**: doodads; elevation flags; a count on `place_unit` (twelve Marines are twelve entries); the affected
+  indices of `move`/`update`/`remove` in the data (only counts; the dry run's diff names the units); sprite names
+  (ids only, there is no table without the game); placement checks.

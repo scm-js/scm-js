@@ -17,11 +17,28 @@ import { CliError, dot, mark, pc, size } from "./ui";
 import { openMapBytes } from "../../src/editor/mapFile";
 // The one module of the editor's the command takes that is not the library's: the plugin host is the editor's
 // (`tests/core.test.ts` names this exception).
-import { parseSpec, PluginLoadError, runHeadless, transpileTs, type HeadlessHost, type LoaderDeps, type LogEntry, type OpenedMap, type PluginSource, type Toast, type TS } from "../../src/plugins/headless";
+import { headlessApi, parseSpec, PluginLoadError, runHeadless, transpileTs, type EditTransaction, type HeadlessApi, type HeadlessHost, type LoaderDeps, type LogEntry, type OpenedMap, type PluginApi, type PluginSource, type Toast, type TS } from "../../src/plugins/headless";
 import { loadTypeScript } from "./build";
 import { diffMaps, printDiff, summarizeDiff, type MapDiff } from "./diff";
 
 export { summarizeDiff };
+export type { EditTransaction, HeadlessApi, PluginApi };
+
+/**
+ * The plugin API over a map with no plugin: for a command that changes a map the way a plugin would, through
+ * `api.document.edit` (`map edit`). What the editor's code under it writes to the console goes to standard error
+ * until `dispose`, as it does while a plugin runs.
+ */
+export function openHost(doc: OpenedMap, name: string): HeadlessApi {
+  const restoreConsole = consoleToStderr();
+  try {
+    const host = headlessApi(doc, name);
+    return { ...host, dispose: () => { try { host.dispose(); } finally { restoreConsole(); } } };
+  } catch (e) {
+    restoreConsole();
+    throw e;
+  }
+}
 import { writeBack } from "./exchange";
 import { toStdout } from "./files";
 

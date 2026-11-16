@@ -110,6 +110,9 @@ Done 2026-11-08 (branch `mods-api`, for the Mod Editor's sounds): the rest of th
 `wavFrames`, `wavCodecName`, `WAV_FORMAT`, `PcmAudio`, `WavBits`; no new edge, so the layering test is unchanged.
 `tests/wav.test.ts` "the WAV codec in @scm-js/core".
 
+Done 2026-11-16 (`map units`, `map edit`): `UnitState` beside `UnitUsed` (a unit record's special properties by
+name, for a row of `map units`). `cli.md` "Objects for a model".
+
 Done 2026-11-07 (the DX slice: `map new|dump|find`, `doctor`): added `flatTerrain`/`baseTerrain`/`DIRT`
 (`formats/tileset/terrain.ts` — works with a null tileset, dirt ids, so it is not "needs the tileset"),
 `DEFAULT_START_PLACEMENT` + its types, `DEFAULT_PLACEMENT`/`PlacementOptions` (placement.ts was already in the walk

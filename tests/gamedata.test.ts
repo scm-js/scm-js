@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { madeWithoutPatch, memberKey, openArchives, readerFor } from "../src/gamedata/archives";
 import { describeExtraction, ExtractError, extractGameData, extractTilesets, extractUnits, TILESET_NAMES } from "../src/gamedata/extract";
-import { isMemberPath, pickArchives, pickLanguageModule } from "../src/gamedata/install";
+import { dataSetLayer, isMemberPath, pickArchives, pickLanguageModule } from "../src/gamedata/install";
 import { pickedDataSet } from "../src/gamedata/modInput";
 import { activeProfileId, DEFAULT_PROFILE, isProfileId, normalizeProfile, PROFILE_KEY, profileIdFrom } from "../src/gamedata/profiles";
 import { locateGameData, type LocateDeps } from "../src/gamedata/source";
@@ -362,5 +362,23 @@ describe("installing a data set from files", () => {
     // A patch_rt.mpq outside a copy of the game is the mod's, standing in for the game's.
     const { input: alone } = await pickedDataSet([file("Mod/patch_rt.mpq"), file("Mod/arr/units.dat")]);
     expect(alone.archives).toEqual([]);
+  });
+});
+
+describe("where a data set is laid", () => {
+  const two = ["StarDat.mpq", "BrooDat.mpq"], three = [...two, "patch_rt.mpq"];
+  it("lays a mod whose folder has the two archives and no patch over a patched copy of the game", () => {
+    expect(dataSetLayer(two, undefined, false, true)).toEqual({ base: "starcraft", archives: false });
+  });
+  it("goes over the two when there is no patched copy, and over a folder's three as before", () => {
+    expect(dataSetLayer(two, undefined, false, false)).toEqual({ base: undefined, archives: true });
+    expect(dataSetLayer(three, undefined, false, true)).toEqual({ base: undefined, archives: true });
+  });
+  it("leaves a folder's game archives out over a copy it was asked to be laid over: a lone StarDat would win", () => {
+    expect(dataSetLayer(["StarDat.mpq"], "starcraft", false, true)).toEqual({ base: "starcraft", archives: false });
+    expect(dataSetLayer([], "cosmonarchy", false, false)).toEqual({ base: "cosmonarchy", archives: false });
+  });
+  it("never moves the game's own copy: it needs the patch with the two (pickArchives)", () => {
+    expect(dataSetLayer(two, undefined, true, true)).toEqual({ base: undefined, archives: true });
   });
 });

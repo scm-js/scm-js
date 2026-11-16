@@ -5,6 +5,7 @@ import { gameDataRevisionAtom, gameDataSourceAtom } from "../../atoms/gameDataAt
 import { closeDialogAtom, pushToastAtom } from "../../atoms/uiAtoms";
 import { desktopBridge, type DesktopLocateResult } from "../../gamedata/desktop";
 import { isGameArchive, madeWithoutPatch } from "../../gamedata/archives";
+import { storedCopy } from "../../gamedata/store";
 import { pickedDataSet } from "../../gamedata/modInput";
 import { applyDataSetTerrain, keepDataSetTerrain } from "../../services/dataSetTerrain";
 import { hostTerms } from "../../editor/platform";
@@ -107,6 +108,11 @@ export function GameDataDialog({ entry }: DialogProps) {
       <GameDataBody onReady={ready} />
     </DialogFrame>
   );
+}
+
+/** Said of a data set whose mod lies over StarDat.mpq and BrooDat.mpq without the patch, or over a copy made so. */
+function unpatchedSetWords(): string {
+  return t("This data set lies over the game's archives without {patch}, so the tables its mod does not replace (unit costs, build times and more) are the game's from before its patches. Give the game's own copy the patch (Remove copy, then the StarCraft folder or all three archives), then add the data set again: it is laid over that copy.", { patch: PATCH_NAME });
 }
 
 /**
@@ -259,8 +265,13 @@ export function GameDataBody({ onReady }: { onReady?: (next: AssetSource) => voi
     void applyDataSetTerrain(store);
     setAdding(false);
     setNewName("");
-    setMessage({ text: t("Installed {name}: {summary}.", { name, summary: next.stored ? summaryText(next.stored.summary) : next.label }) + kept(next.stored?.where ?? "opfs") });
-    toast({ kind: "ok", title: t("Data set ready"), detail: t("Now drawing from {name}.", { name }) });
+    // Laid over the two archives without the patch (no patched copy to lay it over), or over a copy made that way.
+    const under = base ? await storedCopy(base).catch(() => null) : null;
+    const unpatched = madeWithoutPatch(next.stored?.from ?? "") || (!!under && madeWithoutPatch(under.from));
+    setMessage({ text: t("Installed {name}: {summary}.", { name, summary: next.stored ? summaryText(next.stored.summary) : next.label }) + kept(next.stored?.where ?? "opfs") + (unpatched ? ` ${unpatchedSetWords()}` : "") });
+    toast(unpatched
+      ? { kind: "warn", title: t("Data set ready, without the patch"), detail: unpatchedSetWords() }
+      : { kind: "ok", title: t("Data set ready"), detail: t("Now drawing from {name}.", { name }) });
   });
 
   /** Data sets: StarCraft: Remastered beside the copy already here. */
@@ -291,9 +302,11 @@ export function GameDataBody({ onReady }: { onReady?: (next: AssetSource) => voi
               {removable && <Button size="sm" variant="danger" disabled={!!busy} onClick={remove}><Trash2 size={11} /> {" "}{t("Remove copy")}</Button>}
             </div>
             <p className="hint" style={{ marginTop: 4 }}>{explain(source)}</p>
-            {source?.stored && isDefaultProfile(source.profile.id) && madeWithoutPatch(source.stored.from) && (
+            {source?.stored && madeWithoutPatch(source.stored.from) && (
               <p className="hint" style={{ marginTop: 4, color: "var(--danger, #e66)" }}>
-                {t("This copy was made without {patch}, so its unit costs, build times and other tables are the game's from before its patches. The editor's defaults are not the game's, and replays do not play as they were played. Choose Remove copy, then choose the StarCraft folder, or all three archives.", { patch: PATCH_NAME })}
+                {isDefaultProfile(source.profile.id)
+                  ? t("This copy was made without {patch}, so its unit costs, build times and other tables are the game's from before its patches. The editor's defaults are not the game's, and replays do not play as they were played. Choose Remove copy, then choose the StarCraft folder, or all three archives.", { patch: PATCH_NAME })
+                  : unpatchedSetWords()}
               </p>
             )}
             {source && !isDefaultProfile(source.profile.id) && <p className="hint" style={{ marginTop: 4 }}>{t("Data set:")}{" "}<strong>{source.profile.name}</strong>{t(". Units, weapons, upgrades and technologies it renamed show its names.")}</p>}

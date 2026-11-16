@@ -14,7 +14,7 @@
  * And a StarCraft: Remastered installation (`installFromRemastered`), which has no archives
  * to pick: its folder is handed to the worker and read there (`remastered.ts`).
  */
-import { isGameArchive, isMemberPath, sortArchives } from "./archives";
+import { isGameArchive, isMemberPath, lacksPatch, madeWithoutPatch, sortArchives } from "./archives";
 import type { ExtractRequest, ExtractResponse } from "./extract.worker";
 import { DEFAULT_PROFILE, isDefaultProfile, isProfileId, normalizeProfile, type GameDataProfile } from "./profiles";
 import { BUILD_INFO, installRootOf, type PickedFile } from "./remasteredFolder";
@@ -159,11 +159,15 @@ const bytesOf = async (data: InstallBytes): Promise<ArrayBuffer> =>
 export async function installDataSet(profile: GameDataProfile, input: GameDataFiles, progress?: InstallProgress): Promise<StoredCopy> {
   const normalized = normalizeProfile(profile);
   if (!normalized) throw new InstallError(t("\"{id}\" is not a usable data set id: lower-case letters, digits and hyphens, up to 40 characters.", { id: profile.id }));
-  const base = input.base !== undefined ? await baseOf(input.base) : undefined;
-  const games = input.archives.filter((a) => isGameArchive(a.name));
+  const names = input.archives.filter((a) => isGameArchive(a.name)).map((a) => a.name);
+  const own = isDefaultProfile(normalized.id);
+  const ask = input.base === undefined && !own && lacksPatch(names);
+  const layer = dataSetLayer(names, input.base, own, ask && (await patchedGameCopy()));
+  const base = layer.base !== undefined ? await baseOf(layer.base) : undefined;
+  const games = layer.archives ? input.archives.filter((a) => isGameArchive(a.name)) : [];
   // Throws naming what is missing. The game's own copy needs the patch however it arrives (a plugin's
-  // `api.gameData.install` with the default id comes here); a mod's data set keeps the old rule for now.
-  if (!base) pickArchives(games.map((a) => new File([], a.name)), { patch: isDefaultProfile(normalized.id) });
+  // `api.gameData.install` with the default id comes here); a mod's data set may go over the two (`dataSetLayer`).
+  if (!base) pickArchives(games.map((a) => new File([], a.name)), { patch: own });
   progress?.(0, t("Reading the archives"));
   const archives: ExtractRequest["archives"] = [];
   for (const a of sortArchives([...games])) archives.push({ name: a.name, bytes: await bytesOf(a.data) });
@@ -172,6 +176,32 @@ export async function installDataSet(profile: GameDataProfile, input: GameDataFi
   const mod = dataSetMod(normalized.name || normalized.id, input);
   const from = [...archives.map((a) => a.name), ...(mod ? [mod.name] : [])].join(" + ");
   return runWorker(archives, from, progress, isDefaultProfile(normalized.id) ? undefined : normalized, undefined, false, base, mod);
+}
+
+/**
+ * Where a data set is laid, from the game's archives among its files (`names`), the copy it was asked to be laid over
+ * (`given`), whether it is the game's own copy (`own`) and whether a patched copy of the game is here (`patched`):
+ * - a mod whose folder carries StarDat.mpq and BrooDat.mpq without the patch goes over the patched copy when there is
+ *   one: the folder's two are that game's own archives (the mod's hash leaves them out), and without the patch every
+ *   table the mod does not replace would be Brood War's as first sold. With none it goes over the two, and the dialog
+ *   says so (`madeWithoutPatch` of the copy's origin);
+ * - over a copy the folder's game archives are left out (`archives: false`): the copy holds the game, and a lone
+ *   StarDat.mpq laid over it would win over the copy's patched tables.
+ */
+export function dataSetLayer(names: readonly string[], given: string | undefined, own: boolean, patched: boolean): { base: string | undefined; archives: boolean } {
+  const base = given ?? (!own && patched && lacksPatch(names) ? DEFAULT_PROFILE.id : undefined);
+  return { base, archives: base === undefined };
+}
+
+/**
+ * Whether the game's own data here has the patch's tables: a stored copy not made from the two archives alone, or
+ * this build's own files (a clone's extraction, which asks for the patch). What `baseOf(DEFAULT_PROFILE.id)` reads.
+ */
+async function patchedGameCopy(): Promise<boolean> {
+  const copy = await storedCopy(DEFAULT_PROFILE.id).catch(() => null);
+  if (copy?.where === "opfs") return !madeWithoutPatch(copy.from);
+  const source = currentAssetSource();
+  return source?.kind === "bundled" && !!source.base && isDefaultProfile(source.profile.id);
 }
 
 /**

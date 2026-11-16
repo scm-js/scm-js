@@ -119,7 +119,13 @@ unpatched folder (exit 2) for everything that plays the game; `openGameFiles` pa
 `archiveFiles` then withholds `PATCHED_MEMBERS` (null, as for a copy that lacks them: `map preview` draws units as
 tiles, `map analyze` goes without walking speeds) while terrain is read as ever. With a three-archive
 `fixtures/data/` the whole suite passes (2,676), the byte-for-byte extraction check included: no test held 1.04's
-numbers. Still open: a mod's data set over the two without the patch (see `mods.md`). `zip.ts` is the pure part: a `RangeReader` (`httpRangeReader` over `fetch`, with an
+numbers. **A mod's data set** (2026-11-16, the PR after): `install.ts#dataSetLayer` (pure, tested) lays a mod whose
+folder has StarDat + BrooDat and no patch over the default copy when `patchedGameCopy()` (a stored default copy not
+`madeWithoutPatch`, or this build's bundled files), and over any base drops the folder's game archives (a lone
+StarDat, which the dialog sent beside a base, beat the base's patched tables). With no patched copy it still goes
+over the two; the dialog's toast and "Now" group say so (`unpatchedSetWords`, by the copy's `from`, or the base
+copy's when the dialog laid it over one). Real releases ship no StarDat/BrooDat (checked: Cosmonarchy, CosmonarchyPlus,
+TriFresh, SC Revolution, Burning Ground, BWMetaAI …), so this is for hand-made folders and plugins. `zip.ts` is the pure part: a `RangeReader` (`httpRangeReader` over `fetch`, with an
 `onProgress` that streams so an 82 MB member does not freeze the bar), `readZipDirectory` (EOCD then the
 central directory, Zip64 reported rather than misread), `readZipMember` (the *local* header is measured
 rather than trusting the directory's copy of its extra field, then `DecompressionStream("deflate-raw")`)

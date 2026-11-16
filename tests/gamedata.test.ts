@@ -1,7 +1,7 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { memberKey, openArchives, readerFor } from "../src/gamedata/archives";
+import { madeWithoutPatch, memberKey, openArchives, readerFor } from "../src/gamedata/archives";
 import { describeExtraction, ExtractError, extractGameData, extractTilesets, extractUnits, TILESET_NAMES } from "../src/gamedata/extract";
 import { isMemberPath, pickArchives, pickLanguageModule } from "../src/gamedata/install";
 import { pickedDataSet } from "../src/gamedata/modInput";
@@ -114,6 +114,30 @@ describe("pickArchives", () => {
   it("names what is missing", () => {
     expect(() => pickArchives([file("StarDat.mpq")])).toThrow(/BrooDat\.mpq missing/);
     expect(() => pickArchives([file("map.scx")])).toThrow(/No StarCraft archives/);
+  });
+
+  // StarDat and BrooDat alone hold the tables from before the game's patches: a copy of the game needs the patch too.
+  it("asks for patch_rt.mpq with the two, in any case", () => {
+    expect(() => pickArchives([file("StarDat.mpq"), file("BrooDat.mpq")])).toThrow(/patch_rt\.mpq is missing/);
+    expect(pickArchives([file("STARDAT.MPQ"), file("BROODAT.MPQ"), file("PATCH_RT.MPQ")]).map((f) => f.name)).toEqual(["STARDAT.MPQ", "BROODAT.MPQ", "PATCH_RT.MPQ"]);
+  });
+
+  it("takes the two alone for a data set, whose own files are laid over them", () => {
+    expect(pickArchives([file("StarDat.mpq"), file("BrooDat.mpq")], { patch: false }).map((f) => f.name)).toEqual(["StarDat.mpq", "BrooDat.mpq"]);
+  });
+});
+
+describe("madeWithoutPatch", () => {
+  it("tells a copy made from the two archives alone by its origin", () => {
+    expect(madeWithoutPatch("StarDat.mpq + BrooDat.mpq")).toBe(true);
+    expect(madeWithoutPatch("stardat.mpq + broodat.mpq")).toBe(true);
+  });
+
+  it("is false for a copy with the patch, a download and a Remastered installation", () => {
+    expect(madeWithoutPatch("StarDat.mpq + BrooDat.mpq + patch_rt.mpq")).toBe(false);
+    expect(madeWithoutPatch("STARDAT.MPQ + BROODAT.MPQ + PATCH_RT.MPQ")).toBe(false);
+    expect(madeWithoutPatch("https://gamedata.scmjs.dev/StarEdit.zip")).toBe(false);
+    expect(madeWithoutPatch("StarCraft: Remastered 1.23.10.13515")).toBe(false);
   });
 });
 

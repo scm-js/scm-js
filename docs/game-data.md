@@ -36,7 +36,12 @@ or playing one, in the game or on the site's play page, needs StarCraft installe
 - **A classic installation** has two archives, `StarDat.mpq` and `BrooDat.mpq`, with a
   `patch_rt.mpq` beside them that is applied over both, as the game applies it. Brood
   War's archive is required: its unit table is the layout the editor reads, and the Ice,
-  Desert and Twilight tilesets exist only there.
+  Desert and Twilight tilesets exist only there. The patch is required too, in the
+  browser: the two archives alone hold the unit, weapon, upgrade and technology tables
+  from before the game's patches (a Factory at 200 minerals, a Dragoon built in 600
+  frames), and a replay played from them leaves the game that was played within minutes. A
+  copy made from the two alone by an earlier version says so in Help ▸ Game Data…; remove
+  it and choose the folder again.
 - **A Remastered installation** has no `.mpq` archives. The editor reads the same files
   out of its `Data` folder instead, along with Remastered's own pictures; see [StarCraft:
   Remastered](#starcraft-remastered).

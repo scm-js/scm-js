@@ -29,8 +29,16 @@ export { isMemberPath };
 export type InstallProgress = (fraction: number, label: string) => void;
 
 export const ARCHIVE_NAMES = ["StarDat.mpq", "BrooDat.mpq"] as const;
-/** The patch an installation lays over those two, and Blizzard's download carries beside them. */
-const PATCH_NAME = "patch_rt.mpq";
+/**
+ * The patch an installation lays over those two, and Blizzard's download carries beside them. A copy of the game
+ * needs it as much as it needs the two: StarDat and BrooDat alone hold Brood War's tables as it was first sold
+ * (`units.dat`, `weapons.dat`, `flingy.dat`, `upgrades.dat`, `techdata.dat`, `iscript.bin`, `aiscript.bin`,
+ * `stat_txt.tbl`), and the game that is played, and that every replay was played in, reads the patch's. From the
+ * two alone a Factory costs 200 minerals and a Dragoon is built in 600 frames: the editor's defaults are then not the
+ * game's, and a replay played from such a copy leaves the game that was played within minutes (measured 2026-11-16:
+ * two 1.16.1 replays, both from about 5:20, `units.dat` alone being the difference).
+ */
+export const PATCH_NAME = "patch_rt.mpq";
 
 /**
  * Blizzard's own standalone StarEdit package, which carries both archives and is offered
@@ -59,8 +67,12 @@ export class InstallError extends Error {
   }
 }
 
-/** The game's archives among a pick or a dropped folder, or an `InstallError` naming what is missing. */
-export function pickArchives(files: readonly File[]): File[] {
+/**
+ * The game's archives among a pick or a dropped folder, or an `InstallError` naming what is missing. The patch is
+ * asked for with the two (`PATCH_NAME`) unless `options.patch` is false: a data set's folder, where a mod's own files
+ * are what is laid over the two.
+ */
+export function pickArchives(files: readonly File[], options: { patch?: boolean } = {}): File[] {
   const archives = sortArchives(files.filter((f) => isGameArchive(f.name)));
   const names = archives.map((f) => f.name.toLowerCase());
   const missing = ARCHIVE_NAMES.filter((n) => !names.includes(n.toLowerCase()));
@@ -70,6 +82,9 @@ export function pickArchives(files: readonly File[]): File[] {
         ? t("No StarCraft archives among the files picked. The editor needs {first} and {second}.", { first: ARCHIVE_NAMES[0], second: ARCHIVE_NAMES[1] })
         : t("{names} missing — the editor needs both archives.", { names: missing.join(", ") }),
     );
+  }
+  if (options.patch !== false && !names.includes(PATCH_NAME)) {
+    throw new InstallError(t("{patch} is missing: the editor needs it with {first} and {second}, and an installation keeps the three in one folder. The first two alone hold the game's tables from before its patches, so unit costs and build times would not be the game's and replays would not play as they were played.", { patch: PATCH_NAME, first: ARCHIVE_NAMES[0], second: ARCHIVE_NAMES[1] }));
   }
   return archives;
 }
@@ -146,7 +161,7 @@ export async function installDataSet(profile: GameDataProfile, input: GameDataFi
   if (!normalized) throw new InstallError(t("\"{id}\" is not a usable data set id: lower-case letters, digits and hyphens, up to 40 characters.", { id: profile.id }));
   const base = input.base !== undefined ? await baseOf(input.base) : undefined;
   const games = input.archives.filter((a) => isGameArchive(a.name));
-  if (!base) pickArchives(games.map((a) => new File([], a.name))); // throws naming what is missing
+  if (!base) pickArchives(games.map((a) => new File([], a.name)), { patch: false }); // throws naming what is missing
   progress?.(0, t("Reading the archives"));
   const archives: ExtractRequest["archives"] = [];
   for (const a of sortArchives([...games])) archives.push({ name: a.name, bytes: await bytesOf(a.data) });

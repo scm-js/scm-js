@@ -94,7 +94,20 @@ laid in the game's order. **The patch is not optional** (until 2026-10-15 it was
 of `units.dat`), and the folder route and the Remastered route both have the patched ones. With it, the editor's
 938 files and the 1,301 of the play set (1,119 sounds) are byte for byte a 1.16.1 install's (measured
 2026-10-15 by running `extractGameData` + `copyPlaySet` over both). A `public/arr` extracted from StarDat/BrooDat
-without the patch is the old tables; re-extract. `zip.ts` is the pure part: a `RangeReader` (`httpRangeReader` over `fetch`, with an
+without the patch is the old tables; re-extract. **The by-hand route needs it too** (2026-11-16): `pickArchives`
+took StarDat + BrooDat as enough and the button named only the two, so a copy picked that way held BrooDat's tables
+(Brood War as first sold: `units.dat` differs in 7 columns — Factory 200 minerals, Dragoon 600 frames, Zealot
+80/80, Science Facility, Scout, turret, Spawning Pool, supply of Battlecruiser/Carrier/Ultralisk — plus
+`weapons/flingy/upgrades/techdata.dat`, `iscript.bin`, `aiscript.bin`, `stat_txt.tbl`) and was still stamped
+`play`. The play page then played replays from it: two 1.16.1 bot replays left the game at frames 7627 and 7691
+(~5:20; Aftermath's "the game played here is not the game in the replay", no winner), in the analysis and in the
+Replay view alike, and `units.dat` alone decides it (each of the eight patch files laid over the two by itself:
+only `units.dat` cures it; all but `units.dat`: still parts). So `pickArchives` now throws without
+`PATCH_NAME` for the game's own copy (`{ patch: false }` only for a data set's folder, whose rule is unchanged),
+the button reads "Choose StarDat.mpq, BrooDat.mpq and patch_rt.mpq…", and a copy an earlier build made from the two
+(`archives.ts#madeWithoutPatch` over the stamp's `from`) is called out in the dialog's "Now" group. The play page
+has to pass such a copy over on its side (scm-sim `web/gameSource.ts#unplayable`); the desktop search and
+`npm run extract` still take the patch only where they find it. `zip.ts` is the pure part: a `RangeReader` (`httpRangeReader` over `fetch`, with an
 `onProgress` that streams so an 82 MB member does not freeze the bar), `readZipDirectory` (EOCD then the
 central directory, Zip64 reported rather than misread), `readZipMember` (the *local* header is measured
 rather than trusting the directory's copy of its extra field, then `DecompressionStream("deflate-raw")`)

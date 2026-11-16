@@ -1,7 +1,7 @@
 # The `scmjs` command line
 
 `cli/` is the npm package **`@scm-js/cli`** (its command is `scmjs`): `scmjs about | doctor | info | mcp | lsp | map info|check|open|new|generate|dump|find|fetch|set|resize|units|locations|edit|triggers|strings|sounds|diff|log|blame|merge|build|run|unpack|pack|trace|cost|rush|balance|test [record]|preview|heatmap|coverage|optimize|analyze |
-replay info|map|open|watch|export|share | mod info|unpack|pack|check|diff|new|build|play|test | plugin new|check|dev | bot new|init|build|update|run|ladder`, or `npx @scm-js/cli …`. npm refused the plain name `scmjs` on the first publish (2026-11-06,
+replay info|map|open|watch|export|share|sync | mod info|unpack|pack|check|diff|new|build|play|test | plugin new|check|dev | bot new|init|build|update|run|ladder`, or `npx @scm-js/cli …`. npm refused the plain name `scmjs` on the first publish (2026-11-06,
 E403 "too similar to scss, sockjs"), so the user chose the scope beside @scm-js/replay and @scm-js/plugin-api. The reader's page is `docs/cli.md`. The shape was the user's (2026-11-05): one command, a noun for
 each kind of thing (`map`, `replay`, `plugin`, `bot`), "an impressive UX tool … not overly engineered".
 
@@ -1404,6 +1404,74 @@ Phase one of "share links from files on disk". Server half: ai-server 0.36.0 (`P
   of the game, `--no-picture` to skip. A replay from `-` is named `replay.rep`.
 - `tests/cli-replay-share.test.ts` (3) against a stand-in server parsing the multipart with `Request.formData()`.
   Not run against the real server here (ai-server #18 was open); the agent that built #18 drove the editor end.
+
+## `replay sync` (`cli/src/replaysync.ts`) — 2026-11-16, branch `cli-replay-sync`
+
+One of four parallel slices making the account easy from the terminal (with `share`, `library`, `login --device`).
+`scmjs replay sync [folders…] [--watch] [--since d|Nd] [--all] [--dry-run] [--link [--no-picture] [--starcraft]] [--json]`.
+
+- **The folders found** (`usualReplayFolders`): `StarCraft/Maps/Replays` (any case) under each Documents folder —
+  Windows: `%USERPROFILE%\Documents`, `%OneDrive%|OneDriveConsumer|OneDriveCommercial\Documents`, `OneDrive*` in the
+  profile; WSL: every `/mnt/c/Users/<u>/Documents` and `…/OneDrive*/Documents` (not Public, Default, Default User,
+  All Users, WsiAccount); Linux `~/Documents` and Wine's `drive_c/users/*/(My )Documents`; macOS `~/Library/Application
+  Support/Blizzard/StarCraft/…` and `~/Documents` (**the Mac path is unverified**) — then each `usualGameFolders()`
+  copy's `maps/replays` (1.16.1). **Measured on the user's machine (2026-11-16)**: Documents is OneDrive's
+  (`/mnt/c/Users/<name>/OneDrive/Documents/StarCraft/Maps/Replays`, plain `Documents` holds only `My Games`), and the
+  folder is `LastReplay.rep`, a game saved by name at the top, and `AutoSave/<yyyymmdd>/<hhmmss>,<map>.rep` (75 files,
+  2.7 s for a full `--all --dry-run` from WSL). No per-account or Multiplayer sub-folders there; the walk takes any.
+  The Remastered install (`Program Files (x86)/StarCraft`) has `Maps` but no replays.
+- **What is on the account** is `GET /v1/replays`, read once a run: ai-server's `ReplayView` carries `sha256`, so a
+  replay the account has is never sent (not even the first time this command sees it). The server dedups by hash per
+  account too (`existing: true`), the backstop. A server without replays (404) is an error.
+- **The state** (`syncStatePath`: `replay-sync.json` beside `sessionPath()`, or `SCMJS_REPLAY_SYNC`), written via
+  `.part` + rename after every upload so Ctrl+C loses nothing: `servers[server] = { since, firstSync, uploaded{sha →
+  file,name,at,id,link?}, refused{sha → server message} }` and `files[path] = { size, mtimeMs, sha256 | skip }`. The
+  file memo means a second run reads no file it read before (a test makes the file unreadable and still counts it as
+  on the account); an old file with a memo whose hash is known counts as "already", not as "older".
+- **The first run's start** (the user's worry: years of replays into 250 MB): no state for this server → `since` =
+  now, stored; on a TTY (not `--json`/`--dry-run`/`--since`/`--all`) the command asks with the count and size of the
+  older `.rep` files (by stat, nothing read) — yes stores `since: null`. `--since X` or `--all` on the first run store
+  that instead. Later runs' `--since`/`--all` apply to that run only. The cut is the file's mtime (no read needed),
+  not the header's start time. `--dry-run` writes no state at all.
+- **`LastReplay.rep`** is one more path whose hash changes; it is named `<yyyy-mm-dd> <hhmmss>,<map>.rep` by its
+  mtime in local time (the AutoSave form with the date), and each pass takes it **after** the other files, so when
+  the game also saved an AutoSave copy (same bytes) that name wins and LastReplay counts as already there.
+- **Refusals** are told apart by the server's code, read off a fetch wrapped round the client's (`res.clone()`), so
+  `account.ts` is untouched: `invalid_input` for this file (not a replay, too large, unreadable) → skipped and
+  remembered in `refused`; `storage_full`, `invalid_input` "at most N replays", 401 → the run stops, the summary
+  printed, then the CliError (exit 1, 2 for the session) with a My Maps hint. A fetch that throws while watching is a
+  warning and the file is tried on the next pass; in a single run it stops. Files over 8 MB are not read
+  (`MAX_REPLAY_BYTES`, the server's default) and files that `detectFormat`/`parseReplay` refuse are skipped locally.
+- **Settling**: a file is taken when `now - mtime >= 2 s`, or when it has been seen unchanged for 2 s (Windows' and
+  WSL's clocks can differ, and an mtime ahead of this clock would never pass the first test). A single run waits once
+  for the files not settled, then leaves the rest (`unsettled` in the summary); a file that changed while read is
+  left too.
+- **`--watch`** (`ReplayFolders`): one full walk, then every 5 s `changed()` stats each known folder and re-lists only
+  those whose mtime moved (new sub-folders walked), stats the files not yet settled and every `LastReplay.rep` (an
+  overwrite in place does not move its folder's mtime). **Checked on `/mnt/c` (2026-11-16)**: creating a file moves
+  its folder's mtime and not the parent's; rewriting a file moves neither. inotify does not fire on drvfs, hence
+  polling. Ctrl+C: `process.once("SIGINT"|"SIGTERM")` aborts a controller (lifecycle.ts then leaves the signal to
+  us, as for `plugin dev`), the loop ends between files (an upload in flight finishes), the summary prints, exit 0;
+  a single run stopped that way exits 130. A second Ctrl+C has no listener left and kills at once.
+- **Stored, not linked** (decided here): a link is public to whoever holds it, and the share agent's `--no-link` for
+  `replay share` is the same idea; `--link` asks `link=1` per upload and draws the card picture with `replayPicture`
+  (imported from `replayshare.ts`, which this slice does not edit; the upload form is built here). `replay share` on
+  a stored replay later answers its first link, since the same bytes are the same replay.
+- **Output**: a line per upload `✔ <name> · <map> · <matchup> <players ≤ 4> · <length> · stored|<link>` (`ℹ … would
+  upload` for a dry run), facts from the local parse (`matchupOf` copies the server's rule); the summary (uploaded,
+  already, skipped with the first five named, still being written, older left with the `--since`/`--all` hint,
+  storage). The folders and "Watching…" go to stderr. `--json`: one object at the end; with `--watch`, a
+  `{"type":"upload",…}` line each and a `{"type":"summary",…}` line.
+- **For an MCP tool later**: `usualReplayFolders`, `syncReplays(folders, o, deps)` and `watchReplays` return the
+  `SyncReport`; deps take `server`, `file`, `stateFile`, `fetchImpl`, `now`, `settleMs`, `ask`, `onUpload`, `signal`.
+- **Verified**: `tests/cli-replay-sync.test.ts` (13) against a fake fetch; the built command against a throwaway
+  ai-server 0.39.0 (origin/main via `git archive`, PGlite, a session made through the fake-Discord callback) with
+  copies of the user's replays in a temp folder: first run left 7, `--since`, `--all --json`, `--link` (link and
+  card picture from the Remastered install), a 0.1 MB cap stopping with the server's message (exit 1), the TTY
+  question through `script`, and `--watch` picking up a new AutoSave file, a rewritten `LastReplay.rep` and a game
+  saved by name, then SIGINT → summary, exit 0. `--all --dry-run` read the real OneDrive folder (read only).
+  **Not run**: native Windows (`%USERPROFILE%`/OneDrive env paths), a Mac, a real 1.16.1 `maps\replays`, the live
+  server.
 
 ## A map linked to the editor (`cli/src/link.ts`, `src/services/editorLink.ts`, `openLinked` in `useOpenerHandoff.ts`) — 2026-11-16
 

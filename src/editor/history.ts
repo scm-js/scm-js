@@ -16,7 +16,6 @@ import { applyDoodadChanges, type DoodadChange } from "./doodads";
 import { applySpriteChanges, type SpriteChange } from "./sprites";
 import { applyLocationChanges, type LocationChange } from "./locations";
 import type { TablesEdit } from "./tableHistory";
-import type { StoredMembers } from "../formats/mpq/scm";
 
 /** The change lists of one edit; `HistoryEntry` adds the label. */
 export interface HistoryEdit {
@@ -101,7 +100,12 @@ export interface HistoryEdit {
 export interface DocumentSide {
   scenario: Scenario;
   extras: Map<string, Uint8Array>;
-  stored: StoredMembers | null;
+  /**
+   * The members carried as stored (`StoredMembers` of formats/mpq/scm.ts), or null. Not named
+   * here: this module's types are part of the plugin API's declarations, which must stand
+   * without the archive reader's.
+   */
+  stored: unknown;
 }
 
 /**

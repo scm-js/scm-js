@@ -772,7 +772,7 @@ function documentSide(get: Getter): DocumentSide {
  */
 function putDocumentSide(get: Getter, set: Setter, side: DocumentSide) {
   installRegisters(get, set, {
-    scenario: side.scenario, extras: side.extras, stored: side.stored,
+    scenario: side.scenario, extras: side.extras, stored: side.stored as StoredMembers | null,
     fileName: get(mapFilePathAtom), handle: get(mapFileHandleAtom), origin: get(mapOriginAtom), builtBy: get(builtByAtom),
     saveOptions: get(saveOptionsAtom), modified: true, blankFill: get(blankFillAtom),
     undo: get(undoStackAtom), redo: get(redoStackAtom), selected: { units: [], doodads: [], sprites: [], locations: [] }, clipSelection: null,

@@ -2395,8 +2395,10 @@ a newer scmjs; then the commands this computer can run now. Nothing is changed. 
     .addHelpText("after", () => "\n" + t(`Speaks the Model Context Protocol on standard input and output, so an AI tool that runs on this computer (Claude
 Code, Cursor, VS Code, …) can read, check, search, compare and change maps with the same code these commands use.
 Each tool is a command, with its options as arguments by the same names:`) + "\n" + wrapWords(createMcpServer().tools.join(", "), 116, "  ") + "\n" + t(`The tools that run the game or draw it (map_preview, map_analyze, map_trace, map_cost, map_coverage, map_balance) need a
-copy of StarCraft here, as the commands do; doctor says whether there is one. Paths are files in the folder the tool
-started the server in, and a path outside it is refused unless the server was started with --allow-outside.
+copy of StarCraft here, as the commands do; doctor says whether there is one. The account tools (account_info, library_…,
+share, replay_sync) use the session scmjs login keeps, and share, replay_sync, library_unlink and library_remove first
+say what they would do and act only when called again with confirm. Paths are files in the folder the tool started the
+server in, and a path outside it is refused unless the server was started with --allow-outside.
 Claude Code, in your maps folder:`) + `
   claude mcp add scmjs -- npx -y @scm-js/cli mcp
 ${t("Anything else takes the same thing as JSON:")}

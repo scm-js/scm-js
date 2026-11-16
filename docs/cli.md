@@ -3732,7 +3732,9 @@ and attacks with Mavericks, is in the scmbot repository's `examples/cosmonarchy`
 
 These commands use your [scmjs.dev account](guide.md#your-scmjsdev-account). Besides them,
 only a command given a [scmjs.dev link](#links-in-place-of-files) in place of a file talks
-to scmjs.dev, and it needs no account.
+to scmjs.dev, and it needs no account. An AI tool running `scmjs mcp` can use the account
+too, with the session `scmjs login` keeps, and asks you before it uploads or deletes: see
+[Your scmjs.dev account](ai-tools.md#your-scmjsdev-account).
 
 ### Signing in
 
@@ -4393,8 +4395,8 @@ a broken bot from a losing one.
 
 `scmjs mcp` gives an AI tool on your computer, such as Claude Code, Cursor or Claude
 Desktop, the commands of this guide as tools. You ask in words, and the model reads,
-checks, changes and runs your maps. With Claude Code, once, in the folder your maps are
-in:
+checks, changes and runs your maps, and once you have signed in, shares them and fetches
+what your account keeps. With Claude Code, once, in the folder your maps are in:
 
 ```sh
 claude mcp add scmjs -- npx -y @scm-js/cli mcp
@@ -4742,7 +4744,7 @@ gives its options.
 | [`scmjs library rm\|unlink\|rename\|note`](#your-library) | Deletes a map, revision or replay, removes one link, renames a map, sets a revision's note; asks first, `--yes` in scripts |
 | [`scmjs doctor`](#checking-your-setup) | What this computer has for each command, and what is missing |
 | [`scmjs about`](#updating) | This version, whether there is a newer one, and the links |
-| [`scmjs mcp`](ai-tools.md) | The map commands as an MCP server for AI tools, kept to the folder it starts in (and to files, not links) unless `--allow-outside` |
+| [`scmjs mcp`](ai-tools.md) | The map commands and your scmjs.dev account as an MCP server for AI tools, kept to the folder it starts in (and to files, not links) unless `--allow-outside`; uploads and deletions asked first |
 | [`scmjs lsp`](#trigscript-in-your-text-editor) | A TrigScript language server for your text editor: errors, completions, hovers, go to definition |
 | [`scmjs completion <shell>`](#shell-completion) | A completion script for bash, zsh or fish |
 

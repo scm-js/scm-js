@@ -1391,6 +1391,48 @@ Phase one of "share links from files on disk". Server half: ai-server 0.36.0 (`P
   against an `http.createServer` stand-in. Not built: an MCP tool for sharing, a `--follow` link (the newest
   revision), listing or removing links and maps (`account maps`), ending a shared room from the terminal.
 
+## Sign-in by code: `login --device` (`account.ts`) — 2026-11-16
+
+Server half: ai-server 0.40.0 (`POST /v1/auth/device`, `POST /v1/auth/device/token`, the server-rendered `/device`
+page). For a terminal whose browser cannot reach the loopback page (SSH, a container). RFC 8628 in spirit, JSON shapes
+of the server's own (camelCase, `status` in a 200 rather than RFC error codes, so `Client.request` needs no special case).
+
+- **Flow** (`loginByCode`): start with `{ client: "scmjs on <hostname()>" }` (`missingOk`: a 404 = a server before 0.40.0
+  → "{server} does not offer sign-in by code", hint "Sign in on a computer with a browser: scmjs login"); `say` gets
+  `{ deviceCode, userCode, verificationUri, verificationUriComplete, expiresIn: 600, interval: 5 }`; then poll
+  `/v1/auth/device/token { deviceCode }` every `interval` s (floored at 0.2 s so the tests can run fast; the server
+  never sends under 5): `pending`/`slow_down` carry the new interval, `denied` / `expired` are CliErrors, `approved`
+  carries `{ session, account }` — no `GET /v1/account` round as the loopback flow does, the account comes with it.
+  `provider` in the session file = `account.providers[0]`. Three poll failures in a row end it (one dropped connection
+  does not). The deadline is the command's own clock (`expiresIn`), so a server that keeps saying pending still ends.
+- **Terminal** (`loginByCodeHere`): the address + the code indented on its own line, `--qr` draws
+  `verificationUriComplete` (`qrFor`), the countdown is one stderr line rewritten each second (`\r\x1b[K`) only on a
+  TTY; piped, one "expires in 10 minutes" line instead. **Ctrl+C**: its own SIGINT listener (lifecycle's `onSignal`
+  defers to any other listener) aborts the wait → `CliError("Cancelled; nothing was signed in", null, 130)`; the line is
+  cleared in `finally`.
+- **Automatic** (`noLocalBrowser`): `SSH_CONNECTION|SSH_TTY|SSH_CLIENT`, or on Linux `$container` / `/.dockerenv`, and
+  neither `DISPLAY` nor `WAYLAND_DISPLAY` (`ssh -X` gives a display, and then the loopback page works). Commander's
+  `--device` + `--no-device` pair leaves `o.device` undefined unless given, which is when the detection runs; the one
+  line names why and `--no-device`. WSL is not "no browser" (open.ts starts Windows' browser). The doctor's scmjs.dev
+  row's fix becomes `scmjs login --device` under the same test (`scmjsDevCheck(file, server, headless)`).
+- **Server decisions** (ai-server README "Signing in by code"): device code `dev_` + 32 bytes, stored sha256; user
+  code 8 of RFC 8628's 20 consonants (no vowels, no digit look-alikes); 10 min; spent by the poll that hands the
+  session (`UPDATE … status='done' WHERE status='approved' RETURNING`, atomic); `slow_down` +5 s when a poll comes sooner
+  than interval − 1 s; 10 starts per address per 10 min; a start with an `Origin` refused (as `cli: true`); the page
+  turns away an address after 20 codes that led nowhere in 10 min (in memory); the page shows the client's self-given
+  name *as* self-given, the starting address and age, and the code to compare, with Allow / Deny posted same-origin;
+  `frame-ancestors 'none'` + `X-Frame-Options: DENY`; **`Referrer-Policy: same-origin`, not `no-referrer`** — under
+  `no-referrer` Chromium sends `Origin: null` with the page's own form posts and the same-origin check refused the
+  sign-in button (found only in the browser run). A provider sign-in started from `/device` stores the user code on
+  `oauth_states.user_code` and the callback 303s back to `/device?code=…` (or shows the sign-up notice with Continue).
+- **Verified end to end (2026-11-16)**: a local ai-server (PGlite, a stand-in Discord through `fetch`) on 127.0.0.1;
+  the built command under `script` (a pty) with `SSH_CONNECTION` set and no display chose the code by itself; headless
+  Chromium opened the address, typed the code lower-case without the dash, pressed Sign in with Discord (a
+  `ctx.route` on `/device/signin/**` rewrote the 303 to Discord into the callback — **a route on `discord.com/**` does
+  not see a redirect's target, and the real Discord page loads**), Allow → the command printed "Signed in … as Ann",
+  file 600; Deny → "The sign-in was denied on the page", no file; Ctrl+C → exit 130; a 404 server → the message;
+  `--no-device` over SSH → the loopback flow. `tests/cli-login-device.test.ts` does the same against a stand-in.
+
 ## `replay share` (`cli/src/replayshare.ts`) — 2026-11-07, on the sign-in branch
 
 - One request: `POST /v1/replays` multipart `file` + `fileName` + `note?` + `picture?` + `link=1`, which answers

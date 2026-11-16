@@ -18,7 +18,7 @@ import { RUNNERS, unpatchedCopy, type RunnerKind } from "./engine";
 import { findDesktopApp } from "./open";
 import { findBrowser, NO_BROWSER } from "./browser";
 import { findFfmpeg } from "./export";
-import { readSession, serverLabel, serverUrl, sessionPath } from "./account";
+import { noLocalBrowser, readSession, serverLabel, serverUrl, sessionPath } from "./account";
 import { INSTALL, installInfo, installLabel, updateCommand, type Install, type InstallKind } from "./runtime";
 import { msg, t, translate } from "./i18n";
 import { CliError, columns, mark, padColumns, pc, visible } from "./ui";
@@ -219,13 +219,14 @@ export function desktopAppCheck(): Check {
 
 /**
  * Whether a scmjs.dev session is kept here (`scmjs login`), read from the session file alone — no request: the name
- * is the one the sign-in gave. Not signed in is no problem, so the state is `ok` either way, as Claude Code's.
+ * is the one the sign-in gave. Not signed in is no problem, so the state is `ok` either way, as Claude Code's. Where no
+ * browser can reach this computer (SSH, a container), the fix is the sign-in by code.
  */
-export function scmjsDevCheck(file = sessionPath(), server = serverUrl()): Check {
+export function scmjsDevCheck(file = sessionPath(), server = serverUrl(), headless = noLocalBrowser() !== null): Check {
   const what = "scmjs.dev";
   const s = readSession(file);
   if (s && s.server === server) return { what, state: "ok", detail: `${t("signed in as {name}", { name: s.name ?? t("(no name)") })}${pc.dim(` · ${file}`)}`, path: file };
-  return { what, state: "ok", detail: pc.dim(s ? t("not signed in to {server}", { server: serverLabel(server) }) : t("not signed in")), note: t("scmjs map share makes links to maps with it."), fix: "scmjs login" };
+  return { what, state: "ok", detail: pc.dim(s ? t("not signed in to {server}", { server: serverLabel(server) }) : t("not signed in")), note: t("scmjs map share makes links to maps with it."), fix: headless ? "scmjs login --device" : "scmjs login" };
 }
 
 /**

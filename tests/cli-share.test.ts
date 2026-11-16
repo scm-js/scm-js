@@ -243,7 +243,8 @@ describe("scmjs logout and scmjs account", () => {
   });
 
   it("is a row in the doctor, fine either way", () => {
-    expect(scmjsDevCheck(file, base)).toMatchObject({ what: "scmjs.dev", state: "ok", fix: "scmjs login" });
+    expect(scmjsDevCheck(file, base, false)).toMatchObject({ what: "scmjs.dev", state: "ok", fix: "scmjs login" });
+    expect(scmjsDevCheck(file, base, true)).toMatchObject({ fix: "scmjs login --device" });
     expect(visible(scmjsDevCheck(file, base).detail)).toBe("not signed in");
     signedIn();
     const c = scmjsDevCheck(file, base);

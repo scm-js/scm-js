@@ -3478,6 +3478,33 @@ does (`--provider google` or `battlenet` for the others). The command says who s
 once you have approved it. It waits two minutes. With `BROWSER=none` it prints the page's
 address for you to open.
 
+Over SSH, in a container, or anywhere else the browser cannot reach the computer the
+command runs on, sign in by code instead with `scmjs login --device`. The command prints
+an address and a code:
+
+```
+$ scmjs login --device
+ℹ On any device with a browser, open https://api.scmjs.dev/device and enter this code:
+
+    WDJB-MJHT
+
+  Waiting for you to allow it · 9:41 left · Ctrl+C cancels
+```
+
+Open the address on your phone or another computer, enter the code, and sign in there with
+Discord, Google or Battle.net. The page then shows which computer asks
+(`scmjs on <its name>`) and the code again: check that it is the one in your terminal and
+press **Allow**, and the command says who signed in. **Deny** tells the command no. Allow
+only a code you started yourself: whoever holds the session can use your account's maps,
+replays and links, and its balance for AI features. The code expires after ten minutes.
+`--qr` also draws the address with the code filled in as a [QR code](#qr-codes), so a
+phone can open it without typing.
+
+You often need not ask: in an SSH session with no display, or in a container,
+`scmjs login` signs in by code by itself and says so in one line; `--no-device` keeps the
+browser sign-in, for example when you forward the port yourself. A server that does not
+offer sign-in by code says so, and then you sign in on a computer with a browser.
+
 The session is kept in a file only you can read: `~/.config/scmjs/session.json`, or
 `%APPDATA%\scmjs\session.json` on Windows. `scmjs logout` ends the session on scmjs.dev
 and deletes the file.
@@ -3579,7 +3606,7 @@ and the command prints the page's address for you to open.
 
 `--qr` on `map share`, `replay share`, `map play` and `account` draws each link as a QR
 code under it, for the people next to you to open on a phone. The link stays the first
-line.
+line. On `login --device` it draws the sign-in page's address with the code filled in.
 
 ![A QR code drawn in the terminal under a map link](images/cli-qr.webp)
 
@@ -4148,7 +4175,7 @@ gives its options.
 
 | Command | What it does |
 | --- | --- |
-| [`scmjs login`, `scmjs logout`](#signing-in) | Signs in to scmjs.dev in the browser, and out again |
+| [`scmjs login`, `scmjs logout`](#signing-in) | Signs in to scmjs.dev in the browser, or by code with `--device`, and out again |
 | [`scmjs account`](#signing-in) | Who you are signed in as, your storage, the maps you are sharing |
 | [`scmjs doctor`](#checking-your-setup) | What this computer has for each command, and what is missing |
 | [`scmjs about`](#updating) | This version, whether there is a newer one, and the links |
@@ -4204,7 +4231,7 @@ from a clone with `npm run cli -- <command>`, or build it with `npm run build:cl
 | `cli/src/link.ts` | A map linked to the editor: the page between the command and the editor, how other commands find the link, and the reads and writes that go through it |
 | `src/services/editorLink.ts` | The editor's end of a link: the map handed over, a changed one taken back as an undo step, the selection and the view |
 | `cli/src/open.ts` | Finding the desktop app, handing a file to the editor in a browser, and a lobby asked of the play page the same way |
-| `cli/src/account.ts` | The scmjs.dev sign-in through a page on the loopback address, the session file, and the account |
+| `cli/src/account.ts` | The scmjs.dev sign-in through a page on the loopback address or by code, the session file, and the account |
 | `cli/src/share.ts` | A map saved to the account and linked, or opened for editing together, with its facts and picture |
 | `cli/src/replayshare.ts` | A replay stored on the account and linked, with the map's picture for the card |
 | `cli/src/bot.ts` | Running the bot toolchain's image in the bot's folder |

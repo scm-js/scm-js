@@ -4,6 +4,7 @@
  * and links that revision (`POST /v1/maps/:id/links`); an edit link opens a shared-editing room on it
  * (`POST /v1/rooms`), kept open with `--keep`. A picture for the link's card is drawn with the copy of the game when
  * there is one; without, the map goes up without (the server makes no card then, and the link still opens).
+ * `keepMap` (`--no-link`) stores the map or its revision the same way and makes no link.
  */
 import { createHash } from "node:crypto";
 import type { OpenedMap } from "../../src/editor/mapFile";
@@ -45,6 +46,8 @@ export interface ShareOptions {
   /** `--no-picture`: false. */
   picture?: boolean;
   starcraft?: string;
+  /** `--no-link`: false stores the map without a link (`keepMap`). */
+  link?: boolean;
 }
 
 export interface ShareDeps { server?: string; file?: string; fetchImpl?: typeof fetch }
@@ -65,6 +68,9 @@ export interface ShareOutcome {
   picture: { bytes: number } | { none: string };
   storage?: StorageView;
 }
+
+/** A map kept on the account without a link (`--no-link`): what a copy link's share answers, less the link. */
+export type MapKeepOutcome = Omit<ShareOutcome, "link"> & { kind: "copy"; link: null };
 
 /** `<scenario name>.scx` for a map from a pipe (`stdin.scx` says nothing), with what a file name may not hold replaced. */
 export function shareFileName(input: Input, scenarioName: string): string {
@@ -127,7 +133,19 @@ async function asArchive(input: Input, map: OpenedMap): Promise<Uint8Array> {
   return map.origin ? input.bytes : await writeArchiveBytes(input.bytes, { compression: "pkware", encrypt: true, listfile: true });
 }
 
+/** The map on the account and its link: a copy link to the revision, or with `edit` a room to edit it together. */
 export async function shareMap(input: Input, map: OpenedMap, o: ShareOptions = {}, deps: ShareDeps = {}): Promise<ShareOutcome> {
+  if (o.link === false) throw new CliError(t("--no-link keeps the map without a link"), t("Leave --no-link off for a link."), 2);
+  return (await store(input, map, o, deps, true)) as ShareOutcome;
+}
+
+/** `--no-link`: the map stored as a copy link's share stores it (a new map, a revision, or unchanged), and no link made. */
+export async function keepMap(input: Input, map: OpenedMap, o: ShareOptions = {}, deps: ShareDeps = {}): Promise<MapKeepOutcome> {
+  if (o.edit || o.keep !== undefined) throw new CliError(t("--edit is a link to edit together: --no-link makes none"), t("Leave --no-link off for a link to edit it together, or --edit off to keep it without a link."), 2);
+  return (await store(input, map, o, deps, false)) as MapKeepOutcome;
+}
+
+async function store(input: Input, map: OpenedMap, o: ShareOptions, deps: ShareDeps, link: boolean): Promise<ShareOutcome | MapKeepOutcome> {
   const server = (deps.server ?? serverUrl()).replace(/\/+$/, "");
   const keepDays = parseKeep(o.keep);
   if (keepDays !== undefined && !o.edit) throw new CliError(t("--keep is for --edit"), t("A copy link stays until you remove it in My Maps; --keep says how long a shared-editing link stays open."), 2);
@@ -186,18 +204,22 @@ export async function shareMap(input: Input, map: OpenedMap, o: ShareOptions = {
     action = existing ? "new revision" : "new map";
   }
   const revision = detail.head.number;
+  const stored = { ...base, name: detail.name, map: { id: detail.id, name: detail.name, revision, action }, ...(storage ? { storage } : {}) };
+  if (!link) return { kind: "copy", link: null, ...stored };
   // A link to this revision already made (an unchanged map shared again) is given again, not made twice.
   const had = action === "unchanged" ? detail.linkList.find((l) => l.revision === revision) : undefined;
   const token = had?.token ?? (await client.request<{ link: MapLinkView; map: MapDetail }>("POST", `/v1/maps/${encodeURIComponent(detail.id)}/links`, { revision })).link.token;
-  return { kind: "copy", link: linkTo("map", token, server), ...base, name: detail.name, map: { id: detail.id, name: detail.name, revision, action }, ...(storage ? { storage } : {}) };
+  return { kind: "copy", link: linkTo("map", token, server), ...stored };
 }
 
-/** The lines `map share` prints: the link first, alone (so `| head -1` is the link), then what it is. */
-export function printShare(r: ShareOutcome): string[] {
+/** The lines `map share` prints: the link first, alone (so `| head -1` is the link), then what it is; kept without a link, what it is and that nothing was linked. */
+export function printShare(r: ShareOutcome | MapKeepOutcome): string[] {
   const facts = [r.name, `${r.width} × ${r.height}`, size(r.file.bytes)];
   if (r.kind === "copy" && r.map) {
     const what = r.map.action === "new map" ? t("a new map on your account") : r.map.action === "new revision" ? t("a new revision of {name}", { name: r.map.name }) : t("already on your account as it is");
-    return [r.link, `${facts.join(" · ")} · ${t("revision {n}, {what}", { n: r.map.revision, what })}`,
+    const line = `${facts.join(" · ")} · ${t("revision {n}, {what}", { n: r.map.revision, what })}`;
+    if (r.link === null) return [line, pc.dim(t("Not linked: nothing was made for anyone to open. scmjs map share gives it a link."))];
+    return [r.link, line,
       pc.dim(`${t("Anyone with the link opens a copy in their editor, without signing in.")}${"none" in r.picture ? ` ${t("No picture for its card: {reason}.", { reason: r.picture.none })}` : ""}`)];
   }
   const room = r.room!;
@@ -206,5 +228,5 @@ export function printShare(r: ShareOutcome): string[] {
     : room.keepDays === null
       ? t("kept open {keep}, stored on your account", { keep: keepWords(room.keepDays) })
       : t("kept open {keep} after its last edit, stored on your account", { keep: keepWords(room.keepDays) });
-  return [r.link, `${facts.join(" · ")} · ${t("shared for editing, {open}", { open })}`, pc.dim(t("Anyone with the link edits the map with you in their editor, without signing in."))];
+  return [r.link!, `${facts.join(" · ")} · ${t("shared for editing, {open}", { open })}`, pc.dim(t("Anyone with the link edits the map with you in their editor, without signing in."))];
 }

@@ -13,7 +13,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 import { accountReport, DEFAULT_SERVER, linkTo, login, loginPage, logout, printAccount, readSession, requireSession, saveSession, serverUrl, sessionPath, type SavedSession } from "../cli/src/account";
 import { scmjsDevCheck } from "../cli/src/doctor";
 import { loadMapInput, readInput, type Input } from "../cli/src/files";
-import { parseKeep, printShare, shareFileName, shareMap } from "../cli/src/share";
+import { keepMap, parseKeep, printShare, shareFileName, shareMap } from "../cli/src/share";
 import { CliError, visible } from "../cli/src/ui";
 import { TEST_MAPS_DIR } from "./support/maps";
 
@@ -257,6 +257,8 @@ describe("scmjs map share", () => {
   it("links scmjs.dev's editor, and carries a server that is not scmjs.dev's", () => {
     expect(linkTo("map", "abc", DEFAULT_SERVER)).toBe("https://scmjs.dev/editor/map/abc");
     expect(linkTo("share", "inv", "http://127.0.0.1:8787")).toBe("https://scmjs.dev/editor/share/inv?scmjs-server=http%3A%2F%2F127.0.0.1%3A8787");
+    // A replay's is the site's own shorter address, which takes a moment (?t=6:42&play=2).
+    expect(linkTo("replay", "tok", DEFAULT_SERVER)).toBe("https://scmjs.dev/replay/tok");
   });
 
   it("stores a new map and links its first revision; the same bytes again are linked as they are; changed bytes are a revision", async () => {
@@ -331,6 +333,22 @@ describe("scmjs map share", () => {
     expect(parseKeep(undefined)).toBeUndefined();
     expect((await caught(share(input("ums.scx"), { edit: true, keep: "year" }))).exitCode).toBe(2);
     expect((await caught(share(input("ums.scx"), { keep: "week" }))).message).toBe("--keep is for --edit");
+  });
+
+  it("--no-link stores the map as a share would and makes no link; a share then links what is there", async () => {
+    signedIn();
+    const keep = async (i: Input, o: Parameters<typeof keepMap>[2] = {}) => keepMap(i, await loadMapInput(i), { picture: false, ...o }, { server: base, file });
+    const kept = await keep(input("ums.scx"));
+    expect(kept).toMatchObject({ kind: "copy", link: null, map: { id: "m1", revision: 1, action: "new map" } });
+    expect(seen.map((s) => `${s.method} ${s.path}`)).toEqual(["GET /v1/maps", "POST /v1/maps"]);
+    expect(visible(printShare(kept).join("\n"))).toBe(["Test Scenario · 64 × 64 · 5.9 KB · revision 1, a new map on your account",
+      "Not linked: nothing was made for anyone to open. scmjs map share gives it a link."].join("\n"));
+    expect((await keep(input("melee.scx"), { name: "ums" })).map).toMatchObject({ action: "new map" });
+    seen = [];
+    expect((await share(input("ums.scx"))).map).toMatchObject({ id: "m1", action: "unchanged" });
+    expect(seen.map((s) => `${s.method} ${s.path}`)).toEqual(["GET /v1/maps", "GET /v1/maps/m1", "POST /v1/maps/m1/links"]);
+    expect((await caught(keep(input("ums.scx"), { edit: true }))).exitCode).toBe(2);
+    expect((await caught(share(input("ums.scx"), { link: false }))).exitCode).toBe(2);
   });
 
   it("refuses a --starcraft folder that is not a copy of the game, rather than go without a picture", async () => {

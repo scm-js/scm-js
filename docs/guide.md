@@ -1802,6 +1802,10 @@ the play page instead, on a card that names the moment and the player: **Play fr
 runs the game to the moment and stands you in it, paused, with a **Start** button. Someone
 whose browser has no StarCraft yet chooses the folder on that card.
 
+The command line makes the same links from a replay file:
+`scmjs replay share game.rep --at 6:42 --play Drywater` ([A moment in a
+replay](cli.md#a-moment-in-a-replay)).
+
 > **Note.** In the desktop app and an editor hosted elsewhere, Aftermath works from the
 > players' orders alone: there is no Replay view and no analysis.
 

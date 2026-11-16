@@ -50,7 +50,7 @@ import { printReplayInfo, replayReport } from "./replay";
 import { buildOrders, checkPlayedMod, refuseModReplay, replayNamer, type ReplayNameOptions } from "./replaymod";
 import { SCMSCX, scmscx } from "./scmscx";
 import { checkMapOut, mapFileFor, writeReplayMap } from "./replaymap";
-import { printReplayShare, shareReplay } from "./replayshare";
+import { keepReplay, printReplayShare, shareReplay } from "./replayshare";
 import { exportReplay, exportSummary, parseSize as parseClipSize, type ExportOptions } from "./export";
 import { watchReplay, watchSummary, watchValues } from "./watch";
 import { FORMATS, githubAnnotations, githubCoverageAnnotations, githubTestAnnotations, junitCoverageXml, junitTestXml, junitXml, sarifCoverageJson, sarifJson, sarifTestJson, type CheckReport, type Format, type TestReport, type Unread } from "./report";
@@ -65,7 +65,8 @@ import { heatmapMap, type HeatmapOptions as HeatmapFlags } from "./heatmap";
 import { printGenerated, runGenerate, type GenerateFlags } from "./generatecmd";
 import { GEN_PLAYERS, GEN_STYLES, GEN_SYMMETRIES } from "./generate";
 import { accountReport, login, logout, PROVIDERS, printAccount, serverLabel } from "./account";
-import { KEEP, printShare, shareMap } from "./share";
+import { KEEP, keepMap, printShare, shareMap } from "./share";
+import { checkShareOptions, copyLinks, printSharedFile, shareFile, type SharedFile, type ShareFilesOptions } from "./sharefiles";
 import { qrFor } from "./qr";
 import { exportSounds, printSounds, readSounds } from "./sounds";
 import { editInEditor, type EditKind, type EditOutcome } from "./texteditor";
@@ -527,6 +528,15 @@ trigger whose text does. Prints what matched and where. Exits 1 when nothing mat
   /** A link's lines with its QR code under the first (the link alone stays the first line, for `| head -1`). */
   const withQr = (lines: string[], link: string, qr: boolean | undefined) => (qr ? [lines[0], "", ...qrFor(link), "", ...lines.slice(1)] : lines);
   const qrOption = () => new Option("--qr", t("the link as a QR code under it too, for a phone"));
+  const copyOption = () => new Option("--copy", t("put the link on the clipboard too"));
+  const noLinkOption = () => new Option("--no-link", t("keep it on your account without making a link"));
+  /** `--copy`: the links to the clipboard, said on standard error; no clipboard tool is a warning, not a failure. */
+  const copyShared = async (links: (string | null)[]) => {
+    const c = await copyLinks(links);
+    if (c) process.stderr.write(c.copied ? `${mark.ok} ${t("{n, plural, one {Link copied to the clipboard} other {# links copied to the clipboard}}", { n: links.filter(Boolean).length })}\n` : `${mark.warn} ${t("Not copied: {why}", { why: c.why })}\n`);
+  };
+  /** A share's lines, with its QR code under the link (none kept without a link). */
+  const sharedLines = (lines: string[], link: string | null, qr: boolean | undefined) => (link ? withQr(lines, link, qr) : lines);
 
   /**
    * `map triggers edit` / `map strings edit`: the text in the editor, imported when it closes, the map written back as
@@ -1555,17 +1565,21 @@ answer (within 10 seconds), 2 when the file is there already (--force overwrites
     .option("--new", t("store it as a new map even when your account has one with this file name"))
     .option("--no-picture", t("upload no picture for the link's card"))
     .option("--starcraft <folder>", t("your installation of StarCraft, for the picture (SCMJS_STARCRAFT); found in the usual places otherwise"))
-    .addOption(qrOption())
+    .addOption(qrOption()).addOption(copyOption()).addOption(noLinkOption())
     .addHelpText("after", "\n" + t(`Needs a scmjs.dev account: scmjs login. A copy link stores the map on your account (My Maps) as a new map, or as a
 new revision of the map there with the same file name, and links that revision: whoever opens it gets a copy in
 their editor. --edit opens the map for editing together instead; whoever opens that link edits it with you.`) + `
   scmjs map share ridge.scx
-  scmjs map share ridge.scx --edit --keep week`)
-    .action(async (path: string, o: { json?: boolean; name?: string; note?: string; edit?: boolean; keep?: string; new?: boolean; picture?: boolean; starcraft?: string; qr?: boolean }) => {
+  scmjs map share ridge.scx --edit --keep week
+  scmjs map share ridge.scx --no-link`)
+    .action(async (path: string, o: ShareFilesOptions & { json?: boolean }) => {
       const input = await readInput(path);
       expectKind(input, "map");
-      const r = await shareMap(input, await loadMapInput(input), o);
-      print(...(o.json ? [JSON.stringify(r, null, 2)] : withQr(printShare(r), r.link, o.qr)));
+      checkShareOptions([input], o);
+      const map = await loadMapInput(input);
+      const r = o.link === false ? await keepMap(input, map, o) : await shareMap(input, map, o);
+      print(...(o.json ? [JSON.stringify(r, null, 2)] : sharedLines(printShare(r), r.link, o.qr)));
+      if (o.copy) await copyShared([r.link]);
     });
 
   const replay = program.command("replay").description(t("read and open replays")).helpGroup(t("Maps and replays:"));
@@ -1600,19 +1614,28 @@ written as the game had it: a bare .chk, or an archive like a new map's. Opens i
       say(piped, `${mark.ok} ${pc.bold(gameText(r.name) || pc.italic(t("Untitled")))}: ${r.width} × ${r.height}${dot}${t("from {file}", { file: input.name })}${dot}${t("written to {file}", { file: outName(r.written) })}${dot}${size(r.written.bytes)}`);
     });
   replay.command("share").description(t("a link to the replay on scmjs.dev, which anyone opens to watch it in the editor")).argument("<replay>", t("the replay, or - for standard input")).addOption(json)
+    .option("--at <time>", t("the moment the link opens at: m:ss, h:mm:ss or seconds of game time"))
+    .option("--play [player]", t("whoever opens the link plays on as this player (a slot or a name); with no player they choose"))
     .option("--note <text>", t("a note, as My Maps shows it"))
     .option("--no-picture", t("upload no map picture for the link's card"))
     .option("--starcraft <folder>", t("your installation of StarCraft, for the picture (SCMJS_STARCRAFT); found in the usual places otherwise"))
-    .addOption(qrOption())
+    .addOption(qrOption()).addOption(copyOption()).addOption(noLinkOption())
     .addHelpText("after", "\n" + t(`Needs a scmjs.dev account: scmjs login. The replay is stored on your account (My Maps ▸ Replays, up to 8 MB each,
-counted with your maps) and linked; whoever opens the link watches it in the editor's replay viewer. The link's
-card shows the map's picture when your copy of the game is here to draw it.`) + `
-  scmjs replay share game.rep`)
-    .action(async (path: string, o: { json?: boolean; note?: string; picture?: boolean; starcraft?: string; qr?: boolean }) => {
+counted with your maps) and linked; whoever opens the link watches it in the editor's analysis. --at opens it at
+that moment, paused; --play sends them to the play page to play on from there as that player, with their own copy
+of StarCraft. The replay has one link: sharing it again at another moment stores nothing and gives that link with
+the new moment. The link's card shows the map's picture when your copy of the game is here to draw it.`) + `
+  scmjs replay share game.rep
+  scmjs replay share game.rep --at 6:42
+  scmjs replay share game.rep --at 6:42 --play Drywater --copy`)
+    .action(async (path: string, o: ShareFilesOptions & { json?: boolean }) => {
       const input = await readInput(path);
       expectKind(input, "replay");
-      const r = await shareReplay(input, await loadReplayInput(input), o);
-      print(...(o.json ? [JSON.stringify(r, null, 2)] : withQr(printReplayShare(r), r.link, o.qr)));
+      checkShareOptions([input], o);
+      const rep = await loadReplayInput(input);
+      const r = o.link === false ? await keepReplay(input, rep, o) : await shareReplay(input, rep, o);
+      print(...(o.json ? [JSON.stringify(r, null, 2)] : sharedLines(printReplayShare(r), r.link, o.qr)));
+      if (o.copy) await copyShared([r.link]);
     });
   replay.command("open").description(t("watch a replay in the scmJS app, or the editor in your browser")).argument("<replay>")
     .option("--browser", t("the editor in the browser, even with the app installed"))
@@ -1681,6 +1704,47 @@ made from the .webm with ffmpeg, when it is installed. The camera follows where 
       if (tty) process.stderr.write("\r\x1b[2K");
       if (o.json) print(JSON.stringify(r, null, 2));
       else print(exportSummary(r));
+    });
+
+  program.command("share").description(t("a link on scmjs.dev to each map or replay")).helpGroup(t("Maps and replays:"))
+    .argument("<files...>", t("maps and replays, or - for standard input")).addOption(json)
+    .option("--name <name>", t("a map's name on your account and in the link; the scenario's name by default"))
+    .option("--edit", t("a map: a link to edit it together, not a copy"))
+    .addOption(new Option("--keep <how long>", t("with --edit: keep it open this long after its last edit")).choices(Object.keys(KEEP)))
+    .option("--new", t("a map: store it as a new map even when your account has one with this file name"))
+    .option("--at <time>", t("a replay: the moment the link opens at, m:ss, h:mm:ss or seconds"))
+    .option("--play [player]", t("a replay: whoever opens the link plays on as this player (a slot or a name); with no player they choose"))
+    .option("--note <text>", t("a note, as My Maps shows it"))
+    .option("--no-picture", t("upload no picture for the link's card"))
+    .option("--starcraft <folder>", t("your installation of StarCraft, for the picture (SCMJS_STARCRAFT); found in the usual places otherwise"))
+    .addOption(qrOption()).addOption(copyOption()).addOption(noLinkOption())
+    .addHelpText("after", "\n" + t(`Needs a scmjs.dev account: scmjs login. Each map is shared as scmjs map share shares it and each replay as scmjs
+replay share does: a link for each file, first in the file's lines. --name, --edit, --keep and --new are for maps,
+--at and --play for replays; one given with no file of its kind is refused. --copy puts the links on the clipboard;
+--no-link keeps the files on your account and makes no link.`) + `
+  scmjs share ridge.scx
+  scmjs share game.rep --at 6:42 --play 2 --copy
+  scmjs share maps/*.scx --no-link`)
+    .action(async (paths: string[], o: ShareFilesOptions & { json?: boolean }) => {
+      const inputs: Input[] = [];
+      for (const path of paths) { const input = await readInput(path); expectKind(input, "map", "replay"); inputs.push(input); }
+      checkShareOptions(inputs, o);
+      const done: (SharedFile | { file: string; error: string })[] = [];
+      let printed = false;
+      for (const input of inputs) {
+        try {
+          const r = await shareFile(input, input.kind === "map" ? await loadMapInput(input) : await loadReplayInput(input), o);
+          done.push(r);
+          if (!o.json) { if (printed) print(""); print(...sharedLines(printSharedFile(r), r.link, o.qr)); printed = true; }
+        } catch (e) {
+          if (!(e instanceof CliError)) throw e;
+          done.push({ file: input.path, error: e.message });
+          fail(e);
+          process.exitCode = Math.max(Number(process.exitCode ?? 0), e.exitCode);
+        }
+      }
+      if (o.json) print(JSON.stringify(done.length === 1 ? done[0] : done, null, 2));
+      if (o.copy) await copyShared(done.map((r) => ("link" in r ? r.link : null)));
     });
 
   // ── Mods ──────────────────────────────────────────────────────────────────
@@ -2123,7 +2187,7 @@ scmjs logout ends it. scmjs login and scmjs logout are the same as account login
     });
 
   // Hidden from the overview, which holds 23 lines (banner.ts); `scmjs help init`, `map --help` and docs/cli.md name it.
-  program.command("init").description(t("set a folder of maps up for git and GitHub")).helpGroup(t("Maps and replays:"))
+  program.command("init", { hidden: true }).description(t("set a folder of maps up for git and GitHub")).helpGroup(t("Maps and replays:"))
     .argument("[folder]", t("the folder the maps are in"), ".").addOption(json)
     .option("--print", t("print what would be written, to paste by hand, and write nothing"))
     .option("--git", t("git init the folder when it is in no git repository (never done without it)"))

@@ -148,10 +148,16 @@ function serverError(res: Response, data: unknown): CliError {
 /** `scmjs.dev` for the default server, else the address, for the lines that name it. */
 export const serverLabel = (server: string): string => (server === DEFAULT_SERVER ? "scmjs.dev" : server);
 
-/** The editor's address for a link: `<editor>map/<token>` or `share/<invite>`, carrying a server that is not scmjs.dev's. */
+/** The site's own address: a replay link is `<site>replay/<token>`, which scmjs.dev sends on to the editor's analysis, or to the play page when it says to play. */
+export const SITE = "https://scmjs.dev/";
+
+/**
+ * A link's address: `<editor>map/<token>` or `share/<invite>`, and a replay's `<site>replay/<token>` (the spec's
+ * shorter form, which takes a moment: `?t=6:42&play=<slot>`), carrying a server that is not scmjs.dev's.
+ */
 export function linkTo(kind: "map" | "share" | "replay", token: string, server = serverUrl()): string {
   const query = server !== DEFAULT_SERVER ? `?${new URLSearchParams({ [SERVER_QUERY]: server }).toString()}` : "";
-  return `${WEB_EDITOR}${kind}/${token}${query}`;
+  return `${kind === "replay" ? SITE : WEB_EDITOR}${kind}/${token}${query}`;
 }
 
 /* ── Signing in ──────────────────────────────────────────────────── */

@@ -280,7 +280,9 @@ What the tools may touch on your computer, and which of them need your copy of S
 
 - **They stay in the maps folder**, unless you started the server with `--allow-outside`.
   The one exception is `starcraft`, the folder of your copy of the game, which is only
-  read.
+  read. They take no [scmjs.dev links](cli.md#links-in-place-of-files) either, since
+  fetching one reaches past the folder; with `--allow-outside` they read links as the
+  commands do, or `scmjs library get` downloads one into the folder first.
 - **A tool that changes a map writes over it** unless given `out`, like the command. Keep
   your maps in git, or ask for copies. Every tool that only reads is marked so for the AI
   tool, so one that asks before a write can tell them apart.

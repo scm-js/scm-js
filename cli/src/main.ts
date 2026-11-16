@@ -34,7 +34,7 @@ import { looksLikeMpq } from "../../src/formats/mpq/scm";
 import { plainText } from "../../src/editor/textColors";
 import { formatOf } from "../../src/editor/save";
 import { COMPRESSIONS, optimizeJson, optimizeMap, printOptimize, type Compression } from "./optimize";
-import { expectKind, loadMapInput, loadReplayInput, readInput, readTextArg, STDIO, toStdout, writeFileMade, type Input } from "./files";
+import { besideInput, expectKind, loadMapInput, loadReplayInput, readInput, readTextArg, STDIO, toStdout, writeFileMade, type Input } from "./files";
 import { findInMap, hitJson, KINDS, parseKinds, printHits } from "./find";
 import { DEFAULT_LIMIT, fetchJson, fetchMap, mapIdFrom, MAX_LIMIT, parseLimit, printFetched, printSearch, searchJson, searchMaps } from "./fetch";
 import { baselineLine, baselineWritten, issueLine, mapReport, printIssues, printMapInfo, type MapReport } from "./map";
@@ -42,7 +42,8 @@ import { baselineEntries, BASELINE_FILE, mapKey, matchBaseline, readBaseline, wr
 import type { Issue } from "../../src/editor/validate";
 import { createMcpServer, serveStdio } from "./mcp";
 import { serveLsp } from "./lsp";
-import { openInScmjs, playInLobby } from "./open";
+import { openBrowser, openInScmjs, playInLobby } from "./open";
+import { isWebAddress, openWebLink } from "./weblink";
 import { openLink, setLinkLabel } from "./link";
 import { atExit } from "./lifecycle";
 import { checkPlugin, devPlugin, newPlugin, printPluginCheck, type PluginCheck } from "./plugin";
@@ -66,6 +67,7 @@ import { printGenerated, runGenerate, type GenerateFlags } from "./generatecmd";
 import { GEN_PLAYERS, GEN_STYLES, GEN_SYMMETRIES } from "./generate";
 import { accountReport, login, logout, PROVIDERS, printAccount, serverLabel } from "./account";
 import { KEEP, printShare, shareMap } from "./share";
+import { addLibraryCommands } from "./librarycmd";
 import { qrFor } from "./qr";
 import { exportSounds, printSounds, readSounds } from "./sounds";
 import { editInEditor, type EditKind, type EditOutcome } from "./texteditor";
@@ -363,6 +365,12 @@ A map with many old findings can still be held to that: --write-baseline keeps t
     .addOption(new Option("--editor <url>", t("the editor's address (SCMJS_EDITOR_URL)")).hideHelp())
     .action(async (file: string, o: { browser?: boolean; live?: boolean; editor?: string }) => {
       if (o.live && file === STDIO) throw new CliError(t("--live links a file on disk, not standard input"), t("Name the map."), 2);
+      if (isWebAddress(file)) {
+        if (o.live) throw new CliError(t("--live links a file on disk, not a link"), t("scmjs library get downloads it; then link that file."), 2);
+        openWebLink(file, ["map", "share"], openBrowser);
+        print(`${mark.ok} ${t("Opening {link} in your browser", { link: pc.cyan(file) })}`);
+        return;
+      }
       const input = await readInput(file);
       expectKind(input, "map");
       if (!o.live) { await openInScmjs(input, o); return; }
@@ -1590,7 +1598,7 @@ written as the game had it: a bare .chk, or an archive like a new map's. Opens i
     .action(async (file: string, o: { json?: boolean; out?: string; force?: boolean }) => {
       const input = await readInput(file);
       expectKind(input, "replay");
-      const out = o.out ?? mapFileFor(input.path === STDIO ? "stdin.rep" : input.path);
+      const out = o.out ?? mapFileFor(besideInput(input));
       checkMapOut(out);
       const piped = out === STDIO;
       if (piped && o.json) throw new CliError(t("--json and the map both want standard output"), t("Write the map to a file with --out, or leave --json off."), 2);
@@ -1617,7 +1625,10 @@ card shows the map's picture when your copy of the game is here to draw it.`) + 
   replay.command("open").description(t("watch a replay in the scmJS app, or the editor in your browser")).argument("<replay>")
     .option("--browser", t("the editor in the browser, even with the app installed"))
     .addOption(new Option("--editor <url>", t("the editor's address (SCMJS_EDITOR_URL)")).hideHelp())
-    .action(async (file: string, o: { browser?: boolean; editor?: string }) => { const input = await readInput(file); expectKind(input, "replay"); await openInScmjs(input, o); });
+    .action(async (file: string, o: { browser?: boolean; editor?: string }) => {
+      if (isWebAddress(file)) { openWebLink(file, ["replay"], openBrowser); print(`${mark.ok} ${t("Opening {link} in your browser", { link: pc.cyan(file) })}`); return; }
+      const input = await readInput(file); expectKind(input, "replay"); await openInScmjs(input, o);
+    });
   replay.command("watch").description(t("play a replay in the terminal: the minimap, each player's figures, the chat")).argument("<replay>").addOption(json)
     .option("--speed <x>", t("how fast, against the game's Fastest (24 frames a second); in a terminal"), "8")
     .option("--from <m:ss>", t("start the game here"))
@@ -2109,6 +2120,7 @@ scmjs logout ends it. scmjs login and scmjs logout are the same as account login
     });
   account.command("login").description(t("sign in to scmjs.dev in your browser")).addOption(providerOption()).action(signIn);
   account.command("logout").description(t("end the session and delete its file")).action(signOut);
+  addLibraryCommands(program, t("Maps and replays:"));
   program.command("login", { hidden: true }).description(t("sign in to scmjs.dev in your browser (scmjs account login)")).addOption(providerOption()).action(signIn);
   program.command("logout", { hidden: true }).description(t("sign out of scmjs.dev (scmjs account logout)")).action(signOut);
 
@@ -2161,7 +2173,7 @@ a newer scmjs; then the commands this computer can run now. Nothing is changed. 
     });
 
   program.command("mcp").description(t("these commands as an MCP server, for AI tools")).helpGroup(t("This tool:"))
-    .option("--allow-outside", t("let the tools read and write files outside this folder"))
+    .option("--allow-outside", t("let the tools read and write files outside this folder, and read scmjs.dev links"))
     // The tools' names from the server itself, so the list is never short of one; made only when the help is shown.
     .addHelpText("after", () => "\n" + t(`Speaks the Model Context Protocol on standard input and output, so an AI tool that runs on this computer (Claude
 Code, Cursor, VS Code, …) can read, check, search, compare and change maps with the same code these commands use.

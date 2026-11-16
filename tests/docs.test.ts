@@ -287,7 +287,7 @@ describe.skipIf(!haveTypes)("the plugin guide", () => {
 describe("the map files and game data guides", () => {
   const GUIDES = ["docs/file-formats.md", "docs/game-data.md", "docs/triggers.md", "docs/chk-format.md", "docs/cli.md", "docs/ai-tools.md", "docs/core.md", "docs/mods.md", "docs/bots.md"];
   const MARKER = "## In the source";
-  const BOT_INTERFACE_NAMES = new Set(["useTech", "useMapSettings"]);
+  const BOT_INTERFACE_NAMES = new Set(["useTech", "useMapSettings", "useDefault"]);
 
   it("end with the one section that names the source", () => {
     for (const file of GUIDES) {
@@ -305,7 +305,8 @@ describe("the map files and game data guides", () => {
       const paths = [...prose.matchAll(/\bsrc\/[\w./-]+/g)].map((m) => m[0]);
       expect(paths, file).toEqual([]);
       // Two members of the bot interface read like hooks and are not: a unit's `useTech` order
-      // and `init.useMapSettings`, which the bot guide has to name.
+      // and `init.useMapSettings`, which the bot guide has to name. `useDefault` is a field of the settings
+      // `scmjs map set --settings` takes (the Unit Settings dialog's "use default" tick).
       const names = [...text.matchAll(/\b(\w+Atom|use[A-Z]\w+|Jotai)\b/g)].map((m) => m[0]).filter((name) => !BOT_INTERFACE_NAMES.has(name));
       expect(names, file).toEqual([]);
     }

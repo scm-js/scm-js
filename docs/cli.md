@@ -338,11 +338,12 @@ program carries its own).
 `map preview` draws a map with the game's graphics, `map analyze` reads which ground is
 walkable from the game's tilesets, and `map generate` lays its ground with them.
 `map terrain` and `map doodads` read a map's terrain and doodads from the tileset, and
-`map edit` paints terrain and places doodads with it. `map run` gives a plugin the game's
-data when a copy is there, and runs without when it is not. `map trace`, `map cost`,
-`map coverage`, `map rush`, `map test`, `map heatmap`, `map balance`, `replay watch`,
-`replay export`, `bot run` and `bot ladder` run the game itself. They need two things on
-your computer:
+`map edit` paints terrain and places doodads with it. `map set --settings` fills in a
+unit's, upgrade's or technology's numbers from the game's tables. `map run` gives a plugin
+the game's data when a copy is there, and runs without when it is not. `map trace`,
+`map cost`, `map coverage`, `map rush`, `map test`, `map heatmap`, `map balance`,
+`replay watch`, `replay export`, `bot run` and `bot ladder` run the game itself. They need
+two things on your computer:
 
 - Your copy of StarCraft, Remastered or 1.16.1. It is found in the usual places; otherwise
   name its folder with `--starcraft <folder>` or the `SCMJS_STARCRAFT` setting. When
@@ -997,6 +998,108 @@ windows-1252. Remastered reads UTF-8. Both take any case. Text that is plain ASC
 same in every encoding, and a map does not record which one it was written in, so on such
 a map `--encoding` has nothing to change; the command says so and writes nothing.
 `--dry-run` says what would change and writes nothing.
+
+### Players, forces and other settings
+
+`scmjs map settings` lists the Scenario menu's settings as a map has them: the twelve
+players, the four forces, the unit types, upgrades and technologies the map changes from
+the game's, and the switches it names.
+
+```
+$ scmjs map settings ums.scx
+ums.scx
+Players
+  player  type      race      colour  force
+  1       Human     Terran    Red     1 Defenders
+  2       Computer  Zerg      Blue    2 Swarm
+  3       Inactive  Inactive  Teal    1 Defenders
+  …
+Forces
+  force  name       players              allied  allied victory  shared vision  random start
+  1      Defenders  1, 3, 4, 5, 6, 7, 8  yes     yes             yes            no
+  2      Swarm      2                    yes     yes             yes            no
+  …
+Unit settings
+  Terran Marine  0  named "Test Marine" · 80 hit points, armor 2, build time 300, 75 minerals, 0 gas
+Upgrades: as the game has them
+Technologies: as the game has them
+Switches: 1 "Alarm raised"
+```
+
+A unit, upgrade or technology is listed when the map gives it numbers or a name of its
+own, or changes who may build or research it. `--unit <name>`, `--upgrade <name>` and
+`--tech <name>` show one row whether the map changes it or not, with the game's own
+numbers beside the map's when [your copy of StarCraft](#commands-that-need-starcraft) is
+there to read them from. `--json` has every row with each player's availability, levels
+and state.
+
+`scmjs map set --settings <file>` sets them. The file is a JSON object with any of six
+lists, and each entry names what it changes and gives only the fields to change:
+
+```json
+{
+  "players": [{ "player": 3, "type": "Computer", "race": "Protoss", "force": 2 }],
+  "forces": [{ "force": 2, "name": "Invaders", "randomStart": true }],
+  "units": [
+    { "unit": "Zergling", "hitPoints": 50, "name": "Ripper" },
+    { "unit": "Terran Ghost", "available": [{ "player": "default", "value": false }, { "player": 1, "value": true }] }
+  ],
+  "techs": [{ "tech": "Stim Packs", "state": [{ "player": 1, "researched": true }] }],
+  "switches": [{ "switch": 2, "name": "Gate is open" }]
+}
+```
+
+```
+$ scmjs map set ums.scx --settings settings.json
+  Player 3       type                     Inactive → Computer
+  Player 3       race                     Inactive → Protoss
+  Player 3       force                    1 → 2
+  Force 2        name                     Swarm → Invaders
+  Force 2        random start             no → yes
+  Zerg Zergling  name                     (none) → Ripper
+  Zerg Zergling  uses the game's numbers  yes → no
+  Zerg Zergling  hit points               35 → 50
+  Terran Ghost   available by default     yes → no
+  Terran Ghost   available to Player 1    default → yes
+  Stim Packs     for Player 1             default → researched
+  Switch 2       name                     (none) → Gate is open
+✔ ums.scx: 12 settings changed · written to ums.scx · 4.0 KB
+```
+
+| List | Each entry |
+| --- | --- |
+| `players` | `player` (1 to 12), then `type`, `race`, `color` and `force` (1 to 4). A colour is a name such as Red, a number, or `[r, g, b]` for a Remastered custom colour. Colour and force are for players 1 to 8 |
+| `forces` | `force` (1 to 4), then `name`, `players` (moved into the force), `allied`, `alliedVictory`, `sharedVision`, `randomStart` |
+| `units` | `unit` (a name or id), then `name`, `hitPoints`, `shields`, `armor`, `buildTime`, `mineralCost`, `gasCost`, `weapons` (each `weapon`, `damage`, `bonus`), `available`, `useDefault` |
+| `upgrades` | `upgrade` (a name or id), then `mineralCost`, `gasCost`, `timeCost`, the amount each grows by a level (`mineralFactor`, `gasFactor`, `timeFactor`), `levels`, `useDefault` |
+| `techs` | `tech` (a name or id), then `mineralCost`, `gasCost`, `researchTime`, `energyCost`, `state`, `useDefault` |
+| `switches` | `switch` (1 to 256) and `name`; an empty name clears it |
+
+- **Times** are in frames, 24 to a second.
+- **`available`, `levels` and `state`** are lists with one entry a player: `player` is 1
+  to 12, or `"default"` for the column every player follows until given a value of their
+  own. An `available` entry has `value` (true, false, or `"default"` to follow that column
+  again), a `levels` entry `start` and `max`, a `state` entry `available` and
+  `researched`.
+- **A number** for a unit, upgrade or technology takes it off the game's own numbers, as
+  unticking "use default" does in the editor, and the rest of its row is filled in from
+  the game's tables. Those settings read [your copy of
+  StarCraft](#commands-that-need-starcraft); names, availability, levels, players, forces
+  and switches need none. `"useDefault": true` puts a row back on the game's numbers.
+- **A weapon** is one the unit fights with: the Zergling's is Claws. Another is refused.
+
+Every name is checked before anything is set. One the map or the game does not have stops
+the command with the entry's place, and nothing is written:
+
+```
+$ scmjs map set ums.scx --settings bad.json
+✖ players[1]: No race is called "Zergg"
+  One of Zerg, Terran, Protoss, User Selectable, Random, Independent, Neutral, Inactive. Nothing was changed.
+```
+
+`--settings` goes with `--name` and the other options in one command, `--settings -` reads
+the JSON from standard input, and `--dry-run` lists the changes and writes nothing. Sounds
+and the Create Unit with Properties slots are not set from here; the editor has them.
 
 ### Resizing
 
@@ -4546,7 +4649,8 @@ gives its options.
 | [`scmjs map open <map>`](#opening-a-map-in-scmjs) | Opens the map in scmJS; `--live` [keeps it linked](#keeping-a-map-linked-to-the-editor), so commands change it in the editor |
 | [`scmjs map new <map>`](#a-blank-map) | A new map: flat ground, start locations placed |
 | [`scmjs map generate <map>`](#a-melee-map-from-a-seed) | A symmetric melee map from a seed, walked and checked before it is written |
-| [`scmjs map set <map>`](#name-description-and-revision) | The name, description, revision or text encoding; `--dry-run` |
+| [`scmjs map set <map>`](#name-description-and-revision) | The name, description, revision or text encoding, and with `--settings` the [players, forces and other settings](#players-forces-and-other-settings); `--dry-run` |
+| [`scmjs map settings <map>`](#players-forces-and-other-settings) | The players, the forces, and the unit, upgrade and technology settings and switch names the map changes |
 | [`scmjs map resize <map>`](#resizing) | Scenario ▸ Resize: another size, anchored, with what it drops listed; `--dry-run` |
 | [`scmjs map units <map>`, `scmjs map locations <map>`](#listing-units-and-locations) | The units with their index, type, player and position, filtered by type, player or area; the locations with their number, name and bounds |
 | [`scmjs map terrain <map>`, `scmjs map doodads <map>`](#listing-terrain-and-doodads) | The tileset's terrains with the tiles each covers and the map as a grid of letters; the doodads on the map and the ones the tileset has to place |
@@ -4662,6 +4766,7 @@ from a clone with `npm run cli -- <command>`, or build it with `npm run build:cl
 | `cli/src/edit.ts` | The header set, the map resized and the unused strings dropped, over the open document |
 | `cli/src/objects.ts` | `map units` and `map locations`: the rows, the filters, and a unit type, location or area read from a name, a number or a rectangle |
 | `cli/src/mapedit.ts` | `map edit`: the shape of an edit, the list applied in one transaction of the plugin host, what an index means while units come and go, and the lines printed |
+| `cli/src/settings.ts` | `map settings`, and the settings `map set --settings` sets: the shape of the lists, each name read, the change made through the plugin host and worded |
 | `cli/src/terrain.ts` | `map terrain` and `map doodads`, and what the terrain and doodad edits lay: a terrain or doodad read from a name, the diamonds of a stroke (shape, patches from a seed, symmetry), a doodad placed where it fits |
 | `cli/src/optimize.ts` | `map optimize`: what refers to each member, the steps each measured as the file it leaves, the compression chosen |
 | `cli/src/report.ts` | Check Map's findings, a map test's failures and the triggers `map coverage` never saw fire, as GitHub annotations, JUnit XML and SARIF |

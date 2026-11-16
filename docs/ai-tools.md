@@ -91,6 +91,7 @@ these are the ones each request is for.
 | "Give Player 1 six more Marines in the Base location and make the Ghost invincible." | `map_units`, `map_locations`, `map_edit` |
 | "Put a plateau in the middle with a ramp on its south side, and a few lakes around it." | `map_terrain`, `map_edit`, `map_preview` |
 | "Make me a four-player desert map to start from." | `map_generate` |
+| "Make Player 3 a Protoss computer in the second force, and give Zerglings 50 hit points." | `map_settings`, `map_set` |
 | "Show me the map." | `map_preview`, which answers with the picture |
 | "Is this melee map fair? Where are the chokes?" | `map_analyze` |
 | "Do the triggers slow the game down?" | `map_cost` |
@@ -253,18 +254,44 @@ For a whole map to start from, `map_generate` writes a symmetric melee map from 
 mains on high ground with a ramp each, naturals, free bases and a middle, walked and
 checked before it is written.
 
+### Players, forces and settings
+
+`map_settings` reads the Scenario menu's settings: the players, the forces, and the unit
+types, upgrades and technologies the map changes. `map_set` sets them, with the map's name
+and revision. "Make Player 3 a Protoss computer in the second force, and give Zerglings 50
+hit points" is one `map_set`:
+
+```json
+{ "path": "ums.scx",
+  "players": [{ "player": 3, "type": "Computer", "race": "Protoss", "force": 2 }],
+  "units": [{ "unit": "Zergling", "hitPoints": 50 }] }
+```
+
+```
+Player 3 type: Inactive → Computer
+Player 3 race: Inactive → Protoss
+Player 3 force: 1 → 2
+Zerg Zergling uses the game's numbers: yes → no
+Zerg Zergling hit points: 35 → 50
+Written to ums.scx (4092 bytes)
+```
+
+[Players, forces and other settings](cli.md#players-forces-and-other-settings) has every
+list and field: forces, a unit's cost and weapons, who may build it, upgrade levels,
+technologies and switch names. A number for a unit, upgrade or technology is filled in
+from [your copy of the game](#the-tools-that-need-the-game); the rest needs none.
+
 ### Everything else
 
 | To change | The tool |
 | --- | --- |
-| The name, description, revision or text encoding | `map_set` |
 | The size | `map_resize` |
 | A TrigScript map, built from its script | `map_build` |
-| Anything else the plugin API reaches, such as player settings or single tiles, with a script the model writes | `map_run` |
+| Anything else the plugin API reaches, such as sounds or single tiles, with a script the model writes | `map_run` |
 
 ## The tools
 
-There are 45. Each but the `editor_` tools is a command of the [command line
+There are 46. Each but the `editor_` tools is a command of the [command line
 guide](cli.md), and its arguments are the command's options by name: `--dry-run` is
 `dryRun`, `--in` is `in`. A tool answers with the command's text and, beside it, the
 command's `--json` data.
@@ -277,7 +304,9 @@ command's `--json` data.
 | `map_units`, `map_locations` | [The units and the locations as rows](cli.md#listing-units-and-locations): a unit's index, type, player and position, filtered by type, player or area; a location's number, name and bounds | No |
 | `map_terrain`, `map_doodads` | [The terrain and the doodads](cli.md#listing-terrain-and-doodads): the tileset's terrains with the tiles each covers and the map as a grid of letters; the doodads placed, and the ones the tileset has | No |
 | `map_edit` | [A list of edits](cli.md#editing-units-locations-sprites-and-fog) to units, locations, sprites, fog, [terrain and doodads](cli.md#painting-terrain-and-placing-doodads), applied together or not at all | Yes |
-| `map_set`, `map_resize`, `map_new`, `map_build`, `map_run` | The Scenario menu's edits, a new map, the TrigScript build, a plugin run over the map | Yes |
+| `map_settings` | [The players, the forces](cli.md#players-forces-and-other-settings), and the unit, upgrade and technology settings and switch names the map changes | No |
+| `map_set` | The map's name, description and revision, and [its players, forces, unit, upgrade and technology settings and switch names](cli.md#players-forces-and-other-settings) | Yes |
+| `map_resize`, `map_new`, `map_build`, `map_run` | Scenario ▸ Resize, a new map, the TrigScript build, a plugin run over the map | Yes |
 | `map_generate` | [A symmetric melee map from a seed](cli.md#a-melee-map-from-a-seed), walked and checked before it is written | Yes |
 | `map_optimize` | The map made smaller | Only with `write: true` |
 | `map_preview` | The map as a picture: the answer is the PNG itself, so a model that can see images sees the map | No |
@@ -302,6 +331,8 @@ A few tools differ from their commands:
 - `map_trace` and `map_cost` take `mod`, `replay`, `order` and `every`, as the commands
   take `--mod`, `--replay`, `--order` and `--every`. With `replay`, the map's `path` may
   be left out.
+- `map_set` takes the settings as arguments (`players`, `forces`, `units`, `upgrades`,
+  `techs`, `switches`), where the command takes a file with `--settings`.
 - `map_edit` takes the list itself as `edits`, where the command takes a file. An edit
   that cannot be done comes back as an error naming it, such as
   `edits[1] (remove_units): there is no unit 99: the map's units are 0 to 20`, and nothing
@@ -349,12 +380,13 @@ What the tools may touch on your computer, and which of them need your copy of S
 `map_cost`, `map_coverage` and `map_balance` need [your copy of the
 game](cli.md#commands-that-need-starcraft), and the ones that run it fetch the engine the
 first time. `map_edit` needs it for terrain, doodads, `snap` and `check`, and for nothing
-else. `map_run` gives a script the game's data when a copy is there, and runs without when
-it is not: the terrain and doodad parts of the plugin API then do nothing and say so.
-`doctor` tells the model whether the game and the engine are there and what you would need
-to install, so it can tell you instead of failing. When the game is not in one of the
-usual places, the model can pass its folder as `starcraft`, or you can set
-`SCMJS_STARCRAFT` in the tool's MCP settings.
+else; `map_set` needs it for a unit's, upgrade's or technology's numbers. `map_run` gives
+a script the game's data when a copy is there, and runs without when it is not: the
+terrain and doodad parts of the plugin API then do nothing and say so. `doctor` tells the
+model whether the game and the engine are there and what you would need to install, so it
+can tell you instead of failing. When the game is not in one of the usual places, the
+model can pass its folder as `starcraft`, or you can set `SCMJS_STARCRAFT` in the tool's
+MCP settings.
 
 A trace or cost run takes a few seconds and plays at most ten minutes of game.
 `map_coverage` plays whole replays and `map_balance` whole games, so they take as long as
@@ -370,3 +402,4 @@ the frame reached, and cancelling the request stops the game.
 | `src/services/editorLink.ts` | The editor's end of a link: the map handed over, a changed one taken back as an undo step, the selection and the view |
 | `cli/src/mapedit.ts`, `cli/src/objects.ts` | `map_edit` and the lists of units and locations |
 | `cli/src/terrain.ts` | `map_terrain`, `map_doodads` and what the terrain and doodad edits lay |
+| `cli/src/settings.ts` | `map_settings` and the settings `map_set` sets |

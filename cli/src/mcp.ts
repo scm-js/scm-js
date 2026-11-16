@@ -40,6 +40,7 @@ import { printRun, runOnMap } from "./run";
 import { EDIT_ARGUMENT, editMap, parseEdits, printEdits } from "./mapedit";
 import { listLocations, listUnits, locationIndex, printLocations, printUnits, UNIT_ROWS } from "./objects";
 import { DOODAD_ROWS, GRID_COLUMNS, listDoodads, listTerrain, printDoodads, printTerrain } from "./terrain";
+import { anySettings, applySettings, listSettings, printSettings, SETTING_GROUPS, SETTINGS, type MapSettings } from "./settings";
 import { GEN_PLAYERS, GEN_STYLES, GEN_SYMMETRIES } from "./generate";
 import { printGenerated, runGenerate } from "./generatecmd";
 import { costJson, gameMap, printCost, printTrace, removeGameMap, replayRun, runMapInGame, traceJson, type MapRunOptions } from "./trace";
@@ -195,7 +196,7 @@ export interface McpOptions {
 }
 
 /** What the client is told once, with the tool list: how the tools fit together. */
-export const INSTRUCTIONS = `scmJS: StarCraft: Brood War maps on this computer. Paths are files here, relative to the working directory. Start with map_info or map_dump to see what a map holds; map_check is Check Map (errors and warnings, as the editor's). Triggers and strings travel as text: map_triggers_export gives the trigger window's text form (https://docs.scmjs.dev/triggers/), which map_triggers_import takes back; strings are "<number><TAB><text>" lines. map_units and map_locations list a map's units (with the index each has) and locations, filtered by type, player or area; map_terrain lists the tileset's terrains and shows the map as a grid of letters, and map_doodads lists the doodads placed and the ones the tileset has. map_edit changes all of these with a list of edits applied together or not at all: it paints terrain by type with the editor's isometric brush (a cliff or a shore forms where two terrains meet; areas, ellipses, seeded random patches, symmetry), places, scatters and removes doodads (ramps among them), places, moves, changes and removes units, locations and sprites, and sets fog. map_generate writes a whole symmetric melee map from a seed. Terrain and doodads need a copy of StarCraft on this computer for the tileset. Tools that change a map write over it unless given "out"; they never renumber strings. Map text is never translated. map_preview shows the map as a picture, map_analyze reads a melee map's layout (starts, naturals, walks between starts, chokes) in a second, map_trace and map_cost run it in the game itself, and map_coverage counts which triggers fired over many replays; these need a copy of StarCraft on this computer, and doctor says whether one is there and what to install if not. replay_map writes the map a replay was played on. map_optimize makes a map smaller without changing what the game plays (a dry run unless told to write); map_balance plays games on a melee map with the person's own bots to see whether its start locations are fair, which takes minutes. Mods: mod_info says what a mod is, mod_unpack writes it as a folder of text and PNG sheets the person or you can edit, mod_check lints it, mod_diff reads two as a changelog (or one against the game), mod_pack makes the MPQ back, mod_new starts an empty one, mod_header writes a mod's ids by name for a bot made for it, and mod_play hands a mod (with a map and a bot) to the play page in the person's browser. map_trace and map_cost take a mod too. The editor: editor_open opens a map in the scmJS editor in the person's browser and keeps it linked, so they watch the work and can undo it; while it is linked every tool here reads and changes the map in the editor instead of the file (one undo step a change), editor_state says what they have selected and where they are looking, editor_show points at a place, editor_picture is the map as the editor draws it, and editor_save writes the file. Offer it when the person wants to see changes as you make them.`;
+export const INSTRUCTIONS = `scmJS: StarCraft: Brood War maps on this computer. Paths are files here, relative to the working directory. Start with map_info or map_dump to see what a map holds; map_check is Check Map (errors and warnings, as the editor's). Triggers and strings travel as text: map_triggers_export gives the trigger window's text form (https://docs.scmjs.dev/triggers/), which map_triggers_import takes back; strings are "<number><TAB><text>" lines. map_units and map_locations list a map's units (with the index each has) and locations, filtered by type, player or area; map_terrain lists the tileset's terrains and shows the map as a grid of letters, and map_doodads lists the doodads placed and the ones the tileset has. map_edit changes all of these with a list of edits applied together or not at all: it paints terrain by type with the editor's isometric brush (a cliff or a shore forms where two terrains meet; areas, ellipses, seeded random patches, symmetry), places, scatters and removes doodads (ramps among them), places, moves, changes and removes units, locations and sprites, and sets fog. map_generate writes a whole symmetric melee map from a seed. Terrain and doodads need a copy of StarCraft on this computer for the tileset. map_settings reads the Scenario menu's settings (the players, the forces, and the unit, upgrade and technology settings and switch names the map changes), and map_set sets them along with the map's name, description and revision. Tools that change a map write over it unless given "out"; they never renumber strings. Map text is never translated. map_preview shows the map as a picture, map_analyze reads a melee map's layout (starts, naturals, walks between starts, chokes) in a second, map_trace and map_cost run it in the game itself, and map_coverage counts which triggers fired over many replays; these need a copy of StarCraft on this computer, and doctor says whether one is there and what to install if not. replay_map writes the map a replay was played on. map_optimize makes a map smaller without changing what the game plays (a dry run unless told to write); map_balance plays games on a melee map with the person's own bots to see whether its start locations are fair, which takes minutes. Mods: mod_info says what a mod is, mod_unpack writes it as a folder of text and PNG sheets the person or you can edit, mod_check lints it, mod_diff reads two as a changelog (or one against the game), mod_pack makes the MPQ back, mod_new starts an empty one, mod_header writes a mod's ids by name for a bot made for it, and mod_play hands a mod (with a map and a bot) to the play page in the person's browser. map_trace and map_cost take a mod too. The editor: editor_open opens a map in the scmJS editor in the person's browser and keeps it linked, so they watch the work and can undo it; while it is linked every tool here reads and changes the map in the editor instead of the file (one undo step a change), editor_state says what they have selected and where they are looking, editor_show points at a place, editor_picture is the map as the editor draws it, and editor_save writes the file. Offer it when the person wants to see changes as you make them.`;
 
 /**
  * The server with every tool registered, and their names; `connect` it to a transport (stdio for the command, in
@@ -219,6 +220,8 @@ export function createMcpServer(options: McpOptions = {}): { server: McpServer; 
   // The SDK's own words for an argument that does not fit (a missing `path`), in plain terms.
   const toolError = (server as unknown as { createToolError: (text: string) => CallToolResult }).createToolError.bind(server);
   (server as unknown as { createToolError: (text: string) => CallToolResult }).createToolError = (text) => toolError(argumentError(text));
+
+  const starcraftArg = z.string().optional().describe("the folder of the person's StarCraft installation, when doctor did not find one in the usual places");
 
   reg("map_info", {
     title: "What a map holds",
@@ -365,17 +368,45 @@ export function createMcpServer(options: McpOptions = {}): { server: McpServer; 
   }));
 
   reg("map_set", {
-    title: "Map properties",
-    description: `Scenario ▸ Map Properties: set the map's name, description, revision (${VERSIONS.join(", ")}) or text encoding (${ENCODINGS.join(", ")}); what is given is set, the rest left. <03> and the like in a name are the game's colour codes.`,
-    inputSchema: { path, name: z.string().optional(), description: z.string().optional(), revision: z.string().optional(), encoding: z.string().optional(), out },
+    title: "Map properties and settings",
+    description: [
+      `Set a map's properties and the Scenario menu's settings (scmjs map set); what is given is set, the rest left. Scenario ▸ Map Properties: name, description, revision (${VERSIONS.join(", ")}) or text encoding (${ENCODINGS.join(", ")}); <03> and the like in a name are the game's colour codes. And any of these lists, each entry naming what it changes and giving only the fields to change:`,
+      "- players: Player Settings and Player Colors. player (1 to 12), then type, race, color (a name, a number, or [r, g, b] for a Remastered custom colour) and force (1 to 4); colour and force are for players 1 to 8.",
+      "- forces: Force Settings. force (1 to 4), then name, players (moved into the force), allied, alliedVictory, sharedVision, randomStart.",
+      "- units: Unit Settings. unit (a name or units.dat id), then name (a name of the map's own), hitPoints, shields, armor, buildTime (frames, 24 a second), mineralCost, gasCost, weapons [{ weapon, damage, bonus }], and available: who may build it, [{ player: 1 to 12 or \"default\", value: true, false or \"default\" }].",
+      "- upgrades: Upgrade Settings. upgrade, then mineralCost, gasCost, timeCost and the factor each grows by a level (mineralFactor, gasFactor, timeFactor), and levels: [{ player: 1 to 12 or \"default\", start, max }], the level a player starts at and may reach.",
+      "- techs: Technology Settings. tech, then mineralCost, gasCost, researchTime, energyCost, and state: [{ player: 1 to 12 or \"default\", available, researched }].",
+      "- switches: [{ switch: 1 to 256, name }].",
+      "A number for a unit, upgrade or technology takes it off the game's own numbers (useDefault: true puts it back); the rest of its row is then filled in from the game's tables, so those settings need a copy of StarCraft on this computer, and names, availability, levels, players, forces and switches need none. Every name is checked before anything is set: one the map or the game does not have fails with its place (units[1]) and nothing is written. The answer lists each setting that changed with its value before and after; map_settings reads them. `dryRun` writes nothing.",
+    ].join("\n"),
+    inputSchema: { path, name: z.string().optional(), description: z.string().optional(), revision: z.string().optional(), encoding: z.string().optional(), ...SETTINGS, out, dryRun: z.boolean().optional().describe("say what would change and write nothing"), starcraft: starcraftArg },
     annotations: { destructiveHint: true },
-  }, tool(async ({ path: file, name, description, revision, encoding, out: to }) => {
-    if (name === undefined && description === undefined && revision === undefined && encoding === undefined) throw new CliError("Nothing to set", "name, description, revision or encoding, any of them.", 2);
-    const { input, doc } = await openMap(file);
+  }, tool(async ({ path: file, name, description, revision, encoding, out: to, dryRun, starcraft, ...given }) => {
+    const settings = given as MapSettings;
+    if (name === undefined && description === undefined && revision === undefined && encoding === undefined && !anySettings(settings)) throw new CliError("Nothing to set", `name, description, revision, encoding, or any of ${SETTING_GROUPS.join(", ")}.`, 2);
+    const opened = await openMap(file);
+    const { input } = opened;
+    let { doc } = opened;
     const changes = setHeader(doc, { name, description, version: revision, encoding });
-    const w = changes.length || to ? await writeBack(doc, input.path, to ?? null) : null;
-    const lines = changes.length ? changes.map((c) => `${c.field}: ${c.from || "(none)"} → ${c.to || "(none)"}`) : [`${input.name}: nothing changed`];
-    return ok(w ? [...lines, written(w)] : lines, { changes, written: w });
+    const set = anySettings(settings) ? await applySettings(doc, settings, { starcraft }) : null;
+    if (set) doc = set.doc;
+    const changed = changes.length + (set?.changes.length ?? 0);
+    const w = !dryRun && (changed || to) ? await writeBack(doc, input.path, to ?? null) : null;
+    const lines = changed
+      ? [...changes.map((c) => `${c.field}: ${c.from || "(none)"} → ${c.to || "(none)"}`), ...(set?.changes ?? []).map((c) => `${c.subject} ${c.field}: ${c.from || "(none)"} → ${c.to || "(none)"}`)]
+      : [`${input.name}: nothing changed`];
+    return ok(w ? [...lines, written(w)] : dryRun && changed ? [...lines, "Not written (dryRun)."] : lines, { changes, ...(set ? { settings: set.changes, game: set.game } : {}), dryRun: !!dryRun, written: w });
+  }));
+
+  reg("map_settings", {
+    title: "The map's players, forces and settings",
+    description: "The Scenario menu's settings as the map has them (scmjs map settings): the twelve players (type, race, colour, force), the four forces (name, players, allied, allied victory, shared vision, random start), then the unit types, upgrades and technologies the map changes from the game's, each with what it sets, and the switches it names. A row on \"the game's numbers\" keeps the game's hit points, costs and times. With `unit`, `upgrade` or `tech`, that one row alone, changed or not, with the game's own numbers beside the map's when a copy of StarCraft is on this computer. The rows as data, with every player's availability, levels and state. map_set changes them.",
+    inputSchema: { path, unit: z.union([z.string(), z.number().int().min(0)]).optional().describe("this unit type alone: a name or a units.dat id"), upgrade: z.union([z.string(), z.number().int().min(0)]).optional(), tech: z.union([z.string(), z.number().int().min(0)]).optional(), starcraft: starcraftArg },
+    annotations: { readOnlyHint: true },
+  }, tool(async ({ path: file, unit, upgrade, tech, starcraft }) => {
+    const { input, doc } = await openMap(file);
+    const r = await listSettings(doc, input.name, { unit, upgrade, tech, starcraft });
+    return ok(printSettings(input.name, r), r);
   }));
 
   reg("map_resize", {
@@ -416,8 +447,6 @@ export function createMcpServer(options: McpOptions = {}): { server: McpServer; 
     const r = await buildMap(doc, input.path, await loadTypeScript(), { check: !!check, test: !!test, out: to ?? null });
     return { ...ok(printBuild(input.name, r), { file: input.name, ...r }), ...(r.ok ? {} : { isError: true }) };
   }));
-
-  const starcraftArg = z.string().optional().describe("the folder of the person's StarCraft installation, when doctor did not find one in the usual places");
 
   reg("map_run", {
     title: "Run a plugin over the map",

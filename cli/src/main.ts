@@ -62,6 +62,7 @@ import { printRun, runOnMap } from "./run";
 import { editMap, parseEdits, printEdits } from "./mapedit";
 import { listLocations, listUnits, printLocations, printUnits, UNIT_ROWS, type Area, type UnitFilter } from "./objects";
 import { DOODAD_ROWS, GRID_COLUMNS, listDoodads, listTerrain, printDoodads, printTerrain } from "./terrain";
+import { applySettings, listSettings, parseSettings, printSettingChanges, printSettings, type MapSettings } from "./settings";
 import { previewMap, PNG_SCALES } from "./preview";
 import { analyzeMap } from "./analyze";
 import { heatmapMap, type HeatmapOptions as HeatmapFlags } from "./heatmap";
@@ -580,31 +581,69 @@ trigger whose text does. Prints what matched and where. Exits 1 when nothing mat
     print(`${mark.ok} ${pc.bold(input.name)}: ${what}${dot}${t("written to {out}", { out: outName(written!) })}${dot}${size(written!.bytes)}`);
   }
 
-  map.command("set").description(t("the map's name, description, revision or text encoding")).argument("<map>").addOption(json)
+  map.command("set").description(t("the map's name, description, revision or text encoding, and its player, force, unit, upgrade and technology settings")).argument("<map>").addOption(json)
     .option("--name <text>", t("the map's name"))
     .option("--description <text>", t("the map's description"))
     .option("--revision <which>", t("the file's revision: {versions}", { versions: VERSIONS.join(", ") }))
     .option("--encoding <id>", t("the text encoding: {encodings}", { encodings: ENCODINGS.join(", ") }))
+    .option("--settings <file>", t("players, forces, units, upgrades, techs and switches to set, as JSON; - reads it from standard input"))
     .option("-o, --out <map>", t("write the result here instead of over the map; - for standard output"))
     .option("--dry-run", t("say what would change and write nothing"))
+    .option("--starcraft <folder>", t("your installation of StarCraft, for a unit's, upgrade's or technology's numbers (SCMJS_STARCRAFT); found in the usual places otherwise"))
     .addHelpText("after", t(`
 Scenario ▸ Map Properties from the terminal: what is given is set, the rest is left. Nothing is written when nothing
 changed. A revision change does what the editor's does (the string table's form, the colour section the revision
-needs); the encoding is how the map's text is written for 1.16.1, where Remastered reads UTF-8.`))
-    .action(async (file: string, o: { json?: boolean; name?: string; description?: string; revision?: string; encoding?: string; out?: string; dryRun?: boolean }) => {
-      if (o.name === undefined && o.description === undefined && o.revision === undefined && o.encoding === undefined) throw new CliError(t("Nothing to set"), t("--name, --description, --revision or --encoding, any of them."), 2);
-      const { input, doc } = await openForEdit(file);
+needs); the encoding is how the map's text is written for 1.16.1, where Remastered reads UTF-8.
+
+--settings takes the Scenario menu's other dialogs as a JSON object with any of these lists:
+  players   player (1 to 12), then type (Human, Computer, Rescuable, Neutral, …), race (Zerg, Terran, Protoss,
+            User Selectable, Random, …), color (a name such as Red, a number, or [r, g, b]), force (1 to 4)
+  forces    force (1 to 4), then name, players (to move into it), allied, alliedVictory, sharedVision, randomStart
+  units     unit (a name or id), then name, hitPoints, shields, armor, buildTime, mineralCost, gasCost,
+            weapons [{ weapon, damage, bonus }], available [{ player, value }], useDefault
+  upgrades  upgrade (a name or id), then mineralCost, mineralFactor, gasCost, gasFactor, timeCost, timeFactor,
+            levels [{ player, start, max, useDefault }], useDefault
+  techs     tech (a name or id), then mineralCost, gasCost, researchTime, energyCost,
+            state [{ player, available, researched, useDefault }], useDefault
+  switches  switch (1 to 256), name
+In available, levels and state a player is 1 to 12, or "default" for the column the players follow until they are
+given a value of their own; available's value is true, false, or "default" to follow that column again.
+Only what is given changes; scmjs map settings lists what the map has. A number for a unit, upgrade or technology
+takes it off the game's own numbers, and the rest of its row is filled in from your copy of StarCraft, so those
+settings need one. A name the map or the game does not have stops everything: nothing is written.
+  scmjs map set ridge.scx --name "Hold the Ridge"
+  scmjs map set ridge.scx --settings settings.json --dry-run`))
+    .action(async (file: string, o: { json?: boolean; name?: string; description?: string; revision?: string; encoding?: string; settings?: string; out?: string; dryRun?: boolean; starcraft?: string }) => {
+      if (o.name === undefined && o.description === undefined && o.revision === undefined && o.encoding === undefined && o.settings === undefined) throw new CliError(t("Nothing to set"), t("--name, --description, --revision, --encoding or --settings, any of them."), 2);
+      if (file === STDIO && o.settings === STDIO) throw new CliError(t("The map and the settings cannot both come from standard input"), t("Name one of them as a file."), 2);
+      let settings: MapSettings | null = null;
+      if (o.settings !== undefined) {
+        const text = new TextDecoder().decode(await readTextArg(o.settings));
+        let value: unknown;
+        try { value = JSON.parse(text); } catch (e) { throw new CliError(t("{file} is not JSON: {reason}", { file: o.settings === STDIO ? t("standard input") : o.settings, reason: e instanceof Error ? e.message : String(e) }), null, 2); }
+        settings = parseSettings(value);
+      }
+      const opened = await openForEdit(file);
+      const { input } = opened;
+      let { doc } = opened;
       const piped = piping(input, o);
       // Plain ASCII is the same in every encoding, and a map does not record the one it was written in: said, not set.
       const asciiOnly = o.encoding !== undefined && plainAsciiText(doc.scenario);
       const changes = setHeader(doc, { name: o.name, description: o.description, version: o.revision, encoding: o.encoding });
+      const set = settings ? await applySettings(doc, settings, { starcraft: o.starcraft }) : null;
+      if (set) doc = set.doc;
+      const changed = changes.length + (set?.changes.length ?? 0);
       // A pipe always gets the map, changed or not, so the next step has one.
-      const w = !o.dryRun && (changes.length || o.out || piped) ? await writeBack(doc, input.path, o.out ?? null) : null;
-      if (o.json) { print(JSON.stringify({ file: input.path, changes, ...(asciiOnly ? { encoding: "plain ASCII text, the same in every encoding" } : {}), dryRun: !!o.dryRun, written: w }, null, 2)); return; }
+      const w = !o.dryRun && (changed || o.out || piped) ? await writeBack(doc, input.path, o.out ?? null) : null;
+      if (o.json) { print(JSON.stringify({ file: input.path, changes, ...(set ? { settings: set.changes, game: set.game } : {}), ...(asciiOnly ? { encoding: "plain ASCII text, the same in every encoding" } : {}), dryRun: !!o.dryRun, written: w }, null, 2)); return; }
       const note = asciiOnly ? `${mark.info} ${t("The map's text is plain ASCII, the same in every encoding, so the encoding has nothing to change")}` : null;
-      const where = w ? `${dot}${t("written to {out}", { out: outName(w) })}${dot}${size(w.bytes)}` : o.dryRun && changes.length ? pc.dim(` ${t("(--dry-run: nothing written)")}`) : "";
-      if (!changes.length) { say(piped, note, `${mark.ok} ${pc.bold(input.name)}: ${t("nothing changed")}${where}`); return; }
-      say(piped, note, `${o.dryRun ? mark.info : mark.ok} ${pc.bold(input.name)}: ${changes.map((c) => `${translate(c.field)} ${pc.red(c.from || pc.dim(t("(none)")))} ${pc.dim("→")} ${pc.green(c.to || pc.dim(t("(none)")))}`).join(dot)}${where}`);
+      const where = w ? `${dot}${t("written to {out}", { out: outName(w) })}${dot}${size(w.bytes)}` : o.dryRun && changed ? pc.dim(` ${t("(--dry-run: nothing written)")}`) : "";
+      if (!changed) { say(piped, note, `${mark.ok} ${pc.bold(input.name)}: ${t("nothing changed")}${where}`); return; }
+      const said = [
+        ...changes.map((c) => `${translate(c.field)} ${pc.red(c.from || pc.dim(t("(none)")))} ${pc.dim("→")} ${pc.green(c.to || pc.dim(t("(none)")))}`),
+        ...(set?.changes.length ? [t("{n, plural, one {# setting} other {# settings}} changed", { n: set.changes.length })] : []),
+      ];
+      say(piped, note, ...(set ? printSettingChanges(set.changes) : []), `${o.dryRun ? mark.info : mark.ok} ${pc.bold(input.name)}: ${said.join(dot)}${where}`);
     });
 
   map.command("resize").description(t("Scenario ▸ Resize: the map to another size, anchored")).argument("<map>").addOption(json)
@@ -730,6 +769,25 @@ box in pixels and the tiles the box touches, and how many units have their centr
       const r = listLocations(doc, input.path);
       if (o.json) print(JSON.stringify(r, null, 2));
       else print(...printLocations(input.name, r));
+    });
+
+  map.command("settings").description(t("the map's players and forces, and the unit, upgrade and technology settings it changes")).argument("<map>", t("the map; - reads it from standard input")).addOption(json)
+    .option("--unit <name>", t("this unit type alone, changed or not, with the game's own numbers beside it"))
+    .option("--upgrade <name>", t("this upgrade alone"))
+    .option("--tech <name>", t("this technology alone"))
+    .option("--starcraft <folder>", t("your installation of StarCraft (SCMJS_STARCRAFT); found in the usual places otherwise"))
+    .option("--no-game", t("do not read the game's own numbers"))
+    .addHelpText("after", t(`
+The Scenario menu's settings: the twelve players (type, race, colour, force), the four forces, then the unit types,
+upgrades and technologies the map changes from the game's, each with what it sets, and the switches it names. A row
+on "the game's numbers" keeps the game's hit points, costs and times. --unit, --upgrade and --tech show one row
+whether the map changes it or not, and read the game's own numbers from your copy of StarCraft when one is there.
+scmjs map set --settings sets them.`))
+    .action(async (file: string, o: { json?: boolean; unit?: string; upgrade?: string; tech?: string; starcraft?: string; game?: boolean }) => {
+      const { input, doc } = await openForEdit(file);
+      const r = await listSettings(doc, input.path, { unit: o.unit, upgrade: o.upgrade, tech: o.tech, starcraft: o.starcraft, game: o.game });
+      if (o.json) print(JSON.stringify(r, null, 2));
+      else print(...printSettings(input.name, r));
     });
 
   /** `--rect`, `--tiles` and `--location` as an area; undefined when none was given. */
@@ -2387,7 +2445,7 @@ export const COMMAND_GROUPS: Record<string, [heading: string, names: string[]][]
   map: [
     [msg("Looking inside a map:"), ["info", "check", "dump", "find", "preview", "sounds", "analyze"]],
     [msg("Making a map:"), ["new", "generate", "fetch"]],
-    [msg("Changing a map:"), ["set", "resize", "units", "locations", "terrain", "doodads", "edit", "triggers", "strings", "optimize", "unpack", "pack", "build", "run"]],
+    [msg("Changing a map:"), ["set", "settings", "resize", "units", "locations", "terrain", "doodads", "edit", "triggers", "strings", "optimize", "unpack", "pack", "build", "run"]],
     [msg("Maps in git:"), ["diff", "log", "blame", "merge"]],
     [msg("Running a map in the game:"), ["trace", "cost", "test", "coverage", "rush", "balance", "heatmap"]],
     [msg("Sharing:"), ["open", "play", "share"]],

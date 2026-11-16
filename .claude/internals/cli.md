@@ -1,7 +1,7 @@
 # The `scmjs` command line
 
 `cli/` is the npm package **`@scm-js/cli`** (its command is `scmjs`): `scmjs about | doctor | info | share | mcp | lsp | map info|check|open|new|generate|dump|find|fetch|set|resize|units|locations|edit|triggers|strings|sounds|diff|log|blame|merge|build|run|unpack|pack|trace|cost|rush|balance|test [record]|preview|heatmap|coverage|optimize|analyze |
-replay info|map|open|watch|export|share | mod info|unpack|pack|check|diff|new|build|play|test | plugin new|check|dev | bot new|init|build|update|run|ladder`, or `npx @scm-js/cli …`. npm refused the plain name `scmjs` on the first publish (2026-11-06,
+replay info|map|open|watch|export|share | library maps|replays|shared|get|rm|unlink|rename|note | mod info|unpack|pack|check|diff|new|build|play|test | plugin new|check|dev | bot new|init|build|update|run|ladder`, or `npx @scm-js/cli …`. npm refused the plain name `scmjs` on the first publish (2026-11-06,
 E403 "too similar to scss, sockjs"), so the user chose the scope beside @scm-js/replay and @scm-js/plugin-api. The reader's page is `docs/cli.md`. The shape was the user's (2026-11-05): one command, a noun for
 each kind of thing (`map`, `replay`, `plugin`, `bot`), "an impressive UX tool … not overly engineered".
 
@@ -1462,6 +1462,73 @@ sign-in). The link forms are the shared spec's (`~/.cache/scmjs-redesign/share-s
 - For the MCP agent: the data functions are `shareMap`/`keepMap`, `shareReplay`/`keepReplay`, `shareFile`,
   `replayMoment`/`withMoment`, `checkShareOptions`, `copyToClipboard` — none prints.
 
+## The account's library and links as input (`library.ts`, `librarycmd.ts`, `weblink.ts`) — 2026-11-16, branch `cli-library`
+
+One slice of a round making the account features easy from the terminal (four agents in parallel: this one,
+a top-level `scmjs share` with moment links, `scmjs replay sync`, `scmjs login --device`).
+
+- **`library.ts` returns data and prints nothing** (`libraryReport`, `findInLibrary`, `getFromLibrary`,
+  `planRemoval`/`removeFromLibrary`, `planUnlink`/`unlink`, `renameMap`, `noteRevision`, `confirmed`), with
+  `print*` making lines, so an MCP wrapper calls the same functions. Every function takes `{ server, file,
+  fetchImpl }` as `share.ts` does. The commander side is `librarycmd.ts` (`addLibraryCommands(program, group)`, one
+  line in main.ts) so main.ts, which the other agents also touch, gained two lines.
+- **The list**: `GET /v1/rooms/mine` first (a kept room's id *is* its stored map's id, so the map row says "shared
+  for editing" with the invite), `GET /v1/maps`, then `GET /v1/maps/:id` **only for a map whose summary has
+  `links > 0`** (the list carries the count, not the tokens), six at a time; `GET /v1/replays` (its links come
+  inline, with `opens`). `missingOk` turns a server without a part into `missing: [...]`, said dimly. `library
+  shared` alone asks `GET /v1/storage` for the storage line. **Decision: `account` stays "who + storage"**; its
+  output is unchanged except a dim last line pointing at `scmjs library` (its shared-maps table and `--qr` were
+  left, since scripts read `account --json`'s `shared`). The library shows shared maps too, as their own part.
+- **Naming one thing** (`findInLibrary`): a link (the token looked up in the maps' `linkList`s, the replays'
+  `links`, or `rooms/mine`'s invites; a link on another server than the session's is refused, naming both), an
+  id prefix of ≥ 6 hex characters (ids are UUIDs; the list shows the first 8, dashes dropped), else a map's name
+  or head file name or a replay's file name, case-insensitive. Several hits → an error listing them with ids.
+- **`get`**: a map or replay link → the public routes (`GET /v1/links/:token` for the name, owner and revision,
+  then `/file`), **no session sent even when signed in**; `--revision` with a link is refused (a link opens the
+  revision it was made for). A share link → the owner's kept map's head revision; a live room is refused (nothing
+  stored). Else the account's routes with the bearer (`/v1/maps/:id/revisions/:n/file`, `/v1/replays/:id/file`).
+  The file's name is the `Content-Disposition`'s `filename*` (then `filename`), made safe by `safeFileName`
+  (folders and characters Windows refuses dropped: a server could name a file `../x`). Written through
+  `writeOutput`, so `-o -` is standard output (the line then goes to stderr) and a linked map gets the bytes as
+  an undo step; an existing file needs `--force`, as `replay map`.
+- **`rm` / `unlink`** plan first (what goes: revisions, links with their opens, a kept room, the bytes) and
+  print the plan's sentences (`removalLines`, `unlinkLines`) before `confirmed()`: `--yes`, else a y/N question when
+  stdin **and** stdout are terminals (`y`, `yes`, `예`, `네`, `ㅇ`), else exit 2 "no terminal to ask on". `--dry-run`
+  stops after the sentences; `--json` puts them on stderr and prints `{ plan, done }`. A "no" is exit 1. The last
+  revision is refused before asking (the server refuses it too). Deleting the head revision says links to "the
+  newest" will open the one before. Unlinking a share link is `DELETE /v1/rooms/mine/:id`: a live room's people
+  are sent out and nothing is kept; a kept room writes a last revision and stays a map (ai-server's `finishKept`).
+- **`rename`** (`PATCH /v1/maps/:id { name }`) and **`note`** (`PATCH /v1/maps/:id/revisions/:n { note }`, the head
+  by default) are maps only: replays have no PATCH route.
+- **Links as input** (`weblink.ts`): `readInput` asks `isWebAddress(path)` (`^https?://`, so a file named
+  `scmjs.dev/...` is still a file) before `linkedRead`, and `readWebLink` returns an `Input` whose **`path` stays the
+  link** and `link` is set. `writeOutput` refuses a web address (exit 2, "Name a file to write with -o"), so every
+  command that writes back over its input refuses without code of its own. Accepted: hosts `scmjs.dev`,
+  `*.scmjs.dev`, localhost/127.0.0.1/[::1] and `SCMJS_EDITOR_URL`'s; paths ending `/(map|replay|share)/<token>` (so
+  `/editor/…`, `/replay/…`, `/nightly/map/…`) and `/play/?replay=<token>`; tokens `[A-Za-z0-9_-]{8,128}`. The
+  server: the link's `?scmjs-server=` (http/https only), else `SCMJS_SERVER`, else api.scmjs.dev. A 404 is exit 2
+  (a file that is not there). **Each read counts an open** and is under the server's per-address limit
+  (`linkOpensPerMinute`): `map info <link>` is an open, as the editor's is.
+- **What a link input changed elsewhere**: `besideInput(input)` (files.ts) is the path a neighbouring file is named
+  from — the input, or its server name in the current folder for a link or a pipe; `replay map`, `replay export`
+  and the MCP `replay_map` use it. `fileOnDisk(input)` writes a link's or pipe's bytes to a temporary folder for a
+  runner that reads by name (`replay watch`; `replay export`'s `gameMoments` already did this). `map open <link>` / `replay open <link>` open the link itself in the browser (no download, no
+  extra open counted); `--live` with a link is refused. `history.ts#locate` refuses a link before git's own
+  "cannot change to 'https:/…'".
+- **MCP**: a link is refused by a server kept to a folder (`webLinkArg` in `tool()`, checked before
+  `outsideRoot`, which would otherwise have taken `https://…` as a relative path *inside* the folder). Why: the
+  folder is the promise the person made when adding the server, network access is a new kind of reach, and a
+  model told by a page it read to fetch a link would do it. `--allow-outside` lifts both, and its option text says
+  so; `plugin` keeps its own `https:` sources.
+- **The overview**: `library` is a row under "Maps and replays:"; the line for it came from **dropping the blank
+  line before Options** (see "The overview's rows"). The `share` agent's top-level row needs another line found.
+- **Tests**: `tests/cli-library.test.ts` (12) against `tests/support/libraryServer.ts`, a stand-in of the maps,
+  replays, rooms and public link routes (shapes from ai-server's `protocol.ts` at origin/main a303e3b). It also runs
+  by itself (`node tests/support/libraryServer.ts <map> <replay> <port>`), which is how the built command was
+  driven by hand (`SCMJS_SERVER`, a session file with `sess-ok`). **Not run against the real ai-server.**
+- **Not done**: MCP tools for the library (the functions are ready); `library get` of a whole map with every
+  revision; replays renamed or noted (no server route); `--qr` on `library`.
+
 ## A map linked to the editor (`cli/src/link.ts`, `src/services/editorLink.ts`, `openLinked` in `useOpenerHandoff.ts`) — 2026-11-16
 
 The user asked what the MCP work's integration with the editor was (none: the tools wrote files the
@@ -1655,8 +1722,8 @@ and `core`. 0.8.8 was published by hand (security key: own terminal, `--browser=
 
 ## The overview's rows (`cli/src/banner.ts`) — 2026-11-07
 
-`rootHelp` prints the three groups **with no blank line between them**; the one blank line is before Options. That
-freed two of the 23 rows (a 24-row terminal keeps the globe on screen; `tests/cli.test.ts` holds the count), which
+`rootHelp` prints the three groups **with no blank line between them**, and since 2026-11-16 (`library`) none before
+Options either. The first change freed two of the 23 rows (a 24-row terminal keeps the globe on screen; `tests/cli.test.ts` holds the count), which
 `init [folder]` and `account show|login|logout` took. A new top-level row now needs a line freed again: a one-line
 description is the first rule (commander wraps a long one onto a second row, which the count sees), and a hidden
 command (`{ hidden: true }`: `completion`, `login`, `logout`, `help`) is the fallback.

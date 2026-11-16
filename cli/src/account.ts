@@ -40,7 +40,7 @@ export function sessionPath(env: NodeJS.ProcessEnv = process.env, platform: Node
 
 /* ── What the server answers (ai-server's src/protocol.ts, the parts read here) ───────── */
 
-export interface StorageView { usedBytes: number; capBytes: number; maps: number; revisions: number }
+export interface StorageView { usedBytes: number; capBytes: number; maps: number; revisions: number; replays?: number }
 export interface AccountView {
   kind: "trial" | "account";
   name?: string;
@@ -136,7 +136,7 @@ export class Client {
 }
 
 /** A refusal in the server's words (`{ error: { code, message, retryAfterSec } }`); a session it no longer knows is exit 2 with the way back. */
-function serverError(res: Response, data: unknown): CliError {
+export function serverError(res: Response, data: unknown): CliError {
   const e = (data as { error?: { code?: string; message?: string; retryAfterSec?: number } } | null)?.error;
   const retry = e?.retryAfterSec ?? (Number(res.headers.get("retry-after")) || 0);
   const message = e?.message ?? t("The server answered {status}", { status: `${res.status} ${res.statusText}`.trim() });
@@ -364,5 +364,6 @@ export function printAccount(r: AccountReport, home = homedir(), { qr = false } 
     // --qr: each link's code under its name, one after another.
     if (qr) for (const m of r.shared.rooms) lines.push("", `  ${gameText(m.name)}`, ...qrFor(linkTo("share", m.invite, r.server)).map((l) => `  ${l}`));
   }
+  if (st) lines.push("", pc.dim(t("scmjs library lists your maps and replays with their links.")));
   return lines;
 }

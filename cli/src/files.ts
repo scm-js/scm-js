@@ -1,7 +1,10 @@
 /** Reading what the person named: what kind of file it is, and a map or replay out of it, as the editor reads them. */
+import { writeFileSync } from "node:fs";
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { linkedRead } from "./link";
-import { basename, dirname } from "node:path";
+import { isWebAddress, readWebLink } from "./weblink";
+import { basename, dirname, join, resolve } from "node:path";
+import { tempFolder } from "./lifecycle";
 import type { Readable } from "node:stream";
 import { openMapBytes, type OpenedMap } from "../../src/editor/mapFile";
 import { looksLikeMpq } from "../../src/formats/mpq/scm";
@@ -15,6 +18,8 @@ export interface Input {
   path: string; name: string; bytes: Uint8Array; kind: FileKind | null;
   /** Read from the editor the file is linked to, not from disk (link.ts). */
   live?: boolean;
+  /** Downloaded from a scmjs.dev link (weblink.ts): `path` is the link, `name` the file's name on the server. */
+  link?: string;
 }
 
 /** The path that means standard input (as a file to read) or standard output (as a file to write), as `-` does in Unix tools. */
@@ -38,6 +43,8 @@ export async function readInput(path: string, stdin: Readable = process.stdin): 
     const ext = kind === "replay" ? "rep" : kind === "bot" ? "scmbot" : looksLikeMpq(bytes) ? "scx" : "chk";
     return { path: STDIO, name: `stdin.${ext}`, bytes, kind };
   }
+  // A scmjs.dev link to a map or replay: downloaded through the public endpoints, no sign-in (weblink.ts).
+  if (isWebAddress(path)) return await readWebLink(path);
   // A map linked to the editor is read from there: what the editor has now, unsaved changes included (link.ts).
   const live = await linkedRead(path);
   if (live) return { path, name: basename(path), bytes: live, kind: kindOf(basename(path), live), live: true };
@@ -51,6 +58,23 @@ export async function readInput(path: string, stdin: Readable = process.stdin): 
     throw new CliError(code === "ENOENT" ? t("No file {path}", { path }) : t("{path} cannot be read ({code})", { path, code: String(code ?? e) }), code === "ENOENT" ? t("Check the name; put quotes round a name with spaces or brackets.") : null, 2);
   }
   return { path, name: basename(path), bytes, kind: kindOf(basename(path), bytes) };
+}
+
+/**
+ * Where a file named after the input goes when no `--out` names one: beside it, or in the current folder under the
+ * server's name for a file from a link (or `stdin.<ext>` for one from a pipe).
+ */
+export const besideInput = (input: Input): string => (input.link || input.path === STDIO ? input.name : input.path);
+
+/**
+ * The input as a file on disk, for a program that reads it by name (the game's runners): the file itself, or the bytes
+ * written to a temporary folder under the input's name when they came from a link or a pipe.
+ */
+export function fileOnDisk(input: Input, prefix = "scmjs-input-"): string {
+  if (!input.link && input.path !== STDIO) return resolve(input.path);
+  const file = join(tempFolder(prefix), input.name);
+  writeFileSync(file, input.bytes);
+  return file;
 }
 
 /** A bare scenario starts with a section name: four bytes of capitals, digits or spaces (`VER `, `TYPE`, `MTXM`). */

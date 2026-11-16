@@ -2383,13 +2383,14 @@ Preferences (Ctrl+,) are kept in the browser. Nothing is written until OK or App
   are used. It is on unless you turn it off. When you use a feature, the editor sends its
   name and a few words about it, such as which dialog opened, which layer an edit was on
   and which tool made it, which overlay or layer was shown or hidden, the type of each
-  unit placed, or the tileset and size of a map opened. When something goes wrong, it
-  sends where in the editor's code the error happened (the file, line and function) and
-  whether the browser was translating the page, but never the error's message. It never
-  sends the map itself, its name, a file name, its text or anything you typed, and nothing
-  that identifies you. Turning it off also stops the visit count for this browser, and the
-  site's [privacy page](https://scmjs.dev/privacy.html) has the same switch and the
-  details. The desktop app and copies of the editor hosted elsewhere count nothing.
+  unit placed, the tileset and size of a map opened, or the name of the mod in use when
+  the game data is one. When something goes wrong, it sends where in the editor's code the
+  error happened (the file, line and function) and whether the browser was translating the
+  page, but never the error's message. It never sends the map itself, its name, a file
+  name, its text or anything you typed, and nothing that identifies you. Turning it off
+  also stops the visit count for this browser, and the site's [privacy
+  page](https://scmjs.dev/privacy.html) has the same switch and the details. The desktop
+  app and copies of the editor hosted elsewhere count nothing.
 
 **Editing**: the grid's spacing, colour and style, and what snaps to it (View ▸ Grid
 Settings… opens this page); what the palettes start on (the owner of placed units, the

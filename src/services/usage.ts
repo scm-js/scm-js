@@ -27,6 +27,7 @@
  */
 import { copyKind } from "../gamedata/copies";
 import type { AssetSource } from "../gamedata/source";
+import { isDefaultProfile, REMASTERED_PROFILE } from "../gamedata/profiles";
 import { UNIT_TYPES } from "../formats/dat/dat";
 import type { UnitChange } from "../editor/units";
 import { APP_VERSION } from "../version";
@@ -148,16 +149,18 @@ export function extOf(fileName: string | null | undefined): string {
 }
 
 /**
- * What a plugin is called in the counts: the repository name of one the project publishes
- * (`github:scm-js/…`, a bundled one, or one listed in a registry the editor read), and
- * `other` for anything else — a plugin someone installed from their own address is theirs.
+ * What a plugin is called in the counts: for one the project publishes, its repository name
+ * without the `plugin-` in front — the name it is bundled under, so `builtin:aftermath` and
+ * `github:scm-js/plugin-aftermath@v0.27.0` are one plugin, `aftermath`, whichever way this
+ * build has it; `owner/repo` for one listed in a registry the editor read; and `other` for
+ * anything else — a plugin someone installed from their own address is theirs.
  */
 export function pluginCountName(spec: string, listed: (spec: string) => boolean = () => false): string {
   const s = spec.trim();
   const builtin = /^builtin:([\w-]+)$/i.exec(s);
-  if (builtin) return builtin[1].toLowerCase();
+  if (builtin) return builtin[1].toLowerCase().replace(/^plugin-/, "");
   const own = /^(?:github:)?scm-js\/([\w.-]+?)(?:@.*)?$/i.exec(s);
-  if (own) return own[1].toLowerCase();
+  if (own) return own[1].toLowerCase().replace(/^plugin-/, "");
   if (listed(s)) {
     const gh = /^(?:github:)?([\w.-]+)\/([\w.-]+?)(?:@.*)?$/i.exec(s);
     if (gh) return `${gh[1]}/${gh[2]}`.toLowerCase().slice(0, 64);
@@ -362,6 +365,29 @@ export const pluginName = (spec: string) => pluginCountName(spec, listed);
 export function countPluginUse(plugin: { source: string }, via: string, item?: string): void {
   const name = pluginName(plugin.source);
   count("plugin.use", name === "other" || !item ? { plugin: name, via } : { plugin: name, via, item: item.slice(0, 100) });
+}
+
+/**
+ * The mod a data set is, as the counts name it: its name as the person or the mod gave it
+ * (one line, at most 40 characters), or null for the game's own data — the 1.16 files,
+ * StarEdit's download, Remastered — and for none. Never its id, files or hash.
+ */
+export function modOf(source: AssetSource | null): string | null {
+  if (!source || source.kind === "none" || isDefaultProfile(source.profile.id) || source.profile.id === REMASTERED_PROFILE.id) return null;
+  if (source.kind === "stored" && source.stored && copyKind(source.stored) !== "mod") return null;
+  return modName(source.profile.name || source.profile.id);
+}
+
+/** A mod's name in the counts: one line, at most 40 characters. */
+export const modName = (name: string) => name.replace(/\s+/g, " ").trim().slice(0, 40) || "unnamed";
+
+/**
+ * The data set in use changed which mod it is (or to the game's own, `none`): one
+ * `map.dataset` line. The same set adopted again (a reload, a repaint) is not a change.
+ */
+export function countDataSetChange(before: AssetSource | null, next: AssetSource): void {
+  const was = modOf(before), now = modOf(next);
+  if (was !== now) count("map.dataset", { mod: now ?? "none" });
 }
 
 /**

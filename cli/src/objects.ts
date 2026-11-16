@@ -212,8 +212,9 @@ export function printUnits(name: string, r: UnitListing, all = false): string[] 
   const shown = all ? r.units : r.units.slice(0, UNIT_ROWS);
   if (shown.length) {
     lines.push(...table([
-      [t("index"), t("unit"), t("player"), t("x,y"), t("tile"), ""].map((h) => pc.dim(h)),
-      ...shown.map((u) => [String(u.index), u.unit, playerLabel(u.player), `${u.x},${u.y}`, `${u.tileX},${u.tileY}`, pc.dim(unitProperties(u))]),
+      // (An empty cell is left uncoloured: colour codes round nothing would keep the row's padding from being trimmed.)
+      [...[t("index"), t("unit"), t("player"), t("x,y"), t("tile")].map((h) => pc.dim(h)), ""],
+      ...shown.map((u) => { const props = unitProperties(u); return [String(u.index), u.unit, playerLabel(u.player), `${u.x},${u.y}`, `${u.tileX},${u.tileY}`, props ? pc.dim(props) : ""]; }),
     ], 2));
   }
   if (r.units.length > shown.length) lines.push(pc.dim(`  ${t("… and {n} more (--all lists them)", { n: num(r.units.length - shown.length) })}`));

@@ -233,7 +233,7 @@ describe("the sync", () => {
     const folder = mkdtempSync(join(tmpdir(), "scmjs-sync-f-"));
     put(join(folder, "one.rep"), replay("One"), now + 1000);
     const r = await syncReplays([folder], { since: now, link: true, picture: false }, deps);
-    expect(r.uploaded[0].link).toMatch(/^https:\/\/scmjs\.dev\/editor\/replay\/tok-\w+\?scmjs-server=/);
+    expect(r.uploaded[0].link).toMatch(/^https:\/\/scmjs\.dev\/replay\/tok-\w+\?scmjs-server=/);
     expect([...fake.kept.values()][0].link).toBe(true);
   });
 

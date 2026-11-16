@@ -3522,9 +3522,9 @@ keeps, with every link, is [`scmjs library`](#your-library).
 
 When scmjs.dev refuses something, for instance because your storage is full or you are
 sharing too many maps at once, the command shows scmjs.dev's own message. Until you sign
-in, `share`, `map share`, `replay share`, `replay sync`, `account` and `library` say
-"Sign in first: scmjs login" and exit with 2 (`library get` with a link needs no
-sign-in). `map play` does not need it: the play page asks you to sign in there.
+in, `share`, `map share`, `replay share`, `replay sync`, `account` and `library` say "Sign
+in first: scmjs login" and exit with 2 (`library get` with a link needs no sign-in).
+`map play` does not need it: the play page asks you to sign in there.
 
 ### A link to a map
 
@@ -3713,7 +3713,7 @@ Maps
 
 Replays
   Fighting Spirit · PvT  Ann vs Bob · 12:34 · 33 KB · 2026-11-12  77aa01bc
-    https://scmjs.dev/editor/replay/pX4nR8Lq0Tz6Vw2yBc9dFg1J · opened 3 times
+    https://scmjs.dev/replay/pX4nR8Lq0Tz6Vw2yBc9dFg1J · opened 3 times
 
 Shared for editing  2 of 3 at once
   Ridge   kept open for a week · nobody in it
@@ -3897,7 +3897,8 @@ and the command prints the page's address for you to open.
 
 `--qr` on `share`, `map share`, `replay share`, `map play` and `account` draws each link
 as a QR code under it, for the people next to you to open on a phone. The link stays the
-first line. On `login --device` it draws the sign-in page's address with the code filled in.
+first line. On `login --device` it draws the sign-in page's address with the code filled
+in.
 
 ![A QR code drawn in the terminal under a map link](images/cli-qr.webp)
 

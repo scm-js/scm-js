@@ -47,7 +47,7 @@ function stagedEngine(dir: string, runner = FAKE_RUNNER): { dir: string; build: 
 
 /** A folder shaped like a 1.16.1 copy of the game. */
 function classicCopy(dir: string): string {
-  for (const f of ["StarDat.mpq", "BrooDat.mpq"]) writeFileSync(join(dir, f), "mpq");
+  for (const f of ["StarDat.mpq", "BrooDat.mpq", "patch_rt.mpq"]) writeFileSync(join(dir, f), "mpq");
   return dir;
 }
 
@@ -71,7 +71,7 @@ describe("scmjs bot run", () => {
 
   it("finds a 1.16.1 copy whatever the case of its archives' names", () => {
     const lower = tmp();
-    for (const f of ["stardat.mpq", "broodat.mpq"]) writeFileSync(join(lower, f), "mpq");
+    for (const f of ["stardat.mpq", "broodat.mpq", "patch_rt.mpq"]) writeFileSync(join(lower, f), "mpq");
     expect(gameCopyKind(lower)).toBe("classic");
     expect(findGameCopy(lower)).toEqual({ folder: lower, kind: "classic" });
     const upper = tmp();

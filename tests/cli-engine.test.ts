@@ -7,7 +7,8 @@ import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSy
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it, vi } from "vitest";
-import { endDetail, endReason, ensureEngine, findGameCopy } from "../cli/src/engine";
+import { endDetail, endReason, ensureEngine, findGameCopy, PATCHED_MEMBERS as CLI_PATCHED, unpatchedCopy } from "../cli/src/engine";
+import { PATCHED_MEMBERS as EDITOR_PATCHED } from "../src/gamedata/archives";
 import { CliError } from "../cli/src/ui";
 import { classicCopy, stagedEngine } from "./support/mapRunner";
 
@@ -70,6 +71,26 @@ describe("scmjs: the copy of the game", () => {
       err.mockRestore();
       if (before === undefined) delete process.env.SCMJS_STARCRAFT; else process.env.SCMJS_STARCRAFT = before;
     }
+  });
+});
+
+describe("scmjs: a 1.16 folder without patch_rt.mpq", () => {
+  // StarDat and BrooDat alone hold Brood War's tables as first sold: a game played from them is not 1.16.1's.
+  it("is refused for a game with exit 2, and found for the pictures", () => {
+    const dir = tmp();
+    for (const f of ["StarDat.mpq", "BrooDat.mpq"]) writeFileSync(join(dir, f), "mpq");
+    let refused: CliError | null = null;
+    try { findGameCopy(dir); } catch (e) { refused = e as CliError; }
+    expect(refused).toMatchObject({ exitCode: 2, message: expect.stringMatching(/no patch_rt\.mpq/) });
+    expect(findGameCopy(dir, { pictures: true })).toEqual({ folder: dir, kind: "classic" });
+    expect(unpatchedCopy({ folder: dir, kind: "classic" })).toBe(true);
+    writeFileSync(join(dir, "PATCH_RT.MPQ"), "mpq");
+    expect(findGameCopy(dir)).toEqual({ folder: dir, kind: "classic" });
+    expect(unpatchedCopy({ folder: dir, kind: "classic" })).toBe(false);
+  });
+
+  it("names the same tables as the editor's rule", () => {
+    expect([...CLI_PATCHED]).toEqual([...EDITOR_PATCHED]);
   });
 });
 

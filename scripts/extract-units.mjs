@@ -19,11 +19,12 @@
  */
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { openArchives, parseArgs, readMember } from "./lib/archives.mjs";
+import { openArchives, parseArgs, readMember, requirePatch } from "./lib/archives.mjs";
 // Node strips the types itself (v22.18+ / v23.6+); the module imports only iscript.ts for exactly this reason.
 import { ExtractError, extractUnits } from "../src/gamedata/extract.ts";
 
 const { outDir, archives: paths } = parseArgs(process.argv.slice(2), "public");
+requirePatch(paths);
 const { archives, problems } = openArchives(paths);
 
 let result;

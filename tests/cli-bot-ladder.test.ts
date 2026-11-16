@@ -260,7 +260,7 @@ function stagedEngine(withMatch = true): string {
 
 function classicCopy(): string {
   const dir = tmp();
-  for (const f of ["StarDat.mpq", "BrooDat.mpq"]) writeFileSync(join(dir, f), "mpq");
+  for (const f of ["StarDat.mpq", "BrooDat.mpq", "patch_rt.mpq"]) writeFileSync(join(dir, f), "mpq");
   return dir;
 }
 

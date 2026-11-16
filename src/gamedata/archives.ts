@@ -50,7 +50,27 @@ export function isStarEditDownload(archives: readonly { name: string; size: numb
  * installation's name are neither.
  */
 export function madeWithoutPatch(from: string): boolean {
-  const names = from.split(" + ").map((n) => (n.trim().split(/[\\/]/).pop() ?? "").toLowerCase());
+  return lacksPatch(from.split(" + "));
+}
+
+/**
+ * The game's tables `patch_rt.mpq` replaces in StarDat.mpq and BrooDat.mpq. Without the patch they are read as Brood
+ * War was first sold, and of them `arr\units.dat` alone makes a 1.16.1 replay leave the game that was played within
+ * minutes (2026-11-16). The patch also replaces some of the interface (`rez\network.tbl`, `rez\gluAll.tbl`,
+ * `unit\cmdbtns\cmdicons.grp`, `dlgs\protoss.grp`), which no game rule reads; `sprites.dat`, `images.dat`,
+ * `orders.dat` and `sfxdata.dat` are not in it.
+ */
+export const PATCHED_MEMBERS = [
+  "arr\\units.dat", "arr\\weapons.dat", "arr\\flingy.dat", "arr\\upgrades.dat", "arr\\techdata.dat",
+  "scripts\\iscript.bin", "scripts\\aiscript.bin", "rez\\stat_txt.tbl",
+] as const;
+
+/**
+ * True when a set of archives (names or paths, any case) has StarDat.mpq and no `patch_rt.mpq`: a 1.16 copy whose
+ * tables are not the game's (`PATCHED_MEMBERS`). A set without StarDat.mpq (a mod's own archives) is not this case.
+ */
+export function lacksPatch(archives: readonly string[]): boolean {
+  const names = archives.map((n) => (n.trim().split(/[\\/]/).pop() ?? "").toLowerCase());
   return names.includes("stardat.mpq") && !names.includes("patch_rt.mpq");
 }
 

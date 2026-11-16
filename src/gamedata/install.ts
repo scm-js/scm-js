@@ -161,7 +161,9 @@ export async function installDataSet(profile: GameDataProfile, input: GameDataFi
   if (!normalized) throw new InstallError(t("\"{id}\" is not a usable data set id: lower-case letters, digits and hyphens, up to 40 characters.", { id: profile.id }));
   const base = input.base !== undefined ? await baseOf(input.base) : undefined;
   const games = input.archives.filter((a) => isGameArchive(a.name));
-  if (!base) pickArchives(games.map((a) => new File([], a.name)), { patch: false }); // throws naming what is missing
+  // Throws naming what is missing. The game's own copy needs the patch however it arrives (a plugin's
+  // `api.gameData.install` with the default id comes here); a mod's data set keeps the old rule for now.
+  if (!base) pickArchives(games.map((a) => new File([], a.name)), { patch: isDefaultProfile(normalized.id) });
   progress?.(0, t("Reading the archives"));
   const archives: ExtractRequest["archives"] = [];
   for (const a of sortArchives([...games])) archives.push({ name: a.name, bytes: await bytesOf(a.data) });

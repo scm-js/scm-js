@@ -340,6 +340,7 @@ describe("the command", () => {
     for (const [ext, data] of Object.entries(standInTileset())) stardat.addFile(`tileset\\jungle.${ext}`, data);
     writeFileSync(join(dir, "StarDat.mpq"), stardat.write());
     writeFileSync(join(dir, "BrooDat.mpq"), new Creator({}).write());
+    writeFileSync(join(dir, "patch_rt.mpq"), new Creator({}).write());
     return dir;
   }
   const input: Input = { path: "wall.scx", name: "wall.scx", bytes: new Uint8Array(), kind: "map" };

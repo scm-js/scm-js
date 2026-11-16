@@ -5,7 +5,7 @@
  */
 import { readdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join, resolve } from "node:path";
+import { basename, join, resolve } from "node:path";
 import { Archive } from "mopaq";
 
 export const root = resolve(import.meta.dirname, "..", "..");
@@ -68,10 +68,32 @@ export function defaultArchives() {
   return [];
 }
 
+/**
+ * True when the archives have StarDat.mpq and no patch_rt.mpq: Brood War's tables as first sold, not the game's
+ * (`src/gamedata/archives.ts#PATCHED_MEMBERS`). A set without StarDat.mpq is not this case.
+ */
+export function lacksPatch(paths) {
+  const names = paths.map((p) => basename(p).toLowerCase());
+  return names.includes("stardat.mpq") && !names.includes("patch_rt.mpq");
+}
+
+/** Stop with the reason when the archives lack the patch (`lacksPatch`): the unit tables extracted would be wrong. */
+export function requirePatch(paths) {
+  if (!lacksPatch(paths)) return;
+  console.error([
+    "patch_rt.mpq is missing beside StarDat.mpq and BrooDat.mpq:",
+    ...paths.map((p) => `  ${p}`),
+    "Without it the unit costs, build times and other tables are the game's from before its patches, not 1.16.1's.",
+    "Every StarCraft 1.16.1 folder has it beside the other two (so does Blizzard's StarEdit download): copy it in,",
+    "or pass --from <the StarCraft folder>.",
+  ].join("\n"));
+  process.exit(1);
+}
+
 /** The message printed when no archives turned up anywhere. */
 export function noArchivesMessage() {
   return [
-    "No StarCraft archives found. Put StarDat.mpq and BrooDat.mpq in fixtures/data/,",
+    "No StarCraft archives found. Put StarDat.mpq, BrooDat.mpq and patch_rt.mpq in fixtures/data/,",
     "pass --from <StarCraft install dir>, set $SCM_DATA_DIR, or pass archive paths directly.",
     "Searched:",
     ...searchDirs().map((d) => `  ${d}`),

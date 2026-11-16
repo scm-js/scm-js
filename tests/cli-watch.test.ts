@@ -190,7 +190,7 @@ function staged(runner = FAKE_RUNNER): { dir: string; replay: Input; copy: strin
   writeFileSync(join(dir, "current.json"), JSON.stringify({ build, files: ["core.js", "game.js", "base-s1.bin", "interface.bin"], runner: "run-feedface.cjs", replayRunner: "replay-feedface.cjs" }));
   const copy = join(dir, "sc");
   mkdirSync(copy);
-  for (const f of ["StarDat.mpq", "BrooDat.mpq"]) writeFileSync(join(copy, f), "mpq");
+  for (const f of ["StarDat.mpq", "BrooDat.mpq", "patch_rt.mpq"]) writeFileSync(join(copy, f), "mpq");
   const file = join(dir, "g.rep");
   writeFileSync(file, "rep");
   return { dir, replay: { path: file, name: "g.rep", bytes: new Uint8Array(3), kind: "replay" }, copy };

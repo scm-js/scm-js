@@ -19,7 +19,7 @@ import { decodeFlingyDat, decodeImagesDat, decodeSpritesDat, decodeUnitsDat, typ
 import { decodeIscript } from "../../src/formats/dat/iscript";
 import type { SpeedTables } from "../../src/formats/dat/speed";
 import { loadTileset, type Tileset } from "../../src/formats/tileset/decode";
-import { findGameCopy } from "./engine";
+import { findGameCopy, lacksPatch, PATCHED_MEMBERS } from "./engine";
 import { t } from "./i18n";
 import { CliError } from "./ui";
 
@@ -42,8 +42,15 @@ export function classicArchives(folder: string): string[] {
   return ARCHIVES.map((want) => names.find((n) => n.toLowerCase() === want)).filter((n): n is string => !!n).map((n) => join(folder, n));
 }
 
-/** 1.16.1: each archive opened once; a member is read from the last archive that has it. */
+/**
+ * 1.16.1: each archive opened once; a member is read from the last archive that has it. Without `patch_rt.mpq` the
+ * game's tables the patch replaces (`PATCHED_MEMBERS`: units.dat, flingy.dat…) are not read at all, since the two
+ * archives' are Brood War's as first sold: the commands that use them (unit sizes, walking speeds) then do without, as
+ * for a copy that lacks them, while terrain and pictures, which the patch does not change, are drawn as ever.
+ */
 export function archiveFiles(folder: string, paths = classicArchives(folder)): GameFiles {
+  const unpatched = lacksPatch(paths);
+  const withheld = new Set<string>(unpatched ? PATCHED_MEMBERS.map((m) => m.toLowerCase()) : []);
   const archives: Archive[] = [];
   for (const p of paths) {
     try { archives.push(Archive.open(new Uint8Array(readFileSync(p)))); } catch (e) {
@@ -51,9 +58,13 @@ export function archiveFiles(folder: string, paths = classicArchives(folder)): G
     }
   }
   return {
-    folder, kind: "classic", label: t("StarCraft 1.16.1 ({n, plural, one {# archive} other {# archives}})", { n: archives.length }),
+    folder, kind: "classic",
+    label: unpatched
+      ? t("StarCraft 1.16 without patch_rt.mpq ({n, plural, one {# archive} other {# archives}}): its unit tables are not read", { n: archives.length })
+      : t("StarCraft 1.16.1 ({n, plural, one {# archive} other {# archives}})", { n: archives.length }),
     read: async (member) => {
       const name = member.replaceAll("/", "\\");
+      if (withheld.has(name.toLowerCase())) return null;
       for (let i = archives.length - 1; i >= 0; i--) {
         try { return archives[i].readFile(name); } catch { /* not in this one */ }
       }
@@ -91,7 +102,7 @@ export async function storageFiles(folder: string): Promise<GameFiles> {
  */
 export async function openGameFiles(named: string | undefined, why = t("The picture is drawn with your own installation's tileset graphics")): Promise<GameFiles> {
   let copy: ReturnType<typeof findGameCopy>;
-  try { copy = findGameCopy(named); } catch (e) {
+  try { copy = findGameCopy(named, { pictures: true }); } catch (e) {
     if (e instanceof CliError && !named) throw new CliError(e.message, t("{why}: name its folder with --starcraft (or SCMJS_STARCRAFT).", { why }), e.exitCode);
     throw e;
   }

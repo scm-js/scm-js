@@ -106,8 +106,20 @@ only `units.dat` cures it; all but `units.dat`: still parts). So `pickArchives` 
 `PATCH_NAME` for the game's own copy (`{ patch: false }` only for a data set's folder, whose rule is unchanged),
 the button reads "Choose StarDat.mpq, BrooDat.mpq and patch_rt.mpq…", and a copy an earlier build made from the two
 (`archives.ts#madeWithoutPatch` over the stamp's `from`) is called out in the dialog's "Now" group. The play page
-has to pass such a copy over on its side (scm-sim `web/gameSource.ts#unplayable`); the desktop search and
-`npm run extract` still take the patch only where they find it. `zip.ts` is the pure part: a `RangeReader` (`httpRangeReader` over `fetch`, with an
+has to pass such a copy over on its side (scm-sim `web/gameSource.ts#unplayable`, scm-sim #132). **Every other
+door followed** (2026-11-16, the next PR): `installDataSet` asks for the patch for the default id too (a plugin's
+`api.gameData.install` reaches it), the desktop search (`desktop/main.ts#extractFrom`) returns `failed` with the
+reason for a folder with the two and no patch (which stops `locate` there), `npm run extract` / `extract:units`
+stop (`scripts/lib/archives.mjs#requirePatch`; tilesets alone do not need it), and `npm run doctor` says when
+`fixtures/data/` lacks it. The rule is `archives.ts#lacksPatch` + `PATCHED_MEMBERS` (the eight, checked against
+the patch's own members: it also replaces `network.tbl`, `gluAll.tbl`, `cmdicons.grp`, `dlgs\protoss.grp`, which
+no rule reads); the command line keeps its own copy in `cli/src/engine.ts` because it may not reach `src/gamedata`
+(`tests/core.test.ts`), and `tests/cli-engine.test.ts` holds the two lists equal. There `findGameCopy` refuses an
+unpatched folder (exit 2) for everything that plays the game; `openGameFiles` passes `{ pictures: true }` and
+`archiveFiles` then withholds `PATCHED_MEMBERS` (null, as for a copy that lacks them: `map preview` draws units as
+tiles, `map analyze` goes without walking speeds) while terrain is read as ever. With a three-archive
+`fixtures/data/` the whole suite passes (2,676), the byte-for-byte extraction check included: no test held 1.04's
+numbers. Still open: a mod's data set over the two without the patch (see `mods.md`). `zip.ts` is the pure part: a `RangeReader` (`httpRangeReader` over `fetch`, with an
 `onProgress` that streams so an 82 MB member does not freeze the bar), `readZipDirectory` (EOCD then the
 central directory, Zip64 reported rather than misread), `readZipMember` (the *local* header is measured
 rather than trusting the directory's copy of its extra field, then `DecompressionStream("deflate-raw")`)

@@ -36,12 +36,12 @@ or playing one, in the game or on the site's play page, needs StarCraft installe
 - **A classic installation** has two archives, `StarDat.mpq` and `BrooDat.mpq`, with a
   `patch_rt.mpq` beside them that is applied over both, as the game applies it. Brood
   War's archive is required: its unit table is the layout the editor reads, and the Ice,
-  Desert and Twilight tilesets exist only there. The patch is required too, in the
-  browser: the two archives alone hold the unit, weapon, upgrade and technology tables
-  from before the game's patches (a Factory at 200 minerals, a Dragoon built in 600
-  frames), and a replay played from them leaves the game that was played within minutes. A
-  copy made from the two alone by an earlier version says so in Help ▸ Game Data…; remove
-  it and choose the folder again.
+  Desert and Twilight tilesets exist only there. The patch is required too, wherever the
+  editor or the command line takes a copy of the game: the two archives alone hold the
+  unit, weapon, upgrade and technology tables from before the game's patches (a Factory at
+  200 minerals, a Dragoon built in 600 frames), and a replay played from them leaves the
+  game that was played within minutes. A copy made from the two alone by an earlier
+  version says so in Help ▸ Game Data…; remove it and choose the folder again.
 - **A Remastered installation** has no `.mpq` archives. The editor reads the same files
   out of its `Data` folder instead, along with Remastered's own pictures; see [StarCraft:
   Remastered](#starcraft-remastered).
@@ -67,13 +67,15 @@ The editor settles on one source of game data when it starts, in this order:
 3. **A copy kept in the browser.** An earlier install left the files in the browser's
    private storage for the site. The copy survives reloads and browser restarts. A browser
    with no such storage holds the files for the session only.
-4. **The desktop app's search.** The desktop app looks next to the app itself (so the two
-   archives dropped beside it are found), in its own data folder, in `SCM_DATA_DIR` or
-   `STARCRAFT_DIR` from the environment, in the usual install locations
+4. **The desktop app's search.** The desktop app looks next to the app itself (so the
+   three archives dropped beside it are found), in its own data folder, in `SCM_DATA_DIR`
+   or `STARCRAFT_DIR` from the environment, in the usual install locations
    (`C:\Program Files (x86)\StarCraft`, `/Applications/StarCraft`, a Wine prefix on
    Linux), and in `~/StarCraft` and `~/Games/StarCraft`. The first folder with the
    archives or a Remastered installation is copied into the app's data folder, which is
-   then step 2. Someone whose game is where the installer put it never sees a dialog.
+   then step 2. Someone whose game is where the installer put it never sees a dialog. A
+   folder with `StarDat.mpq` and `BrooDat.mpq` but no `patch_rt.mpq` stops the search, and
+   Help ▸ Game Data… says why.
 5. **Nothing.** The editor runs without graphics and opens the Game Data dialog.
 
 Nothing is ever fetched from an address you did not name.
@@ -446,14 +448,17 @@ or takes them as arguments:
 ```sh
 npm run extract                                                     # look for an installation
 npm run extract -- --from "/mnt/c/Program Files (x86)/StarCraft"     # a folder
-npm run extract -- path/to/StarDat.mpq path/to/BrooDat.mpq           # the archives themselves
+npm run extract -- path/to/StarDat.mpq path/to/BrooDat.mpq path/to/patch_rt.mpq   # the archives themselves
 SCM_DATA_DIR=~/games/sc npm run extract                              # from the environment
 ```
 
 With no arguments it looks in `SCM_DATA_DIR` or `STARCRAFT_DIR`, then in the repository's
 own `fixtures/data/`, then in the usual install locations for the platform, including the
-Windows drives a WSL session sees under `/mnt`. A `patch_rt.mpq` found with the two is
-applied over them.
+Windows drives a WSL session sees under `/mnt`. The `patch_rt.mpq` found with the two is
+applied over them, as the game applies it, and is required: without it the script stops
+and says so, since the unit tables it would write are the ones from before the game's
+patches. `npm run extract:tilesets` alone does not need it, as the patch holds no terrain.
+`npm run doctor` says when `fixtures/data/` has the two archives and not the patch.
 
 The script reads `.mpq` archives only, from a classic installation or the map editor
 download; it cannot read a Remastered installation. With only Remastered, run the dev

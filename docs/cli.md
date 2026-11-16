@@ -337,8 +337,11 @@ itself. They need two things on your computer:
 - Your copy of StarCraft, Remastered or 1.16.1. It is found in the usual places; otherwise
   name its folder with `--starcraft <folder>` or the `SCMJS_STARCRAFT` setting. When
   `SCMJS_STARCRAFT` names a folder that is not a copy of the game, the command tells you,
-  and names the copy it used instead. Nothing of the game is fetched or carried by the
-  command.
+  and names the copy it used instead. A 1.16.1 folder holds `StarDat.mpq`, `BrooDat.mpq`
+  and `patch_rt.mpq`. Without the patch the two hold the game's tables from before its
+  patches, so the commands that run the game refuse such a folder, and the others draw the
+  terrain and leave out what comes from those tables (unit sizes, walking speeds). Nothing
+  of the game is fetched or carried by the command.
 - The game engine, for the commands that run the game. It is the engine of
   [scmjs.dev/play](https://scmjs.dev/play/), about 25 MB to download (105 MB once on
   disk), fetched the first time a command needs it and kept in your cache folder

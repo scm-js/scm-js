@@ -250,6 +250,28 @@ describe("a 1.16.1 copy", () => {
     await expect(readTileset(files, "ice")).rejects.toThrow(/has no ice\.cv5/);
   });
 
+  // StarDat and BrooDat alone hold Brood War's tables as first sold: their units.dat is not read, the tiles are.
+  it("without patch_rt.mpq, reads the terrain and not the game's tables", async () => {
+    const dir = tmp();
+    const stardat = new Creator({});
+    for (const [ext, data] of Object.entries(fakeTilesetFiles([200, 100, 50]))) stardat.addFile(`tileset\\jungle.${ext}`, data);
+    stardat.addFile("arr\\units.dat", new Uint8Array(19876));
+    stardat.addFile("arr\\sprites.dat", new Uint8Array([7]));
+    writeFileSync(join(dir, "StarDat.mpq"), stardat.write());
+    writeFileSync(join(dir, "BrooDat.mpq"), new Creator({}).write());
+    const files = archiveFiles(dir);
+    expect(files.label).toMatch(/without patch_rt\.mpq/);
+    expect(await files.read("arr\\units.dat")).toBeNull();
+    expect(await files.read("ARR/UNITS.DAT")).toBeNull();
+    expect([...(await files.read("arr\\sprites.dat"))!]).toEqual([7]);
+    expect((await readTileset(files, "jungle")).palette.length).toBeGreaterThan(0);
+
+    writeFileSync(join(dir, "patch_rt.mpq"), new Creator({}).write());
+    const patched = archiveFiles(dir);
+    expect(patched.label).not.toMatch(/without/);
+    expect((await patched.read("arr\\units.dat"))?.length).toBe(19876);
+  });
+
   it("the command: checks its options before it looks for the game, and says when the folder is not a copy", async () => {
     const input: Input = { path: "x.scx", name: "x.scx", bytes: new Uint8Array(), kind: "map" };
     const map = { scenario: createScenario({ width: 64, height: 64, era: 4, name: "t" }), extras: new Map(), fileName: "x.scx" };

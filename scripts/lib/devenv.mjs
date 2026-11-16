@@ -25,6 +25,8 @@ export function gameData(root) {
   return {
     extracted,
     archives: mpqs.some((n) => /^stardat/i.test(n)) && mpqs.some((n) => /^broodat/i.test(n)),
+    /** patch_rt.mpq beside them: without it what `npm run extract` reads from here is not 1.16.1's tables. */
+    patch: mpqs.some((n) => /^patch_rt\.mpq$/i.test(n)),
     maps: list("fixtures/maps", /\.sc[mx]$/i).length,
   };
 }

@@ -89,6 +89,8 @@ these are the ones each request is for.
 | "Change the opening message to 'Hold the ridge.' and show me what changed." | `map_triggers_export`, `map_triggers_import`, `map_diff` |
 | "Which of my maps still mention the Marine?" | `map_find` |
 | "Give Player 1 six more Marines in the Base location and make the Ghost invincible." | `map_units`, `map_locations`, `map_edit` |
+| "Put a plateau in the middle with a ramp on its south side, and a few lakes around it." | `map_terrain`, `map_edit`, `map_preview` |
+| "Make me a four-player desert map to start from." | `map_generate` |
 | "Show me the map." | `map_preview`, which answers with the picture |
 | "Is this melee map fair? Where are the chokes?" | `map_analyze` |
 | "Do the triggers slow the game down?" | `map_cost` |
@@ -210,8 +212,46 @@ edits that are applied together or not at all. With two units selected in the li
 An edit also moves and removes units, adds, changes and removes locations, places sprites
 and sets fog. [Editing units, locations, sprites and
 fog](cli.md#editing-units-locations-sprites-and-fog) lists every kind of edit and its
-fields. No game files are read, so a position is used as given: have the model run
-`map_check` afterwards.
+fields. A position is used as given unless the edit says `snap`, which puts a building on
+the building grid, or `check`, which refuses a position the editor would refuse.
+
+### Terrain and doodads
+
+`map_edit` also paints terrain and places doodads. The model reads the tileset's terrains
+and the lie of the land with `map_terrain`, which draws the map as a grid of letters, and
+the doodads with `map_doodads`. "Put a plateau in the middle with a ramp on its south
+side, and a few lakes around it" on a flat jungle map is one `map_edit`:
+
+```json
+{ "path": "ridge.scx", "edits": [
+  { "op": "paint_terrain", "terrain": "Water", "cover": 0.12, "grain": 10, "seed": 7, "symmetry": "rot180" },
+  { "op": "paint_terrain", "terrain": "High Dirt", "tiles": { "x0": 20, "y0": 16, "x1": 44, "y1": 40 }, "shape": "ellipse" },
+  { "op": "place_doodad", "doodad": "ramp", "tileX": 30, "tileY": 38, "within": 8 }
+] }
+```
+
+```
+  0  paint_terrain  Water · 2,080 tiles changed
+  1  paint_terrain  High Dirt · 786 tiles changed
+  2  place_doodad   Cliff #13 · 32,38 · 6 × 6 · doodad 0
+✔ ridge.scx: 3 edits · 4 sections changed · written to ridge.scx · 11 KB
+```
+
+![The map after the edits: lakes mirrored through the centre and a plateau of high dirt with a ramp at its foot](images/cli-map-edit-terrain.webp)
+
+Terrain is painted with the editor's isometric brush, so the cliff round the plateau and
+the shore round each lake form on their own, and the ramp goes where StarEdit would let it
+go. [Painting terrain and placing doodads](cli.md#painting-terrain-and-placing-doodads)
+has every field: shapes, patches placed by a seed, symmetry, scattering doodads over an
+area.
+
+These edits read the tileset from [your copy of the game](#the-tools-that-need-the-game).
+Painting does not move what stands on the ground, so ask the model to look at the result
+(`map_preview`, or `editor_picture` on a linked map) and to run `map_check`.
+
+For a whole map to start from, `map_generate` writes a symmetric melee map from a seed:
+mains on high ground with a ramp each, naturals, free bases and a middle, walked and
+checked before it is written.
 
 ### Everything else
 
@@ -220,11 +260,11 @@ fields. No game files are read, so a position is used as given: have the model r
 | The name, description, revision or text encoding | `map_set` |
 | The size | `map_resize` |
 | A TrigScript map, built from its script | `map_build` |
-| Anything the plugin API reaches, such as terrain and doodads, with a script the model writes | `map_run` |
+| Anything else the plugin API reaches, such as player settings or single tiles, with a script the model writes | `map_run` |
 
 ## The tools
 
-There are 42. Each but the `editor_` tools is a command of the [command line
+There are 45. Each but the `editor_` tools is a command of the [command line
 guide](cli.md), and its arguments are the command's options by name: `--dry-run` is
 `dryRun`, `--in` is `in`. A tool answers with the command's text and, beside it, the
 command's `--json` data.
@@ -235,8 +275,10 @@ command's `--json` data.
 | `map_triggers_export`, `map_strings_export` | The triggers and the strings as text, in the [trigger window's text form](triggers.md) and as `<number><TAB><text>` lines | No |
 | `map_triggers_import`, `map_strings_import`, `map_strings_prune` | The text back into the map, passed inline, and the unused strings dropped | Yes |
 | `map_units`, `map_locations` | [The units and the locations as rows](cli.md#listing-units-and-locations): a unit's index, type, player and position, filtered by type, player or area; a location's number, name and bounds | No |
-| `map_edit` | [A list of edits](cli.md#editing-units-locations-sprites-and-fog) to units, locations, sprites and fog, applied together or not at all | Yes |
+| `map_terrain`, `map_doodads` | [The terrain and the doodads](cli.md#listing-terrain-and-doodads): the tileset's terrains with the tiles each covers and the map as a grid of letters; the doodads placed, and the ones the tileset has | No |
+| `map_edit` | [A list of edits](cli.md#editing-units-locations-sprites-and-fog) to units, locations, sprites, fog, [terrain and doodads](cli.md#painting-terrain-and-placing-doodads), applied together or not at all | Yes |
 | `map_set`, `map_resize`, `map_new`, `map_build`, `map_run` | The Scenario menu's edits, a new map, the TrigScript build, a plugin run over the map | Yes |
+| `map_generate` | [A symmetric melee map from a seed](cli.md#a-melee-map-from-a-seed), walked and checked before it is written | Yes |
 | `map_optimize` | The map made smaller | Only with `write: true` |
 | `map_preview` | The map as a picture: the answer is the PNG itself, so a model that can see images sees the map | No |
 | `map_analyze` | A melee map's layout: starts, naturals, the walks between starts, their narrowest points and the verdicts; with `picture`, the PNG too | No |
@@ -255,6 +297,8 @@ A few tools differ from their commands:
   round from the command.
 - `map_find` takes `kinds` and `matchCase` as well as `in` and `case`, `map_run` takes
   `args` as well as `arg`, and `map_preview` takes `marks` as well as `units`.
+- `map_run` takes `game: false` where the command takes `--no-game`, and `map_generate`
+  has no `rush`.
 - `map_trace` and `map_cost` take `mod`, `replay`, `order` and `every`, as the commands
   take `--mod`, `--replay`, `--order` and `--every`. With `replay`, the map's `path` may
   be left out.
@@ -266,11 +310,10 @@ A few tools differ from their commands:
 - The tools answer in English whatever the language of the commands, since the model reads
   them.
 
-The rest of the commands are not tools: `map generate`, `map test`, `map rush`,
-`map heatmap`, `map log`, `map blame`, `map merge`, `map unpack` and `pack`, `map sounds`,
-`map fetch`, sharing, `replay watch` and `export`, the bot and plugin commands, and
-`init`. An AI tool that can run commands in a terminal, as Claude Code can, runs those as
-you would.
+The rest of the commands are not tools: `map test`, `map rush`, `map heatmap`, `map log`,
+`map blame`, `map merge`, `map unpack` and `pack`, `map sounds`, `map fetch`, sharing,
+`replay watch` and `export`, the bot and plugin commands, and `init`. An AI tool that can
+run commands in a terminal, as Claude Code can, runs those as you would.
 
 ## Your files and the game
 
@@ -302,12 +345,16 @@ What the tools may touch on your computer, and which of them need your copy of S
 
 ### The tools that need the game
 
-`map_preview`, `map_analyze`, `map_trace`, `map_cost`, `map_coverage` and `map_balance`
-need [your copy of the game](cli.md#commands-that-need-starcraft), and the ones that run
-it fetch the engine the first time. `doctor` tells the model whether the game and the
-engine are there and what you would need to install, so it can tell you instead of
-failing. When the game is not in one of the usual places, the model can pass its folder as
-`starcraft`, or you can set `SCMJS_STARCRAFT` in the tool's MCP settings.
+`map_preview`, `map_analyze`, `map_terrain`, `map_doodads`, `map_generate`, `map_trace`,
+`map_cost`, `map_coverage` and `map_balance` need [your copy of the
+game](cli.md#commands-that-need-starcraft), and the ones that run it fetch the engine the
+first time. `map_edit` needs it for terrain, doodads, `snap` and `check`, and for nothing
+else. `map_run` gives a script the game's data when a copy is there, and runs without when
+it is not: the terrain and doodad parts of the plugin API then do nothing and say so.
+`doctor` tells the model whether the game and the engine are there and what you would need
+to install, so it can tell you instead of failing. When the game is not in one of the
+usual places, the model can pass its folder as `starcraft`, or you can set
+`SCMJS_STARCRAFT` in the tool's MCP settings.
 
 A trace or cost run takes a few seconds and plays at most ten minutes of game.
 `map_coverage` plays whole replays and `map_balance` whole games, so they take as long as
@@ -322,3 +369,4 @@ the frame reached, and cancelling the request stops the game.
 | `cli/src/link.ts` | A map linked to the editor: the page between the command and the editor, and the reads and writes that go through it |
 | `src/services/editorLink.ts` | The editor's end of a link: the map handed over, a changed one taken back as an undo step, the selection and the view |
 | `cli/src/mapedit.ts`, `cli/src/objects.ts` | `map_edit` and the lists of units and locations |
+| `cli/src/terrain.ts` | `map_terrain`, `map_doodads` and what the terrain and doodad edits lay |

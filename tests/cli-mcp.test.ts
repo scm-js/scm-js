@@ -54,7 +54,7 @@ describe("scmjs mcp", () => {
   it("lists the tools with what each is for, and says how they fit together", async () => {
     const { tools } = await client.listTools();
     const names = tools.map((t) => t.name).sort();
-    expect(names).toEqual(["doctor", "editor_close", "editor_open", "editor_picture", "editor_save", "editor_show", "editor_state", "map_analyze", "map_balance", "map_build", "map_check", "map_cost", "map_coverage", "map_diff", "map_dump", "map_edit", "map_find", "map_info", "map_locations", "map_new", "map_optimize", "map_preview", "map_resize", "map_run", "map_set", "map_strings_export", "map_strings_import", "map_strings_prune", "map_trace", "map_triggers_export", "map_triggers_import", "map_units", "mod_check", "mod_diff", "mod_header", "mod_info", "mod_new", "mod_pack", "mod_play", "mod_unpack", "replay_info", "replay_map"]);
+    expect(names).toEqual(["doctor", "editor_close", "editor_open", "editor_picture", "editor_save", "editor_show", "editor_state", "map_analyze", "map_balance", "map_build", "map_check", "map_cost", "map_coverage", "map_diff", "map_doodads", "map_dump", "map_edit", "map_find", "map_generate", "map_info", "map_locations", "map_new", "map_optimize", "map_preview", "map_resize", "map_run", "map_set", "map_strings_export", "map_strings_import", "map_strings_prune", "map_terrain", "map_trace", "map_triggers_export", "map_triggers_import", "map_units", "mod_check", "mod_diff", "mod_header", "mod_info", "mod_new", "mod_pack", "mod_play", "mod_unpack", "replay_info", "replay_map"]);
     for (const t of tools) {
       expect(t.description?.length ?? 0, t.name).toBeGreaterThan(60);
       expect((t.inputSchema as { properties?: object }).properties, t.name).toBeDefined();
@@ -529,17 +529,17 @@ describe("scmjs mcp: map_units, map_locations, map_edit", () => {
 
   it("lists them: the two readers read only, the editor writes, and an edit is one flat object", async () => {
     const { tools } = await client.listTools();
-    expect(tools).toHaveLength(42);
+    expect(tools).toHaveLength(45);
     for (const name of ["map_units", "map_locations"]) expect(tools.find((t) => t.name === name)?.annotations?.readOnlyHint, name).toBe(true);
     const edit = tools.find((t) => t.name === "map_edit")!;
     expect(edit.annotations?.destructiveHint).toBe(true);
     const item = (edit.inputSchema.properties as { edits: { items: { properties: Record<string, { enum?: string[] }>; required: string[]; additionalProperties: boolean; oneOf?: unknown } } }).edits.items;
-    expect(item.properties.op.enum).toEqual(["place_unit", "move_units", "update_units", "remove_units", "add_location", "edit_location", "remove_locations", "place_sprite", "remove_sprites", "set_fog"]);
+    expect(item.properties.op.enum).toEqual(["place_unit", "move_units", "update_units", "remove_units", "add_location", "edit_location", "remove_locations", "place_sprite", "remove_sprites", "set_fog", "paint_terrain", "place_doodad", "scatter_doodads", "remove_doodads"]);
     expect([item.required, item.additionalProperties, item.oneOf]).toEqual([["op"], false, undefined]);
     // Every kind is in the description with its fields, since the schema does not say which kind takes which.
     for (const op of item.properties.op.enum!) expect(edit.description, op).toContain(`- ${op}: `);
-    expect(JSON.stringify(edit).length).toBeLessThan(9000);
-    expect(INSTRUCTIONS).toMatch(/map_units and map_locations list .* map_edit places, moves, changes and removes/);
+    expect(JSON.stringify(edit).length).toBeLessThan(12000);
+    expect(INSTRUCTIONS).toMatch(/map_units and map_locations list .* map_edit changes all of these .* paints terrain by type .* places, moves, changes and removes units/);
   });
 
   it("map_units gives the rows with their indices, filtered; map_locations the numbers and names", async () => {
@@ -631,10 +631,10 @@ describe("scmjs mcp: map_units, map_locations, map_edit", () => {
   it("refuses arguments and fields it does not take, each with the ones it does", async () => {
     const edits = [{ op: "remove_units", indices: [20] }];
     const cases: [Record<string, unknown>, string | RegExp][] = [
-      [{ path: map, edits, dry_run: true }, "map_edit: `dry_run` is not an argument of map_edit: it takes `path`, `edits`, `out`, `dryRun`, `all`"],
+      [{ path: map, edits, dry_run: true }, "map_edit: `dry_run` is not an argument of map_edit: it takes `path`, `edits`, `out`, `dryRun`, `all`, `starcraft`"],
       [{ path: map, edits: [{ op: "remove_units", indices: [20], colour: 1 }] }, "map_edit: `colour` is not a field of an edit at edits[0]"],
       [{ path: map, edits: [{ op: "remove_units", indices: [20], dx: 1 }] }, "edits[0] (remove_units): `dx` is not a field of remove_units: it takes `indices`, `where`\nNothing was changed."],
-      [{ path: map, edits: [{ op: "place_doodad", x: 1, y: 1 }] }, /^map_edit: `op` is one of place_unit, .*set_fog \(doodads are not among them: they need the game's tileset files, which this does not read\) at edits\[0\]\.op$/],
+      [{ path: map, edits: [{ op: "raise_ground", x: 1, y: 1 }] }, /^map_edit: `op` is one of place_unit, .*set_fog, paint_terrain, place_doodad, scatter_doodads, remove_doodads at edits\[0\]\.op$/],
       [{ path: map, edits: [{ op: "place_unit", unit: "Terran Marine", player: 1, x: "4", y: 3 }] }, "map_edit: `edits[0].x` takes a number, not a string"],
       [{ path: map, edits: [{ op: "place_unit", unit: "Terran Marine", x: 4, y: 3 }] }, "edits[0] (place_unit): `player`: expected number, received undefined\nNothing was changed."],
       [{ path: map, edits: [] }, /edits/],

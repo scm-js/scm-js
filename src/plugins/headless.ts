@@ -24,6 +24,13 @@ import { pluginCommandsAtom } from "../atoms/pluginAtoms";
 import { checkApiVersion, Contributions, createPluginApi, qualifyCommand, resolveActivate, type Store } from "./host";
 import { loadPlugin, parseSpec, PluginLoadError, type LoaderDeps, type PluginSource } from "./loader";
 
+import { tilesetIndex } from "../formats/chk/scenario";
+import { DEFAULT_PROFILE } from "../gamedata/profiles";
+import { setAssetSource } from "../gamedata/source";
+import { ensureTileset, TILESET_FILENAMES } from "../formats/tileset/load";
+import { getUnitAssets } from "../formats/units/load";
+import { dropDecodedData } from "../services/gameData";
+
 export { parseSpec, PluginLoadError };
 export { transpileTs, type TS } from "./transpile";
 export type { LoaderDeps, PluginSource, Toast, LogEntry, OpenedMap, PluginApi, EditTransaction };
@@ -85,6 +92,60 @@ export function attachSinks(store: Store, sinks: HeadlessSinks): () => void {
     stops.push(subscribeLog(flush));
   }
   return () => { flush(); for (const stop of stops) stop(); };
+}
+
+/* ── A copy of the game ─────────────────────────────────── */
+
+/**
+ * A copy of the game the caller opened (the command's is the person's installation, `cli/src/gamefiles.ts`): a file
+ * by the game's own name for it (`tileset\jungle.cv5`, `arr\units.dat`), null when the copy has none.
+ */
+export interface GameCopy {
+  /** What the copy is, for a person: the source's label. */
+  label: string;
+  read(member: string): Promise<Uint8Array | null>;
+}
+
+/** What of a copy is in memory for a map: its tileset's tables and doodads, and the unit tables. */
+export interface GameCopyLoaded { tileset: boolean; units: boolean }
+
+let copyInUse: GameCopy | null = null;
+
+/**
+ * Make `copy` the game data every host in this process reads, and load what `doc` needs of it before a host is
+ * made: the map's tileset (its terrain table, megatiles and doodads, with no picture: there is no page to draw on,
+ * `atlas.ts#buildAtlas`) and the unit tables. Without this a host has no game data at all, and what reads the
+ * game's files does nothing and says so in a note: terrain by type, doodads, the placement checks.
+ *
+ * The copy is a `reader` source with nothing under it, so the editor's own loaders do the reading and decoding, a
+ * plugin's `api.tileset.load()` and `api.data.load()` answer true, and a tileset change reads the next tileset from
+ * the same copy. The decoded files are the module's (one process, one copy): a second call with the same copy reads
+ * only a tileset not yet in memory, and another copy drops what the first decoded. A part the copy lacks is false
+ * in the answer, and the host does without it as before.
+ */
+export async function loadGameCopy(copy: GameCopy, doc: OpenedMap): Promise<GameCopyLoaded> {
+  if (copyInUse !== copy) {
+    dropDecodedData();
+    setAssetSource({ kind: "reader", profile: DEFAULT_PROFILE, label: copy.label, tried: [], reader: { base: null, read: (_path, context) => (context.member ? copy.read(context.member) : null) } });
+    copyInUse = copy;
+  }
+  const [tileset, units] = await Promise.all([
+    ensureTileset(TILESET_FILENAMES[tilesetIndex(doc.scenario)]).then(() => true, () => false),
+    getUnitAssets().then(() => true, () => false),
+  ]);
+  return { tileset, units };
+}
+
+/**
+ * Take the copy away again: the hosts made from here on have no game data, as before any copy was given. For a
+ * caller that runs many maps in one process (the command's MCP server) and must not let one call's copy change
+ * what the next call does. What was decoded is dropped; the caller keeps its copy open and gives it again when asked.
+ */
+export function dropGameCopy(): void {
+  if (!copyInUse) return;
+  dropDecodedData();
+  setAssetSource({ kind: "none", profile: DEFAULT_PROFILE, label: "", tried: [] });
+  copyInUse = null;
 }
 
 /** The host for a function: the API over one map, with no plugin loaded. */

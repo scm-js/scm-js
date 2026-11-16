@@ -182,6 +182,9 @@ export async function buildAtlas(tileset: Tileset, bands: readonly PaletteBand[]
   const { pixels, width, height, columns } = buildAtlasImageData(tileset);
   const count = Math.max(1, tileset.megatileCount);
   const averages = megatileAverages(pixels, width, columns, count);
+  // No page to draw on (the plugin host under Node, `plugins/headless.ts`): the tables' side of the atlas, the
+  // averages, and no picture. Nothing there blits; what asks for a tile's colour reads the averages.
+  if (typeof ImageData === "undefined") return { image: null as unknown as CanvasImageSource, columns, tileSize: MEGATILE_PX, count, averages, animation: null };
   const data = new ImageData(pixels, width, height);
   const animation = buildAnimation(tileset, bands);
 

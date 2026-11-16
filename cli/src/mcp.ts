@@ -39,6 +39,9 @@ import { DEFAULT_PNG_SCALE, loadGraphics, previewPng, tilesetOf } from "./previe
 import { printRun, runOnMap } from "./run";
 import { EDIT_ARGUMENT, editMap, parseEdits, printEdits } from "./mapedit";
 import { listLocations, listUnits, locationIndex, printLocations, printUnits, UNIT_ROWS } from "./objects";
+import { DOODAD_ROWS, GRID_COLUMNS, listDoodads, listTerrain, printDoodads, printTerrain } from "./terrain";
+import { GEN_PLAYERS, GEN_STYLES, GEN_SYMMETRIES } from "./generate";
+import { printGenerated, runGenerate } from "./generatecmd";
 import { costJson, gameMap, printCost, printTrace, removeGameMap, replayRun, runMapInGame, traceJson, type MapRunOptions } from "./trace";
 import { checkModSource, printModCheck } from "./mod/check";
 import { diffModSources, printModDiff } from "./mod/diff";
@@ -192,7 +195,7 @@ export interface McpOptions {
 }
 
 /** What the client is told once, with the tool list: how the tools fit together. */
-export const INSTRUCTIONS = `scmJS: StarCraft: Brood War maps on this computer. Paths are files here, relative to the working directory. Start with map_info or map_dump to see what a map holds; map_check is Check Map (errors and warnings, as the editor's). Triggers and strings travel as text: map_triggers_export gives the trigger window's text form (https://docs.scmjs.dev/triggers/), which map_triggers_import takes back; strings are "<number><TAB><text>" lines. map_units and map_locations list a map's units (with the index each has) and locations, filtered by type, player or area, and map_edit places, moves, changes and removes units, locations and sprites and sets fog, a list of edits applied together or not at all. Tools that change a map write over it unless given "out"; they never renumber strings. Map text is never translated. map_preview shows the map as a picture, map_analyze reads a melee map's layout (starts, naturals, walks between starts, chokes) in a second, map_trace and map_cost run it in the game itself, and map_coverage counts which triggers fired over many replays; these need a copy of StarCraft on this computer, and doctor says whether one is there and what to install if not. replay_map writes the map a replay was played on. map_optimize makes a map smaller without changing what the game plays (a dry run unless told to write); map_balance plays games on a melee map with the person's own bots to see whether its start locations are fair, which takes minutes. Mods: mod_info says what a mod is, mod_unpack writes it as a folder of text and PNG sheets the person or you can edit, mod_check lints it, mod_diff reads two as a changelog (or one against the game), mod_pack makes the MPQ back, mod_new starts an empty one, mod_header writes a mod's ids by name for a bot made for it, and mod_play hands a mod (with a map and a bot) to the play page in the person's browser. map_trace and map_cost take a mod too. The editor: editor_open opens a map in the scmJS editor in the person's browser and keeps it linked, so they watch the work and can undo it; while it is linked every tool here reads and changes the map in the editor instead of the file (one undo step a change), editor_state says what they have selected and where they are looking, editor_show points at a place, editor_picture is the map as the editor draws it, and editor_save writes the file. Offer it when the person wants to see changes as you make them.`;
+export const INSTRUCTIONS = `scmJS: StarCraft: Brood War maps on this computer. Paths are files here, relative to the working directory. Start with map_info or map_dump to see what a map holds; map_check is Check Map (errors and warnings, as the editor's). Triggers and strings travel as text: map_triggers_export gives the trigger window's text form (https://docs.scmjs.dev/triggers/), which map_triggers_import takes back; strings are "<number><TAB><text>" lines. map_units and map_locations list a map's units (with the index each has) and locations, filtered by type, player or area; map_terrain lists the tileset's terrains and shows the map as a grid of letters, and map_doodads lists the doodads placed and the ones the tileset has. map_edit changes all of these with a list of edits applied together or not at all: it paints terrain by type with the editor's isometric brush (a cliff or a shore forms where two terrains meet; areas, ellipses, seeded random patches, symmetry), places, scatters and removes doodads (ramps among them), places, moves, changes and removes units, locations and sprites, and sets fog. map_generate writes a whole symmetric melee map from a seed. Terrain and doodads need a copy of StarCraft on this computer for the tileset. Tools that change a map write over it unless given "out"; they never renumber strings. Map text is never translated. map_preview shows the map as a picture, map_analyze reads a melee map's layout (starts, naturals, walks between starts, chokes) in a second, map_trace and map_cost run it in the game itself, and map_coverage counts which triggers fired over many replays; these need a copy of StarCraft on this computer, and doctor says whether one is there and what to install if not. replay_map writes the map a replay was played on. map_optimize makes a map smaller without changing what the game plays (a dry run unless told to write); map_balance plays games on a melee map with the person's own bots to see whether its start locations are fair, which takes minutes. Mods: mod_info says what a mod is, mod_unpack writes it as a folder of text and PNG sheets the person or you can edit, mod_check lints it, mod_diff reads two as a changelog (or one against the game), mod_pack makes the MPQ back, mod_new starts an empty one, mod_header writes a mod's ids by name for a bot made for it, and mod_play hands a mod (with a map and a bot) to the play page in the person's browser. map_trace and map_cost take a mod too. The editor: editor_open opens a map in the scmJS editor in the person's browser and keeps it linked, so they watch the work and can undo it; while it is linked every tool here reads and changes the map in the editor instead of the file (one undo step a change), editor_state says what they have selected and where they are looking, editor_show points at a place, editor_picture is the map as the editor draws it, and editor_save writes the file. Offer it when the person wants to see changes as you make them.`;
 
 /**
  * The server with every tool registered, and their names; `connect` it to a transport (stdio for the command, in
@@ -414,15 +417,18 @@ export function createMcpServer(options: McpOptions = {}): { server: McpServer; 
     return { ...ok(printBuild(input.name, r), { file: input.name, ...r }), ...(r.ok ? {} : { isError: true }) };
   }));
 
+  const starcraftArg = z.string().optional().describe("the folder of the person's StarCraft installation, when doctor did not find one in the usual places");
+
   reg("map_run", {
     title: "Run a plugin over the map",
-    description: "Run an editor plugin, or a script written like one (a file exporting activate(api)), over the map with the plugin API and no editor: a folder with plugin.json, a plugin.ts/.js file, github:owner/repo or a URL. `command` runs one of its commands after it starts. `dryRun` says what would change and writes nothing. The plugin runs with this computer's privileges.",
-    inputSchema: { plugin: z.string(), path, command: z.string().optional(), args: z.array(z.string()).optional(), arg: z.array(z.string()).optional().describe("the command's --arg: the same as args"), out, dryRun: z.boolean().optional() },
+    description: "Run an editor plugin, or a script written like one (a file exporting activate(api)), over the map with the plugin API and no editor: a folder with plugin.json, a plugin.ts/.js file, github:owner/repo or a URL. `command` runs one of its commands after it starts. `dryRun` says what would change and writes nothing. With a copy of StarCraft on this computer the plugin has the game's data as in the editor (the map's tileset, so terrain by type, the isometric brush and doodads work, and the unit tables); the data's `game` says which copy, or null when it ran with none, and then those parts of the API do nothing and say so. The plugin runs with this computer's privileges. For terrain, doodads, units and locations map_edit needs no script.",
+    inputSchema: { plugin: z.string(), path, command: z.string().optional(), args: z.array(z.string()).optional(), arg: z.array(z.string()).optional().describe("the command's --arg: the same as args"), out, dryRun: z.boolean().optional(), starcraft: starcraftArg, game: z.boolean().optional().describe("false runs with no game data (the command's --no-game)") },
     annotations: { destructiveHint: true, openWorldHint: true },
-  }, tool(async ({ plugin, path: file, command, args, arg, out: to, dryRun }) => {
+  }, tool(async ({ plugin, path: file, command, args, arg, out: to, dryRun, starcraft, game }) => {
     if ((args ?? arg) && !command) throw new CliError("args are for `command`: name the command they go to", null, 2);
+    if (starcraft && game === false) throw new CliError("`starcraft` names a copy of the game and `game: false` runs without one: give one of them", null, 2);
     const { input, doc } = await openMap(file);
-    const r = await runOnMap(doc, input.path, input.bytes, plugin, { command, args: args ?? arg, out: to ?? null, dryRun: !!dryRun });
+    const r = await runOnMap(doc, input.path, input.bytes, plugin, { command, args: args ?? arg, out: to ?? null, dryRun: !!dryRun, game: game === false ? undefined : starcraft ?? true });
     return ok(printRun(input.name, r, { events: true, dryRun: !!dryRun }), { file: input.name, ...r });
   }));
 
@@ -430,6 +436,49 @@ export function createMcpServer(options: McpOptions = {}): { server: McpServer; 
   const locationArg = z.union([z.string(), z.number().int().min(1)]);
   const rectArg = z.strictObject({ left: z.number().int().min(0), top: z.number().int().min(0), right: z.number().int().min(0), bottom: z.number().int().min(0) });
   const tilesArg = z.strictObject({ x0: z.number().int().min(0), y0: z.number().int().min(0), x1: z.number().int().min(0), y1: z.number().int().min(0) });
+
+  const areaArgs = {
+    location: locationArg.optional().describe("only this location's area: its name, or its number as map_locations lists it"),
+    rect: rectArg.optional().describe("only this rectangle, in pixels; right and bottom are just outside it"),
+    tiles: tilesArg.optional().describe("only this rectangle, in tiles; x1 and y1 are just outside it"),
+  };
+  const areaOf = (a: { location?: string | number; rect?: z.infer<typeof rectArg>; tiles?: z.infer<typeof tilesArg> }) => (a.location === undefined && a.rect === undefined && a.tiles === undefined ? undefined : { location: a.location, rect: a.rect, tiles: a.tiles });
+
+  reg("map_terrain", {
+    title: "The map's terrain",
+    description: `The map's terrain (scmjs map terrain): the terrains of its tileset, a row each with the letter the grid draws it with, its name and id (map_edit's paint_terrain takes either), its height (0 low, 1 mid, 2 high: a cliff forms between two heights), whether buildings go on it and how many tiles it covers; then the map, or the area asked for, as a grid of characters, the terrain most of each cell is, lower case for low ground, with # for the edge between two terrains (a cliff or a shore). The grid is kept to ${GRID_COLUMNS} columns unless \`cell\` says how many tiles a character is (1 is a character a tile). Call it before painting, to learn the terrains' names and see the lie of the land. Needs a copy of StarCraft on this computer for the tileset; doctor says whether one is there.`,
+    inputSchema: { path, ...areaArgs, cell: z.number().int().min(1).max(32).optional().describe("tiles a character of the grid"), grid: z.boolean().optional().describe("false for the table alone"), starcraft: starcraftArg },
+    annotations: { readOnlyHint: true },
+  }, tool(async ({ path: file, cell, grid, starcraft, ...area }) => {
+    const { input, doc } = await openMap(file);
+    const r = await listTerrain(doc, input.name, { area: areaOf(area), cell, starcraft });
+    return ok(printTerrain(input.name, r, { grid: grid !== false }), r);
+  }));
+
+  reg("map_doodads", {
+    title: "The map's doodads, and the doodads to place",
+    description: `The doodads on the map, a row each (scmjs map doodads): its index (its place in the file, from 0, which map_edit's remove_doodads takes), its name and id, its top-left tile and its size in tiles; then the tileset's categories. With \`category\` (a category's name, or "ramp" for the ramps) or \`palette\`, also the doodads that can be placed, each with its size and the ground StarEdit lets it go on. A doodad has no name of its own: it is its category and its id ("Jungle #180"). An area keeps the placed doodads whose centre is inside it. The text is cut at ${DOODAD_ROWS} rows unless \`all\`; the data has every row. Needs a copy of StarCraft on this computer for the tileset.`,
+    inputSchema: { path, category: z.string().optional().describe("only this category's doodads, placed and to place; \"ramp\" for the ramps"), palette: z.boolean().optional().describe("list every doodad the tileset has to place"), ...areaArgs, all: z.boolean().optional().describe("every row in the text"), starcraft: starcraftArg },
+    annotations: { readOnlyHint: true },
+  }, tool(async ({ path: file, category, palette, all, starcraft, ...area }) => {
+    const { input, doc } = await openMap(file);
+    const r = await listDoodads(doc, input.name, { area: areaOf(area), category, palette: !!palette, starcraft });
+    return ok(printDoodads(input.name, r, !!all), r);
+  }));
+
+  reg("map_generate", {
+    title: "A melee map from a seed",
+    description: `A new symmetric melee map (scmjs map generate), written to \`path\`: a main on high ground for each player with one ramp down to a natural, free bases where there is room, and a middle of low ground with mesas, lakes and patches of the tileset's other ground, every player's bases the same, mirrored or turned with the map. The ground is laid with the editor's isometric brush and the ramps are the tileset's own. Before the file is written the map passes Check Map and every start is walked to every other; a layout that fails is thrown away and the next tried. Players: ${GEN_PLAYERS.join(", ")}. Tilesets: badlands, platform, ashworld, jungle (the default), desert, ice, twilight. Symmetry: ${GEN_SYMMETRIES.join(", ")}. Style: ${GEN_STYLES.join(" or ")} (an open middle, or one narrowed by more high ground). The same seed and options give the same map; without a seed, a new one each time. The answer has each player's resources and the ground distances between the starts. Refuses a file that is there unless \`force\`. Needs a copy of StarCraft on this computer for the tileset. The start for "make me a map"; map_edit changes it from there.`,
+    inputSchema: {
+      path, players: z.number().int().min(2).max(8).optional(), size: z.string().optional().describe("WxH, each 96, 128, 192 or 256; 128x128 by default (192x192 for 8 players)"), tileset: z.string().optional(),
+      seed: z.number().int().min(0).max(0xffffffff).optional(), symmetry: z.string().optional(), style: z.string().optional(), name: z.string().optional().describe("the map's name; the file's by default"), force: z.boolean().optional(), starcraft: starcraftArg,
+    },
+    annotations: { destructiveHint: true },
+  }, tool(async ({ path: file, players, size: spec, tileset, seed, symmetry, style, name, force, starcraft }) => {
+    if (existsSync(file) && !force) throw new CliError(`${file} is there already`, "force overwrites it.", 2);
+    const { report } = await runGenerate(file, { players: players === undefined ? undefined : String(players), size: spec, tileset, seed: seed === undefined ? undefined : String(seed), symmetry, style, starcraft }, name ?? nameFromFile(file));
+    return ok(printGenerated(report, shown(report.path)), report);
+  }));
 
   reg("map_units", {
     title: "The map's units",
@@ -462,10 +511,14 @@ export function createMcpServer(options: McpOptions = {}): { server: McpServer; 
   }));
 
   reg("map_edit", {
-    title: "Change units, locations, sprites and fog",
+    title: "Change terrain, doodads, units, locations, sprites and fog",
     description: [
-      "Apply a list of edits to a map's units, locations, sprites and fog as one step (scmjs map edit). All of them are applied or none: when one cannot be done nothing is written, and the error names it by its place in the list (edits[2] is the third) with what is wrong. Each edit is an object with `op` and its fields:",
-      "- place_unit: unit, player, a position, and any unit properties.",
+      "Apply a list of edits to a map's terrain, doodads, units, locations, sprites and fog as one step (scmjs map edit). All of them are applied or none: when one cannot be done nothing is written, and the error names it by its place in the list (edits[2] is the third) with what is wrong. Each edit is an object with `op` and its fields:",
+      "- paint_terrain: terrain (a name or id, as map_terrain lists them) and an area (the whole map without one), painted with the editor's isometric brush, so the edge forms on its own: a cliff where the height changes, a shore beside water. A plateau is high ground painted on low ground; a lake is water. shape is \"rect\" or \"ellipse\" (the ellipse inside the area). cover (0 to 1) paints that share of the area in patches about grain tiles across (8 by default), placed by seed: random-looking ground, the same for the same seed. symmetry repeats the stroke at its images: h (left and right), v (top and bottom), hv, rot180, and on a square map rot90, diag, adiag.",
+      "- place_doodad: doodad and tileX, tileY, its top-left tile. doodad is an id, a name (\"Jungle #180\"), a category's name for any one of its doodads, or \"ramp\" for whichever of the tileset's ramps fits. Refused where StarEdit would refuse it (a doodad goes on the ground it is drawn for, a ramp only on the cliff shape it was drawn for) unless within says how many tiles around to look for a place one fits (for a ramp: paint the cliff, then place \"ramp\" within 6 or so of its edge) or force places it regardless.",
+      "- scatter_doodads: doodad (a category scatters a mix), an area, and count or density (the share of the area's tiles to cover, 0.1 by default), each put where it fits, placed by seed. Fewer are placed when no more fit.",
+      "- remove_doodads: indices (as map_doodads lists them) or where {doodad, an area}; the ground under them comes back.",
+      "- place_unit: unit, player, a position, and any unit properties. snap puts a building on the building grid (give it for every building, resource and start location); check refuses a position the editor would refuse (unwalkable or unbuildable ground, a unit in the way).",
       "- move_units: units, then a position (for one unit) or dx, dy in pixels (for any number).",
       "- update_units: units, then player (the new owner) and any unit properties; only what is given changes.",
       "- remove_units: units.",
@@ -476,15 +529,15 @@ export function createMcpServer(options: McpOptions = {}): { server: McpServer; 
       "- remove_sprites: indices (the sprites in the order map_dump lists them, from 0) or where {sprite, unit, player, an area}.",
       "- set_fog: players (a list of 1 to 8), mode (\"fog\" hides the area at the start, \"clear\" shows it), and an area (the whole map without one).",
       "A unit type is a name (\"Terran Marine\", \"Zergling\") or a units.dat id. A player is 1 to 12; 12 is neutral. A position is x, y in pixels or tileX, tileY (the centre of that tile). An area is one of rect {left, top, right, bottom} in pixels, tiles {x0, y0, x1, y1} or location; right, bottom, x1 and y1 are just outside it, and a unit is inside when its centre is. A location is its name, or its number as map_locations lists it. Units are named by `indices` (as map_units lists them, counted before this call, so a removal earlier in the list does not shift them) or by `where` {unit, player, an area}: all must hold, and matching nothing is not an error. Unit properties: hitPoints, shields, energy (percent), resources (a mineral field's or geyser's amount), hangar (interceptors or scarabs aboard), and the states cloaked, burrowed, lifted (a Terran building in the air), hallucinated, invincible (true or false).",
-      "The answer lists what each edit did, with the index a placed unit or sprite got and the number a new location got, then the change as map_diff reports it. Positions are taken as given: nothing is checked against the terrain, and a building is not snapped to the building grid (give its centre in pixels), because the game's files are not read. Doodads are not offered for the same reason. `dryRun` says what would change and writes nothing; map_check afterwards says what the editor's Check Map makes of the result.",
+      "The answer lists what each edit did, with the index a placed unit, sprite or doodad got and the number a new location got, then the change as map_diff reports it. Terrain and doodad edits, snap and check read the tileset and the unit tables from the person's copy of StarCraft, and fail with what to do when there is none (doctor says whether one is there); a list without them needs no copy, and a position is then taken as given. Painting terrain does not move what stands on it: look with map_preview (or editor_picture) and run map_check afterwards. `dryRun` says what would change and writes nothing.",
     ].join("\n"),
-    inputSchema: { path, edits: z.array(EDIT_ARGUMENT).min(1).describe("the edits, applied in order"), out, dryRun: z.boolean().optional().describe("say what would change and write nothing"), all: z.boolean().optional().describe("list every edit and every change in the text; long lists are cut otherwise") },
+    inputSchema: { path, edits: z.array(EDIT_ARGUMENT).min(1).describe("the edits, applied in order"), out, dryRun: z.boolean().optional().describe("say what would change and write nothing"), all: z.boolean().optional().describe("list every edit and every change in the text; long lists are cut otherwise"), starcraft: starcraftArg },
     annotations: { destructiveHint: true },
-  }, tool(async ({ path: file, edits, out: to, dryRun, all }) => {
+  }, tool(async ({ path: file, edits, out: to, dryRun, all, starcraft }) => {
     // Each edit held to the fields of its kind, before anything is opened.
     const list = parseEdits(edits);
     const { input, doc } = await openMap(file);
-    const r = await editMap(input, doc, list, { out: to ?? null, dryRun: !!dryRun });
+    const r = await editMap(input, doc, list, { out: to ?? null, dryRun: !!dryRun, starcraft });
     return ok(printEdits(input.name, r, { dryRun: !!dryRun, all: !!all }), { file: input.name, ...r, dryRun: !!dryRun });
   }));
 

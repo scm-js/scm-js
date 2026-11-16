@@ -3336,6 +3336,9 @@ has `place_units`, `update_units`, `add_location` and the rest; this is the same
   on). `remove_sprites` by `indices` (the order `map dump` lists them; `map_find`'s data has them too) or `where`.
   `set_fog` is `tx.setFog` over the tiles an area touches, players 1–8. `map diff` has no group for sprites or fog,
   so they show as the THG2 / MASK sections; the edit's own line says what was done.
+- **(Superseded the same day by "Terrain and doodads for a model" below: the host is now given the person's copy of
+  the game when a list needs it, and doodads, snap and check are offered. What follows is the host *without* a copy,
+  which is still what a list of unit, location, sprite and fog edits gets.)**
 - **No game data, measured** (`map run` with a probe script, the built CLI, 2026-11-16): the headless host's
   `api.gameData.source()` is `none` and `api.tileset.load()` answers false under Node — nothing feeds it a copy of
   the game, with or without one installed. So: `tx.placeDoodad` → −1 with "doodad N is not in this tileset";
@@ -3376,3 +3379,91 @@ has `place_units`, `update_units`, `add_location` and the rest; this is the same
 - **Not done**: doodads; elevation flags; a count on `place_unit` (twelve Marines are twelve entries); the affected
   indices of `move`/`update`/`remove` in the data (only counts; the dry run's diff names the units); sprite names
   (ids only, there is no table without the game); placement checks.
+
+## Terrain and doodads for a model: the host with the game, `map terrain`, `map doodads`, the terrain edits, `map_generate` (`cli/src/terrain.ts`, `mapedit.ts`, `run.ts#giveHostGame`) — 2026-11-16, branch `mcp-terrain`
+
+The user asked whether the MCP server could "place a cliff or random terrain". It could not: no terrain tool, and the
+guide's fallback (`map_run` with a script) did nothing, measured — under Node the host's `terrain.types()` was empty,
+`tx.paintIsom` false, `fillFlat`/`stampTerrain`/`heal` 0 tiles, `placeDoodad` −1; only a raw `setTile` worked. One
+cause: the host had no game data. 45 tools now (was 42).
+
+- **The host is given the person's copy** (`run.ts#giveHostGame(doc, starcraft?)` → `headless.ts#loadGameCopy`,
+  plugins-host.md "A host with a copy of the game"). `GameFiles` (`gamefiles.ts`, the copy `map preview` reads) is the
+  `GameCopy` as it stands (`label`, `read(member)`), set as a `reader` asset source with no base, so the editor's own
+  loaders read and decode; the map's tileset and the unit tables are awaited *before* a host is made, since the host
+  reads what is in memory when it starts (`peekTileset`, `peekUnitAssets`). None found and none named → null, and the
+  caller decides: `map run` goes on without (`game: null` in the outcome), the terrain commands fail with the usual
+  words (`terrain.ts#needTileset`, exit 2). Opened copies are kept by folder (`copies`) for the server's later calls.
+- **A call never depends on the calls before it.** The decoded data is the editor's module state, one per process, and
+  the MCP server is one process. So a host that is to have no game data drops it first (`run.ts#noHostGame` →
+  `dropGameCopy`: `dropDecodedData`, a `none` source): `runOnMap` without `game`, `editMap` for a list where
+  `needsGame` is false. Otherwise a unit placed after a terrain call would get `makeUnit`'s defaults *with* the tables
+  and one placed before would not. Cost measured over stdio on the built server (Remastered through `/mnt/c`):
+  terrain edit warm 49 ms, a units-only edit 19 ms, the terrain edit after it 163 ms (the tileset and tables decoded
+  again; the copy stays open).
+- **Opt in by the list.** `needsGame(edits)`: any of `paint_terrain`, `place_doodad`, `scatter_doodads`,
+  `remove_doodads`, or a `place_unit` with `snap` or `check`. A list without them looks for no copy and writes what it
+  wrote before, byte for byte, which is why `snap`/`check` are fields and not the default: the same list must do the
+  same on CI (no game) and on a desk. `snap`/`check` on a copy without unit tables (1.16 lacking `patch_rt.mpq`) are
+  refused rather than silently skipped. `map run` is the other way round: the game by default when there is a copy
+  (a plugin may ask for anything), `--no-game` / `game: false` to run as CI will.
+- **`paint_terrain`** is `tx.paintIsom(d, id, 1)` a diamond, the editor's own brush, so cliffs and shores are its.
+  `terrain.ts#strokeDiamonds`: `api.terrain.diamondsIn(cells)`; `ellipse` keeps the diamonds whose centre tile
+  (2x, y) is inside the ellipse in the area; `cover` ranks the diamonds by value noise (a lattice `grain` tiles
+  apart, eased, hashed from `seed`) and keeps the top share, which gives patches rather than speckle; `symmetry`
+  sets the editor's mode for the call (`api.terrain.setSymmetry`, restored in `finally`), takes each diamond's
+  centre pixel (64x, 32y) through `tx.mirrorPoint` and back through `diamondAt`, deduplicated. `cover` is the share
+  *before* the images, so `cover: 0.12` with `rot180` came to 28 % water with shores. Tiles changed are counted by
+  comparing `scn.tiles` before and after (the transaction has no count a stroke), and vary by a few between runs:
+  the host passes `Math.random` for a terrain's variations, so the *terrain* is reproducible from a seed and the
+  exact tiles are not (said in the guide; a seeded brush would need the host to take a `random`). Measured: a whole
+  64 × 64 map (1,073 diamonds) in 65 ms.
+- **Not `replace_terrain`.** `tx.replaceTerrain` is the Rect brush's (flat tiles swapped, edges left as they were),
+  which a model would use across heights and get wrong; an isometric replace needs each diamond's terrain, and a
+  diamond's centre is a tile corner. Left out until asked for.
+- **Doodads.** A reference (`doodadsOf`) is an id, a name ("Jungle #180": a doodad has only its category and id), a
+  category (any of its doodads), or `ramp` (every doodad with the ramp bit, 102 on Jungle). `place_doodad` asks
+  `api.query.doodadPlacement` (StarEdit's rule, not the palette's switch) and tries the choices in an order from the
+  list's seeded run; `within` walks the tiles around by distance, which is what makes "a ramp near here" work without
+  the model knowing which of 34 cliff shapes it painted; `force` is `tx.placeDoodad` as it is. `scatter_doodads`
+  tries random spots (twenty a doodad wanted) and places where the rule says yes, whole inside the area.
+  `remove_doodads` is `tx.removeDoodads`, safe now that the catalogue is loaded (without it the records went and the
+  tiles stayed). The Jungle category's trees fit on Dirt too: the rule counts only cells a doodad draws.
+  A third `Tracker` (`"doodad"`) gives doodad indices the units' meaning: the map before the call. One seeded run
+  (`seeded(1)`) serves every edit of a list that gives no `seed`, so two `place_doodad` of a category need not be the
+  same doodad, and a list is still reproducible.
+- **`place_unit` `snap` and `check`.** `snap` on a building places it with `tx.placeUnit` (the palette's snap, which
+  for a building is the build grid), reads the position back and removes it; then the unit is made as before
+  (`makeUnit` + `addUnits`), so its properties and index tracking are one path. `check` is `api.query.placement`
+  at the final position, its reason in the refusal ("the ground is unbuildable", "it overlaps Terran Command Center").
+- **`map terrain` / `map_terrain`** (`listTerrain`): the tileset's terrains (id, name, height 0–2 worded Low/Mid/High
+  as the Terrain palette does — Jungle's High Dirt is 1, Badlands' is 2 — buildable, tiles, share) and a grid, a
+  character a cell by majority: a letter a terrain (from its name less High/Raised, lower case at height 0), `#` an
+  edge tile `terrainAt` gives no terrain (`tileInfo().kind === "edge"`), `*` a doodad's, `?` neither. 64 columns
+  unless `cell`. The grid is what lets a model see heights without a picture; plugin-ai's `terrain_at` grid was the
+  model for it. **`map doodads` / `map_doodads`** (`listDoodads`): placed rows (index, top-left tile by
+  `doodadOrigin`'s rounding), the categories with their ramp counts, and with `category`/`palette` the placeable
+  ones with the ground each needs (`groundFor`: the flat pairs among `required`, "cliff or shore pieces" for the rest).
+- **`map_generate`** is `generatecmd.ts#runGenerate` and `printGenerated` as they were (the note above said the
+  function was ready for a tool); no `rush`, no `tilesets` folder.
+- **The tool list** is 69.0 KB for 45 tools (measured with the SDK client): `map_edit` 11.3 KB (4.5 KB of it the
+  description, which carries the terrain kinds first since they need the most saying), `map_terrain` 2.6,
+  `map_doodads` 2.6, `map_generate` 2.1. The bound in `tests/cli-mcp.test.ts` is 12 KB.
+- **A linked map** needs nothing new: the tools read the editor's copy and put the result back as one undo step, the
+  terrain laid by the Node host with the person's installation. So a map on a *mod's* tileset in the editor is painted
+  with the game's own tables here; running the edit inside the editor (the link carries only read/apply/state/show/
+  picture/save) would lift that and the need for an installation, and is the next step proposed to the user.
+- Measured from the terminal (the built CLI, a new 64 × 64 Jungle map): `map run` cold 0.85 s with Remastered through
+  `/mnt/c`, 0.63 s with the 1.16.1 archives on the Linux disk (0.2 s of either is Node starting); `map edit` with
+  two strokes, a ramp, two scatters and a snapped Command Center 0.73 s.
+- Tests: `tests/cli-terrain.test.ts` (16; ten of them need a copy of the game and skip on CI): the list's shape and
+  `needsGame`, the failure with a folder that is no copy, `buildAtlas` with no page, a host given a copy that holds
+  nothing; then with a copy a plateau and its cliff, patches the same for the same seed, a half-turn's symmetry (96 %
+  of water tiles have water at their image; shores are not their own image), unknown names, a ramp found `within`
+  and all-or-nothing when none fits, scatter and removal, snap and check, the three tools and `map_generate` through
+  the SDK client, `runOnMap` with and without the game. By hand: the built `scmjs mcp` over stdio.
+- **Not done**: the edit run inside the linked editor; `replace_terrain`, heal, pins, blocks and paste; stretched
+  ramps (`placeStretchedDoodad`); doodads mirrored under a symmetry (needs `doodadTwin`); units and doodads moved or
+  removed when terrain is painted under them (the editor's "remove stranded" is the palette's, not the
+  transaction's); settings edits (players, forces, unit settings, upgrades, tech, sounds, switches: `api.settings`
+  has them all, no tool does); `map diff` groups for terrain and doodads (they show as sections changed).

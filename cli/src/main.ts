@@ -60,7 +60,8 @@ import { coverageForm, coverageJson, coverageScenario, printCoverage, runCoverag
 import { defaultOut, defaultTests, readMapForTests, readTests, recordLines, recordTest, runTests, testHeader, testJson, testSummary, updateSkipped, updateTests, type PlannedScenario } from "./maptest";
 import { printRun, runOnMap } from "./run";
 import { editMap, parseEdits, printEdits } from "./mapedit";
-import { listLocations, listUnits, printLocations, printUnits, UNIT_ROWS, type UnitFilter } from "./objects";
+import { listLocations, listUnits, printLocations, printUnits, UNIT_ROWS, type Area, type UnitFilter } from "./objects";
+import { DOODAD_ROWS, GRID_COLUMNS, listDoodads, listTerrain, printDoodads, printTerrain } from "./terrain";
 import { previewMap, PNG_SCALES } from "./preview";
 import { analyzeMap } from "./analyze";
 import { heatmapMap, type HeatmapOptions as HeatmapFlags } from "./heatmap";
@@ -639,14 +640,16 @@ The map is moved under the anchor; what falls outside is dropped (units, sprites
         r.outside.length ? `${mark.warn} ${t("Left past the map's edge (--no-clamp): {list}", { list: r.outside.join(", ") })}` : null);
     });
 
-  map.command("edit").description(t("apply a list of edits to the map's units, locations, sprites and fog, all or none")).argument("<map>", t("the map to change; - reads it from standard input")).addOption(json)
+  map.command("edit").description(t("apply a list of edits to the map's units, locations, sprites, fog, terrain and doodads, all or none")).argument("<map>", t("the map to change; - reads it from standard input")).addOption(json)
     .requiredOption("--edits <file>", t("the edits: a JSON list, or an object with the list as \"edits\"; - reads it from standard input"))
     .option("-o, --out <map>", t("write the result here instead of over the map; - for standard output"))
     .option("--dry-run", t("say what would change, as map diff does, and write nothing"))
     .option("--all", t("list every edit and every change; by default a long list is cut"))
+    .option("--starcraft <folder>", t("your installation of StarCraft, for terrain and doodads (SCMJS_STARCRAFT); found in the usual places otherwise"))
     .addHelpText("after", t(`
 Each edit is an object with an "op" and its fields:
-  place_unit        unit, player, x, y (or tileX, tileY), and any of the properties below
+  place_unit        unit, player, x, y (or tileX, tileY), and any of the properties below; snap (a building on
+                    the building grid), check (refuse a position the editor would refuse)
   move_units        indices or where, then x, y (one unit) or dx, dy (any number)
   update_units      indices or where, then player, hitPoints, shields, energy (percent), resources, hangar,
                     cloaked, burrowed, lifted, hallucinated, invincible
@@ -657,12 +660,22 @@ Each edit is an object with an "op" and its fields:
   place_sprite      sprite (a sprites.dat id) or unit, then player, x, y (or tileX, tileY), flipped, disabled
   remove_sprites    indices or where {sprite, unit, player, rect, tiles, location}
   set_fog           players (1 to 8), mode fog or clear, and rect, tiles or location (the whole map without one)
+  paint_terrain     terrain (a name or id, as scmjs map terrain lists them), and rect, tiles or location (the whole
+                    map without one); shape rect or ellipse; cover (0 to 1: that share of the area, in patches),
+                    grain (a patch's size in tiles), seed; symmetry h, v, hv, rot180, rot90, diag or adiag
+  place_doodad      doodad (an id or name, a category for any of its doodads, or "ramp"), tileX, tileY (its top-left
+                    tile); within (tiles to look around for a place it fits), force, seed
+  scatter_doodads   doodad, and rect, tiles or location; count or density (0 to 1), seed
+  remove_doodads    indices or where {doodad, rect, tiles, location}
 A unit is a name ("Terran Marine", "Zergling") or a units.dat id, a player 1 to 12 (12 is neutral). indices are the
 ones scmjs map units lists, as the map was before the edits; where is {unit, player, rect, tiles, location}, all of
 which must hold. The edits are applied together: when one cannot be done, nothing is written and the error names it
-by its place in the list, from 0. Positions are taken as given: nothing is checked against the terrain or snapped to
-the building grid, since that needs the game's files, and doodads are left to the editor for the same reason.`))
-    .action(async (file: string, o: { json?: boolean; edits: string; out?: string; dryRun?: boolean; all?: boolean }) => {
+by its place in the list, from 0. A unit's position is taken as given unless the edit says snap or check.
+
+Terrain is painted with the editor's isometric brush, so a cliff or a shore forms where two terrains meet, and a
+doodad goes where StarEdit would let it. Those edits, and snap and check, read your own copy of StarCraft: the
+tileset and the unit tables. A list without them needs no copy.`))
+    .action(async (file: string, o: { json?: boolean; edits: string; out?: string; dryRun?: boolean; all?: boolean; starcraft?: string }) => {
       if (file === STDIO && o.edits === STDIO) throw new CliError(t("The map and the edits cannot both come from standard input"), t("Name one of them as a file."), 2);
       const text = new TextDecoder().decode(await readTextArg(o.edits));
       let value: unknown;
@@ -670,7 +683,7 @@ the building grid, since that needs the game's files, and doodads are left to th
       const edits = parseEdits(value);
       const { input, doc } = await openForEdit(file);
       const piped = piping(input, o);
-      const r = await editMap(input, doc, edits, { out: o.out ?? null, dryRun: !!o.dryRun });
+      const r = await editMap(input, doc, edits, { out: o.out ?? null, dryRun: !!o.dryRun, starcraft: o.starcraft });
       if (o.json) print(JSON.stringify({ file: input.path, ...r, dryRun: !!o.dryRun }, null, 2));
       else say(piped, ...printEdits(input.name, r, { dryRun: !!o.dryRun, all: !!o.all }));
     });
@@ -717,6 +730,57 @@ box in pixels and the tiles the box touches, and how many units have their centr
       const r = listLocations(doc, input.path);
       if (o.json) print(JSON.stringify(r, null, 2));
       else print(...printLocations(input.name, r));
+    });
+
+  /** `--rect`, `--tiles` and `--location` as an area; undefined when none was given. */
+  const areaOf = (o: { location?: string; rect?: string; tiles?: string }): Area | undefined => {
+    const area: Area = {};
+    if (o.location !== undefined) area.location = o.location;
+    if (o.rect !== undefined) { const [left, top, right, bottom] = fourOf(o.rect, "--rect"); area.rect = { left, top, right, bottom }; }
+    if (o.tiles !== undefined) { const [x0, y0, x1, y1] = fourOf(o.tiles, "--tiles"); area.tiles = { x0, y0, x1, y1 }; }
+    return Object.keys(area).length ? area : undefined;
+  };
+  map.command("terrain").description(t("the map's terrain: the tileset's terrains, how much of the map each covers, and the map as a grid of letters")).argument("<map>", t("the map; - reads it from standard input")).addOption(json)
+    .option("--location <name>", t("only this location's area, by name or number"))
+    .option("--rect <l,t,r,b>", t("only this rectangle, in pixels"))
+    .option("--tiles <x0,y0,x1,y1>", t("only this rectangle, in tiles"))
+    .option("--cell <n>", t("tiles a character of the grid; by default as many as keep it to {n} columns", { n: GRID_COLUMNS }))
+    .option("--no-grid", t("the table alone"))
+    .option("--starcraft <folder>", t("your installation of StarCraft (SCMJS_STARCRAFT); found in the usual places otherwise"))
+    .addHelpText("after", t(`
+A row a terrain of the map's tileset: the letter the grid draws it with, its name and id (scmjs map edit's
+paint_terrain takes either), its height (low, mid, high: a cliff forms between two heights), whether buildings
+go on it, and the tiles it covers. Then the map, or the area asked for, as a grid: a character a cell, the terrain
+most of the cell is, lower case for low ground. A tile under a cliff, a shore or a doodad counts as the terrain the
+isometric lattice gives it. The terrains are read from your own copy of StarCraft.`))
+    .action(async (file: string, o: { json?: boolean; location?: string; rect?: string; tiles?: string; cell?: string; grid?: boolean; starcraft?: string }) => {
+      const cell = o.cell === undefined ? undefined : parseWhole(o.cell, "cell", 1);
+      const area = areaOf(o);
+      const { input, doc } = await openForEdit(file);
+      const r = await listTerrain(doc, input.path, { area, cell, starcraft: o.starcraft });
+      if (o.json) print(JSON.stringify(r, null, 2));
+      else print(...printTerrain(input.name, r, { grid: o.grid !== false }));
+    });
+
+  map.command("doodads").description(t("the map's doodads with their index, and the doodads the tileset has to place")).argument("<map>", t("the map; - reads it from standard input")).addOption(json)
+    .option("--category <name>", t("only this category's doodads, placed and to place; \"ramp\" for the ramps"))
+    .option("--palette", t("list every doodad the tileset has to place, with its size and the ground it goes on"))
+    .option("--location <name>", t("only those inside this location, by name or number"))
+    .option("--rect <l,t,r,b>", t("only those inside this rectangle, in pixels"))
+    .option("--tiles <x0,y0,x1,y1>", t("only those inside this rectangle, in tiles"))
+    .option("--all", t("list every row; by default a long list is cut at {n}", { n: DOODAD_ROWS }))
+    .option("--starcraft <folder>", t("your installation of StarCraft (SCMJS_STARCRAFT); found in the usual places otherwise"))
+    .addHelpText("after", t(`
+A row a doodad on the map: its index (its place in the file, from 0, which scmjs map edit's remove_doodads takes),
+its name and id, its top-left tile and its size in tiles. Then the tileset's categories; with --category or
+--palette, the doodads that can be placed, each with the ground StarEdit lets it go on. A doodad has no name of
+its own: it is its category and its id. The doodads are read from your own copy of StarCraft.`))
+    .action(async (file: string, o: { json?: boolean; category?: string; palette?: boolean; location?: string; rect?: string; tiles?: string; all?: boolean; starcraft?: string }) => {
+      const area = areaOf(o);
+      const { input, doc } = await openForEdit(file);
+      const r = await listDoodads(doc, input.path, { area, category: o.category, palette: !!o.palette, starcraft: o.starcraft });
+      if (o.json) print(JSON.stringify(r, null, 2));
+      else print(...printDoodads(input.name, r, !!o.all));
     });
 
   const triggers = map.command("triggers").description(t("a map's triggers as a text or .trg file, and back"))
@@ -967,16 +1031,23 @@ compile, a test fails or the build is refused; nothing is written then.`))
     .option("--arg <value...>", t("arguments for --command"))
     .option("-o, --out <map>", t("write the changed map here instead of over the map; - for standard output"))
     .option("--dry-run", t("say what would change, as map diff does, and write nothing"))
+    .option("--starcraft <folder>", t("your installation of StarCraft (SCMJS_STARCRAFT); found in the usual places otherwise"))
+    .option("--no-game", t("run with no game data, as on a computer without StarCraft"))
     .addHelpText("after", t(`
 The plugin gets the editor's plugin API (docs.scmjs.dev/plugins) with the map open and no editor around it: what it
 would show — its status line, toasts, log — is printed here, and dialogs show nothing. A script is a file exporting
 activate(api), like a plugin's entry; a .ts needs TypeScript installed. The map is written back only when the
-plugin changed it. Exits 1 when the plugin does not load or throws.`))
-    .action(async (target: string, file: string, o: { json?: boolean; command?: string; arg?: string[]; out?: string; dryRun?: boolean }) => {
+plugin changed it. Exits 1 when the plugin does not load or throws.
+
+With a copy of StarCraft on this computer the plugin has the game's data, as in the editor: the map's tileset
+(terrain by type, the isometric brush, doodads) and the unit tables (sizes, the placement check). Without one, or
+with --no-game, those parts of the API do nothing and say so.`))
+    .action(async (target: string, file: string, o: { json?: boolean; command?: string; arg?: string[]; out?: string; dryRun?: boolean; starcraft?: string; game?: boolean }) => {
+      if (o.starcraft && o.game === false) throw new CliError(t("--starcraft names a copy of the game and --no-game runs without one: give one of them"), null, 2);
       if (o.arg && !o.command) throw new CliError(t("--arg is for --command"), t("Name the command the arguments are for: --command <id> --arg <value>."), 2);
       const { input, doc } = await openForEdit(file);
       const piped = piping(input, o);
-      const r = await runOnMap(doc, input.path, input.bytes, target, { command: o.command, args: o.arg, out: o.out ?? null, dryRun: !!o.dryRun, live: o.json ? undefined : (line) => say(piped, line) });
+      const r = await runOnMap(doc, input.path, input.bytes, target, { command: o.command, args: o.arg, out: o.out ?? null, dryRun: !!o.dryRun, game: o.game === false ? undefined : o.starcraft ?? true, live: o.json ? undefined : (line) => say(piped, line) });
       if (o.json) print(JSON.stringify({ file: input.path, ...r }, null, 2));
       else say(piped, ...printRun(input.name, r, { dryRun: !!o.dryRun }));
     });
@@ -2316,7 +2387,7 @@ export const COMMAND_GROUPS: Record<string, [heading: string, names: string[]][]
   map: [
     [msg("Looking inside a map:"), ["info", "check", "dump", "find", "preview", "sounds", "analyze"]],
     [msg("Making a map:"), ["new", "generate", "fetch"]],
-    [msg("Changing a map:"), ["set", "resize", "units", "locations", "edit", "triggers", "strings", "optimize", "unpack", "pack", "build", "run"]],
+    [msg("Changing a map:"), ["set", "resize", "units", "locations", "terrain", "doodads", "edit", "triggers", "strings", "optimize", "unpack", "pack", "build", "run"]],
     [msg("Maps in git:"), ["diff", "log", "blame", "merge"]],
     [msg("Running a map in the game:"), ["trace", "cost", "test", "coverage", "rush", "balance", "heatmap"]],
     [msg("Sharing:"), ["open", "play", "share"]],

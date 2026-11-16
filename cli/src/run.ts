@@ -17,12 +17,55 @@ import { CliError, dot, mark, pc, size } from "./ui";
 import { openMapBytes } from "../../src/editor/mapFile";
 // The one module of the editor's the command takes that is not the library's: the plugin host is the editor's
 // (`tests/core.test.ts` names this exception).
-import { headlessApi, parseSpec, PluginLoadError, runHeadless, transpileTs, type EditTransaction, type HeadlessApi, type HeadlessHost, type LoaderDeps, type LogEntry, type OpenedMap, type PluginApi, type PluginSource, type Toast, type TS } from "../../src/plugins/headless";
+import { dropGameCopy, headlessApi, loadGameCopy, parseSpec, PluginLoadError, runHeadless, transpileTs, type EditTransaction, type HeadlessApi, type HeadlessHost, type LoaderDeps, type LogEntry, type OpenedMap, type PluginApi, type PluginSource, type Toast, type TS } from "../../src/plugins/headless";
 import { loadTypeScript } from "./build";
+import { findGameCopy } from "./engine";
+import { archiveFiles, storageFiles, type GameFiles } from "./gamefiles";
 import { diffMaps, printDiff, summarizeDiff, type MapDiff } from "./diff";
 
 export { summarizeDiff };
 export type { EditTransaction, HeadlessApi, PluginApi };
+
+/** The copies of the game opened in this process, by folder: the MCP server opens one once, for every call after. */
+const copies = new Map<string, Promise<GameFiles>>();
+
+/** What the host was given of the person's copy of the game. */
+export interface HostGame {
+  folder: string;
+  /** What the copy is, for a person: "StarCraft: Remastered 1.23.10.13515". */
+  label: string;
+  /** The map's tileset is in memory: terrain by type, doodads and the ground under a unit can be read and laid. */
+  tileset: boolean;
+  /** The unit tables are: a unit's size, its build grid, what it starts with. */
+  units: boolean;
+}
+
+/**
+ * Give the plugin host the person's own copy of StarCraft for `doc` (`headless.ts#loadGameCopy`), before a host is
+ * opened over it: the copy named with `--starcraft` (or `SCMJS_STARCRAFT`), else the first in the usual places.
+ * Null when there is none and none was named: the host then has no game data, and what needs the game's files says
+ * so. A named folder that is no copy is the person's mistake, and thrown.
+ */
+export async function giveHostGame(doc: OpenedMap, starcraft?: string): Promise<HostGame | null> {
+  let copy: ReturnType<typeof findGameCopy>;
+  try { copy = findGameCopy(starcraft, { pictures: true }); } catch (e) { if (starcraft || !(e instanceof CliError)) throw e; return null; }
+  let opening = copies.get(copy.folder);
+  if (!opening) {
+    opening = copy.kind === "remastered" ? storageFiles(copy.folder) : (async () => archiveFiles(copy.folder))();
+    copies.set(copy.folder, opening);
+    opening.catch(() => copies.delete(copy.folder));
+  }
+  const files = await opening;
+  return { folder: files.folder, label: files.label, ...(await loadGameCopy(files, doc)) };
+}
+
+/**
+ * The next host has no game data, whatever an earlier call in this process was given: a list of edits that needs
+ * none, a plugin run with `--no-game`. So that what a call does never depends on the calls before it.
+ */
+export function noHostGame(): void {
+  dropGameCopy();
+}
 
 /**
  * The plugin API over a map with no plugin: for a command that changes a map the way a plugin would, through
@@ -185,6 +228,11 @@ export interface RunOptions {
   dryRun?: boolean;
   /** Where the plugin's status, toasts and log lines go as they happen; absent, they are kept in the outcome only. */
   live?: (line: string) => void;
+  /**
+   * Give the plugin the person's copy of the game (`giveHostGame`): `true` for the first in the usual places (none
+   * is not an error), a folder for that copy. Absent, the plugin runs with no game data.
+   */
+  game?: string | true;
 }
 
 export interface RunEvent { kind: "status" | "toast" | "log"; level: "info" | "warn" | "error"; text: string }
@@ -194,6 +242,8 @@ export interface RunOutcome {
   /** What the plugin's `activate` (or the command) returned, when it is JSON; else null. */
   result: unknown;
   events: RunEvent[];
+  /** The copy of the game the plugin was given, and what of it loaded; null when it ran with no game data. */
+  game: HostGame | null;
   /** Whether the plugin changed the map. */
   modified: boolean;
   /** The change, as `map diff` sees it, when the map was modified. */
@@ -230,7 +280,10 @@ export async function runOnMap(doc: OpenedMap, inputPath: string, inputBytes: Ui
   let typescript: ReturnType<typeof loadTypeScript> | null = null;
   const deps = nodeLoaderDeps({ typescript: async () => (await (typescript ??= loadTypeScript())).ts });
   let host: HeadlessHost;
+  let game: HostGame | null = null;
   try {
+    if (options.game) game = await giveHostGame(doc, options.game === true ? undefined : options.game);
+    if (!game) noHostGame();
     host = await runHeadless(source, doc, deps, {
       status: (text) => note({ kind: "status", level: "info", text }),
       // Plain text in the event (it goes into --json too); the colour is the printed line's.
@@ -263,7 +316,7 @@ export async function runOnMap(doc: OpenedMap, inputPath: string, inputBytes: Ui
     const diff = modified ? diffMaps({ name, doc: await openMapBytes(inputBytes, name) }, { name: options.out ?? name, doc: after }) : null;
     const outcome: RunOutcome = {
       plugin: { id: host.info.id, name: host.manifest.name, version: host.manifest.version ?? null },
-      result: isJson(result) ? result : null, events, modified, diff, written: null,
+      result: isJson(result) ? result : null, events, game, modified, diff, written: null,
     };
     // Changed, or --out named, or the map going down a pipe: the next step needs a map either way.
     if ((modified || options.out || toStdout(inputPath, options.out)) && !options.dryRun) outcome.written = await writeBack(after, inputPath, options.out ?? null);

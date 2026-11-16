@@ -18,6 +18,12 @@ for the *document's* tileset, so `useTileset` calls `releaseTileset` on the one 
 (on the transition, not a sweep — a tileset a dialog is loading ahead of a change is never taken
 away); a released tileset is fetched again if a later map needs it. `tests/tileset-cache.test.ts`.
 
+**No page (2026-11-16).** `buildAtlas` returns `{ image: null, animation: null }` with the real `averages` when the
+runtime has no `ImageData`: the plugin host under Node given a copy of the game (plugins-host.md "A host with a copy
+of the game") loads tilesets through `getTileset` like everything else and needs the tables, the doodads and the
+averages (`api.terrain.color`), never the picture. Nothing in the browser takes this branch. `image` is typed as
+before, so code that blits must not run without a page — none of the host's does.
+
 The atlas is also why the New Scenario dialog cannot go through `getTileset`: it pictures
 all eight tilesets at once, and eight atlases is more memory than the rest of the editor.
 `loadTilesetGraphics(name)` is the way round it — the four files the megatile decoder needs,

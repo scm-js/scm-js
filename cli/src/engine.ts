@@ -298,10 +298,54 @@ let saidSetting = false;
  * person fixes before anything plays (exit 2), as is a `SCMJS_STARCRAFT` that names no copy, which is said on standard
  * error with the copy used instead.
  */
-export function findGameCopy(named: string | undefined): { folder: string; kind: "remastered" | "classic" } {
+export function findGameCopy(named: string | undefined, options: { pictures?: boolean } = {}): { folder: string; kind: "remastered" | "classic" } {
+  const found = findCopy(named);
+  if (!options.pictures) refuseUnpatched(found);
+  return found;
+}
+
+/**
+ * The game's tables `patch_rt.mpq` replaces in StarDat.mpq and BrooDat.mpq, and the rule for a set of archives that
+ * lacks it: the editor's (`src/gamedata/archives.ts`), kept here too because the command may not reach `src/gamedata`
+ * (`tests/core.test.ts`). Without the patch these are Brood War's tables as first sold, and `arr\\units.dat` alone
+ * makes a 1.16.1 replay leave the game that was played within minutes.
+ */
+export const PATCHED_MEMBERS = [
+  "arr\\units.dat", "arr\\weapons.dat", "arr\\flingy.dat", "arr\\upgrades.dat", "arr\\techdata.dat",
+  "scripts\\iscript.bin", "scripts\\aiscript.bin", "rez\\stat_txt.tbl",
+] as const;
+
+/** True when the archives (names or paths, any case) have StarDat.mpq and no patch_rt.mpq. */
+export function lacksPatch(archives: readonly string[]): boolean {
+  const names = archives.map((n) => (n.trim().split(/[\\/]/).pop() ?? "").toLowerCase());
+  return names.includes("stardat.mpq") && !names.includes("patch_rt.mpq");
+}
+
+/**
+ * True for a 1.16 folder with StarDat.mpq and BrooDat.mpq and no patch_rt.mpq (`lacksPatch`), so a game played from it
+ * is not StarCraft 1.16.1's.
+ */
+export function unpatchedCopy(copy: { folder: string; kind: "remastered" | "classic" }): boolean {
+  return copy.kind === "classic" && lacksPatch(readdirSafe(copy.folder));
+}
+
+/**
+ * A game is not played from an unpatched copy (`unpatchedCopy`): a replay would leave the game that was played within
+ * minutes, and a test or a ladder would play by the wrong costs. The pictures are drawn from it (`options.pictures`).
+ */
+function refuseUnpatched(copy: { folder: string; kind: "remastered" | "classic" }): void {
+  if (!unpatchedCopy(copy)) return;
+  throw new CliError(
+    t("{folder} has StarDat.mpq and BrooDat.mpq but no patch_rt.mpq: without it the unit costs, build times and other tables are the game's from before its patches, and the game would not play as StarCraft 1.16.1 does.", { folder: copy.folder }),
+    t("Copy patch_rt.mpq in from your StarCraft 1.16.1 folder, or name that folder with --starcraft."),
+    2,
+  );
+}
+
+function findCopy(named: string | undefined): { folder: string; kind: "remastered" | "classic" } {
   if (named) {
     const kind = gameCopyKind(resolve(named));
-    if (!kind) throw new CliError(t("{folder} is not a copy of StarCraft.", { folder: named }), t("A Remastered installation (with .build.info) or a 1.16.1 one (StarDat.mpq and BrooDat.mpq)."), 2);
+    if (!kind) throw new CliError(t("{folder} is not a copy of StarCraft.", { folder: named }), t("A Remastered installation (with .build.info) or a 1.16.1 one (StarDat.mpq, BrooDat.mpq and patch_rt.mpq)."), 2);
     return { folder: resolve(named), kind };
   }
   const setting = process.env.SCMJS_STARCRAFT;
@@ -312,7 +356,7 @@ export function findGameCopy(named: string | undefined): { folder: string; kind:
     if (settingBad && !saidSetting) { saidSetting = true; process.stderr.write(`${mark.warn} ${t("SCMJS_STARCRAFT names {setting}, which is not a copy of StarCraft; playing with the one in {folder}.", { setting: setting!, folder })}\n`); }
     return { folder, kind };
   }
-  if (settingBad) throw new CliError(t("SCMJS_STARCRAFT names {setting}, which is not a copy of StarCraft, and there is none in the usual places.", { setting: setting! }), t("A Remastered installation (with .build.info) or a 1.16.1 one (StarDat.mpq and BrooDat.mpq)."), 2);
+  if (settingBad) throw new CliError(t("SCMJS_STARCRAFT names {setting}, which is not a copy of StarCraft, and there is none in the usual places.", { setting: setting! }), t("A Remastered installation (with .build.info) or a 1.16.1 one (StarDat.mpq, BrooDat.mpq and patch_rt.mpq)."), 2);
   throw new CliError(t("No copy of StarCraft was found on this computer."), t("The game plays with your own installation's files: name its folder with --starcraft (or SCMJS_STARCRAFT)."), 2);
 }
 

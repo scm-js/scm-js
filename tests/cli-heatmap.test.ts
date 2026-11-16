@@ -238,6 +238,7 @@ function staged(runner = EVENTS_RUNNER) {
   for (const [ext, data] of Object.entries(fakeTilesetFiles([60, 120, 60]))) stardat.addFile(`tileset\\jungle.${ext}`, data);
   writeFileSync(join(copy, "StarDat.mpq"), stardat.write());
   writeFileSync(join(copy, "BrooDat.mpq"), new Creator({}).write());
+  writeFileSync(join(copy, "patch_rt.mpq"), new Creator({}).write());
   return { dir, sub, copy, played: () => (existsSync(join(sub, "played.txt")) ? readFileSync(join(sub, "played.txt"), "utf8").trim().split("\n").sort() : []) };
 }
 

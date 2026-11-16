@@ -227,6 +227,7 @@ describe("the command, through a stand-in 1.16.1 copy", () => {
     }
     writeFileSync(join(dir, "StarDat.mpq"), stardat.write());
     writeFileSync(join(dir, "BrooDat.mpq"), new Creator({}).write());
+    writeFileSync(join(dir, "patch_rt.mpq"), new Creator({}).write());
     return dir;
   }
   const opened = (name: string, scenario: Scenario): { input: Input; doc: OpenedMap } => ({

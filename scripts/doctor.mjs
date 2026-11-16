@@ -56,9 +56,11 @@ const data = gameData(root);
 if (data.extracted) say("ok", "Game data", "extracted into public/");
 else say("warn", "Game data", "not extracted", {
   fix: found ? `npm run extract -- --from "${found}"` : "npm run extract -- --from <your StarCraft folder>",
-  note: `${found ? `StarCraft 1.16 is at ${found}. ` : "It needs a classic StarCraft (1.16) folder with StarDat.mpq and BrooDat.mpq. "}Without it terrain is flat colours, and the tileset and unit test suites skip.${found ? "" : " Remastered's files are read only by Help ▸ Game Data… in the editor."}`,
+  note: `${found ? `StarCraft 1.16 is at ${found}. ` : "It needs a classic StarCraft (1.16) folder with StarDat.mpq, BrooDat.mpq and patch_rt.mpq. "}Without it terrain is flat colours, and the tileset and unit test suites skip.${found ? "" : " Remastered's files are read only by Help ▸ Game Data… in the editor."}`,
 });
-say(data.archives ? "ok" : "warn", "Test archives", data.archives ? "fixtures/data/ has StarDat.mpq and BrooDat.mpq" : "fixtures/data/ has no StarDat.mpq and BrooDat.mpq", data.archives ? {} : { fix: found ? `cp "${found}/StarDat.mpq" "${found}/BrooDat.mpq" fixtures/data/` : undefined, note: "The suites that read the archives themselves skip without them. Never commit them." });
+if (data.archives && data.patch) say("ok", "Test archives", "fixtures/data/ has StarDat.mpq, BrooDat.mpq and patch_rt.mpq");
+else if (data.archives) say("warn", "Test archives", "fixtures/data/ has StarDat.mpq and BrooDat.mpq but no patch_rt.mpq", { fix: found ? `cp "${found}/patch_rt.mpq" fixtures/data/` : undefined, note: "Without it npm run extract stops: the two alone hold the unit tables from before the game's patches. Never commit it." });
+else say("warn", "Test archives", "fixtures/data/ has no StarDat.mpq and BrooDat.mpq", { fix: found ? `cp "${found}/StarDat.mpq" "${found}/BrooDat.mpq" "${found}/patch_rt.mpq" fixtures/data/` : undefined, note: "The suites that read the archives themselves skip without them. Never commit them." });
 say(data.maps ? "ok" : "warn", "Test maps", data.maps ? `${data.maps} in fixtures/maps/` : "none in fixtures/maps/", data.maps ? {} : { fix: found ? `cp "${found}/Maps/Ladder/"*.sc? fixtures/maps/   (or any maps of Blizzard's you have)` : undefined, note: "The suites that open Blizzard's maps skip without them; tests/maps/ (generated, committed) always run. Never commit them." });
 
 // The browser tests' Chromium: installed, and able to start (on Linux and WSL it needs system libraries).

@@ -14,7 +14,7 @@ import { newestVersion, olderThan, PACKAGE, VERSION } from "./about";
 import { dockerVersion } from "./bot";
 import { cacheRoot, findGameCopy } from "./botrun";
 import { findTypeScript } from "./build";
-import { RUNNERS, type RunnerKind } from "./engine";
+import { RUNNERS, unpatchedCopy, type RunnerKind } from "./engine";
 import { findDesktopApp } from "./open";
 import { findBrowser, NO_BROWSER } from "./browser";
 import { findFfmpeg } from "./export";
@@ -79,7 +79,9 @@ export function dockerCheck(): Check {
 
 export function starcraftCheck(): Check {
   try {
-    const { folder, kind } = findGameCopy(undefined);
+    const copy = findGameCopy(undefined, { pictures: true });
+    const { folder, kind } = copy;
+    if (unpatchedCopy(copy)) return { what: "StarCraft", state: "warn", detail: `${t("1.16 without patch_rt.mpq")}${pc.dim(` · ${folder}`)}`, path: folder, fix: t("Copy patch_rt.mpq into {folder} from your StarCraft 1.16.1 folder", { folder }), note: t("Without it the unit tables are the game's from before its patches: the commands that play the game refuse the folder, and the pictures leave out unit sizes and walking speeds.") };
     return { what: "StarCraft", state: "ok", detail: `${kind === "remastered" ? t("Remastered") : "1.16.1"}${pc.dim(` · ${folder}`)}`, path: folder };
   } catch (e) {
     if (!(e instanceof CliError)) throw e;

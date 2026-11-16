@@ -54,9 +54,9 @@ There are two ways to get them into a source build:
 - **Help ▸ Game Data… in the running dev editor.** Point it at your StarCraft folder, the
   classic game (1.16) or StarCraft: Remastered. This is the recommended way, and the only
   one for Remastered: the copy goes into the browser's storage, as it does for any user.
-- **`npm run extract`** reads `StarDat.mpq` and `BrooDat.mpq` from a classic installation
-  (it finds them on its own, or takes `--from <folder>`) and writes the files into
-  `public/`. It does not read Remastered's files.
+- **`npm run extract`** reads `StarDat.mpq`, `BrooDat.mpq` and `patch_rt.mpq` from a
+  classic installation (it finds them on its own, or takes `--from <folder>`) and writes
+  the files into `public/`. It does not read Remastered's files.
 
 [game-data.md](game-data.md#extracting-for-a-source-build) has the details. No build,
 container image or hosted site carries the data or an address to fetch it from;

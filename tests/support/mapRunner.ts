@@ -108,6 +108,6 @@ export function stagedEngine(dir: string, withMap = true, mapRunner = FAKE_RUNNE
 
 /** A folder shaped like a 1.16.1 copy of the game. */
 export function classicCopy(dir: string): string {
-  for (const f of ["StarDat.mpq", "BrooDat.mpq"]) writeFileSync(join(dir, f), "mpq");
+  for (const f of ["StarDat.mpq", "BrooDat.mpq", "patch_rt.mpq"]) writeFileSync(join(dir, f), "mpq");
   return dir;
 }

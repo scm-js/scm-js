@@ -17,7 +17,7 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { defaultArchives, archivesIn, noArchivesMessage, root } from "./lib/archives.mjs";
+import { defaultArchives, archivesIn, noArchivesMessage, requirePatch, root } from "./lib/archives.mjs";
 
 const TILESETS = ["badlands", "platform", "install", "ashworld", "jungle", "desert", "ice", "twilight"];
 /** Tables the unit renderer cannot start without; the GRPs themselves are listed in unit/manifest.json. */
@@ -87,6 +87,7 @@ if (archives.length === 0) {
   console.error(noArchivesMessage());
   process.exit(1);
 }
+requirePatch(archives);
 
 console.log(`Extracting from:\n${archives.map((a) => `  ${a}`).join("\n")}\n`);
 for (const script of ["extract-tilesets.mjs", "extract-units.mjs"]) {

@@ -23,9 +23,10 @@ describe.skipIf(!haveArchives)("extraction against the real archives", () => {
   const opened = openArchives(archives.map((name) => ({ name, bytes: new Uint8Array(readFileSync(join(DATA, name))) })));
   const read = readerFor(opened.archives);
 
-  it("opens both archives in the game's order", () => {
+  it("opens the archives in the game's order, the patch last", () => {
     expect(opened.problems).toEqual([]);
-    expect(opened.archives.map((a) => a.name.toLowerCase())).toEqual(["stardat.mpq", "broodat.mpq"]);
+    const patch = archives.some((n) => n.toLowerCase() === "patch_rt.mpq") ? ["patch_rt.mpq"] : [];
+    expect(opened.archives.map((a) => a.name.toLowerCase())).toEqual(["stardat.mpq", "broodat.mpq", ...patch]);
   });
 
   it("extracts every tileset complete, with the shared names file", () => {

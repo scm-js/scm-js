@@ -911,8 +911,12 @@ describe("scmjs mod test and --mod", () => {
 
 /* ── The person's own game, and Cosmonarchy ────────────────────────────── */
 
-describe.skipIf(!haveGameArchives)("the game's own data (fixtures/data)", () => {
-  const files = haveGameArchives ? archiveFiles(join(import.meta.dirname, "..", "fixtures", "data")) : null!;
+// The command line's reader does not read the game's tables from StarDat and BrooDat without patch_rt.mpq (they are
+// Brood War's as first sold), and these read them all: the three, or the suite skips.
+const GAME_DATA = join(import.meta.dirname, "..", "fixtures", "data");
+const haveGameCopy = haveGameArchives && readdirSync(GAME_DATA).some((n) => n.toLowerCase() === "patch_rt.mpq");
+describe.skipIf(!haveGameCopy)("the game's own data (fixtures/data)", () => {
+  const files = haveGameCopy ? archiveFiles(GAME_DATA) : null!;
   const names = async () => {
     const out: string[] = DAT_TABLES.map((t) => DAT_SCHEMAS[t].file);
     out.push("rez\\stat_txt.tbl", "arr\\images.tbl", "arr\\sfxdata.tbl", "arr\\portdata.tbl", "arr\\mapdata.tbl", "rez\\network.tbl", "scripts\\iscript.bin", "scripts\\aiscript.bin", "scripts\\bwscript.bin", "tileset\\jungle.wpe");

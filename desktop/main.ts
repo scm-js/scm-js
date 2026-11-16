@@ -17,7 +17,7 @@ import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSyn
 import { homedir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { openArchives, readerFor } from "../src/gamedata/archives";
+import { lacksPatch, openArchives, readerFor } from "../src/gamedata/archives";
 import { describeExtraction, extractGameData, type GameDataExtraction } from "../src/gamedata/extract";
 import { BUILD_INFO, extractRemastered } from "../src/gamedata/remastered";
 import type { DesktopGameInfo, DesktopLocateResult, DesktopTestResult } from "../src/gamedata/desktop";
@@ -175,6 +175,9 @@ async function extractFrom(dir: string): Promise<DesktopLocateResult> {
       const read = await extractRemastered(await Storage.open(nodeSource(dir)), (f, label) => report(f * 0.9, label));
       return writeCopy(read.result, `${read.from} in ${dir}`, read.problems);
     }
+    // The two archives without the patch are Brood War as first sold, not the game (`archives.ts#PATCHED_MEMBERS`):
+    // stop here and say so rather than keep a copy whose unit tables and replays are wrong.
+    if (lacksPatch(paths)) return { status: "failed", message: `${dir} has StarDat.mpq and BrooDat.mpq but no patch_rt.mpq. Without it the unit costs and build times are the game's from before its patches, and replays would not play as they were played. Choose the folder StarCraft 1.16.1 is installed in, which has the three.` };
     report(0, "Reading the archives");
     const { archives, problems } = openArchives(paths.map((p) => ({ name: p.split(/[\\/]/).pop()!, bytes: new Uint8Array(readFileSync(p)) })));
     if (archives.length === 0) return { status: "failed", message: problems[0] ?? "No archive could be opened." };
@@ -697,7 +700,7 @@ app.whenReady().then(() => {
     const win = BrowserWindow.fromWebContents(e.sender);
     const picked = await dialog.showOpenDialog(win ?? undefined as never, {
       title: "Choose the StarCraft folder",
-      message: "A StarCraft: Remastered folder, or the folder holding StarDat.mpq and BrooDat.mpq",
+      message: "A StarCraft: Remastered folder, or the folder holding StarDat.mpq, BrooDat.mpq and patch_rt.mpq",
       properties: ["openDirectory"],
     });
     if (picked.canceled || picked.filePaths.length === 0) return null;

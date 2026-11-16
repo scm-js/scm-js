@@ -52,6 +52,7 @@ import { buildOrders, checkPlayedMod, refuseModReplay, replayNamer, type ReplayN
 import { SCMSCX, scmscx } from "./scmscx";
 import { checkMapOut, mapFileFor, writeReplayMap } from "./replaymap";
 import { keepReplay, printReplayShare, shareReplay } from "./replayshare";
+import { replaySyncCommand } from "./replaysync";
 import { exportReplay, exportSummary, parseSize as parseClipSize, type ExportOptions } from "./export";
 import { watchReplay, watchSummary, watchValues } from "./watch";
 import { FORMATS, githubAnnotations, githubCoverageAnnotations, githubTestAnnotations, junitCoverageXml, junitTestXml, junitXml, sarifCoverageJson, sarifJson, sarifTestJson, type CheckReport, type Format, type TestReport, type Unread } from "./report";
@@ -1645,6 +1646,20 @@ the new moment. The link's card shows the map's picture when your copy of the ga
       print(...(o.json ? [JSON.stringify(r, null, 2)] : sharedLines(printReplayShare(r), r.link, o.qr)));
       if (o.copy) await copyShared([r.link]);
     });
+  replay.command("sync").description(t("your new games' replays stored on your scmjs.dev account, by themselves with --watch")).argument("[folders...]", t("the folders to look in; StarCraft's own replay folders by default")).addOption(json)
+    .option("-w, --watch", t("keep running and upload each game as it is saved; Ctrl+C stops"))
+    .option("--since <date>", t("replays from this date on (2026-11-01, or 7d for the last week)"))
+    .option("--all", t("every replay in the folders, however old"))
+    .option("--dry-run", t("list what would be uploaded, and upload nothing"))
+    .option("--link", t("a link for each replay too, as replay share makes"))
+    .option("--no-picture", t("with --link, no map picture for the links' cards"))
+    .option("--starcraft <folder>", t("your installation of StarCraft, for the pictures with --link (SCMJS_STARCRAFT)"))
+    .addHelpText("after", "\n" + t(`Needs a scmjs.dev account: scmjs login. Replays the account has already are not sent again. The first sync with
+an account starts from then: the replays already in the folders stay (a terminal asks first), and --since or --all
+takes them. The replays are stored, not linked: replay share gives one its link later.`) + `
+  scmjs replay sync --watch
+  scmjs replay sync --since 2026-11-01 --dry-run`)
+    .action((folders: string[], o: Parameters<typeof replaySyncCommand>[1]) => replaySyncCommand(folders, o));
   replay.command("open").description(t("watch a replay in the scmJS app, or the editor in your browser")).argument("<replay>")
     .option("--browser", t("the editor in the browser, even with the app installed"))
     .addOption(new Option("--editor <url>", t("the editor's address (SCMJS_EDITOR_URL)")).hideHelp())

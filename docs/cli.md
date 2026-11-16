@@ -198,6 +198,7 @@ scmjs replay export game.rep --to 0:30          # its first half minute, as game
 scmjs map share map.scx --qr                    # a link, and a code for a phone
 scmjs library                                   # your maps and replays on scmjs.dev, with their links
 scmjs replay info https://scmjs.dev/replay/…    # any command reads a link as a file
+scmjs replay sync --watch                       # each game's replay to your account as it is saved
 scmjs init                                      # this folder of maps, ready for git
 scmjs map unpack map.scx --text                 # the map as text files, to keep in git
 scmjs mod unpack MyMod.mpq mymod                # a mod as text and pictures; mod pack puts it back
@@ -3494,9 +3495,9 @@ keeps, with every link, is [`scmjs library`](#your-library).
 
 When scmjs.dev refuses something, for instance because your storage is full or you are
 sharing too many maps at once, the command shows scmjs.dev's own message. Until you sign
-in, `share`, `map share`, `replay share`, `account` and `library` say "Sign in first: scmjs login"
-and exit with 2 (`library get` with a link needs no sign-in). `map play` does not need it:
-the play page asks you to sign in there.
+in, `share`, `map share`, `replay share`, `replay sync`, `account` and `library` say
+"Sign in first: scmjs login" and exit with 2 (`library get` with a link needs no
+sign-in). `map play` does not need it: the play page asks you to sign in there.
 
 ### A link to a map
 
@@ -3769,6 +3770,81 @@ writes a file beside its input, such as `replay map`, writes it in the current f
 `map open` and `replay open` open the link itself in your browser. `map log`, `map blame`
 and `map diff --rev` read git's history, which a link does not have.
 
+### Your replays on your account
+
+`scmjs replay sync` stores the replays of your games on your scmjs.dev account, so they
+are in My Maps ▸ Replays wherever you sign in. With `--watch` it keeps running and stores
+each game as soon as StarCraft saves its replay:
+
+```
+$ scmjs replay sync --watch
+Replays in /mnt/c/Users/ann/OneDrive/Documents/StarCraft/Maps/Replays
+ℹ Watching for new games. Ctrl+C stops.
+✔ 143500,(2)Bottleneck.rep · Bottleneck · TvP Ann vs Auriga Tribe · 0:39 · stored
+✔ 2026-11-16 133639,Twin Lanes of Char.rep · Twin Lanes of Char · TvZ Ann vs Garm Brood · 1:59 · stored
+^C
+✔ Uploaded 2 replays (91 KB) · 6 already on your account
+Storage: 1.1 MB of 250.0 MB
+```
+
+Each replay gets one line: its file, the map, the matchup and players, the game's length,
+and `stored`. Without `--watch` the command stores what is new and stops.
+
+**Where it looks.** With no folders named, the command looks where StarCraft saves
+replays:
+
+- StarCraft: Remastered keeps them in your Documents folder, under
+  `StarCraft\Maps\Replays`. Games saved by name are at the top, the copies saved
+  automatically are in `AutoSave`, in a folder for each day, and the last game is always
+  `LastReplay.rep`. When Windows keeps Documents in OneDrive, the folder is under
+  `OneDrive\Documents` instead, and that is looked at too.
+- StarCraft 1.16.1 keeps them in its installation's `maps\replays` folder.
+
+From WSL the command looks in the Windows users' Documents under `/mnt/c/Users`. Every
+`.rep` file in the folders and their sub-folders counts. Name the folders yourself, as in
+`scmjs replay sync D:\Replays`, to look somewhere else.
+
+**The first sync.** The first time you sync, the replays already in the folders are left
+where they are, so years of games do not fill your storage at once. In a terminal the
+command asks first, with how many there are and their size. From then on, every game saved
+after that first sync is stored. `--since 2026-11-01` takes the replays from that date on,
+`--since 7d` those of the last week, and `--all` every one; `--dry-run` lists what would
+be stored without storing anything.
+
+**What is not sent twice.** A replay your account has already is not sent again, whatever
+its file is called. `LastReplay.rep` holds a different game each time you play, and each
+of those games is stored once, under the date and time it was saved and the map's name.
+When StarCraft has also saved the game in `AutoSave`, it is stored under that name
+instead. The command remembers what it has read in `replay-sync.json`, next to your
+session file, so a second run reads only the replays that are new or changed.
+
+A file that is not a replay, or is larger than the 8 MB scmjs.dev takes, is skipped and
+named in the summary. A replay StarCraft is still writing is taken once it stops changing.
+When your storage is full, or the account has as many replays as it may keep, the command
+stops with scmjs.dev's message. Delete replays or old map revisions in My Maps, then run
+it again.
+
+**Links.** The replays are stored, not shared: nobody sees them until you share one.
+`scmjs replay share` on a stored replay gives it a link, since the same replay is not
+stored twice. `--link` makes a link for each replay as it is stored, printed in place of
+`stored`, with the map's picture for its card when your copy of the game is on the
+computer.
+
+| Option | What it does |
+| --- | --- |
+| `--watch`, `-w` | Keeps running and stores each game as it is saved, until Ctrl+C |
+| `--since <date>` | Replays from that date on (`2026-11-01`), or from that many days back (`7d`) |
+| `--all` | Every replay in the folders, however old |
+| `--dry-run` | Lists what would be stored, and stores nothing |
+| `--link` | A link for each replay too |
+| `--no-picture` | With `--link`, no map picture for the links' cards |
+| `--starcraft <folder>` | Your installation of StarCraft, for the pictures |
+| `--json` | One JSON object at the end; with `--watch`, a JSON line for each replay as it is stored, then one for the summary |
+
+In `--watch`, the command looks at the folders every five seconds. It checks only whether
+the folders and `LastReplay.rep` have changed, and reads a replay only when one has, so it
+stays light on a folder of thousands of replays and on a Windows drive seen from WSL.
+
 ### A game with other people
 
 `scmjs map play ridge.scx` opens scmjs.dev/play in your browser with the map and asks it
@@ -3810,6 +3886,7 @@ has no such characters, so there it is drawn with `#`, twice as wide.
 | Setting | Effect |
 | --- | --- |
 | `SCMJS_SESSION` | Another file for the session |
+| `SCMJS_REPLAY_SYNC` | Another file for what `replay sync` remembers (`replay-sync.json` next to the session otherwise) |
 | `SCMJS_SERVER` | Another server than `https://api.scmjs.dev`, such as one of your own; its links carry its address for the editor, and a link that carries none is downloaded from it. The play page does not read that address, so a `--play` link made this way opens only where the play page is set to the same server |
 
 ## Bots
@@ -4337,6 +4414,7 @@ gives its options.
 | [`scmjs replay export <replay>`](#a-video-or-gif-of-a-replay) | A video or GIF of the replay with the game's own pictures; `--resolution` its size, `--whole-map` the camera |
 | [`scmjs replay open <replay>`](#opening-a-replay-in-scmjs) | Opens the replay in scmJS's replay viewer |
 | [`scmjs replay share <replay>`](#a-link-to-a-replay) | A link that opens the replay in the editor; `--at` [at a moment](#a-moment-in-a-replay), `--play` to play on from it |
+| [`scmjs replay sync [folders…]`](#your-replays-on-your-account) | Your new replays stored on your scmjs.dev account; `--watch` stores each game as it is saved, `--since` and `--all` older ones |
 
 ### `scmjs mod`
 
@@ -4433,6 +4511,7 @@ from a clone with `npm run cli -- <command>`, or build it with `npm run build:cl
 | `cli/src/replayshare.ts` | A replay stored on the account and linked, with the map's picture for the card |
 | `cli/src/library.ts`, `cli/src/librarycmd.ts` | `scmjs library`: the account's maps, replays and shared maps with their links, one of them found by link, id or name, and what a removal takes with it; the commands and their questions |
 | `cli/src/weblink.ts` | A scmjs.dev link read as a file: its forms, the server it belongs to, the public download and the file's name |
+| `cli/src/replaysync.ts` | `replay sync`: StarCraft's replay folders found, the first sync's start, what the account has by hash, `LastReplay.rep` named after its game, the state file, the folders looked at again while watching |
 | `cli/src/bot.ts` | Running the bot toolchain's image in the bot's folder |
 | `cli/src/engine.ts` | The game engine the playing commands share: the play page's current build fetched into the cache with its runners, the copy of the game found, a runner started |
 | `cli/src/replaymod.ts` | A replay's mod: the mod named with `--mod` checked against the one the replay names, the names and costs from the mod's tables, and the refusal to play a mod's replay with the game's own files |

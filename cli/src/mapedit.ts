@@ -485,9 +485,10 @@ export function printEdits(name: string, r: MapEditOutcome, { dryRun = false, al
   if (r.edits.length > shown.length) lines.push(pc.dim(`  ${t("… and {n} more (--all lists them)", { n: num(r.edits.length - shown.length) })}`));
   if (dryRun && r.diff) lines.push("", ...printDiff(r.diff, all), "");
   const count = t("{n, plural, one {# edit} other {# edits}}", { n: r.edits.length });
-  const where = (path: string) => (path === STDIO ? t("standard output") : pc.cyan(path));
-  const written = r.written ? `${t("written to {where}", { where: where(r.written.path) })}${dot}${size(r.written.bytes)}` : null;
-  if (!r.modified) lines.push(`${mark.ok} ${pc.bold(name)}: ${count}${dot}${written ? t("unchanged, written to {path}", { path: where(r.written!.path) }) : t("the map is unchanged")}`);
+  // (A map linked to the editor is changed there, not on disk: link.ts.)
+  const where = (w: Written) => (w.path === STDIO ? t("standard output") : w.live ? t("the editor, as one undo step") : pc.cyan(w.path));
+  const written = r.written ? `${t("written to {where}", { where: where(r.written) })}${dot}${size(r.written.bytes)}` : null;
+  if (!r.modified) lines.push(`${mark.ok} ${pc.bold(name)}: ${count}${dot}${written ? t("unchanged, written to {path}", { path: where(r.written!) }) : t("the map is unchanged")}`);
   else lines.push(`${dryRun ? mark.info : mark.ok} ${pc.bold(name)}: ${count}${dot}${r.diff ? summarizeDiff(r.diff) : t("changed")}${dot}${written ?? pc.dim(t("not written (--dry-run)"))}`);
   return lines;
 }

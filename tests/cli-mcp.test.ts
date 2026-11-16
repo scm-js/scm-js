@@ -529,7 +529,7 @@ describe("scmjs mcp: map_units, map_locations, map_edit", () => {
 
   it("lists them: the two readers read only, the editor writes, and an edit is one flat object", async () => {
     const { tools } = await client.listTools();
-    expect(tools).toHaveLength(36);
+    expect(tools).toHaveLength(42);
     for (const name of ["map_units", "map_locations"]) expect(tools.find((t) => t.name === name)?.annotations?.readOnlyHint, name).toBe(true);
     const edit = tools.find((t) => t.name === "map_edit")!;
     expect(edit.annotations?.destructiveHint).toBe(true);

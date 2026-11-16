@@ -198,7 +198,7 @@ export interface RunOutcome {
   modified: boolean;
   /** The change, as `map diff` sees it, when the map was modified. */
   diff: MapDiff | null;
-  written: { path: string; bytes: number } | null;
+  written: { path: string; bytes: number; live?: boolean } | null;
 }
 
 const toastLevel = (kind: Toast["kind"] | undefined): RunEvent["level"] => (kind === "error" ? "error" : kind === "warn" ? "warn" : "info");
@@ -281,7 +281,8 @@ const isJson = (v: unknown): boolean => { try { return v !== undefined && JSON.s
 export function printRun(name: string, r: RunOutcome, { events = false, dryRun = false } = {}): string[] {
   const lines: string[] = events ? r.events.map(eventLine) : [];
   const who = `${r.plugin.name}${r.plugin.version ? pc.dim(` ${r.plugin.version}`) : ""}`;
-  const where = (path: string) => (path === "-" ? t("standard output") : pc.cyan(path));
+  // (A map linked to the editor is changed there, not on disk: link.ts.)
+  const where = (path: string) => (path === "-" ? t("standard output") : r.written?.live ? t("the editor, as one undo step") : pc.cyan(path));
   if (!r.modified) { lines.push(`${mark.ok} ${pc.bold(name)}: ${t("{plugin} ran", { plugin: who })}${dot}${r.written ? t("unchanged, written to {path}", { path: where(r.written.path) }) : t("the map is unchanged")}`); return lines; }
   if (dryRun && r.diff) lines.push(...printDiff(r.diff), "");
   const change = r.diff ? summarizeDiff(r.diff) : t("changed");

@@ -1459,6 +1459,11 @@ advanced, and actually offers something useful". `scmjs map open --live <map>` a
   own game data, at most ~1,600 px on the long side), `editor_save`, `editor_close`. `path` may be
   left out when one map is linked (`allLinks`). They have no terminal commands. `serveStdio` ends
   the links it owns when the client goes.
+- **Addressing is `map edit`'s** (same day, with `map_edit`): `editor_state` gives a unit's index
+  from 0 and a location's `number` from 1 (and its slot as `index`); `editor_show` takes units by
+  index and locations by name or number, resolved here with `locationIndex` on the map read through
+  the link, so the editor is only ever told slots. `printEdits`, `printRun` and `printBuild` word a
+  result that went to the editor ("written to the editor, as one undo step") from `Written.live`.
 - **Traps.** (1) The event stream's headers do not leave Node until something is written, so the
   owner writes a comment at once; without it a stand-in page using `fetch` waited for ever (the
   browser's `EventSource` did not care). (2) In the Playwright spec the pages' requests are routed

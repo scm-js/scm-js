@@ -37,7 +37,7 @@ import { encodePng } from "./png";
 import { DEFAULT_PNG_SCALE, loadGraphics, previewPng, tilesetOf } from "./preview";
 import { printRun, runOnMap } from "./run";
 import { EDIT_ARGUMENT, editMap, parseEdits, printEdits } from "./mapedit";
-import { listLocations, listUnits, printLocations, printUnits, UNIT_ROWS } from "./objects";
+import { listLocations, listUnits, locationIndex, printLocations, printUnits, UNIT_ROWS } from "./objects";
 import { costJson, gameMap, printCost, printTrace, removeGameMap, replayRun, runMapInGame, traceJson, type MapRunOptions } from "./trace";
 import { checkModSource, printModCheck } from "./mod/check";
 import { diffModSources, printModDiff } from "./mod/diff";
@@ -622,18 +622,18 @@ export function createMcpServer(options: McpOptions = {}): { server: McpServer; 
 
   reg("editor_state", {
     title: "What the person is looking at",
-    description: "The linked map in the editor right now: whether it has unsaved changes, the layer in use, the zoom, the part of the map in view (tiles), and the selection: units (index, type, player 1-12, position in pixels), locations (index, name, bounds in pixels), doodads and sprites (indices), and the marked area (tiles). Use it for requests about \"these units\", \"this location\" or \"here\".",
+    description: "The linked map in the editor right now: whether it has unsaved changes, the layer in use, the zoom, the part of the map in view (tiles), and the selection: units (index as map_units and map_edit count it, type, player 1-12, position in pixels), locations (number as map_locations and map_edit count it, name, bounds in pixels), doodads and sprites (indices), and the marked area (tiles). Use it for requests about \"these units\", \"this location\" or \"here\".",
     inputSchema: { path: linked },
     annotations: { readOnlyHint: true },
   }, tool(async ({ path: file }) => {
     const link = await linkOf(file);
-    const s = (await link.call("state")).result as { name: string; modified: boolean; layer: string; zoom: number; size: { width: number; height: number }; view: { x0: number; y0: number; x1: number; y1: number }; selection: { units: { index: number; type: string; player: number; x: number; y: number }[]; locations: { index: number; name: string }[]; doodads: number[]; sprites: number[]; area: { x0: number; y0: number; x1: number; y1: number } | null } };
+    const s = (await link.call("state")).result as { name: string; modified: boolean; layer: string; zoom: number; size: { width: number; height: number }; view: { x0: number; y0: number; x1: number; y1: number }; selection: { units: { index: number; type: string; player: number; x: number; y: number }[]; locations: { number: number; name: string }[]; doodads: number[]; sprites: number[]; area: { x0: number; y0: number; x1: number; y1: number } | null } };
     const sel = s.selection;
     const lines = [
       `${s.name}: ${s.size.width} × ${s.size.height}${s.modified ? ", unsaved changes" : ", saved"}; ${s.layer} layer at ${Math.round(s.zoom * 100)}%`,
       `In view: tiles ${s.view.x0},${s.view.y0} to ${s.view.x1},${s.view.y1}`,
       sel.units.length ? `Selected units (${sel.units.length}): ${sel.units.slice(0, 40).map((u) => `#${u.index} ${u.type} P${u.player} at ${u.x},${u.y}`).join("; ")}${sel.units.length > 40 ? "; …" : ""}` : null,
-      sel.locations.length ? `Selected locations: ${sel.locations.map((l) => `#${l.index} ${l.name}`).join("; ")}` : null,
+      sel.locations.length ? `Selected locations: ${sel.locations.map((l) => `${l.number} "${l.name}"`).join("; ")}` : null,
       sel.doodads.length ? `Selected doodads: ${sel.doodads.join(", ")}` : null,
       sel.sprites.length ? `Selected sprites: ${sel.sprites.join(", ")}` : null,
       sel.area ? `Marked area: tiles ${sel.area.x0},${sel.area.y0} to ${sel.area.x1},${sel.area.y1}` : null,
@@ -644,17 +644,19 @@ export function createMcpServer(options: McpOptions = {}): { server: McpServer; 
 
   reg("editor_show", {
     title: "Show the person a place",
-    description: "Bring a part of the linked map into the editor's view and flash it: a rectangle in tiles, units by index (they are selected too) or locations by index. Use it to point at what you changed or what you are asking about. It moves the person's view, so call it when they would want to look.",
+    description: "Bring a part of the linked map into the editor's view and flash it: a rectangle in tiles, units by index (they are selected too) or locations by name or number. Use it to point at what you changed or what you are asking about. It moves the person's view, so call it when they would want to look.",
     inputSchema: {
       path: linked,
       rect: tilesRect.optional(),
-      units: z.array(z.number().int().min(0)).optional().describe("unit indices, as map_dump and editor_state list them"),
-      locations: z.array(z.number().int().min(0)).optional().describe("location indices"),
+      units: z.array(z.number().int().min(0)).optional().describe("unit indices, as map_units and editor_state list them (from 0)"),
+      locations: z.array(z.union([z.string(), z.number().int().min(1)])).optional().describe("locations, each by name or by number as map_locations lists it (from 1)"),
     },
     annotations: { readOnlyHint: true },
   }, tool(async ({ path: file, rect, units, locations }) => {
     const link = await linkOf(file);
-    const r = (await link.call("show", { rect, units, locations })).result as { rect: { x0: number; y0: number; x1: number; y1: number } };
+    // Names and numbers are the commands' way to say a location; the editor is told the slots.
+    const slots = locations?.length ? await (async () => { const { doc } = await openMap(link.path); return locations.map((l) => locationIndex(doc.scenario, l)); })() : undefined;
+    const r = (await link.call("show", { rect, units, locations: slots })).result as { rect: { x0: number; y0: number; x1: number; y1: number } };
     return ok(`The editor shows tiles ${r.rect.x0},${r.rect.y0} to ${r.rect.x1},${r.rect.y1} of ${link.name}.`, r);
   }));
 

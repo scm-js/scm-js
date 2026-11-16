@@ -3871,7 +3871,7 @@ these are the ones each request is for.
 | "What is in ridge.scx, and does Check Map find anything?" | `map_info`, `map_check` |
 | "Which triggers never fire, and why?" | `map_trace` |
 | "Open ridge.scx in the editor so I can watch, then change the opening message." | `editor_open`, `map_triggers_export`, `map_triggers_import` |
-| "What are the units I have selected for?" | `editor_state`, `map_find` |
+| "Make the units I have selected invincible." | `editor_state`, `map_edit` |
 | "Change the opening message to 'Hold the ridge.' and show me what changed." | `map_triggers_export`, `map_triggers_import`, `map_diff` |
 | "Which of my maps still mention the Marine?" | `map_find` |
 | "Give Player 1 six more Marines in the Base location and make the Ghost invincible." | `map_units`, `map_locations`, `map_edit` |

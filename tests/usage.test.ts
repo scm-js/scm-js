@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { count, countError, countPlacedUnits, countView, countingWanted, countPluginUse, countReplays, errorKind, extOf, flushCounts, gameDataOf, messageKind, noteModuleSource, OFF_KEY, pluginCountName, resetCountsForTests, setCounting, stackProps, waitingCounts } from "../src/services/usage";
+import { count, countError, countPlacedUnits, countView, countingWanted, countPluginUse, countReplays, countDataSetChange, errorKind, extOf, flushCounts, gameDataOf, messageKind, modOf, noteModuleSource, OFF_KEY, pluginCountName, resetCountsForTests, setCounting, stackProps, waitingCounts } from "../src/services/usage";
 import { logError, logRenderError, resetLogForTests } from "../src/editor/log";
 import { createStore } from "jotai";
 import { activatePlugin, runCommand } from "../src/plugins/host";
@@ -7,7 +7,7 @@ import type { LoaderDeps } from "../src/plugins/loader";
 import type { PluginApi } from "../src/plugins/api";
 import { changedPreferences, DEFAULT_PREFERENCES } from "../src/editor/preferences";
 import type { AssetSource } from "../src/gamedata/source";
-import { DEFAULT_PROFILE } from "../src/gamedata/profiles";
+import { DEFAULT_PROFILE, REMASTERED_PROFILE } from "../src/gamedata/profiles";
 import type { UnitRecord } from "../src/formats/chk/sections/objects";
 import { createScenario } from "../src/formats/chk/create";
 import { commitEditAtom, loadDocumentAtom } from "../src/atoms/documentAtoms";
@@ -150,14 +150,17 @@ describe("feature counts", () => {
   });
 
   it("names only the project's own plugins", () => {
-    expect(pluginCountName("github:scm-js/plugin-trigscript@v3.12.0")).toBe("plugin-trigscript");
+    expect(pluginCountName("github:scm-js/plugin-trigscript@v3.12.0")).toBe("trigscript");
+    // Bundled or fetched, one plugin is one name: the repository's without its `plugin-`.
+    expect(pluginCountName("builtin:aftermath")).toBe(pluginCountName("github:scm-js/plugin-aftermath@v0.27.0"));
+    expect(pluginCountName("github:scm-js/plugin-scm-sim@v0.21.0")).toBe("scm-sim");
     expect(pluginCountName("builtin:repair")).toBe("repair");
     expect(pluginCountName("github:someone/private-tool@main")).toBe("other");
     expect(pluginCountName("https://example.com/my/plugin.json")).toBe("other");
     expect(pluginCountName("github:friend/listed@v1", (s) => s.startsWith("github:friend/"))).toBe("friend/listed");
     countPluginUse({ source: "github:someone/private-tool" }, "menu", "Secret Thing");
     countPluginUse({ source: "github:scm-js/plugin-paint@v1.1.0" }, "menu", "Paint");
-    expect(waitingCounts().map((c) => c.props)).toEqual([{ plugin: "other", via: "menu" }, { plugin: "plugin-paint", via: "menu", item: "Paint" }]);
+    expect(waitingCounts().map((c) => c.props)).toEqual([{ plugin: "other", via: "menu" }, { plugin: "paint", via: "menu", item: "Paint" }]);
   });
 
   it("counts each replay once, however many ways it reached a plugin", () => {
@@ -183,6 +186,24 @@ describe("feature counts", () => {
     expect(gameDataOf({ ...base, kind: "none" } as AssetSource)).toBe("none");
     expect(gameDataOf({ ...base, kind: "stored", stored: { from: "https://example.com/StarEdit.zip", at: "", files: 1, bytes: 1, summary: "", where: "opfs" } } as AssetSource)).toBe("download");
     expect(gameDataOf({ ...base, kind: "stored", stored: { from: "StarDat.mpq, BrooDat.mpq", at: "", files: 1, bytes: 1, summary: "", where: "opfs" } } as AssetSource)).toBe("classic");
+  });
+
+  it("names a mod by its name, and the game's own data as none", () => {
+    const stored = { at: "", files: 1, bytes: 1, summary: "", where: "opfs" };
+    const game = { kind: "stored", profile: DEFAULT_PROFILE, label: "", tried: [], stored: { ...stored, from: "StarDat.mpq, BrooDat.mpq" } } as unknown as AssetSource;
+    const remastered = { kind: "stored", profile: REMASTERED_PROFILE, label: "", tried: [], stored: { ...stored, from: "Remastered", profile: REMASTERED_PROFILE } } as unknown as AssetSource;
+    const profile = { id: "cosmonarchy", name: "  Cosmonarchy\n  Bridge of a very long name past forty characters " };
+    const mod = { kind: "stored", profile, label: "", tried: [], stored: { ...stored, from: "Cosmonarchy.zip", profile } } as unknown as AssetSource;
+    expect(modOf(null)).toBeNull();
+    expect(modOf(game)).toBeNull();
+    expect(modOf(remastered)).toBeNull();
+    expect(modOf(mod)).toBe("Cosmonarchy Bridge of a very long name p");
+    countDataSetChange(game, mod);
+    countDataSetChange(mod, mod);
+    countDataSetChange(mod, game);
+    countDataSetChange(game, remastered);
+    expect(waitingCounts().map((c) => c.props)).toEqual([{ mod: "Cosmonarchy Bridge of a very long name p" }, { mod: "none" }]);
+    expect(waitingCounts().every((c) => c.name === "map.dataset")).toBe(true);
   });
 
   it("names the preferences Apply changes, with the value only when it is on or off", () => {

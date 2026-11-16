@@ -31,7 +31,7 @@ import { clearStoredCopy, listStoredCopies, profileOf } from "../gamedata/store"
 import { relayBlankTerrain } from "../hooks/useMapFileActions";
 import { clearComposedImages } from "../plugins/graphics";
 import { t } from "../i18n";
-import { count, gameDataOf } from "./usage";
+import { count, countDataSetChange, gameDataOf, modOf } from "./usage";
 
 type Store = ReturnType<typeof getDefaultStore>;
 
@@ -45,8 +45,10 @@ export const sameFiles = (a: AssetSource | null, b: AssetSource) => a !== null &
  * startup map is laid again with real variations.
  */
 export function adoptSource(store: Store, next: AssetSource, switched: boolean): void {
-  const before = gameDataOf(store.get(gameDataSourceAtom));
+  const was = store.get(gameDataSourceAtom);
+  const before = gameDataOf(was);
   if (before !== gameDataOf(next)) count("gamedata", { data: gameDataOf(next), was: before });
+  countDataSetChange(was, next);
   if (switched) dropDecodedData();
   retryFailedParts();
   retryTilesetParts();
@@ -106,6 +108,9 @@ export async function installDataSetInto(store: Store, profile: GameDataProfile,
   const before = store.get(gameDataSourceAtom);
   store.set(gameDataProfileAtom, { profile: profileOf(copy).id });
   const next = adoptStoredCopy(copy);
+  // A mod kept here: the play page counts the same line for a mod kept there (`how` says where it came in).
+  const mod = modOf(next);
+  if (mod) count("mod.add", { how: "editor", mod });
   adoptSource(store, next, !sameFiles(before, next) || before?.kind === "stored");
   return next;
 }

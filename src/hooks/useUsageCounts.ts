@@ -1,7 +1,8 @@
 /**
  * The feature counts' startup (`services/usage.ts`): the preference applied, the plugins the
  * project's registry lists kept current for the plugins' names, and once the plugins have started, one
- * `start` line for the session — the editor's language, the game data in use — and one
+ * `start` line for the session — the editor's language, the game data in use (and the mod's
+ * name, when it is a mod) — and one
  * `plugin.running` line for each plugin that is running. The layer, the terrain tool, the
  * mirror and a plugin's view in the map's place (a replay) are counted as they change,
  * however they were changed, and a replay dropped anywhere on the page is counted as opened.
@@ -14,7 +15,7 @@ import { activeLayerAtom, symmetryAtom, terrainModeAtom } from "../atoms/editorA
 import { currentAssetSource } from "../gamedata/source";
 import { locale } from "../i18n";
 import { DEFAULT_REGISTRIES, pluginKey } from "../plugins/defaults";
-import { count, countingHere, countingWanted, countReplays, gameDataOf, pluginName, setCounting, setListedPlugins } from "../services/usage";
+import { count, countingHere, countingWanted, countReplays, gameDataOf, modOf, pluginName, setCounting, setListedPlugins } from "../services/usage";
 
 let started = false;
 
@@ -67,7 +68,8 @@ export function useUsageCounts() {
     if (!pluginsStarted || started || !countingHere()) return;
     started = true;
     const runtimes = Object.values(store.get(pluginRuntimesAtom));
-    count("start", { language: locale(), data: gameDataOf(currentAssetSource()), plugins: runtimes.filter((r) => r.status === "active").length });
+    const source = currentAssetSource(), mod = modOf(source);
+    count("start", { language: locale(), data: gameDataOf(source), ...(mod ? { mod } : {}), plugins: runtimes.filter((r) => r.status === "active").length });
     for (const r of runtimes) if (r.status === "active") count("plugin.running", { plugin: pluginName(r.spec) });
   }, [pluginsStarted, store]);
 }

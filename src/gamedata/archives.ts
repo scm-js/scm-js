@@ -43,6 +43,17 @@ export function isStarEditDownload(archives: readonly { name: string; size: numb
   return Object.entries(STAREDIT_SIZES).every(([name, size]) => named.get(name) === size);
 }
 
+/**
+ * True for a copy's origin (its stamp's `from`: the archives' names joined with " + ") that names StarDat.mpq and no
+ * `patch_rt.mpq`: a copy made from the two archives alone, before the patch was asked for with them. Its tables are
+ * Brood War's as first sold, not the game's (`install.ts#PATCH_NAME`). A download's address and a Remastered
+ * installation's name are neither.
+ */
+export function madeWithoutPatch(from: string): boolean {
+  const names = from.split(" + ").map((n) => (n.trim().split(/[\\/]/).pop() ?? "").toLowerCase());
+  return names.includes("stardat.mpq") && !names.includes("patch_rt.mpq");
+}
+
 /** Open each archive that opens; the ones that do not are reported, not thrown. */
 export function openArchives(inputs: { name: string; bytes: Uint8Array }[]): { archives: OpenedArchive[]; problems: string[] } {
   const archives: OpenedArchive[] = [];

@@ -216,8 +216,10 @@ The lower part of the dialog has two ways in without an installation:
 - **Download from Blizzard — 83 MB.** Blizzard offers its standalone StarCraft map editor
   as a free download, and the package carries the files the graphics come from. No
   account, nothing to find on your own disk. The editor fetches only the parts it needs.
-- **Choose StarDat.mpq and BrooDat.mpq…** (browser only). Pick the two archives yourself,
-  from the map editor download or from a classic installation's folder.
+- **Choose StarDat.mpq, BrooDat.mpq and patch_rt.mpq…** (browser only). Pick the three
+  archives yourself, from the map editor download or from a classic installation's folder.
+  All three are needed: `patch_rt.mpq` holds the game's patches, and without it unit costs
+  and build times are not the game's and replays do not play as they were played.
 
 A copy made from the map editor download is enough to edit maps and watch replays. Testing
 a map or playing needs StarCraft installed. Once you have it, open **Help ▸ Game Data…**,

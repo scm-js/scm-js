@@ -52,13 +52,14 @@ well. Picking a Remastered folder also turns on [Remastered
 graphics](#classic-or-remastered-graphics).
 
 Without StarCraft installed, the dialog offers Blizzard's free StarCraft map editor
-download (83 MB), which carries the graphics. You can also pick `StarDat.mpq` and
-`BrooDat.mpq` from a classic installation by hand. What each source allows:
+download (83 MB), which carries the graphics. You can also pick `StarDat.mpq`,
+`BrooDat.mpq` and `patch_rt.mpq` from a classic installation by hand. What each source
+allows:
 
 | Where the files come from | Edit maps | Watch replays | Test or play on scmjs.dev |
 | --- | --- | --- | --- |
 | Your StarCraft folder, classic or Remastered | Yes | Yes | Yes |
-| `StarDat.mpq` and `BrooDat.mpq` from a 1.16 installation | Yes | Yes | Yes |
+| `StarDat.mpq`, `BrooDat.mpq` and `patch_rt.mpq` from a 1.16 installation | Yes | Yes | Yes |
 | Blizzard's map editor download | Yes | Yes | No |
 
 The files are read once and a copy is kept for next time. [The

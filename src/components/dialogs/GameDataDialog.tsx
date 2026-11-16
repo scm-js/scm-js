@@ -4,12 +4,12 @@ import { AlertTriangle, Download, FolderOpen, HardDrive, Layers, Search, Trash2 
 import { gameDataRevisionAtom, gameDataSourceAtom } from "../../atoms/gameDataAtoms";
 import { closeDialogAtom, pushToastAtom } from "../../atoms/uiAtoms";
 import { desktopBridge, type DesktopLocateResult } from "../../gamedata/desktop";
-import { isGameArchive } from "../../gamedata/archives";
+import { isGameArchive, madeWithoutPatch } from "../../gamedata/archives";
 import { pickedDataSet } from "../../gamedata/modInput";
 import { applyDataSetTerrain, keepDataSetTerrain } from "../../services/dataSetTerrain";
 import { hostTerms } from "../../editor/platform";
 import {
-  ARCHIVE_NAMES, BLIZZARD_ZIP_URL, installFromFiles, installFromRemastered, installFromZipUrl, isRemasteredFolder, pickArchives,
+  ARCHIVE_NAMES, BLIZZARD_ZIP_URL, installFromFiles, installFromRemastered, installFromZipUrl, isRemasteredFolder, PATCH_NAME, pickArchives,
   type InstallProgress, type RemasteredFolder,
 } from "../../gamedata/install";
 import { DEFAULT_PROFILE, isDefaultProfile, profileIdFrom, type GameDataProfile } from "../../gamedata/profiles";
@@ -291,6 +291,11 @@ export function GameDataBody({ onReady }: { onReady?: (next: AssetSource) => voi
               {removable && <Button size="sm" variant="danger" disabled={!!busy} onClick={remove}><Trash2 size={11} /> {" "}{t("Remove copy")}</Button>}
             </div>
             <p className="hint" style={{ marginTop: 4 }}>{explain(source)}</p>
+            {source?.stored && isDefaultProfile(source.profile.id) && madeWithoutPatch(source.stored.from) && (
+              <p className="hint" style={{ marginTop: 4, color: "var(--danger, #e66)" }}>
+                {t("This copy was made without {patch}, so its unit costs, build times and other tables are the game's from before its patches. The editor's defaults are not the game's, and replays do not play as they were played. Choose Remove copy, then choose the StarCraft folder, or all three archives.", { patch: PATCH_NAME })}
+              </p>
+            )}
             {source && !isDefaultProfile(source.profile.id) && <p className="hint" style={{ marginTop: 4 }}>{t("Data set:")}{" "}<strong>{source.profile.name}</strong>{t(". Units, weapons, upgrades and technologies it renamed show its names.")}</p>}
             {revision > 0 && <p className="hint" style={{ marginTop: 4 }}>{t("Open maps pick the graphics up as they arrive.")}</p>}
           </Group>
@@ -402,7 +407,7 @@ export function GameDataBody({ onReady }: { onReady?: (next: AssetSource) => voi
               </p>
               <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
                 <Button size="sm" disabled={!!busy} onClick={fromBlizzard}><Download size={11} /> {" "}{t("Download from Blizzard — 83 MB")}</Button>
-                {!desktop && <Button size="sm" variant="ghost" disabled={!!busy} onClick={() => fileInput.current?.click()}>{t("Choose StarDat.mpq and BrooDat.mpq…")}</Button>}
+                {!desktop && <Button size="sm" variant="ghost" disabled={!!busy} onClick={() => fileInput.current?.click()}>{t("Choose StarDat.mpq, BrooDat.mpq and patch_rt.mpq…")}</Button>}
               </div>
               <input ref={fileInput} type="file" accept=".mpq" multiple hidden onChange={(e) => { const f = Array.from(e.target.files ?? []); e.target.value = ""; if (f.length) void fromFiles(f); }} />
             </section>

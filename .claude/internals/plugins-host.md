@@ -554,6 +554,14 @@ a folder on disk (`sourceFor` makes the `file:` source). Commands run through th
 the CLI writes the document with `writeBack`. Layering: `tests/core.test.ts` lets `cli/src/run.ts` import this one
 module beyond the library's entry (`HOST_EXCEPTION`); the host stays the editor's.
 
+**A host for a function (2026-11-16, `scmjs map edit`).** `headlessApi(doc, name, sinks?)` is the same store and
+`createPluginApi` with nothing loaded: the info is made from the name (`id` its slug, `source` `builtin:<name>`),
+`save`/`saveAs` answer as in `runHeadless`, and it returns `{ store, api, document(), modified(), dispose() }`. For
+a command that changes a map the way a plugin would, without writing a plugin file to a temp folder and importing
+it. The module also re-exports the `PluginApi` and `EditTransaction` types, which `cli/src/run.ts` passes on, so
+the command's other modules never import this one (`cli.md` "Objects for a model"). `tests/cli-map-edit.test.ts`
+checks that a builder that throws leaves the document and the modified flag as they were.
+
 ### Data sets for mods (M4, 2026-11-08)
 
 Additive, version 1 unchanged, nothing named after a mod: `GameDataProfile.url?` (where the set's makers publish it;

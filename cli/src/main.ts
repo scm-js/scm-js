@@ -57,6 +57,8 @@ import { FORMATS, githubAnnotations, githubCoverageAnnotations, githubTestAnnota
 import { coverageForm, coverageJson, coverageScenario, printCoverage, runCoverage } from "./coverage";
 import { defaultOut, defaultTests, readMapForTests, readTests, recordLines, recordTest, runTests, testHeader, testJson, testSummary, updateSkipped, updateTests, type PlannedScenario } from "./maptest";
 import { printRun, runOnMap } from "./run";
+import { editMap, parseEdits, printEdits } from "./mapedit";
+import { listLocations, listUnits, printLocations, printUnits, UNIT_ROWS, type UnitFilter } from "./objects";
 import { previewMap, PNG_SCALES } from "./preview";
 import { analyzeMap } from "./analyze";
 import { heatmapMap, type HeatmapOptions as HeatmapFlags } from "./heatmap";
@@ -616,6 +618,86 @@ The map is moved under the anchor; what falls outside is dropped (units, sprites
         ...(rest.length > limit ? [pc.dim(`  ${t("… and {n} more (--all lists them)", { n: num(rest.length - limit) })}`)] : []),
         r.collapsed.length ? `${mark.warn} ${t("Pulled inside with no width or height left: {list}", { list: r.collapsed.join(", ") })}` : null,
         r.outside.length ? `${mark.warn} ${t("Left past the map's edge (--no-clamp): {list}", { list: r.outside.join(", ") })}` : null);
+    });
+
+  map.command("edit").description(t("apply a list of edits to the map's units, locations, sprites and fog, all or none")).argument("<map>", t("the map to change; - reads it from standard input")).addOption(json)
+    .requiredOption("--edits <file>", t("the edits: a JSON list, or an object with the list as \"edits\"; - reads it from standard input"))
+    .option("-o, --out <map>", t("write the result here instead of over the map; - for standard output"))
+    .option("--dry-run", t("say what would change, as map diff does, and write nothing"))
+    .option("--all", t("list every edit and every change; by default a long list is cut"))
+    .addHelpText("after", t(`
+Each edit is an object with an "op" and its fields:
+  place_unit        unit, player, x, y (or tileX, tileY), and any of the properties below
+  move_units        indices or where, then x, y (one unit) or dx, dy (any number)
+  update_units      indices or where, then player, hitPoints, shields, energy (percent), resources, hangar,
+                    cloaked, burrowed, lifted, hallucinated, invincible
+  remove_units      indices or where
+  add_location      name, and rect {left, top, right, bottom} in pixels or tiles {x0, y0, x1, y1}
+  edit_location     location (a name or number), then name, rect or tiles
+  remove_locations  locations (names or numbers)
+  place_sprite      sprite (a sprites.dat id) or unit, then player, x, y (or tileX, tileY), flipped, disabled
+  remove_sprites    indices or where {sprite, unit, player, rect, tiles, location}
+  set_fog           players (1 to 8), mode fog or clear, and rect, tiles or location (the whole map without one)
+A unit is a name ("Terran Marine", "Zergling") or a units.dat id, a player 1 to 12 (12 is neutral). indices are the
+ones scmjs map units lists, as the map was before the edits; where is {unit, player, rect, tiles, location}, all of
+which must hold. The edits are applied together: when one cannot be done, nothing is written and the error names it
+by its place in the list, from 0. Positions are taken as given: nothing is checked against the terrain or snapped to
+the building grid, since that needs the game's files, and doodads are left to the editor for the same reason.`))
+    .action(async (file: string, o: { json?: boolean; edits: string; out?: string; dryRun?: boolean; all?: boolean }) => {
+      if (file === STDIO && o.edits === STDIO) throw new CliError(t("The map and the edits cannot both come from standard input"), t("Name one of them as a file."), 2);
+      const text = new TextDecoder().decode(await readTextArg(o.edits));
+      let value: unknown;
+      try { value = JSON.parse(text); } catch (e) { throw new CliError(t("{file} is not JSON: {reason}", { file: o.edits === STDIO ? t("standard input") : o.edits, reason: e instanceof Error ? e.message : String(e) }), null, 2); }
+      const edits = parseEdits(value);
+      const { input, doc } = await openForEdit(file);
+      const piped = piping(input, o);
+      const r = await editMap(input, doc, edits, { out: o.out ?? null, dryRun: !!o.dryRun });
+      if (o.json) print(JSON.stringify({ file: input.path, ...r, dryRun: !!o.dryRun }, null, 2));
+      else say(piped, ...printEdits(input.name, r, { dryRun: !!o.dryRun, all: !!o.all }));
+    });
+
+  /** `--rect` and `--tiles`: four whole numbers with commas between. */
+  const fourOf = (value: string, option: string): [number, number, number, number] => {
+    const parts = value.split(",").map((v) => v.trim());
+    if (parts.length !== 4 || !parts.every((v) => /^\d+$/.test(v))) throw new CliError(t("{option} takes four whole numbers with commas between, not \"{value}\"", { option, value }), null, 2);
+    return parts.map(Number) as [number, number, number, number];
+  };
+  map.command("units").description(t("the map's units with their index, type, player and position, all or some")).argument("<map>", t("the map; - reads it from standard input")).addOption(json)
+    .option("--unit <name>", t("only this type: a name (\"Terran Marine\", Zergling) or a units.dat id"))
+    .option("--player <n>", t("only this player's, 1 to 12 (12 is neutral)"))
+    .option("--location <name>", t("only those inside this location, by name or number"))
+    .option("--rect <l,t,r,b>", t("only those inside this rectangle, in pixels"))
+    .option("--tiles <x0,y0,x1,y1>", t("only those inside this rectangle, in tiles"))
+    .option("--all", t("list every unit; by default a long list is cut at {n}", { n: UNIT_ROWS }))
+    .addHelpText("after", t(`
+A row a unit: its index (its place in the file, from 0, which scmjs map edit takes), type, player, position in
+pixels and in tiles, and the properties its record sets. The filters narrow the list and all of them must hold; a
+unit is inside an area when its centre is.`))
+    .action(async (file: string, o: { json?: boolean; unit?: string; player?: string; location?: string; rect?: string; tiles?: string; all?: boolean }) => {
+      const filter: UnitFilter = {};
+      if (o.unit !== undefined) filter.unit = o.unit;
+      if (o.player !== undefined) {
+        filter.player = parseWhole(o.player, "player", 1);
+        if (filter.player > 12) throw new CliError(t("--player is 1 to 12 (12 is neutral), not {value}", { value: o.player }), null, 2);
+      }
+      if (o.location !== undefined) filter.location = o.location;
+      if (o.rect !== undefined) { const [left, top, right, bottom] = fourOf(o.rect, "--rect"); filter.rect = { left, top, right, bottom }; }
+      if (o.tiles !== undefined) { const [x0, y0, x1, y1] = fourOf(o.tiles, "--tiles"); filter.tiles = { x0, y0, x1, y1 }; }
+      const { input, doc } = await openForEdit(file);
+      const r = listUnits(doc, input.path, filter);
+      if (o.json) print(JSON.stringify(r, null, 2));
+      else print(...printUnits(input.name, r, !!o.all));
+    });
+
+  map.command("locations").description(t("the map's locations with their number, name, bounds and the units inside")).argument("<map>", t("the map; - reads it from standard input")).addOption(json)
+    .addHelpText("after", t(`
+A row a location: its number as triggers count it (which scmjs map edit takes, as it takes the name), its name, its
+box in pixels and the tiles the box touches, and how many units have their centre inside.`))
+    .action(async (file: string, o: { json?: boolean }) => {
+      const { input, doc } = await openForEdit(file);
+      const r = listLocations(doc, input.path);
+      if (o.json) print(JSON.stringify(r, null, 2));
+      else print(...printLocations(input.name, r));
     });
 
   const triggers = map.command("triggers").description(t("a map's triggers as a text or .trg file, and back"))
@@ -2134,7 +2216,7 @@ export const COMMAND_GROUPS: Record<string, [heading: string, names: string[]][]
   map: [
     [msg("Looking inside a map:"), ["info", "check", "dump", "find", "preview", "sounds", "analyze"]],
     [msg("Making a map:"), ["new", "generate", "fetch"]],
-    [msg("Changing a map:"), ["set", "resize", "triggers", "strings", "optimize", "unpack", "pack", "build", "run"]],
+    [msg("Changing a map:"), ["set", "resize", "units", "locations", "edit", "triggers", "strings", "optimize", "unpack", "pack", "build", "run"]],
     [msg("Maps in git:"), ["diff", "log", "blame", "merge"]],
     [msg("Running a map in the game:"), ["trace", "cost", "test", "coverage", "rush", "balance", "heatmap"]],
     [msg("Sharing:"), ["open", "play", "share"]],

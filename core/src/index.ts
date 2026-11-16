@@ -67,7 +67,7 @@ export { formatStringTable, parseStringTable, applyStringImport, escapeStringTex
 export { plainText, runsOf, TEXT_CODES, textCode } from "../../src/editor/textColors";
 
 // ── Units, locations and settings ──
-export { addUnits, removeUnits, updateUnits, moveUnits, applyUnitChanges, makeUnit, nextSerial, unitAt, unitsInBox, isResource, type UnitChange, MINERAL_FIELD_IDS, VESPENE_GEYSER, DEFAULT_MINERALS, DEFAULT_GAS, UnitUsed } from "../../src/editor/units";
+export { addUnits, removeUnits, updateUnits, moveUnits, applyUnitChanges, makeUnit, nextSerial, unitAt, unitsInBox, isResource, type UnitChange, MINERAL_FIELD_IDS, VESPENE_GEYSER, DEFAULT_MINERALS, DEFAULT_GAS, UnitUsed, UnitState } from "../../src/editor/units";
 export { addLocation, editLocation, removeLocations, moveLocations, applyLocationChanges, locationName, usedLocations, placedLocations, locationCapacity, type Bounds, type LocationChange, type LocationPatch, ANYWHERE_NAME } from "../../src/editor/locations";
 export {
   readPlayerSettings, applyPlayerSettings, type PlayerSettings, readForceSettings, applyForceSettings, type ForceSettings, forceName,

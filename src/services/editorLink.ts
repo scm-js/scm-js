@@ -191,7 +191,8 @@ export function createEditorLink(store: Store, port: LinkPort, name: string, sav
     });
     const locations = store.get(selectedLocationsAtom).filter((i) => scn.locations[i]).map((i) => {
       const l = scn.locations[i];
-      return { index: i, name: locationName(scn, i), left: l.left, top: l.top, right: l.right, bottom: l.bottom };
+      // `number` is the location as triggers and the commands count it, from 1; `index` its slot.
+      return { index: i, number: i + 1, name: locationName(scn, i), left: l.left, top: l.top, right: l.right, bottom: l.bottom };
     });
     const area = store.get(clipSelectionAtom);
     return {

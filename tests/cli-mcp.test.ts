@@ -54,7 +54,7 @@ describe("scmjs mcp", () => {
   it("lists the tools with what each is for, and says how they fit together", async () => {
     const { tools } = await client.listTools();
     const names = tools.map((t) => t.name).sort();
-    expect(names).toEqual(["doctor", "editor_close", "editor_open", "editor_picture", "editor_save", "editor_show", "editor_state", "map_analyze", "map_balance", "map_build", "map_check", "map_cost", "map_coverage", "map_diff", "map_dump", "map_find", "map_info", "map_new", "map_optimize", "map_preview", "map_resize", "map_run", "map_set", "map_strings_export", "map_strings_import", "map_strings_prune", "map_trace", "map_triggers_export", "map_triggers_import", "mod_check", "mod_diff", "mod_header", "mod_info", "mod_new", "mod_pack", "mod_play", "mod_unpack", "replay_info", "replay_map"]);
+    expect(names).toEqual(["doctor", "editor_close", "editor_open", "editor_picture", "editor_save", "editor_show", "editor_state", "map_analyze", "map_balance", "map_build", "map_check", "map_cost", "map_coverage", "map_diff", "map_dump", "map_edit", "map_find", "map_info", "map_locations", "map_new", "map_optimize", "map_preview", "map_resize", "map_run", "map_set", "map_strings_export", "map_strings_import", "map_strings_prune", "map_trace", "map_triggers_export", "map_triggers_import", "map_units", "mod_check", "mod_diff", "mod_header", "mod_info", "mod_new", "mod_pack", "mod_play", "mod_unpack", "replay_info", "replay_map"]);
     for (const t of tools) {
       expect(t.description?.length ?? 0, t.name).toBeGreaterThan(60);
       expect((t.inputSchema as { properties?: object }).properties, t.name).toBeDefined();
@@ -511,6 +511,144 @@ describe("scmjs mcp: mod_header and mod_play", () => {
       for (const [k, v] of [["BROWSER", was.browser], ["SCMJS_PLAY_URL", was.play]] as const) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
       await client.close();
     }
+  });
+});
+
+describe("scmjs mcp: map_units, map_locations, map_edit", () => {
+  type Edited = { edits: Record<string, unknown>[]; modified: boolean; dryRun: boolean; written: { path: string; bytes: number } | null; diff: { units: { change: string; text: string }[]; locations: { change: string; number: number }[]; sections: { name: string }[] } | null };
+  let client: Client, call: Awaited<ReturnType<typeof connected>>["call"];
+  let dir: string, map: string, original: Buffer;
+  beforeAll(async () => {
+    ({ client, call } = await connected());
+    dir = tmp();
+    map = join(dir, "ums.scx");
+    copyFileSync(join(TEST_MAPS_DIR, "ums.scx"), map);
+    original = readFileSync(map);
+  });
+  afterAll(async () => { await client.close(); });
+
+  it("lists them: the two readers read only, the editor writes, and an edit is one flat object", async () => {
+    const { tools } = await client.listTools();
+    expect(tools).toHaveLength(42);
+    for (const name of ["map_units", "map_locations"]) expect(tools.find((t) => t.name === name)?.annotations?.readOnlyHint, name).toBe(true);
+    const edit = tools.find((t) => t.name === "map_edit")!;
+    expect(edit.annotations?.destructiveHint).toBe(true);
+    const item = (edit.inputSchema.properties as { edits: { items: { properties: Record<string, { enum?: string[] }>; required: string[]; additionalProperties: boolean; oneOf?: unknown } } }).edits.items;
+    expect(item.properties.op.enum).toEqual(["place_unit", "move_units", "update_units", "remove_units", "add_location", "edit_location", "remove_locations", "place_sprite", "remove_sprites", "set_fog"]);
+    expect([item.required, item.additionalProperties, item.oneOf]).toEqual([["op"], false, undefined]);
+    // Every kind is in the description with its fields, since the schema does not say which kind takes which.
+    for (const op of item.properties.op.enum!) expect(edit.description, op).toContain(`- ${op}: `);
+    expect(JSON.stringify(edit).length).toBeLessThan(9000);
+    expect(INSTRUCTIONS).toMatch(/map_units and map_locations list .* map_edit places, moves, changes and removes/);
+  });
+
+  it("map_units gives the rows with their indices, filtered; map_locations the numbers and names", async () => {
+    const units = await call("map_units", { path: map, player: 1, location: "Base" });
+    expect(text(units)).toMatch(/^ums\.scx {2}4 of 21 units\n\s+index\s+unit\s+player\s+x,y\s+tile\n\s+0\s+Start Location\s+Player 1\s+336,1744\s+10,54\n/);
+    expect(text(units)).toMatch(/\n\s+18\s+Terran Ghost\s+Player 1\s+496,1616\s+15,50\s+energy 75%, cloaked$/);
+    const data = units.structuredContent as { total: number; matched: number; units: { index: number; unit: string; player: number; x: number; y: number }[] };
+    expect([data.total, data.matched, data.units.map((u) => u.index)]).toEqual([21, 4, [0, 16, 17, 18]]);
+    expect(data.units[2]).toEqual({ index: 17, id: 0, unit: "Terran Marine", player: 1, x: 464, y: 1616, tileX: 14, tileY: 50, hitPoints: 50 });
+    const byType = (await call("map_units", { path: map, unit: 176, tiles: { x0: 0, y0: 40, x1: 20, y1: 64 } })).structuredContent as { units: { index: number }[] };
+    expect(byType.units.map((u) => u.index)).toEqual([1, 2, 3, 4, 5, 6]);
+    const none = await call("map_units", { path: map, unit: "Terran Wraith" });
+    expect(text(none)).toBe("ums.scx  0 of 21 units");
+    const bad = await call("map_units", { path: map, location: "Nope" });
+    expect([bad.isError, text(bad)]).toEqual([true, 'No location is called "Nope"\nThe map has 1 "Base", 2 "Nest", 3 "Middle", 64 "Anywhere".']);
+
+    const locations = await call("map_locations", { path: map });
+    expect(text(locations)).toMatch(/^ums\.scx {2}3 locations, and Anywhere\n\s+number\s+name\s+pixels\s+tiles\s+units\n\s+1\s+Base\s+192,1600–512,1856\s+6,50–16,58\s+4\n/);
+    expect((locations.structuredContent as { locations: { number: number; index: number; name: string }[] }).locations.map((l) => [l.number, l.index, l.name])).toEqual([[1, 0, "Base"], [2, 1, "Nest"], [3, 2, "Middle"], [64, 63, "Anywhere"]]);
+  });
+
+  it("map_edit applies every kind of edit as one step, to another file, and says what each did", async () => {
+    const out = join(dir, "edited.scx");
+    const r = await call("map_edit", { path: map, out, edits: [
+      { op: "place_unit", unit: "Terran Marine", player: 1, x: 400, y: 1700 },
+      { op: "place_unit", unit: "Zergling", player: 2, tileX: 52, tileY: 12, burrowed: true },
+      { op: "move_units", indices: [17], tileX: 15, tileY: 51 },
+      { op: "update_units", where: { unit: "Terran Ghost", player: 1, location: "Base" }, energy: 100, invincible: true },
+      { op: "update_units", indices: [19], player: 2, hitPoints: 50 },
+      { op: "remove_units", indices: [20] },
+      { op: "add_location", name: "Ramp", tiles: { x0: 20, y0: 40, x1: 24, y1: 44 } },
+      { op: "edit_location", location: "Middle", name: "Centre", rect: { left: 864, top: 864, right: 1184, bottom: 1184 } },
+      { op: "remove_locations", locations: ["Nest"] },
+      { op: "place_sprite", sprite: 318, x: 1000, y: 1000 },
+      { op: "remove_sprites", where: { unit: "Terran Marine" } },
+      { op: "set_fog", players: [1], mode: "clear", location: "Ramp" },
+    ] });
+    expect(r.isError).toBeFalsy();
+    const lines = text(r).split("\n");
+    expect(lines.slice(0, 12)).toEqual([
+      "   0  place_unit        Terran Marine · Player 1 · 400,1700 · unit 20",
+      "   1  place_unit        Zerg Zergling · Player 2 · 1680,400 · unit 21",
+      "   2  move_units        1 unit moved",
+      "   3  update_units      1 unit changed",
+      "   4  update_units      1 unit changed",
+      "   5  remove_units      1 unit removed",
+      "   6  add_location      4  Ramp · 640,1280–768,1408",
+      "   7  edit_location     3  Centre · 864,864–1184,1184",
+      "   8  remove_locations  2  Nest",
+      "   9  place_sprite      sprite 318 · Player 1 · 1000,1000 · sprite 1",
+      "  10  remove_sprites    1 sprite removed",
+      "  11  set_fog           16 tiles cleared · Player 1",
+    ]);
+    expect(lines[12]).toMatch(/^✔ ums\.scx: 12 edits · .*5 units added, 4 units removed, 1 location added, 1 location removed, 1 location changed, 2 strings added · written to .*edited\.scx · /);
+    const data = r.structuredContent as Edited;
+    expect(data.edits[0]).toEqual({ op: "place_unit", unit: "Terran Marine", player: 1, x: 400, y: 1700, index: 20 });
+    expect(data.edits[6]).toEqual({ op: "add_location", number: 4, index: 3, name: "Ramp", left: 640, top: 1280, right: 768, bottom: 1408 });
+    expect([data.modified, data.dryRun, data.written?.path]).toEqual([true, false, out]);
+    expect(data.diff!.locations.map((l) => [l.change, l.number])).toEqual([["removed", 2], ["changed", 3], ["added", 4]]);
+    // The map named is as it was; the other file holds the change, as the readers see it.
+    expect(readFileSync(map).equals(original)).toBe(true);
+    const after = (await call("map_units", { path: out, player: 2 })).structuredContent as { units: { index: number; unit: string; states?: string[]; hitPoints?: number }[] };
+    expect(after.units.map((u) => [u.index, u.unit])).toEqual([[8, "Start Location"], [19, "Protoss Carrier"], [21, "Zerg Zergling"]]);
+    expect([after.units[1].hitPoints, after.units[2].states]).toEqual([50, ["burrowed"]]);
+    expect(text(await call("map_locations", { path: out }))).toMatch(/\n\s+3\s+Centre\s+864,864–1184,1184\s.*\n\s+4\s+Ramp\s+640,1280–768,1408\s/);
+  });
+
+  it("a dry run lists the change as map_diff does and writes nothing", async () => {
+    const r = await call("map_edit", { path: map, dryRun: true, edits: [{ op: "remove_units", where: { unit: "Zergling" } }, { op: "add_location", name: "Ramp", tiles: { x0: 20, y0: 40, x1: 24, y1: 44 } }] });
+    expect(text(r)).toContain("Units −1\n  − Zerg Zergling (Player 2) at 1616,464");
+    expect(text(r)).toContain("Locations +1\n  + 4  Ramp 640,1280–768,1408");
+    expect(text(r)).toMatch(/ℹ ums\.scx: 2 edits · .* · not written \(--dry-run\)$/);
+    expect(r.structuredContent as Edited).toMatchObject({ dryRun: true, modified: true, written: null });
+    expect(readFileSync(map).equals(original)).toBe(true);
+  });
+
+  it("one edit that cannot be done fails them all: the error names it, nothing is written", async () => {
+    const out = join(dir, "never.scx");
+    const r = await call("map_edit", { path: map, out, edits: [{ op: "place_unit", unit: "Terran Marine", player: 1, x: 400, y: 1700 }, { op: "add_location", name: "Ramp", tiles: { x0: 20, y0: 40, x1: 24, y1: 44 } }, { op: "remove_units", indices: [99] }] });
+    expect(r.isError).toBe(true);
+    expect(text(r)).toBe("edits[2] (remove_units): there is no unit 99: the map's units are 0 to 20\nNothing was changed: the edits are applied together or not at all.");
+    expect(existsSync(out)).toBe(false);
+    expect(readFileSync(map).equals(original)).toBe(true);
+    const name = await call("map_edit", { path: map, edits: [{ op: "place_unit", unit: "Siege Tank", player: 1, x: 1, y: 1 }] });
+    expect(text(name)).toMatch(/^edits\[0\] \(place_unit\): "Siege Tank" could be "Terran Siege Tank \(Tank Mode\)" \(5\)/);
+    expect(readFileSync(map).equals(original)).toBe(true);
+  });
+
+  it("refuses arguments and fields it does not take, each with the ones it does", async () => {
+    const edits = [{ op: "remove_units", indices: [20] }];
+    const cases: [Record<string, unknown>, string | RegExp][] = [
+      [{ path: map, edits, dry_run: true }, "map_edit: `dry_run` is not an argument of map_edit: it takes `path`, `edits`, `out`, `dryRun`, `all`"],
+      [{ path: map, edits: [{ op: "remove_units", indices: [20], colour: 1 }] }, "map_edit: `colour` is not a field of an edit at edits[0]"],
+      [{ path: map, edits: [{ op: "remove_units", indices: [20], dx: 1 }] }, "edits[0] (remove_units): `dx` is not a field of remove_units: it takes `indices`, `where`\nNothing was changed."],
+      [{ path: map, edits: [{ op: "place_doodad", x: 1, y: 1 }] }, /^map_edit: `op` is one of place_unit, .*set_fog \(doodads are not among them: they need the game's tileset files, which this does not read\) at edits\[0\]\.op$/],
+      [{ path: map, edits: [{ op: "place_unit", unit: "Terran Marine", player: 1, x: "4", y: 3 }] }, "map_edit: `edits[0].x` takes a number, not a string"],
+      [{ path: map, edits: [{ op: "place_unit", unit: "Terran Marine", x: 4, y: 3 }] }, "edits[0] (place_unit): `player`: expected number, received undefined\nNothing was changed."],
+      [{ path: map, edits: [] }, /edits/],
+      [{ path: map }, "map_edit: `edits` is missing (an array)"],
+      [{ path: "-", edits }, /standard input or output\) is not a file here/],
+    ];
+    for (const [args, said] of cases) {
+      const r = await call("map_edit", args);
+      expect(r.isError, JSON.stringify(args)).toBe(true);
+      if (typeof said === "string") expect(text(r), JSON.stringify(args)).toBe(said); else expect(text(r), JSON.stringify(args)).toMatch(said);
+    }
+    expect((await call("map_units", { path: map, owner: 1 })).isError).toBe(true);
+    expect(text(await call("map_locations", { path: map, all: true }))).toBe("map_locations: `all` is not an argument of map_locations: it takes `path`");
+    expect(readFileSync(map).equals(original)).toBe(true);
   });
 });
 

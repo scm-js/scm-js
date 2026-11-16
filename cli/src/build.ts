@@ -250,7 +250,7 @@ export interface BuildOutcome {
   /** TrigScript's build log, and what the map maker should hear beyond it. */
   log: string[];
   warnings: string[];
-  written: { path: string; bytes: number } | null;
+  written: { path: string; bytes: number; live?: boolean } | null;
 }
 
 /**
@@ -353,7 +353,7 @@ export function printBuild(name: string, r: BuildOutcome): string[] {
     r.programs ? `${t("{n, plural, one {# program} other {# programs}}", { n: r.programs })} ${pc.dim(t("(Remastered)"))}` : null,
     r.sounds ? t("{n, plural, one {# sound} other {# sounds}}", { n: r.sounds }) : null,
     r.tests ? `${t("{n, plural, one {# test} other {# tests}} passed", { n: r.tests.passed })}${r.tests.skipped ? pc.dim(t(", {n} skipped", { n: r.tests.skipped })) : ""}` : r.testCount ? pc.dim(t("{n, plural, one {# test} other {# tests}} not run", { n: r.testCount })) : null,
-    r.written ? `${t("written to {path}", { path: pc.cyan(r.written.path) })}${dot}${size(r.written.bytes)}` : t("compiles, nothing written"),
+    r.written ? `${t("written to {path}", { path: r.written.live ? t("the editor, as one undo step") : pc.cyan(r.written.path) })}${dot}${size(r.written.bytes)}` : t("compiles, nothing written"),
   ].filter((p): p is string => !!p);
   lines.push(`${mark.ok} ${pc.bold(name)}: ${parts.join(dot)}${pc.dim(`  TrigScript ${r.trigscript}, TypeScript ${r.typescript}`)}`);
   return lines;

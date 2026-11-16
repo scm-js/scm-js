@@ -1,7 +1,8 @@
 /**
  * The plugin host without the editor: a Jotai store holding one document and a `PluginApi` over it, for a plugin or
- * a script run under Node (`scmjs map run`). The API is the editor's own (`host.ts#createPluginApi`); what differs
- * is around it. There is no page, so the surfaces that would show something — the status line, toasts, the log —
+ * a script run under Node (`scmjs map run`), or over it with no plugin at all (`headlessApi`, for `scmjs map edit`).
+ * The API is the editor's own (`host.ts#createPluginApi`); what differs is around it. There is no page, so the
+ * surfaces that would show something — the status line, toasts, the log —
  * are reported to `sinks` instead, dialogs and panels register and show nothing, and `pickFiles` answers none. A
  * map goes in as an `OpenedMap` and comes back out as one (`document()`), with whether the plugin changed it, so
  * the caller writes it where it wants to; `api.document.save()` resolves true and writes nothing (the caller
@@ -17,7 +18,7 @@ import { mapModifiedAtom } from "../atoms/editorAtoms";
 import { statusMessageAtom, toastsAtom, type Toast } from "../atoms/uiAtoms";
 import { logEntries, subscribeLog, type LogEntry } from "../editor/log";
 import type { OpenedMap } from "../editor/mapFile";
-import type { PluginApi, PluginInfo, PluginManifest } from "./api";
+import type { EditTransaction, PluginApi, PluginInfo, PluginManifest } from "./api";
 import { pluginIdOf } from "./api";
 import { pluginCommandsAtom } from "../atoms/pluginAtoms";
 import { checkApiVersion, Contributions, createPluginApi, qualifyCommand, resolveActivate, type Store } from "./host";
@@ -25,7 +26,7 @@ import { loadPlugin, parseSpec, PluginLoadError, type LoaderDeps, type PluginSou
 
 export { parseSpec, PluginLoadError };
 export { transpileTs, type TS } from "./transpile";
-export type { LoaderDeps, PluginSource, Toast, LogEntry, OpenedMap };
+export type { LoaderDeps, PluginSource, Toast, LogEntry, OpenedMap, PluginApi, EditTransaction };
 
 /** Where the surfaces the editor would draw go instead. Each is optional. */
 export interface HeadlessSinks {
@@ -84,6 +85,38 @@ export function attachSinks(store: Store, sinks: HeadlessSinks): () => void {
     stops.push(subscribeLog(flush));
   }
   return () => { flush(); for (const stop of stops) stop(); };
+}
+
+/** The host for a function: the API over one map, with no plugin loaded. */
+export interface HeadlessApi {
+  store: Store;
+  api: PluginApi;
+  /** The document as the caller's edits left it, in the shape it came in. */
+  document(): OpenedMap;
+  /** Whether the map was changed (the editor's modified flag). */
+  modified(): boolean;
+  /** The sweep of what was registered through the API; the sinks stop. */
+  dispose(): void;
+}
+
+/**
+ * The plugin API over a map for a caller that is not a plugin: a command of the command line that changes a map
+ * through `api.document.edit`, as a plugin would, with nothing to load or activate (`scmjs map edit`). `name` is
+ * what the log and the undo entry call the caller.
+ */
+export function headlessApi(doc: OpenedMap, name: string, sinks: HeadlessSinks = {}): HeadlessApi {
+  const store = headlessStore(doc);
+  const detach = attachSinks(store, sinks);
+  const bag = new Contributions();
+  const api = createPluginApi(store, { id: pluginIdOf({ name }), name, source: `builtin:${name}` }, bag);
+  api.document.save = async () => true;
+  api.document.saveAs = async () => false;
+  return {
+    store, api,
+    document: () => documentOf(store, doc),
+    modified: () => store.get(mapModifiedAtom),
+    dispose: () => { bag.dispose(); detach(); },
+  };
 }
 
 /**

@@ -16,6 +16,7 @@ import { applyDoodadChanges, type DoodadChange } from "./doodads";
 import { applySpriteChanges, type SpriteChange } from "./sprites";
 import { applyLocationChanges, type LocationChange } from "./locations";
 import type { TablesEdit } from "./tableHistory";
+import type { StoredMembers } from "../formats/mpq/scm";
 
 /** The change lists of one edit; `HistoryEntry` adds the label. */
 export interface HistoryEdit {
@@ -82,6 +83,25 @@ export interface HistoryEdit {
    * apply it with `swapWholeState`.
    */
   whole?: WholeState;
+  /**
+   * A change to the whole document made outside the editor's own tools — a linked `scmjs`
+   * command (services/editorLink.ts): the document as it stands on the other side of the
+   * step. Undo and redo put it in place of the open one and keep what they took out here,
+   * as `whole` does, but the object itself is swapped, since any part of it may differ. An
+   * entry with this part has no other.
+   */
+  document?: DocumentSide;
+}
+
+/**
+ * One side of a `document` step: the scenario object and the archive's other files. Held by
+ * reference — every later in-place edit is on the undo stack above the entry, so when the
+ * entry is undone the object it took out is exactly as it was left.
+ */
+export interface DocumentSide {
+  scenario: Scenario;
+  extras: Map<string, Uint8Array>;
+  stored: StoredMembers | null;
 }
 
 /**
@@ -258,6 +278,7 @@ export const ALL_PARTS: CommitParts = {
 export function entryParts(entry: HistoryEdit): CommitParts {
   // The size and tileset are settings; triggers are the one part a whole-map change leaves.
   if (entry.whole) return { ...ALL_PARTS, triggers: false };
+  if (entry.document) return ALL_PARTS;
   return {
     ...NO_PARTS,
     terrain: entry.changes.length > 0 || (entry.doodadTiles?.length ?? 0) > 0,
@@ -279,7 +300,7 @@ export function entryParts(entry: HistoryEdit): CommitParts {
  * the whole map, since it is not listed cell by cell.
  */
 export function entryArea(entry: HistoryEdit, width: number, height: number): Rect | null {
-  if (entry.whole) return null;
+  if (entry.whole || entry.document) return null;
   if (entry.createdIsom !== undefined || entry.rebuiltIsom || entry.createdMask !== undefined) return { x0: 0, y0: 0, x1: width, y1: height };
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
   const tile = (x: number, y: number) => {

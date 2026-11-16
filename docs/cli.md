@@ -179,6 +179,7 @@ scmjs map check maps/*.scx --baseline --strict  # fail only on findings not in .
 scmjs map preview map.scx --out map.png         # a picture
 scmjs map find "Marine" maps/*.scx              # search
 scmjs map triggers edit map.scx                 # triggers in your text editor
+scmjs map open map.scx --live                   # in the editor, linked: commands change it there
 scmjs map diff --rev HEAD~1 map.scx --picture   # what the last commit changed, and where
 scmjs map log map.scx                           # the map's history, in the map's terms
 scmjs map blame map.scx                         # who last changed each trigger
@@ -771,6 +772,57 @@ browser even when the app is installed.
 | --- | --- |
 | `SCMJS_APP` | The desktop app's path, when it is installed somewhere unusual |
 | `BROWSER=none` | Opens no browser; the command prints the page's address for you to open |
+
+### Keeping a map linked to the editor
+
+`scmjs map open ridge.scx --live` opens the map in the editor in your browser and keeps it
+linked to the command line for as long as the command runs:
+
+```
+$ scmjs map open ridge.scx --live
+ℹ Opening ridge.scx in the editor in your browser
+  If nothing opens, go to http://127.0.0.1:44641/aafe12469d68167fb1b39886
+✔ ridge.scx is linked to the editor
+  scmjs commands and AI tools on this computer now change it there, one undo step each.
+  Save in the editor writes ridge.scx. Ctrl+C here, or closing the map there, ends the link.
+```
+
+While the link holds, a `scmjs` command that names the file works on the map in the
+editor, from any terminal:
+
+```
+$ scmjs map set ridge.scx --name "Hold the Ridge"
+✔ ridge.scx: Name Ridge → Hold the Ridge · written to the editor, as one undo step · 4.0 KB
+```
+
+| | While the map is linked |
+| --- | --- |
+| A command that reads the map | Reads what the editor has, unsaved changes included |
+| A command that changes the map | Changes it in the editor. **Edit ▸ Undo** takes the whole command back |
+| The file on disk | Changes only on a save. **File ▸ Save** in the editor writes it, with no download |
+| A command given `--out` | Writes that file as always and leaves the editor alone |
+
+The editor's status bar shows **Linked** while the map is in front, and its status line
+names each command that changed the map. A change replaces the map in the editor, so the
+selection is cleared; the view stays where it is.
+
+- **Your own edits are safe.** If you edit the map while a command is working on it, the
+  command stops with "The map changed in the editor while the command ran" and changes
+  nothing. Run it again.
+- **A change waits for you to finish.** With a stroke under way or a dialog open that
+  holds the map, such as the Trigger Editor, a command waits up to twenty seconds.
+- **Ending the link.** Close the map or its tab, close the small scmjs tab that opened
+  beside it, or press Ctrl+C in the terminal. The map stays open in the editor.
+- **The small tab carries the messages** between the command and the editor. Keep it open.
+- **Nothing leaves your computer.** The command listens on 127.0.0.1 only, and the editor
+  answers only the page that opened it, for the one map that page handed it.
+- **The browser, not the app.** `--live` opens the editor in your browser even when the
+  desktop app is installed, which does not link yet.
+- **An editor older than this command** opens the map as a copy, and the command says it
+  cannot link.
+
+An AI tool links a map the same way and can also see what you have selected: see [Watching
+the work in the editor](#watching-the-work-in-the-editor).
 
 ## Making a map
 
@@ -3674,6 +3726,8 @@ these are the ones each request is for.
 | --- | --- |
 | "What is in ridge.scx, and does Check Map find anything?" | `map_info`, `map_check` |
 | "Which triggers never fire, and why?" | `map_trace` |
+| "Open ridge.scx in the editor so I can watch, then change the opening message." | `editor_open`, `map_triggers_export`, `map_triggers_import` |
+| "What are the units I have selected for?" | `editor_state`, `map_find` |
 | "Change the opening message to 'Hold the ridge.' and show me what changed." | `map_triggers_export`, `map_triggers_import`, `map_diff` |
 | "Which of my maps still mention the Marine?" | `map_find` |
 | "Show me the map." | `map_preview`, which answers with the picture |
@@ -3738,9 +3792,9 @@ The old message is still in the string table, as after any trigger import, until
 
 ### The tools
 
-There are 33. Each is a command of this guide, and its arguments are the command's options
-by name: `--dry-run` is `dryRun`, `--in` is `in`. A tool answers with the command's text
-and, beside it, the command's `--json` data.
+There are 39. Each but the `editor_` tools is a command of this guide, and its arguments
+are the command's options by name: `--dry-run` is `dryRun`, `--in` is `in`. A tool answers
+with the command's text and, beside it, the command's `--json` data.
 
 | Tools | What they do | Write files |
 | --- | --- | --- |
@@ -3757,6 +3811,7 @@ and, beside it, the command's `--json` data.
 | `mod_info`, `mod_check`, `mod_diff` | [Mods](#mods): what a mod is, its check, a changelog | No |
 | `mod_unpack`, `mod_pack`, `mod_new`, `mod_header` | The mod as a folder of text and back, a new one, and [the ids for a bot](#a-bot-made-for-a-mod), written into a bot's folder with `bot` | Yes |
 | `mod_play` | The mod [handed to the play page](#playing-a-mod-on-the-play-page) with a `map` and a `bot`. It opens your browser and answers with the page's link and what the page told it | No |
+| `editor_open`, `editor_state`, `editor_show`, `editor_picture`, `editor_save`, `editor_close` | A map [linked to the editor](#watching-the-work-in-the-editor): open it there, what you have selected and in view, bring a place into view, the map as the editor draws it, save, end the link | `editor_save` |
 | `doctor` | What this computer has, so the model knows what it can call | No |
 
 A few tools differ from their commands:
@@ -3778,6 +3833,26 @@ The rest of the commands are not tools: `map generate`, `map test`, `map rush`,
 `init`. An AI tool that can run commands in a terminal, as Claude Code can, runs those as
 you would.
 
+### Watching the work in the editor
+
+Ask the model to open the map in the editor, or link it yourself with
+[`scmjs map open --live`](#keeping-a-map-linked-to-the-editor). From then on the tools
+work on the map in front of you:
+
+- **Each tool call is one undo step.** Edit ▸ Undo names it after the tool, and takes it
+  back whole.
+- **Nothing reaches the file until a save**, yours or the model's (`editor_save`).
+- **The model sees what you see.** `editor_state` tells it which units and locations you
+  have selected and which part of the map is in view, so "these units" and "here" mean
+  something. `editor_picture` is the map as the editor draws it, with the editor's game
+  data, so the model needs no copy of StarCraft for a picture.
+- **The model can point.** `editor_show` brings a place into view and flashes it, with the
+  units or locations it names selected.
+
+`editor_open` opens a browser tab and waits up to two minutes for the editor to take the
+map. The link ends with `editor_close`, when you close the map, or when the AI tool stops
+the server.
+
 ### What the tools can do to your files
 
 - **They stay in the maps folder**, unless you started the server with `--allow-outside`.
@@ -3786,6 +3861,8 @@ you would.
 - **A tool that changes a map writes over it** unless given `out`, like the command. Keep
   your maps in git, or ask for copies. Every tool that only reads is marked so for the AI
   tool, so one that asks before a write can tell them apart.
+- **A linked map is changed in the editor, not on disk**, until it is saved there. `out`
+  still writes a file.
 - **An argument a tool does not take is refused**, with the ones it does take, so a
   misspelt `dryRun` cannot write over a map:
   ``map_strings_prune: `dry_run` is not an argument of map_strings_prune: it takes `path`, `dryRun`, `out` ``.
@@ -4055,7 +4132,7 @@ gives its options.
 | [`scmjs map preview <map>`](#a-picture-of-a-map) | A picture of the map, in the terminal or as a PNG with `--out` |
 | [`scmjs map sounds [list\|export] <map>`](#a-maps-sounds) | The sounds the map carries, listed or written out as WAV and Ogg files |
 | [`scmjs map fetch <words…>`](#maps-from-scmscxcom) | Searches scmscx.com, and downloads a map with `--id` or `--first` |
-| [`scmjs map open <map>`](#opening-a-map-in-scmjs) | Opens the map in scmJS |
+| [`scmjs map open <map>`](#opening-a-map-in-scmjs) | Opens the map in scmJS; `--live` [keeps it linked](#keeping-a-map-linked-to-the-editor), so commands change it in the editor |
 | [`scmjs map new <map>`](#a-blank-map) | A new map: flat ground, start locations placed |
 | [`scmjs map generate <map>`](#a-melee-map-from-a-seed) | A symmetric melee map from a seed, walked and checked before it is written |
 | [`scmjs map set <map>`](#name-description-and-revision) | The name, description, revision or text encoding; `--dry-run` |
@@ -4184,6 +4261,8 @@ from a clone with `npm run cli -- <command>`, or build it with `npm run build:cl
 | `cli/src/lsp.ts` | The language server: which files are a script and which map names them, the protocol round TrigScript's language service (`plugins/trigscript/language.ts`) |
 | `cli/src/replaymap.ts` | The replay's scenario written out as a map file |
 | `cli/src/scmscx.ts`, `cli/src/fetch.ts` | scmscx.com's routes in one place, with the timeout and the errors; the search table, the file name made safe, the download opened before it is written |
+| `cli/src/link.ts` | A map linked to the editor: the page between the command and the editor, how other commands find the link, and the reads and writes that go through it |
+| `src/services/editorLink.ts` | The editor's end of a link: the map handed over, a changed one taken back as an undo step, the selection and the view |
 | `cli/src/open.ts` | Finding the desktop app, handing a file to the editor in a browser, and a lobby asked of the play page the same way |
 | `cli/src/account.ts` | The scmjs.dev sign-in through a page on the loopback address, the session file, and the account |
 | `cli/src/share.ts` | A map saved to the account and linked, or opened for editing together, with its facts and picture |

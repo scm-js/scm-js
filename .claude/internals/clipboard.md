@@ -110,3 +110,29 @@ and `applyEntry` never see one).
   drops the history the same way.
 - `replaceScenarioAtom` (raw section edits, Repair) still drops the history — it installs a new
   `Scenario` object, which a reference swap cannot take back. `tests/whole-history.test.ts`.
+
+### Whole-document undo (`DocumentSide` in `editor/history.ts`, `applyDocumentAtom` / `stepDocument` in `documentAtoms.ts`, 2026-11-16)
+
+A third kind of entry that has no other part, beside `tables` and `whole`: `document`, the scenario
+*object* and the archive's extras and stored members as they stand on the other side of the step.
+It is what a linked `scmjs` command's change is (`cli.md`, "A map linked to the editor"): the
+command hands back a whole map as bytes, so there is no change list to record, and any part may
+differ. `applyDocumentAtom(side, label)` pushes `{ label, changes: [], document: <the open side> }`
+and installs the new one through `installRegisters(..., "replace")` with the file name, handle,
+save options, view and both stacks kept; undo and redo swap the sides and keep what they took out
+on the entry, as `stepWhole` does.
+
+- **Why swapping the object is sound.** `replaceScenarioAtom` drops the history because the older
+  entries were recorded against the object it throws away. Here the entry keeps that object, and
+  every later in-place edit sits above the entry on the stack, so by the time the entry is undone
+  the object is exactly as it was left and the entries beneath apply to what they were recorded
+  on. `tests/link.test.ts` undoes through a swap to the byte, with an edit on either side.
+- **Tables.** `installRegisters` calls `followTables`, which keeps the baseline an object already
+  has (a `WeakMap` by scenario), so a side coming back still diffs a dialog's write correctly.
+- **Shared maps.** As Resize: `beforeWhole` / `whole` send the map to everyone and the stacks are
+  cleared (`tap.owns`), on the apply and on a step.
+- Plugins hear `"document"` with reason `"replace"` and a `"whole"` commit notice, as after a raw
+  section edit. Selections are cleared; `center: null` leaves the view where it is.
+- Not done: `replaceScenarioAtom` (Section Explorer, Repair) could become undoable the same way.
+  The entry's weight is not counted by `withinTablesBudget`; the depth limit bounds it.
+

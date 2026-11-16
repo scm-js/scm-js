@@ -13,6 +13,7 @@ import type { TriggerRecord } from "../../src/formats/chk/sections/triggers";
 import { applyStringImport, encodeTrg, formatStringTable, parseStringTable, readTriggerFile, triggerFormatOf, triggersToText } from "../../src/editor/exchange";
 import { defaultSaveOptions, formatOf, type MapFormat } from "../../src/editor/save";
 import { STDIO, toStdout, writeFileMade } from "./files";
+import { linkedWrite } from "./link";
 import { t } from "./i18n";
 import { CliError } from "./ui";
 
@@ -128,7 +129,11 @@ export async function writeBack(doc: OpenedMap, inputPath: string, outPath: stri
 }
 
 /** What was written: the path (`-` for standard output) and the size. */
-export interface Written { path: string; bytes: number }
+export interface Written {
+  path: string; bytes: number;
+  /** The map went to the editor it is linked to, not to the file (link.ts). */
+  live?: boolean;
+}
 
 /**
  * The form a map is written back in: the output name's extension, else the input's, else the form it came in (a map
@@ -144,6 +149,8 @@ export async function writeOutput(bytes: Uint8Array, path: string, stdout: Writa
     await new Promise<void>((resolve, reject) => stdout.write(bytes, (e) => (e ? reject(e) : resolve())));
     return { path, bytes: bytes.length };
   }
+  // A map linked to the editor goes there, as one undo step; the editor's Save writes the file (link.ts).
+  if (await linkedWrite(path, bytes)) return { path, bytes: bytes.length, live: true };
   await writeFileMade(path, bytes);
   return { path, bytes: bytes.length };
 }

@@ -60,6 +60,13 @@ export function isDiskHandle(handle: unknown): handle is DiskMapHandle {
   return !!handle && typeof handle === "object" && (handle as Record<symbol, unknown>)[DISK] === true;
 }
 
+/** Marks a handle that cannot be kept between sessions: a linked map's (services/editorLink.ts), which is a channel to a command. */
+export const TRANSIENT = Symbol.for("scmjs.transientHandle");
+
+export function isTransientHandle(handle: unknown): boolean {
+  return !!handle && typeof handle === "object" && (handle as Record<symbol, unknown>)[TRANSIENT] === true;
+}
+
 /** What the handle store keeps for a handle: `{ diskPath }` for a disk handle, the handle itself otherwise. */
 export function storableHandle<T>(handle: T): T | { diskPath: string } {
   return isDiskHandle(handle) ? { diskPath: handle.path } : handle;

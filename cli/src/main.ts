@@ -43,6 +43,8 @@ import type { Issue } from "../../src/editor/validate";
 import { createMcpServer, serveStdio } from "./mcp";
 import { serveLsp } from "./lsp";
 import { openInScmjs, playInLobby } from "./open";
+import { openLink, setLinkLabel } from "./link";
+import { atExit } from "./lifecycle";
 import { checkPlugin, devPlugin, newPlugin, printPluginCheck, type PluginCheck } from "./plugin";
 import { printReplayInfo, replayReport } from "./replay";
 import { buildOrders, checkPlayedMod, refuseModReplay, replayNamer, type ReplayNameOptions } from "./replaymod";
@@ -355,8 +357,26 @@ A map with many old findings can still be held to that: --write-baseline keeps t
     });
   map.command("open").description(t("open a map in the scmJS app, or the editor in your browser")).argument("<map>")
     .option("--browser", t("the editor in the browser, even with the app installed"))
+    .option("--live", t("keep the map linked to the editor in your browser: commands change it there, one undo step each"))
     .addOption(new Option("--editor <url>", t("the editor's address (SCMJS_EDITOR_URL)")).hideHelp())
-    .action(async (file: string, o: { browser?: boolean; editor?: string }) => { const input = await readInput(file); expectKind(input, "map"); await openInScmjs(input, o); });
+    .action(async (file: string, o: { browser?: boolean; live?: boolean; editor?: string }) => {
+      if (o.live && file === STDIO) throw new CliError(t("--live links a file on disk, not standard input"), t("Name the map."), 2);
+      const input = await readInput(file);
+      expectKind(input, "map");
+      if (!o.live) { await openInScmjs(input, o); return; }
+      // The link lasts as long as this command: it serves the page between scmjs and the editor (link.ts).
+      const owner = await openLink(file, input.bytes, { editor: o.editor, say: print });
+      const off = atExit(() => owner.end(t("scmjs stopped")));
+      print(
+        `${mark.ok} ${t("{name} is linked to the editor", { name: pc.bold(owner.name) })}`,
+        pc.dim(`  ${t("scmjs commands and AI tools on this computer now change it there, one undo step each.")}`),
+        pc.dim(`  ${t("Save in the editor writes {path}. Ctrl+C here, or closing the map there, ends the link.", { path: file })}`),
+      );
+      owner.onSave((bytes) => print(`${mark.ok} ${t("Saved from the editor")}${dot}${size(bytes)}`));
+      const reason = await new Promise<string>((done) => owner.onEnd(done));
+      off();
+      print(`${mark.info} ${t("The link has ended: {reason}", { reason })}`);
+    });
 
   map.command("new").description(t("a new map: flat ground, start locations laid out, the file written")).argument("<map>", t("the file to write: .scx, .scm or .chk (.scx added to a name without one); - for standard output")).addOption(json)
     .option("--size <WxH>", t("width and height, each 64, 96, 128, 192 or 256"), "128x128")
@@ -490,7 +510,7 @@ trigger whose text does. Prints what matched and where. Exits 1 when nothing mat
     for (const l of lines) if (l !== null && l !== undefined && l !== false) process.stderr.write(l + "\n");
   }
   /** The output's name for a message: the file, or "standard output". */
-  const outName = (w: { path: string }) => (w.path === STDIO ? t("standard output") : pc.cyan(w.path));
+  const outName = (w: { path: string; live?: boolean }) => (w.path === STDIO ? t("standard output") : w.live ? t("the editor, as one undo step") : pc.cyan(w.path));
 
   /** `--out` for text: the file, or stdout when there is none (or `-`). */
   async function emit(text: string, out: string | undefined, said: string): Promise<void> {
@@ -2097,6 +2117,12 @@ the setup for each editor. Needs TypeScript, as map build does.`))
       print(...(o.json ? [JSON.stringify(r, null, 2)] : printAbout(r)));
     });
   finishProgram(program);
+  // A change to a map linked to the editor is named there by the command that made it (link.ts).
+  program.hook("preAction", (_program, action) => {
+    const names: string[] = [];
+    for (let c: Command | null = action; c && c.parent; c = c.parent) names.unshift(c.name());
+    setLinkLabel(`scmjs ${names.join(" ")}`);
+  });
   return program;
 }
 

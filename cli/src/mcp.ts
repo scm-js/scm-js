@@ -48,6 +48,7 @@ import { unpackMod } from "./mod/unpack";
 import { writeModHeader } from "./mod/header";
 import { modOverlay } from "./mod/overlay";
 import { pageRace, playBotOf, playOnPage, playSet } from "./mod/play";
+import { allLinks, closeOwnedLinks, LinkError, linkFor, openLink, setLinkLabel, type Link } from "./link";
 import { CliError, plural, visible } from "./ui";
 
 /** Where a tool's words go while the server runs: standard error, since standard output is the protocol. */
@@ -98,7 +99,9 @@ async function openMap(file: string): Promise<{ input: Input; doc: Awaited<Retur
 }
 /** A path for the model: relative when it is under the working directory, else as it is. */
 export function shown(path: string): string { const r = relative(process.cwd(), path); return r && !r.startsWith("..") ? r : path; }
-const written = (w: { path: string; bytes: number }) => `Written to ${shown(w.path)} (${w.bytes} bytes)`;
+const written = (w: { path: string; bytes: number; live?: boolean }) => (w.live
+  ? `Changed in the editor, where ${shown(w.path)} is linked: one undo step there, not saved to the file yet (editor_save saves it)`
+  : `Written to ${shown(w.path)} (${w.bytes} bytes)`);
 
 /**
  * `-` is standard input or output to the commands, and both are the protocol here: a tool reading `-` would eat the
@@ -138,7 +141,13 @@ const tool = <T>(fn: (args: T, extra: Extra) => Promise<CallToolResult>, root: s
     noPipe(a.path, a.out, a.a, a.b, ...(a.paths ?? []));
     const outside = root === null ? null : outsideRoot(args as Record<string, unknown>, root);
     if (outside !== null) throw new CliError(`${outside} is outside the folder the server was started in (${root})`, "The tools read and write files in that folder only; the person can start the server with scmjs mcp --allow-outside to lift that.", 2);
-    return await fn(args, extra);
+    try {
+      return await fn(args, extra);
+    } catch (e) {
+      // The person edited the linked map in the editor while the tool ran: once more, from what the editor has now.
+      if (e instanceof LinkError && e.code === "changed") return await fn(args, extra);
+      throw e;
+    }
   } catch (e) { return failed(e); }
 };
 
@@ -164,7 +173,7 @@ export interface McpOptions {
 }
 
 /** What the client is told once, with the tool list: how the tools fit together. */
-export const INSTRUCTIONS = `scmJS: StarCraft: Brood War maps on this computer. Paths are files here, relative to the working directory. Start with map_info or map_dump to see what a map holds; map_check is Check Map (errors and warnings, as the editor's). Triggers and strings travel as text: map_triggers_export gives the trigger window's text form (https://docs.scmjs.dev/triggers/), which map_triggers_import takes back; strings are "<number><TAB><text>" lines. Tools that change a map write over it unless given "out"; they never renumber strings. Map text is never translated. map_preview shows the map as a picture, map_analyze reads a melee map's layout (starts, naturals, walks between starts, chokes) in a second, map_trace and map_cost run it in the game itself, and map_coverage counts which triggers fired over many replays; these need a copy of StarCraft on this computer, and doctor says whether one is there and what to install if not. replay_map writes the map a replay was played on. map_optimize makes a map smaller without changing what the game plays (a dry run unless told to write); map_balance plays games on a melee map with the person's own bots to see whether its start locations are fair, which takes minutes. Mods: mod_info says what a mod is, mod_unpack writes it as a folder of text and PNG sheets the person or you can edit, mod_check lints it, mod_diff reads two as a changelog (or one against the game), mod_pack makes the MPQ back, mod_new starts an empty one, mod_header writes a mod's ids by name for a bot made for it, and mod_play hands a mod (with a map and a bot) to the play page in the person's browser. map_trace and map_cost take a mod too.`;
+export const INSTRUCTIONS = `scmJS: StarCraft: Brood War maps on this computer. Paths are files here, relative to the working directory. Start with map_info or map_dump to see what a map holds; map_check is Check Map (errors and warnings, as the editor's). Triggers and strings travel as text: map_triggers_export gives the trigger window's text form (https://docs.scmjs.dev/triggers/), which map_triggers_import takes back; strings are "<number><TAB><text>" lines. Tools that change a map write over it unless given "out"; they never renumber strings. Map text is never translated. map_preview shows the map as a picture, map_analyze reads a melee map's layout (starts, naturals, walks between starts, chokes) in a second, map_trace and map_cost run it in the game itself, and map_coverage counts which triggers fired over many replays; these need a copy of StarCraft on this computer, and doctor says whether one is there and what to install if not. replay_map writes the map a replay was played on. map_optimize makes a map smaller without changing what the game plays (a dry run unless told to write); map_balance plays games on a melee map with the person's own bots to see whether its start locations are fair, which takes minutes. Mods: mod_info says what a mod is, mod_unpack writes it as a folder of text and PNG sheets the person or you can edit, mod_check lints it, mod_diff reads two as a changelog (or one against the game), mod_pack makes the MPQ back, mod_new starts an empty one, mod_header writes a mod's ids by name for a bot made for it, and mod_play hands a mod (with a map and a bot) to the play page in the person's browser. map_trace and map_cost take a mod too. The editor: editor_open opens a map in the scmJS editor in the person's browser and keeps it linked, so they watch the work and can undo it; while it is linked every tool here reads and changes the map in the editor instead of the file (one undo step a change), editor_state says what they have selected and where they are looking, editor_show points at a place, editor_picture is the map as the editor draws it, and editor_save writes the file. Offer it when the person wants to see changes as you make them.`;
 
 /**
  * The server with every tool registered, and their names; `connect` it to a transport (stdio for the command, in
@@ -179,7 +188,11 @@ export function createMcpServer(options: McpOptions = {}): { server: McpServer; 
     tools.push(name);
     const shape = config.inputSchema ?? {};
     const inputSchema = z.strictObject(shape, { error: (issue) => (issue.code === "unrecognized_keys" ? unknownArguments(name, issue.keys, Object.keys(shape)) : undefined) });
-    return server.registerTool(name, { ...config, inputSchema } as never, ((args: never, extra: Extra) => (root === null ? cb(args, extra) : tool(cb, root)(args, extra))) as never);
+    return server.registerTool(name, { ...config, inputSchema } as never, ((args: never, extra: Extra) => {
+      // What the editor's Undo calls a change this tool makes to a linked map.
+      setLinkLabel(`scmjs ${name.replace(/_/g, " ")}`);
+      return root === null ? cb(args, extra) : tool(cb, root)(args, extra);
+    }) as never);
   }) as unknown as typeof server.registerTool;
   // The SDK's own words for an argument that does not fit (a missing `path`), in plain terms.
   const toolError = (server as unknown as { createToolError: (text: string) => CallToolResult }).createToolError.bind(server);
@@ -516,6 +529,111 @@ export function createMcpServer(options: McpOptions = {}): { server: McpServer; 
     } finally { removeGameMap(playMap.path); removeGameMap(rushMap.path); }
   }));
 
+  /** The link a tool means: the one for `file`, or the only one there is. */
+  const linkOf = async (file: string | undefined): Promise<Link> => {
+    if (file !== undefined) {
+      const link = await linkFor(file);
+      if (!link) throw new CliError(`${shown(file)} is not linked to the editor`, "editor_open links it.", 2);
+      return link;
+    }
+    const links = await allLinks();
+    if (links.length === 1) return links[0];
+    if (!links.length) throw new CliError("No map is linked to the editor", "editor_open links one.", 2);
+    throw new CliError(`${links.length} maps are linked to the editor: ${links.map((l) => shown(l.path)).join(", ")}`, "Name one with `path`.", 2);
+  };
+  const linked = z.string().optional().describe("the linked map's file; may be left out when one map is linked");
+  const tilesRect = z.object({ x0: z.number(), y0: z.number(), x1: z.number(), y1: z.number() }).describe("a rectangle in tiles (a tile is 32 pixels), x1 and y1 exclusive");
+
+  reg("editor_open", {
+    title: "Link a map to the editor",
+    description: "Open a map in the scmJS editor in the person's browser and keep it linked (scmjs map open --live), so they watch the work. While a map is linked, every tool here that takes its path reads the map as the editor has it, unsaved changes included, and a tool that changes it changes it in the editor as one undo step: nothing is written to the file until editor_save or the person's own Save. The link lasts until the map or the page beside it is closed, editor_close, or this server stops. Opens a browser tab, and waits up to two minutes for the editor to take the map.",
+    inputSchema: { path },
+    annotations: { openWorldHint: true },
+  }, tool(async ({ path: file }) => {
+    const input = await readInput(file);
+    expectKind(input, "map");
+    const owner = await openLink(file, input.bytes, { say: (...l) => { for (const line of l) STDERR(visible(line)); } });
+    return ok(`${owner.name} is open in the editor and linked. Tools that change ${shown(file)} now change it there, one undo step each; editor_save writes the file.`, { name: owner.name, path: owner.path, linked: true });
+  }));
+
+  reg("editor_state", {
+    title: "What the person is looking at",
+    description: "The linked map in the editor right now: whether it has unsaved changes, the layer in use, the zoom, the part of the map in view (tiles), and the selection: units (index, type, player 1-12, position in pixels), locations (index, name, bounds in pixels), doodads and sprites (indices), and the marked area (tiles). Use it for requests about \"these units\", \"this location\" or \"here\".",
+    inputSchema: { path: linked },
+    annotations: { readOnlyHint: true },
+  }, tool(async ({ path: file }) => {
+    const link = await linkOf(file);
+    const s = (await link.call("state")).result as { name: string; modified: boolean; layer: string; zoom: number; size: { width: number; height: number }; view: { x0: number; y0: number; x1: number; y1: number }; selection: { units: { index: number; type: string; player: number; x: number; y: number }[]; locations: { index: number; name: string }[]; doodads: number[]; sprites: number[]; area: { x0: number; y0: number; x1: number; y1: number } | null } };
+    const sel = s.selection;
+    const lines = [
+      `${s.name}: ${s.size.width} × ${s.size.height}${s.modified ? ", unsaved changes" : ", saved"}; ${s.layer} layer at ${Math.round(s.zoom * 100)}%`,
+      `In view: tiles ${s.view.x0},${s.view.y0} to ${s.view.x1},${s.view.y1}`,
+      sel.units.length ? `Selected units (${sel.units.length}): ${sel.units.slice(0, 40).map((u) => `#${u.index} ${u.type} P${u.player} at ${u.x},${u.y}`).join("; ")}${sel.units.length > 40 ? "; …" : ""}` : null,
+      sel.locations.length ? `Selected locations: ${sel.locations.map((l) => `#${l.index} ${l.name}`).join("; ")}` : null,
+      sel.doodads.length ? `Selected doodads: ${sel.doodads.join(", ")}` : null,
+      sel.sprites.length ? `Selected sprites: ${sel.sprites.join(", ")}` : null,
+      sel.area ? `Marked area: tiles ${sel.area.x0},${sel.area.y0} to ${sel.area.x1},${sel.area.y1}` : null,
+    ].filter((l): l is string => l !== null);
+    if (lines.length === 2) lines.push("Nothing is selected.");
+    return ok(lines, s);
+  }));
+
+  reg("editor_show", {
+    title: "Show the person a place",
+    description: "Bring a part of the linked map into the editor's view and flash it: a rectangle in tiles, units by index (they are selected too) or locations by index. Use it to point at what you changed or what you are asking about. It moves the person's view, so call it when they would want to look.",
+    inputSchema: {
+      path: linked,
+      rect: tilesRect.optional(),
+      units: z.array(z.number().int().min(0)).optional().describe("unit indices, as map_dump and editor_state list them"),
+      locations: z.array(z.number().int().min(0)).optional().describe("location indices"),
+    },
+    annotations: { readOnlyHint: true },
+  }, tool(async ({ path: file, rect, units, locations }) => {
+    const link = await linkOf(file);
+    const r = (await link.call("show", { rect, units, locations })).result as { rect: { x0: number; y0: number; x1: number; y1: number } };
+    return ok(`The editor shows tiles ${r.rect.x0},${r.rect.y0} to ${r.rect.x1},${r.rect.y1} of ${link.name}.`, r);
+  }));
+
+  reg("editor_picture", {
+    title: "The map as the editor draws it",
+    description: "A picture of the linked map from the editor, drawn with the game's graphics the editor has, units, sprites and locations included: what the person sees, so it needs no copy of StarCraft here. By default the part in view; `rect` for other tiles, `whole` for the whole map. The result is a PNG image.",
+    inputSchema: {
+      path: linked,
+      rect: tilesRect.optional(),
+      whole: z.boolean().optional().describe("the whole map rather than the part in view"),
+      locations: z.boolean().optional().describe("false to leave the locations out"),
+    },
+    annotations: { readOnlyHint: true },
+  }, tool(async ({ path: file, rect, whole, locations }) => {
+    const link = await linkOf(file);
+    const a = await link.call("picture", { rect, whole, locations });
+    if (!a.bytes) throw new CliError("The editor sent no picture");
+    const r = a.result as { rect: { x0: number; y0: number; x1: number; y1: number }; pixelsPerTile: number };
+    const text = `${link.name}: tiles ${r.rect.x0},${r.rect.y0} to ${r.rect.x1},${r.rect.y1} at ${r.pixelsPerTile} px a tile, as the editor draws it`;
+    return { content: [{ type: "image", data: Buffer.from(a.bytes).toString("base64"), mimeType: "image/png" }, { type: "text", text }], structuredContent: { ...r, bytes: a.bytes.length } };
+  }));
+
+  reg("editor_save", {
+    title: "Save the linked map",
+    description: "The editor's Save for the linked map: the file on disk is written with everything changed since, by the tools and by the person. Until then the changes exist only in the editor.",
+    inputSchema: { path: linked },
+    annotations: { destructiveHint: true },
+  }, tool(async ({ path: file }) => {
+    const link = await linkOf(file);
+    await link.call("save");
+    return ok(`Saved: ${shown(link.path)} is as the editor has it.`, { path: link.path, saved: true });
+  }));
+
+  reg("editor_close", {
+    title: "End the link",
+    description: "End the link to the editor. The map stays open there with any unsaved changes, as an ordinary open map; the tools go back to reading and writing the file. Save first (editor_save) if the file should have the changes.",
+    inputSchema: { path: linked },
+  }, tool(async ({ path: file }) => {
+    const link = await linkOf(file);
+    await link.close();
+    return ok(`${link.name} is no longer linked. The tools read and write ${shown(link.path)} again.`, { path: link.path, linked: false });
+  }));
+
   reg("doctor", {
     title: "What this computer has",
     description: "What this computer has of what the tools need beyond Node (scmjs doctor): whether a copy of StarCraft and the game engine are there, which map_trace and map_cost need, TypeScript for map_build, and whether npm has a newer scmjs; for each thing missing, what the person can install or set. Call it before map_trace or map_cost, or when one fails, to know what to tell the person. Changes nothing.",
@@ -793,5 +911,7 @@ export async function serveStdio({ allowOutside = false }: { allowOutside?: bool
   // The transport reads stdin but does not close on its end, so the client going away is watched here: the server is
   // closed and the command returns (else Node would exit on an unsettled await with code 13).
   await new Promise<void>((resolve) => { process.stdin.once("end", resolve); server.server.onclose = resolve; });
+  // A map this server linked to the editor is let go with it.
+  closeOwnedLinks("scmjs stopped");
   await server.close();
 }

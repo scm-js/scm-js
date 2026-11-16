@@ -2198,6 +2198,9 @@ latest.
 that lay out maps, write triggers, names and briefings, review a map and rewrite its
 strings. They come with the scmjs.dev plugin and run on your own Anthropic API key.
 
+An AI tool you already use, such as Claude Code or Cursor, can work on the open map too,
+with each change as one undo step: see [AI tools](ai-tools.md).
+
 ### Adding your key
 
 1. Make an API key at [console.anthropic.com](https://console.anthropic.com).

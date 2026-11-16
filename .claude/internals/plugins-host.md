@@ -562,6 +562,24 @@ it. The module also re-exports the `PluginApi` and `EditTransaction` types, whic
 the command's other modules never import this one (`cli.md` "Objects for a model"). `tests/cli-map-edit.test.ts`
 checks that a builder that throws leaves the document and the modified flag as they were.
 
+**A host with a copy of the game (2026-11-16, `scmjs map edit`'s terrain, `map run`).** Under Node the host had no
+game data at all: nothing resolves an asset source there, so `peekTileset` and `peekUnitAssets` were null and every
+part of the API that reads the game's files did nothing with a note. `loadGameCopy(copy, doc)` makes a `GameCopy`
+(`label`, `read(member)` — the command's `GameFiles` as it is) the session's source, as a `reader` with no base
+(`setAssetSource`; `readContext` already gives the member's own name, so a renamed file such as
+`tileset\jungle\dddata.bin` needs no table here), then awaits `ensureTileset` for the map's tileset and
+`getUnitAssets`, each to true or false. It runs **before** `headlessApi` / `runHeadless`, because the host and its
+transactions read what is in memory when they are made. Being the ordinary loader path, `api.tileset.load()` and
+`api.data.load()` answer true and a tileset change loads the next tileset from the same copy;
+`unit/manifest.json` is made by `readerManifest.ts` from what the copy answers. The one thing the loader could not
+do without a page was the atlas (`new ImageData`, `createImageBitmap`): `atlas.ts#buildAtlas` now returns the
+averages with `image: null` when there is no `ImageData` (tileset.md). `dropGameCopy()` takes it away again
+(`dropDecodedData` and a `none` source) for the caller that runs many maps in one process: the decoded data is
+module state, so without it one call's copy would change what the next call does (cli.md "Terrain and doodads for a
+model"). Identity of the copy object decides whether anything is dropped: the same object again only loads a
+tileset not yet in memory. `tests/cli-terrain.test.ts` covers a copy that holds nothing (the loaders ask for
+`arr\units.dat` and the tileset's `.cv5` by the game's names; both parts false; the host as before).
+
 ### Data sets for mods (M4, 2026-11-08)
 
 Additive, version 1 unchanged, nothing named after a mod: `GameDataProfile.url?` (where the set's makers publish it;

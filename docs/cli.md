@@ -184,6 +184,8 @@ scmjs map diff --rev HEAD~1 map.scx --picture   # what the last commit changed, 
 scmjs map log map.scx                           # the map's history, in the map's terms
 scmjs map blame map.scx                         # who last changed each trigger
 scmjs map generate "(2)Duel.scx" --seed 7       # a melee map to play
+scmjs map terrain map.scx                       # the terrains, and the map as a grid of letters
+scmjs map edit map.scx --edits edits.json       # paint terrain, place doodads and units from a list
 scmjs map analyze map.scx --out layout.png      # starts, naturals, walks and chokes, in a second
 scmjs map balance map.scx --bots mybot.scmbot   # is every start fair? games from each
 scmjs map optimize map.scx --dry-run            # what would make the map smaller
@@ -335,9 +337,13 @@ program carries its own).
 
 `map preview` draws a map with the game's graphics, `map analyze` reads which ground is
 walkable from the game's tilesets, and `map generate` lays its ground with them.
-`map trace`, `map cost`, `map coverage`, `map rush`, `map test`, `map heatmap`,
-`map balance`, `replay watch`, `replay export`, `bot run` and `bot ladder` run the game
-itself. They need two things on your computer:
+`map terrain` and `map doodads` read a map's terrain and doodads from the tileset, and
+`map edit` paints terrain and places doodads with it. `map set --settings` fills in a
+unit's, upgrade's or technology's numbers from the game's tables. `map run` gives a plugin
+the game's data when a copy is there, and runs without when it is not. `map trace`,
+`map cost`, `map coverage`, `map rush`, `map test`, `map heatmap`, `map balance`,
+`replay watch`, `replay export`, `bot run` and `bot ladder` run the game itself. They need
+two things on your computer:
 
 - Your copy of StarCraft, Remastered or 1.16.1. It is found in the usual places; otherwise
   name its folder with `--starcraft <folder>` or the `SCMJS_STARCRAFT` setting. When
@@ -993,6 +999,108 @@ same in every encoding, and a map does not record which one it was written in, s
 a map `--encoding` has nothing to change; the command says so and writes nothing.
 `--dry-run` says what would change and writes nothing.
 
+### Players, forces and other settings
+
+`scmjs map settings` lists the Scenario menu's settings as a map has them: the twelve
+players, the four forces, the unit types, upgrades and technologies the map changes from
+the game's, and the switches it names.
+
+```
+$ scmjs map settings ums.scx
+ums.scx
+Players
+  player  type      race      colour  force
+  1       Human     Terran    Red     1 Defenders
+  2       Computer  Zerg      Blue    2 Swarm
+  3       Inactive  Inactive  Teal    1 Defenders
+  …
+Forces
+  force  name       players              allied  allied victory  shared vision  random start
+  1      Defenders  1, 3, 4, 5, 6, 7, 8  yes     yes             yes            no
+  2      Swarm      2                    yes     yes             yes            no
+  …
+Unit settings
+  Terran Marine  0  named "Test Marine" · 80 hit points, armor 2, build time 300, 75 minerals, 0 gas
+Upgrades: as the game has them
+Technologies: as the game has them
+Switches: 1 "Alarm raised"
+```
+
+A unit, upgrade or technology is listed when the map gives it numbers or a name of its
+own, or changes who may build or research it. `--unit <name>`, `--upgrade <name>` and
+`--tech <name>` show one row whether the map changes it or not, with the game's own
+numbers beside the map's when [your copy of StarCraft](#commands-that-need-starcraft) is
+there to read them from. `--json` has every row with each player's availability, levels
+and state.
+
+`scmjs map set --settings <file>` sets them. The file is a JSON object with any of six
+lists, and each entry names what it changes and gives only the fields to change:
+
+```json
+{
+  "players": [{ "player": 3, "type": "Computer", "race": "Protoss", "force": 2 }],
+  "forces": [{ "force": 2, "name": "Invaders", "randomStart": true }],
+  "units": [
+    { "unit": "Zergling", "hitPoints": 50, "name": "Ripper" },
+    { "unit": "Terran Ghost", "available": [{ "player": "default", "value": false }, { "player": 1, "value": true }] }
+  ],
+  "techs": [{ "tech": "Stim Packs", "state": [{ "player": 1, "researched": true }] }],
+  "switches": [{ "switch": 2, "name": "Gate is open" }]
+}
+```
+
+```
+$ scmjs map set ums.scx --settings settings.json
+  Player 3       type                     Inactive → Computer
+  Player 3       race                     Inactive → Protoss
+  Player 3       force                    1 → 2
+  Force 2        name                     Swarm → Invaders
+  Force 2        random start             no → yes
+  Zerg Zergling  name                     (none) → Ripper
+  Zerg Zergling  uses the game's numbers  yes → no
+  Zerg Zergling  hit points               35 → 50
+  Terran Ghost   available by default     yes → no
+  Terran Ghost   available to Player 1    default → yes
+  Stim Packs     for Player 1             default → researched
+  Switch 2       name                     (none) → Gate is open
+✔ ums.scx: 12 settings changed · written to ums.scx · 4.0 KB
+```
+
+| List | Each entry |
+| --- | --- |
+| `players` | `player` (1 to 12), then `type`, `race`, `color` and `force` (1 to 4). A colour is a name such as Red, a number, or `[r, g, b]` for a Remastered custom colour. Colour and force are for players 1 to 8 |
+| `forces` | `force` (1 to 4), then `name`, `players` (moved into the force), `allied`, `alliedVictory`, `sharedVision`, `randomStart` |
+| `units` | `unit` (a name or id), then `name`, `hitPoints`, `shields`, `armor`, `buildTime`, `mineralCost`, `gasCost`, `weapons` (each `weapon`, `damage`, `bonus`), `available`, `useDefault` |
+| `upgrades` | `upgrade` (a name or id), then `mineralCost`, `gasCost`, `timeCost`, the amount each grows by a level (`mineralFactor`, `gasFactor`, `timeFactor`), `levels`, `useDefault` |
+| `techs` | `tech` (a name or id), then `mineralCost`, `gasCost`, `researchTime`, `energyCost`, `state`, `useDefault` |
+| `switches` | `switch` (1 to 256) and `name`; an empty name clears it |
+
+- **Times** are in frames, 24 to a second.
+- **`available`, `levels` and `state`** are lists with one entry a player: `player` is 1
+  to 12, or `"default"` for the column every player follows until given a value of their
+  own. An `available` entry has `value` (true, false, or `"default"` to follow that column
+  again), a `levels` entry `start` and `max`, a `state` entry `available` and
+  `researched`.
+- **A number** for a unit, upgrade or technology takes it off the game's own numbers, as
+  unticking "use default" does in the editor, and the rest of its row is filled in from
+  the game's tables. Those settings read [your copy of
+  StarCraft](#commands-that-need-starcraft); names, availability, levels, players, forces
+  and switches need none. `"useDefault": true` puts a row back on the game's numbers.
+- **A weapon** is one the unit fights with: the Zergling's is Claws. Another is refused.
+
+Every name is checked before anything is set. One the map or the game does not have stops
+the command with the entry's place, and nothing is written:
+
+```
+$ scmjs map set ums.scx --settings bad.json
+✖ players[1]: No race is called "Zergg"
+  One of Zerg, Terran, Protoss, User Selectable, Random, Independent, Neutral, Inactive. Nothing was changed.
+```
+
+`--settings` goes with `--name` and the other options in one command, `--settings -` reads
+the JSON from standard input, and `--dry-run` lists the changes and writes nothing. Sounds
+and the Create Unit with Properties slots are not set from here; the editor has them.
+
 ### Resizing
 
 `scmjs map resize ridge.scx --size 128x96` is Scenario ▸ Resize.
@@ -1054,12 +1162,81 @@ hangar, and the states cloaked, burrowed, lifted, hallucinated and invincible. W
 several filters, a unit must pass all of them. `map locations` has no options but
 `--json`; its last column counts the units inside each location.
 
+### Listing terrain and doodads
+
+`scmjs map terrain` lists the terrains of the map's tileset and draws the map as a grid of
+letters, and `scmjs map doodads` lists the doodads on it. They are the lists to read
+before [painting terrain or placing doodads](#painting-terrain-and-placing-doodads). Both
+read the tileset from [your copy of StarCraft](#commands-that-need-starcraft).
+
+```
+$ scmjs map terrain ridge.scx --cell 2
+ridge.scx  64 × 64 · Jungle World
+  letter  terrain             id  height  buildable  tiles  share
+  w       Water               5   low     no         1,130  28%
+  d       Dirt                2   low     yes        1,710  42%
+  m       Mud                 4   low     yes        0      0
+  j       Jungle              8   low     yes        0      0
+  …
+  D       High Dirt           3   mid     yes        444    11%
+  U       High Jungle         10  mid     yes        0      0
+  …
+  # 788 tiles of an edge between two terrains (a cliff or a shore)
+  * 24 tiles of a doodad
+
+  Tiles 0,0 to 64,64, a character every 2 tiles
+     0         20        40        60
+   0 ddd#ww##d#www##ddd#wwwwwwwwwwwww
+   2 dddd##ddd#wwww##ddd#wwwwwwwwwwww
+  …
+  16 ddddddddddddddDDDDddddd#wwwww###
+  18 ddddddddddddDDDDDDDDddd#wwwwwwww
+  20 ddddddddddd#DDDDDDDDD#d#wwwwwwww
+  22 ddddddddddDDDDDDDDDDDDdd#wwwwww#
+  …
+```
+
+A terrain's height is low, mid or high, and a cliff forms where two heights meet. Its
+letter is lower case for low ground and upper case above it. In the grid each character is
+the terrain most of its cell is; `#` is the edge between two terrains, a cliff or a shore,
+and `*` a doodad. The grid is kept to 64 columns, so a 128-tile map is drawn a character
+every 2 tiles; `--cell 1` with an area draws every tile of it.
+
+| Option of `map terrain` | What it does |
+| --- | --- |
+| `--tiles <x0,y0,x1,y1>`, `--rect <l,t,r,b>`, `--location <name>` | Only this area: the counts and the grid |
+| `--cell <n>` | Tiles a character of the grid |
+| `--no-grid` | The table alone |
+| `--starcraft <folder>` | Your copy of the game, when it is not in one of the usual places |
+| `--json` | The terrains, the counts and the grid's rows as data |
+
+```
+$ scmjs map doodads ridge.scx --category ramp
+ridge.scx  1 of 23 doodads · Jungle World
+  index  doodad            id  tile   size
+  0      Cliff #13 (ramp)  13  32,38  6 × 6
+
+ℹ 102 doodads to place
+  id   doodad                   size   goes on
+  12   Cliff #12 (ramp)         6 × 6  High Dirt, Dirt, cliff or shore pieces
+  13   Cliff #13 (ramp)         6 × 6  High Dirt, Dirt, cliff or shore pieces
+  …
+```
+
+A doodad has no name of its own: it is its category and its id, "Cliff #13". Its index is
+its place in the file, counted from 0, and its tile is its top-left corner. Without an
+option the command lists the doodads on the map and the tileset's categories.
+`--category <name>` narrows the list to one category and adds the doodads of it that can
+be placed, each with its size and the ground it goes on; `--category ramp` is the ramps of
+every category. `--palette` lists every doodad the tileset has. The area options keep the
+placed doodads whose centre is inside, and `--all` lifts the cut at 40 rows.
+
 ### Editing units, locations, sprites and fog
 
-`scmjs map edit` applies a list of edits to a map's units, locations, sprites and fog of
-war. The list is a JSON file, so it suits a script or an [AI tool](#ai-tools) more than
-typing by hand. The edits are applied together: when one of them cannot be done, nothing
-is written.
+`scmjs map edit` applies a list of edits to a map: its units, locations, sprites and fog
+of war, and its [terrain and doodads](#painting-terrain-and-placing-doodads). The list is
+a JSON file, so it suits a script or an [AI tool](#ai-tools) more than typing by hand. The
+edits are applied together: when one of them cannot be done, nothing is written.
 
 ```json
 [
@@ -1092,11 +1269,12 @@ unit counts as one removed and one added.
 | `--out <map>` | Write the result here instead of over the map; `-` for standard output |
 | `--dry-run` | Print the change as `map diff` prints it, and write nothing |
 | `--all` | List every edit and every change; long lists are cut otherwise |
+| `--starcraft <folder>` | Your copy of the game, for the edits that read it, when it is not in one of the usual places |
 | `--json` | What each edit did and the comparison, as data |
 
 | Kind of edit (`op`) | Its fields |
 | --- | --- |
-| `place_unit` | `unit`, `player`, a position, and any unit properties |
+| `place_unit` | `unit`, `player`, a position, and any unit properties; `snap` and `check` |
 | `move_units` | Units, then a position (for one unit) or `dx` and `dy` in pixels (for any number) |
 | `update_units` | Units, then `player` (the new owner) and any unit properties |
 | `remove_units` | Units |
@@ -1106,6 +1284,7 @@ unit counts as one removed and one added.
 | `place_sprite` | `sprite` (a sprites.dat id) or `unit` (a unit drawn as a sprite), then `player`, a position, `flipped`, `disabled` |
 | `remove_sprites` | `indices`, or `where` with any of `sprite`, `unit`, `player` and an area |
 | `set_fog` | `players` (a list of 1 to 8), `mode` (`fog` or `clear`), and an area; the whole map without one |
+| `paint_terrain`, `place_doodad`, `scatter_doodads`, `remove_doodads` | [Terrain and doodads](#painting-terrain-and-placing-doodads) |
 
 - **A unit type** is a name ("Terran Marine", "Zergling") or a units.dat id. **A player**
   is 1 to 12; 12 is neutral.
@@ -1139,20 +1318,90 @@ field the kind of edit does not take, a second location with a name already in u
 any change to Anywhere. A file that is not JSON, or an entry that is not an edit, exits 2;
 an edit the map refuses exits 1.
 
-The command does not read the game's files, which sets three limits:
+A unit's position is used as given, and nothing is checked against the terrain or other
+units, unless the edit asks. Both of these read the unit tables and the tileset from [your
+copy of StarCraft](#commands-that-need-starcraft):
 
-- A position is used as given. Nothing is checked against the terrain or other units, so
-  run [`map check`](#checking-a-map) afterwards.
-- A building is not snapped to the building grid. Give its centre in pixels: a Command
-  Center is 4 by 3 tiles, so with its top-left corner at tile 8,52 its centre is 320,1712.
-- Doodads are not offered. Placing or removing one changes terrain tiles that only the
-  tileset's files describe; use the editor, or a plugin with
-  [`map run`](#running-a-plugin-over-a-map).
+- `"snap": true` puts a building on the building grid, as the editor places it. Without
+  it, give the building's centre in pixels: a Command Center is 4 by 3 tiles, so with its
+  top-left corner at tile 8,52 its centre is 320,1712.
+- `"check": true` refuses a position the editor would refuse: unwalkable ground for a
+  unit, unbuildable ground for a building, another unit in the way.
+
+A list with neither, and with no terrain or doodad edit, needs no copy of the game.
 
 A sprite is placed by its sprites.dat id, or as a unit sprite by the unit's name. Fog is
 set per tile, so an area in pixels covers every tile it touches. The edits go through the
 editor's own plugin host, the one `map run` uses, so a unit or location is written as a
 plugin's `api.document.edit` would write it.
+
+### Painting terrain and placing doodads
+
+Four kinds of edit change the ground. They go in the same list as the others, and they
+read the tileset from [your copy of StarCraft](#commands-that-need-starcraft). This list
+turns a flat map into the one pictured: lakes, a plateau with a ramp down, and rubble.
+
+```json
+[
+  { "op": "paint_terrain", "terrain": "Water", "cover": 0.12, "grain": 10, "seed": 7, "symmetry": "rot180" },
+  { "op": "paint_terrain", "terrain": "High Dirt", "tiles": { "x0": 20, "y0": 16, "x1": 44, "y1": 40 }, "shape": "ellipse" },
+  { "op": "place_doodad", "doodad": "ramp", "tileX": 30, "tileY": 38, "within": 8 },
+  { "op": "scatter_doodads", "doodad": "Dirt", "density": 0.03, "seed": 3 }
+]
+```
+
+```
+$ scmjs map edit ridge.scx --edits terrain.json
+  0  paint_terrain    Water · 2,080 tiles changed
+  1  paint_terrain    High Dirt · 788 tiles changed
+  2  place_doodad     Cliff #13 · 32,38 · 6 × 6 · doodad 0
+  3  scatter_doodads  22 doodads placed
+✔ ridge.scx: 4 edits · 5 sections changed · written to ridge.scx · 12 KB
+```
+
+![The map after the four edits: lakes mirrored through the centre, a plateau of high dirt with a ramp at its foot, rubble scattered on the dirt](images/cli-map-edit-terrain.webp)
+
+| Kind of edit (`op`) | Its fields |
+| --- | --- |
+| `paint_terrain` | `terrain`, and an area (the whole map without one); `shape`, `cover`, `grain`, `seed`, `symmetry` |
+| `place_doodad` | `doodad`, and `tileX` and `tileY`, its top-left tile; `within`, `force`, `seed` |
+| `scatter_doodads` | `doodad`, and an area (the whole map without one); `count` or `density`, `seed` |
+| `remove_doodads` | `indices`, as `map doodads` lists them, or `where` with `doodad` and an area |
+
+**Terrain** is a name or id that [`map terrain`](#listing-terrain-and-doodads) lists. It
+is painted with the editor's isometric brush, so the edge forms on its own: a cliff where
+the height changes, a shore beside water. A plateau is high ground painted on low ground.
+The brush works on diamonds four tiles wide and two high, so an area is painted to the
+nearest diamond and its outline is the brush's.
+
+| Field of `paint_terrain` | What it does |
+| --- | --- |
+| `shape` | `rect`, the area itself, or `ellipse`, the ellipse inside it |
+| `cover` | From 0 to 1: paint that share of the area, in patches, instead of all of it |
+| `grain` | How large a patch is, about, in tiles: 8 without it |
+| `seed` | Where the patches fall. The same seed paints the same patches |
+| `symmetry` | Repeat the stroke at its images: `h` (left and right), `v` (top and bottom), `hv` (all four), `rot180`, and on a square map `rot90`, `diag` and `adiag` |
+
+**A doodad** is an id, a name such as "Jungle #180", a category's name for any one of its
+doodads, or `ramp` for whichever of the tileset's ramps fits. `place_doodad` is refused
+where StarEdit would refuse it: a doodad goes on the ground it is drawn for, and a ramp
+only on the cliff shape it was drawn for. `within` says how many tiles around to look for
+a place where one fits, which is the way to place a ramp: paint the plateau, then ask for
+`ramp` within a few tiles of its edge. `force` places one doodad, named by its id,
+whatever is under it.
+
+`scatter_doodads` places `count` doodads, or as many as cover the `density` share of the
+area's tiles (0.1 without either), each where it fits and whole inside the area. A
+category scatters a mix of its doodads. When no more fit, fewer are placed, and the line
+says so. `remove_doodads` puts the ground under a doodad back.
+
+Painting terrain does not move what stands on it: a unit can end up in a lake, or a start
+location on a cliff. Look at the result with [`map preview`](#a-picture-of-a-map) and run
+[`map check`](#checking-a-map). A map without the isometric lattice, as some older editors
+leave it, cannot be painted by type until the editor's Terrain palette rebuilds it;
+`map terrain` says when that is so. Repeating a list paints the same terrains in the same
+places, but the tiles can differ, since the brush picks among a terrain's variations at
+random.
 
 ### Triggers and strings as text
 
@@ -1454,6 +1703,15 @@ that comparison in full and writes nothing. Saving is the command's job:
 at the end, and `api.document.saveAs()` resolves false, having no dialog to show. A plugin
 written in TypeScript needs TypeScript installed, as `map build` does; a built plugin or a
 JavaScript script needs nothing more.
+
+With [a copy of StarCraft](#commands-that-need-starcraft) on the computer, the plugin has
+the game's data as it does in the editor: the map's tileset, so the terrain types, the
+isometric brush and the doodads work, and the unit tables, so a unit's size and the
+placement check do. `api.tileset.load()` and `api.data.load()` answer true. Without a
+copy, those parts of the API do nothing and leave a note saying what they needed, and
+everything else works as before. `--starcraft <folder>` names the copy, and `--no-game`
+runs without one, which is how the plugin will run on a build server. `--json` says which
+copy was used.
 
 This is the editor's own plugin host, so a plugin's logic runs as it does in the editor.
 You can try a plugin from a terminal, or run it over many maps from a shell loop, before
@@ -4393,17 +4651,19 @@ gives its options.
 | [`scmjs map open <map>`](#opening-a-map-in-scmjs) | Opens the map in scmJS; `--live` [keeps it linked](#keeping-a-map-linked-to-the-editor), so commands change it in the editor |
 | [`scmjs map new <map>`](#a-blank-map) | A new map: flat ground, start locations placed |
 | [`scmjs map generate <map>`](#a-melee-map-from-a-seed) | A symmetric melee map from a seed, walked and checked before it is written |
-| [`scmjs map set <map>`](#name-description-and-revision) | The name, description, revision or text encoding; `--dry-run` |
+| [`scmjs map set <map>`](#name-description-and-revision) | The name, description, revision or text encoding, and with `--settings` the [players, forces and other settings](#players-forces-and-other-settings); `--dry-run` |
+| [`scmjs map settings <map>`](#players-forces-and-other-settings) | The players, the forces, and the unit, upgrade and technology settings and switch names the map changes |
 | [`scmjs map resize <map>`](#resizing) | Scenario ▸ Resize: another size, anchored, with what it drops listed; `--dry-run` |
 | [`scmjs map units <map>`, `scmjs map locations <map>`](#listing-units-and-locations) | The units with their index, type, player and position, filtered by type, player or area; the locations with their number, name and bounds |
-| [`scmjs map edit <map> --edits <file>`](#editing-units-locations-sprites-and-fog) | A JSON list of edits to units, locations, sprites and fog, applied together or not at all; `--dry-run` |
+| [`scmjs map terrain <map>`, `scmjs map doodads <map>`](#listing-terrain-and-doodads) | The tileset's terrains with the tiles each covers and the map as a grid of letters; the doodads on the map and the ones the tileset has to place |
+| [`scmjs map edit <map> --edits <file>`](#editing-units-locations-sprites-and-fog) | A JSON list of edits to units, locations, sprites, fog, [terrain and doodads](#painting-terrain-and-placing-doodads), applied together or not at all; `--dry-run` |
 | [`scmjs map triggers export\|import\|edit`](#triggers-and-strings-as-text) | The triggers as a text or `.trg` file and back (`-` for standard input, `--allow-empty`, `--dry-run`); `edit` opens them in your editor |
 | [`scmjs map strings export\|import\|edit\|prune`](#triggers-and-strings-as-text) | The strings as a text file and back; `prune` removes the unused ones |
 | [`scmjs map optimize <map>`](#making-a-map-smaller) | The map made smaller: unused sounds, files and strings out, compressed again; `--strip-editor` drops the editor-only sections too |
 | [`scmjs map unpack <map>`, `scmjs map pack <folder>`](#the-archive-as-a-folder) | The map's archive as a folder of files, and back; `pack --out -`, `--dry-run` |
 | [`scmjs map unpack <map> --text`](#a-map-as-a-folder-of-text) | The scenario as text files to keep in git; `map pack` builds the map from them |
 | [`scmjs map build <map>`](#building-a-trigscript-map) | Builds the map's TrigScript script into it, as Save does |
-| [`scmjs map run <plugin> <map>`](#running-a-plugin-over-a-map) | Runs a plugin, or a script written like one, over the map |
+| [`scmjs map run <plugin> <map>`](#running-a-plugin-over-a-map) | Runs a plugin, or a script written like one, over the map, with the game's data when a copy is there; `--no-game` |
 | [`scmjs map diff <a> <b>`](#comparing-two-maps) | What changed between two maps, or since a git revision with `--rev` (`--rev main...` for what a branch changed); `--picture` shows where |
 | [`scmjs map log <map>`](#a-maps-history) | The commits that changed the map, each with what it changed in the map's terms |
 | [`scmjs map blame <map>`](#who-last-changed-what) | The commit, author and date that last changed each trigger, location, string, unit group or setting |
@@ -4508,6 +4768,8 @@ from a clone with `npm run cli -- <command>`, or build it with `npm run build:cl
 | `cli/src/edit.ts` | The header set, the map resized and the unused strings dropped, over the open document |
 | `cli/src/objects.ts` | `map units` and `map locations`: the rows, the filters, and a unit type, location or area read from a name, a number or a rectangle |
 | `cli/src/mapedit.ts` | `map edit`: the shape of an edit, the list applied in one transaction of the plugin host, what an index means while units come and go, and the lines printed |
+| `cli/src/settings.ts` | `map settings`, and the settings `map set --settings` sets: the shape of the lists, each name read, the change made through the plugin host and worded |
+| `cli/src/terrain.ts` | `map terrain` and `map doodads`, and what the terrain and doodad edits lay: a terrain or doodad read from a name, the diamonds of a stroke (shape, patches from a seed, symmetry), a doodad placed where it fits |
 | `cli/src/optimize.ts` | `map optimize`: what refers to each member, the steps each measured as the file it leaves, the compression chosen |
 | `cli/src/report.ts` | Check Map's findings, a map test's failures and the triggers `map coverage` never saw fire, as GitHub annotations, JUnit XML and SARIF |
 | `cli/src/baseline.ts` | `map check --baseline`: a finding's identity (a trigger by its text, counts left out), the known findings matched one for one, the file read and written |
@@ -4526,7 +4788,7 @@ from a clone with `npm run cli -- <command>`, or build it with `npm run build:cl
 | `cli/src/texteditor.ts` | `triggers edit` and `strings edit`: the editor chosen and started, the file kept when the text does not read |
 | `cli/src/sounds.ts` | The map's sounds: the WAV table joined with the archive's members, their lengths, the files written |
 | `cli/src/qr.ts` | The QR encoder for `--qr` and its drawing in the terminal |
-| `cli/src/run.ts`, `src/plugins/headless.ts` | A plugin run over a map: the editor's plugin host with a store, a document and no page, its status, toasts and log reported instead of shown; the same host with no plugin, for `map edit` |
+| `cli/src/run.ts`, `src/plugins/headless.ts` | A plugin run over a map: the editor's plugin host with a store, a document and no page, its status, toasts and log reported instead of shown; the same host with no plugin, for `map edit`; the host given your copy of the game |
 | `cli/src/build.ts` | The TrigScript build: finding TypeScript, compiling against the map's names, applying the block, laying the programs in and packing the file |
 | `cli/src/completion.ts` | The bash, zsh and fish scripts, generated from the command tree |
 | `cli/src/mcp.ts` | The MCP server: each tool a command's functions, its text and JSON as the result |

@@ -344,13 +344,13 @@ describe("map edit: the list as JSON", () => {
     const one = { op: "remove_units", indices: [1] };
     expect(parseEdits([one])).toEqual([one]);
     expect(parseEdits({ edits: [one] })).toEqual([one]);
-    expect(EDIT_OPS).toEqual(["place_unit", "move_units", "update_units", "remove_units", "add_location", "edit_location", "remove_locations", "place_sprite", "remove_sprites", "set_fog"]);
+    expect(EDIT_OPS).toEqual(["place_unit", "move_units", "update_units", "remove_units", "add_location", "edit_location", "remove_locations", "place_sprite", "remove_sprites", "set_fog", "paint_terrain", "place_doodad", "scatter_doodads", "remove_doodads"]);
     const cases: [unknown, RegExp][] = [
       [{}, /The edits are a JSON list/],
       ["x", /The edits are a JSON list/],
       [[], /The list of edits is empty/],
       [[one, { op: "place_unit", unit: "Marine", player: 1, x: 4, y: 4, colour: 3 }], /^edits\[1\] \(place_unit\): `colour` is not a field of place_unit: it takes `unit`, `player`, `x`, `y`, `tileX`, `tileY`, `hitPoints`/],
-      [[{ op: "place_doodad", doodad: 3 }], /^edits\[0\] \(place_doodad\): `op` is one of place_unit, .*set_fog \(doodads are not among them: they need the game's tileset files/],
+      [[{ op: "raise_ground", terrain: 3 }], /^edits\[0\] \(raise_ground\): `op` is one of place_unit, .*set_fog, paint_terrain, place_doodad, scatter_doodads, remove_doodads$/],
       [[{ unit: 3 }], /^edits\[0\]: `op` is one of/],
       [[{ op: "place_unit", unit: "Marine", player: 13, x: "4", y: 1 }], /^edits\[0\] \(place_unit\): `player`: Too big: expected number to be <=12; `x`: expected number, received string$/],
       [[{ op: "update_units", where: { owner: 1 }, hitPoints: 5 }], /^edits\[0\] \(update_units\): `where`: Unrecognized key: "owner"$/],

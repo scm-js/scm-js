@@ -8,19 +8,22 @@
  * would do it. An edit that cannot be done throws inside the transaction, which takes back what the earlier edits
  * did; nothing is written, and the error names the edit by its place in the list (`edits[2]`).
  *
- * The host has no game data here, so what needs the game's files is not offered: doodads (their tiles are in the
- * tileset's doodad table) and the placement checks. A position is taken as given.
+ * Units, locations, sprites and fog need nothing but the map. Terrain and doodads are the tileset's, and a unit's
+ * size and the ground it may stand on are the game's tables', so a list with an edit of those kinds (`needsGame`)
+ * has the host given the person's own copy of StarCraft first (`run.ts#giveHostGame`, `terrain.ts`); a list
+ * without one is applied as before, with no copy looked for, and a position is taken as given.
  */
 import { z } from "zod";
 import type { OpenedMap } from "../../src/editor/mapFile";
-import type { SpriteRecord, UnitRecord } from "../../src/formats/chk/sections/objects";
+import type { DoodadRecord, SpriteRecord, UnitRecord } from "../../src/formats/chk/sections/objects";
 import { unitName } from "../../src/data/units";
 import { diffMaps, printDiff, summarizeDiff, type MapDiff } from "./diff";
 import { writeBack, type Written } from "./exchange";
 import { loadMapInput, toStdout, STDIO, type Input } from "./files";
 import { t } from "./i18n";
 import { areaRect, locationIndex, nameOf, playerLabel, TILE, tileRect, UNIT_STATES, unitsWhere, unitType, within, type PixelRect } from "./objects";
-import { openHost, type EditTransaction, type PluginApi } from "./run";
+import { noHostGame, openHost, type EditTransaction, type HostGame, type PluginApi } from "./run";
+import { doodadsOf, groundFor, needTileset, paintDiamonds, placeOneDoodad, scatterDoodads, seeded, SHAPES, strokeDiamonds, SYMMETRIES, terrainOf, type PlacedDoodad } from "./terrain";
 import { CliError, dot, mark, num, pc, size } from "./ui";
 
 /* ── The list's shape ───────────────────────────────────────── */
@@ -41,11 +44,15 @@ const properties = {
   cloaked: z.boolean().optional(), burrowed: z.boolean().optional(), lifted: z.boolean().optional(), hallucinated: z.boolean().optional(), invincible: z.boolean().optional(),
 };
 const indices = z.array(upTo(0xffff)).min(1).optional();
+const terrainRef = z.union([z.string().min(1), upTo(0xffff)]);
+const doodadRef = z.union([z.string().min(1), upTo(0xffff)]);
+const share = z.number().min(0).max(1);
+const seed = upTo(0xffffffff).optional();
 const whichUnits = { indices, where: z.strictObject({ unit: unitRef.optional(), player: player.optional(), ...area }).optional() };
 
 /** The fields of each kind of edit, by its `op`. */
 const OPS = {
-  place_unit: { unit: unitRef, player, ...at, ...properties },
+  place_unit: { unit: unitRef, player, ...at, ...properties, snap: z.boolean().optional(), check: z.boolean().optional() },
   move_units: { ...whichUnits, ...at, dx: z.number().int().optional(), dy: z.number().int().optional() },
   update_units: { ...whichUnits, player: player.optional(), ...properties },
   remove_units: { ...whichUnits },
@@ -55,12 +62,22 @@ const OPS = {
   place_sprite: { sprite: upTo(516).optional(), unit: unitRef.optional(), player: player.optional(), ...at, flipped: z.boolean().optional(), disabled: z.boolean().optional() },
   remove_sprites: { indices, where: z.strictObject({ sprite: upTo(0xffff).optional(), unit: unitRef.optional(), player: player.optional(), ...area }).optional() },
   set_fog: { players: z.array(z.number().int().min(1).max(8)).min(1), mode: z.enum(["fog", "clear"]), ...area },
+  paint_terrain: { terrain: terrainRef, ...area, shape: z.enum(SHAPES).optional(), cover: share.optional(), grain: z.number().int().min(2).max(64).optional(), seed, symmetry: z.enum(SYMMETRIES).optional() },
+  place_doodad: { doodad: doodadRef, tileX: tile, tileY: tile, within: z.number().int().min(0).max(32).optional(), force: z.boolean().optional(), seed },
+  scatter_doodads: { doodad: doodadRef, ...area, count: z.number().int().min(1).max(2000).optional(), density: share.optional(), seed },
+  remove_doodads: { indices, where: z.strictObject({ doodad: doodadRef.optional(), ...area }).optional() },
 } as const;
+
+/** The kinds of edit that read the game's files: the tileset for terrain and doodads. */
+const GAME_OPS = new Set<string>(["paint_terrain", "place_doodad", "scatter_doodads", "remove_doodads"]);
+
+/** Whether a list has an edit that needs the person's copy of the game: terrain, doodads, a unit snapped or checked. */
+export const needsGame = (edits: readonly MapEdit[]) => edits.some((e) => GAME_OPS.has(e.op) || (e.op === "place_unit" && (e.snap === true || e.check === true)));
 
 export const EDIT_OPS = Object.keys(OPS) as (keyof typeof OPS)[];
 
 /** The words for an `op` that is none of the kinds: they say why doodads are not among them. */
-const NOT_AN_OP = `\`op\` is one of ${EDIT_OPS.join(", ")} (doodads are not among them: they need the game's tileset files, which this does not read)`;
+const NOT_AN_OP = `\`op\` is one of ${EDIT_OPS.join(", ")}`;
 
 const fields = (keys: readonly string[]) => keys.map((k) => `\`${k}\``).join(", ");
 /** An edit of one kind: its fields and no others, a stray one named with those it takes. */
@@ -73,6 +90,7 @@ export const EDIT = z.discriminatedUnion("op", [
   editOf("place_unit"), editOf("move_units"), editOf("update_units"), editOf("remove_units"),
   editOf("add_location"), editOf("edit_location"), editOf("remove_locations"),
   editOf("place_sprite"), editOf("remove_sprites"), editOf("set_fog"),
+  editOf("paint_terrain"), editOf("place_doodad"), editOf("scatter_doodads"), editOf("remove_doodads"),
 ], { error: () => NOT_AN_OP });
 
 export type MapEdit = z.infer<typeof EDIT>;
@@ -90,8 +108,8 @@ export const EDIT_ARGUMENT = z.strictObject({
   x: pixel.optional().describe("a position in pixels, with y"), y: pixel.optional(),
   tileX: tile.optional().describe("a position as a tile (its centre), with tileY, in place of x and y"), tileY: tile.optional(),
   dx: z.number().int().optional().describe("move_units: pixels to move by, with dy"), dy: z.number().int().optional(),
-  indices: indices.describe("units (or sprites) by index, counted before this call"),
-  where: z.strictObject({ unit: unitRef.optional(), sprite: upTo(0xffff).optional(), player: player.optional(), ...area }).optional().describe("units (or sprites) that are all of these, in place of indices"),
+  indices: indices.describe("units (or sprites, or doodads) by index, counted before this call"),
+  where: z.strictObject({ unit: unitRef.optional(), sprite: upTo(0xffff).optional(), doodad: doodadRef.optional(), player: player.optional(), ...area }).optional().describe("units (or sprites, or doodads) that are all of these, in place of indices"),
   name: z.string().min(1).optional().describe("a location's name"),
   location: locationRef.optional().describe("a location: its name, or its number"),
   locations: z.array(locationRef).min(1).optional(),
@@ -103,6 +121,13 @@ export const EDIT_ARGUMENT = z.strictObject({
   mode: z.enum(["fog", "clear"]).optional(),
   hitPoints: percent.describe("percent"), shields: percent, energy: percent, resources: upTo(0xffffffff).optional(), hangar: upTo(0xffff).optional(),
   cloaked: z.boolean().optional(), burrowed: z.boolean().optional(), lifted: z.boolean().optional(), hallucinated: z.boolean().optional(), invincible: z.boolean().optional(),
+  snap: z.boolean().optional().describe("place_unit: put a building on the building grid"), check: z.boolean().optional().describe("place_unit: refuse a position the editor would refuse"),
+  terrain: terrainRef.optional().describe("a terrain of the tileset: its name, or its id as map_terrain lists it"),
+  shape: z.enum(SHAPES).optional(), cover: share.optional().describe("paint_terrain: the share of the area to paint, in patches"), grain: z.number().int().min(2).max(64).optional().describe("the size of a patch, about, in tiles"),
+  seed: seed.describe("the same seed gives the same patches and the same scatter"), symmetry: z.enum(SYMMETRIES).optional(),
+  doodad: doodadRef.optional().describe("a doodad's id or name, a category's name for any of its doodads, or \"ramp\""),
+  within: z.number().int().min(0).max(32).optional().describe("place_doodad: tiles to look around for a place it fits"), force: z.boolean().optional(),
+  count: z.number().int().min(1).max(2000).optional(), density: share.optional().describe("scatter_doodads: the share of the area's tiles to cover"),
 }, { error: (issue) => (issue.code === "unrecognized_keys" ? `${fields(issue.keys)} ${issue.keys.length === 1 ? "is not a field" : "are not fields"} of an edit` : undefined) });
 
 /** How an edit is named: its place in the list, from 0, as JSON counts. */
@@ -146,7 +171,11 @@ export type EditResult =
   | ({ op: "edit_location"; changed: boolean } & LocationNamed & Box)
   | { op: "remove_locations"; removed: LocationNamed[] }
   | { op: "place_sprite"; kind: "pure" | "unit"; sprite: string; player: number; x: number; y: number; index: number | null }
-  | { op: "set_fog"; mode: "fog" | "clear"; players: number[]; tiles: number };
+  | { op: "set_fog"; mode: "fog" | "clear"; players: number[]; tiles: number }
+  | { op: "paint_terrain"; terrain: string; id: number; diamonds: number; refused: number; tiles: number }
+  | ({ op: "place_doodad"; index: number | null } & PlacedDoodad)
+  | { op: "scatter_doodads"; asked: number | null; placed: (PlacedDoodad & { index: number | null })[] }
+  | { op: "remove_doodads"; matched: number; changed: number };
 
 export interface MapEditOutcome {
   /** One result an edit, in the list's order. */
@@ -155,6 +184,8 @@ export interface MapEditOutcome {
   modified: boolean;
   /** The change as `map diff` sees it, when there is one. */
   diff: MapDiff | null;
+  /** The copy of the game the terrain and doodad edits were laid with; null for a list that needed none. */
+  game: HostGame | null;
   written: Written | null;
 }
 
@@ -163,11 +194,31 @@ export interface EditOptions {
   out?: string | null;
   /** Apply the edits in memory, say what they change and write nothing. */
   dryRun?: boolean;
+  /** The folder of the copy of the game to lay terrain and doodads with; the first in the usual places without it. */
+  starcraft?: string;
 }
 
 /** An edit that cannot be done: the list stops there and nothing is written. */
 class Refused extends Error {}
 const refuse = (message: string): never => { throw new Refused(message); };
+
+type Tracked = "unit" | "sprite" | "doodad";
+/** The words for an index that names nothing, by what it was to name. */
+const NONE: Record<Tracked, (index: number) => string> = {
+  unit: (index) => t("there is no unit {index}: the map has no units", { index }),
+  sprite: (index) => t("there is no sprite {index}: the map has no sprites", { index }),
+  doodad: (index) => t("there is no doodad {index}: the map has no doodads", { index }),
+};
+const PAST: Record<Tracked, (index: number, last: number) => string> = {
+  unit: (index, last) => t("there is no unit {index}: the map's units are 0 to {last}", { index, last }),
+  sprite: (index, last) => t("there is no sprite {index}: the map's sprites are 0 to {last}", { index, last }),
+  doodad: (index, last) => t("there is no doodad {index}: the map's doodads are 0 to {last}", { index, last }),
+};
+const GONE: Record<Tracked, (index: number, edit: string) => string> = {
+  unit: (index, edit) => t("unit {index} was removed by {edit}", { index, edit }),
+  sprite: (index, edit) => t("sprite {index} was removed by {edit}", { index, edit }),
+  doodad: (index, edit) => t("doodad {index} was removed by {edit}", { index, edit }),
+};
 
 /**
  * Which record is which while the list is applied. An index a caller gives is the record's place before the call, so
@@ -179,8 +230,8 @@ class Tracker<T extends object> {
   private readonly gone = new Map<number, number>();
   private readonly count: number;
   private readonly list: () => readonly T[];
-  private readonly what: "unit" | "sprite";
-  constructor(list: () => readonly T[], what: "unit" | "sprite") {
+  private readonly what: Tracked;
+  constructor(list: () => readonly T[], what: Tracked) {
     this.list = list;
     this.what = what;
     const now = list();
@@ -192,12 +243,9 @@ class Tracker<T extends object> {
     const now = new Map<number, number>();
     this.list().forEach((r, i) => { const was = this.tags.get(r)?.was; if (was !== null && was !== undefined) now.set(was, i); });
     return [...new Set(indices)].map((was) => {
-      if (was >= this.count) {
-        refuse(this.count === 0 ? (this.what === "unit" ? t("there is no unit {index}: the map has no units", { index: was }) : t("there is no sprite {index}: the map has no sprites", { index: was }))
-          : this.what === "unit" ? t("there is no unit {index}: the map's units are 0 to {last}", { index: was, last: this.count - 1 }) : t("there is no sprite {index}: the map's sprites are 0 to {last}", { index: was, last: this.count - 1 }));
-      }
+      if (was >= this.count) refuse(this.count === 0 ? NONE[this.what](was) : PAST[this.what](was, this.count - 1));
       const at = now.get(was);
-      if (at === undefined) refuse(this.what === "unit" ? t("unit {index} was removed by {edit}", { index: was, edit: place(this.gone.get(was) ?? 0) }) : t("sprite {index} was removed by {edit}", { index: was, edit: place(this.gone.get(was) ?? 0) }));
+      if (at === undefined) refuse(GONE[this.what](was, place(this.gone.get(was) ?? 0)));
       return at!;
     });
   }
@@ -274,10 +322,17 @@ const named = (tx: EditTransaction, index: number): LocationNamed & Box => {
 };
 
 /** Apply the list inside one transaction; a `Refused` (or the editor's own error) leaves at the edit that threw it. */
-function applyEdits(api: PluginApi, tx: EditTransaction, edits: readonly MapEdit[], at: (i: number) => void): EditResult[] {
+function applyEdits(api: PluginApi, tx: EditTransaction, edits: readonly MapEdit[], at: (i: number) => void, game: HostGame | null = null): EditResult[] {
   const scn = tx.scenario as OpenedMap["scenario"];
   const units = new Tracker<UnitRecord>(() => scn.units, "unit");
   const sprites = new Tracker<SpriteRecord>(() => scn.sprites, "sprite");
+  const doodads = new Tracker<DoodadRecord>(() => scn.doodads, "doodad");
+  // The chance in the list's doodads: one run of numbers for the whole list, so that two edits asking for any doodad
+  // of a category need not get the same one, and the same list gives the same map. An edit with a `seed` has its own.
+  const chance = seeded(1);
+  const chanceOf = (seed: number | undefined) => (seed === undefined ? chance : seeded(seed));
+  /** A placed doodad's result takes its final index when the list is done, as a placed unit's does. */
+  const doodadPlaced = <R extends { index: number | null }>(index: number, result: R): R => { doodads.placed(index, result); result.index = null; return result; };
   const anywhere = api.consts.location.anywhere;
   const results: EditResult[] = [];
 
@@ -306,6 +361,18 @@ function applyEdits(api: PluginApi, tx: EditTransaction, edits: readonly MapEdit
       case "place_unit": {
         const id = unitType(e.unit);
         const p = pointOf(e, tx) ?? refuse(t("say where: `x` and `y` (pixels), or `tileX` and `tileY`"));
+        if ((e.snap || e.check) && !game?.units) refuse(t("`snap` and `check` read the game's unit tables, and {copy} has none to read", { copy: game?.label ?? t("this copy") }));
+        // A building on the building grid: where the editor's own placement puts it (its box on whole tiles).
+        if (e.snap && api.palette.unitSize(id).building) {
+          const probe = tx.placeUnit(id, e.player - 1, p.x, p.y);
+          p.x = scn.units[probe].x;
+          p.y = scn.units[probe].y;
+          tx.removeUnits([probe]);
+        }
+        if (e.check) {
+          const verdict = api.query.placement(id, p.x, p.y);
+          if (verdict?.problem) refuse(t("{unit} cannot go at {x},{y}: {reason}", { unit: unitName(id), x: p.x, y: p.y, reason: verdict.reason ?? verdict.problem }));
+        }
         const rec = tx.makeUnit(id, e.player - 1, p.x, p.y);
         Object.assign(rec, propertiesOf(e, api.consts)?.(rec));
         const [index] = tx.addUnits([rec]);
@@ -412,10 +479,68 @@ function applyEdits(api: PluginApi, tx: EditTransaction, edits: readonly MapEdit
         results.push({ op: e.op, mode: e.mode, players, tiles: tx.setFog(cells, players.reduce((m, p) => m | (1 << (p - 1)), 0), e.mode) });
         break;
       }
+      case "paint_terrain": {
+        if (!api.terrain.hasIsom()) refuse(t("the map has no isometric lattice to paint on: Rebuild ISOM in the editor's Terrain palette makes one from its tiles"));
+        const type = terrainOf(api, e.terrain);
+        if (e.cover === undefined && (e.grain !== undefined || e.seed !== undefined)) refuse(t("`grain` and `seed` shape the patches of `cover`: give `cover` too, the share of the area to paint"));
+        const box = boxOf(tx, e);
+        const cells = box ? tileRect(box) : { x0: 0, y0: 0, x1: tx.width, y1: tx.height };
+        const diamonds = strokeDiamonds(api, tx, cells, { shape: e.shape, cover: e.cover, grain: e.grain, seed: e.seed, symmetry: e.symmetry });
+        if (!diamonds.length) refuse(t("the area is smaller than one diamond of the lattice (four tiles by two): nothing would be painted"));
+        const painted = paintDiamonds(tx, type, diamonds);
+        results.push({ op: e.op, terrain: painted.terrain, id: painted.id, diamonds: painted.diamonds, refused: painted.refused, tiles: painted.tiles });
+        break;
+      }
+      case "place_doodad": {
+        const choices = doodadsOf(api, e.doodad);
+        if (e.force && (choices.length > 1 || e.within)) refuse(t("`force` places one doodad exactly where it is told: name it by its id, without `within`"));
+        const placed = placeOneDoodad(api, tx, choices, e.tileX, e.tileY, { within: e.within, force: e.force, random: chanceOf(e.seed) });
+        if (!placed) {
+          const what = choices.length === 1 ? choices[0].name : t("none of the {n} doodads of {name}", { n: choices.length, name: String(e.doodad) });
+          const where = e.within ? t("within {n} tiles of {x},{y}", { n: e.within, x: e.tileX, y: e.tileY }) : t("at {x},{y}", { x: e.tileX, y: e.tileY });
+          throw new CliError(
+            choices.length === 1 ? t("{doodad} does not fit {where}: it goes on {ground}", { doodad: what, where, ground: groundFor(api, choices[0]) }) : t("{doodad} fits {where}", { doodad: what, where }),
+            e.within ? t("map_terrain shows what ground is where.") : t("`within` looks around for a place it fits; `force` places it whatever is under it."),
+          );
+        }
+        const { index, ...where } = placed;
+        results.push(doodadPlaced(index, { op: e.op, index: null as number | null, ...where }));
+        break;
+      }
+      case "scatter_doodads": {
+        if (e.count !== undefined && e.density !== undefined) refuse(t("`count` and `density` both say how many: give one"));
+        const choices = doodadsOf(api, e.doodad);
+        const box = boxOf(tx, e);
+        const cells = box ? tileRect(box) : { x0: 0, y0: 0, x1: tx.width, y1: tx.height };
+        const placed = scatterDoodads(api, tx, choices, cells, { count: e.count, density: e.density, random: chanceOf(e.seed) });
+        results.push({ op: e.op, asked: e.count ?? null, placed: placed.map(({ index, ...where }) => doodadPlaced(index, { index: null as number | null, ...where })) });
+        break;
+      }
+      case "remove_doodads": {
+        if ((e.indices === undefined) === (e.where === undefined)) refuse(t("name the doodads with `indices` or with `where`, one of the two"));
+        let which: number[];
+        if (e.indices) which = doodads.pick(e.indices);
+        else {
+          const w = e.where!;
+          if (!Object.keys(w).length) refuse(t("an empty `where` is every doodad on the map: give it a doodad, a category or an area"));
+          const only = w.doodad === undefined ? null : new Set(doodadsOf(api, w.doodad).map((d) => d.id));
+          const box = boxOf(tx, w);
+          which = [];
+          scn.doodads.forEach((d, k) => {
+            if (only && !only.has(d.doodadId)) return;
+            if (box && !within(d, box)) return;
+            which.push(k);
+          });
+        }
+        doodads.removing(which, i);
+        results.push({ op: e.op, matched: which.length, changed: tx.removeDoodads(which) });
+        break;
+      }
     }
   });
   units.settle();
   sprites.settle();
+  doodads.settle();
   return results;
 }
 
@@ -426,11 +551,14 @@ function applyEdits(api: PluginApi, tx: EditTransaction, edits: readonly MapEdit
  */
 export async function editMap(input: Input, doc: OpenedMap, edits: readonly MapEdit[], options: EditOptions = {}): Promise<MapEditOutcome> {
   const before = await loadMapInput(input);
+  // Before the host: it reads the tileset and the unit tables that are in memory when it is made.
+  const game = needsGame(edits) ? await needTileset(doc, options.starcraft) : null;
+  if (!game) noHostGame();
   const host = openHost(doc, "map edit");
   try {
     let results: EditResult[] = [], current = 0;
     try {
-      host.api.document.edit("map edit", (tx) => { results = applyEdits(host.api, tx, edits, (i) => { current = i; }); });
+      host.api.document.edit("map edit", (tx) => { results = applyEdits(host.api, tx, edits, (i) => { current = i; }, game); });
     } catch (e) {
       // The reason's own hint first (what the map has, how a unit is named), then what became of the list.
       const reason = e instanceof Error ? e.message : String(e);
@@ -440,7 +568,7 @@ export async function editMap(input: Input, doc: OpenedMap, edits: readonly MapE
     const modified = host.modified();
     const after = host.document();
     const name = input.name;
-    const outcome: MapEditOutcome = { edits: results, modified, diff: modified ? diffMaps({ name, doc: before }, { name: options.out && options.out !== STDIO ? options.out : name, doc: after }) : null, written: null };
+    const outcome: MapEditOutcome = { edits: results, modified, diff: modified ? diffMaps({ name, doc: before }, { name: options.out && options.out !== STDIO ? options.out : name, doc: after }) : null, game, written: null };
     // Changed, or --out named, or the map going down a pipe: the next step needs a map either way.
     if ((modified || options.out || toStdout(input.path, options.out)) && !options.dryRun) outcome.written = await writeBack(after, input.path, options.out ?? null);
     return outcome;
@@ -467,6 +595,10 @@ export function editLine(r: EditResult): string {
     case "remove_locations": return r.removed.map((l) => `${l.number}  ${l.name}`).join(", ");
     case "place_sprite": return `${r.kind === "unit" ? t("{unit} (unit sprite)", { unit: r.sprite }) : r.sprite}${dot}${playerLabel(r.player)}${dot}${r.x},${r.y}${dot}${r.index === null ? t("removed again") : t("sprite {index}", { index: r.index })}`;
     case "remove_sprites": return r.matched ? t("{what} removed", { what: spriteCount(r.changed) }) : pc.yellow(t("no sprite matches"));
+    case "paint_terrain": return `${r.terrain}${dot}${t("{n, plural, one {# tile} other {# tiles}} changed", { n: r.tiles })}${r.refused ? pc.yellow(` ${t("({n, plural, one {# diamond} other {# diamonds}} the tileset cannot join to the ground beside)", { n: r.refused })}`) : ""}`;
+    case "place_doodad": return `${r.name}${dot}${r.tileX},${r.tileY}${dot}${r.width} × ${r.height}${dot}${r.index === null ? t("removed again") : t("doodad {index}", { index: r.index })}`;
+    case "scatter_doodads": return r.placed.length ? t("{n, plural, one {# doodad} other {# doodads}} placed", { n: r.placed.length }) + (r.asked !== null && r.placed.length < r.asked ? pc.yellow(` ${t("(of {n} asked for: no more fit)", { n: r.asked })}`) : "") : pc.yellow(t("no doodad fits there"));
+    case "remove_doodads": return r.matched ? t("{n, plural, one {# doodad} other {# doodads}} removed", { n: r.changed }) : pc.yellow(t("no doodad matches"));
     case "set_fog": return `${r.mode === "fog" ? t("{n, plural, one {# tile} other {# tiles}} fogged", { n: r.tiles }) : t("{n, plural, one {# tile} other {# tiles}} cleared", { n: r.tiles })}${dot}${r.players.map((p) => playerLabel(p)).join(", ")}`;
   }
 }

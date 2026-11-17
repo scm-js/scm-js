@@ -99,7 +99,9 @@ that page; there is no separate dialog). `Preferences.undoLevels` is read by
 `app/viewMemory.ts`). Its write takes a `SetStateAction` like the old primitive and records
 in `viewMemoryAtom` every remembered tick whose value changed, so the menu, `toggleFlagAtom`
 (hotkeys, toolbar), the panels, `api.view.setFlags` and `turnOnRemasteredGraphics` all persist
-without knowing. The overlays and the show/hide ticks stay per session (a reload must never
+without knowing. An update that hands back the object it was given writes nothing (the
+derived value is never the session atom's own object, so setting it would notify every reader
+and send plugins a `view` event for no change: `useAutoShow` does this on each layer switch). The overlays and the show/hide ticks stay per session (a reload must never
 open a map with its units hidden). Storing only what was *changed* is what lets "reduce motion"
 work: `reducedMotionAtom` is `matchMedia("(prefers-reduced-motion: reduce)")` read once at
 module load, and turns the two animation defaults off; a tick the person set wins. Still one set

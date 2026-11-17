@@ -9,10 +9,10 @@ import { runInNewContext } from "node:vm";
 import { describe, expect, it } from "vitest";
 import { createStore } from "jotai";
 import { mergeDefaults } from "../src/app/storage";
-import { pushToastAtom, toastsAtom } from "../src/atoms/uiAtoms";
+import { pushToastAtom, toastLimitAtom, toastsAtom } from "../src/atoms/uiAtoms";
 import { applyInterfaceSize, SIZE_ATTRIBUTE, type SizeRoot } from "../src/app/interfaceSize";
 import { DEFAULT_PREFERENCES, INTERFACE_SIZES, interfaceZoom } from "../src/app/preferences";
-import { defaultToastTtl, toastLifetime } from "../src/app/view";
+import { defaultToastTtl, KEPT_TOAST_LIMIT, TOAST_LIMIT, toastLifetime, toastLimit } from "../src/app/view";
 
 /** A stand-in for `document.documentElement`: what it was given, as the page would have it. */
 function fakeRoot() {
@@ -97,6 +97,8 @@ describe("interface size", () => {
     const list = css.slice(css.indexOf(":is(") + 4, css.indexOf("zoom: var(--ui-zoom)"));
     const entries = topLevel(list.slice(0, list.lastIndexOf(")"))).map((e) => e.trim());
     expect(entries).toContain(".map-column > :not(.map-stack)");
+    // `.body` is also a trigger's row in the Trigger Editor, inside a dialog that is zoomed already: the app's is named from `.app`.
+    for (const entry of entries) if (entry.includes(".body")) expect(entry, entry).toMatch(/^\.app > /);
     for (const entry of entries) expect(entry, entry).not.toMatch(/(^|[\s>])(\.map-stack|\.map-column|\.body|\.viewport|\.scroller|\.map-surface)$/);
   });
 });
@@ -111,6 +113,21 @@ describe("notices", () => {
     expect(store.get(toastsAtom).map((t) => t.ttl)).toEqual([6000, 12000, 2500, 0]);
     expect([defaultToastTtl("info"), defaultToastTtl("warn"), defaultToastTtl("error")]).toEqual([6000, 6000, 12000]);
     expect(store.get(toastsAtom).map((t) => toastLifetime(t, false))).toEqual([6000, 12000, 2500, 0]);
+  });
+
+  it("push the oldest out at the fifth, and none out while they are kept", () => {
+    const store = createStore();
+    for (let i = 1; i <= 6; i++) store.set(pushToastAtom, { kind: "info", title: `n${i}` });
+    expect(store.get(toastsAtom).map((t) => t.title)).toEqual(["n3", "n4", "n5", "n6"]);
+    // What `useApplyPreferences` sets while Keep notices until I close them is on.
+    expect(toastLimit(false)).toBe(TOAST_LIMIT);
+    store.set(toastLimitAtom, toastLimit(true));
+    for (let i = 7; i <= 20; i++) store.set(pushToastAtom, { kind: i === 7 ? "error" : "info", title: `n${i}` });
+    expect(store.get(toastsAtom)).toHaveLength(18);
+    expect(store.get(toastsAtom)[0].title).toBe("n3");
+    // Not without end: a caller raising notices in a loop stops at the limit.
+    for (let i = 0; i < 100; i++) store.set(pushToastAtom, { kind: "info", title: "again" });
+    expect(store.get(toastsAtom)).toHaveLength(KEPT_TOAST_LIMIT);
   });
 
   it("stay until closed while the preference is on, whatever time was asked for", () => {

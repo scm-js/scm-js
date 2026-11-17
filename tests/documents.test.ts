@@ -3,8 +3,8 @@ import { createStore } from "jotai";
 import { createScenario } from "../src/formats/chk/create";
 import { serializeScenario, setScenarioName } from "../src/formats/chk/scenario";
 import {
-  activateDocumentAtom, activeDocumentIdAtom, anyModifiedAtom, closeDocumentAtom, commitSettingsAtom, documentChangeAtom, documentsAtom, documentTabsAtom, loadDocumentAtom, parkedTilesetsAtom,
-  redoStackAtom, scenarioAtom, settingsRevisionAtom, triggersRevisionAtom, undoStackAtom,
+  activateDocumentAtom, activeDocumentIdAtom, anyModifiedAtom, applyDocumentAtom, closeDocumentAtom, commitSettingsAtom, documentChangeAtom, documentsAtom, documentTabsAtom, loadDocumentAtom, parkedTilesetsAtom,
+  redoStackAtom, replaceScenarioAtom, scenarioAtom, settingsRevisionAtom, triggersRevisionAtom, undoAtom, undoStackAtom,
 } from "../src/atoms/documentAtoms";
 import { blendAnchorAtom, doodadPlacingAtom, unitPlacingAtom } from "../src/atoms/editorAtoms";
 import { centerViewOnAtom, clipSelectionAtom, locationsAutoHiddenAtom, viewFlagsAtom, mapFilePathAtom, mapModifiedAtom, mapNameAtom, mapTilesetAtom, mapWidthAtom, selectedUnitsAtom, viewportRectAtom, zoomAtom } from "../src/atoms/editorAtoms";
@@ -139,6 +139,32 @@ describe("several maps open at once", () => {
     store.set(activateDocumentAtom, a);
     expect(store.get(unitPlacingAtom)).toBe(false);
     expect(store.get(doodadPlacingAtom)).toBe(false);
+    expect(store.get(blendAnchorAtom)).toBeNull();
+  });
+
+  it("keeps the unit in hand and the Blend anchor when the map in front is read again", () => {
+    // A linked command's edit, its undo, a shared map's whole-map change: the same map, another object.
+    const store = withA();
+    store.set(unitPlacingAtom, true);
+    store.set(doodadPlacingAtom, true);
+    store.set(blendAnchorAtom, { x: 3, y: 2 });
+
+    const next = scn("a, edited");
+    expect(store.set(applyDocumentAtom, { scenario: next, extras: new Map(), stored: null }, "map edit")).toBe(true);
+    expect(store.get(scenarioAtom)).toBe(next);
+    expect(store.get(unitPlacingAtom)).toBe(true);
+    expect(store.get(blendAnchorAtom)).toEqual({ x: 3, y: 2 });
+    // The doodad in hand ends there, as before.
+    expect(store.get(doodadPlacingAtom)).toBe(false);
+
+    store.set(undoAtom);
+    expect(store.get(unitPlacingAtom)).toBe(true);
+    expect(store.get(blendAnchorAtom)).toEqual({ x: 3, y: 2 });
+
+    // An anchor on a cell the map no longer has goes.
+    store.set(blendAnchorAtom, { x: next.width, y: 0 });
+    store.set(replaceScenarioAtom, scn("a, sections edited"));
+    expect(store.get(unitPlacingAtom)).toBe(true);
     expect(store.get(blendAnchorAtom)).toBeNull();
   });
 

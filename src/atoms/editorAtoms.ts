@@ -257,6 +257,8 @@ export const viewFlagsAtom = atom(
   (get, set, update: SetStateAction<ViewFlags>) => {
     const before = get(viewFlagsAtom);
     const next = typeof update === "function" ? update(before) : update;
+    // An update that hands back what it was given changes nothing: no repaint, and no `view` event for plugins.
+    if (next === before) return;
     set(sessionViewFlagsAtom, next);
     const changed: ViewMemory = {};
     for (const k of REMEMBERED_FLAGS) if (next[k] !== before[k]) changed[k] = next[k];

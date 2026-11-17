@@ -593,6 +593,23 @@ a.brand:focus-visible {
   pointer-events: auto;
   box-shadow: var(--shadow-pop);
 }
+/* Kept notices are not cut at four: the pile stops short of the top of the window and
+   scrolls from there (the wheel over a notice; the box itself lets presses through to the
+   map). The room on the left and top is for the notices' shadows, which a scrolling box
+   would cut. `--ui-zoom` is the interface size's: a window length inside a zoomed surface
+   is divided by it (size.css). */
+.toasts.kept {
+  max-height: calc(100vh / var(--ui-zoom, 1) - var(--h-statusbar) - 24px);
+  overflow-y: auto;
+  scrollbar-width: none;
+  padding: 16px 0 0 24px;
+}
+.toasts.kept > * { flex-shrink: 0; }
+.toasts.kept .toasts-clear {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
 @keyframes toast-in {
   from { opacity: 0; transform: translateY(6px); }
   to { opacity: 1; transform: none; }

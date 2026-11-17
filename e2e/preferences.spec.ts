@@ -106,3 +106,21 @@ test("Apply and Reset everything work while the results show", async ({ editor }
   await expect(dlg).toHaveCount(0);
   expect((await stored(editor.page)).keepNotices).toBe(false);
 });
+
+test("a radio chosen in the results shows as chosen while its page is the one in front", async ({ editor }) => {
+  // The page in front stays mounted behind the results, so View's radios are in the dialog twice.
+  await editor.open("dialog=preferences&page=view");
+  const dlg = editor.dialog("Preferences");
+  await dlg.getByRole("textbox", { name: "Find a setting" }).fill("wheel");
+  const results = dlg.locator(".prefs-results");
+  const scrolls = results.getByLabel("Scrolls the map; Ctrl+wheel zooms");
+  const zooms = results.getByLabel("Zooms; Shift+wheel scrolls sideways");
+  await expect(scrolls).toBeChecked();
+  await zooms.check();
+  await expect(zooms).toBeChecked();
+  await expect(scrolls).not.toBeChecked();
+  await dlg.getByRole("button", { name: "OK", exact: true }).click();
+  await expect(dlg).toHaveCount(0);
+  expect(((await stored(editor.page)).view as { wheel: string }).wheel).toBe("zoom");
+});
+

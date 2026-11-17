@@ -124,7 +124,10 @@ read in the first effect pass is still null.
   purpose**: a second list of words drifts from the labels the first time one is edited, while this
   way a section added to a page later is searchable with nothing to register. `IconSelect` writes its
   option labels into a `hidden` span for the same reason (radix's list is in the DOM only while
-  open), which is how "한국어" finds Language. Rejected: per-section keywords; matching the
+  open), which is how "한국어" finds Language. The page in front stays mounted, `hidden`, behind
+  the results, so a built-in page can be in the dialog twice: **a radio group's `name` has to differ per
+  copy** (`ViewPage` takes it from `useId`), or the two copies are one group and the hidden one takes the
+  check after a click on the visible one. Rejected: per-section keywords; matching the
   `t()` strings of the source (the catalogue does not know which section a string is drawn in,
   and run-time text such as `hostTerms()` and the storage rows would be missed); rendering the
   pages off screen just to read their text (two mounts of everything for no gain). What the
@@ -415,7 +418,12 @@ read in the first effect pass is still null.
   full repaint — both, and closing the last map, walk the one `REGISTERS` table (field of
   `ParkedDocument`, atom, empty value), so a per-document atom is declared once; the scenario, the
   selections, the zoom and the view are handled beside it, and a gesture (the placing modes, the Blend
-  anchor) is ended on every install and close; nothing is re-parsed and a parked map has no subscriptions, no viewport and no
+  anchor) is ended when another map arrives and on a close (`endGestures`). For the *same* map read again
+  (reason `"replace"`: a linked command's edit and its undo through `putDocumentSide`, a shared map's whole-map
+  change, a plugin's section edit) the doodad, the sprite and the paste end as they always have, but the unit
+  in hand and the Blend anchor stay — ending them there took the unit from someone placing units at every
+  edit an AI tool or `scmjs map edit` made to the linked map; the anchor goes only if the map no longer has
+  its cell; nothing is re-parsed and a parked map has no subscriptions, no viewport and no
   analysis running, so the one-map case is unchanged and a background map costs memory only. The
   alternative, one Jotai store per map with the Provider swapped, remounts the whole tree and loses
   component state (`useTileset`'s), and the plugin host holds the default store — rejected.
@@ -593,6 +601,10 @@ read in the first effect pass is still null.
   `.map-hud`, the notices, the start screen, a plugin's floating panel), and what is portalled to the body (`.dlg`,
   `[data-radix-popper-content-wrapper] > *` — the content, never the wrapper, which floating-ui positions in page
   pixels and then measures with the zoomed content inside — the plugin tooltip, the splash card, the crash card).
+  The app's `.body` is written `.app > .body` in that list: a class the list names bare is zoomed wherever it
+  turns up, and a trigger's row in the Trigger Editor is a `.body` too, so its text was zoomed a second time
+  inside the zoomed `.dlg` (1.69× at 130%). `e2e/interfaceSize.spec.ts` reads `currentCSSZoom` of everything in
+  that dialog; a new entry in the list should be a class nothing inside a dialog or panel uses.
   **The map is never inside a zoomed box, and that is the point.** `MapViewport`'s pointer arithmetic is
   `clientX - rect.left + scrollLeft`: page pixels against the scroller's own, equal only at zoom 1. Rejected:
   zooming the page and zooming `.map-stack` back by `1 / z` (Chromium multiplies the two to 0.99999994, and
@@ -631,7 +643,12 @@ read in the first effect pass is still null.
 - **Notices kept until closed** (`Preferences.keepNotices`, off by default). `pushToastAtom` still stores the
   time asked for (`defaultToastTtl`: 6 s, 12 s for an error); `Toasts` asks `toastLifetime(toast, keep)`, which is 0
   while the preference is on, so a plugin's `ui.toast` with its own time is held too, and turning it off later
-  starts each notice's own time from then. Up to four are shown (`slice(-3)`); while the preference is on and two or
-  more are up, a *Close all* (`dismissAllToastsAtom`) sits above them. Each notice's × is a button, so Tab reaches it.
+  starts each notice's own time from then. Up to four are up at once and a fifth pushes the oldest out
+  (`toastLimitAtom`, `TOAST_LIMIT`); while the preference is on the limit is `KEPT_TOAST_LIMIT` (50), so no
+  notice leaves unseen — `useApplyPreferences` sets the atom from the preference, because `preferencesAtoms`
+  imports `uiAtoms` and the push cannot read it. A kept pile is `.toasts.kept`: it stops short of the top of
+  the window and scrolls from there (the wheel over a notice; the box itself is `pointer-events: none` so the
+  map under it stays reachable), `Toasts` scrolls it to the newest as one arrives, and with two or
+  more up a *Close all* (`dismissAllToastsAtom`) sits above them, sticky at the pile's top. Each notice's × is a button, so Tab reaches it.
 - CSS is plain, layered in import order `tokens → base → ui → chrome → panels → viewport → dialogs → splash → size`
   under `src/styles/`; design tokens are CSS variables in `tokens.css`.

@@ -2,7 +2,7 @@ import { atom } from "jotai";
 import { atomWithStorage, createJSONStorage } from "jotai/utils";
 import { browserStorage } from "../app/storage";
 import type { DialogId } from "../components/dialogs/ids";
-import { defaultToastTtl, type Toast } from "../app/view";
+import { defaultToastTtl, TOAST_LIMIT, type Toast } from "../app/view";
 import { msg } from "../i18n";
 import { count } from "../services/usage";
 import { viewOnlyAtom, viewOnlyMessage } from "./editorAtoms";
@@ -110,13 +110,20 @@ export const folderReadsAtom = atom<FolderRead[]>([]);
 /* ── Toasts ─────────────────────────────────────────────── */
 
 export const toastsAtom = atom<Toast[]>([]);
+/**
+ * How many notices may be up at once; the one after that pushes the oldest out. Four, and
+ * `useApplyPreferences` raises it while Preferences ▸ View keeps notices until they are
+ * closed (the preferences' atoms import this module, so the preference is not read here).
+ */
+export const toastLimitAtom = atom(TOAST_LIMIT);
 
 let nextToast = 1;
 export const pushToastAtom = atom(null, (get, set, toast: Omit<Toast, "id" | "ttl"> & { ttl?: number }): number => {
   const id = nextToast++;
   // (The time asked for; Toasts holds every notice instead while Keep notices is on — `toastLifetime`.)
   const ttl = toast.ttl ?? defaultToastTtl(toast.kind);
-  set(toastsAtom, [...get(toastsAtom).slice(-3), { ...toast, id, ttl }]);
+  const room = Math.max(1, get(toastLimitAtom)) - 1;
+  set(toastsAtom, [...(room > 0 ? get(toastsAtom).slice(-room) : []), { ...toast, id, ttl }]);
   return id;
 });
 

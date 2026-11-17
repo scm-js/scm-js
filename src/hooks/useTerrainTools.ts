@@ -701,16 +701,18 @@ export function useTerrainTools() {
     const area = rect ?? { x0: 0, y0: 0, x1: scn.width, y1: scn.height };
     const cells: number[] = [];
     for (let y = Math.max(0, area.y0); y < Math.min(scn.height, area.y1); y++) for (let x = Math.max(0, area.x0); x < Math.min(scn.width, area.x1); x++) cells.push(y * scn.width + x);
-    const changes = withoutPinned(healTiles(scn, loaded.tileset, cells), store.get(pinnedTilesAtom)).changes;
+    const spared = withoutPinned(healTiles(scn, loaded.tileset, cells), store.get(pinnedTilesAtom));
+    const changes = spared.changes;
     if (changes.length === 0) {
-      setStatus(healMissNote(healMiss(scn, loaded.tileset, cells)));
+      // Pins held back every tile it would have changed: say that, as the brush does, not that the tileset has no tile for it.
+      setStatus(spared.kept > 0 ? t("Nothing painted: the tiles here are pinned (the Pin tab unpins)") : healMissNote(healMiss(scn, loaded.tileset, cells)));
       return 0;
     }
     const before = shownSeams(scn, loaded.tileset, cells);
     applyChanges(scn, changes);
     const after = shownSeams(scn, loaded.tileset, cells);
     const label = t("Heal seams");
-    commitTerrain(scn, { label, tool: "healArea", changes }, healedNote(changes.length, before, after));
+    commitTerrain(scn, { label, tool: "healArea", changes }, healedNote(changes.length, before, after) + keptNote(spared.kept));
     return changes.length;
   }, [store, loaded, commitTerrain, setStatus]);
 

@@ -641,12 +641,25 @@ const SELECTIONS = {
   units: selectedUnitsAtom, doodads: selectedDoodadsAtom, sprites: selectedSpritesAtom, locations: selectedLocationsAtom,
 } satisfies Record<keyof ParkedDocument["selected"], unknown>;
 
-/** What belongs to a gesture on the map in front and never survives a switch: the placing modes and the Blend brush's anchor. */
-function endGestures(set: Setter) {
-  set(unitPlacingAtom, false);
+/**
+ * What belongs to a gesture on the map in front: the placing modes and the Blend brush's
+ * anchor. None of it survives another map coming forward. `same` is the map in front read
+ * again (a linked command's edit, its undo, a shared map's whole-map change, a plugin's
+ * section edit): the person is still on their map, so the unit being placed stays in hand
+ * — a tool that edits the map while they place units must not take it from them at every
+ * edit — and so does the anchor, where the map still has that cell. The doodad, the sprite
+ * and the paste end there as they always have.
+ */
+function endGestures(get: Getter, set: Setter, same: Scenario | null) {
   set(doodadPlacingAtom, false);
   set(spritePlacingAtom, false);
   set(clipPastingAtom, false);
+  const anchor = get(blendAnchorAtom);
+  if (same) {
+    if (anchor && (anchor.x >= same.width || anchor.y >= same.height)) set(blendAnchorAtom, null);
+    return;
+  }
+  set(unitPlacingAtom, false);
   set(blendAnchorAtom, null);
 }
 
@@ -691,7 +704,8 @@ const DOCUMENT_LINES: Partial<Record<DocumentChangeReason, string>> = {
  * onto a neighbour — mirroring the scenario's fields into the atoms the chrome displays and
  * bumping every revision, since everything drawn is now another object. Selections, the
  * history and the view come from the record: empty for a map just opened, as left for one
- * coming back. The placing modes are always off — a click on the map that arrives should select.
+ * coming back. The placing modes are off for a map that arrives — a click on it should select
+ * — and what stays for the same map read again is `endGestures`'.
  */
 function installRegisters(get: Getter, set: Setter, p: ParkedDocument, reason: DocumentChangeReason) {
   const { scenario } = p;
@@ -711,7 +725,7 @@ function installRegisters(get: Getter, set: Setter, p: ParkedDocument, reason: D
   set(SELECTIONS.doodads, p.selected.doodads);
   set(SELECTIONS.sprites, p.selected.sprites);
   set(SELECTIONS.locations, p.selected.locations);
-  endGestures(set);
+  endGestures(get, set, reason === "replace" ? scenario : null);
   set(zoomAtom, p.zoom);
   if (p.center) set(centerViewOnAtom, p.center);
   bumpEveryRevision(get, set);
@@ -902,7 +916,7 @@ export const closeDocumentAtom = atom(null, (get, set) => {
   set(scenarioAtom, null);
   for (const r of REGISTERS) r.clear(set);
   for (const selection of Object.values(SELECTIONS)) set(selection, []);
-  endGestures(set);
+  endGestures(get, set, null);
   bumpEveryRevision(get, set);
 });
 

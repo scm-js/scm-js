@@ -18,7 +18,7 @@
  * is matched on its name only and shown as a row that opens it: mounting one would make its
  * `apply` run on OK. On Hotkeys the box narrows that page's rows instead.
  */
-import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useAtom, useAtomValue, useSetAtom, useStore } from "jotai";
 import {
   ChevronDown,
@@ -797,6 +797,9 @@ function ViewPage({ w, patch }: { w: Working; patch: (p: Partial<Preferences>) =
   const view = (v: Partial<Preferences["view"]>) => patch({ view: { ...p.view, ...v } });
   const fx = p.remasteredEffects;
   const effects = (v: Partial<Preferences["remasteredEffects"]>) => patch({ remasteredEffects: { ...fx, ...v } });
+  // The page is drawn twice while the filter's results show (the page in front stays mounted,
+  // hidden), and two copies of one radio group take each other's check: a group name per copy.
+  const group = useId();
   return (
     <div className="stack">
       <Section title={t("Interface")}>
@@ -820,8 +823,8 @@ function ViewPage({ w, patch }: { w: Working; patch: (p: Partial<Preferences>) =
         <Hint>{t("Otherwise a notice leaves after 6 seconds, and an error after 12.")}</Hint>
       </Section>
       <Section title={t("Mouse wheel")}>
-        <Check radio name="wheel" label={t("Scrolls the map; Ctrl+wheel zooms")} checked={p.view.wheel === "scroll"} onChange={() => view({ wheel: "scroll" })} />
-        <Check radio name="wheel" label={t("Zooms; Shift+wheel scrolls sideways")} checked={p.view.wheel === "zoom"} onChange={() => view({ wheel: "zoom" })} />
+        <Check radio name={`wheel-${group}`} label={t("Scrolls the map; Ctrl+wheel zooms")} checked={p.view.wheel === "scroll"} onChange={() => view({ wheel: "scroll" })} />
+        <Check radio name={`wheel-${group}`} label={t("Zooms; Shift+wheel scrolls sideways")} checked={p.view.wheel === "zoom"} onChange={() => view({ wheel: "zoom" })} />
         <Check label={t("Zoom toward the pointer")} checked={p.view.zoomToCursor} onChange={(e) => view({ zoomToCursor: e.target.checked })} />
         <Hint>{t("Keeps the tile under the pointer in place when the wheel zooms; the menu and keyboard zoom on the centre.")}</Hint>
       </Section>
@@ -859,8 +862,8 @@ function ViewPage({ w, patch }: { w: Working; patch: (p: Partial<Preferences>) =
         <Hint>{t("The message, the symmetry mode while one is on, and what plugins add always show.")}</Hint>
       </Section>
       <Section title={t("Text colours")}>
-        <Check radio name="classicText" label={t("Preview strings as Remastered draws them: a colour carries onto the next line")} checked={!p.classicText} onChange={() => patch({ classicText: false })} />
-        <Check radio name="classicText" label={t("Preview strings as 1.16.1 drew them: the colour resets at every line break")} checked={p.classicText} onChange={() => patch({ classicText: true })} />
+        <Check radio name={`classicText-${group}`} label={t("Preview strings as Remastered draws them: a colour carries onto the next line")} checked={!p.classicText} onChange={() => patch({ classicText: false })} />
+        <Check radio name={`classicText-${group}`} label={t("Preview strings as 1.16.1 drew them: the colour resets at every line break")} checked={p.classicText} onChange={() => patch({ classicText: true })} />
         <Hint>{t("Changes only what the editor draws, never the map: Map Properties, the String Editor, force and unit names, trigger text.")}</Hint>
       </Section>
     </div>

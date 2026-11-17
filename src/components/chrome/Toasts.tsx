@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 import { useAtomValue, useSetAtom } from "jotai";
 import { CircleAlert, CircleCheck, Info, TriangleAlert, X } from "lucide-react";
 import { dismissAllToastsAtom, dismissToastAtom, toastsAtom, type Toast } from "../../atoms/uiAtoms";
@@ -11,16 +11,24 @@ const ICONS = { ok: CircleCheck, info: Info, warn: TriangleAlert, error: CircleA
 /**
  * The notices `pushToastAtom` raises, bottom-right over the map, each leaving after its `ttl`
  * — or none of them, while Preferences ▸ View keeps notices until they are closed. Then a
- * pile of them gets a Close all above it, so up to four notices over the map go in one press.
+ * pile of them gets a Close all above it, so they go in one press. A kept pile is not cut
+ * at four (`toastLimitAtom`): it grows up the window and then scrolls, the newest in view and
+ * Close all staying at its top.
  */
 export default function Toasts() {
   const t = useT();
   const toasts = useAtomValue(toastsAtom);
   const keep = useAtomValue(keepNoticesAtom);
   const dismissAll = useSetAtom(dismissAllToastsAtom);
+  const box = useRef<HTMLDivElement>(null);
+  const newest = toasts.at(-1)?.id;
+  // A pile taller than the window scrolls: the notice that just arrived is the one to show.
+  useLayoutEffect(() => {
+    if (keep && box.current) box.current.scrollTop = box.current.scrollHeight;
+  }, [keep, newest]);
   if (toasts.length === 0) return null;
   return (
-    <div className="toasts" role="status" aria-live="polite">
+    <div className={keep ? "toasts kept" : "toasts"} role="status" aria-live="polite" ref={box}>
       {keep && toasts.length > 1 && (
         <button type="button" className="toast-action toasts-clear" onClick={() => dismissAll()}>{t("Close all")}</button>
       )}

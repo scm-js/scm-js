@@ -84,6 +84,20 @@ export function toastLifetime(toast: Pick<Toast, "ttl">, keepNotices: boolean): 
   return keepNotices ? 0 : Math.max(0, toast.ttl);
 }
 
+/** Notices over the map at once: a fifth pushes the oldest out. */
+export const TOAST_LIMIT = 4;
+/**
+ * The same while notices are kept until they are closed: none may leave unseen, so the pile
+ * grows (and scrolls) instead. Still a number, so a caller raising notices in a loop cannot
+ * grow it without end.
+ */
+export const KEPT_TOAST_LIMIT = 50;
+
+/** How many notices may be up at once (`toastLimitAtom`). */
+export function toastLimit(keepNotices: boolean): number {
+  return keepNotices ? KEPT_TOAST_LIMIT : TOAST_LIMIT;
+}
+
 /** One of a toast's `actions`. */
 export interface ToastAction {
   label: string;

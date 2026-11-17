@@ -6,6 +6,7 @@
  * above it were rounded the corner sat at y = 103.19 at 130%, so a press on a tile's first
  * row read the row above.
  */
+import { join } from "node:path";
 import { test, expect } from "./support/editor";
 
 test.use({ viewport: { width: 1366, height: 768 } });
@@ -90,3 +91,19 @@ test("at 130% the right dock's edge stays under the pointer", async ({ editor })
   await page.mouse.up();
   await expect.poll(async () => Math.round((await dock.boundingBox())!.x)).toBe(Math.round(before.x - 130));
 });
+
+test("at 130% nothing in the Trigger Editor is zoomed a second time", async ({ editor }) => {
+  await editor.open();
+  await editor.dismissGameDataOffer();
+  // A map with triggers: a trigger's row is a `.body`, the app's own class for what is under the bars.
+  await editor.openMap(join(import.meta.dirname, "../tests/maps/ums.scx"));
+  await editor.menu("Triggers", /^Trigger Editor/);
+  const dlg = editor.dialog("Trigger Editor");
+  await expect(dlg.locator(".trig-list .item .body").first()).toBeVisible();
+  // Everything drawn in the dialog is at the dialog's size (an element that is not drawn answers 1).
+  const largest = await dlg.evaluate((el) => Math.max(...[el, ...el.querySelectorAll("*")].map((e) => Math.round((e as HTMLElement).currentCSSZoom * 100) / 100)));
+  expect(largest).toBe(1.3);
+  const row = dlg.locator(".trig-list .item .body").first().locator("span").first();
+  expect(await row.evaluate((e) => Math.round((e as HTMLElement).currentCSSZoom * 100) / 100)).toBe(1.3);
+});
+

@@ -91,8 +91,21 @@ read in the first effect pass is still null.
   (`.prefs-nav`) on the left and one page mounted on the right; `payload.page` picks the page
   (`?dialog=preferences&page=view` in a deep link, `dlgWith(…, { page })` in the menu). Every
   page edits one working copy — the `Preferences` object plus the grid's spacing, look and
-  snaps, which keep their own atoms — written on OK/Apply; Reset to defaults resets the
-  whole copy. The Storage page's clears act at once on the atoms, so `StorageSection` reports
+  snaps, which keep their own atoms — written on OK/Apply. The footer has two resets, both
+  on the working copy only. **Reset this page** puts back what the page in front shows:
+  `PREFERENCES_PAGE_KEYS` in `editor/preferences.ts` is the one page → `Preferences` keys
+  table, and the dialog's `PAGE_PARTS` adds Editing's grid parts; on Testing it also calls
+  the mounted test targets' `reset`, on a plugin page that page's `spec.reset`; disabled on
+  Storage (nothing there is a setting) and on a plugin page with no `reset`. **Reset
+  everything…** asks first by swapping the footer (`footerLeft` = the question, `footer` =
+  Cancel + a danger button, so OK / Cancel / Apply are hidden while it asks), then resets
+  every built-in page and calls `reset` on the plugin pages in `visited` and the test
+  targets in `targetSettings` — only pages that were mounted, since `reset` is specified for
+  a page that has been shown and an unshown page's `apply` never runs. `counting` is in
+  `NEVER_RESET` and neither reset touches it (on is its default, so a reset could only turn
+  it back on). `tests/preferences.test.ts` fails when a key of `Preferences` is on no page's
+  list and not in `NEVER_RESET`: **a new preference must be added to the table.** General
+  holds Language, Startup, Maps, Privacy; Files holds New scenario, Saving, Recovery. The Storage page's clears act at once on the atoms, so `StorageSection` reports
   the keys it cleared and the dialog re-reads those parts (`KEY_PARTS`). `"gridSettings"` is
   still a `DialogId` (plugins may open it): its registry entry is `GridSettingsDialog`, a
   wrapper that opens Preferences on Editing. Sections are `.prefs-section` — the group box's

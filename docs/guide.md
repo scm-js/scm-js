@@ -1634,7 +1634,7 @@ then on.
 - **Firefox and Safari** download every save and replace nothing, so there is nothing to
   keep.
 
-Preferences ▸ General ▸ Saving turns this off.
+Preferences ▸ Files ▸ Saving turns this off.
 
 **Maps built on save.** A map with a TrigScript program is built by TrigScript as the file
 is written. The file you save is the one the game plays. It also carries the map as you
@@ -1669,7 +1669,7 @@ window are never listed there.
 
 Quitting the desktop app and answering Don't Save removes the copies. A copy only covers
 changes up to the moment it was made, and it lives in this browser: it is not a backup of
-the file, and clearing the site's data removes it. Preferences ▸ General ▸ Recovery turns
+the file, and clearing the site's data removes it. Preferences ▸ Files ▸ Recovery turns
 the copies off or changes how often they are made.
 
 ### Export an image
@@ -2391,8 +2391,11 @@ the commands can be given other keys on Preferences ▸ Hotkeys:
 
 ![Preferences](images/preferences.webp)
 
-Preferences (Ctrl+,) are kept in the browser. Nothing is written until OK or Apply, and
-**Reset to defaults** puts every page back. The pages down the left:
+Preferences (Ctrl+,) are kept in the browser. Nothing is written until OK or Apply.
+**Reset this page** puts back what the page in front shows. **Reset everything…** asks
+first, then puts every page back, the language and hotkeys included. A plugin's page goes
+back only if it was opened since the dialog opened. Neither reset turns Privacy back on.
+The pages down the left:
 
 **General**
 
@@ -2404,12 +2407,6 @@ Preferences (Ctrl+,) are kept in the browser. Nothing is written until OK or App
   at startup, and whether to include nightly builds.
 - **Maps**: whether each map opens in its own tab, and whether to ask before closing or
   replacing a map with unsaved changes.
-- **New scenario**: the tileset, size and revision a new map starts with.
-- **Saving**: what the Save dialog starts from (how the file was opened, *Everything* or
-  *Smallest*), the compression for a map with no file yet, and whether a save keeps the
-  file it replaces (a `.bak`, or a previous version in a browser).
-- **Recovery**: whether to keep [recovery copies](#recovery-copies) of unsaved maps, and
-  how often.
 - **Privacy** (the editor at scmjs.dev only): whether to count which parts of the editor
   are used. It is on unless you turn it off. When you use a feature, the editor sends its
   name and a few words about it, such as which dialog opened, which layer an edit was on
@@ -2422,6 +2419,15 @@ Preferences (Ctrl+,) are kept in the browser. Nothing is written until OK or App
   also stops the visit count for this browser, and the site's [privacy
   page](https://scmjs.dev/privacy.html) has the same switch and the details. The desktop
   app and copies of the editor hosted elsewhere count nothing.
+
+**Files**
+
+- **New scenario**: the tileset, size and revision a new map starts with.
+- **Saving**: what the Save dialog starts from (how the file was opened, *Everything* or
+  *Smallest*), the compression for a map with no file yet, and whether a save keeps the
+  file it replaces (a `.bak`, or a previous version in a browser).
+- **Recovery**: whether to keep [recovery copies](#recovery-copies) of unsaved maps, and
+  how often.
 
 **Editing**: the grid's spacing, colour and style, and what snaps to it (View ▸ Grid
 Settings… opens this page); what the palettes start on (the owner of placed units, the

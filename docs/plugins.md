@@ -1560,7 +1560,10 @@ Plugins, rather than behind a menu item. One page per plugin.
   stays mounted until the dialog closes.
 - **`apply()`** is called on OK and Apply. Without it, write each setting to `api.storage`
   as it changes.
-- **`reset()`** is called by Reset to defaults while your page is the one showing.
+- **`reset()`** puts the page's controls back on their defaults. Reset this page calls it
+  while your page is the one showing. Reset everything calls it when your page has been
+  shown since the dialog opened, even if another page is in front; a page not shown is
+  left alone.
 
 `api.ui.open("preferences", { page: "plugin:<your id>" })` opens the dialog on your page.
 See [the example in the reference](https://docs.scmjs.dev/api/ui/#preferencespagespec).

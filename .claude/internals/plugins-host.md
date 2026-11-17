@@ -134,7 +134,8 @@ icon or a `.status-spinner` while `busy`), `api.ui.preferencesPage` (`pluginPref
 one entry per plugin — a second registration replaces the first; `PreferencesDialog.tsx` lists
 each under Plugins in its nav as `plugin:<id>` and renders `PluginPreferencesPage`, a state-held
 host `div` the spec `mount`s into; a visited page stays mounted hidden until the dialog closes so
-`apply` on OK/Apply sees what the user changed, `reset` goes to the page showing; counted as
+`apply` on OK/Apply sees what the user changed, `reset` goes to the page showing on Reset this
+page and to every visited page on Reset everything (never to an unvisited one); counted as
 `preferences` in `Contributions.counts`), `api.ui.dialogSlot` (`pluginDialogSlotsAtom`; a
 dialog opts in by passing `slot={{ dialog, fields, payload }}` to `DialogFrame`, which renders
 `components/ui/DialogSlots.tsx` at the left of the footer — one `<span>` per registration,

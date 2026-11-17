@@ -2,7 +2,7 @@
  * The store side of the log (`editor/log.ts`): whether the Debug Console is open, whether
  * the chatty tier is recording, and the facts its header is built from.
  *
- * The entries themselves are *not* in an atom. They are written from `plugins/host.ts`,
+ * The entries themselves are *not* in an atom. They are written from `plugins/host/`,
  * the loader, the preload and a `window.onerror` handler — none of which have a store —
  * and putting them through Jotai would re-render the panel once per entry. The buffer is
  * a plain module with its own subscription; only these three flags live here.

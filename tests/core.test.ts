@@ -19,7 +19,7 @@ const rel = (file: string) => relative(root, file).replace(/\\/g, "/");
 interface Edge { to: string; typeOnly: boolean }
 
 /** What the library must not run: the state, the components, the hooks, the browser services, the plugin host, the game-data store, the desktop app. */
-const UI = [/^src\/atoms\//, /^src\/components\//, /^src\/hooks\//, /^src\/services\//, /^src\/plugins\/(host|builtin|registry|updates|defaults|devLink)\.ts$/, /^src\/gamedata\//, /^desktop\//];
+const UI = [/^src\/atoms\//, /^src\/components\//, /^src\/hooks\//, /^src\/services\//, /^src\/plugins\/(host|builtin|registry|updates|defaults|devLink)\.ts$/, /^src\/plugins\/host\//, /^src\/gamedata\//, /^desktop\//];
 const isUi = (file: string) => UI.some((re) => re.test(rel(file)));
 
 /** The modules a file imports or re-exports from, with whether the edge is erased at run time. */

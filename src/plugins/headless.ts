@@ -1,7 +1,7 @@
 /**
  * The plugin host without the editor: a Jotai store holding one document and a `PluginApi` over it, for a plugin or
  * a script run under Node (`scmjs map run`), or over it with no plugin at all (`headlessApi`, for `scmjs map edit`).
- * The API is the editor's own (`host.ts#createPluginApi`); what differs is around it. There is no page, so the
+ * The API is the editor's own (`host/pluginApi.ts#createPluginApi`); what differs is around it. There is no page, so the
  * surfaces that would show something — the status line, toasts, the log —
  * are reported to `sinks` instead, dialogs and panels register and show nothing, and `pickFiles` answers none. A
  * map goes in as an `OpenedMap` and comes back out as one (`document()`), with whether the plugin changed it, so

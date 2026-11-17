@@ -32,7 +32,7 @@ const KNOWN = [
   "gamedata/profiles.ts -> atoms/storage.ts",
   "hooks/useDevDeepLinks.ts -> components/chrome/MenuBar.tsx",
   "hooks/useDevDeepLinks.ts -> components/dialogs/DialogHost.tsx",
-  "plugins/host.ts -> components/viewport/paint/overView.ts",
+  "plugins/host/mapView.ts -> components/viewport/paint/overView.ts",
   "services/mapImage.ts -> components/viewport/fog.ts",
   "services/mapImage.ts -> components/viewport/missingTile.ts",
 ];

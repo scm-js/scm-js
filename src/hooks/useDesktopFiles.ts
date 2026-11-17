@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { useStore } from "jotai";
 import { desktopBridge } from "../gamedata/desktop";
 import { diskHandle } from "../services/diskFiles";
-import { openGivenFiles } from "./useOpenerHandoff";
+import { openGivenFiles } from "../services/documentActions";
 
 /**
  * The desktop build's "Open with": a map double-clicked in the file manager, dropped on

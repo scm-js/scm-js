@@ -21,8 +21,9 @@ import { unitLabel } from "../../data/units";
 import { clipSummary } from "../../editor/clipboard";
 import { logError } from "../../editor/log";
 import type { UnitAssets } from "../../formats/units/load";
-import { doodadLabel, type useDoodadTools } from "../../hooks/useDoodadTools";
-import { spriteName } from "../../hooks/useSpriteTools";
+import type { useDoodadTools } from "../../hooks/useDoodadTools";
+import { doodadLabel } from "../../formats/tileset/doodads";
+import { spriteName } from "../../data/sprites";
 import { t } from "../../i18n";
 import { countPluginUse, pluginName } from "../../services/usage";
 

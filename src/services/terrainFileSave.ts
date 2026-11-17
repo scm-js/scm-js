@@ -4,7 +4,6 @@
  * unknown keys; with none (a download), the data set in use's own kept file is the base, else nothing. Loaded only when
  * the button is pressed.
  */
-import type { getDefaultStore } from "jotai";
 import { borrowHostsAtom } from "../atoms/borrowAtoms";
 import { scenarioAtom, tilesetFileNameAtom } from "../atoms/documentAtoms";
 import { gameDataSourceAtom } from "../atoms/gameDataAtoms";
@@ -24,8 +23,7 @@ import { keptDataSetTerrainText } from "./dataSetTerrain";
 import { saveComposed } from "./mapIo";
 import { sectionsFromStore } from "./pieces";
 import { copyTerrainsFor } from "./terrainCopies";
-
-type Store = ReturnType<typeof getDefaultStore>;
+import type { Store } from "../atoms/store";
 
 const readable = (text: string | null): TerrainFile | null => {
   if (!text) return null;

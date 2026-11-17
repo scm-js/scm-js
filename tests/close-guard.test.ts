@@ -5,7 +5,7 @@ import { scenarioAtom } from "../src/atoms/documentAtoms";
 import { mapModifiedAtom } from "../src/atoms/editorAtoms";
 import { preferencesAtom } from "../src/atoms/preferencesAtoms";
 import { closeDialogAtom, dialogStackAtom } from "../src/atoms/uiAtoms";
-import { guardedAction, needsCloseConfirm, runPendingAction, type PendingAction } from "../src/hooks/useMapFileActions";
+import { guardedAction, needsCloseConfirm, runPendingAction, type PendingAction } from "../src/services/documentActions";
 import { mapFilePathAtom } from "../src/atoms/editorAtoms";
 import { serializeScenario } from "../src/formats/chk/scenario";
 import { statusMessageAtom } from "../src/atoms/uiAtoms";

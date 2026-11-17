@@ -28,7 +28,8 @@ import { chromeModeAtom, flagOffered, flagShown, mapInFront, toggleFlagAtom } fr
 import { shownZoomAtom, zoomToAtom } from "../../atoms/zoomAtoms";
 import { redoAtom, undoAtom } from "../../atoms/documentAtoms";
 import { openDialogAtom, statusMessageAtom, type DialogId } from "../../atoms/uiAtoms";
-import { editCopyIn, useMapFileActions } from "../../hooks/useMapFileActions";
+import { useMapFileActions } from "../../hooks/useMapFileActions";
+import { editCopyIn } from "../../services/documentActions";
 import { useClipboardTools } from "../../hooks/useClipboardTools";
 import { IconSelect, Tip } from "../ui";
 import { SymmetryIcon } from "../ui/SymmetryIcon";

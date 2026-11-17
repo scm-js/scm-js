@@ -12,7 +12,7 @@ export const APP_TITLE = msg("scmJS — StarCraft Scenario Editor");
  * what "which map is this" means once several are open in tabs — otherwise the scenario
  * name. A modified map is marked with a leading `*`, as every editor on Windows does.
  */
-export function documentTitle(fileName: string | null, mapName: string, modified: boolean): string {
+function documentTitle(fileName: string | null, mapName: string, modified: boolean): string {
   const name = (fileName ?? mapName).trim();
   return `${modified ? "*" : ""}${name || t("Untitled Scenario")} — scmJS`;
 }

@@ -21,7 +21,7 @@ import { desktopBridge } from "../../gamedata/desktop";
 import { hostTerms } from "../../editor/platform";
 import { APP_VERSION } from "../../version";
 import { tilesetFileNameAtom } from "../../atoms/documentAtoms";
-import { doodadLabel } from "../../hooks/useDoodadTools";
+import { doodadLabel } from "../../formats/tileset/doodads";
 import { msg, t, translate } from "../../i18n";
 import {
   archiveExtrasAtom,

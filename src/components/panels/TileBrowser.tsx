@@ -7,7 +7,7 @@ import {
   blockFromRect, blockRect, runBounds, SHEET_COLUMNS, sheetRows, type SheetRect, type SheetRow as SheetRowInfo, type TileBlock,
 } from "../../editor/tileSheet";
 import { t } from "../../i18n";
-import { zoomOf } from "../ui/interfaceSize";
+import { zoomOf } from "../../editor/interfaceSize";
 
 /** Paint one tile id from the atlas; the null megatile and out-of-range ids draw as void. */
 export function drawTile(ctx: CanvasRenderingContext2D, loaded: LoadedTileset, id: number, x: number, y: number, px: number) {

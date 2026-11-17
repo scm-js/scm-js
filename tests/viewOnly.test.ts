@@ -9,7 +9,7 @@ import { mapModifiedAtom } from "../src/atoms/editorAtoms";
 import { dialogStackAtom, openDialogAtom, statusMessageAtom } from "../src/atoms/uiAtoms";
 import { applyChanges } from "../src/editor/terrain";
 import { DEFAULT_SAVE_OPTIONS } from "../src/editor/save";
-import { editCopyIn, saveDocument, type SaveWriter } from "../src/hooks/useMapFileActions";
+import { editCopyIn, saveDocument, type SaveWriter } from "../src/services/documentActions";
 import { Contributions, createPluginApi } from "../src/plugins/host";
 
 const scn = (name: string) => createScenario({ width: 8, height: 6, era: 0, name });

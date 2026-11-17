@@ -3,11 +3,9 @@
  * repository name when it is one the project publishes, `other` otherwise
  * (`usage.ts#pluginCountName`).
  */
-import type { getDefaultStore } from "jotai";
 import { pluginRuntimesAtom } from "../atoms/pluginAtoms";
 import { pluginName } from "./usage";
-
-type Store = ReturnType<typeof getDefaultStore>;
+import type { Store } from "../atoms/store";
 
 /** A running plugin's name in the counts, by its manifest id. */
 export function pluginNameOf(store: Store, pluginId: string): string {

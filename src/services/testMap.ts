@@ -9,7 +9,6 @@
  * The bytes are exactly what Save would write (the remembered save options), except that a
  * bare `.chk` becomes an `.scx`, since the game only opens archives.
  */
-import type { createStore } from "jotai";
 import { scenarioAtom } from "../atoms/documentAtoms";
 import { mapFilePathAtom, mapOriginAtom, saveOptionsAtom } from "../atoms/editorAtoms";
 import { preferencesAtom } from "../atoms/preferencesAtoms";
@@ -24,8 +23,7 @@ import { dataSetOf } from "./mapDataSet";
 import type { DataSetRace } from "@scm-js/mod";
 import { gameDataSourceAtom } from "../atoms/gameDataAtoms";
 import { currentAssetSource } from "../gamedata/source";
-
-type Store = ReturnType<typeof createStore>;
+import type { Store } from "../atoms/store";
 
 /** The IndexedDB key of the browser's test folder handle. */
 export const TEST_FOLDER_KEY = "testMapFolder";

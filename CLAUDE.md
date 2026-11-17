@@ -86,9 +86,11 @@ the fastest way to reach a specific UI state — see `docs/development.md` and `
 - `scenarioAtom` (`src/atoms/documentAtoms.ts`) holds the parsed `Scenario` — the object that gets
   **written to disk**. It is **mutated in place** (terrain edits, `setScenarioName`, …), not replaced.
 - The older UI atoms in `src/atoms/editorAtoms.ts` (`mapNameAtom`, `mapWidthAtom`, `mapTilesetAtom`, …)
-  are what the chrome/panels **display**. `loadDocumentAtom` mirrors scenario fields into them on open;
-  when you change something in the scenario, update the mirror atom too (and vice versa) or the UI and
-  the file will disagree.
+  are what the chrome/panels **display**. `mirrorTexts` and `mirrorShape` (`documentAtoms.ts`) refill
+  them from the scenario: both on open and switch, the texts (name, description, version) after a settings
+  commit, the shape (size, tileset) after a whole-map step. A change to one of those fields that goes
+  through none of those must set `mirrorTextsAtom` itself, or the UI and the file will disagree; nothing
+  else writes those atoms.
 - Because the scenario is mutated in place, React does not see terrain changes. `terrainRevisionAtom`
   is a counter bumped after every edit/undo/load; `MapViewport` subscribes to it to repaint. Any new
   code that mutates `scenario.tiles` must bump it (usually via `commitEditAtom`).
@@ -96,8 +98,9 @@ the fastest way to reach a specific UI state — see `docs/development.md` and `
   `ParkedDocument` records in `documentsAtom` — the same fields, snapshotted — and switching
   (`activateDocumentAtom`) swaps the records through the atoms. Nothing reads a parked map except
   the tab strip, the Window menu and `api.document.list()`; a hook or panel never needs to know
-  there is more than one. **Any new per-document atom must be added to `parkRegisters` /
-  `installRegisters` in `documentAtoms.ts`, or it leaks from one map into the next on a switch.**
+  there is more than one. **Any new per-document atom must be added to the `REGISTERS` table
+  in `documentAtoms.ts` (parking, installing and closing all walk it), or it leaks from one map into the
+  next on a switch.**
 
 ## Always true
 

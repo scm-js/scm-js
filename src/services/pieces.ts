@@ -3,7 +3,6 @@
  * the plugin API (`api.terrain.pieces`), the learned part read into `learnedPiecesAtom` on first
  * use, and the sections with the plugins' provided sets ahead of the cut.
  */
-import type { createStore } from "jotai";
 import { learnedPiecesAtom, providedPiecesAtom } from "../atoms/pieceAtoms";
 import { mapTilesetAtom } from "../atoms/editorAtoms";
 import { scenarioAtom, terrainRevisionAtom } from "../atoms/documentAtoms";
@@ -13,8 +12,7 @@ import { cutPieces, emptyEvidence, gatherEvidence, mergeEvidence, pieceIndex, ty
 import { collapsePieces, type PieceEntry } from "../editor/tileCopies";
 import { pieceSections, type PieceSection } from "../editor/pieceList";
 import { browserPieceStore, piecesKey, readLearned } from "./pieceStore";
-
-type Store = ReturnType<typeof createStore>;
+import type { Store } from "../atoms/store";
 
 /** Read the learned pieces for a key into `learnedPiecesAtom`, once. */
 export async function loadLearnedPieces(store: Store, key: string): Promise<void> {

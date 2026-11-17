@@ -3,7 +3,7 @@ import { createStore } from "jotai";
 import { scenarioAtom } from "../src/atoms/documentAtoms";
 import { mapModifiedAtom } from "../src/atoms/editorAtoms";
 import { START_LOCATION } from "../src/data/units";
-import { DEFAULT_NEW_MAP, newMapInto } from "../src/hooks/useMapFileActions";
+import { DEFAULT_NEW_MAP, newMapInto } from "../src/services/documentActions";
 
 /**
  * File ▸ New can lay start locations down with the terrain (the New Scenario dialog's

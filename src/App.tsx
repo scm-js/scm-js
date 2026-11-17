@@ -7,7 +7,7 @@ import { useHotkeys } from "./hooks/useHotkeys";
 import { useApplyPreferences } from "./hooks/useApplyPreferences";
 import { useLocale } from "./i18n/react";
 import { useMapFileActions } from "./hooks/useMapFileActions";
-import type { PendingAction } from "./hooks/useMapFileActions";
+import type { PendingAction } from "./services/documentActions";
 import { useDevDeepLinks } from "./hooks/useDevDeepLinks";
 import { usePreload } from "./hooks/usePreload";
 import { useUpdateCheck } from "./hooks/useUpdateCheck";
@@ -43,8 +43,7 @@ import StartScreen from "./components/viewport/StartScreen";
 import DialogHost from "./components/dialogs/DialogHost";
 import SplashScreen from "./components/splash/SplashScreen";
 import { removeBootSplash } from "./components/splash/bootSplash";
-
-type Store = ReturnType<typeof useStore>;
+import type { Store } from "./atoms/store";
 
 /**
  * A drop: the files a plugin claimed (`api.ui.fileType` — replays, say) go to it, all of them

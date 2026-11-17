@@ -3,7 +3,7 @@ import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { Eraser, Lock, Music, Pencil, Play, Plus, RefreshCw, Search, Square, SquareDashed, ToggleLeft, Trash2, Type, Upload } from "lucide-react";
 import { closeDialogAtom, openDialogAtom } from "../../atoms/uiAtoms";
 import { preferencesAtom } from "../../atoms/preferencesAtoms";
-import { activeLayerAtom, mapDescriptionAtom, mapNameAtom, selectedLocationsAtom } from "../../atoms/editorAtoms";
+import { activeLayerAtom, selectedLocationsAtom } from "../../atoms/editorAtoms";
 import { archiveExtrasAtom, commitSettingsAtom, locationsAtom, scenarioAtom, settingsRevisionAtom } from "../../atoms/documentAtoms";
 import { isAnywhereIntact, locationCapacity, locationName } from "../../editor/locations";
 import { applyStrings, deleteUnused, readStrings, stringCapacity, stringUsages, type StringUsage } from "../../editor/strings";
@@ -21,10 +21,7 @@ import { ColorTextField, InlineString } from "../ui/ColorCodes";
 import DialogFrame from "../ui/DialogFrame";
 import type { DialogProps } from "./DialogHost";
 import { t, msg } from "../../i18n";
-
-function NoMap({ entry, title, icon }: { entry: DialogProps["entry"]; title: string; icon: React.ReactNode }) {
-  return <DialogFrame dialogKey={entry.key} title={title} icon={icon} size="sm"><p className="hint">{t("Open or create a map first.")}</p></DialogFrame>;
-}
+import { NoMap } from "./NoMap";
 
 /* ── String Editor ──────────────────────────────────────── */
 
@@ -58,8 +55,6 @@ export function StringEditorDialog({ entry }: DialogProps) {
   const scenario = useAtomValue(scenarioAtom);
   useAtomValue(settingsRevisionAtom);
   const commit = useSetAtom(commitSettingsAtom);
-  const setName = useSetAtom(mapNameAtom);
-  const setDescription = useSetAtom(mapDescriptionAtom);
   const [list, setList, guard] = useScenarioForm(scenario, readStrings);
   const [q, setQ] = useState("");
   const [sel, setSel] = useState<number>(typeof entry.payload?.index === "number" ? (entry.payload.index as number) : 1);
@@ -95,13 +90,7 @@ export function StringEditorDialog({ entry }: DialogProps) {
 
   const addString = () => { const next = [...list, ""]; setList(next); setSel(next.length - 1); setQ(""); };
   const apply = () => {
-    if (applyStrings(scenario, list, usages)) {
-      commit();
-      // The chrome shows mirror atoms of the name and description; keep them in step with the table.
-      const name = list[scenario.nameIndex];
-      if (name) setName(name);
-      setDescription(list[scenario.descriptionIndex] ?? "");
-    }
+    if (applyStrings(scenario, list, usages)) commit();
     setList(readStrings(scenario));
   };
 

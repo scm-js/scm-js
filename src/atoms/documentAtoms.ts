@@ -1,6 +1,6 @@
 import type { MapFileHandle } from "../services/mapIo";
 import type { MemberInfo, StoredMembers } from "../formats/mpq/scm";
-import { atom, type Getter, type Setter } from "jotai";
+import { atom, type Getter, type Setter, type WritableAtom } from "jotai";
 import { atomWithStorage, createJSONStorage } from "jotai/utils";
 import { preferencesAtom } from "./preferencesAtoms";
 import { blankFillAtom } from "./gameDataAtoms";
@@ -17,7 +17,7 @@ import {
   centerViewOnAtom, clipPastingAtom, locationsAutoHiddenAtom, viewFlagsAtom, clipSelectionAtom, doodadPlacingAtom, mapDescriptionAtom, mapFileHandleAtom, mapFilePathAtom, mapHeightAtom, mapModifiedAtom, mapOriginAtom, saveOptionsAtom,
   mapNameAtom, mapTilesetAtom, mapVersionAtom, mapWidthAtom, placementOptionsAtom, selectedDoodadsAtom, selectedLocationsAtom, selectedSpritesAtom, selectedUnitsAtom,
   spritePlacingAtom, viewportRectAtom, zoomAtom, type EditorLayer,
-  activeLayerAtom, symmetryAtom, terrainModeAtom,
+  activeLayerAtom, blendAnchorAtom, symmetryAtom, terrainModeAtom, unitPlacingAtom,
 } from "./editorAtoms";
 import type { SaveOptions } from "../editor/save";
 import type { BuiltBy } from "../editor/mapBuild";
@@ -265,6 +265,30 @@ const wantsNotice = (how: TablesCommit) => (typeof how === "object" ? how.notice
  * history would record it and applied backwards, so the map is as it was. True when the
  * write was refused (the commit then does nothing else).
  */
+/**
+ * The atoms the chrome displays are refilled from the scenario's own fields here and nowhere
+ * else, so the panels and the file never disagree. What a dialog or a table step can change:
+ * the name, the description and the version.
+ */
+function mirrorTexts(get: Getter, set: Setter, scn: Scenario) {
+  set(mapNameAtom, scenarioName(scn) ?? get(mapFilePathAtom) ?? "Untitled Scenario");
+  set(mapDescriptionAtom, scenarioDescription(scn) ?? "");
+  set(mapVersionAtom, mapVersionOf(scn.fileVersion));
+}
+
+/** What only a whole-map step can change: the size and the tileset. */
+function mirrorShape(set: Setter, scn: Scenario) {
+  set(mapWidthAtom, scn.width);
+  set(mapHeightAtom, scn.height);
+  set(mapTilesetAtom, (TILESETS[tilesetIndex(scn)]?.id ?? "jungle") as TilesetId);
+}
+
+/** `mirrorTexts` for a writer outside this module that changed the scenario in place (a shared map's incoming change). */
+export const mirrorTextsAtom = atom(null, (get, set) => {
+  const scn = get(scenarioAtom);
+  if (scn) mirrorTexts(get, set, scn);
+});
+
 function refuseTables(get: Getter, set: Setter, how: TablesCommit): boolean {
   if (canEdit(get, set)) return false;
   const scn = get(scenarioAtom);
@@ -298,7 +322,7 @@ export const commitSettingsAtom = atom(null, (get, set, how: TablesCommit = true
   set(unitsRevisionAtom, get(unitsRevisionAtom) + 1);
   set(doodadsRevisionAtom, get(doodadsRevisionAtom) + 1);
   const scn = get(scenarioAtom);
-  if (scn) set(mapVersionAtom, mapVersionOf(scn.fileVersion));
+  if (scn) mirrorTexts(get, set, scn);
   get(syncTapAtom)?.tables(get, set);
   count("edit", { layer: "settings", part: "settings" });
   if (wantsNotice(how)) set(commitNoticeAtom, { reason: "tables", label: label ?? "", area: null, parts: { ...NO_PARTS, settings: true } });
@@ -363,8 +387,7 @@ export const resizeDocumentAtom = atom(null, (get, set, req: ResizeRequest): Res
       members.push({ name: COPY_MEMBER, before: member, after });
     }
   }
-  set(mapWidthAtom, scn.width);
-  set(mapHeightAtom, scn.height);
+  mirrorShape(set, scn);
   // The entry carries the files the resize moved, so undoing it puts them back as they were.
   const entry = wholeEntry(get, t("Resize map"), before);
   if (entry && pinsBefore) entry.pins = { before: pinsMemberBefore, after: get(archiveExtrasAtom).get(PINS_MEMBER) ?? null };
@@ -404,7 +427,7 @@ export const changeTilesetAtom = atom(null, (get, set, req: ChangeTilesetRequest
     fill: baseTerrain(tileset, req.terrainId ?? TILESETS[era].defaultIsom),
     doodads: previous?.doodads ?? null,
   });
-  set(mapTilesetAtom, req.tileset);
+  mirrorShape(set, scn);
   afterWholeDocumentChange(get, set, wholeEntry(get, t("Change tileset"), before));
   get(syncTapAtom)?.whole(get, set, t("Change tileset"));
   set(noticeWholeAtom, { reason: "whole", label: t("Change tileset") });
@@ -572,19 +595,82 @@ export const documentTabsAtom = atom<OpenDocumentInfo[]>((get) =>
       }
       : { id, name: get(mapNameAtom), fileName: get(mapFilePathAtom), tileset: get(mapTilesetAtom), width: get(mapWidthAtom), height: get(mapHeightAtom), modified: get(mapModifiedAtom), active: true, viewOnly: get(viewOnlyAtom) !== null }));
 
+/** The undo and redo stacks of the map in front; what fills them is under "Undo history" below. */
+export const undoStackAtom = atom<HistoryEntry[]>([]);
+export const redoStackAtom = atom<HistoryEntry[]>([]);
+
+/** A register that holds one field of the open document: read when the map is parked, written when one is installed, emptied when the last is closed. */
+interface Register {
+  park(get: Getter, out: Partial<ParkedDocument>): void;
+  install(set: Setter, p: ParkedDocument): void;
+  clear(set: Setter): void;
+}
+
+function register<K extends keyof ParkedDocument>(key: K, held: WritableAtom<ParkedDocument[K], [ParkedDocument[K]], unknown>, empty: () => ParkedDocument[K]): Register {
+  return {
+    park: (get, out) => { out[key] = get(held); },
+    install: (set, p) => { set(held, p[key]); },
+    clear: (set) => { set(held, empty()); },
+  };
+}
+
+/**
+ * The per-document registers. Parking, installing and closing all walk this list, so an atom
+ * added here is carried by all three; one left out stays as the last map set it. The
+ * scenario, the selections, the zoom and the view are not here: each has more to it than a field.
+ */
+const REGISTERS: readonly Register[] = [
+  register("extras", archiveExtrasAtom, () => new Map()),
+  register("stored", archiveStoredAtom, () => null),
+  register("fileName", mapFilePathAtom, () => null),
+  register("handle", mapFileHandleAtom, () => null),
+  register("origin", mapOriginAtom, () => null),
+  register("builtBy", builtByAtom, () => null),
+  register("saveOptions", saveOptionsAtom, () => null),
+  register("viewOnly", viewOnlyAtom, () => null),
+  register("modified", mapModifiedAtom, () => false),
+  register("blankFill", blankFillAtom, () => null),
+  register("undo", undoStackAtom, () => []),
+  register("redo", redoStackAtom, () => []),
+  // The clip itself is kept — copying between maps is the point — but the marked area belongs to a map.
+  register("clipSelection", clipSelectionAtom, () => null),
+];
+
+/** The selections, by their field of `ParkedDocument.selected`. */
+const SELECTIONS = {
+  units: selectedUnitsAtom, doodads: selectedDoodadsAtom, sprites: selectedSpritesAtom, locations: selectedLocationsAtom,
+} satisfies Record<keyof ParkedDocument["selected"], unknown>;
+
+/** What belongs to a gesture on the map in front and never survives a switch: the placing modes and the Blend brush's anchor. */
+function endGestures(set: Setter) {
+  set(unitPlacingAtom, false);
+  set(doodadPlacingAtom, false);
+  set(spritePlacingAtom, false);
+  set(clipPastingAtom, false);
+  set(blendAnchorAtom, null);
+}
+
+/** Everything drawn is another object now. */
+function bumpEveryRevision(get: Getter, set: Setter) {
+  for (const revision of [terrainRevisionAtom, unitsRevisionAtom, doodadsRevisionAtom, locationsRevisionAtom, isomRevisionAtom, settingsRevisionAtom, triggersRevisionAtom]) {
+    set(revision, get(revision) + 1);
+  }
+}
+
 /** The registers as a record: what parking the front map keeps. Null with no map. */
 function parkRegisters(get: Getter): ParkedDocument | null {
   const scenario = get(scenarioAtom);
   if (!scenario) return null;
   const v = get(viewportRectAtom);
-  return {
-    scenario, extras: get(archiveExtrasAtom), stored: get(archiveStoredAtom), fileName: get(mapFilePathAtom), handle: get(mapFileHandleAtom), origin: get(mapOriginAtom),
-    builtBy: get(builtByAtom), saveOptions: get(saveOptionsAtom), modified: get(mapModifiedAtom), blankFill: get(blankFillAtom), undo: get(undoStackAtom), redo: get(redoStackAtom),
-    selected: { units: get(selectedUnitsAtom), doodads: get(selectedDoodadsAtom), sprites: get(selectedSpritesAtom), locations: get(selectedLocationsAtom) },
-    clipSelection: get(clipSelectionAtom), zoom: get(zoomAtom), viewOnly: get(viewOnlyAtom),
+  const out: Partial<ParkedDocument> = {
+    scenario,
+    selected: { units: get(SELECTIONS.units), doodads: get(SELECTIONS.doodads), sprites: get(SELECTIONS.sprites), locations: get(SELECTIONS.locations) },
+    zoom: get(zoomAtom),
     // The viewport has not measured itself before the first paint (w = h = 1): nothing to come back to.
     center: v.w > 1 || v.h > 1 ? { x: v.x + v.w / 2, y: v.y + v.h / 2 } : null,
   };
+  for (const r of REGISTERS) r.park(get, out);
+  return out as ParkedDocument;
 }
 
 /** The map in front as the record parking would take — what the recovery copies are made from. Null with no map. */
@@ -592,13 +678,6 @@ export function frontDocument(get: Getter): ParkedDocument | null {
   return parkRegisters(get);
 }
 
-/**
- * Put a record into the registers — the one write behind opening, switching and closing
- * onto a neighbour — mirroring the scenario's fields into the atoms the chrome displays and
- * bumping every revision, since everything drawn is now another object. Selections, the
- * history and the view come from the record: empty for a map just opened, as left for one
- * coming back. The placing modes are always off — a click on the map that arrives should select.
- */
 /** The document lifecycle in a reader's words; the reasons themselves are the event's vocabulary. */
 const DOCUMENT_LINES: Partial<Record<DocumentChangeReason, string>> = {
   open: "Map opened",
@@ -607,6 +686,13 @@ const DOCUMENT_LINES: Partial<Record<DocumentChangeReason, string>> = {
   replace: "Map parsed again from edited bytes",
 };
 
+/**
+ * Put a record into the registers — the one write behind opening, switching and closing
+ * onto a neighbour — mirroring the scenario's fields into the atoms the chrome displays and
+ * bumping every revision, since everything drawn is now another object. Selections, the
+ * history and the view come from the record: empty for a map just opened, as left for one
+ * coming back. The placing modes are always off — a click on the map that arrives should select.
+ */
 function installRegisters(get: Getter, set: Setter, p: ParkedDocument, reason: DocumentChangeReason) {
   const { scenario } = p;
   logInfo("document", DOCUMENT_LINES[reason] ?? `Map ${reason}`, {
@@ -617,43 +703,18 @@ function installRegisters(get: Getter, set: Setter, p: ParkedDocument, reason: D
   set(scenarioAtom, scenario);
   // From here on a dialog's write can be told from the tables as they were (dialog undo).
   followTables(scenario);
-  set(archiveExtrasAtom, p.extras);
-  set(archiveStoredAtom, p.stored);
-  set(mapFilePathAtom, p.fileName);
-  set(mapFileHandleAtom, p.handle);
-  set(mapOriginAtom, p.origin);
-  set(builtByAtom, p.builtBy);
-  set(saveOptionsAtom, p.saveOptions);
-  set(viewOnlyAtom, p.viewOnly);
+  for (const r of REGISTERS) r.install(set, p);
 
-  set(mapNameAtom, scenarioName(scenario) ?? p.fileName ?? "Untitled Scenario");
-  set(mapDescriptionAtom, scenarioDescription(scenario) ?? "");
-  set(mapWidthAtom, scenario.width);
-  set(mapHeightAtom, scenario.height);
-  set(mapTilesetAtom, (TILESETS[tilesetIndex(scenario)]?.id ?? "jungle") as TilesetId);
-  set(mapVersionAtom, mapVersionOf(scenario.fileVersion));
-  set(mapModifiedAtom, p.modified);
-  set(blankFillAtom, p.blankFill);
-  set(undoStackAtom, p.undo);
-  set(redoStackAtom, p.redo);
-  set(selectedUnitsAtom, p.selected.units);
-  set(selectedDoodadsAtom, p.selected.doodads);
-  set(selectedSpritesAtom, p.selected.sprites);
-  set(selectedLocationsAtom, p.selected.locations);
-  set(doodadPlacingAtom, false);
-  set(spritePlacingAtom, false);
-  // The clip itself is kept — copying between maps is the point — but the marked area belongs to a map.
-  set(clipSelectionAtom, p.clipSelection);
-  set(clipPastingAtom, false);
+  mirrorTexts(get, set, scenario);
+  mirrorShape(set, scenario);
+  set(SELECTIONS.units, p.selected.units);
+  set(SELECTIONS.doodads, p.selected.doodads);
+  set(SELECTIONS.sprites, p.selected.sprites);
+  set(SELECTIONS.locations, p.selected.locations);
+  endGestures(set);
   set(zoomAtom, p.zoom);
   if (p.center) set(centerViewOnAtom, p.center);
-  set(terrainRevisionAtom, get(terrainRevisionAtom) + 1);
-  set(unitsRevisionAtom, get(unitsRevisionAtom) + 1);
-  set(doodadsRevisionAtom, get(doodadsRevisionAtom) + 1);
-  set(locationsRevisionAtom, get(locationsRevisionAtom) + 1);
-  set(isomRevisionAtom, get(isomRevisionAtom) + 1);
-  set(settingsRevisionAtom, get(settingsRevisionAtom) + 1);
-  set(triggersRevisionAtom, get(triggersRevisionAtom) + 1);
+  bumpEveryRevision(get, set);
   followScrambledLocations(get, set, scenario, reason);
 }
 
@@ -839,30 +900,10 @@ export const closeDocumentAtom = atom(null, (get, set) => {
   logInfo("document", "Map closed; none open");
   set(documentChangeAtom, { reason: "close", scenario: null });
   set(scenarioAtom, null);
-  set(archiveExtrasAtom, new Map());
-  set(archiveStoredAtom, null);
-  set(mapFilePathAtom, null);
-  set(mapFileHandleAtom, null);
-  set(mapOriginAtom, null);
-  set(builtByAtom, null);
-  set(saveOptionsAtom, null);
-  set(viewOnlyAtom, null);
-  set(mapModifiedAtom, false);
-  set(blankFillAtom, null);
-  set(terrainRevisionAtom, get(terrainRevisionAtom) + 1);
-  set(unitsRevisionAtom, get(unitsRevisionAtom) + 1);
-  set(doodadsRevisionAtom, get(doodadsRevisionAtom) + 1);
-  set(selectedUnitsAtom, []);
-  set(selectedDoodadsAtom, []);
-  set(doodadPlacingAtom, false);
-  set(selectedSpritesAtom, []);
-  set(spritePlacingAtom, false);
-  set(selectedLocationsAtom, []);
-  set(clipSelectionAtom, null);
-  set(clipPastingAtom, false);
-  set(locationsRevisionAtom, get(locationsRevisionAtom) + 1);
-  set(undoStackAtom, []);
-  set(redoStackAtom, []);
+  for (const r of REGISTERS) r.clear(set);
+  for (const selection of Object.values(SELECTIONS)) set(selection, []);
+  endGestures(set);
+  bumpEveryRevision(get, set);
 });
 
 /* ── Undo history ────────────────────────────────────────── */
@@ -874,9 +915,6 @@ export type { HistoryEntry };
 // The depth is `Preferences.undoLevels` (SCMDraft's 200 by default; a 7x7 stroke across a
 // whole map is still only a few hundred KB). Read at commit time, so a change applies to
 // the next edit; a stack already deeper is not trimmed until it grows.
-
-export const undoStackAtom = atom<HistoryEntry[]>([]);
-export const redoStackAtom = atom<HistoryEntry[]>([]);
 
 /**
  * Record an edit that has already been applied to the scenario, so the viewport can
@@ -1047,9 +1085,7 @@ function stepTables(get: Getter, set: Setter, scn: Scenario, entry: HistoryEntry
   if (edit.extras && get(archiveExtrasAtom) === (direction === "do" ? edit.extras.before : edit.extras.after)) {
     set(archiveExtrasAtom, direction === "do" ? edit.extras.after : edit.extras.before);
   }
-  set(mapNameAtom, scenarioName(scn) ?? get(mapFilePathAtom) ?? "Untitled Scenario");
-  set(mapDescriptionAtom, scenarioDescription(scn) ?? "");
-  set(mapVersionAtom, mapVersionOf(scn.fileVersion));
+  mirrorTexts(get, set, scn);
   set(mapModifiedAtom, true);
   // Names and colours reach the lists, the locations and every drawn sprite.
   for (const a of [settingsRevisionAtom, triggersRevisionAtom, unitsRevisionAtom, doodadsRevisionAtom, locationsRevisionAtom]) set(a, get(a) + 1);
@@ -1070,9 +1106,7 @@ function stepWhole(get: Getter, set: Setter, scn: Scenario, entry: HistoryEntry,
   entry.whole = swapWholeState(scn, entry.whole!);
   // The archive's files the step moved with the map (a resize's pins and borrowed lattices).
   stepPins(get, set, entry, direction);
-  set(mapWidthAtom, scn.width);
-  set(mapHeightAtom, scn.height);
-  set(mapTilesetAtom, TILESETS[tilesetIndex(scn)].id);
+  mirrorShape(set, scn);
   afterWholeDocumentChange(get, set, shared ? null : "keep");
   tap?.whole(get, set, entry.label);
   noticeEntry(get, set, direction === "do" ? "redo" : "undo", entry, entry.label);

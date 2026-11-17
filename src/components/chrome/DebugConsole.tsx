@@ -20,7 +20,7 @@ import { useSetAtom } from "jotai";
 import { clearLog, formatData, formatLog, logDropped, logEntries, stamp, subscribeLog, type LogEntry, type LogLevel } from "../../editor/log";
 import { saveBlob } from "../../services/mapIo";
 import { t } from "../../i18n";
-import { zoomOf } from "../ui/interfaceSize";
+import { zoomOf } from "../../editor/interfaceSize";
 
 /** Rows put in the DOM. Everything older is in the buffer and in a copy; it is not on screen. */
 const SHOWN = 400;

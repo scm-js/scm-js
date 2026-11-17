@@ -8,7 +8,7 @@
  * Both are dialog transactions (OK / Apply / Cancel over a working copy) like the
  * settings dialogs, committed through `commitTriggersAtom`.
  */
-import { memo, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
+import { memo, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { useAtomValue, useSetAtom } from "jotai";
 import { ArrowDown, ArrowUp, Code2, Copy, MessageSquare, Plus, Trash2, Zap } from "lucide-react";
 import { commitTriggersAtom, locationsRevisionAtom, scenarioAtom, settingsRevisionAtom, triggersRevisionAtom } from "../../atoms/documentAtoms";
@@ -59,14 +59,6 @@ function useNames(scenario: Scenario | null): { names: TriggerNames | null; draf
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const names = useMemo(() => (scenario ? draftTriggerNames(scenario, triggerNames(scenario), drafts) : null), [scenario, settingsRev, locationsRev, triggersRev]);
   return { names, drafts };
-}
-
-function NoMap({ entry, title, icon }: DialogProps & { title: string; icon: ReactNode }) {
-  return (
-    <DialogFrame dialogKey={entry.key} title={title} icon={icon} size="sm">
-      <p className="hint">{t("Open or create a map first.")}</p>
-    </DialogFrame>
-  );
 }
 
 /** The player groups worth listing: the common 22, plus any the list actually uses. */
@@ -120,6 +112,7 @@ function ChoiceSelect({ value, onChange, options, groups, width }: { value: numb
 
 import { addressOfEpd, CREATING_ACTIONS, epdOf, sameTriggers, triggerCanCreate, TRIGGER_OWNERS } from "../../editor/triggers";
 import { peekUnitAssets } from "../../formats/units/load";
+import { NoMap } from "./NoMap";
 export { addressOfEpd, epdOf };
 
 /**

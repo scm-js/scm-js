@@ -3,8 +3,8 @@ import { useAtomValue, useStore } from "jotai";
 import { anyModifiedAtom } from "../atoms/documentAtoms";
 import { preferencesAtom } from "../atoms/preferencesAtoms";
 import { desktopBridge } from "../gamedata/desktop";
-import { quitGuard } from "./useMapFileActions";
-import { forgetSessionCopies } from "./useRecovery";
+import { quitGuard } from "../services/documentActions";
+import { forgetSessionCopies } from "../services/recoveryCopier";
 
 /**
  * Leaving the editor altogether — the tab's × , the window's, Alt+F4, Cmd+Q — with a map that

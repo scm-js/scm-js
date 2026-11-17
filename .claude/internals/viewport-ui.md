@@ -583,7 +583,7 @@ read in the first effect pass is still null.
   `src/hooks/useMapFileActions.ts` and `src/services/mapIo.ts` (File System Access API with
   `<input>`/download fallbacks).
 - **Interface size** (2026-11-16, `Preferences.interfaceSize`: 100 / 115 / 130, Preferences ▸ View ▸ Interface;
-  `styles/size.css`, `components/ui/interfaceSize.ts`). At 115 / 130 the root carries `data-ui-size` and
+  `styles/size.css`, `editor/interfaceSize.ts`). At 115 / 130 the root carries `data-ui-size` and
   `--ui-zoom` (1.15 / 1.3); at 100 neither is there and **no rule of `size.css` applies**, every rule being under
   `:root[data-ui-size]` (`tests/interfaceSize.test.ts` checks that), so the default is byte for byte what it was
   (screenshots against `origin/main`: identical). It is CSS `zoom` **per surface**: `.app`'s children but `.body`,

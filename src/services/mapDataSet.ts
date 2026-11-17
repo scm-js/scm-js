@@ -9,7 +9,6 @@
  * asks once: switch to it when it is installed here, or say where its makers publish it
  * when it is not. Nothing is ever fetched from that address.
  */
-import type { getDefaultStore } from "jotai";
 import { archiveExtrasAtom } from "../atoms/documentAtoms";
 import { gameDataSourceAtom, keepRacesAtom } from "../atoms/gameDataAtoms";
 import { openDialogAtom } from "../atoms/uiAtoms";
@@ -18,8 +17,7 @@ import { normalizeRaces, type DataSetRace } from "@scm-js/mod";
 import { sameRaces } from "../formats/mod/races";
 import { currentAssetSource, type AssetSource } from "../gamedata/source";
 import { listStoredCopies, profileOf } from "../gamedata/store";
-
-type Store = ReturnType<typeof getDefaultStore>;
+import type { Store } from "../atoms/store";
 
 /** The member's name in the map's archive. */
 export const DATASET_MEMBER = "scmjs\\dataset.json";

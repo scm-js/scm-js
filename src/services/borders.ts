@@ -11,7 +11,6 @@
  * The stand-in the shapes are read with is the game's own Badlands beneath the data set (`gameOwnTileset`).
  * React-free, so the plugin host can use it too.
  */
-import type { getDefaultStore } from "jotai";
 import { borrowHostsAtom } from "../atoms/borrowAtoms";
 import { drawnBordersAtom, learnedBordersAtom, providedBordersAtom } from "../atoms/borderAtoms";
 import { TILESETS } from "../data/tilesets";
@@ -26,8 +25,7 @@ import type { BorrowContext } from "../editor/borrowLattice";
 import type { Tileset } from "../formats/tileset/decode";
 import { borrowContext, gameOwnTileset, hostKeyOf, readKnownBorrowed } from "./borrow";
 import { browserPieceStore, type PieceStore } from "./pieceStore";
-
-type Store = ReturnType<typeof getDefaultStore>;
+import type { Store } from "../atoms/store";
 
 export const bordersKey = (hostHash: string, sourceHash: string) => `borders/${hostHash}/${sourceHash}`;
 

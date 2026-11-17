@@ -11,7 +11,6 @@
  * Precedence, per copied terrain (source and height): a plugin's blocks (`api.terrain.provideCopies`) > a data set's
  * terrain file (`copies`) > the scan. React-free, so the plugin host can use it.
  */
-import type { getDefaultStore } from "jotai";
 import { copyHostsAtom, copyScanAtom, providedCopiesAtom, type CopyBlockInfo, type CopyHostInfo, type CopyTerrainInfo } from "../atoms/copyAtoms";
 import { TILESETS } from "../data/tilesets";
 import { megatileHeight, type Tileset } from "../formats/tileset/decode";
@@ -30,8 +29,7 @@ import { gameDataRevisionAtom } from "../atoms/gameDataAtoms";
 import { peekTileset } from "../formats/tileset/load";
 import { tilesetIndex } from "../formats/chk/scenario";
 import type { PieceStore } from "./pieceStore";
-
-type Store = ReturnType<typeof getDefaultStore>;
+import type { Store } from "../atoms/store";
 
 /** The version of what is kept: a stored scan of another version is worked out again. */
 const KEPT_VERSION = 2;

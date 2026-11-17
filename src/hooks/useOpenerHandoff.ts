@@ -1,12 +1,8 @@
 import { useEffect } from "react";
 import { useStore } from "jotai";
-import { pluginsStartedAtom } from "../atoms/pluginAtoms";
-import { handFilesToPlugins } from "../plugins/fileTypes";
-import { guardedAction, openFileInto, saveDocument } from "./useMapFileActions";
-import type { MapFileHandle } from "../services/mapIo";
+import type { Store } from "../atoms/store";
+import { openGivenFiles, saveDocument } from "../services/documentActions";
 import { takeInbox } from "../services/inbox";
-
-type Store = ReturnType<typeof useStore>;
 
 /** The pages that may hand the editor files: one on this machine's loopback address (`scmjs map open`). */
 const LOOPBACK = /^http:\/\/(127\.0\.0\.1|localhost|\[::1\]):\d+$/;
@@ -22,24 +18,6 @@ let handedOver = false;
 /** …or to take a file a page of its own site left for it (`services/inbox.ts`): read once, the same way. */
 const INBOX = typeof window !== "undefined" && new URL(window.location.href).searchParams.has("inbox");
 let inboxTaken = false;
-
-/**
- * Files given to the editor from outside (the desktop's open-with, `scmjs … open`): once the plugins have started,
- * the ones a plugin claims (a replay) go to it, and the first of the rest opens as File ▸ Open would, through the
- * unsaved-changes gate.
- */
-export async function openGivenFiles(store: Store, files: File[], handle: MapFileHandle | null = null): Promise<void> {
-  if (!store.get(pluginsStartedAtom)) {
-    await new Promise<void>((resolve) => {
-      const stop = store.sub(pluginsStartedAtom, () => { if (store.get(pluginsStartedAtom)) { stop(); resolve(); } });
-    });
-  }
-  const rest = handFilesToPlugins(store, files);
-  const file = rest[0];
-  if (!file) return;
-  const own = file === files[0] ? handle : null;
-  await guardedAction(store, () => openFileInto(store, file, own), (done) => ({ action: "open", file, handle: own, done }));
-}
 
 /**
  * A map handed over to stay linked (services/editorLink.ts, loaded only now): it opens with a handle that writes

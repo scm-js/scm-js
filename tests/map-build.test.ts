@@ -9,7 +9,7 @@ import { pluginBuildStepsAtom } from "../src/atoms/pluginAtoms";
 import { toastsAtom } from "../src/atoms/uiAtoms";
 import { BUILD_MANIFEST_MEMBER, BUILD_SOURCE_MEMBER, readBuildManifest, sha256Hex } from "../src/editor/mapBuild";
 import { buildMapFile, DEFAULT_SAVE_OPTIONS, type SaveOptions } from "../src/editor/save";
-import { saveDocument, type SaveWriter } from "../src/hooks/useMapFileActions";
+import { saveDocument, type SaveWriter } from "../src/services/documentActions";
 import { Contributions, createPluginApi } from "../src/plugins/host";
 import type { BuildStepInput } from "../src/plugins/api";
 import { openMapFile } from "../src/services/mapIo";

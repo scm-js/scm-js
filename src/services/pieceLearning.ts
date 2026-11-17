@@ -5,7 +5,6 @@
  * line and a toast. Loaded only when the button is pressed: it brings the folder pick and the
  * map reader with it.
  */
-import type { createStore } from "jotai";
 import { pushToastAtom, statusMessageAtom } from "../atoms/uiAtoms";
 import { learnedPiecesAtom, pieceLearningAtom } from "../atoms/pieceAtoms";
 import { TILESETS, terrainName } from "../data/tilesets";
@@ -22,8 +21,7 @@ import { drawsFromGame } from "./borrow";
 import { forgetLearnedBorders, keepLearnedBorders, learningSetup } from "./borders";
 import { browserPieceStore, forgetLearned, piecesKey, writeLearned } from "./pieceStore";
 import { t, translate } from "../i18n";
-
-type Store = ReturnType<typeof createStore>;
+import type { Store } from "../atoms/store";
 
 /** The data set in use's tables, by ERA index (null where it has none). */
 async function tablesInUse(): Promise<(readonly Cv5Group[] | null)[]> {

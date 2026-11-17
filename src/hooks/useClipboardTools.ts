@@ -12,7 +12,7 @@ import {
 } from "../editor/clipboard";
 import { soundAxes, STRETCH_AXES, stretchFromDrag, type StretchAxis, type StretchPlan } from "../editor/stretch";
 import type { Rect } from "../editor/terrain";
-import { stretchArrow } from "./useDoodadTools";
+import { stretchArrow } from "../editor/stretch";
 import type { MapPoint } from "./useTerrainTools";
 import { peekTileset } from "../formats/tileset/load";
 import { NO_DOODADS } from "../formats/tileset/doodads";

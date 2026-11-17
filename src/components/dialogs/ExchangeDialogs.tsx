@@ -4,24 +4,20 @@ import { Download, FileText, Upload } from "lucide-react";
 import { commitSettingsAtom, commitTriggersAtom, scenarioAtom, settingsRevisionAtom, triggersRevisionAtom } from "../../atoms/documentAtoms";
 import { pluginTriggerClaimsAtom } from "../../atoms/pluginAtoms";
 import { locateClaims } from "../../plugins/claims";
-import { mapDescriptionAtom, mapFilePathAtom, mapNameAtom } from "../../atoms/editorAtoms";
+import { mapFilePathAtom, mapNameAtom } from "../../atoms/editorAtoms";
 import { closeDialogAtom, pushToastAtom, statusMessageAtom } from "../../atoms/uiAtoms";
 import {
   applyStringImport, encodeTrg, formatStringTable, parseStringTable, readTriggerFile, triggersToText, type TriggerFileFormat,
 } from "../../editor/exchange";
 import { applyBriefing, applyTriggers, newStringDrafts, resolveDraftStrings, type StringDrafts } from "../../editor/triggers";
 import { hostTerms } from "../../editor/platform";
-import { getString } from "../../formats/chk/sections/strings";
 import type { TriggerRecord } from "../../formats/chk/sections/triggers";
 import { saveBytes } from "../../services/mapIo";
 import { Button, Check, Field, Group, Select } from "../ui";
 import DialogFrame from "../ui/DialogFrame";
 import type { DialogProps } from "./DialogHost";
 import { msg, pluginText, t, translate } from "../../i18n";
-
-function NoMap({ entry, title, icon }: { entry: DialogProps["entry"]; title: string; icon: React.ReactNode }) {
-  return <DialogFrame dialogKey={entry.key} title={title} icon={icon} size="sm"><p className="hint">{t("Open or create a map first.")}</p></DialogFrame>;
-}
+import { NoMap } from "./NoMap";
 
 /** A file name to suggest: the open file's stem, else the scenario name, made safe. */
 function useFileStem(): string {
@@ -220,8 +216,6 @@ export function ImportStringsDialog({ entry }: DialogProps) {
   const close = useSetAtom(closeDialogAtom);
   const setStatus = useSetAtom(statusMessageAtom);
   const toast = useSetAtom(pushToastAtom);
-  const setName = useSetAtom(mapNameAtom);
-  const setDescription = useSetAtom(mapDescriptionAtom);
   const [state, setState] = useState<StringImportState | null>(null);
   if (!scenario) return <NoMap entry={entry} title={t("Import Strings")} icon={<Upload size={14} />} />;
 
@@ -235,10 +229,6 @@ export function ImportStringsDialog({ entry }: DialogProps) {
     if (!state) return;
     const { replaced, added } = applyStringImport(scenario, state.entries);
     if (replaced > 0 || added > 0) commit();
-    // The chrome shows mirror atoms of the name and description; keep them in step with the table.
-    const name = getString(scenario.strings, scenario.nameIndex);
-    if (name !== null) setName(name);
-    setDescription(getString(scenario.strings, scenario.descriptionIndex) ?? "");
     setStatus(t("Imported strings from {fileName}: {replaced} replaced, {added} added", { fileName: state.fileName, replaced, added }));
     toast({ kind: "ok", title: t("Strings imported"), detail: t("{fileName}: {replaced} replaced, {added} added", { fileName: state.fileName, replaced, added }) });
     close(entry.key);

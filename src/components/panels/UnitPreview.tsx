@@ -3,7 +3,7 @@ import { displayColorHex, playerTeamColor } from "../../data/players";
 import type { PlayerRgb } from "../../formats/chk/sections/players";
 import { getImageFrame, getUnitSprite, type ImageFrame } from "../../formats/units/sprites";
 import type { SpriteKind } from "../../editor/sprites";
-import { spriteFrame, spriteGrp, spriteImageId } from "../../hooks/useSpriteTools";
+import { spriteFrame, spriteGrp, spriteImageId } from "../../data/sprites";
 import { useGrpRevision, useUnitAssets } from "../../hooks/useUnitAssets";
 import { useTileset } from "../../hooks/useTileset";
 import { teamColorKey } from "../../formats/units/teamColor";

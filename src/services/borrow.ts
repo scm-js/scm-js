@@ -15,7 +15,6 @@
  *
  * React-free, so the plugin host can use it too.
  */
-import type { getDefaultStore } from "jotai";
 import { borrowHostsAtom, borrowScanAtom, providedBorrowAtom, type BorrowHostInfo, type BorrowSourceInfo } from "../atoms/borrowAtoms";
 import { gameDataSourceAtom } from "../atoms/gameDataAtoms";
 import { TILESETS } from "../data/tilesets";
@@ -29,8 +28,7 @@ import { readStored } from "../gamedata/store";
 import { BORROW_STORE } from "./handleStore";
 import { logInfo, type LogData } from "../editor/log";
 import { browserStore, type PieceStore } from "./pieceStore";
-
-type Store = ReturnType<typeof getDefaultStore>;
+import type { Store } from "../atoms/store";
 
 /** The editor's store of borrowed-terrain tables. */
 export const browserBorrowStore: PieceStore = browserStore(BORROW_STORE);

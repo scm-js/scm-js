@@ -93,7 +93,7 @@ function sameMember(a: Uint8Array | null, b: Uint8Array | null): boolean {
 }
 
 /** "Floor from Installation": a borrowed terrain's name in the user's language. */
-export function borrowedLabel(b: Pick<BorrowedTerrain, "name" | "sourceEra">): string {
+function borrowedLabel(b: Pick<BorrowedTerrain, "name" | "sourceEra">): string {
   return t("{terrain} from {tileset}", { terrain: translate(b.name), tileset: translate(TILESETS[b.sourceEra & 7].name) });
 }
 

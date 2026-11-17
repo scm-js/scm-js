@@ -443,25 +443,7 @@
   color: rgba(255, 190, 220, 0.6);
   margin-top: 1px;
 }
-.about-homage {
-  max-width: 46ch;
-  font-size: 10.5px;
-  color: rgba(255, 190, 220, 0.5);
-  margin: 12px 0 0;
-  line-height: 1.6;
-}
-.about-homage strong {
-  color: rgba(255, 190, 220, 0.8);
-  font-weight: 600;
-}
 
-/* credits roll */
-.about-credits {
-  flex: none;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
 .about-group h3 {
   margin: 0 0 5px;
   font-size: 10px;

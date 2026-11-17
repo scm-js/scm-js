@@ -14,7 +14,6 @@
  *
  * Per data set, not per document: nothing here is parked with a map, and nothing is written to a map.
  */
-import type { getDefaultStore } from "jotai";
 import { providedBorrowAtom, type ProvidedBorrow } from "../atoms/borrowAtoms";
 import { providedBordersAtom, type ProvidedBorder } from "../atoms/borderAtoms";
 import { providedCopiesAtom, type ProvidedCopy } from "../atoms/copyAtoms";
@@ -32,8 +31,7 @@ import { logInfo } from "../editor/log";
 import { t, translate } from "../i18n";
 import { drawsFromGame, refreshProvided } from "./borrow";
 import { browserPieceStore, type PieceStore } from "./pieceStore";
-
-type Store = ReturnType<typeof getDefaultStore>;
+import type { Store } from "../atoms/store";
 
 const fileKey = (id: string) => `terrain/${id}`;
 

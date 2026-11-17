@@ -10,12 +10,12 @@ import {
   snapDoodad, updateDoodads, type DoodadChange, type DoodadEdit, type DoodadVerdict, type SpriteChange, type TileRect,
 } from "../editor/doodads";
 import { applyChanges, Stroke } from "../editor/terrain";
-import { isStretched, soundAxes, STRETCH_AXES, stretchDoodad, stretchFromDrag, type StretchAxis } from "../editor/stretch";
+import { isStretched, soundAxes, STRETCH_AXES, stretchArrow, stretchDoodad, stretchFromDrag, type StretchAxis } from "../editor/stretch";
 import { doodadTwin, mirroredDoodad, mirrorsAcross, twinDifference } from "../editor/doodadTwin";
 import type { Tileset } from "../formats/tileset/decode";
 import type { DoodadRecord } from "../formats/chk/sections/objects";
 import type { Scenario } from "../formats/chk/scenario";
-import { doodadOrigin, NO_DOODADS, type DoodadCatalogue, type DoodadDef } from "../formats/tileset/doodads";
+import { doodadLabel, doodadOrigin, NO_DOODADS, type DoodadCatalogue, type DoodadDef } from "../formats/tileset/doodads";
 import { useTileset } from "./useTileset";
 import type { MapPoint } from "./useTerrainTools";
 import { t } from "../i18n";
@@ -43,14 +43,6 @@ function placedDoodads(scn: Scenario, catalogue: DoodadCatalogue, tileset: Tiles
     return { x: (o.x + def.width / 2) * 32, y: (o.y + def.height / 2) * 32, kind: twin ? Math.min(rec.doodadId, twin.id) : rec.doodadId };
   });
 }
-
-export function doodadLabel(def: DoodadDef): string {
-  return `${def.category} #${def.id}`;
-}
-
-const AXIS_ARROW: Record<StretchAxis, [forward: string, back: string]> = { se: ["↘", "↖"], ne: ["↗", "↙"], e: ["→", "←"], s: ["↓", "↑"] };
-/** The way a stretch runs, as an arrow. */
-export const stretchArrow = (axis: StretchAxis, steps: number): string => AXIS_ARROW[axis][steps >= 0 ? 0 : 1];
 
 function describeRefusal(def: DoodadDef, v: DoodadVerdict, hasPlacementData: boolean): string {
   if (v.outOfBounds) return t("Can't place {doodad} here: it would leave the map", { doodad: doodadLabel(def) });

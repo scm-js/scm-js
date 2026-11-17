@@ -15,7 +15,7 @@ import { loadDocumentAtom } from "../src/atoms/documentAtoms";
 import { mapModifiedAtom } from "../src/atoms/editorAtoms";
 import { toastsAtom } from "../src/atoms/uiAtoms";
 import { DEFAULT_SAVE_OPTIONS } from "../src/editor/save";
-import { saveDocument } from "../src/hooks/useMapFileActions";
+import { saveDocument } from "../src/services/documentActions";
 import { diskHandle, isDiskHandle, pathBaseName, revivedHandle, storableHandle } from "../src/services/diskFiles";
 import { loadHandle, removeHandle, storeHandle } from "../src/services/handleStore";
 import { listPrevious, removePrevious } from "../src/services/previousVersions";

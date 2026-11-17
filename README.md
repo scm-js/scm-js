@@ -44,9 +44,10 @@ Plugins ▸ Browse Plugins….
 - **A command line.** `scmjs` looks inside maps and replays, checks maps on every push
   with a GitHub Action, plays a map's triggers in the game, and builds and plays bots. See
   [the command line guide](docs/cli.md).
-- **Your own AI tool on your maps.** With `scmjs mcp`, Claude Code, Cursor or Claude
-  Desktop reads, checks and changes a map as you ask. Open the map in the editor and each
-  change arrives there as one undo step. See [AI tools](docs/ai-tools.md).
+- **Your own AI app on your maps.** Claude Desktop, Claude Code, Cursor and other apps
+  read, check and change a map as you ask. Claude Desktop installs it from one file, with
+  no terminal. Open the map in the editor and each change arrives there as one undo step.
+  See [AI tools](docs/ai-tools.md).
 - **Several people on one map.** Share the open map and anyone with the link edits it with
   you, live. See [Editing a map together](docs/guide.md#editing-a-map-together).
 - **Triggers as code.** [TrigScript](docs/trigscript.md) writes triggers in TypeScript,
@@ -128,7 +129,7 @@ same release as the editor at [scmjs.dev/editor](https://scmjs.dev/editor/).
 | [docs/chk-format.md](docs/chk-format.md) | Every section of the scenario file, byte by byte |
 | [docs/plugins.md](docs/plugins.md) | Writing and installing plugins; the plugin API |
 | [docs/cli.md](docs/cli.md) | The `scmjs` command line, by task: getting started, looking inside a map, making and changing maps, maps in git and CI, running a map's triggers in the game, a melee map's layout and balance, replays, mods, sharing, bots and plugins, and a reference of every command |
-| [docs/ai-tools.md](docs/ai-tools.md) | AI tools on your maps through `scmjs mcp`: setting it up, what to ask, working on the map open in the editor, and every tool |
+| [docs/ai-tools.md](docs/ai-tools.md) | AI apps on your maps through `scmjs mcp`: setting up Claude Desktop and the others, what to ask, working on the map open in the editor, when something goes wrong, and every tool |
 | [docs/bots.md](docs/bots.md) | Bots on the play page and from the command line: playing against one, a first bot in JavaScript, bringing a BWAPI bot, bots for mods, how good the sample bots are, what is not there yet, and the reference for JavaScript bots |
 | [docs/mods.md](docs/mods.md) | Mods: a mod read as its makers ship it, kept as a folder of PyMS text and PNG sheets, checked, compared, packed back into an MPQ and played |
 | [docs/core.md](docs/core.md) | `@scm-js/core`, the editor's map code as an npm package for scripts and tools of your own |

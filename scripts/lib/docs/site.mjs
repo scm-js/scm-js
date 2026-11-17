@@ -76,8 +76,8 @@ export const SOURCES = [
     id: "ai-tools",
     file: "docs/ai-tools.md",
     title: "AI tools",
-    blurb: "Claude Code, Cursor and other AI tools working on your maps through scmjs mcp: setting it up, what to ask, watching and undoing the changes in the open editor, and every tool.",
-    pageTitle: "StarCraft maps with Claude Code and other AI tools",
+    blurb: "Claude Desktop, Claude Code, Cursor and other AI apps working on your maps through scmjs mcp: setting it up, what to ask, watching and undoing the changes in the open editor, when something goes wrong, and every tool.",
+    pageTitle: "StarCraft maps with Claude and other AI apps",
   },
   {
     id: "bots",

@@ -55,7 +55,7 @@ describe("how scmjs was installed", () => {
     expect(updateCommand(installInfo("npm", "/x/scmjs.mjs"))).toBe("npm install -g @scm-js/cli@latest");
     expect(updateCommand(binary("C:\\Users\\me\\scoop\\apps\\scmjs\\current\\scmjs.exe"))).toBe("scoop update scmjs");
     expect(updateCommand(binary("C:\\Users\\me\\AppData\\Local\\Microsoft\\WinGet\\Packages\\x\\scmjs.exe"))).toBe("winget upgrade scm-js.scmjs");
-    expect(updateCommand(binary("/opt/homebrew/Cellar/scmjs/0.12.0/bin/scmjs"))).toBe("brew upgrade scmjs");
+    expect(updateCommand(binary("/opt/homebrew/Cellar/scmjs/0.12.0/bin/scmjs"))).toBe("brew update && brew upgrade scmjs");
     expect(updateCommand(binary("/home/me/bin/scmjs"))).toBe(`download it again from ${RELEASES_URL}`);
     expect(installLabel(binary("/home/me/bin/scmjs"))).toBe("single executable");
     expect(installLabel(binary("/opt/homebrew/Cellar/scmjs/0.12.0/bin/scmjs"))).toBe("single executable, from Homebrew");
@@ -71,7 +71,7 @@ describe("how scmjs was installed", () => {
   it("doctor names the single executable and its update, and never finds its Node too old", async () => {
     const newer = "999.0.0";
     const brew = await versionCheck(newer, binary("/opt/homebrew/Cellar/scmjs/1/bin/scmjs"));
-    expect([brew.state, visible(brew.detail), brew.fix]).toEqual(["warn", `${VERSION}, ${newer} is out · single executable, from Homebrew`, "brew upgrade scmjs"]);
+    expect([brew.state, visible(brew.detail), brew.fix]).toEqual(["warn", `${VERSION}, ${newer} is out · single executable, from Homebrew`, "brew update && brew upgrade scmjs"]);
     const same = await versionCheck(VERSION, binary("/home/me/bin/scmjs"));
     expect(visible(same.detail)).toBe(`${VERSION} · the newest · single executable`);
     const npm = await versionCheck(VERSION, installInfo("npm", "/x"));

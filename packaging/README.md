@@ -24,7 +24,7 @@ The docs (`docs/cli.md`, "Installing") give the install commands as these names 
 `scoop bucket add scm-js https://github.com/scm-js/scoop-bucket` then `scoop install scmjs`,
 `winget install scm-js.scmjs`, and `brew install scm-js/tap/scmjs`. `scmjs about` and
 `scmjs doctor` print `scoop update scmjs`, `winget upgrade scm-js.scmjs` and
-`brew upgrade scmjs` for a program they find in those package managers' folders
+`brew update && brew upgrade scmjs` for a program they find in those package managers' folders
 (`cli/src/runtime.ts`), so a different bucket, identifier or tap means changing them too.
 
 ## Filling them for a release

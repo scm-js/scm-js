@@ -374,8 +374,12 @@ copy was installed, the desktop app and Docker if they are installed, and the ad
 the editor, the docs and the source. Update the way you installed. With Homebrew:
 
 ```sh
-brew upgrade scmjs
+brew update && brew upgrade scmjs
 ```
+
+`brew upgrade` on its own refreshes the tap at most once a day, so it can report that the
+version you have is the newest for up to a day after a release. `brew update` fetches the
+tap first.
 
 With Scoop:
 

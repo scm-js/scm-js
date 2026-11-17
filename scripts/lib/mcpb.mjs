@@ -105,7 +105,7 @@ export function askServer(command, args, { cwd, env, timeout = 20000 } = {}, req
     const child = spawn(command, args, { cwd, env, stdio: ["pipe", "pipe", "pipe"] });
     let out = "", err = "";
     const answers = new Map();
-    const timer = setTimeout(() => { child.kill(); reject(new Error(`no answer from ${command}: ${out}${err}`)); }, timeout);
+    const timer = setTimeout(() => { child.kill(); reject(new Error(`no answer from ${command} within ${timeout / 1000} s: ${out}${err}`)); }, timeout);
     child.on("error", (e) => { clearTimeout(timer); reject(e); });
     child.stderr.on("data", (b) => { err += b; });
     child.stdout.on("data", (b) => {

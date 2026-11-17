@@ -172,7 +172,9 @@ if (mcpb) {
     const app = appConfig(manifest, dir, { maps_folder: maps }, { DOCUMENTS: work, HOME: work });
     if (!app.env.SCMJS_STARCRAFT?.includes("${user_config.starcraft}")) throw new Error(`an empty StarCraft folder reached the server as ${JSON.stringify(app.env.SCMJS_STARCRAFT)}; the check expects the placeholder`);
     const call = (name, a = {}) => ({ method: "tools/call", params: { name, arguments: a } });
-    const { answers: [info, outside, doctor], stderr } = await askServer(app.command, app.args, { cwd: dir, env: { ...env, ...app.env } }, [
+    // Two minutes: the copy unpacked here is a new file, which Rosetta translates again before an Intel Mac's build
+    // runs on Apple silicon; that first start took longer than 20 s on CI.
+    const { answers: [info, outside, doctor], stderr } = await askServer(app.command, app.args, { cwd: dir, env: { ...env, ...app.env }, timeout: 120000 }, [
       call("map_info", { path: "ums.scx" }), call("map_info", { path: join(work, "melee.scx") }), call("doctor"),
     ]);
     const text = (a) => a.result?.content?.map((c) => c.text ?? "").join("\n") ?? JSON.stringify(a);

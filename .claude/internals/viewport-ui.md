@@ -105,7 +105,7 @@ read in the first effect pass is still null.
   `NEVER_RESET` and neither reset touches it (on is its default, so a reset could only turn
   it back on). `tests/preferences.test.ts` fails when a key of `Preferences` is on no page's
   list and not in `NEVER_RESET`: **a new preference must be added to the table.** General
-  holds Language, Startup, Maps, Privacy; Files holds New scenario, Saving, Recovery. The Storage page's clears act at once on the atoms, so `StorageSection` reports
+  holds Language, Startup, Maps (`tc("preferences", "Maps")` → 맵: a bare "Maps" is the game's folder in Test Map's text and stays untranslated), Privacy; Files holds New scenario, Saving, Recovery. The Storage page's clears act at once on the atoms, so `StorageSection` reports
   the keys it cleared and the dialog re-reads those parts (`KEY_PARTS`). `"gridSettings"` is
   still a `DialogId` (plugins may open it): its registry entry is `GridSettingsDialog`, a
   wrapper that opens Preferences on Editing. Sections are `.prefs-section` — the group box's
@@ -113,6 +113,48 @@ read in the first effect pass is still null.
   `Group` is not used here. The Test Map folder rows (`dialogs/TestFolder.tsx`) are shared
   with Tools ▸ Test Map; the desktop path lives in the preferences, the browser's handle in
   IndexedDB and so is written at once, not on OK.
+- **Preferences' filter box** (2026-11-16, `PreferencesDialog.tsx` + `preferencesFilter.ts`). A text field
+  above the page list (`.prefs-side` > `.prefs-search`, then `.prefs-nav`). With words in it the
+  dialog renders `.prefs-results` in `.prefs-page` instead of the page in front: every built-in page,
+  drawn whole by the same components (`results` = `content` with Testing, Plugins and Hotkeys
+  adjusted) under a `.prefs-results-head`, and a layout effect + `MutationObserver` runs
+  `filterSections`, which sets `hidden` on each `.prefs-section` whose **rendered text** (every text
+  node, so a closed `<select>`'s options and a closed `<details>` count; an open `<details>` is opened
+  when its inside matches) lacks a word, and on a page group with nothing left. Words are AND,
+  substring, `NFC` + `toLowerCase`, so Korean works with no extra step. **There is no keyword table on
+  purpose**: a second list of words drifts from the labels the first time one is edited, while this
+  way a section added to a page later is searchable with nothing to register. `IconSelect` writes its
+  option labels into a `hidden` span for the same reason (radix's list is in the DOM only while
+  open), which is how "한국어" finds Language. Rejected: per-section keywords; matching the
+  `t()` strings of the source (the catalogue does not know which section a string is drawn in,
+  and run-time text such as `hostTerms()` and the storage rows would be missed); rendering the
+  pages off screen just to read their text (two mounts of everything for no gain). What the
+  results mount: Storage's sections do their IndexedDB lookups (once per filtering session — the
+  results stay mounted while the words change; the same reads the Storage page does) and the
+  observer re-filters when they come back. **Testing is drawn without `targetSettings`**, so no
+  test target's `settings.mount` runs and nothing joins `targetSettings` — registering is what makes
+  OK / Reset reach a target — and a target whose label matches is a `ResultRow` that opens Testing;
+  a plugin's own page is the same, a row matched on `plugin.name` opening `plugin:<id>`, never
+  mounted (a mounted page is in `visited` and gets `apply` on OK). The Testing instance kept
+  mounted for its targets stays hidden behind the results; `useTestFolder(reread)` reads the
+  browser's folder handle again when it shows, since the results' copy may have changed it.
+  The page in front stays mounted but `hidden` (its local state and scroll come back: `savedScroll`);
+  choosing a page in the list clears the box (`choose`). While the results show nothing is
+  `is-active` in the list and **Reset this page is disabled** with a title saying why (it would
+  reset a page nobody can see); Reset everything is untouched. **On Hotkeys the box narrows the page
+  itself** (`HotkeysPage` `filter`), not the results: rows match on `translate(label)` or on a key
+  as `formatCombo` shows it, the whole key or its start up to a `+` (`keyMatches`: "Ctrl+S" is
+  not Ctrl+Shift+S, "Ctrl" is every Ctrl key); a row capturing keys stays; Reset this page still
+  resets every hotkey and says so. In the results the same component draws the table alone
+  (`inResults`), so + and × work there. Focus: the box is `type="text"` so `DialogFrame`'s
+  open-focus puts the cursor in it (before, the dialog element itself had focus; no page has a text
+  field). Esc: `onEscapeKeyDown` empties a non-empty box and keeps the dialog; an empty box lets
+  Esc close as before (the Hotkeys capture listener still takes Esc first while waiting for keys).
+  Edit ▸ Find's resolved keys (Ctrl+F by default) focus the box from anywhere in the `.dlg` — a
+  listener on the dialog element, so a dialog opened on top does not reach it; a plain key bound
+  to Find is left to a focused text field. Tests: `tests/preferencesFilter.test.ts` (matching),
+  `e2e/preferences.spec.ts` (a control in the results reaching OK, Apply and Reset everything
+  while filtering, the Hotkeys narrowing, Esc, Ctrl+F).
 - The wheel over the map is a non-passive listener on the scroller in `MapViewport.tsx` (a
   React `onWheel` is passive and cannot `preventDefault`): Ctrl/Cmd+wheel always zooms a
   step of `ZOOM_STEPS` and takes the event from the browser's page zoom (which it used to

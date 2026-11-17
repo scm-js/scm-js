@@ -1420,13 +1420,55 @@
   color: var(--text);
   font-size: var(--fs-sm);
 }
+/* The left column: the filter box over the page list, which scrolls on its own. */
+.prefs-side {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-right: 1px solid var(--border);
+}
 .prefs-nav {
   display: flex;
   flex-direction: column;
   gap: 2px;
   padding: 4px 8px 4px 0;
-  border-right: 1px solid var(--border);
   overflow: auto;
+  min-height: 0;
+}
+.prefs-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: none;
+  margin: 4px 8px 0 0;
+}
+.prefs-search > svg {
+  position: absolute;
+  left: 6px;
+  color: var(--text-faint);
+  pointer-events: none;
+}
+.prefs-search .input {
+  width: 100%;
+  min-width: 0;
+  padding-left: 22px;
+  padding-right: 20px;
+}
+.prefs-search .clear {
+  position: absolute;
+  right: 4px;
+  display: grid;
+  place-items: center;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--text-faint);
+  cursor: pointer;
+}
+.prefs-search .clear:hover {
+  color: var(--text);
 }
 .prefs-nav-btn {
   display: flex;
@@ -1469,6 +1511,25 @@
   flex-direction: column;
 }
 .prefs-builtin { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+/* The filter's results: each page that has a match, under its name, then its sections. */
+.prefs-results {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+.prefs-results-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 10px;
+  color: var(--text-dim);
+  font-size: var(--fs-md);
+  font-weight: 600;
+}
+.prefs-result-row {
+  gap: 8px;
+  align-items: center;
+}
 .prefs-page .stack { gap: 18px; }
 .prefs-section > h3 {
   margin: 0 0 8px;

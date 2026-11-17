@@ -1,7 +1,8 @@
 import { useEffect, useRef } from "react";
 import { useStore } from "jotai";
 import { brushSizeAtom, mapTilesetAtom, screenAtom, unitOwnerAtom } from "../atoms/editorAtoms";
-import { localeAtom, preferencesAtom } from "../atoms/preferencesAtoms";
+import { interfaceSizeAtom, localeAtom, preferencesAtom } from "../atoms/preferencesAtoms";
+import { applyInterfaceSize } from "../components/ui/interfaceSize";
 import { setLocale } from "../i18n";
 
 /**
@@ -13,7 +14,9 @@ import { setLocale } from "../i18n";
  * The language is applied here too, and again whenever the preference changes — it
  * lives outside the atoms (`i18n/index.ts`), since `t()` is called from code with no
  * store, and the document's `lang` follows it so fonts and hyphenation pick the right
- * rules.
+ * rules. The interface size likewise: `index.html` puts the stored one on the page before
+ * the first paint, and this keeps it on the preference from then on (OK / Apply, a reset, an
+ * import).
  */
 export function useApplyPreferences() {
   const store = useStore();
@@ -25,7 +28,11 @@ export function useApplyPreferences() {
       if (typeof document !== "undefined") document.documentElement.lang = loc;
     };
     applyLanguage();
-    const unsubscribe = store.sub(localeAtom, applyLanguage);
+    const applySize = () => { if (typeof document !== "undefined") applyInterfaceSize(store.get(interfaceSizeAtom)); };
+    applySize();
+    const stopLanguage = store.sub(localeAtom, applyLanguage);
+    const stopSize = store.sub(interfaceSizeAtom, applySize);
+    const unsubscribe = () => { stopLanguage(); stopSize(); };
     if (applied.current) return unsubscribe;
     applied.current = true;
     const prefs = store.get(preferencesAtom);

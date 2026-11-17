@@ -8,6 +8,7 @@
  * it a read-out for a chart; text is asked once and shows after the editor's usual rest.
  */
 import type { TooltipHandle, TooltipOptions, TooltipPointer } from "./api";
+import { zoomOf } from "../components/ui/interfaceSize";
 
 /** The gap between the pointer and the tip, and the margin it keeps from the window's edges. */
 const GAP_X = 14;
@@ -40,13 +41,16 @@ export function attachTooltip(target: HTMLElement, content: TooltipContent, opti
 
   const place = () => {
     if (!tip || !last) return;
-    const w = tip.offsetWidth, h = tip.offsetHeight;
+    // Worked out in the page's pixels; the tip is zoomed with the chrome at a larger
+    // interface size, so its own size is multiplied up and its position divided back.
+    const zoom = zoomOf(tip);
+    const w = tip.offsetWidth * zoom, h = tip.offsetHeight * zoom;
     const vw = window.innerWidth, vh = window.innerHeight;
     let x = last.x + GAP_X, y = last.y + GAP_Y;
     if (x + w > vw - MARGIN) x = last.x - GAP_X - w;
     if (y + h > vh - MARGIN) y = last.y - GAP_Y / 2 - h;
-    tip.style.left = `${Math.max(MARGIN, Math.min(x, vw - MARGIN - w))}px`;
-    tip.style.top = `${Math.max(MARGIN, Math.min(y, vh - MARGIN - h))}px`;
+    tip.style.left = `${Math.max(MARGIN, Math.min(x, vw - MARGIN - w)) / zoom}px`;
+    tip.style.top = `${Math.max(MARGIN, Math.min(y, vh - MARGIN - h)) / zoom}px`;
   };
 
   /** Ask for the content where the pointer is and show it; hide when there is none. */

@@ -94,6 +94,12 @@ export const animateWaterSpeedAtom = atom((get) => get(preferencesAtom).animateW
 export const remasteredEffectsAtom = atom((get) => get(preferencesAtom).remasteredEffects);
 export const animateUnitsSpeedAtom = atom((get) => get(preferencesAtom).animateUnitsSpeed);
 
+/** The interface size on its own: `useApplyPreferences` puts it on the page when it changes. */
+export const interfaceSizeAtom = atom((get) => get(preferencesAtom).interfaceSize);
+
+/** Whether notices stay until closed, on its own, so the notices do not re-render for every other preference. */
+export const keepNoticesAtom = atom((get) => get(preferencesAtom).keepNotices);
+
 /** The status bar's cells on their own, so the bar does not re-render for every other preference. */
 export const statusBarCellsAtom = atom((get) => get(preferencesAtom).statusBar);
 

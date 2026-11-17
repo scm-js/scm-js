@@ -18,7 +18,7 @@ locations clamped, Anywhere reset. `validateScenario(scn, { extras, isom })` is 
 revision-aware about required sections; `Issue.target` drives the dialog's go-to, and
 `payload.only === "triggers"` is Triggers ▸ Validate Triggers. `editor/find.ts` is the pure search
 behind Ctrl+F. `Preferences.multipleMaps` (on by default, Preferences ▸ General ▸ Maps) is read by
-`openTarget` in `useMapFileActions` only — see `viewport-ui.md` for the several-maps design. Persisted preferences and the grid look live in `atoms/preferencesAtoms.ts`
+`openTarget` in `useMapFileActions` only — see `viewport-ui.md` for the several-maps design. `Preferences.interfaceSize` and `keepNotices` (Preferences ▸ View, both on `PREFERENCES_PAGE_KEYS.view`) are in `viewport-ui.md`: the size is applied by `useApplyPreferences` and, before the first paint, by an inline script in `index.html`, which is why it cannot wait for the store; `mergedStorage` gives both their defaults (100, off) for a stored object without them. Persisted preferences and the grid look live in `atoms/preferencesAtoms.ts`
 (`atomWithStorage`, `getOnInit` because startup hooks read through
 `store.get`) and are applied once by `hooks/useApplyPreferences.ts` before the deep links;
 `atoms/storage.ts` is the one `localStorage` accessor everything persisted shares (a memory

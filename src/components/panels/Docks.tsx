@@ -22,8 +22,8 @@ function PanelHead({ title, right }: { title: React.ReactNode; right?: React.Rea
   );
 }
 
-/** The right dock may take up to this share of the window: a plugin's panel there (a replay's) wants room. */
-const rightDockMax = () => Math.max(420, Math.round(window.innerWidth * 0.45));
+/** The right dock may take up to this share of the window: a plugin's panel there (a replay's) wants room. In the dock's own pixels. */
+const rightDockMax = (zoom: number) => Math.max(420, Math.round((window.innerWidth * 0.45) / zoom));
 
 export function LeftDock() {
   const [width, setWidth] = useAtom(leftDockWidthAtom);
@@ -31,7 +31,8 @@ export function LeftDock() {
   const layer = useAtomValue(activeLayerAtom);
   const { dragging, ...resize } = useDockResize("left", width, setWidth, 220, 480);
   return (
-    <aside className="dock left" style={{ width }}>
+    // (`--dock-w`: at a larger interface size, styles/size.css rounds the width to a whole pixel of the page from it.)
+    <aside className="dock left" style={{ width, "--dock-w": `${width}px` } as React.CSSProperties}>
       <div className="panel grow">
         <PanelHead
           title={<>{t("Palette")}{" "}<span className="faint">·</span> <span className="gold">{translate(LAYERS.find((l) => l.id === layer)?.label ?? "")}</span></>}
@@ -52,6 +53,8 @@ export function RightDock() {
   return (
     <aside className="dock right" style={{ width }}>
       <div className={`dock-resizer ${dragging ? "dragging" : ""}`} {...resize} />
+      {/* The column of panels on its own, so that it can scroll at a larger interface size while the edge above stays whole (styles/size.css). */}
+      <div className="dock-panels">
       {panels.minimap && (
         <div className="panel">
           <PanelHead title={t("Minimap")} right={<Tip label={t("Hide minimap")}><Button icon onClick={() => setPanels({ ...panels, minimap: false })}><PanelRightClose size={13} /></Button></Tip>} />
@@ -75,6 +78,7 @@ export function RightDock() {
         </div>
       )}
       <Guarded surface="plugin panels"><DockedPluginPanels /></Guarded>
+      </div>
     </aside>
   );
 }

@@ -1,30 +1,43 @@
 import { useEffect } from "react";
 import { useAtomValue, useSetAtom } from "jotai";
 import { CircleAlert, CircleCheck, Info, TriangleAlert, X } from "lucide-react";
-import { dismissToastAtom, toastsAtom, type Toast } from "../../atoms/uiAtoms";
+import { dismissAllToastsAtom, dismissToastAtom, toastsAtom, type Toast } from "../../atoms/uiAtoms";
+import { keepNoticesAtom } from "../../atoms/preferencesAtoms";
+import { toastLifetime } from "../../editor/view";
 import { useT } from "../../i18n/react";
 
 const ICONS = { ok: CircleCheck, info: Info, warn: TriangleAlert, error: CircleAlert } as const;
 
-/** The notices `pushToastAtom` raises, bottom-right over the map, each leaving after its `ttl`. */
+/**
+ * The notices `pushToastAtom` raises, bottom-right over the map, each leaving after its `ttl`
+ * — or none of them, while Preferences ▸ View keeps notices until they are closed. Then a
+ * pile of them gets a Close all above it, so up to four notices over the map go in one press.
+ */
 export default function Toasts() {
+  const t = useT();
   const toasts = useAtomValue(toastsAtom);
+  const keep = useAtomValue(keepNoticesAtom);
+  const dismissAll = useSetAtom(dismissAllToastsAtom);
   if (toasts.length === 0) return null;
   return (
     <div className="toasts" role="status" aria-live="polite">
-      {toasts.map((t) => <ToastView key={t.id} toast={t} />)}
+      {keep && toasts.length > 1 && (
+        <button type="button" className="toast-action toasts-clear" onClick={() => dismissAll()}>{t("Close all")}</button>
+      )}
+      {toasts.map((toast) => <ToastView key={toast.id} toast={toast} keep={keep} />)}
     </div>
   );
 }
 
-function ToastView({ toast }: { toast: Toast }) {
+function ToastView({ toast, keep }: { toast: Toast; keep: boolean }) {
   const t = useT();
   const dismiss = useSetAtom(dismissToastAtom);
+  const lifetime = toastLifetime(toast, keep);
   useEffect(() => {
-    if (toast.ttl <= 0) return;
-    const timer = setTimeout(() => dismiss(toast.id), toast.ttl);
+    if (lifetime <= 0) return;
+    const timer = setTimeout(() => dismiss(toast.id), lifetime);
     return () => clearTimeout(timer);
-  }, [toast.id, toast.ttl, dismiss]);
+  }, [toast.id, lifetime, dismiss]);
   const Icon = ICONS[toast.kind];
   return (
     <div className={`toast ${toast.kind}`}>

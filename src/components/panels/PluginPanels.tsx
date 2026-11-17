@@ -14,6 +14,7 @@ import { useAtomValue } from "jotai";
 import { Maximize2, Minimize2, PanelBottomClose, PanelRightClose, X } from "lucide-react";
 import { pluginPanelsAtom, type PluginPanelEntry } from "../../atoms/pluginAtoms";
 import { PluginIconView } from "../ui/PluginIconView";
+import { zoomOf } from "../ui/interfaceSize";
 import { Button, Tip } from "../ui";
 import { t } from "../../i18n";
 
@@ -79,18 +80,19 @@ function BottomPanel({ entry }: { entry: PluginPanelEntry }) {
   usePanelMount(host, entry);
   const memoryKey = `${plugin.id}:${spec.title}`;
   const [height, setHeight] = useState(() => bottomHeights.get(memoryKey) ?? spec.height ?? BOTTOM_DEFAULT);
-  const drag = useRef<{ y: number; h: number } | null>(null);
-  // Never taller than most of the window: the map keeps at least a strip of its own.
-  const clamp = (h: number) => Math.round(Math.max(BOTTOM_MIN, Math.min(h, window.innerHeight * 0.7)));
+  const drag = useRef<{ y: number; h: number; zoom: number } | null>(null);
+  // Never taller than most of the window: the map keeps at least a strip of its own. The
+  // height is the panel's own pixels, which a larger interface size makes larger than the page's.
+  const clamp = (h: number, zoom = 1) => Math.round(Math.max(BOTTOM_MIN, Math.min(h, (window.innerHeight * 0.7) / zoom)));
   return (
-    <div className="panel plugin-docked bottom" data-plugin={plugin.id} aria-label={title} style={{ height: clamp(height) }}>
+    <div className="panel plugin-docked bottom" data-plugin={plugin.id} aria-label={title} style={{ height: clamp(height, zoomOf(host)) }}>
       <div
         className="bottom-dock-resizer"
         role="separator"
         aria-orientation="horizontal"
         aria-label={t("Resize {title}", { title })}
-        onPointerDown={(e) => { if (e.button !== 0) return; e.preventDefault(); e.currentTarget.setPointerCapture(e.pointerId); drag.current = { y: e.clientY, h: clamp(height) }; }}
-        onPointerMove={(e) => { const d = drag.current; if (!d) return; const next = clamp(d.h + d.y - e.clientY); bottomHeights.set(memoryKey, next); setHeight(next); }}
+        onPointerDown={(e) => { if (e.button !== 0) return; e.preventDefault(); e.currentTarget.setPointerCapture(e.pointerId); const zoom = zoomOf(e.currentTarget); drag.current = { y: e.clientY, h: clamp(height, zoom), zoom }; }}
+        onPointerMove={(e) => { const d = drag.current; if (!d) return; const next = clamp(d.h + (d.y - e.clientY) / d.zoom, d.zoom); bottomHeights.set(memoryKey, next); setHeight(next); }}
         onPointerUp={(e) => { drag.current = null; if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId); }}
       />
       <div className="panel-head">
@@ -166,18 +168,21 @@ function PluginPanel({ entry, index }: { entry: PluginPanelEntry; index: number 
   const [size, setSize] = useState(() => sizes.get(memoryKey) ?? { w: spec.width ?? DEFAULT_WIDTH, h: spec.height ?? 0 });
   const width = size.w;
   const [pos, setPos] = useState(() => positions.get(memoryKey) ?? { x: 0, y: 0 });
-  const resize = useRef<{ dx: number; dy: number } | null>(null);
+  const resize = useRef<{ x: number; y: number; w: number; h: number; zoom: number } | null>(null);
   const title = usePanelTitle(titleBox);
   const [host, setHost] = useState<HTMLDivElement | null>(null);
   usePanelMount(host, entry);
-  const drag = useRef<{ dx: number; dy: number } | null>(null);
+  const drag = useRef<{ x: number; y: number; from: { x: number; y: number }; zoom: number } | null>(null);
   const frame = useRef<HTMLDivElement | null>(null);
+  // The position and size are the panel's own pixels, which a larger interface size makes
+  // larger than the page's and the map's: the pointer's travel is divided by the panel's zoom.
 
   // A panel opening for the first time goes to the top-right of the map; it cannot know the map's width until it is in the DOM.
   useLayoutEffect(() => {
     const parent = frame.current?.parentElement;
     if (positions.has(memoryKey) || !parent) return;
-    const first = { x: Math.max(0, parent.clientWidth - width - MARGIN - index * STEP), y: 20 + MARGIN + index * STEP };
+    const zoom = zoomOf(frame.current);
+    const first = { x: Math.max(0, parent.clientWidth / zoom - width - MARGIN - index * STEP), y: 20 + MARGIN + index * STEP };
     positions.set(memoryKey, first);
     setPos(first);
   }, [memoryKey, width, index]);
@@ -186,16 +191,16 @@ function PluginPanel({ entry, index }: { entry: PluginPanelEntry; index: number 
     if (e.button !== 0 || maximized || (e.target as HTMLElement).closest("button")) return;
     e.preventDefault();
     e.currentTarget.setPointerCapture(e.pointerId);
-    drag.current = { dx: e.clientX - pos.x, dy: e.clientY - pos.y };
+    drag.current = { x: e.clientX, y: e.clientY, from: pos, zoom: zoomOf(frame.current) };
   };
   const onMove = (e: React.PointerEvent<HTMLDivElement>) => {
     const d = drag.current;
     const parent = frame.current?.parentElement;
     if (!d || !parent) return;
     // Keep the title strip reachable: the panel may hang off the bottom or the right, never off the top or the left.
-    const maxX = Math.max(0, parent.clientWidth - 60);
-    const maxY = Math.max(0, parent.clientHeight - 32);
-    const next = { x: Math.min(maxX, Math.max(0, e.clientX - d.dx)), y: Math.min(maxY, Math.max(0, e.clientY - d.dy)) };
+    const maxX = Math.max(0, parent.clientWidth / d.zoom - 60);
+    const maxY = Math.max(0, parent.clientHeight / d.zoom - 32);
+    const next = { x: Math.min(maxX, Math.max(0, d.from.x + (e.clientX - d.x) / d.zoom)), y: Math.min(maxY, Math.max(0, d.from.y + (e.clientY - d.y) / d.zoom)) };
     positions.set(memoryKey, next);
     setPos(next);
   };
@@ -211,15 +216,15 @@ function PluginPanel({ entry, index }: { entry: PluginPanelEntry; index: number 
     e.stopPropagation();
     e.currentTarget.setPointerCapture(e.pointerId);
     const h = size.h || frame.current?.offsetHeight || MIN_HEIGHT;
-    resize.current = { dx: e.clientX - size.w, dy: e.clientY - h };
+    resize.current = { x: e.clientX, y: e.clientY, w: size.w, h, zoom: zoomOf(frame.current) };
   };
   const onGripMove = (e: React.PointerEvent<HTMLDivElement>) => {
     const r = resize.current;
     const parent = frame.current?.parentElement;
     if (!r || !parent) return;
     const next = {
-      w: Math.max(MIN_WIDTH, Math.min(parent.clientWidth - pos.x, e.clientX - r.dx)),
-      h: Math.max(MIN_HEIGHT, Math.min(parent.clientHeight - pos.y, e.clientY - r.dy)),
+      w: Math.max(MIN_WIDTH, Math.min(parent.clientWidth / r.zoom - pos.x, r.w + (e.clientX - r.x) / r.zoom)),
+      h: Math.max(MIN_HEIGHT, Math.min(parent.clientHeight / r.zoom - pos.y, r.h + (e.clientY - r.y) / r.zoom)),
     };
     sizes.set(memoryKey, next);
     setSize(next);

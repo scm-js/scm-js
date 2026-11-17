@@ -2434,7 +2434,12 @@ The pages down the left:
 Settings… opens this page); what the palettes start on (the owner of placed units, the
 brush size, the size of a new location); and how many undo levels each map keeps.
 
-**View**: whether the mouse wheel scrolls (Ctrl+wheel zooms) or zooms, and whether a wheel
+**View**: how large the editor's own interface is drawn (100%, 115% or 130%: the menus,
+toolbar, palettes and panels, status bar, dialogs and notices grow, while the map keeps
+its own zoom and a press on it still lands on the tile under the pointer; in a browser,
+the browser's own zoom enlarges the map as well); whether notices stay until you close
+them, rather than leaving after 6 seconds (12 for an error), with *Close all* above two or
+more; whether the mouse wheel scrolls (Ctrl+wheel zooms) or zooms, and whether a wheel
 zoom keeps the tile under the pointer in place; how fast water and units animate, and how
 Remastered's water and lava move; which cells the status bar shows; and whether string
 previews follow Remastered's colour rule or 1.16.1's. Whether water and units animate at

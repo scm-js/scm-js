@@ -20,6 +20,7 @@ import { useSetAtom } from "jotai";
 import { clearLog, formatData, formatLog, logDropped, logEntries, stamp, subscribeLog, type LogEntry, type LogLevel } from "../../editor/log";
 import { saveBlob } from "../../services/mapIo";
 import { t } from "../../i18n";
+import { zoomOf } from "../ui/interfaceSize";
 
 /** Rows put in the DOM. Everything older is in the buffer and in a copy; it is not on screen. */
 const SHOWN = 400;
@@ -95,7 +96,9 @@ export default function DebugConsole() {
     e.preventDefault();
     const startY = e.clientY;
     const startH = height;
-    const move = (ev: PointerEvent) => setHeight(Math.max(80, Math.min(window.innerHeight - 200, startH - (ev.clientY - startY))));
+    // (In the console's own pixels, which a larger interface size makes larger than the page's.)
+    const zoom = zoomOf(e.currentTarget);
+    const move = (ev: PointerEvent) => setHeight(Math.max(80, Math.min(window.innerHeight / zoom - 200, startH - (ev.clientY - startY) / zoom)));
     const up = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); };
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);

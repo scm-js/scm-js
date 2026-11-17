@@ -20,12 +20,11 @@ all, resolves to null and the plugin keeps the default mark); a built-in's file 
 runtime and on `PluginInfo`, and `PluginIconView` draws it in the Manage Plugins list and as the title
 icon of every dialog the plugin opens. `installedPluginsAtom` persists `{ spec, enabled }`;
 `defaults.ts` holds the plugins a fresh editor starts with (`DEFAULT_REMOTE_PLUGINS` —
-Aftermath (a default since 2026-10-25, on; it `requires` scm-sim, which `orderedInstalls` starts first), Paint, Repair, scm-sim (a default since 2026-10-13, on: Tools ▸ Test Map in Browser moved to it from scmjs.dev, whose pin moved to the version without it in the same commit), scmjs.dev (on since 2026-09-22; off before, while the AI was a paid trial), scmscx.com,
-Stamp Library, Terrain from Image, TrigEdit (the Text Trigger Editor, moved out 2026-09-07; **off**), TrigScript
-(a default since 2026-09-07, on) and Walkability. Since 2026-09-22 the array is alphabetical by display name and
-the Installed tab sorts by manifest name (the repository name until a manifest is in), matching Browse; before
-that the array order was the order they were added plus two rules — eudplib first "to head the list", TrigEdit
-before TrigScript so TrigScript's `after: "Text Trigger Editor…"` found its anchor. Neither is needed now:
+Aftermath (on; it `requires` scm-sim, which `orderedInstalls` starts first), Paint, Repair, scm-sim (on: Tools ▸ Test Map in Browser is its, not scmjs.dev's), scmjs.dev (on), scmscx.com,
+Stamp Library, Terrain from Image, TrigEdit (the Text Trigger Editor; **off**), TrigScript
+(on) and Walkability. The array is alphabetical by display name and
+the Installed tab sorts by manifest name (the repository name until a manifest is in), matching Browse. No
+ordering rule is needed for requirements or anchors (such as TrigScript's `after: "Text Trigger Editor…"`):
 `orderedInstalls` starts requirements first, and `withPluginItems` retries an unresolved `after:` once every
 other item is placed, so an anchor to another plugin's item works whichever registered first (with TrigEdit off
 there is no anchor and TrigScript's item goes to the end of the Triggers menu). The array order is still the start
@@ -40,11 +39,11 @@ an ordinary spec; the Manage Plugins row badges it `default`
 and hides its Remove button (what the user pastes is canonicalised through `canonicalSpec(parseSpec(...))`,
 so pasting the default's own github.com URL is recognised as it rather than duplicating it).
 Every default names a **tag, not a branch**, and that one change is what the rest hangs off.
-An unpinned default meant a push to a plugin repository changed every editor already in use
-and no released version could be rebuilt as it shipped; moving one forward is now a commit
+An unpinned default means a push to a plugin repository changes every editor already in use
+and no released version can be rebuilt as it shipped; moving one forward is a commit
 in `defaults.ts` that ships with the next release. `isPinned` therefore counts any explicit
-ref that is not a branch name (`MOVING_REFS`) and `unpin` strips any ref, and identity moved
-off the spec string: `loader.ts#pluginIdentity` is the repository whatever version follows
+ref that is not a branch name (`MOVING_REFS`) and `unpin` strips any ref, and identity is
+not the spec string: `loader.ts#pluginIdentity` is the repository whatever version follows
 it, and `defaults.ts#pluginKey` is that with a *bundled* copy answering for the spec it was
 built from. `effectiveInstalls` folds a stored row onto the default with the same key (an
 older editor's unpinned spec, or the desktop's `builtin:` copy) instead of listing — and
@@ -64,16 +63,16 @@ script itself reads to know which copies are its own (it brings those up to date
 removes ones that stopped being defaults; a hand-made directory is left alone). A copy
 already at the pinned spec is skipped, so only the first build after a clone touches the
 network and `SCMJS_SKIP_VENDOR=1` opts out entirely (that bundle fetches its defaults at
-startup, as before).
+startup).
 **Every** build bundles them, not just the desktop. The reason is the cold path: a `.ts`
 plugin must be transpiled before the browser will import it, one transpile starts
 `transpile.worker.ts`, and TypeScript is *inlined into that worker* — so five remote `.ts`
-defaults dragged 3.4 MB (975 KB gzipped) of compiler onto a first visit. Measured on the
-production build with a logging static server, a cold visit went from 1235 KB gzipped / 20
-cross-origin requests to 344 KB / none. It is all or nothing: one remote `.ts` default
+defaults drag 3.4 MB (975 KB gzipped) of compiler onto a first visit. Measured on the
+production build with a logging static server, a cold visit is 344 KB gzipped and no
+cross-origin requests, against 1235 KB / 20 with the defaults fetched. It is all or nothing: one remote `.ts` default
 starts the worker and costs the lot. The rest follows — an installed app and a container on
 an intranet start with all five, and nothing third-party is fetched at startup.
-What it costs is that the remote loading path is no longer walked by simply opening the
+What it costs is that the remote loading path is not walked by simply opening the
 editor. `tests/plugin-network.test.ts` is the deliberate replacement (real fetch, transpile
 and `import()` through `data:` URLs in Node; `describe.skipIf` unless
 `SCMJS_NETWORK_TESTS=1`), run by build.yml's Web job and release.yml's pre-flight — neither
@@ -89,8 +88,7 @@ repositories as `@scm-js/plugin-api`, a devDependency on `^1` holding one genera
 `scripts/publish-plugin-api.mjs` publishes it — to **npm**, which is what the plugin
 repositories depend on, and to `github.com/scm-js/plugin-api`, which is the audit trail
 behind the tarball and holds its README. The `plugin-api` job in build.yml runs it on every
-build. Before this each of the nine repositories carried its own copy of the 61-file
-emitted tree, refreshed by hand. Nothing is fetched at runtime for it — `import type` is
+build. Nothing is fetched at runtime for it — `import type` is
 erased before the loader sees a specifier, which is what lets a plugin depend on a package
 at all.
 The version is the **API's**, not the editor's: major is `PLUGIN_API_VERSION`, the minor
@@ -121,11 +119,11 @@ date, so a tag whose `dist/plugin.js` is not what its source builds to fails. It
 run type-checks against the newest `@scm-js/plugin-api`, which is how a moved contract
 surfaces. `tests/plugin-network.test.ts` covers both loading paths against the real
 repositories.
-A failed activation is no longer silent: `plugins/failures.ts` is pure (`pluginFailures`
+A failed activation is not silent: `plugins/failures.ts` is pure (`pluginFailures`
 over the runtimes, `failureToast` with `ttl: 0` so it outlives the splash and a *Plugins…*
 button that opens Manage Plugins) and `usePlugins` awaits the pass and reports once per spec
 per session. For that to work `activatePlugin` returns the load **in flight** for a spec that
-is already loading rather than a resolved promise — React's double mount otherwise had the
+is already loading rather than a resolved promise — React's double mount otherwise has the
 second pass reading the runtimes before a single fetch had finished.
 Adding a plugin goes through a confirmation first: `PluginsDialog`'s Add canonicalises
 the spec (`loader.ts#canonicalSpec`), runs `host.ts#inspectPlugin` → `loader.ts#previewPlugin` —
@@ -168,20 +166,20 @@ instead: it previews the repository's newest release and, when that is a differe
 reopens the confirmation with `replaces` set, which makes `installPlugin` deactivate, unlist
 and un-copy the old commit before installing the new one.
 That button is on every row with an address to ask, whether or not anything is newer, so
-most presses can only answer "nothing is" — it used to say **Update** and put that answer in
-one dim line at the top of the pane, which for a button near the bottom of a scrolling list
-read as the press doing nothing at all. The answer is a `PluginUpdateAnswer` per spec now
+most presses can only answer "nothing is" — and that answer in one dim line at the top of the
+pane, for a button near the bottom of a scrolling list, reads as the press doing nothing at all.
+So the answer is a `PluginUpdateAnswer` per spec
 (`updates.ts#answerFor`, kept in `pluginUpdatesAtom`): *Up to date* or *Could not check* on
 the row itself, under the button that was pressed (worded with the release it found — "the
-newest commit" answered a question nobody asked), and for a newer release the button
+newest commit" answers a question nobody asked), and for a newer release the button
 becomes `Update to v…` holding the preview it was found with, so cancelling the
-confirmation neither loses the answer nor asks GitHub twice. **No toast**: there used to be
-one per answer as well, and *Check all* then filled the corner with a "No update" per
-plugin (and opened a confirmation per newer one, mid-loop).
+confirmation neither loses the answer nor asks GitHub twice. **No toast**: one per answer
+would have *Check all* fill the corner with a "No update" per
+plugin (and open a confirmation per newer one, mid-loop).
 *Check all* is `updates.ts#checkAllForUpdates`, not the row button in a loop: the
 registries (fetched with `force`), then the address only for an unlisted plugin or a listed
-one with no running version (`RegistryAnswers.unversioned`). The loop was 2–3 GitHub
-requests a row against 60 an hour, so a few presses spent the limit and the rows then said
+one with no running version (`RegistryAnswers.unversioned`). The row button in a loop is 2–3 GitHub
+requests a row against 60 an hour, so a few presses spend the limit and the rows then say
 *Could not check*. A registry up to an hour behind a release is the row button's job,
 which always asks the address. Its result is one `plugin-bulk-note` line under the
 buttons. **Update all** (shown at two or more offers) is `updateAllPlugins`: sequential
@@ -189,23 +187,23 @@ installs keeping each row's `enabled`/`local`, defaults included (the press is t
 user's), a registry answer previewed at its address first, `needsApi` past
 `PLUGIN_API_VERSION` left with the reason; no confirmation screen, the same as `auto`.
 Which rows get it is `defaults.ts#updateAddress`, not `isPinned`: vendoring swaps a default's
-spec for `builtin:paint`, which is not pinned, so the one button that moves a plugin forward
-appeared on every row **except** the ones the editor ships — and only in builds that skipped
+spec for `builtin:paint`, which is not pinned, so keyed on `isPinned` the one button that moves a plugin forward
+would appear on every row **except** the ones the editor ships — and only in builds that skipped
 vendoring, making the button's presence a fact about the packaging rather than the plugin.
 `BUILTIN_REPLACES` holds the spec each bundled copy was built from, which is the address to
 ask; a bundled plugin is still asked for nothing until the press. What it asks about is the
 newest **release tag** (`loader.ts#listTags` / `newestTag`, ranked here because the API's tag
-order is not version order), not the branch tip: `checkForUpdate` used to preview
-`unpin(spec)`, which called a plugin out of date the moment anything landed on main after
-its tag — a docs commit, a CI-rebuilt `dist/plugin.js` — and the update it then offered was
-an untagged commit whose `plugin.json` carried the version already installed, so the button
-read `Update to v1.1.2` on a row reading v1.1.2 and taking it stored a commit no release
+order is not version order), not the branch tip: previewing
+`unpin(spec)` calls a plugin out of date the moment anything lands on main after
+its tag — a docs commit, a CI-rebuilt `dist/plugin.js` — and the update it then offers is
+an untagged commit whose `plugin.json` carries the version already installed, so the button
+reads `Update to v1.1.2` on a row reading v1.1.2 and taking it stores a commit no release
 names. A prerelease tag is not a release for this. A repository with no release tags still
 falls back to the branch, which is all it has.
 The comparison itself is by **commit** (`host.ts#checkForUpdate`), because comparing spec
-strings called every tag-pinned install out of date for ever — a tag is never spelt like the
-hash a check resolves — which would have had all five defaults offering an update to the code
-they were already running; the installed tag's commit usually comes out of the same tag list
+strings calls every tag-pinned install out of date for ever — a tag is never spelt like the
+hash a check resolves — which would have every default offering an update to the code
+it is already running; the installed tag's commit usually comes out of the same tag list
 (so the common check is two requests, one fewer than before, and `previewPlugin` takes the
 newest release's commit as `opts.commit` rather than asking again), a hash-pinned spec answers
 for itself, and an unresolvable ref falls back to the spec comparison. Over that sits the
@@ -244,9 +242,9 @@ ordinary fetch at startup — which `ConfirmPluginDialog` says in place of its "
 <commit>" line — so a default whose row spec is no longer the shipped one grows a **Revert**
 button: it drops the stored row and `usePlugins` activates the bundled copy again.
 `pluginRuntimesAtom` is status/manifest/error per
-spec; `usePlugins` (in `App`) keeps the two in step, idempotently per spec. Only
-`activatePlugin` used to write that atom, so a listed-but-off plugin was a bare spec in
-Manage Plugins until you enabled it — `describePlugin` is the other half:
+spec; `usePlugins` (in `App`) keeps the two in step, idempotently per spec. If only
+`activatePlugin` wrote that atom, a listed-but-off plugin would be a bare spec in
+Manage Plugins until enabled — `describePlugin` is the other half:
 `resolvePlugin(..., { entry: false })` fetches the one `plugin.json` (no entry probe, no
 code, no `import()`) and fills in name/version/description/icon without touching `status`
 or `error`, so a plugin the network cannot describe is still merely *off*. One attempt per
@@ -321,23 +319,23 @@ Browse is read as the list of plugins there *are*, so a plugin installed from it
 address — or one a registry stopped listing, which is what an `exclude` in
 `scm-js/registry`'s `plugins.json` does — went missing from the only place it was looked
 for while running perfectly well under Installed. Nothing installed can fall out of the
-list now, whatever a registry says, and `BrowseRow` takes the resolved `icon` so those
+list, whatever a registry says, and `BrowseRow` takes the resolved `icon` so those
 rows draw the plugin's own.
 A row's `v…` is the reader's own version, not the index's (`PluginDialogs.tsx#browseVersion`).
 An entry carries the version its index was generated from — the newest *release* — which
-in the same grey as Manage Plugins' number beside the same plugin read as the copy being
-run, and did not move when the plugin was updated: updating scmjs.dev to 1.1.0 left Browse
-saying 1.0.4 until the hour-old cache was refreshed, and then said 1.1.0 for a reason that
-had nothing to do with the update. So an installed row prints the manifest version out of
+in the same grey as Manage Plugins' number beside the same plugin reads as the copy being
+run, and does not move when the plugin is updated: updating scmjs.dev to 1.1.0 leaves Browse
+saying 1.0.4 until the hour-old cache is refreshed, and then says 1.1.0 for a reason that
+has nothing to do with the update. So an installed row prints the manifest version out of
 `pluginRuntimesAtom` and names the registry's only when `compareVersions` puts it ahead, as
 a `v… available` badge — which is the one time the difference is worth reading, and makes
-an available update visible in the tab it is not installed from. `unlistedInstalls` already
-built its entries from the same manifest, so the two kinds of row now mean the same thing.
+an available update visible in the tab it is not installed from. `unlistedInstalls`
+builds its entries from the same manifest, so the two kinds of row mean the same thing.
 Both the version and the icon come through `runtimeOf`, which looks the runtime up by the
-*installed* spec: `runtimes[entry.spec]` never hit for anything pinned, so every installed
-row had been falling back to `entryIcon` since the defaults were pinned to tags.
+*installed* spec: `runtimes[entry.spec]` never hits for anything pinned, so every installed
+row would fall back to `entryIcon`.
 
-**`requires` (2026-09-17).** `PluginManifest.requires` is a list of specs, canonicalised by
+**`requires`.** `PluginManifest.requires` is a list of specs, canonicalised by
 `validateManifest` (an unusable one fails the manifest, naming it). `plugins/requires.ts` is the
 pure half — `requiredInstalls`, `neededBy` (only *enabled* dependents hold a plugin),
 `activationOrder` (depth-first, requirements first, cycles and unknown specs reported through a
@@ -348,15 +346,14 @@ them; a caller with none has them read; one already listed is only enabled; a se
 recursion), `enableWithRequirements` is the one enable path both the Manage Plugins tick and
 Browse's *Turn on* call, `InstalledPane` disables the tick and Remove of a held row, turns its name
 `--warn` orange and adds a "Used by …" line (`BrowsePane` runs the same `neededBy` over its installs and marks
-the row the same way; a disabled `.check`/`.tick` box itself dims since 2026-09-18, not only its label), and `usePlugins` activates `orderedInstalls`. `loadAndRun` logs a requirement not in the
+the row the same way; a disabled `.check`/`.tick` box itself dims, not only its label), and `usePlugins` activates `orderedInstalls`. `loadAndRun` logs a requirement not in the
 list and starts the plugin anyway — `services.watch` copes with a provider that never comes, and
 the install path is what adds them. Version compatibility is deliberately **not** in the manifest:
 the provider passes a `version` to `services.provide` and the consumer checks `ServiceInfo.version`;
-a range in the manifest would have the editor arbitrate a contract it never reads. First user:
-Magenta requiring `plugin-eudplib`. `tests/plugin-requires.test.ts`.
+a range in the manifest would have the editor arbitrate a contract it never reads.
+`tests/plugin-requires.test.ts`.
 
-**A vendored plugin cannot hand its own module to a worker.** Found when TrigScript became a default
-(2026-09-07): its compile worker `import()`s the compiler by `import.meta.url`, which is the module's
+**A vendored plugin cannot hand its own module to a worker.** Found when TrigScript became a default: its compile worker `import()`s the compiler by `import.meta.url`, which is the module's
 `blob:` URL when the loader fetched the plugin and works from a same-origin worker. Compiled in by Vite,
 that URL is the plugin's chunk under `assets/`, and the chunk imports `__vitePreload` from the app's
 index chunk (Vite wraps every dynamic `import()`, `@vite-ignore` or not, in it), so importing it in a
@@ -365,22 +362,19 @@ plugin, and the plugin must work under both bundlers. The plugin's answer: `dist
 compiler bundled alone by its `npm run build`, which the worker fetches from jsDelivr at the plugin's
 own version tag when `ENTRY_URL` is not `blob:` (`compile.ts#workerModuleUrl`, `version.ts` — the
 one place the version is written as code, test-checked against the manifest), the way Monaco and
-TypeScript already arrive. Without that it silently fell back to compiling on the main thread — the
+TypeScript already arrive. Without that it silently falls back to compiling on the main thread — the
 probe is `typeof globalThis.ts === "undefined"` after a check, since only the fallback loads
 TypeScript into the page. Any plugin that starts a worker from its own module has the same trap.
 The same chunk has a second trap: on a **web** build its `import.meta.url` is
 `https://<host>/assets/plugin-<hash>.js`, so "an http(s) module URL means a dev server" is
-wrong there. plugin-eudplib had exactly that (fixed in 0.3.0: `servedFromRepository` also wants
-the path to end in `plugin.ts` or `dist/plugin.js`) — on nightly and the container it looked
-for its worker under `/assets/dist/` instead of jsDelivr. The desktop hid it, being `app://`.
+wrong there: a plugin that thinks so looks for its worker under `/assets/dist/` instead of
+jsDelivr on nightly and the container (plugin-eudplib's `servedFromRepository` also wanted the
+path to end in `plugin.ts` or `dist/plugin.js`). The desktop hides it, being `app://`.
 A third, under `npm run dev`: the vendored source is served as `/plugins/<name>/plugin.ts`, which
-passes that path test, and `plugins/` holds no `dist/` — eudplib 0.3.1 also requires the module to
-be on **another origin than the page** before it counts as a repository served for development.
-eudplib 0.4.0 (2026-09-18) is the first default that registers a build step (`saving.md`): it owns the
-one eudplib step and other plugins contribute to it. With no contributor it never applies, so the pin
-by itself changes nothing a user sees.
+passes that path test, and `plugins/` holds no `dist/` — so the module must also be on
+**another origin than the page** before it counts as a repository served for development.
 
-### `?plugin=` links (`plugins/link.ts`, `hooks/usePluginLink.ts`, 2026-09-23)
+### `?plugin=` links (`plugins/link.ts`, `hooks/usePluginLink.ts`)
 
 The docs site's Try it links carry `?plugin=github:scm-js/plugin-api-playground`. After the first
 activation pass (`pluginsStartedAtom`) and once the editor is on screen (a dialog over the splash
@@ -393,7 +387,7 @@ confirmation. The rest of the address (`playground=`) is left for the plugin, wh
 in `activate`; after an install from the link the new plugin activates with it still there.
 
 
-### `?plugin-dev=` (`plugins/devLink.ts`, `hooks/usePluginDev.ts`, 2026-11-06)
+### `?plugin-dev=` (`plugins/devLink.ts`, `hooks/usePluginDev.ts`)
 
 `scmjs plugin dev` (cli/src/plugin.ts) serves a plugin folder on `http://127.0.0.1:<port>/` (default 5310, so the
 install keeps one spec) and opens the editor with `?plugin-dev=<that>`. `devPluginSpec` accepts only plain http on

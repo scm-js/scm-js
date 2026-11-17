@@ -18,11 +18,11 @@ for the *document's* tileset, so `useTileset` calls `releaseTileset` on the one 
 (on the transition, not a sweep — a tileset a dialog is loading ahead of a change is never taken
 away); a released tileset is fetched again if a later map needs it. `tests/tileset-cache.test.ts`.
 
-**No page (2026-11-16).** `buildAtlas` returns `{ image: null, animation: null }` with the real `averages` when the
+**No page.** `buildAtlas` returns `{ image: null, animation: null }` with the real `averages` when the
 runtime has no `ImageData`: the plugin host under Node given a copy of the game (plugins-host.md "A host with a copy
 of the game") loads tilesets through `getTileset` like everything else and needs the tables, the doodads and the
 averages (`api.terrain.color`), never the picture. Nothing in the browser takes this branch. `image` is typed as
-before, so code that blits must not run without a page — none of the host's does.
+for a page, so code that blits must not run without one — none of the host's does.
 
 The atlas is also why the New Scenario dialog cannot go through `getTileset`: it pictures
 all eight tilesets at once, and eight atlases is more memory than the rest of the editor.
@@ -40,7 +40,7 @@ the map at its own scale with the start locations `idealStarts` would put on it)
 graphics both fall back to the tileset's flat reference colour, as the viewport does.
 `tests/tileset-preview.test.ts`.
 
-### Remastered terrain: the 2x pictures (`hd.ts`, 2026-10-09)
+### Remastered terrain: the 2x pictures (`hd.ts`)
 
 View ▸ Remastered Graphics (`ViewFlags.hdGraphics`, remembered across sessions in `scmjs.viewMenu` — `editor-operations.md`; one
 switch for this and the 2x sprites, `units.md`; off by
@@ -70,12 +70,12 @@ wrong ground silently.
   "this is the answer"; the classic picture keeps drawing during the fetch. A tileset with no
   usable file is cached as `null` (`hdTerrainMissing`), the hook says so once per game-data
   revision in a toast, and `retryTilesetParts` drops the nulls after an install.
-  **Two reasons, two toasts** (2026-11-09): `hdTerrainUnfit(name)` is true when the file *is* there and
+  **Two reasons, two toasts**: `hdTerrainUnfit(name)` is true when the file *is* there and
   has fewer pictures than the loaded tables have megatiles (`hdUnfit`, set beside `hdReady` in `ensureHd`,
   dropped wherever `hdReady`'s entry is). That is a mod's tileset over a Remastered copy — a data set in
   memory (the Mod Editor's attach, `drawFromModFolder`) or one installed over the copy, whose extraction
   copies the base's `.hd.vr4`. `useTileset` then says "Classic terrain with {set}" instead of "No
-  Remastered graphics here", which told someone with a Remastered copy to install one. Measured on
+  Remastered graphics here", which would tell someone with a Remastered copy to install one. Measured on
   Cosmonarchy against 1.16's tables: every tileset is replaced (Badlands 39,851 megatiles to the game's
   4,844) and **renumbered** — by index 4 of Badlands' 4,844 megatiles are the game's, Installation alone
   keeps all 1,431 — so the count rule refuses rightly and drawing 2x by index below the file's count would
@@ -99,9 +99,9 @@ wrong ground silently.
   click to the repaint including the 15 MB fetch. `tests/hd-terrain.test.ts` builds its own
   `.dds.vr4`; `SCM_REMASTERED_DIR` adds the count check on all eight real files.
 
-### Remastered water and lava (`hd.ts`, `viewport/effectPass.ts`, 2026-10-09)
+### Remastered water and lava (`hd.ts`, `viewport/effectPass.ts`)
 
-Supersedes "no water animation" above. Remastered does not animate these tiles: it draws the
+Remastered does not animate these tiles: it draws the
 terrain and bends the picture. **Water** re-samples the ground at a point offset by two scrolling
 normal layers (each mixed between two frames of its own sequence); **lava** offsets by a couple of
 pixels driven by scrolling noise, weighted by how red the pixel it reaches is and zero below a dull
@@ -115,12 +115,12 @@ red. A mask limits both. All of it measured on the real install:
   and Installation have neither file**. Shared: `HD2/effect/water_normal_1.dds.grp` (45 × 64²),
   `water_normal_2.dds.grp` (120 × 256²), `noise.DDS` (64², uncompressed RGBA). Copied as
   `tileset/<name>.hd.tmsk`, `<name>.hd.mask`, `water_large.hd.grp`, `water_fine.hd.grp`,
-  `heat_noise.hd.dds` (15 files, ~9 MB; a Remastered copy is now 1737 files / 375 MB).
+  `heat_noise.hd.dds` (15 files, ~9 MB; a Remastered copy is 1737 files / 375 MB).
 - **Which effect** is not in the table — the game knows its tilesets — so `load.ts#effectKind`
   does: Ashworld heat, Desert **none**, everything else water. Desert's table (8 plain tar
-  megatiles 51–58, one all-white mask) was first given water as a guess; the user checked
-  Remastered (2026-10-14) and the game leaves tar still. With water on, the glint lit plain tar
-  and not the doodad tiles beside it, which outlined every tar doodad. The doodads' own faint
+  megatiles 51–58, one all-white mask) looks like water, but the user checked
+  Remastered and the game leaves tar still; water there lights plain tar
+  and not the doodad tiles beside it, which outlines every tar doodad. The doodads' own faint
   squares are in Blizzard's 2x pictures (their tar is lighter than plain tar's 5,2,0) and show
   in the game too — not something to fix.
 - **Constants.** The build ships its shaders as text (`ShadersGLSL/water.glsl`,
@@ -154,24 +154,24 @@ red. A mask limits both. All of it measured on the real install:
   lava cracks move (4.2 %); no console errors. Performance on a real GPU, the non-s3tc path and
   context loss are not exercised.
 
-(2026-10-09, after main's viewport split — PR #14 — was pulled under this work: the ground pass is
-`viewport/paint/ground.ts#paintGround`, which now takes `Ground.motion` (the pass getter, the time
+(The ground pass is
+`viewport/paint/ground.ts#paintGround`, which takes `Ground.motion` (the pass getter, the time
 and the tune, or null with Animate Water off) and answers `{ animated, moving }`; the tile ghosts
 are `paint/ghosts.ts` and take `src.size`; sprite smoothing is `paint/objects.ts#spritePx`. The
-elevation and buildability overlays are part of the ground layer since that PR, so over moving
+elevation and buildability overlays are part of the ground layer, so over moving
 water they bend with it.)
 
-**A dev server's page is not a tileset file** (2026-10-14). Vite answers a missing file with
+**A dev server's page is not a tileset file.** Vite answers a missing file with
 `index.html`, status 200, and the part checks are only sizes — `isVx4Ex` is "a multiple of 64".
-The page at the root base was 8,704 bytes = 136 records, so with no `.vx4ex` extracted it was taken
-as the Remastered tile table and every tile drew black (under `/editor/` the page is 8,755 bytes and
-the bug hid). `fetchPart` now refuses a `text/html` response, which `fetchOptional` turns into
+The page at the root base is 8,704 bytes = 136 records, so with no `.vx4ex` extracted it would be taken
+as the Remastered tile table and every tile would draw black (under `/editor/` the page is 8,755 bytes and
+the bug hides). `fetchPart` refuses a `text/html` response, which `fetchOptional` turns into
 "absent" and the classic `.vx4` is fetched. `tests/tileset-fetch.test.ts`.
 
-### Extended tilesets (M4, 2026-11-08)
+### Extended tilesets (M4)
 
 A mod's tilesets can be far larger than the game's (Cosmonarchy's Badlands: 4,094 CV5 groups, 39,851 megatiles in a
-`.vx4ex`). The readers already took any size; what changed is the group in an MTXM value: `decode.ts#tileGroupOf(id,
+`.vx4ex`). The readers take any size; what differs is the group in an MTXM value: `decode.ts#tileGroupOf(id,
 groupCount)` is `(id >> 4) & 0xFFF` when the tileset has more than `CLASSIC_GROUP_LIMIT` (2,048) groups — bit 15 is
 then part of the group — and `& 0x7FF` otherwise, where bit 15 stays Remastered's creep flag (`hasCreepFlag`). Every
 site that turns a tile into a group passes `tileset.groups.length`. The atlas for 40k megatiles is ~2,176 × 21,300 px;
@@ -181,13 +181,13 @@ See `gamedata.md` "Data sets widened".
 What those added groups are to the brushes (they carry no terrain type and no ISOM links) is in `terrain.md`
 "Pair terrains": `palette.ts#isLoosePair` / `terrainCopies` / `pairTerrain`, and why pixels alone cannot find them.
 
-Detection by the whole group (2026-11-09): Check Map, the missing-terrain toast **and the drawing** ask whose a tile
+Detection by the whole group: Check Map, the missing-terrain toast **and the drawing** ask whose a tile
 is and whether the data set has it by the *whole* group, bit 15 included (`data/remasteredTiles.ts`), on every
 tileset. `tileGroupOf` keeps the eleven-bit rule on a table of ≤ 2,048 groups, but the ground layer, the minimap and
 the image export ask `missingGroups` first and hatch a tile the table has not got instead of resolving it
 (`viewport-ui.md` "A tile the data set has not got is hatched") — so over a short table a tile with bit 15 set is
-never drawn as the eleven-bit group's megatile any more. The known cost: a vanilla map with a deliberate creep flag on
+never drawn as the eleven-bit group's megatile. The known cost: a vanilla map with a deliberate creep flag on
 a tile shows that tile hatched (one probe map of ~600 surveyed). Reasons and the survey in `editor-operations.md`
-"Check Map: terrain made for a mod". `megatileForTile` takes `Pick<Tileset, "groups" | "megatileCount">` now, and
+"Check Map: terrain made for a mod". `megatileForTile` takes `Pick<Tileset, "groups" | "megatileCount">`, and
 `CV5_ENTRY_BYTES` (52) is exported: a table's length in groups is its file's size over it, which is how a stored
 data set or a folder is asked whether it has a map's terrain without decoding anything (`gamedata.md`).

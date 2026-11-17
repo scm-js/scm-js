@@ -41,7 +41,7 @@ plugin API, Ctrl+A) are not expanded. `symmetryAtom` is a derived atom that reco
 mode for `toggleSymmetryAtom` (M, `tools.symmetry`; the toolbar's `SymmetryControl`).
 `tests/symmetry.test.ts`.
 
-**The fairness report (`src/editor/fairness.ts`, `useFairness`, 2026-11-13).** `fairnessReport(scn,
+**The fairness report (`src/editor/fairness.ts`, `useFairness`).** `fairnessReport(scn,
 tileset, mode)` holds the map against its own image under a symmetry mode at minitile resolution
 (`symmetryImages` on a `4w × 4h` grid; a square and its images are one group, judged where its lowest
 index is, so every difference is counted once and `places` lie on the top-left side): walkable bit,
@@ -75,13 +75,13 @@ notice pointing at the Repair plugin; the rebuild itself (`rebuildIsomFromTiles`
 the `createdIsom` history case (`commitEditAtom` bumps `isomRevisionAtom` for it). `isomReport` /
 `STALE_ISOM_SHARE` live in `editor/isom.ts`; `useIsomStatus` and `api.terrain.checkIsom` both read them
 (computed on load, not per stroke). `checkIsom` measures **lattice → tiles**: does the lattice reproduce
-the tiles that are there. That is *not* the question a rebuild answers, and reporting it alone was a bug
-worth remembering: `rebuildIsomFromTiles` votes a lattice out of the tiles, converges in **one** pass,
+the tiles that are there. That is *not* the question a rebuild answers, and reporting it alone is a trap:
+`rebuildIsomFromTiles` votes a lattice out of the tiles, converges in **one** pass,
 and leaves behind every rect no lattice can produce — hand-placed tiles, blends, another editor's
-ground. Measured over the fixture maps with Rect blocks stamped on, a rebuild took 5–34% disagreement
-down to a residue of 2–13% and a second rebuild changed nothing, so a map with hand-laid terrain warned
-"ISOM stale (14%)" and recommended a repair that could not move the number, for ever — the Repair
-plugin re-ticked it after every press. So `isomReport` runs the rebuild too and answers `inherent`
+ground. Measured over the fixture maps with Rect blocks stamped on, a rebuild takes 5–34% disagreement
+down to a residue of 2–13% and a second rebuild changes nothing, so on that number alone a map with
+hand-laid terrain warns "ISOM stale (14%)" and recommends a repair that cannot move it, for ever — the
+Repair plugin re-ticks it after every press. So `isomReport` runs the rebuild too and answers `inherent`
 (the rects it would leave) beside `mismatched`, and **`stale` is what a rebuild would recover**:
 `(mismatched - inherent) / rects > STALE_ISOM_SHARE`. The palette badge, its hint, Check Map and the
 plugin all read `stale`, and say the leftover is nobody's to fix rather than offering a repair for it.
@@ -90,27 +90,27 @@ like the answer and is not — a rebuild rewrites 500–3000 values on a Blizzar
 mismatched, since a different row can mean the same thing. Cost: `checkIsom` is ~2 ms on a 256 × 256
 map and the rebuild ~75, so `isomReport` returns on the check alone when `mismatched` is 0, which is
 every map StarEdit and this editor write; `rebuildIsomFromTiles` keys its inverse-link table by number
-rather than by a template string, which is 131k lookups on that map (89 → 73 ms). `tests/isom.test.ts` validates all of this against the fixture maps; keep those
+rather than by a template string, which is 131k lookups on that map (73 ms rather than 89). `tests/isom.test.ts` validates all of this against the fixture maps; keep those
 tests green when touching the CV5 decoder (`edges`, `stack`) or the tables.
 
 Terrain-type ids in the palette are CV5 group indices of flat tile pairs (the same ids `ISOM` stores).
 Rect mode paints in left/right pairs following map column parity, sharing one random variation per
 pair — the tests in `tests/terrain-edit.test.ts` pin this behaviour.
 
-**Pair terrains — flat ground the tileset does not type (2026-11-10).** A mod's added groups all have CV5
+**Pair terrains — flat ground the tileset does not type.** A mod's added groups all have CV5
 `index` 0 and no links or stack values (Cosmonarchy's Jungle: 2,517 groups past the game's 1,578, used on 81 of its
 86 Jungle maps, up to 64% of a map), so they have no ISOM id and `isomTables` has nothing to build from; the maps'
 own ISOM under those tiles is unrelated terrain (hand-placed). The tile-laying tools take them through a second
 kind of terrain id: `palette.ts#PAIR_TERRAIN` (0x10000) + the pair's even group. `terrainOf` / `pairTerrain`
 resolve one, `flatGroupOf` / `matchingTiles` / `replaceTerrain` accept one, the Rect flood compares
-`terrainKeyOfTile` (index, or the pair where the index is 0 — before, a flood from an untyped tile took every
+`terrainKeyOfTile` (index, or the pair where the index is 0 — by index alone a flood from an untyped tile takes every
 untyped tile), `fillMap` leaves ISOM alone for one, and `pickAt` in isometric mode switches to Rect when the
 pick is one. They are never written to a map and the isometric brush ignores them (`currentIsomTerrain` falls
-back). `api.terrain.types()` is unchanged (the game's types), though `tx.replaceTerrain` and `flatGroupOf` take
+back). `api.terrain.types()` lists the game's types only, though `tx.replaceTerrain` and `flatGroupOf` take
 the ids since they share the functions.
 **Which pairs are offered is a matter of evidence, and the files alone do not give it.** `isLoosePair` is only a
 shape (two index-0 groups, same slots, a left and a right that differ, one megatile height, one buildability:
-675 of them in that Jungle). Measured before settling: seam distance (`edgeDistance`, pair / wrap / vertical) and
+675 of them in that Jungle). Measured: seam distance (`edgeDistance`, pair / wrap / vertical) and
 quadrant colour spread do **not** separate flat pairs from seam pieces — the game's own mud-to-dirt edge groups
 (index 22) score better on both than several typed flat terrains, and the mod's dry-grass flat (2082) and a
 grass seam block (2024) come out the same. So a pair is listed on one of three grounds: (1) `terrainCopies` — every
@@ -130,17 +130,17 @@ stays English, `label` is the localized composition, shown through `terrainLabel
 A real isometric brush for such ground needs a table nobody ships (type rows, adjacency, and links for groups laid
 out in the mod's own compact blocks, not StarEdit's fourteen shapes) — not attempted.
 
-**The Tile palette's sheet and blocks (`src/editor/tileSheet.ts`, `atoms/tileBlockAtoms.ts`, 2026-11-13).** Why: a
+**The Tile palette's sheet and blocks (`src/editor/tileSheet.ts`, `atoms/tileBlockAtoms.ts`).** Why: a
 mod's tileset adds thousands of groups (Cosmonarchy's Badlands 1,665 → 4,094, every added one CV5 index 0, no links),
 and laid 16 megatiles wide in group order they form the artist's sheet — ruins, buildings, walls, road diagonals, a
 picture spanning slots *and* groups, neighbours in the sheet designed neighbours on the map. The game's doodads are laid
 the same way (`DoodadDef`: row r = group + r, column c = slot c). 375 of the mod's 404 maps lay this ground by hand, and
-the old Tile tab (8×2 blocks with gaps, or a grid whose width follows the panel) could neither show such a picture nor
-lay it in one go.
+a Tile tab of 8×2 blocks with gaps, or a grid whose width follows the panel, can neither show such a picture nor lay it
+in one go.
 *Model.* `sheetRows(listed, isEmpty)` → one `SheetRow { group, run, blank }` per listed group in order; consecutive groups
 share a `run`; a gap of ≤ `SHEET_BRIDGE` (16) groups that are **all empty** (no slot with a megatile, the groups
 `tileGroups` leaves out) is filled with `blank` rows of the same run, any other gap starts a run (the palette draws a
-dashed break). Measured before choosing the bridge: the mod's Badlands has 220 empty groups, 36 single ones inside its
+dashed break). Measured for the bridge: the mod's Badlands has 220 empty groups, 36 single ones inside its
 pictures and runs of 2–64; its added groups (2,385 listed) become 2,429 rows in **one** run. The game's eight tilesets
 have one empty stretch of hundreds of groups (between terrain and doodads) and a few of 5–64, which stay breaks.
 `blockFromRect(rows, rect, isVoid)` → `TileBlock { cols, rows, ids, origin }`, row-major, `HOLE` (-1) for a void slot
@@ -170,7 +170,7 @@ data set's profile name (a folder attached with `drawFromModFolder` is named aft
 *Left open:* no auto-scroll while dragging a block past the sheet's edge (the wheel works mid-drag); cutting the
 sheet into named pieces listed like doodads; anything isometric for the added ground; no plugin API for blocks.
 
-**Pieces: the parts of the sheet maps lay whole (`src/editor/pieces.ts`, 2026-11-13).** *The rule's record.* A tileset is
+**Pieces: the parts of the sheet maps lay whole (`src/editor/pieces.ts`).** *The rule's record.* A tileset is
 a sheet 16 wide; maps are counted a **join** of the sheet at a time (`gatherEvidence`: how often a tile is laid, and how
 often it has its sheet's right / lower neighbour beside / below it). `cutPieces` keeps a join when the two tiles are laid
 together at least half the times the rarer of them is laid (`DEFAULT_CUT.share` 0.5); a piece is a connected run.
@@ -180,7 +180,7 @@ Doodad groups and void slots are left out. Measured:
 - Maps laid with the game's brushes give none, by construction: neighbouring columns take a pair's left and right
   group, so no two neighbours share a group. All 16 Blizzard fixture maps and the committed test maps: zero (pinned by
   `tests/pieces.test.ts`, and the learn loop over the committed maps in `tests/pieces-view.test.ts`).
-- Counting whole laid shapes instead was tried and fails: a piece laid cut short or overlapped is another shape each time
+- Counting whole laid shapes instead fails: a piece laid cut short or overlapped is another shape each time
   (Badlands: 5,946 distinct shapes; the share of a shape's tiles laid inside that exact shape is bimodal with a wide
   middle; shapes of 9+ tiles mostly under 10%). Per join, the cut-short lays add up.
 - Cutting by the sheet's pixels was not attempted: objects sit on continuous ground and seam distance does not separate
@@ -199,15 +199,15 @@ the button is pressed, since it brings `plugins/host.ts#pickFolder` and the map 
 picked folder, opened with `openMapBytes`, counted against `formats/tileset/load.ts#loadTilesetGroups` (the CV5 alone
 from the data set in use, no atlas); a map with a tile `lackedGroups` refuses is skipped as `notOurs`, one that throws as
 `unreadable`; a `setTimeout(0)` between maps; progress in `pieceLearningAtom` (the view's one-line header shows it in
-place of the source line); the end said once, in the status line and a toast, as a finished job is (round 3: the report
-used to stay in the palette and took a third of it). Measured in headless Chromium: Cosmonarchy's 404 maps (441 files) in 30 s, all read, Badlands 3,525 pieces,
+place of the source line); the end said once, in the status line and a toast, as a finished job is (kept in the palette,
+the report would take a third of it). Measured in headless Chromium: Cosmonarchy's 404 maps (441 files) in 30 s, all read, Badlands 3,525 pieces,
 Platform 1,993, Installation 9, Ashworld 1,599, Jungle 3,077, Desert 1,628, Ice 2,291, Twilight 1,631. Kept by
 `services/pieceStore.ts` in `handleStore.ts`' database, a store of its own (`PIECES_STORE`, the database's version 4),
 one `Int32Array` of `encodeEvidence` per **`{tileset}/{tableHash}`** (`pieceLearn.ts#tableHash`: two 32-bit hashes of
 the CV5's 26 words a record, from the decoded groups, which keep them all). Why the table and not the data set's id:
-evidence is about one `.cv5`'s tile ids. Keyed by profile id (slice 2), the mod attached from its folder (id `release`
-here, the folder's name) and the same mod installed under its own id kept two collections, so what was learned under
-`release` was shown to nobody else; and a mod update that renumbers a table would have shown pieces cut for other tiles.
+evidence is about one `.cv5`'s tile ids. Keyed by profile id, the mod attached from its folder (id `release` here, the
+folder's name) and the same mod installed under its own id keep two collections, so what is learned under `release` is
+shown to nobody else; and a mod update that renumbers a table would show pieces cut for other tiles.
 Learning writes under the tables of the data set in use (`loadTilesetGroups` for all eight) after deleting those eight
 keys; *Forget* deletes the same eight; Preferences ▸ Storage ▸ Clear all data (`clearStoredDataAtom`) clears the whole
 store and `learnedPiecesAtom`. `learnedPiecesAtom` holds what was read, by key; the Tile tab reads it on mount so
@@ -216,14 +216,13 @@ Alt+click can use it before the view has been opened, and the plugin host asks f
 pick): the cell's tile is a piece's and at least one of its four sheet neighbours from the same piece is laid beside it;
 the precedent is `laidPairAt`. A piece's corner tile laid alone stays a single-tile pick.
 
-**The same tile twice (`src/editor/tileCopies.ts`, 2026-11-13).** A mod's tileset repeats the game's pictures and its
+**The same tile twice (`src/editor/tileCopies.ts`).** A mod's tileset repeats the game's pictures and its
 own. "The same tile" = the same picture *and* the same flags, the flags being `heal.ts#kindKey` (exported for this; the
 group's flag word and the megatile's sixteen VF4 words). The same picture under other flags is another tile and stays.
 *Grid view*: one entry per exact picture and flags (`uniqueTiles`, the lowest id kept, so the game's tile where a mod
 repeats it; with *Added by*, a tile whose key the game's part has is left out). Picture = two 32-bit hashes of the
-megatile's 1,024 palette indices with the minitile flips applied, cached per tileset; keys cached per tile. The Grid was
-never `drawableTiles` (it listed every slot of the listed groups, a megatile repeated in two slots included);
-`drawableTiles` is unchanged (Blend and Heal want one id per megatile and keep their own flag checks). Measured on
+megatile's 1,024 palette indices with the minitile flips applied, cached per tileset; keys cached per tile. The Grid does
+not use `drawableTiles` (Blend and Heal want one id per megatile and keep their own flag checks). Measured on
 Cosmonarchy's Badlands: of 38,328 ground megatiles 12,089 repeat another's picture, 6,923 with the same flags; 1,982 added
 megatiles are byte-identical to one of the game's. The Grid's *All groups* goes 41,354 → 32,860 tiles (212 ms the first
 time, hashing included), *Added by* 29,848 → 24,235. *Sheet and Groups views hide nothing*: there a tile's place is the
@@ -237,22 +236,22 @@ its own, placed right after it, its hover naming what differs (height, walkable,
 walkable bits, the CV5 buildable bit). Measured on the 57 maps' 3,525 Badlands pieces: 238 are an exact picture copy of
 another of the same outline (95 with the same flags too); by the copy test 542 have a copy (248 with the same flags);
 `collapsePieces` folds 153 and lists 148 as the same picture under other flags: 3,372 entries, ~0.7 s once per cut
-(cached with the cut). The coordinator's looser test (a mean 3/255 a pixel) counted 711 / 514; the spike's test is the one
+(cached with the cut). A looser test (a mean 3/255 a pixel) counts 711 / 514; the spike's test is the one
 used. With *Added by*, an entry with any member in the game's part is left out (2,691 entries there).
 *Left open:* the cut pieces are not named or grouped like doodads (a plugin can name its own, below); a big collection
 costs one `mergeEvidence` copy per cut.
 
-**Fill Area with a block (round 3)** floods what the Rect fill reads, `terrainKeyOfTile` (the CV5 index, or the pair for
-an untyped group), not the same exact tile: on a mod's varied ground the exact-tile region was one tile (measured on
-Scrap Yard in slice 2). The single-tile fill keeps the exact-tile rule.
+**Fill Area with a block** floods what the Rect fill reads, `terrainKeyOfTile` (the CV5 index, or the pair for
+an untyped group), not the same exact tile: on a mod's varied ground the exact-tile region is one tile (measured on
+Scrap Yard). The single-tile fill keeps the exact-tile rule.
 
-**Blocks and pieces on the plugin API (round 3)**: `plugins-host.md` has the host side. Here: `editor/pieceList.ts`
+**Blocks and pieces on the plugin API**: `plugins-host.md` has the host side. Here: `editor/pieceList.ts`
 (pure) composes what the Pieces view and `api.terrain.pieces()` list — each provided set whose pieces fit the loaded
 table (`blockFits`: every non-hole tile inside the table with a picture), in registration order, then the cut entries
 less any whose member has the same tile set as a provided piece (the named one wins). `declaredTerrains` makes a plugin's
 declared ground `pairTerrain` with the plugin's name; `useTerrainTools.types` appends them for the tileset in front, so the
 Rect tab, Replace Terrain, the fills and the status lines name them, and `terrainOf` resolves them before the generic
-pair. `api.terrain.types()` still lists the game's types alone.
+pair. `api.terrain.types()` lists the game's types alone.
 
 
 The Blend brush (`src/editor/blend.ts`) is pixel-based: `edgeTable` lifts every megatile's four
@@ -267,10 +266,10 @@ listed tile follows undo), and the palette's `tools.blendAt(side, id)` is the on
 when `blendFollowAtom` is set. `tests/blend.test.ts` pins the edge extraction (including the minitile
 flip bit), ranking and placement against a synthetic tileset and the designed seams of the real ones.
 
-**The seam overlay (View ▸ Seam Overlay, `viewFlags.seams`, 2026-11-13).** `blend.ts#seamStep(tileset, a,
+**The seam overlay (View ▸ Seam Overlay, `viewFlags.seams`).** `blend.ts#seamStep(tileset, a,
 side, b)` is `edgeDistance` across the join less the mean of the two pictures' own *grain* at that edge
 (`edgeGrain`: the difference between a megatile's outermost pixel row and the next one in, per side,
-cached per tileset). The plain edge distance was tried first and is no use for this: at the Blend
+cached per tileset). The plain edge distance is no use for this: at the Blend
 brush's 16, 1–11% of the joins of sixteen Blizzard maps are over it (7% on Badlands, 11% on Ice — rough
 rock against rough rock) and 9.8% of those inside a stretched cliff ramp, whose joins the eye finds at
 once because the slope is smooth. Against the grain, at `SEAM_SHOWS` 8: 0.2–2% of the maps' joins and
@@ -280,16 +279,16 @@ cycles or a scroll uncovers it, so nothing may spill onto a neighbour); any terr
 layer, so a line never outlives the join. It reads the classic VR4 pixels whatever is drawn, like the
 Blend brush. The stretch searches its cut by this measure as well as the plain distance (objects.md).
 
-**The Heal brush (`src/editor/heal.ts`, terrain mode `"heal"`, 2026-11-13).** `healTiles(scn, tileset,
+**The Heal brush (`src/editor/heal.ts`, terrain mode `"heal"`).** `healTiles(scn, tileset,
 cells)` trades a tile for another of the same *kind* that joins its four neighbours better by `seamStep`.
 Kind is the CV5 group's whole flag word plus the megatile's sixteen VF4 words, compared as a string key
 (`healTables`, per tileset: tiles by kind from `drawableTiles`, and each megatile's mean colour), so
 nothing the game reads changes; `HEAL_SAME_GROUND` (mean colour within 14 a channel) keeps dirt from
 becoming grass that happens to end on the right pixels. **It only touches a cell with at least one join
 over `SEAM_SHOWS`**, and takes a candidate that leaves fewer such joins, or as many and `HEAL_GAIN` less
-step in all. The first cut took any improvement and was a lesson in what a "heal" must not do: over a
-whole Blizzard Badlands map it changed 19% of the tiles (one variation of dirt for another) for 6% fewer
-lines. As it is, over sixteen Blizzard maps a whole-map heal changes 0.1–3.3% of the tiles and removes
+step in all. Taking any improvement is what a "heal" must not do: over a whole
+Blizzard Badlands map it changes 19% of the tiles (one variation of dirt for another) for 6% fewer
+lines. With the rule, over sixteen Blizzard maps a whole-map heal changes 0.1–3.3% of the tiles and removes
 30–60% of the lines (Ashworld Hunters 568 → 24), in ≤ 180 ms; on a ramp stretched along its cliff,
 Badlands 21 → 13, Twilight 7 → 3, Ice 25 → 21 — little, because few tiles have a ramp tile's flags, and
 the stripe along a Badlands ramp's lower edge stays. Cells where `tiles[at] !== editorTiles[at]` (a
@@ -298,7 +297,7 @@ order against the neighbours as already changed, twice. The brush goes through `
 Tile (`paintsTiles`), so symmetry, the stroke's undo entry and `commitTerrain` are theirs; `tools.heal(rect?)`
 is the tab's button (marked area or whole map, `shownSeams` before and after in the status line).
 ISOM is untouched. `tests/heal.test.ts`.
-*The tab's UX (2026-11-16, after the user found Heal confusing — "what seams are"):* one word, **seam**, in
+*The tab's UX (the user found Heal confusing — "what seams are"):* one word, **seam**, in
 every user-visible string (tab, status lines, Properties, guide); "join" stays in code and in the overlay's
 definition only. The map draws the seams while the Heal tab is open (`MapViewport`: `flags.seams` or terrain +
 heal, as the Pin tab does pins); the tab's checkbox is *Always show*. The tab counts seams (`countSeams`, whole
@@ -308,7 +307,7 @@ footprints (symmetry included), `endStroke` counts seams over them before (from 
 after; a stroke that changed nothing says why through `healMiss` — no seam / only on a doodad's tiles / no
 look-alike. The button uses the same notes.
 
-**Pinned tiles (`src/editor/pins.ts`, terrain mode `"pin"`, 2026-11-13).** A pinned tile is skipped by
+**Pinned tiles (`src/editor/pins.ts`, terrain mode `"pin"`).** A pinned tile is skipped by
 the brushes that lay terrain by rule — `paintIsom` / `paintIsomDiamonds` (`IsomPass.setTile` returns
 early; the pass's `kept` lists the cells), Rect and Heal strokes (`stampAt` → `unpinned`), both fills,
 `fillMap`, Replace Terrain, the Heal button — and written by what is pointed at it (Tile, Blend, paste,
@@ -326,20 +325,20 @@ doodad placed as terrain must pin in the same undo step as its tiles. `pinCellsA
 and answers the part; `commitEditAtom` records an entry that has only pins; undo / redo / rollback call
 `stepPins`, and on a shared map the pins are copied onto the entry `tap.step` answers. `hasEdits` does
 **not** count pins (it decides whether an op goes over the wire, and a pins-only entry has none).
-Resize: `resizeDocumentAtom` moves the pins with `resizePins`; undoing the resize does not bring back
-pins it cut off. Auto-pin: `DoodadPlacementOptions.pin` (default on) pins every cell of a doodad that
+Resize: `resizeDocumentAtom` moves the pins with `resizePins`; the resize entry carries the pins
+member, so undoing the resize brings back pins it cut off. Auto-pin: `DoodadPlacementOptions.pin` (default on) pins every cell of a doodad that
 goes down as terrain, stretched ones included; pastes are not pinned.
 *What "hand-laid" means:* `isom.ts#latticeMisses` — a tile whose group's CV5 index is not the one its
 rect's lattice resolves to, skipping a placed doodad's cells (`tiles !== editorTiles`). **This is offered
 as a button (`handLaidCells`, "Pin All Hand-Laid Tiles"), not applied automatically by the brush**, which
-was the first design and is wrong: ground laid with the Rect brush does not match the lattice either
+is wrong: ground laid with the Rect brush does not match the lattice either
 (Rect never writes ISOM), so a brush that protected every mismatch could not paint a plateau over
 Rect-laid dirt, and protecting only what it reached by propagation left the plateau without its cliff
 edge. An explicit, visible set is the only version that does not break mixed Rect/isometric work.
 Overlay: `paint/ground.ts` draws a wash and a corner tab per pinned tile when `viewFlags.pins` or the
 Pin tab is open.
 
-Tile values as the game reads them (2026-10-17 audit, PR 3): MTXM bit 15 is a creep flag — the
+Tile values as the game reads them (audit): MTXM bit 15 is a creep flag — the
 group is `(id >> 4) & 0x7FF` (`tileGroupOf`, `TILE_CREEP_FLAG` in tileset/decode.ts; run T01:
 0x8084 draws as 0x84, flags 0x41FFFF). `megatileForTile`, `tileGroup`, placement, the overlays
 and `tileInfo` mask it; the ISOM/TILE editing code does not (it works on StarEdit's own tiles).
@@ -348,17 +347,17 @@ high+mid ≥12 → mid); the CV5 height bits are masked off by the game (0xD8FA)
 of megatiles. Check Map counts creep tiles (info) and groups past the CV5 (warn: Remastered draws
 tile 0x20, 1.16.1 reads past the table).
 
-`paintIsomDiamonds(scn, tileset, diamonds, terrain)` (2026-11-07, for `scmjs map generate`) is the brush with a footprint of
+`paintIsomDiamonds(scn, tileset, diamonds, terrain)` (for `scmjs map generate`) is the brush with a footprint of
 any shape: `IsomPass.placeMany` sets every listed diamond at once and propagates from all of them, so a plateau or a lake
 painted as one stroke does not depend on the order of its diamonds. What the generator learned about the brush (details in
-`cli.md` "A map from a seed"): **two bodies of one terrain whose tips face each other across a single diamond** — across an
+`cli-map-pictures.md` "A map from a seed"): **two bodies of one terrain whose tips face each other across a single diamond** — across an
 edge, or edge-to-corner such as (0, −2) and (1, +1) — leave a rect whose links hash to no CV5 group, which `updateTile`
 writes as tile 0 (black); fill such a diamond first (the generator's `squeezed`, angles measured on the lattice's u/v
 axes). A water diamond needs four steps to high ground (shore, ground, cliff). And every ramp doodad in every tileset
 fits only a south-west or south-east cliff edge; Remastered's CV5 adds cliff pieces with the VF4 ramp bit that StarEdit's
 placement rule accepts at a ramp's place but that do not walk.
 
-**Borrowed terrain (`editor/borrow.ts`, `editor/borrowLattice.ts`, `services/borrow.ts`, 2026-11-14).** A mod's tileset
+**Borrowed terrain (`editor/borrow.ts`, `editor/borrowLattice.ts`, `services/borrow.ts`).** A mod's tileset
 holds another game tileset's ground copied in (Cosmonarchy's Badlands: all of Installation's typed groups but two tiles).
 The isometric brush lays it by running **on the source tileset's own tables** and translating each tile it lays to a host
 tile with the same picture. The spike behind it (`~/mods-under-test/_notes/borrowed-isom-findings.md`, code in the
@@ -378,20 +377,20 @@ tile with the same picture. The spike behind it (`~/mods-under-test/_notes/borro
   on the overall mean and a coarse 8 × 8 pass at the same bound drop nothing. Per megatile only the 64 block sums are kept
   (`picturesOf`, 384 B: 15 MB for 40k megatiles, not the spike's 122 MB of pixels); pixels are read from the VR4 when a
   candidate gets that far. Installation → mod Badlands: 360 ms (Node), the host summary 164 ms once; all seven sources into
-  the mod's Badlands 16 s in Node, 20–25 s in headless Chromium in slices on the page (`Slicing`, a `setTimeout(0)` every ~12 ms) — since moved to workers, see "The scan in a worker" below — JS
+  the mod's Badlands 16 s in Node, 20–25 s in headless Chromium in slices on the page (`Slicing`, a `setTimeout(0)` every ~12 ms; the editor hands the scan to workers, see "The scan in a worker" below), JS
   heap 135 → 220 MB peak → 174 MB after.
 - *Translation* (`borrowTable`): per source tile (typed groups, used slots) the host tiles showing a copy, preferring the
   same sixteen VF4 words and group flag word, then the same VF4, then any; kept only those of the first one's kind
   (`heal.ts#kindKey`), up to 8. The brush picks among them per cell by `seamStep` against the neighbours (two passes, as
-  Heal), because neighbours from separately dithered copies raised the patch's internal seams 283 → 385 in the spike and a
-  Heal-like choice took it to 254. Installation → mod Badlands: 1,824 tiles, identical flags 160, same VF4 849, picture
+  Heal), because neighbours from separately dithered copies raise the patch's internal seams 283 → 385 in the spike and a
+  Heal-like choice takes it to 254. Installation → mod Badlands: 1,824 tiles, identical flags 160, same VF4 849, picture
   only 813, stand-ins 2 (the spike's numbers exactly). A source picture with no copy gets the nearest within
   `STAND_IN_BLOCK` 6 / `STAND_IN_PIXEL` 12 as a stand-in (the two Substructure / Floor edge tiles: 5.2 / 7.5).
 - *What is offered* (`borrowableTerrains`): a source terrain whose groups and every type on the brush's path to the
   source's base ground (`terrainTypeMap` hops: edge sets and terrains between) are whole, stand-ins at most
-  `STAND_IN_SHARE` (a tenth) of a type's tiles — added after the first cut offered "Floor" in five hosts where both of
-  Installation's Floor tiles were look-alike stand-ins; and not the host's own ground (every tile with a copy in a typed
-  host group — the first cut offered Jungle's Dirt in Badlands). Over Cosmonarchy's eight: Badlands ← Installation (all
+  `STAND_IN_SHARE` (a tenth) of a type's tiles — without that cap "Floor" is offered in five hosts where both of
+  Installation's Floor tiles are look-alike stand-ins; and not the host's own ground (every tile with a copy in a typed
+  host group — else Jungle's Dirt is offered in Badlands). Over Cosmonarchy's eight: Badlands ← Installation (all
   seven) and Jungle (Jungle, Raised Jungle); Platform ← Badlands (Dirt, Rocky Ground); Jungle ← Badlands (Grass, Asphalt);
   Ice ← Badlands (Dirt, Asphalt); Installation, Ashworld, Desert, Twilight nothing. The host's own tileset is never a source.
 *The lattice* is the source's ISOM, kept as an archive member per source (`borrowMember`, `scmjs\borrowed-<id>.bin`:
@@ -402,17 +401,17 @@ first stroke lays what it would on a fresh source map. The member is sparse beca
 (`diffExtras` sends changed members): two Roof strokes = 54 diamonds = 336 bytes; a whole 256 × 256 map borrowed ≈ 100 KB.
 Not a Scenario field and not a new atom: archive members are already per document, saved, parked and shared (the pins'
 precedent). **Resize** moves it by whole rects (`resizeBorrowMember`; an odd column shift drops it) and the resize entry
-now carries the moved members *and the pins* (`entry.members`, `entry.pins`), stepped in `stepWhole` — before, undoing a
-resize left the pins file of the new size, which then read as no pins.
+carries the moved members *and the pins* (`entry.members`, `entry.pins`), stepped in `stepWhole` — otherwise undoing a
+resize leaves the pins file of the new size, which then reads as no pins.
 *The stroke* (`BorrowStroke`): a shadow scenario in the source's numbering — the lattice, and the source tiles it lays
 (`tilesFromIsom`, cached per member object) where it is borrowed, `NO_TILE` (0xFFFF, a group past the table) elsewhere.
-The sentinel matters: `IsomPass` reports only cells whose tile *changed*, and a base tile that happened to equal the newly
-laid one was never translated (caught by the test comparing with the source's own map). `paintIsomDiamonds` on the shadow;
+The sentinel matters: `IsomPass` reports only cells whose tile *changed*, and a base tile that happens to equal the newly
+laid one would never be translated (the test comparing with the source's own map catches it). `paintIsomDiamonds` on the shadow;
 its tile changes are translated and returned as the host's changes, so **only cells the stroke changes are written**.
 Pinned cells: the shadow pass skips them (`kept`). *The check* before a stroke: a borrowed rect whose map tiles
 (`editorTiles`, the ground under a doodad) are not a copy of **any slot of the group** the lattice lays there goes back to
 base ground (counted in the status line). By group, not exact megatile: a reopened map's shadow is laid afresh with other
-variation slots than were painted — the first cut compared megatiles and reported 26 diamonds "written over" on a map
+variation slots than were painted — comparing megatiles reports 26 diamonds "written over" on a map
 saved and reopened untouched (headless run; pinned by the test that starts the second stroke from a copy of the member).
 A cell whose source tile has no host tile (a null rect) is left as it was and counted.
 *Where it shows:* the Isometric tab's "From other tilesets" (`BorrowedTerrains.tsx`): a button the first time (scan in
@@ -421,19 +420,19 @@ A cell whose source tile has no host tile (a null rect) is left as it was and co
 `tilesetHash` (all five files' content, not the CV5 alone: the pictures are what the table is about). Sources are the
 game's own tilesets *beneath* the data set (`gameOwnTileset`: a reader's base, else the bundled files, else the stored
 copy); with the game's own (or Remastered) data in use nothing is offered (`drawsFromGame`). Terrain ids
-`BORROWED_TERRAIN` (0x40000) + era << 8 + index, never written; `isPairTerrain` now stops below them. `useTerrainTools`
+`BORROWED_TERRAIN` (0x40000) + era << 8 + index, never written; `isPairTerrain` stops below them. `useTerrainTools`
 paints one when it is the active terrain (map ISOM not required); the first stroke after picking waits for
 `borrowContext` (the palette starts it on the click), else says so. Status line: tiles, joins to the map's own ground over
 `SEAM_SHOWS`, untranslated, stand-ins, reset diamonds. Measured in headless Chromium on Butcher's Corner with the mod's
 folder attached: scan 20–25 s; two joining Roof strokes 176 + 110 tiles (18 / 26 joins showing); undo, redo; Save As,
 reopen, a third stroke joined with no reset; Walkability overlay over it; no page errors.
-*Left open:* borders were left to drawn borders (below); no rebuild of a lattice for borrowed ground laid without the member (another
+*Left open:* borders are drawn borders' job (below); no rebuild of a lattice for borrowed ground laid without the member (another
 editor, the mod's own maps: they start from base ground); walkability is the copies' (462 of 891 Installation megatiles
 have a copy that walks the same in the mod's Badlands); the eyedropper does not pick a borrowed terrain; one source per
 stroke.
 
-**The scan in a worker (`services/borrowTableClient.ts`, `services/borrowTable.worker.ts`, `editor/borrowWorker.ts`,
-2026-11-14).** The tables are worked out in a pool of module workers; the page reads the sources, hashes them, reads kept
+**The scan in a worker (`services/borrowTableClient.ts`, `services/borrowTable.worker.ts`,
+`editor/borrowWorker.ts`).** The tables are worked out in a pool of module workers; the page reads the sources, hashes them, reads kept
 tables from IndexedDB, lists the terrains and stores what lands — short steps — and nothing else.
 *Shape.* `editor/borrowWorker.ts#borrowWorkerHandler` is the whole worker as a function (a Node test drives it); the worker
 module only wires it to `self`. A worker is given the host once (`{kind:"host"}`), then one source at a time (`{kind:
@@ -442,11 +441,11 @@ scan; it answers `progress` (at most every 100 ms) and the `encodeBorrowTable` I
 travel as `TilesetParts`: palette, VR4, VX4 refs, VF4 and the groups packed 18 words a group (index, flag word, sixteen
 megatiles) — not 4,094 `Cv5Group` objects; the arrays are the editor's own, so they are *copied* by the clone, never
 transferred (that would detach the open map's tileset). For the worker to stay small the table half of `borrow.ts` is its
-own module, `editor/borrowTable.ts` (`borrow.ts` re-exports it, so nothing that imported `borrow.ts` changed), and
-`heal.ts#kindKey` moved to `formats/tileset/kind.ts` (re-exported by `heal.ts`): through `isom.ts` and `data/tilesets.ts`
+own module, `editor/borrowTable.ts` (`borrow.ts` re-exports it), and
+`kindKey` lives in `formats/tileset/kind.ts` (re-exported by `heal.ts`): through `isom.ts` and `data/tilesets.ts`
 the worker would otherwise carry the CHK scenario module and the i18n catalogue. The worker chunk is 5.3 kB.
 *Who uses it.* `services/borrow.ts` takes a `BorrowTableMaker` (`ScanDeps.tables`, default `setBorrowTableMaker`'s, else
-`slicedTableMaker`, today's path). `main.tsx` sets the worker client, so the command line, `@scm-js/core` and the headless
+`slicedTableMaker`, the page path). `main.tsx` sets the worker client, so the command line, `@scm-js/core` and the headless
 plugin host (none of which load `main.tsx`) never reach `new Worker(new URL(...))` and keep the sliced path — unlike
 `extract.worker`, whose construction the SSR build leaves in the CLI bundle where it only fails at run time. The scan asks
 for every missing table at once; the client queues them over the pool; a `WorkerUnavailableError` (no `Worker`, a worker
@@ -475,44 +474,43 @@ longest single table 3.3–3.7 s (Jungle into Badlands), which bounds what more 
 `navigator.hardwareConcurrency - 1`: one to two halves the wait for ~90 MB; two to three saves 2 s more for ~90 MB and a
 longer stall. All seven tables are byte-identical to the page path's (an FNV checksum of every stored Int32Array,
 Installation's among them). The scan's one log line (always on, counts only) gives `ms`, `onPage` (tables that fell back),
-`workers`, `hostPosts`, `postMs`, `clonedMB`, `workerMsMax`, `workerMsSum`. Another map in front mid-scan (on Ice) broke
-nothing: the result is published by host key and was there on coming back. The desktop app serves `app://scmjs/` as a
+`workers`, `hostPosts`, `postMs`, `clonedMB`, `workerMsMax`, `workerMsSum`. Another map in front mid-scan (on Ice) breaks
+nothing: the result is published by host key and is there on coming back. The desktop app serves `app://scmjs/` as a
 standard, secure scheme through `net.fetch` of the file, as for the transpile and extraction workers built the same way;
 not run in Electron. `tests/borrow.test.ts` "the scan's worker": the handler against `borrowTable`, the pool through an
 in-process fake `Worker`, the fallback without `Worker`, a failing worker, a stop.
 
 **A mod's terrain file in the editor (`services/dataSetTerrain.ts`, `editor/terrainFileSection.ts`,
-`services/terrainFileSave.ts`, 2026-11-14).** While a data set whose kept `terrain.json` (gamedata.md) is in use, its
+`services/terrainFileSave.ts`).** While a data set whose kept `terrain.json` (gamedata.md) is in use, its
 sections go into `providedPiecesAtom` / `providedTypesAtom` / `providedBorrowAtom` under the provider
 `@dataset:<id>` (`pieceList.ts#DATA_SET_KEY`; `@` cannot start a plugin id), so every reader that serves the plugins'
 declarations serves the file's: the Pieces view (a section headed with the data set's name), the Rect tab and fills
 (declared pair terrains), the Isometric tab's "From other tilesets" with no scan (`refreshProvided` → `providedTable`).
 *Precedence:* a plugin's row goes in ahead of the data set's (`beforeDataSet` in the three `provide*` writers), and every
-reader lets the first of a duplicate stand — `pieceSections` now drops a later set's piece whose tiles an earlier set
-listed (this also settles two plugins naming one piece: the first registered wins), `declaredTerrains` already did,
+reader lets the first of a duplicate stand — `pieceSections` drops a later set's piece whose tiles an earlier set
+listed (this also settles two plugins naming one piece: the first registered wins), as `declaredTerrains` does,
 `refreshProvided` keeps the first table per source. The file wins over learned and scanned (provided sets come before
 the cut; a provided source replaces the scanned one). *Fit:* a section is used only when its `table` equals `tableHash`
 of the tileset's groups in the data set in use (`loadTilesetGroups`, CV5 alone); otherwise a warn toast once per
 (set, tileset, table) and nothing of it is provided. *Lifecycle:* `applyDataSetTerrain` removes every `@dataset:` row
 then adds the current set's (a generation counter drops a stale apply); another data set or the game's own leaves none.
 Per data set, not per document: nothing in `parkRegisters`, and nothing is written to a map (shared maps unchanged).
-*Regression found on the way and fixed:* `BorrowedTerrains` now calls `refreshProvided` on every mount, and an unscanned
-host with no provided table got an empty `borrowHostsAtom` entry, so the palette said "No other tileset's terrain is
-whole" instead of offering the scan. `BorrowHostInfo.scanned` now separates "scanned, nothing found" from "only provided
+*A trap:* `BorrowedTerrains` calls `refreshProvided` on every mount, and an empty `borrowHostsAtom` entry for an
+unscanned host with no provided table makes the palette say "No other tileset's terrain is whole" instead of offering
+the scan. `BorrowHostInfo.scanned` separates "scanned, nothing found" from "only provided
 tables known"; an entry that is neither is not published (`tests/borrow.test.ts`).
 *Writing:* the Pieces view's **Save as a terrain file…** (`FileDown` icon beside Learn from Maps…) →
 `services/terrainFileSave.ts` (loaded on click): `terrainFileSection(tableHash, sectionsFromStore(...), declared types,
 tables of every known source via borrowContext)` — pieces as listed (provided first, cut entries folded, duplicates by
 block dropped), all of a table's choices as pairs, its stand-ins — merged into the chosen file through
-`mapIo.ts#saveComposed` (new: picks the place, reads what is there, then writes; a download starts from the data set in
+`mapIo.ts#saveComposed` (picks the place, reads what is there, then writes; a download starts from the data set in
 use's kept file, else empty). Measured on Butcher's Corner with Cosmonarchy's folder attached, built bundle: learn 404
 maps 26.5 s, scan 9.4 s, save → 518,081 bytes, 3,373 pieces, 7 borrow tables (9,627 Installation pairs, 9,714
 Jungle…); `readTerrainFile` 4–7 ms in Node. Added as a data set from a copy with the file: the Pieces view lists 3,414
 pieces under the set's name with nothing learned, the Isometric tab lists Installation and Jungle World with no scan
-(the same as the scan; the file without `standIns` had listed Ashworld too, see mods.md), a Roof stroke lays 208 tiles.
+(the same as the scan; a file without `standIns` lists Ashworld too, see mods.md), a Roof stroke lays 208 tiles.
 
-**Drawn borders (`editor/borderLattice.ts`, `borderTable.ts`, `borderPass.ts`, `borderRecord.ts`, `services/borders.ts`,
-2026-11-14).** Where borrowed ground meets the host's own, a mod's maps lay purpose-drawn pieces. The spike
+**Drawn borders (`editor/borderLattice.ts`, `borderTable.ts`, `borderPass.ts`, `borderRecord.ts`, `services/borders.ts`).** Where borrowed ground meets the host's own, a mod's maps lay purpose-drawn pieces. The spike
 (`~/mods-under-test/_notes/borders-findings.md`, "Round two"; code in the `scm-js-borders-spike` worktree's
 `spikes/borders/`) found the method; this is it, built.
 *Shape of a border cell.* The patch's diamonds are laid with the game's brush on a **stand-in** pair of the game's own
@@ -527,10 +525,10 @@ shape → tile → count; `encode/decodeBorderEvidence` JSON; `mergeBorderEviden
 reading — transition cells as neither terrain or as the ground — whose tiles keep to one shape most). Cell classes
 (`cellKind`): **X** a host megatile that is a copy of a source *flat* terrain (by every known source's borrow table,
 `borderClasses`, packed `era << 10 | index`); **Y** a host typed flat terrain **by picture** (typed pair groups' megatiles,
-and any megatile with the same pixels — mod maps lay their ground from untyped duplicates, which first cost Floor/Dirt
-6 of its 9 maps); **T** an untyped tile that is no copy of any known source and no picture of the host's typed sets.
+and any megatile with the same pixels — mod maps lay their ground from untyped duplicates; by typed groups alone Floor/Dirt
+loses 6 of its 9 maps); **T** an untyped tile that is no copy of any known source and no picture of the host's typed sets.
 A pair is read where a T cell has exactly one X and one Y next to it; for a pair a map shows none of those, within two
-cells (a two-cell-thick drawn border; the synthetic world needs it). Using the two-cell reading for every pair made
+cells (a two-cell-thick drawn border; the synthetic world needs it). Using the two-cell reading for every pair makes
 Floor/Dirt worse (8.8 joins/100 against 1.8): it is the fallback only. **Every known source helps**: with only
 Installation's table, other tilesets' copies in the mod count as T and Floor/Dirt read 3 maps, 14–19 joins/100; with all
 seven, 8 maps, 0–7 (below). So `services/borders.ts` learns with all known tables, and borders need the scan (or a file's
@@ -541,47 +539,47 @@ passes until settled; a cell whose worst join > `SEAM_SHOWS` gets the pool first
 the patch, else the ground's own tile before). Two changes from the spike: **the ground's own tile stays** on the
 ground's side wherever it joins (`kept`: no rubble on plain dirt, the spike's `c2`); **exact pruning** of pool
 candidates by a lower bound from per-side edge means (|mean diff| ≤ mean |diff|, so the bound never cuts a winner).
-*The stroke* (`BorrowStroke`, opts `{ record, borders }`). `finish` now always **settles** the stroke's box plus margin
+*The stroke* (`BorrowStroke`, opts `{ record, borders }`). `finish` always **settles** the stroke's box plus margin
 (`settle`): the map before any borrowed stroke rebuilt from the record, every cell of the window laid as the patch says —
 outside the patch its host tile, inside it the lattice's tile (a copy of any slot of the group stands), and with a setup
 each border cell whose pair (X from the diamonds around, Y the commonest host terrain within 2 cells before any borrowed
 stroke) has a table goes to `layBorder`; without a table, as the brush lays it. Its changes come back in
-`result.changes`; the hook applies them and adds them to the same `Stroke`, one undo step. Live strokes show the old
+`result.changes`; the hook applies them and adds them to the same `Stroke`, one undo step. Live strokes show the brush's own
 output while dragging; the border comes on mouse-up. *What the patch is* (`inPatch`): the diamonds the brush painted (the
 record's `painted`, with the terrain painted, base ground included), else a flat non-base value (maps from before the
 record); a painted diamond the brush changed since (an edge, a buffer) is the patch only between borrowed terrains — at
 host ground it is not. Three rules came from the browser run, each from cliff walls laid where ground was taken back:
 that one; an inner cell whose lattice tile is the source's edge to its base ground next to host ground takes the
-patch's flat tile (`nearGround`); with a setup, a cell no stand-in reaches and no patch is near (`nearPatch`) is host
+patch's flat tile (`onGround`: one of the rect's own diamonds is host ground); with a setup, a cell no stand-in reaches and no patch is near (`nearPatch`) is host
 ground (the lattice's leftover edges). And `takeBack` paints only borrowed diamonds (base over host ground laid edges
 around nothing). *The check* (`checkAgainstMap`) where a record or
 setup exists looks only at rects inside the patch, and there accepts an untyped tile in a recorded cell (a border piece
-the cliff stand-in reached inside with); without that, 150 random strokes found 9 false resets, now 0.
-**Base ground**: Installation's Floor is its base, so a Floor patch was invisible to the lattice (the old brush laid
+the cliff stand-in reached inside with); without that, 150 random strokes find 9 false resets; with it, 0.
+**Base ground**: Installation's Floor is its base, so a Floor patch is invisible to the lattice (the brush alone lays
 partial Floor rects with no edges); `painted` makes it a patch, and the settle lays it whole. **Take back**
 (`TAKE_BACK` = index 0xFF, `takeBackId`, a row per source in the list): paints base on the shadow, unpaints, restores
 recorded cells; the settle relays the border. All strokes then all taken back → the map byte for byte (tests).
-*Review round (2026-11-14).* Two defects in the browser pictures, both reproduced as pure strokes in the gated suite
-("the browser session's strokes": the session's pointer path, a brush application per new diamond as the hook does; the
-map pixel is 100 left and 50 up of the tile grid the driver named). **(1) Wall pieces left on Dirt after a partial
-take-back.** Cells beside painted Substructure diamonds that the take-back's brush turned into edges found no patch
-terrain (`xOfCell` read only `inPatch`, which says "not the patch" there), so with no pair they fell to "as the brush
-lays it" and kept the source's cliff. Now `xOfCell` looks two diamonds out and then at the painted terrain around, and,
-with drawn borders, a cell whose patch terrain is still unknown is host ground. It also no longer falls back to the
-stroke's last painted terrain: the answer must not depend on which stroke asks (an audit stroke disagreed with the
-painting one). **(2) Floor cut in blocks against Substructure.** The inner-cell rule replaced the lattice's tile with the
-patch's flat tile whenever ground was within a diamond (`nearGround`); where two borrowed terrains meet beside Dirt that
-overwrote their own edge. It now looks only at the rect's own diamonds (`onGround`). Not a reopen effect: it failed in one
-session too. What is left at that junction matches the source's own lattice cell for cell (mean colours compared; the
+*Two traps*, both reproduced as pure strokes in the gated suite ("the browser session's strokes": the session's
+pointer path, a brush application per new diamond as the hook does; the map pixel is 100 left and 50 up of the tile
+grid the driver named). **(1) Wall pieces left on Dirt after a partial take-back.** Cells beside painted Substructure
+diamonds that the take-back's brush turns into edges find no patch terrain through `inPatch` alone (it says "not the
+patch" there), so with no pair they fall to "as the brush lays it" and keep the source's cliff. So `xOfCell` looks two
+diamonds out and then at the painted terrain around, and, with drawn borders, a cell whose patch terrain is still
+unknown is host ground. It does not fall back to the stroke's last painted terrain: the answer must not depend on which
+stroke asks (an audit stroke would disagree with the painting one). **(2) Floor cut in blocks against Substructure.**
+Replacing the lattice's tile with the patch's flat tile whenever ground is within a diamond overwrites the edge where
+two borrowed terrains meet beside Dirt; the inner-cell rule looks only at the rect's own diamonds (`onGround`). Not a
+reopen effect: it shows in one session too. What is left at that junction matches the source's own lattice cell for cell (mean colours compared; the
 straight vertical boundary is Installation's own vertical edge, and the door is a variation of the cliff group, picked at
 random as the game does), except rects that touch the tileset's ground, which are border cells by design.
-Tried and dropped: unpainting the brush's buffer on take-back (it unpainted Floor/Substructure junction edges within
-reach and made new holes); taking a painted edge as the patch whenever two painted terrains are around (no change).
+Approaches that do not work: unpainting the brush's buffer on take-back (it unpaints Floor/Substructure junction edges
+within reach and makes new holes); taking a painted edge as the patch whenever two painted terrains are around (no
+change).
 **Guards:** `BorrowStroke.strays(box)` — cells no patch diamond touches and no stand-in of their own pair names, not at
 their host tile (a pair without a table is laid as the brush lays it and is not counted) — checked after every
 drawn-border stroke in the random tests (CI and the mod) and the session test; `latticeEdgesBroken` (rects of two
 painted terrains with painted ground all round must hold copies of the lattice's tile) after every stroke, in one
-session and after encode/decode. Both fail on the old code. Also a kept ground half whose rect partner is drawn now
+session and after encode/decode. Both fail without the two rules above. A kept ground half whose rect partner is drawn
 takes the shape's own tile where one joins (+1–2 drawn cells on Substructure, +5–12 on Floor/Asphalt; joins unchanged).
 Checked, not changed: `d30`'s straight cut is the settle's own outcome (a whole-map settle afterwards changes 0 cells),
 not the write window; `d23`'s missing trim is hard cells on the right lobe (`h49,A,A,h49`, `B,h49,h49,B`,
@@ -600,14 +598,14 @@ Clear all data drop it). `prepareBorders` loads the stand-in, all known contexts
 measures (`warmBorderPass`; the first pass on the mod's 23,772 megatiles otherwise pays ~900 ms). `peekBorderSetup` is
 null with the switch off (`drawnBordersAtom`, stored as `scmjs.drawnBorders`, default on; memory storage in Node and the
 headless host, so on there), unprepared (it starts) or no table.
-`refreshProvided` drops the scanned contexts too, so the panel re-reads them after it (its hovers went blank once).
+`refreshProvided` drops the scanned contexts too, so the panel re-reads them after it (else its hovers go blank).
 *Numbers* (Cosmonarchy's Badlands, 57 Badlands maps of CMBW-maps, all seven sources known; spike in brackets).
 Tables: Substructure/Dirt 10 maps 29 shapes (29), Floor/Dirt 8 maps 36 shapes (43), Floor/Asphalt 8 maps 36 (37); pools
 897 / 219 / 326 (938 / 335 / 218). Joins showing per 100 border cells, brush patches drag / notch-and-bar / two strokes:
 Substructure/Dirt 5.1 / 3.3 / 2.2 (7.4 / 5.4 / 7.1), hard 18 / 17 / 8 (25 / 27 / 24); Floor/Dirt 7.0 / 1.8 / 0.0
 (7.0 / 7.9 / 0.9), hard 34 / 13 / 5 (53 / 54 / 16); Floor/Asphalt 0.0 everywhere (blind measure, as in the spike), hard
 0. Pass times (Node, warm): Substructure/Dirt 69 / 127 / 131 ms, Floor/Dirt 21 / 30 / 18, Floor/Asphalt 9 / 17 / 28 —
-under 150 ms, so it runs on mouse-up in the stroke, not deferred. In the built bundle the mouse-up of a stroke took
+under 150 ms, so it runs on mouse-up in the stroke, not deferred. In the built bundle the mouse-up of a stroke takes
 36–132 ms (5 ms without borders). Record 1.8–3.0 KB a patch (6 B a cell, 6 B a painted diamond); 3.2 KB after two
 crossing strokes; after the browser session (seven strokes, a take-back, Save As, two more) lattice 768 B, record
 3,084 B (86 diamonds, 425 cells).
@@ -616,21 +614,19 @@ Learn from Maps over 404 maps: 26 s with borders (the same as without), 74 pairs
 tiles together from the pairs maps lay. *Here:* reading pairs within two cells everywhere (above); the brush's edge ring
 as part of the patch (an edge-valued diamond widens the stand-in's patch by a ring).
 *Left open:* shapes no map lays stay hard (the cliff sets' inner corners mostly). "Unlike either side" (`borders.unlike`)
-counts walkability only since 2026-11-14 (it counted buildability too, which flagged nearly every cliff piece; numbers in
-"Follow-ups" below). The
+counts walkability only (counting buildability too flags nearly every cliff piece). The
 stand-in is the game's Badlands for every host, so a host era with other cliff heights is read through Badlands' shapes.
 `tests/borders.test.ts` (made-up world in CI: learn from a map, lay, pins, take back, many strokes, save and reopen;
 gated: set 20 against the game's, the game's own maps learn nothing, the mod's numbers).
 
-**Drawn borders, follow-ups (2026-11-14, branch `borders-followups`).** The switch is stored (`scmjs.drawnBorders` in
+**Drawn borders: the switch, Clear all data, the count.** The switch is stored (`scmjs.drawnBorders` in
 `STORED_RESETS`, `RELOADS` and `storedLabels.ts`; `atomWithStorage` + `getOnInit` + `createJSONStorage(browserStorage)`,
 as `debugConsoleAtom`). The panel shows it unchecked and disabled where no border is known without writing it. Clear
-all data now also empties `learnedBordersAtom` and the data set's rows of `providedBordersAtom` live (their store was
-already cleared). The status line's count is walkability only: a drawn tile counts when its walkable minitiles
+all data also empties `learnedBordersAtom` and the data set's rows of `providedBordersAtom` live, beside their store. The status line's count is walkability only: a drawn tile counts when its walkable minitiles
 (none / some / all) differ from both the patch's tile and the ground's.
 
 **Copied terrain (`editor/terrainCopyTable.ts`, `editor/terrainCopyLattice.ts`, `services/terrainCopies.ts`, `atoms/copyAtoms.ts`,
-`plugins/copies.ts`, `components/panels/CopiedTerrains.tsx`, 2026-11-14).** A mod's tileset holds one of its own typed
+`plugins/copies.ts`, `components/panels/CopiedTerrains.tsx`).** A mod's tileset holds one of its own typed
 terrains S again under other flags (`terrainCopies`: the untyped pair S′, "Mud (mid ground)") and, often, S's edge set E
 again beside it: untyped tiles keeping each E piece's picture where the piece shows S, the other side repainted as the
 ground G the copy is meant to sit on (Cosmonarchy's Jungle: Mud mid/high × 3 grounds each). Two spike rounds
@@ -649,7 +645,7 @@ places the pieces that keep too little S for pixels (mostly-O corners) and break
 has none (synthetic shuffled: 53% recovered against 76–78% laid out). Pieces whose picture is S alone map to S′'s tile.
 Reported when ≥ `MIN_SHAPES` (4) halves and ≥ `MIN_SHARE` (0.5) of them have a piece by pixels — false blocks/sets measured
 max 0.42 (p90 0.38) on the synthetic mods, true median 0.58. *One set per block*: each block megatile votes for the set one
-of whose pieces it keeps most of (a share of shapes was tried first and favoured small sets: Ice's Snow/Dirt block lost to
+of whose pieces it keeps most of (a share of shapes favours small sets: Ice's Snow/Dirt block loses to
 Snow/Rocky Snow). *Block key* = two hashes of its tiles' pictures, so a mod update that moves groups finds it again.
 *The gate* (`gateBlock`, then on the page `GATE_JOINS`): **askable** halves = E halves that are first in the tileset for their rect's link hash (what
 `IsomPass.updateTile` takes; for every set found that is all halves) — each needs a tile (any slot: the game picks any
@@ -668,8 +664,8 @@ correspondence 113/120 same tile, 7 same picture.
 terrains, loose pairs outside the block) by mean `seamStep` across the pieces' O-facing sides; each counted by painting the
 fixed strokes (`countStrokes`: a diamond, blobs 2–5, lines, an L, a ring, a blob with a hole, four walks) on a 48² map of it,
 joins showing per 100 border cells; lowest count, ties within `COUNT_MARGIN` (1 join/100) by the repainted minitiles' VF4
-words, typed first. Measured: game sets 88 right + 17 twin of 112 (old mean-step 88 + 16), twins 14/16 (13), the hand-checked
-high Mud block's ground right (pair 3672, 7.7 vs next 14.0; the mean step had picked another pair).
+words, typed first. Measured: game sets 88 right + 17 twin of 112 (mean step alone 88 + 16), twins 14/16 (mean step 13), the hand-checked
+high Mud block's ground right (pair 3672, 7.7 vs next 14.0; the mean step alone picks another pair).
 *At stroke time* (`chooseBlock`): of the terrain's blocks (complete ones, else the incomplete), the one whose count on the
 ground under the stroke (`groundUnder`: the commonest ground round its first diamonds) is lowest; laid against that ground
 when its count is within `COUNT_MARGIN` of the block's own outer ground's, else against its own. The palette lists one entry
@@ -693,15 +689,15 @@ neighbours, and whose rects hold only tiles the patch could lay; then **shrink**
 rects of G alone; rewrite the shadow's cells; a cell the patch held that it no longer does takes the tile the real lattice
 lays (`tilesFromIsom` on a scratch copy). **A tile that is neither the patch's nor its ground's is never written over**,
 in the shadow or out of it: someone laid it over the patch since (the Rect or Tile brush, a borrowed stroke), and a re-lay
-set off by a stroke two diamonds away must not take it back (review, 2026-11-14: before, a kept neighbour's edge ring
-re-laid such a cell, and a cell the patch gave up went to the lattice's tile whatever it held). Measured on the mod's Jungle (mid Mud on Jungle, G laid first, the game's Jungle
+set off by a stroke two diamonds away must not take it back (without this rule a kept neighbour's edge ring
+re-lays such a cell, and a cell the patch gives up goes to the lattice's tile whatever it holds). Measured on the mod's Jungle (mid Mud on Jungle, G laid first, the game's Jungle
 painted 2–3 diamonds away from four sides; joins showing in a 32 × 24 window, the patch alone 16): no re-lay 23–26; re-lay
 without the shrink 17–23 (hard cuts left); with it 5–12, cut joins 1–5. A 3-diamond patch that close is given up entirely
 (its remaining G cannot hold a diamond with its ring). Heal and Blend rewriting patch cells are not re-laid; a later copy
 stroke's check drops diamonds whose rects hold foreign tiles.
 *The scan* (`services/terrainCopies.ts`): by itself when the map in front's tileset has a copy (`watchCopiesInFront`, from
 App; polls `peekTileset` while it loads); the pixel part in the borrow worker (`{kind:"copies"}`, its own worker started and
-ended for it, `borrowTableClient.ts#workerCopyScan`, set in `main.tsx`; `TilesetParts` now carries `links` so the worker sees
+ended for it, `borrowTableClient.ts#workerCopyScan`, set in `main.tsx`; `TilesetParts` carries `links` so the worker sees
 edges and stacks), else sliced on the page (CLI, core, headless host); then counts on the page with a pause between grounds.
 Kept in `BORROW_STORE` under `copies/{tilesetHash}` (`KEPT_VERSION`), cleared by Clear all data (which empties
 `copyHostsAtom`; the next tileset change scans again). Measured on Cosmonarchy's eight (Node): the rule 1–650 ms a tileset; the
@@ -711,7 +707,7 @@ counts dominating: each ground's count is ~50–80 ms, one slice on the page. Mo
 was there by the time the mod's folder was attached; not timed further.
 *Tiers*: plugin `provideCopies` > data set's `terrain.json` `copies` (`@dataset:` rows) > the scan, per (source, height).
 The spike's "maps' commonest neighbour" tier is **not built**: the learned collection keeps sheet joins, not neighbours;
-the stroke-time choice reads the map's own ground instead, which agreed with the maps on 10 of the 12 offered blocks.
+the stroke-time choice reads the map's own ground instead, which agrees with the maps on 10 of the 12 offered blocks.
 *Dead ends* (both rounds): "explained pixels" (repaint = G's pictures at the same place: 70% of the worked example's
 repainted minitiles exist nowhere else); a colour-histogram ground choice; the share-of-shapes winner; growing the stroke to
 avoid missing shapes (4 rounds add 500–2,800 diamonds, the missing share barely moves); the source piece as fallback (2–10×

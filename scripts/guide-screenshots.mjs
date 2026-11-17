@@ -665,23 +665,11 @@ const SCENES = [
     await p.take("assistant");
     await p.page.keyboard.press("Control+Shift+A"); await p.wait(400);
 
-    await p.submenu("Tools", /^AI$/, /^Name and Describe/); await p.wait(800);
-    await p.page.locator(".dlg button", { hasText: /^Suggest$/ }).click();
-    await p.page.locator(".dlg .ai-item").first().waitFor({ timeout: 30_000 }); await p.wait(600);
-    await p.page.locator(".dlg .ai-item").first().click(); await p.wait(300);
-    await p.dialog("name-describe"); await p.esc();
-
     await p.submenu("Tools", /^AI$/, /^Review Map/); await p.wait(800);
     await p.page.locator(".dlg .ai-chip", { hasText: /Melee balance/ }).click();
     await p.page.locator(".dlg button", { hasText: /^Review$/ }).click();
     await p.page.locator(".dlg .ai-item").first().waitFor({ timeout: 60_000 }); await p.wait(600);
     await p.dialog("review-map"); await p.esc();
-
-    await p.submenu("Tools", /^AI$/, /^Rewrite Strings/); await p.wait(800);
-    await p.page.locator(".dlg textarea").first().fill("Translate into German.");
-    await p.page.locator(".dlg button", { hasText: /^Rewrite$/ }).click();
-    await p.page.locator(".dlg .ai-table tr").nth(1).waitFor({ timeout: 30_000 }); await p.wait(600);
-    await p.dialog("rewrite-strings"); await p.esc();
   }, { seed: true }),
 
   scene("scmjs-generate", "", async (p) => {

@@ -15,10 +15,10 @@ was **removed** along with `installFromUrl`, the `remote` source kind and the CI
 fetched from an address the user did not name, and the chain running out and asking is easier to explain
 than four ways of not being asked. The preload's first task is the resolution (progress on the splash for a
 desktop extraction); `usePreload` mirrors the source into `gameDataSourceAtom` and opens the `gameData`
-dialog with `{ auto: true }` when it ends at none — through `offerGameDataWhenClear`, which waits for `pluginsStartedAtom` (first activation pass settled, capped at `PLUGIN_WAIT_MS`) and then for `dialogStackAtom` to be empty (a link's Join / Open a Copy dialog raced it and was hidden under it on a slow probe; tests/gamedata-offer.test.ts). A plugin dialog that never closes means no offer; Help ▸ Game Data… still works. After an install the dialog calls `retryFailedParts`
+dialog with `{ auto: true }` when it ends at none — through `offerGameDataWhenClear` (`services/startupOffers.ts`), which waits for `pluginsStartedAtom` (first activation pass settled, capped at `PLUGIN_WAIT_MS`) and then for `dialogStackAtom` to be empty (a link's Join / Open a Copy dialog raced it and was hidden under it on a slow probe; tests/gamedata-offer.test.ts). A plugin dialog that never closes means no offer; Help ▸ Game Data… still works. After an install the dialog calls `retryFailedParts`
 (drops the `LazyFiles` nulls) / `retryTilesetParts` and bumps `gameDataRevisionAtom`, which `useTileset` /
 `useUnitAssets` depend on — that is how a map already open picks the graphics up. It also calls
-`useMapFileActions.ts#relayBlankTerrain`: the startup map was laid by `flatTerrain` with no CV5 to pick
+`services/documentActions.ts#relayBlankTerrain`: the startup map was laid by `flatTerrain` with no CV5 to pick
 variations from, so every pair took variation 0 — invisible under flat colours, and one megatile repeated
 across the map the moment the graphics land. `newMapInto` records that fill in `blankFillAtom`
 (`gameDataAtoms.ts`, cleared by `loadDocumentAtom` / `closeDocumentAtom`) and the relay lays the tiles and
@@ -30,7 +30,7 @@ game files at a time, and a `GameDataProfile` (id + name) names it — `DEFAULT_
 own; any other is a mod's, the same formats with files replaced, installed under its id
 (`installDataSet`: the game's two archives required, the mod read in the worker by `@scm-js/mod`'s `readMod`
 and its winning files under the extraction's folders laid over them through `readerFor`'s overlay;
-`pickedDataSet` turns a picked folder into that — since 2026-11-12, `mods.md` "@scm-js/mod adopted") and stored
+`pickedDataSet` turns a picked folder into that — `mods.md` "@scm-js/mod adopted") and stored
 under `gamedata-profiles/<id>/` beside the game's `gamedata/` (`store.ts#profileDir`, every store
 function takes the id, `listStoredCopies`). The choice is `scmjs.gameData` (`gameDataProfileAtom`,
 in `STORED_RESETS`; the resolver reads the key itself through `activeProfileId` since it runs
@@ -38,14 +38,14 @@ outside the store) and the chain asks for the chosen set's copy first, falling b
 own with a note in `tried`. `AssetSource.profile` says which set answered. Switching is
 `switchDataSet`: everything decoded describes the old files under the same ids, so it drops the lot
 (`resetUnitAssets`, `releaseAllTilesets`, `clearFrameCache`, `clearComposedImages`), resolves again
-and bumps `gameDataRevisionAtom` — `useUnitAssets` now re-reads `peekUnitAssets` on every bump
+and bumps `gameDataRevisionAtom` — `useUnitAssets` re-reads `peekUnitAssets` on every bump
 rather than keeping what it had. `api.gameData` and the `"gameData"` event are the plugin side
-(`host.ts#gameDataApi`); `api.gameData.read(path)` (`host.ts#readGameFile`) hands a plugin one extracted file through `fetchAsset`, null for a missing one — a dev server's `text/html` fallback included. `extract.ts#EXTRA_TABLES` (`arr/orders.dat`; since 2026-11-08 also `portdata.dat/.tbl` and `mapdata.dat/.tbl`, so with `UNIT_TABLES` and `SOUND_TABLES` the copy holds all fifteen `arr\` files 1.16.1 has — pinned by `tests/datasets-widths.test.ts` "the extraction's tables"; `DATEX_TABLES` gained `portdata`/`mapdata`) is copied though the editor never reads it: OpenBW, behind Walkability's game pathing, will not start without it, and a stored copy made before 2026-09-25 lacks it (the plugin says to reinstall). The Mod Editor compared a mod's `mapdata`/`portdata` against a copy without them and counted them as changed, which is why all of `arr\` is kept now; a copy or `public/` extracted before 2026-11-08 lacks the four (`tests/gamedata.test.ts`'s byte-for-byte comparison with `public/` tolerates exactly those, `ADDED_SINCE`; `npm run extract` brings them). The play set already had `portdata` at the same path, so `copyPlaySet` now skips it (`result.files.has`). `extract.ts#ICON_FILES` (`unit/cmdbtns/cmdicons.grp` + `ticon.pcx`, 2026-10-15) are copied when present for `api.graphics.icon` (`plugins-host.md`); an older copy lacks them and plugins show names. A data set is a name over files in the game's formats — at any width since M4 (below); the CHK's
+(`host.ts#gameDataApi`); `api.gameData.read(path)` (`host.ts#readGameFile`) hands a plugin one extracted file through `fetchAsset`, null for a missing one — a dev server's `text/html` fallback included. `extract.ts#EXTRA_TABLES` (`arr/orders.dat`, `portdata.dat/.tbl` and `mapdata.dat/.tbl`, so with `UNIT_TABLES` and `SOUND_TABLES` the copy holds all fifteen `arr\` files 1.16.1 has — pinned by `tests/datasets-widths.test.ts` "the extraction's tables"; `DATEX_TABLES` has `portdata`/`mapdata`) is copied though the editor never reads it: OpenBW, behind Walkability's game pathing, will not start without `orders.dat`, and an older stored copy lacks it (the plugin says to reinstall). The Mod Editor compares a mod's `mapdata`/`portdata` against the copy and counts them as changed when the copy has none, which is why all of `arr\` is kept; a copy or `public/` from an older extraction lacks the four (`tests/gamedata.test.ts`'s byte-for-byte comparison with `public/` tolerates exactly those, `ADDED_SINCE`; `npm run extract` brings them). The play set has `portdata` at the same path, so `copyPlaySet` skips it (`result.files.has`). `extract.ts#ICON_FILES` (`unit/cmdbtns/cmdicons.grp` + `ticon.pcx`) are copied when present for `api.graphics.icon` (`plugins-host.md`); an older copy lacks them and plugins show names. A data set is a name over files in the game's formats — at any width (M4, below); the CHK's
 settings sections stay the format's.
 
 **Names from the data** (`data/gameNames.ts`): `stat_txt.tbl` (entries 0–227 the unit types as
 `Name\0Subname\0Category`, read by `decodeTblEntries`; the `label` columns of `weapons.dat` /
-`upgrades.dat` / `techdata.dat` point into it, now decoded) gives the game's own names; the editor's
+`upgrades.dat` / `techdata.dat` point into it, decoded too) gives the game's own names; the editor's
 tables are StarEdit's. The rule is per entry: the data's name where it differs from what the
 game's own data says for that id, StarEdit's elsewhere — so Blizzard's files change nothing and a
 mod's renames show. `GAME_*` there are the game's names where they differ from StarEdit's,
@@ -53,12 +53,10 @@ generated from the real files and pinned in `tests/names.test.ts`; `namesFromAss
 `LoadedNames` (null per slot where the table stands) that `units/load.ts` installs through
 `installNames` when the tables arrive, and `unitName` / `weaponName` / `upgradeName` / `techName`
 read it first, so every caller follows. `UNIT_NAMES` stays the text trigger format's vocabulary;
-`unitByName` accepts the loaded names too. Lists built once at import were the trap here: the
-palette's and the settings dialogs' item lists are built per render or on the revision now.
-(`UPGRADE_NAMES` had Plasma Shields at 7 where `upgrades.dat` has it at 15; fixed, with
-`UPGRADE_RACE`.)
+`unitByName` accepts the loaded names too. Lists built once at import are the trap here: the
+palette's and the settings dialogs' item lists are built per render or on the revision.
 
-**The Game Data page** (`data.html` → `src/pages/data.tsx` → `pages/GameDataPage.tsx`, 2026-10-12): a
+**The Game Data page** (`data.html` → `src/pages/data.tsx` → `pages/GameDataPage.tsx`): a
 second Vite input (`build.rollupOptions.input` in `vite.config.ts`; the editor's entry chunk is
 therefore `main-*.js`, not `index-*.js`), served at `scmjs.dev/editor/data` (Pages answers `/data`
 with `data.html`; `vite preview` and the dev server want `/data.html`). It is the site's "what has
@@ -88,26 +86,24 @@ weighted rather than listed — the download is a card (`.gd-card`) carrying the
 (`.gd-cta`), the user's own archives the quieter `.gd-alt` under it, and the footer says "Continue without
 graphics" so leaving is a choice rather than a dismissal. **Download from Blizzard** (`install.ts#installFromZipUrl` over `BLIZZARD_ZIP_URL`) reads
 Blizzard's own free StarEdit package — trimmed StarDat/BrooDat plus a `patch_rt.mpq`, all three fetched and
-laid in the game's order. **The patch is not optional** (until 2026-10-15 it was skipped on the belief that it
-"changes seven tables" away from the other routes): those seven — `units/weapons/flingy/techdata/upgrades.dat`,
+laid in the game's order. **The patch is not optional**: the seven tables it changes — `units/weapons/flingy/techdata/upgrades.dat`,
 `stat_txt.tbl`, `aiscript.bin` — are the 1.16.1 balance patch, which StarDat/BrooDat alone predate (22 bytes
 of `units.dat`), and the folder route and the Remastered route both have the patched ones. With it, the editor's
 938 files and the 1,301 of the play set (1,119 sounds) are byte for byte a 1.16.1 install's (measured
-2026-10-15 by running `extractGameData` + `copyPlaySet` over both). A `public/arr` extracted from StarDat/BrooDat
-without the patch is the old tables; re-extract. **The by-hand route needs it too** (2026-11-16): `pickArchives`
-took StarDat + BrooDat as enough and the button named only the two, so a copy picked that way held BrooDat's tables
+by running `extractGameData` + `copyPlaySet` over both). A `public/arr` extracted from StarDat/BrooDat
+without the patch is the old tables; re-extract. **The by-hand route needs it too**: a copy picked as StarDat + BrooDat alone holds BrooDat's tables
 (Brood War as first sold: `units.dat` differs in 7 columns — Factory 200 minerals, Dragoon 600 frames, Zealot
 80/80, Science Facility, Scout, turret, Spawning Pool, supply of Battlecruiser/Carrier/Ultralisk — plus
-`weapons/flingy/upgrades/techdata.dat`, `iscript.bin`, `aiscript.bin`, `stat_txt.tbl`) and was still stamped
-`play`. The play page then played replays from it: two 1.16.1 bot replays left the game at frames 7627 and 7691
+`weapons/flingy/upgrades/techdata.dat`, `iscript.bin`, `aiscript.bin`, `stat_txt.tbl`) and is still stamped
+`play`. The play page plays replays from it wrongly: two 1.16.1 bot replays left the game at frames 7627 and 7691
 (~5:20; Aftermath's "the game played here is not the game in the replay", no winner), in the analysis and in the
 Replay view alike, and `units.dat` alone decides it (each of the eight patch files laid over the two by itself:
-only `units.dat` cures it; all but `units.dat`: still parts). So `pickArchives` now throws without
-`PATCH_NAME` for the game's own copy (`{ patch: false }` only for a data set's folder, whose rule is unchanged),
+only `units.dat` cures it; all but `units.dat`: still parts). So `pickArchives` throws without
+`PATCH_NAME` for the game's own copy (`{ patch: false }` only for a data set's folder, below),
 the button reads "Choose StarDat.mpq, BrooDat.mpq and patch_rt.mpq…", and a copy an earlier build made from the two
 (`archives.ts#madeWithoutPatch` over the stamp's `from`) is called out in the dialog's "Now" group. The play page
-has to pass such a copy over on its side (scm-sim `web/gameSource.ts#unplayable`, scm-sim #132). **Every other
-door followed** (2026-11-16, the next PR): `installDataSet` asks for the patch for the default id too (a plugin's
+has to pass such a copy over on its side (scm-sim `web/gameSource.ts#unplayable`). **Every other
+door asks too**: `installDataSet` asks for the patch for the default id (a plugin's
 `api.gameData.install` reaches it), the desktop search (`desktop/main.ts#extractFrom`) returns `failed` with the
 reason for a folder with the two and no patch (which stops `locate` there), `npm run extract` / `extract:units`
 stop (`scripts/lib/archives.mjs#requirePatch`; tilesets alone do not need it), and `npm run doctor` says when
@@ -118,8 +114,8 @@ no rule reads); the command line keeps its own copy in `cli/src/engine.ts` becau
 unpatched folder (exit 2) for everything that plays the game; `openGameFiles` passes `{ pictures: true }` and
 `archiveFiles` then withholds `PATCHED_MEMBERS` (null, as for a copy that lacks them: `map preview` draws units as
 tiles, `map analyze` goes without walking speeds) while terrain is read as ever. With a three-archive
-`fixtures/data/` the whole suite passes (2,676), the byte-for-byte extraction check included: no test held 1.04's
-numbers. **A mod's data set** (2026-11-16, the PR after): `install.ts#dataSetLayer` (pure, tested) lays a mod whose
+`fixtures/data/` the whole suite passes, the byte-for-byte extraction check included: no test holds 1.04's
+numbers. **A mod's data set**: `install.ts#dataSetLayer` (pure, tested) lays a mod whose
 folder has StarDat + BrooDat and no patch over the default copy when `patchedGameCopy()` (a stored default copy not
 `madeWithoutPatch`, or this build's bundled files), and over any base drops the folder's game archives (a lone
 StarDat, which the dialog sent beside a base, beat the base's patched tables). With no patched copy it still goes
@@ -146,7 +142,7 @@ scripts wrote — `scripts/extract-*.mjs` are thin wrappers now, `archives.ts` i
 redistribute what it produces: the forwarder passes Blizzard's own download through and keeps nothing, and
 no build ships game data or an address to fetch it from.
 
-**StarCraft: Remastered** (`gamedata/remastered.ts`, 2026-10-09): a Remastered installation has
+**StarCraft: Remastered** (`gamedata/remastered.ts`): a Remastered installation has
 no MPQs — CASC storage under `Data/`, read with `kascade` (ours, the sibling of mopaq; the main
 entry is universal, `kascade/node` is the `node:fs` source the desktop uses). It is a third
 *reader*, not a third extraction: `extractRemastered(storage)` produces the same
@@ -163,7 +159,7 @@ for a storage (byte-equal to a direct extraction; needs `fixtures/data/`), and
 `SCM_REMASTERED_DIR=<folder>` adds a run over a real installation (guarded with `if`, not
 `skipIf`: it imports `kascade/node`).
 
-What differs in the files (measured 2026-10-09, all eight tilesets): the tile tables are a
+What differs in the files (measured over all eight tilesets): the tile tables are a
 **strict superset** of 1.16's. `vx4ex` (already preferred by `tileset/load.ts`) + `vr4` compose
 every 1.16 megatile to identical pixels, `vf4` and `wpe` match over the 1.16 range, and the only
 in-range `cv5` changes (Platform, Desert, Twilight) are groups that had no megatiles before. Seven
@@ -183,7 +179,7 @@ copy. **Data in place:** *Add StarCraft: Remastered…* under Data sets →
 `services/gameData.ts#installRemasteredInto`, stored as `REMASTERED_PROFILE` (`remastered`) and
 switched to. **Desktop:** `desktop/main.ts#extractFrom` takes a folder with the archives first and
 an installation otherwise, so `locate()` finds a default Remastered install on first run;
-`extractFrom` / `locate` became async for it. The worker gets the folder itself
+`extractFrom` / `locate` are async for it. The worker gets the folder itself
 (`ExtractRequest.remastered`): a `FileSystemDirectoryHandle` from `showDirectoryPicker`, or — no
 picker (Firefox, Safari) — the `File`s of an `<input webkitdirectory>` pick through
 `pickedFilesSource`. Both are structured-cloneable and neither is read until asked; a `File` is a
@@ -193,21 +189,20 @@ Chromium (`setInputFiles(<install dir>)`, ~18 s over `/mnt/c`); the handle route
 Safari are not, and whether those browsers include the dot-file `.build.info` in a folder pick is
 unverified — without it the pick is simply not recognised as an installation.
 
-A trap found on the way, older than this: `store.ts` caches directory lookups, *including the
-misses*, and the worker writes behind the main thread's back — so `gamedata-profiles/`, looked for
-when the dialog first listed the data sets, stayed "missing" after the first data set of a session
-was installed and the new set was absent from the list until a reload. `forgetStoredFolders()`
-after every worker install is the fix.
+A trap: `store.ts` caches directory lookups, *including the misses*, and the worker writes behind
+the main thread's back — so `gamedata-profiles/`, looked for when the dialog first lists the data
+sets, stays "missing" after the first data set of a session is installed and the new set is absent
+from the list until a reload. `forgetStoredFolders()` after every worker install prevents it.
 
-`extract.ts#SOUND_TABLES` (`arr/sfxdata.dat`, `arr/sfxdata.tbl`, 2026-10-12) are copied beside
+`extract.ts#SOUND_TABLES` (`arr/sfxdata.dat`, `arr/sfxdata.tbl`) are copied beside
 `EXTRA_TABLES` when the source has them, and seeded in `extractRemastered` with the other tables —
 both sources carry identical files (31985 / 10296 bytes). They are the *list* of the game's
-sounds for the trigger sound picker (`strings-sounds.md`); a copy made before lacks them and the
+sounds for the trigger sound picker (`strings-sounds.md`); an older copy lacks them and the
 picker says to install again.
 
 Not done: the 4x terrain and sprites, and `npm run extract` from a Remastered folder.
 
-**The play set** (`gamedata/play.ts`, 2026-10-12): what the game itself runs on, kept in a stored
+**The play set** (`gamedata/play.ts`): what the game itself runs on, kept in a stored
 copy for the site's play page (scm-sim at `scmjs.dev/play/`, same origin, so it reads the copy in
 OPFS rather than asking for the game twice — the user's call: an owner of Remastered alone must be
 able to play). The editor never opens any of it. `PLAY_MEMBERS` is the fixed part (104 files, ~5 MB:
@@ -221,7 +216,7 @@ are stored under the game's own paths (`assetPath`), unlike the tileset remaps t
 (`tileset/<name>.ofire.pcx`, `tileset/stat_txt.tbl`) — the play page maps those two itself
 (scm-sim `web/gameSource.ts#copyPath`).
 
-**Version 2 (2026-10-12): every image's picture.** The editor's extraction walks from the
+**Version 2: every image's picture.** The editor's extraction walks from the
 units and sprites that can be placed (885 of 999 images); the game creates the other 114
 images itself in play — the protoss warp texture and rift, terran and zerg construction, zerg
 births, the nuke, every spell's overlay, the selection circles — and a game played from the
@@ -232,7 +227,7 @@ copy drew boxes or nothing for them (found by the user on a pylon warping in).
 more, 26 MB: a copy is 3137 files / 668 MB, 48 s. `PLAY_VERSION` is 2; the play page still
 plays from a version 1 copy, without those pictures, and says to renew it.
 
-**Version 3 (2026-10-13): the rest of Remastered's interface.** 29 more optional `hd2/` members
+**Version 3: the rest of Remastered's interface.** 29 more optional `hd2/` members
 (the fixed part is 133): the nineteen cursors' `hd2/cursor/<name>.dds.grp`,
 `hd2/unit/wirefram/wirefram.dds.grp` (30 MB: a 1024×128 picture a unit type, eight squares — four
 body parts in white, two shield outlines, the whole, one empty), `hd2/game/icons.dds.grp` (the
@@ -245,7 +240,7 @@ play page plays from versions 1–3 and draws a version 2 copy with the classic 
 and icons, saying nothing. **The play page must accept a version before an editor that writes it
 is released** (scm-sim `web/gameSource.ts#PLAY_VERSIONS`), or a new copy is refused there.
 
-**Version 4 (2026-10-13): the lighting's layers.** The play page lights Remastered's sprites as the
+**Version 4: the lighting's layers.** The play page lights Remastered's sprites as the
 game's real-time lighting does (scm-sim `web/spritePass.ts`), from four layers of a sprite file the
 editor has no use for and `slimAnim` drops: `normal`, `specular`, `ao_depth`, `emissive`
 (`ANIM_LIT_LAYERS`; `slimAnim(bytes, kept)` takes the list). **Asked for at install** — the user's
@@ -260,11 +255,11 @@ writes; the editor reads either, `parseAnim` taking the layers by name). A file 
 not counted again and its bytes are the difference. Measured over the installation's 868
 `HD2/anim/main_*.anim` (513 MB whole): diffuse 209 MB, teamcolor 30, normal 74, ao_depth 74,
 specular 37, emissive 15, bright 74 (kept by nobody); 216 files have a normal layer at all. A copy
-is 3166 files / 897 MB, 66 s with them and 698 MB, 45 s without, as it was. The play page takes
+is 3166 files / 897 MB, 66 s with them and 698 MB, 45 s without. The play page takes
 versions 1–4 and offers the lighting from a version 4 copy whose stamp says `lit`; from any other
 its option is greyed and says to choose the folder again with the box ticked.
 
-**Version 5 (2026-10-13): the button faces.** Three more optional members (the fixed part is 136),
+**Version 5: the button faces.** Three more optional members (the fixed part is 136),
 `hd2/game/consoles/<race>/cmdbtns.dds.grp`, 166 KB each: 37 pictures, of which the play page uses
 the first two — a 72×70 dark button face and the same held down. `console_right.dds` has the
 hazard-striped plate of an *empty* place baked in, and the yellow icons straight on that were hard
@@ -272,7 +267,7 @@ to read; the game draws a face between the two. The play page takes versions 1�
 icons on the plates from an earlier copy. (The other pictures — green frames, the digits 1–5,
 larger frames in four colours — are not mapped.)
 
-**Version 6 (2026-10-13): the count down's beat.** One more optional member, `sound\glue\countdown.wav`
+**Version 6: the count down's beat.** One more optional member, `sound\glue\countdown.wav`
 (`PLAY_COUNTDOWN`): the play page's lobby counts down to a game between people with it, and it is a
 menu's sound, which `sfxdata.dat` does not list — so no copy had it, and the page sounded a tone of its
 own. Measured on the three sources: 1.16.1 has it in StarDat and BrooDat (8,008 bytes, 22 kHz mono, the
@@ -281,9 +276,9 @@ for byte, at `SD\sound\glue\countdown.wav`. A copy takes the one at the game's n
 every other sound, so a Remastered copy counts down with Remastered's. Not required: a copy without it
 plays. The play page reads versions 1–6 (scm-sim `PLAY_VERSIONS`) and must be deployed first.
 
-**The language module (2026-11-13), not a version.** 1.16.1 keeps its accelerator tables (Ctrl/Alt + digit for
+**The language module, not a version.** 1.16.1 keeps its accelerator tables (Ctrl/Alt + digit for
 control groups, F2–F4 for screen places) in `Local.dll`, a loose file of the game's folder, in no archive. scm-sim's
-own-screen work (#112) hands the person's keys to the game's window procedure and reads those tables from it:
+own screen hands the person's keys to the game's window procedure and reads those tables from it:
 `gameSource.ts#namedFilesFor` asks every source for `named.ts#LANGUAGE_MODULE` = `"local.dll"`, and a copy answers
 through `copySource.read` → `fileOf(dir, copyPath("local.dll"))`, i.e. the file `local.dll` at the top of the copy's
 folder (`gamedata/` or `gamedata-profiles/<id>/`). OPFS names are case-sensitive, so it is stored as
@@ -299,7 +294,7 @@ data set (`splitPickedFiles` skips `.dll`; whether a mod folder's `Local.dll` sh
 sides, and a copy without it plays with those keys doing nothing (the play page's Options row says so). An older
 copy's stamp has no `play.language`: `copies.ts#lacksLanguageModule` (a `classic` copy with `play` and no
 `language`) puts one line on the Game Data page saying the keys do nothing and that removing the copy and choosing
-the folder again keeps the file — true for a copy made before this and for archives picked without their folder; with
+the folder again keeps the file — true for an older copy and for archives picked without their folder; with
 data in place the dialog shows no folder button, so "remove, then choose" is the only renewal there is. Never for
 Remastered, the download, a mod, or a copy without `play`. Measured: 1.16.1's `Local.dll` is 52,224 bytes.
 `tests/play-set.test.ts`, `tests/gamedata.test.ts` ("pickLanguageModule"), `tests/copies.test.ts`.
@@ -311,26 +306,24 @@ stamp — `writeStoredCopy(…, more)` hands `copyPlaySet` its own writer, so on
 a time — reading straight from the source (`storage.readFile` or the archive reader). The stamp
 gains `play: { version, files, sounds, bytes }` (and its `files` / `bytes` / `summary` include
 them) only when every `PLAY_REQUIRED` member and 95% of the game's sounds were there (Remastered lacks one).
-The rule was "at least one sound" until 2026-10-15, and under mopaq 1.5 a 1.16 copy read 3 of 1,119 (the
-compressed WAVs need mopaq 1.6's Huffman + ADPCM) and still claimed `play`. The StarEdit download *does* have
-every sound — the old "it has none" was the same decoding failure — so a download copy gets `play` too, and
-**whether it may be played from is the play page's rule, not the copy's**: the user's decision (2026-10-15) is
+"At least one sound" is not a rule: a reader without Huffman + ADPCM (mopaq before 1.6) gets 3 of 1,119 from a
+1.16 copy (the compressed WAVs) and would still claim `play`. The StarEdit download *does* have every sound — "it
+has none" is the same decoding failure — so a download copy gets `play` too, and
+**whether it may be played from is the play page's rule, not the copy's**: the user's decision is
 that a copy from the download unlocks replays and the cinematic viewer but never Test Map or a game. The play
 page tells it by the stamp's `from` (the download's URL). A failure while copying is a `problems` line and a copy without
 `play`, never a failed install. A memory-only copy (no OPFS) has none. The desktop's own
 extraction (`desktop/main.ts`) does not write it either: the desktop frames the hosted play page.
 
-**The installer page** (`install.html` → `src/pages/install.ts`, a third Vite input, 2026-10-12):
+**The installer page** (`install.html` → `src/pages/install.ts`, a third Vite input):
 no interface, a `message` listener. The play page frames it out of sight and posts a Remastered
 folder pick (`{ type: "scmjs.install", files: [{ path, file }] }` — pairs, because a `File` posted to
 another window keeps its bytes and loses `webkitRelativePath`; `installFromPickedRemastered` is
 `installFromRemastered`'s file-list half taking them), and is told `scmjs.install.ready` /
-`.progress` / `.done` (the stamp) / `.error`. Same origin only, both ways. Built because the user,
-on the live play page, picked their Remastered folder and was sent to another page to pick it
-again. Where it installs: the default copy when there is none or it is the free download or an
-older Remastered copy; `REMASTERED_PROFILE` beside a classic or mod copy. Since 2026-10-13 (the user:
-a Remastered folder given to the play page should make the editor default to Remastered too) it
-then writes the editor's two stored choices as the atoms would — `hdGraphics: true` into
+`.progress` / `.done` (the stamp) / `.error`. Same origin only, both ways. It exists so that someone who picks their Remastered folder on the
+play page is not sent to another page to pick it again. Where it installs: the default copy when there is none or it is the free download or an
+older Remastered copy; `REMASTERED_PROFILE` beside a classic or mod copy. The user: a Remastered
+folder given to the play page should make the editor default to Remastered too, so it then writes the editor's two stored choices as the atoms would — `hdGraphics: true` into
 `scmjs.viewMenu` (the View menu's remembered ticks, after `carryOverViewPreferences` so an older
 `scmjs.prefs` choice is not lost; up to 0.16 it went into `scmjs.prefs`), and the Remastered data set into `scmjs.gameData` when the copy went in beside
 another (`gamedata/remasteredDefault.ts`, `tests/remastered-default.test.ts`). Straight to storage
@@ -338,22 +331,22 @@ because `services/gameData` drags the document atoms in; only at that moment, li
 `turnOnRemasteredGraphics`. An editor tab already open picks it up at its next load. The message names are a contract with scm-sim's
 `web/editorInstall.ts`. `e2e/installPage.spec.ts`.
 
-**The stamp is now read by three programs**: `copies.ts`, `site/header.js`, and scm-sim's
+**The stamp is read by three programs**: `copies.ts`, `site/header.js`, and scm-sim's
 `web/gameSource.ts` (which needs `from`, `at`, `profile`, `play`, and `PLAY_VERSION` = 1). Bump
 `PLAY_VERSION` when the list changes so that an old copy cannot serve; the play page then asks
 for a reinstall. What the classic game's interface needs beyond the play set (fonts, dialogs,
 console art — Remastered has none of it) is scm-sim's interface pack, not ours.
 
-**Chromium's folder picker cannot open the install (found by the user, 2026-10-09).**
+**Chromium's folder picker cannot open the install (found by the user).**
 `showDirectoryPicker` refuses any folder under Program Files — "can't open this folder because it
 contains system files" — and that is where the installer puts StarCraft, classic or Remastered. So
 both folder buttons in the dialog go through `<input webkitdirectory>` and never the picker; the
 input has no blocklist, only the "upload N files?" question. `installFromRemastered` and the worker
 still take a `FileSystemDirectoryHandle` (a plugin or a later caller may have one for a folder
-elsewhere), but nothing in the editor produces one now. Headless testing had only ever driven the
-input, which is why this was not seen.
+elsewhere), but nothing in the editor produces one. Headless testing drives the input, not the
+picker, so it does not show this.
 
-**The option turns itself on once (2026-10-09, the user's call).** A copy made from a Remastered
+**The option turns itself on once (the user's call).** A copy made from a Remastered
 installation is mostly Remastered's pictures, and someone who pointed the editor at Remastered and
 then saw the 1.16 graphics would not go looking for a menu item — so
 `services/gameData.ts#turnOnRemasteredGraphics` sets `ViewFlags.hdGraphics` (which `viewFlagsAtom`
@@ -374,13 +367,13 @@ run* with `extractedFrom` (later launches find the copy at the bundled step and 
 split the extraction is in the worker chunk only (checked: its strings appear in
 `extract.worker-*.js` and nowhere else in `dist/assets`).
 
-**Moved out of `docs/game-data.md` (docs refresh, 2026-10-16).** Two things to know before
+**Kept out of `docs/game-data.md`.** Two things to know before
 changing the extraction or the decoders: the manifests the extraction writes are what the loaders
 probe for, so changing what is extracted means re-running it and checking the app against the
 result, not only the tests; and `tests/dat.test.ts`, `tests/iscript.test.ts`,
 `tests/animate.test.ts`, `tests/palette.test.ts` and `tests/tileset.test.ts` run against the real
 files in `public/` and skip when they are absent, so a green run on a clone without them has not
-exercised the decoders. Also cut from the reader's doc, recorded here: the download goes through
+exercised the decoders. Also kept here rather than in the reader's doc: the download goes through
 `gamedata.scmjs.dev` (scm-js/cloudflare-blizzard-forwarder) because Blizzard's download server's
 HTTPS certificate is for another name, plain HTTP is blocked on an HTTPS page, and it sends no CORS
 header — the forwarder adds the header and passes range requests through, stores nothing, and the
@@ -389,13 +382,13 @@ into an atlas (a decoded tileset is ~20 MB of pixels); the others are fetched in
 but not decoded. Remastered terrain: six to nine thousand compressed pictures per tileset, a map
 uses a few hundred, decoded on first draw. A copy in the browser keeps two of a Remastered sprite's
 seven layers (diffuse + teamcolor) unless the lighting tick adds four more. The size figures the
-docs give (browser copy ~140 MB classic, ~650 / ~850 MB Remastered (641 MB measured 2026-10-12); desktop ~30 / ~365 MB) come
+docs give (browser copy ~140 MB classic, ~650 / ~850 MB Remastered (641 MB measured); desktop ~30 / ~365 MB) come
 from the measurements above; the classic browser figure is 30 MB + ~95 MB sounds + the play set's
 small classic files, an estimate rather than a measured copy.
 
-## Data sets widened (M4, 2026-11-08)
+## Data sets widened (M4)
 
-The mods plan's slice M4 (`scm-sim` branch mods-plan, `docs/mods-plan.md`, "Tier E"): the editor makes maps for a mod.
+The mods plan's slice M4 (scm-sim `docs/mods-plan.md`, "Tier E"): the editor makes maps for a mod.
 
 - **Widths from the file.** `dat.ts`'s readers keep their API and take every column from `table.ts#decodeDat`, so a
   table is the game's, DatExtend's expanded `.dat` or GPTP's `.datex` by its length (and name). `UnitsDat.flingy`,
@@ -410,14 +403,14 @@ The mods plan's slice M4 (`scm-sim` branch mods-plan, `docs/mods-plan.md`, "Tier
 - **Loader.** `units/load.ts` fetches `unit/manifest.json` first (`unitManifest`, one promise a data set, dropped by
   `resetUnitAssets`); its `datex` list says which tables are stored as `arr/<t>.datex`, `optional` which of
   `rez/unitnames.tbl` / `unit/cmdbtns/uniticons.grp` exist (asked only then: a dev server answers a missing file with
-  its page, and `fetchPart` now refuses `text/html` too). A bad `iscript.bin` costs animation, not the tables.
+  its page, and `fetchPart` refuses `text/html` too). A bad `iscript.bin` costs animation, not the tables.
 - **iscript.** `decodeIscript` takes its headers from `iscriptText.ts#readIscriptHeaders` (IceCC's `type + 1` entry
   points or PyMS's table, detected); `iscript.ts` imports only that file, with the `.ts` extension, for Node.
-- **Extraction.** `extract.ts` imports `table.ts` (which now imports `./schema.ts` with the extension — Node type
+- **Extraction.** `extract.ts` imports `table.ts` (which imports `./schema.ts` with the extension — Node type
   stripping). It prefers `arr\<t>.datex` for `DATEX_TABLES` when that is a whole number of entries, walks every
   unit/sprite of the file's width, skips an animation whose opcode it cannot read (Cosmonarchy's `flagjmp` 0x3E), and
   copies `UNIT_EXTRA_FILES`. The legacy (19192) units.dat is still refused with the BrooDat hint. Vanilla output is
-  byte-identical to before (manifests compared).
+  byte-identical to the narrow extraction's (manifests compared).
 - **Names and groups.** `unitnames.tbl` entry N names type N for every type where it has a non-`*` name (GPTP's
   `get_unit_name_ext` reads it before stat_txt), through the same per-entry rule; past 227 without it, `Unit #N`.
   `gameNames.ts#unitCatalogue` lists ids ≥ 228 (all of them without a name file, only the named ones with one —
@@ -439,7 +432,7 @@ The mods plan's slice M4 (`scm-sim` branch mods-plan, `docs/mods-plan.md`, "Tier
   folder route lays a folder without the two archives over the copy in use (or that copy's own base).
 - **In memory**: `AssetSource.kind "reader"` (`DataSetReader { read, base, hash? }`), `fetchAsset` asks `read` then
   the base source; `services/gameData.ts#attachReaderDataSet` / `reloadDataSet`; never remembered; 2x sprites off.
-  **Mod Editor asks (2026-11-08, branch `mods-api`):** `read(path, { member, under })` — `member` from
+  **Mod Editor asks:** `read(path, { member, under })` — `member` from
   `paths.ts#memberOfStored` (null for the two manifests), `under(p)` = `source.ts#readFrom(reader.base, p)`;
   `readUnder(path)` (the base of a reader source, else the source) behind `api.gameData.read(path, { under: true })`.
   `unit/manifest.json` the reader leaves null is the base's with `datex`/`optional` worked out by asking the reader
@@ -450,38 +443,25 @@ The mods plan's slice M4 (`scm-sim` branch mods-plan, `docs/mods-plan.md`, "Tier
   `testDataSet`/`stampDataSet` read the atom, so they follow). `attach` still always reloads, even with the same
   function — the plugin's "new hash ⇒ attach" path relies on it re-reading. `GameDataSource.base` for a reader = the
   base's profile id. `paths.ts` holds `storedPathOf` (re-exported from `overCopy.ts`) and its inverse; `storedPathOf`
-  now renames only the extraction's own tileset subfiles (four remaps + `dddata.bin`) — the play set's
-  `tileset\<name>\dark.pcx` etc. stay at the game's path, which is where `play.ts` writes them (the old regex sent
-  them to `tileset/<name>.dark.pcx`, a path nothing writes).
-- **Hash** (the one mod hash, 2026-11-08 branch `mod-hash`; `mods.md` "The mod hash, one rule"). **Superseded
-  2026-11-12:** the stamp's hash is `readMod(modTree(req.mod)).identity.hash` in the worker (`ExtractRequest.mod`,
-  made by `install.ts#dataSetMod`); `dataSetHashOf`, `hashOnly`, `code`, `overlay` and `splitPickedFiles` below are
-  gone (`mods.md` "@scm-js/mod adopted"). The record as it was:
-  `overCopy.ts#dataSetHashOf(names, own, code)` = core's `modHashOfDigests` over **every** own file — never compared
-  with the base (the old `changedFiles`/`firstOf`/`copyChain`/`hashUnbased` are gone; `hashUnbased` stays in
-  `StoredStamp` only so old stamps read). Names: the overlay's keys, `ExtractRequest.hashOnly` (loose files in
-  `GAME_FOLDERS` the extraction does not read, `install.ts#isGamePath`), and each own archive's **listed** members, or
-  `hash.ts#probeNames` for an archive with no list — no longer `asked` (what the extraction read), which made a listed
-  archive's unlisted members count where the page does not. Code: `ExtractRequest.code` (loose `.qdp`/`.bwl`/`.fgp`/
-  `.fgd` from `splitPickedFiles`, anywhere in the pick) → plugin and project lines; an own archive's `.fgp` member is a
-  project line, its `.qdp`/`.fgd` members nothing. `splitPickedFiles` also takes `.exe` as an archive (installDataSet
-  keeps `exeArchive(bytes).archive`, drops an exe with none) and skips `.dll`. Base-only (the game's own copy): no own
-  file → no hash, as before. **An operating system's files** (`sources.ts#isSystemFile`: `desktop.ini`, `Thumbs.db`,
-  `.DS_Store`, `._*`, `__MACOSX/`, …; `mods.md`, "An operating system's files have no line", 2026-11-09) are not the
-  set's: `splitPickedFiles` passes them over before anything else (no archive, no code, no loose member), `isGamePath`
-  is false for one, `installDataSet` skips one handed in by a plugin, `folderSet.ts#folderSet` (a mod's folder drawn
-  from in memory) lists none, `dataSetHashOf` does not read one among the
-  names (a member of the mod's own archive, packed from a folder Explorer had been in) and core's hash has no line for
-  it. A set installed before then keeps the stamp it has (with those lines) until it is installed again; the stamp
-  keeps no older form. Proof: the worker's `onmessage` in Node over `fixtures/data` + Cosmonarchy's release
-  folder as `splitPickedFiles` gives it → stamp `ac3f86533e4b5a31` (the page's), 2 s; `tests/datasets-widths.test.ts`
-  "a made data set installed through the editor's extraction" (now counts the weapons.dat it ships unchanged).
+  renames only the extraction's own tileset subfiles (four remaps + `dddata.bin`) — the play set's
+  `tileset\<name>\dark.pcx` etc. stay at the game's path, which is where `play.ts` writes them (a broader rename
+  sends them to `tileset/<name>.dark.pcx`, a path nothing writes).
+- **Hash** (the one mod hash; `mods.md` "The mod hash, one rule"). The stamp's hash is
+  `readMod(modTree(req.mod)).identity.hash` in the worker (`ExtractRequest.mod`, made by `modInput.ts#dataSetMod`;
+  `mods.md` "@scm-js/mod adopted"); `hashUnbased` stays in `StoredStamp` only so old stamps read. **An operating
+  system's files** (`isSystemFile`: `desktop.ini`, `Thumbs.db`, `.DS_Store`, `._*`, `__MACOSX/`, …; `mods.md`, "An
+  operating system's files have no line") are not the set's: `folderSet.ts#folderSet` (a mod's folder drawn from in
+  memory) lists none, and the hash has no line for one (nor for one that is a member of the mod's own archive, packed
+  from a folder Explorer had been in). A set installed while the hash still counted them keeps the stamp it has (with
+  those lines) until it is installed again; the stamp keeps no older form. Proof: the worker's `onmessage` in Node
+  over `fixtures/data` + Cosmonarchy's release folder gives the page's hash, 2 s; `tests/datasets-widths.test.ts`
+  "a made data set installed through the editor's extraction".
 - **The map's member** `scmjs\dataset.json` (`services/mapDataSet.ts`): `stampDataSet` before `buildOutgoing` in
   `saveDocument` (bytes the Save dialog built are dropped when it changed the extras), only for a non-default set,
   never removed; `offerMapDataSet` after `openFileInto` and the Open dialog's own load → the `mapDataSet` dialog
   (`NEEDS_PAYLOAD` in `dialogs.spec.ts`). The "Switch" / "Keep" buttons use `tc("data set", …)` because "Switch" is
   already the trigger switch in Korean.
-- **Terrain the data set lacks** (2026-11-09, `services/missingTerrain.ts`, `hooks/useMissingTerrain.ts`): the map in
+- **Terrain the data set lacks** (`services/missingTerrain.ts`, `hooks/useMissingTerrain.ts`): the map in
   front with tiles the loaded tileset has not got (`remasteredTiles.ts#missingTerrain`, by the whole twelve-bit group)
   gets one `warn` toast, `ttl: 0`: the data set's name, the tileset, a count, and mod (past Remastered's table; with
   "and N more from what Remastered added" over a 1.16 copy, since both are hatched) vs Remastered's additions (over
@@ -493,9 +473,8 @@ The mods plan's slice M4 (`scm-sim` branch mods-plan, `docs/mods-plan.md`, "Tier
   - **When it is said.** `told: WeakMap<Scenario, set key>` holds the *last* data set a map was told about (the
     `Scenario` object, so a parked tab keeps it and no `parkRegisters` entry is needed); `shown: WeakMap<Store, Up>`
     the notice up now. Not said again while the key stays (another map in front and back: no repeat); a null notice
-    (the set in use has the terrain) deletes `told`, so **a switch away and back says it again** — changed from "once
-    per map and data set" when the notice gained its buttons, as the hatching is back with the old set and so should
-    the way out be. The key is `copy:<id>` / `reader:<id>`: a set in memory is not the stored set of the same id. A
+    (the set in use has the terrain) deletes `told`, so **a switch away and back says it again** — not "once
+    per map and data set": the hatching is back with the old set and so should the way out be. The key is `copy:<id>` / `reader:<id>`: a set in memory is not the stored set of the same id. A
     notice whose count changed under the same key (a reader set reloaded with other files) is replaced. Taken down
     before it was ever up (below) = not told.
   - **The offer of a set already here** (`otherSetTables` → `setWithTerrain`). `updateMissingTerrain` is async for
@@ -525,7 +504,7 @@ The mods plan's slice M4 (`scm-sim` branch mods-plan, `docs/mods-plan.md`, "Tier
     folder's name, id `profileIdFrom(name) || "mod"` as the Mod Editor derives it, `-folder` appended if that is the
     game's or Remastered's id), `forget()` first so the rule decides afresh; then the notice's own rule: gone when
     nothing is missing, back with the new count when some is. Measured in headless Chromium on BattleGuard over
-    the bundled files (2026-11-09; the folder input, since `showDirectoryPicker` cannot be driven there): from a
+    the bundled files (the folder input, since `showDirectoryPicker` cannot be driven there): from a
     copy of Cosmonarchy's release folder on the Linux disk (7,776 files; everything the editor reads real, sounds
     and portraits one-byte stand-ins) the browser handed the list over in 1.9 s and the map was drawn right 2.8 s
     after the pick; straight off `/mnt/c` (WSL's 9p) the browser took 195 s to hand the 7,796 files over and the
@@ -543,32 +522,32 @@ The mods plan's slice M4 (`scm-sim` branch mods-plan, `docs/mods-plan.md`, "Tier
     and so no folder button. Open: let that dialog offer the folder too.
   - `tests/missing-terrain.test.ts` (the rule, the table = the rule for all 4,096 groups, the minimap's fill, the
     offer off `keepInMemory` copies), `tests/mod-folder.test.ts` (member lookup, laziness, the answers).
-- **Test Map**: `TestMapFile.dataSet {id,name,hash}` (`testMap.ts#testDataSet`); plugin-scm-sim (branch `mods`)
+- **Test Map**: `TestMapFile.dataSet {id,name,hash}` (`testMap.ts#testDataSet`); plugin-scm-sim
   posts it as `dataSet` in `scmjs.play`. The play page's acceptance is M1's.
 - **Proofs**: `tests/datasets-widths.test.ts` (readers at three widths, grown tables made with `encodeDat`, tilesets
   grown, the over-copy extraction against `public/`), `tests/map-dataset.test.ts`, `tests/dataset-reader.test.ts`,
   `tests/datasets-cosmonarchy.test.ts` (`SCMJS_COSMONARCHY` / `SCMJS_COSMONARCHY_MAPS`: 404/404 open and save byte for
   byte, unit ids to 657, groups to 4,094). In headless Chromium on the dev server: a 240-type set installed over the
   bundled files through the dialog in ~7 s; Cosmonarchy (CMBW-editor.mpq + `mpq/`) in ~22 s, 1,202 GRPs, 4 missing.
-- **Open (from the Mod Editor's pictures-and-sounds part, 2026-11-08; no code yet):** the editor's own copy holds no
+- **Open (from the Mod Editor's pictures-and-sounds part; no code yet):** the editor's own copy holds no
   `sound\` files (only a copy with the play set has the game's sounds, at their game paths; a data set laid over a copy
   keeps none), so a reader set or a plugin comparing a mod's WAVs against the game's has nothing to compare with from
   the editor's files alone. And the editor's iscript reader knows only `scripts\iscript.bin`, while some mods split
   iscript across several files chosen by the high word of the iscript id (GPTP-style); the extraction's walk and the
-  loaders would read only the first file's headers. Related, done on `mods-api`: `api.graphics.grpImage` (a plugin's
+  loaders would read only the first file's headers. Related, done: `api.graphics.grpImage` (a plugin's
   GRP bytes drawn the editor's way, `formats/units/grpPicture.ts#paintGrpFrame`, either GRP encoding via
   `decodeGrpImage`, palette by tileset name through `ensureTileset`, team colour as `unitImage`'s; no remapping, no
   Remastered pictures, new canvas each call, not cached) and core exporting the WAV codec (`decodeWav`, `encodeWav`,
-  `decodePcmWav`, `decodeImaAdpcm` — now exported from `formats/wav.ts` — `isPlainPcm`, `canDecodeWav`, `wavFrames`,
+  `decodePcmWav`, `decodeImaAdpcm` — exported from `formats/wav.ts` — `isPlainPcm`, `canDecodeWav`, `wavFrames`,
   `wavCodecName`, `WAV_FORMAT`).
-- **Races a data set adds** (2026-11-10, branch `mod-races`; contract in `mods.md` "Races a mod adds"):
+- **Races a data set adds** (contract in `mods.md` "Races a mod adds"):
   `GameDataProfile.races?` (`normalizeProfile` keeps them, absent when empty). **The truth is the stored key**
   `scmjs.dataSetRaces` (`{ <id>: DataSetRace[] }`), owned by `gameDataAtoms.ts#keptRacesAtom` (atomWithStorage, in
   `STORED_RESETS` and `RELOADS`: a clear or an import resets/reloads it and runs `refreshDataSetRacesAtom`, so the
   source loses or regains its races live). `keepRacesAtom` is the one writer (`profiles.ts#racesTableWith` builds the
   table from storage, normalized; refreshes when the id is the set in use); `profiles.ts#keptRaces/racesOf` read storage
   directly (the source runs outside the store). `racesOf` = kept ?? [] — **a profile's own `races` is never read**
-  (it was, and a clear could not take races the source's profile already carried); a profile handed in with races is
+  (if it were, a clear could not take races the source's profile already carries); a profile handed in with races is
   kept first (`keepGivenRaces`: `attach`, `install`, and the dialog's folder route via
   `install.ts#pickedFolderRaces`, a `mod.json` directly in the picked folder, ≤ 2 path segments; `splitPickedFiles`
   never takes it, so no hash change). An empty table is kept as "declared none". Never for `starcraft`/`remastered`.
@@ -586,21 +565,21 @@ The mods plan's slice M4 (`scm-sim` branch mods-plan, `docs/mods-plan.md`, "Tier
   **A stored copy gives nothing**: the extraction keeps neither `rez\network.tbl` nor a mod's console/statbtn files;
   adding them to `extract.ts#UNIT_EXTRA_FILES` (and so `optional`, pinned counts in `tests/datasets-widths.test.ts`)
   would be the change. `tests/races.test.ts`.
-- **Name lists (C7 audit (2026-11-08, branch `c7-editor`)):** `extract.ts#UNIT_EXTRA_FILES` gained `rez\stat.txt`, `arr\weapons.txt`, `upgrades.txt`,
+- **Name lists:** `extract.ts#UNIT_EXTRA_FILES` holds `rez\stat.txt`, `arr\weapons.txt`, `upgrades.txt`,
   `techdata.txt` (`formats/mod/data.ts#NAME_TEXT_FILES`), copied and listed in `optional` when present; `units/load.ts`
-  `fetchNameTexts` reads them into `UnitAssets.nameTexts` for `namesFromAssets`. They were already in the install's
-  overlay (`isMemberPath`: `arr\`, `rez\`), so the hash does not change (`ac3f86533e4b5a31` after reinstalling). A copy
-  installed before shows the labels' names until it is added again. The list rules (`nameList`: a line for every entry
+  `fetchNameTexts` reads them into `UnitAssets.nameTexts` for `namesFromAssets`. They are in the install's
+  overlay (`isMemberPath`: `arr\`, `rez\`), so copying them changes no hash. An older copy lacks them and shows the
+  labels' names until it is added again. The list rules (`nameList`: a line for every entry
   or not at all, `""` keeps the label; `statWithText`) are shared with `scmjs mod header` (`cli/src/mod/header.ts#modNames`
-  now calls them; core exports them).
+  calls them; core exports them).
 
-**A data set's terrain file (2026-11-14).** `pickedDataSet` also answers the text of the folder's `terrain.json`
+**A data set's terrain file.** `pickedDataSet` also answers the text of the folder's `terrain.json`
 (`terrain`, by `mod.json`'s rule); the Game Data dialog keeps it for the set's id before installing
 (`services/dataSetTerrain.ts#keepDataSetTerrain`, IndexedDB, the learned pieces' store under `terrain/<id>`, text — it
 can be half a MB, so not localStorage beside the races). The folder route (`drawFromModFolder`) does the same for
 `folderProfile(name).id` before attaching. `removeDataSet` forgets it; Clear all data clears the store and drops the
 file's rows. A plugin's `api.gameData.attach` carries none: the Mod Editor can call the three `provide*` functions for a
-live edit, so no profile field or `setTerrain` call was added. `watchDataSetTerrain` (App) follows
+live edit, so there is no profile field or `setTerrain` call. `watchDataSetTerrain` (App) follows
 `gameDataSourceAtom` and `gameDataRevisionAtom` and runs `applyDataSetTerrain` (terrain.md). Measured adding
 Cosmonarchy's release folder (a hard-linked copy, 7,797 files, 2.6 GB) as a data set in headless Chromium against the
 built bundle: with the 518 KB `terrain.json` 33.2 s and +228.30 MB of `navigator.storage.estimate()`, without it

@@ -33,7 +33,7 @@ Sections: OWNR is always written together with IOWN (StarEdit's copy, decoded in
 and Check Map warns when a file's two disagree); `playerRgb` is CRGB
 (Remastered: an RGB triple and a `ColorMode` per playable slot; `null` = no section, and Player
 Colors drops it again when every slot is back on `Palette`). A Palette slot shows its **COLR**
-colour in Remastered: probe R13 (2026-10-17, single player) gave Palette slots third bytes Blue /
+colour in Remastered: probe R13 (single player) gave Palette slots third bytes Blue /
 Orange / Pink and every player played in its COLR colour, although the loader copies that byte
 into the lobby colour choice (reading the code alone said otherwise — trust the played result).
 `applyPlayerColors` → `playerRgbFor` still writes `[0, 0, COLR]` into Palette slots
@@ -45,7 +45,7 @@ anywhere in the chrome and `playerTeamColor` what its sprites are painted with (
 row for the sixteen classic colours, else an RGB — Pink … Black and any CRGB custom colour — for which
 `teamColor.ts` synthesises a ramp and `sprites.ts` draws through a palette copy with slots 8–15 overridden,
 since the tileset palettes have no pink to remap to; `tests/team-color.test.ts`). `unitSettings` is
-one model for UNIS (100 weapons) and UNIx (130), read from whichever the game reads for the file's `VER` when both exist (see *Pairs that disagree* below; it was UNIx unconditionally until 2026-10-09); `unitSettingsSections`
+one model for UNIS (100 weapons) and UNIx (130), read from whichever the game reads for the file's `VER` when both exist (see *Pairs that disagree* below); `unitSettingsSections`
 decides which to write (the file's revision plus whichever it already carries, so a hybrid map keeps
 both). `unitAvailability` is PUNI, player-major (`puniIndex`). Both are `null` when the file has no
 section (a new map has them). The upgrade and technology tables follow the same pattern:
@@ -81,29 +81,29 @@ follow Unit Settings exactly: `useScenarioForm(read*Settings)`, in-place typed-a
 `bump`, `apply*Settings(clone…)`, `commitSettingsAtom`; the per-player rows show the effective value
 through `upgradeLevels` / `techState` while on Default.
 Unit Settings shows dat defaults for a type on "use default" and seeds its row from them when the
-tick comes off; `units.dat` now also yields `buildTime`, `armor`, `groundWeapon`/`airWeapon`
+tick comes off; `units.dat` also yields `buildTime`, `armor`, `groundWeapon`/`airWeapon`
 (a turreted vehicle's weapons live on its subunit) and `weapons.dat` ships as `assets.weapons`
 (optional — an older extraction shows weapon defaults as 0). `tests/settings.test.ts` pins the codecs,
 the section choice per revision and byte-for-byte re-encoding against the fixture maps.
 
-**Races a data set adds (2026-11-10).** Player Settings' race column is a plain `Select` over
+**Races a data set adds.** Player Settings' race column is a plain `Select` over
 `data/races.ts#raceOptions(value, races)`: the game's eight (StarEdit's order), the set's declared races
 (`dataSetRacesAtom`), and the slot's own byte as `t("Race {n}")` when neither has it — so a 69 the map holds stays
-selected and `applyPlayerSettings` (which diffs) leaves SIDE clean. `ByteSelect`'s "(raw)" is no longer used for races.
+selected and `applyPlayerSettings` (which diffs) leaves SIDE clean.
 `playerSlotViews().raceName` and `mapStatistics().players[].race` are `dataSetRaceLabel` (English: the set's name or
 `Race {n}`); the Statistics dialog shows `raceText` (translated) from the scenario byte.
 
-### Pairs that disagree (`scenario.ts#readPair`, 2026-10-09)
+### Pairs that disagree (`scenario.ts#readPair`)
 
-Found through a fixture the user added, `(8)Ashworld Hunters.scm`: `VER` 59 (original StarCraft)
-carrying all five `x` sections as well, with UPGR ≠ PUPx (184 uses-default flags) and PTEC ≠ PTEx.
-An editor had written the Brood War sections once and later changed only the original ones. The
-parser took the `x` section whenever it was present, so for such a file the dialogs showed
-settings the game does not use, and the first save that dirtied the pair wrote those stale values
+Such files exist — a fixture the user added, `(8)Ashworld Hunters.scm`, is `VER` 59 (original
+StarCraft) carrying all five `x` sections as well, with UPGR ≠ PUPx (184 uses-default flags) and
+PTEC ≠ PTEx: an editor wrote the Brood War sections once and later changed only the original ones.
+Taking the `x` section whenever it is present does not work: for such a file the dialogs show
+settings the game does not use, and the first save that dirties the pair writes those stale values
 over the real ones in UPGR / PTEC.
 
 `readPair(fileVersion, original, expansion, decode)` picks by revision, the rule `isExpansion`
-already stated for *writing*: `VER` ≥ 63 reads `x`, below reads the original. Below 63 with both
+states for *writing*: `VER` ≥ 63 reads `x`, below reads the original. Below 63 with both
 present, the `x` section is decoded first and the original decoded **over** it (every decoder
 takes an optional `over` model), because the original is the narrower table and the columns only
 `x` has — upgrades 46–60, technologies 24–43, weapons 100–129 — would otherwise go back to
@@ -112,23 +112,23 @@ dirtied pair is written both ways from the one model, so the secondary comes out
 primary (which changes its bytes exactly where the file's two disagreed, on purpose).
 
 Tests: `tests/data-settings.test.ts` builds such a file from the codec (runs in CI) for both
-revisions and the write-back; the fixture loop now requires byte-for-byte only of the section the
+revisions and the write-back; the fixture loop requires byte-for-byte only of the section the
 game reads, plus "the saved file parses to the same settings" and "saving it again changes
-nothing". The old expectation — every present section byte for byte after marking it dirty —
+nothing". Expecting every present section byte for byte after marking it dirty
 cannot hold for a file whose two sections disagree unless both are modelled separately, which
 nothing needs.
 
-CRGB on VER 59/63/64 (2026-10-17, probe R3/R3b played, Hybrid, SP): Custom → the RGB; Palette → the colour
+CRGB on VER 59/63/64 (probe R3/R3b played, Hybrid, SP): Custom → the RGB; Palette → the colour
 number in the triple's third byte (Orange played orange); Random and Player choice → random each game (the
 lobby shows both as Random). No COLR is read in those revisions, so `playerRgbFor(colors, rgb, fileVersion)`
 writes CRGB whenever a colour is not the slot's own there, and `changeMapVersion` re-runs
 `applyPlayerColors`. In 205/206 COLR overrides the Palette byte (R13). 1.16.1 reads neither in 59/63.
 
-**Upgrade / technology names and entries past the format (C7 audit (2026-11-08, branch `c7-editor`)).** `namesFromAssets` takes the mod's own lists
+**Upgrade / technology names and entries past the format (C7 audit).** `namesFromAssets` takes the mod's own lists
 (`assets.nameTexts`, see `gamedata.md`) over the labels, `rez\stat.txt` where `stat_txt.tbl` has no entry, and
 `cleanLabel` cuts at the first line break (five Cosmonarchy techs' labels point at button tooltips: "Hijack (C)Leaps to
 the target…"). `LoadedNames.upgrades/techs/weapons` are as long as the table (Cosmonarchy 100/100); `upgradeTypeCount()` /
 `techTypeCount()`. The dialogs list every one; ids ≥ `UPGRADES_BW` / `TECHS_BW` get `CatalogueItem.group` = the set's
 name (a heading after the races, no "unused" badge) and the sentence "No per-map settings for this upgrade/technology"
-instead of the form — the sections stay 61/44. The tech dialog's title read `TECH_NAMES[sel]` (StarEdit's, never the
-set's) — now `techLabel`. `api.names.upgrades()/techs()` still list 61/44 (the audit's design question).
+instead of the form — the sections stay 61/44. The tech dialog's title is `techLabel`, not `TECH_NAMES[sel]` (StarEdit's,
+never the set's). `api.names.upgrades()/techs()` still list 61/44 (the audit's design question).

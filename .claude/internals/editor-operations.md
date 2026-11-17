@@ -18,7 +18,7 @@ locations clamped, Anywhere reset. `validateScenario(scn, { extras, isom })` is 
 revision-aware about required sections; `Issue.target` drives the dialog's go-to, and
 `payload.only === "triggers"` is Triggers ▸ Validate Triggers. `editor/find.ts` is the pure search
 behind Ctrl+F. `Preferences.multipleMaps` (on by default, Preferences ▸ General ▸ Maps) is read by
-`openTarget` in `useMapFileActions` only — see `viewport-ui.md` for the several-maps design. `Preferences.interfaceSize` and `keepNotices` (Preferences ▸ View, both on `PREFERENCES_PAGE_KEYS.view`) are in `viewport-ui.md`: the size is applied by `useApplyPreferences` and, before the first paint, by an inline script in `index.html`, which is why it cannot wait for the store; `mergedStorage` gives both their defaults (100, off) for a stored object without them. Persisted preferences and the grid look live in `atoms/preferencesAtoms.ts`
+`openTarget` in `services/documentActions.ts` only — see `viewport-ui.md` for the several-maps design. `Preferences.interfaceSize` and `keepNotices` (Preferences ▸ View, both on `PREFERENCES_PAGE_KEYS.view`) are in `viewport-ui.md`: the size is applied by `useApplyPreferences` and, before the first paint, by an inline script in `index.html`, which is why it cannot wait for the store; `mergedStorage` gives both their defaults (100, off) for a stored object without them. Persisted preferences and the grid look live in `atoms/preferencesAtoms.ts`
 (`atomWithStorage`, `getOnInit` because startup hooks read through
 `store.get`) and are applied once by `hooks/useApplyPreferences.ts` before the deep links;
 `atoms/storage.ts` is the one `localStorage` accessor everything persisted shares (a memory
@@ -58,13 +58,13 @@ active layer's selection like the Del / Esc keys; `useTerrainTools().fillMap` is
 (whole map via `flatTerrain`, so the ISOM lattice is regenerated to match, one undo entry). Open Recent
 (`recentFilesAtom`, persisted as `scmjs.recents`) reopens from the file handle kept in IndexedDB
 (`services/handleStore.ts`, key `recent:<name>`; `pushRecentAtom` stores it on open and save,
-`useMapFileActions.ts#openRecentInto` asks permission and opens through the unsaved-changes gate);
+`services/documentActions.ts#openRecentInto` asks permission and opens through the unsaved-changes gate);
 without a handle (Firefox, Safari) an entry is listed and reopens through File ▸ Open. There are no
 menu stubs left: Tools ▸ Auto-place Start Locations is `editor/startLocations.ts` (`AutoStartsDialog`),
 Test Map is `services/testMap.ts` (`TestMapDialog`, Ctrl+F5, the toolbar's Test) — the desktop's
 `game` bridge writes into the game's `Maps\scmJS` folder and starts the executable, a browser writes
 into a folder picked once (handle in IndexedDB) or downloads — and Replace Terrain is above.
-**Test targets (0.8.6).** Test Map, Ctrl+F5 and the toolbar go through `services/testTargets.ts#startTest`, not
+**Test targets.** Test Map, Ctrl+F5 and the toolbar go through `services/testTargets.ts#startTest`, not
 straight to the dialog: `testMap.target` (`""` = the first `api.ui.testTarget` there is, else StarCraft;
 `"starcraft"`; a plugin id) picks StarCraft (`TestMapDialog` with `run`) or a plugin's target, whose `run` is
 called *synchronously* inside the click with a promise of `testMapBytes` (dynamically imported, off the startup
@@ -83,10 +83,10 @@ Browse Plugins.
 (the viewport's `onDown` refuses a locked layer's gestures), `cursorPixelAtom` the status bar's Px.
 `gridSizeAtom`, `locationSnapAtom`, `placementOptionsAtom` (`scmjs.placement`),
 `doodadPlacementAtom` (`scmjs.doodadPlacement`), `panelsAtom` and the dock widths are `atomWithStorage`
-now — the two placement bags through `mergedStorage`, and every one of them listed in Preferences ▸
+— the two placement bags through `mergedStorage`, and every one of them listed in Preferences ▸
 Storage, registered in `STORED_RESETS` and so clearable on its own or with the rest. The grid's
 spacing, look and the two snaps are edited on Preferences ▸ Editing (View ▸ Grid Settings… opens
-that page; there is no separate dialog any more). `Preferences.undoLevels` is read by
+that page; there is no separate dialog). `Preferences.undoLevels` is read by
 `commitEditAtom` at commit time (a stack already deeper is trimmed at its next commit) and
 `startup.recents` by `pushRecentAtom`; `placement.{owner,brushSize}` seed `unitOwnerAtom` /
 `brushSizeAtom` in `useApplyPreferences`, `placement.locationTiles` is read by
@@ -126,7 +126,7 @@ storage through `RELOADS` — keep `RELOADS` in step with `STORED_RESETS` (a mer
 merges over the value the store holds). `mergedStorage` merges one level down as well
 (`mergeDefaults`), so a field added to a nested group (`newMap.version`) has its default.
 
-**Check Map: tiles only Remastered has** (`data/remasteredTiles.ts`, 2026-10-09). An `info`
+**Check Map: tiles only Remastered has** (`data/remasteredTiles.ts`). An `info`
 finding under Terrain when MTXM holds a tile from a group Remastered added: every group past the
 end of the 1.16 table, and on Space Platform (933–1023), Desert (770–1023) and Twilight (797–1023)
 the low groups 1.16 left empty and Remastered filled with doodads. `validateScenario` is pure over
@@ -134,30 +134,28 @@ the scenario and must answer whichever data set is loaded (a map with such tiles
 1.16 copy is exactly when the finding matters), so the ranges are a table of the two files'
 group counts, not a look at the loaded tileset. `tests/validate.test.ts` pins each boundary;
 `tests/remastered-isom.test.ts` checks the whole table group by group against the real 1.16 and
-Remastered files when `SCM_REMASTERED_DIR` is set — which is what caught Twilight's row being
-written without its low range. Info, not warn: the map is fine in Remastered. No jump target —
+Remastered files when `SCM_REMASTERED_DIR` is set — the check that catches a row written
+without its low range (Twilight's was). Info, not warn: the map is fine in Remastered. No jump target —
 `IssueTarget` has no tile kind — so the text carries the first tile's coordinates.
 
-**Check Map: terrain made for a mod** (2026-11-09). Three cases now, all by the tile's *whole*
+**Check Map: terrain made for a mod.** Three cases, all by the tile's *whole*
 group, `tile >> 4` with bit 15 (`remasteredTiles.ts#fullGroup`): `isModTile` (past Remastered's
 count) → a `warn` "terrain StarCraft has not got, in 1.16.1 or Remastered … made for a mod", target
 the `gameData` dialog; `isRemasteredOnlyTile` → the info above; anything else past the loaded table
-→ the old "names groups this tileset does not have" warn (now nearly unreachable: a loaded table
-shorter than 1.16's). The bug fixed: `isRemasteredOnlyTile` masked with `0x7ff`, so Cosmonarchy's
-BattleGuard (Jungle, group 3,734 = bit 15 + 1,686) was "Remastered's" and its mod tiles never
-named. With `ctx.tileset`, a tile the loaded table has (`tilesetHasTile`) is not a mod finding, and
+→ the "names groups this tileset does not have" warn (nearly unreachable: a loaded table
+shorter than 1.16's). Masking with `0x7ff` here does not work: Cosmonarchy's BattleGuard (Jungle,
+group 3,734 = bit 15 + 1,686) then reads as "Remastered's" and its mod tiles are never named. With `ctx.tileset`, a tile the loaded table has (`tilesetHasTile`) is not a mod finding, and
 when that table is longer than Remastered's (a mod's) its tiles in Remastered's range are not the
-Remastered info either. Why the whole group although bit 15 is the game's creep flag: surveyed
-2026-11-09, of ~600 non-mod maps on this machine (fixtures, the 1.16 install's ladder folders, the
+Remastered info either. Why the whole group although bit 15 is the game's creep flag: of ~600 non-mod maps on this machine (fixtures, the 1.16 install's ladder folders, the
 user's Remastered maps folder) only our probe `Audit/R2 creep flag.scx` sets bit 15; 291 of
 Cosmonarchy's 404 maps do, and 191 of those have every bit-15 tile's eleven-bit group inside the
-1.16 table, so no per-map "is it a creep flag" rule separates them. A creep-flagged probe now gets
-both the creep info and the mod warn; accepted. `tileGroupOf` is unchanged, but since the follow-up the same day the
-drawing asks the whole group too and hatches what the table lacks (`viewport-ui.md`), so that probe's flagged tiles
-are hatched over the game's files, where they used to draw as the tile under the flag.
+1.16 table, so no per-map "is it a creep flag" rule separates them. A creep-flagged probe gets
+both the creep info and the mod warn; accepted. `tileGroupOf` keeps its mask, but the drawing asks the whole group
+too and hatches what the table lacks (`viewport-ui.md`), so that probe's flagged tiles are hatched over the game's
+files.
 `tests/validate.test.ts` "terrain made for a mod".
 
-Check Map follows the game (2026-10-17 audit, PR 2; evidence `~/github/scm-sim-reader/editor-audit/`):
+Check Map follows the game (evidence `~/github/scm-sim-reader/editor-audit/`):
 - `formats/chk/game.ts` holds the game's reads per revision (`gameReadSections`), its length rules
   (`gameSizeRule`/`gameAcceptsSize`) and the VCOD hash (`vcodPasses`); `tests/check-map-game.test.ts`
   holds it equal to `scripts/lib/chk-game.mjs` (the docs' table). Add a fact in both or the test fails.
@@ -170,7 +168,7 @@ Check Map follows the game (2026-10-17 audit, PR 2; evidence `~/github/scm-sim-r
 - `ValidateContext.units` / `.tileset` (the dialog passes `useUnitAssets` + `peekTileset`; the plugin
   API too): without both the unwalkable-ground rule is skipped (no flyer flag without units.dat).
 - `serializeScenario` replaces every VCOD copy with StarEdit's when any copy fails `vcodPasses` for
-  the current OWNR/SIDE (a failing VCOD = map does not load). Rerun AUD VC2 lists now.
+  the current OWNR/SIDE (a failing VCOD = map does not load).
 - `parseScenario` marks MRGN dirty when a copy is not `locationSlots(ver) × 20` bytes (C3).
 - Defeat: a human "can lose" also through another in-game slot's Victory, Draw or a flag-0x02 trigger
   (LOOP L7.4). Wait slot: any non-hyper trigger with a Wait (or a Transmission for a human) of a

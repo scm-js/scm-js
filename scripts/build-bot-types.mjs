@@ -22,7 +22,7 @@
  * major is the interface's version, as `@scm-js/plugin-api`'s is the plugin API's.
  *
  * Publishing is by hand, by the user: `npm publish` in `bot/` (its `prepack` runs this).
- * `.claude/internals/cli.md` ("`@scm-js/bot`") has the steps.
+ * `.claude/internals/cli-bots-plugins.md` ("`@scm-js/bot`") has the steps.
  */
 import { generateDtsBundle } from "dts-bundle-generator";
 import { execFileSync } from "node:child_process";

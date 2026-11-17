@@ -2,7 +2,7 @@
  * `scmjs replay export` (cli/src/export.ts, browser.ts, camera.ts, gif.ts) without a browser: the options read into a
  * clip, the files the loopback server serves and keeps, the DevTools protocol's framing on its pipe, the camera from a
  * player's clicks and from moments of the game, and the GIF read back pixel for pixel by a decoder written here. The
- * recording itself needs a browser and the game's files, which CI has not; it was run by hand (cli.md).
+ * recording itself needs a browser and the game's files, which CI has not; it was run by hand (.claude/internals/cli-replays-mods.md).
  */
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";

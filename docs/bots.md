@@ -382,10 +382,9 @@ made an identifier. In Cosmonarchy BW the terran worker is `Terran_Mason`, so
 `game.want("Terran_Mason", 14)`, or `game.want("Mason", 14)`, trains Masons. BWAPI's names
 for the game's types stay as second names for the same types (`Terran_SCV` is the Mason
 there too), so a bot written for the game's own units still runs. The names are the ones
-`scmjs mod header` writes, by the rules [the command line
-guide](cli.md#a-bot-made-for-a-mod) gives; `scmjs mod header "<mod>" --js` writes them as
-a module, for your editor's completion. Weapons, upgrades and techs keep BWAPI's names
-while the game runs.
+`scmjs mod header` writes, by the rules [the mods guide](mods.md#a-bot-for-your-mod)
+gives; `scmjs mod header "<mod>" --js` writes them as a module, for your editor's
+completion. Weapons, upgrades and techs keep BWAPI's names while the game runs.
 
 This bot is made for Cosmonarchy BW. Its Masons mine, the Ministry trains more of them, a
 Mason puts up a Stockade (and more of them, up to four, while minerals pile up), the

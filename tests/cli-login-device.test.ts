@@ -1,7 +1,7 @@
 /**
  * `scmjs login --device`, the sign-in by code, against a stand-in of the server's two routes on the loopback address
  * (answering as ai-server 0.40.0 does), with intervals cut to a fifth of a second. The real round — the built command,
- * a local ai-server and its /device page in Chromium — was run by hand (.claude/internals/cli.md).
+ * a local ai-server and its /device page in Chromium — was run by hand (.claude/internals/cli-account.md).
  */
 import { mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
 import { createServer, type Server } from "node:http";

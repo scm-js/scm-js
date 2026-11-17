@@ -1,11 +1,11 @@
 # Browser tests
 
-### Playwright (`e2e/`, `playwright.config.ts`, 2026-10-06)
+### Playwright (`e2e/`, `playwright.config.ts`)
 
-Added because every suite under `tests/` is node-environment and store-level: nothing rendered
-a component, loaded a chunk or touched a browser API. The first three specs are the ones that
-catch the most for the least — boot, every dialog, one open → edit → save → read-back. Not yet
-written, in the order they were proposed: the mirror atoms and dialog undo through the chrome,
+Every suite under `tests/` is node-environment and store-level: nothing there renders a
+component, loads a chunk or touches a browser API. The specs that catch the most for the least
+are boot, every dialog, and one open → edit → save → read-back. Not yet written, in the order
+they were proposed: the mirror atoms and dialog undo through the chrome,
 several maps and a switch (`parkRegisters` from the outside), the close guard and recovery
 (real `beforeunload` / IndexedDB), pointer tools on the canvas, hotkeys with real key events;
 later still, a shared map in two contexts and the Electron build through `_electron`.
@@ -70,7 +70,7 @@ in middleware mode and `ssrLoadModule`s the two modules — the same transform v
 `tests/`. Only types are imported statically. `tsconfig.e2e.json` (a fourth `tsc -b` reference)
 type-checks the specs with the app's options, since those type imports pull `src/` in.
 
-**`startScreen.spec.ts` (2026-11-14): the start screen, and the site's items in the bar.** The start screen is
+**`startScreen.spec.ts`: the start screen, and the site's items in the bar.** The start screen is
 reached by File ▸ Close Map (the editor starts on a blank map, so nothing on load changed for the other specs);
 Open a file… and a handle-less recent row are answered through `filechooser`, and the drop is a `DataTransfer`
 built in the page and dispatched on the zone (`dragover` then `drop`, which bubble to `.app`). **On the site
@@ -90,17 +90,17 @@ fails with "4 updates available". `npm run vendor:plugins`, then build again.
 
 **Scrollbars are hidden by default.** Playwright launches headless Chromium with
 `--hide-scrollbars`, so a scroller's `clientWidth` equals its box and anything that depends on
-the scrollbar's width cannot fail. `rulers.spec.ts` (the rulers once stretched past the map view
+the scrollbar's width cannot fail. `rulers.spec.ts` (the rulers must stop at the map view, not run on
 by the scrollbar's 10px) drops that argument with a file-level
 `test.use({ launchOptions: { ignoreDefaultArgs: ["--hide-scrollbars"] } })` — a worker option,
-so it cannot go in a `describe`. Checked against the unfixed code: across/down came back 10.
-macOS overlays its scrollbars (no width, so `scrollbars: true` failed there, #111), and a
+so it cannot go in a `describe`. Against rulers that run on, across/down come back 10.
+macOS overlays its scrollbars (no width, so `scrollbars: true` fails there), and a
 `::-webkit-scrollbar` width alone does not help: Chromium ignores the pseudo-element when
 `scrollbar-width` / `scrollbar-color` are set, which `base.css` does on `*`. The spec sets
 both back to `auto` on `.scroller` with `addStyleTag`, and the styled scrollbar takes space
 everywhere. `--enable-features=OverlayScrollbar` emulates overlay scrollbars on Linux: the
-old spec failed under it, the new one passes, and still fails (10) on the unfixed rulers.
+spec passes under it, and still fails (10) on rulers that run on.
 
-Timings on an M-series laptop: 100 tests, ~18 s, 4 skipped (the two payload dialogs × two
-languages). `@playwright/test` is a devDependency; its `playwright` dependency is also what
+Timings on an M-series laptop: ~18 s; the two payload dialogs are skipped in both
+languages. `@playwright/test` is a devDependency; its `playwright` dependency is also what
 `scripts/guide-screenshots.mjs` imports (`sharp` is still `--no-save`).

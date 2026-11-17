@@ -8,12 +8,12 @@ working copy of the table and `applyStrings` writes it back **without renumberin
 unreferenced trailing blanks and keeps a blank slot something still points at. `escapeControls` /
 `unescapeControls` show bytes below 0x20 as `<XX>` (tab, LF, CR stay literal), and
 `editor/textColors.ts` is what those bytes *mean*: `TEXT_CODES` (the community table at
-wiki.staredit.net/wiki/Color, whose twelve player colours are the classic BW palette — the
-editor's older table was wrong from 0x12 up, with the alignment codes a byte early and 0x18
-called black instead of player 9's green), `runsOf` turning a string into coloured runs the
+wiki.staredit.net/wiki/Color, whose twelve player colours are the classic BW palette — a table
+with the alignment codes a byte early from 0x12 up, or 0x18 as black instead of player 9's
+green, is wrong), `runsOf` turning a string into coloured runs the
 way the game draws it, and the Remastered newline change: 1.16.1 reset the colour at every
 line break and Remastered carries it on, so `bleedingLines` finds the lines that render
-differently now and `fixBleeding` writes the reset the old game supplied (`RESET_CODE`,
+differently in Remastered and `fixBleeding` writes the reset the old game supplied (`RESET_CODE`,
 0x02, the cyan that *is* the default), and `inlineRuns` — the same reading flattened to one
 line, with a `NEWLINE_MARK` between the lines. `components/ui/ColorCodes.tsx` is the shared
 chrome, three surfaces a field takes as many of as it has room for: `ColorCodeBar` (a swatch
@@ -29,7 +29,7 @@ the String Editor) or `"none"`; `codes` is `"popover"` (a Radix `Popover` on the
 button, `onOpenAutoFocus` prevented so the caret stays put), `"bar"` or `"none"`. Going back
 to the read surface on blur is deferred one task on purpose — pulling the input out of the
 tree while the browser is still moving focus makes the dialog's focus trap take it back, and
-clicking from one of these fields into another landed on the dialog. It is used by Map
+clicking from one of these fields into another lands on the dialog. It is used by Map
 Properties, the String Editor, force names, custom unit names and a trigger or briefing
 action's `text` argument; a `wav` argument and the strings the game never draws (location
 names, switch names, trigger comments) deliberately get none of it. `Preferences.classicText`
@@ -54,10 +54,10 @@ extra bytes; `encodeWav` 8/16-bit PCM; `decodeWav` for 8/16/24/32-bit PCM, float
 ADPCM — the game's own sound encoding — and Microsoft ADPCM, `canDecodeWav` / `wavFrames` /
 `wavDuration` off the header; `tests/wav.test.ts` encodes each format on the test side and checks the
 decoders against it). A file already a PCM WAV in the target format is kept byte for byte, and a
-converted one is renamed `.wav`. `mopaq` cannot read the MPQ-ADPCM-*compressed* members of the game's
-own archives — that is the archive's compression, not the WAV encoding, and out of this repository's
-hands.
-**The game's own sounds** (`editor/stockSounds.ts`, `ui/SoundPicker.tsx`, 2026-10-12). A trigger's
+converted one is renamed `.wav`. The MPQ-ADPCM-*compressed* members of the game's own archives are the
+archive's compression, not the WAV encoding — `mopaq`'s business (it decodes them from 1.6.0), not
+this repository's.
+**The game's own sounds** (`editor/stockSounds.ts`, `ui/SoundPicker.tsx`). A trigger's
 `wav` is a path the game opens through its archives, so `sound\Terran\Marine\TMaYes00.wav` plays
 with no file in the map and no WAV entry (the game never reads WAV). The list is `arr/sfxdata.tbl`
 (1127 names under `sound\`, 1123 distinct: a few files repeat and the first spelling stands), and
@@ -69,17 +69,17 @@ folders are grouped case aside (the table has `Protoss\CARRIER` and `Protoss\Car
 races first. `formats/units/load.ts#getStockSounds` fetches on first use, null when the copy has no
 tbl (one made before the extraction copied it — the picker says to reinstall), dropped with the
 unit tables on a data-set switch and retried after an install; `useStockSounds` is the hook.
-`SoundField` replaced the bare text input of the `wav` arg kind in `TriggerDialogs.tsx`: the text
-field stays (any path can be typed), **Browse…** is a radix Popover (portalled, so it works inside
+`SoundField` is the input of the `wav` arg kind in `TriggerDialogs.tsx`: a text
+field (any path can be typed), **Browse…** is a radix Popover (portalled, so it works inside
 the dialog; Escape closes it alone) with the unit's lines first when the same action has a `unit`
 arg (`ItemEditor` passes it), then the map's sounds, then the game's by folder; search is every
 word in the path, a unit's shown name or the moment (`pissed` is accepted for annoyed). The labels
 are `tc("unit voice", …)` because Ready / What / Yes already mean other things in the catalogue.
 1100 rows are plain DOM with `content-visibility: auto` per folder; no virtual list was needed.
-Check Map (`validate.ts`) used to call every stock path "not in the archive": now a path under
-`sound\` is silent unless the list is loaded and lacks it. **Nothing plays a stock sound yet.**
-Measured the same day: in BrooDat/StarDat 3 of 1127 open, the rest are MPQ IMA-ADPCM members
-`mopaq` does not decode (needs ADPCM, likely Huffman with it); a Remastered install has the same
+Check Map (`validate.ts`) is silent on a path under `sound\` unless the list is loaded and lacks it,
+rather than calling every stock path "not in the archive". **Nothing plays a stock sound yet.**
+In BrooDat/StarDat 3 of 1127 open without ADPCM; the rest are MPQ IMA-ADPCM members (Huffman with
+it), which `mopaq` before 1.6.0 does not decode; a Remastered install has the same
 two tables and its sounds are plain PCM (1123 files, 278 MB), to be read on demand or copied
 opt-in. Not verified in the game: that a stock path plays in both 1.16 and Remastered from a map
 with no WAV entry — standard practice among map makers, and what the format says, but no probe map
@@ -88,16 +88,16 @@ has been played.
 names; `switchUsage` counts Switch conditions and Set Switch actions). `tests/strings.test.ts` and
 `tests/sounds.test.ts` pin the usage map, the escape round trip and the WAV / extras join.
 
-Played in Remastered (2026-10-17, probes R1/R4/R4b/R5 in `Maps/Audit`):
+Played in Remastered (probes R1/R4/R4b/R5 in `Maps/Audit`):
 - Ogg from Play WAV plays in a VER 205 and a 206 map; 1.16.1 plays only WAV. Check Map's Ogg line is an
   info about 1.16.1.
 - Names: map list shows name and description in full; lobby/game keep 31 bytes of the name **as UTF-8**
   (20-syllable Korean name → 10 syllables); force names cut at 29 bytes in both games. Check Map counts
   the name as max(file bytes, UTF-8 bytes).
 - Remastered DOES show Western Windows-1252 text as Korean when the string passes its test (probe R6,
-  English client, 2026-10-17): "Ärger Don’t" → "훣ger Don뭪", "Größe" → "Gr秤e" in map list, lobby and
+  English client): "Ärger Don’t" → "훣ger Don뭪", "Größe" → "Gr秤e" in map list, lobby and
   game; "Défense España"/"café" as written. R5e looked like a refutation only because "é " fails the test.
-  The dump's table object had its try-Korean byte = 1. Check Map warns again (`remasteredReadsAsKorean`
-  in formats/text/encoding.ts, restored from #64's first commit; the string-level test plus run-by-run
+  The dump's table object had its try-Korean byte = 1. Check Map warns (`remasteredReadsAsKorean`
+  in formats/text/encoding.ts; the string-level test plus run-by-run
   CP949 conversion, its pair table checked against Remastered's own).
 - `<01>` steps back one colour and grey `<05>` locks later codes — read from both games' code, not played.

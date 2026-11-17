@@ -1,6 +1,6 @@
 # Saving
 
-### Saving (`src/editor/save.ts`, `src/services/mapIo.ts`, `useMapFileActions.ts#saveDocument`, `SaveMapDialog`)
+### Saving (`src/editor/save.ts`, `src/services/mapIo.ts`, `services/documentActions.ts#saveDocument`, `SaveMapDialog`)
 
 `editor/save.ts` is pure: `SaveOptions` (format, compression, encrypt, `omitExtras`, the strip ticks,
 `mergeRepeats`, `dropTrailing`), `planSave(scn, extras, options)` → a `SavePlan` (every `currentChk`
@@ -15,9 +15,9 @@ is the file's own extension and *the way it was opened* (`mapOriginAtom`), else 
 Custom, shows the five strip ticks; the radio is read back from the ticks — none on, all on, else
 Custom — so a stored option set reopens on the right one). Nothing here mutates the scenario.
 
-**Members kept as stored while unchanged (2026-11-11, CLI audit S2).** StarEdit stores a WAV with ADPCM + Huffman
-sectors (first sector PKWARE); mopaq decodes them, and before this every save re-stored the PCM (Wakka Wakka 572 KB →
-1.5 MB, nothing could shrink it back). `src/formats/mpq/stored.ts`: `readMembers` reads each named member's sector
+**Members kept as stored while unchanged.** StarEdit stores a WAV with ADPCM + Huffman
+sectors (first sector PKWARE); mopaq decodes them, and a save that re-stores the PCM grows the map for good (Wakka
+Wakka 572 KB → 1.5 MB, nothing can shrink it back). `src/formats/mpq/stored.ts`: `readMembers` reads each named member's sector
 method bytes (`storedMethods`, the MPQ cipher copied from mopaq for the sector table and first word) and, for one with a
 method the writer cannot make (not just zlib/PKWARE), `keepStoredForm(bytes, { name, member, methods, hashTable })` —
 a **WeakMap keyed by the decoded `Uint8Array`** plus an FNV fingerprint, so the form travels wherever the array goes
@@ -32,13 +32,13 @@ the CLI's `map set` decodes member-for-member identical and is smaller than the 
 Fortress ran 200 frames in the game. A recovery copy restored in a later session has new arrays: those sounds are
 written as PCM then (not fixed).
 
-**Bytes with no scenario are refused (CLI audit S1).** `readArchive` (so `openMapBytes`, the editor's open, the CLI)
+**Bytes with no scenario are refused.** `readArchive` (so `openMapBytes`, the editor's open, the CLI)
 throws `MapLoadError` when the chk has no complete section of a name in `SECTION_SPECS` (`looksLikeScenario`): a text
 file renamed `.scx`, 0 bytes, random bytes, an archive whose `staredit\scenario.chk` is garbage. Before, `parseScenario`
 of anything was a blank 64 × 64 map and a Save wrote an MPQ over the text file. `loadMap` itself still takes any bytes
 (the container tests and `chkOf` rely on that).
 
-The dialog (reworked 2026-09-21, the user found the two-column version confusing): file name, format
+The dialog (the user found a two-column version confusing): file name, format
 and *What to keep* in front; **Archive** and **Sections** are `<details>` folds (`.save-more`) whose
 summaries carry the current state (compression · encrypted · n of m other files; kept sections ·
 chk size). The Archive fold starts open only when the options differ from `defaultSaveOptions` for
@@ -75,14 +75,14 @@ as long as the scenario, extras and stored members are the same objects, so goin
 choice already tried does not build again. `of(inputs)` hands back a handle tied to those inputs,
 so a build that lands after the map changed cannot be served for the new one. `tests/save.test.ts`
 covers the key (a new `SaveOptions` field must be given a variant there), the eviction and that
-each option set is served the file a fresh build writes; checked headlessly 2026-10-01 (presets
-switched back and forth: 170 ms the first time, ~0 after; the file saved was the one shown). What made this matter (2026-10-01): mopaq's
-`writeAsync` / `readFileAsync` started a Worker per zlib sector — 35 s to write and 6 s to read a
-7.4 MB scenario at 4 KB sectors, which is what `requiredSectorSize` picks when stored members are
-kept and what other editors' zlib maps use. Fixed in mopaq itself (small sectors on the calling
-thread, paced; 0.16 s / 0.15 s, same bytes) and released as mopaq 1.5.1, which the editor is on.
+each option set is served the file a fresh build writes; checked headlessly (presets
+switched back and forth: 170 ms the first time, ~0 after; the file saved was the one shown). The
+mopaq floor is 1.5.1: before it `writeAsync` / `readFileAsync` started a Worker per zlib sector — 35 s to
+write and 6 s to read a 7.4 MB scenario at 4 KB sectors, which is what `requiredSectorSize` picks when
+stored members are kept and what other editors' zlib maps use; 1.5.1 keeps small sectors on the calling
+thread, paced (0.16 s / 0.15 s, same bytes).
 
-### Build steps and built maps (`editor/mapBuild.ts`, `services/mapBuild.ts`, 2026-09-18)
+### Build steps and built maps (`editor/mapBuild.ts`, `services/mapBuild.ts`)
 
 Decided with the user for TrigScript going Remastered-only: **one file, built on save**, not
 euddraft's source + `-eud.scx` pair (a map maker hosts the wrong one). `api.document.buildSteps.add`
@@ -108,24 +108,23 @@ parsed once for the sound hints and the source parsed after — two parses only 
 (an `AbortController`; the run is raced against it, since a step may ignore the signal) → the plain
 bytes are written, `saveDocument` still returns true and clears modified, and a ttl-0 toast says
 why. Test Map throws instead (`TestMapDialog` shows the reason). `.chk` is never built.
-How the log and the counts take it (2026-10-26, after 0.8.0's "Errors: 10, up from 0, most in
-document"): a plain `Error` (`constructor === Error`, `name === "Error"`) from a step or a `before`
+How the log and the counts take it: a plain `Error` (`constructor === Error`, `name === "Error"`) from a step or a `before`
 handler is the contract's message to the user — TrigScript throws one for a script that does not
 compile, a failing test, a block edited by hand — so `stepFailed` logs a *warning* and counts
 `map.build.refused` `{ step, plugin }`; anything else (`TypeError`, a plugin's own class,
-`NoMapError` for an empty return) stays `logError` and an `error` count with its stack. Before
-this, every typo in a script at save time was an editor error on `/admin`.
-Same treatment for the STR refusal (2026-10-31, from 0.8.4's `/admin`: ~15 `Error` counts, all
-`throw Error(strOverflowText(…))` inside `saveDocument`, users retrying Save 5–7 times): it is
+`NoMapError` for an empty return) stays `logError` and an `error` count with its stack — otherwise
+every typo in a script at save time is an editor error on `/admin`.
+Same treatment for the STR refusal (seen on `/admin` as `throw Error(strOverflowText(…))` inside
+`saveDocument`, users retrying Save 5–7 times): it is
 checked before the `try` through `unreachableStrings(scn)` (`validate.ts`; 0 unless `STR ` is
 dirty, since an untouched table is emitted byte for byte), logged as a warning and counted
-`map.save.refused` `{ reason: "strOverflow" }`. A `RangeError` from the save (0.8.4 also had 3 from
+`map.save.refused` `{ reason: "strOverflow" }`. A `RangeError` from the save (seen from
 `new Uint8Array(total)` in `serializeChk`, cause unknown — counts carry no message) adds `chkKB`
 and `textKB` (powers of two) to the error count: text far past the CHK means a table whose
 strings overlap, re-encoded one by one. A `running`
 WeakSet makes `export()` from inside a step answer the plain map — Magenta 0.9 and TrigScript 2.6
 both call `export()` to feed their own build, so without it the first step to be registered would
-recurse. `builtByAtom` (per document: in `parkRegisters` / `installRegisters`, kept across a
+recurse. `builtByAtom` (per document: in the `REGISTERS` table, kept across a
 `"replace"`) is what lets Save say, once, that the file was built by a step nothing provides now;
 it is set from the manifest on open and from the outcome on every non-copy save.
 
@@ -140,8 +139,8 @@ default plugin with nothing to do does not flash the notice on every save of eve
 
 Not done, on purpose or yet: the Save dialog does not mention steps or show the built size; there is
 no "leave the source out" tick for a release copy; nothing offers to open the stored source of a
-changed file. The write-plain-first-then-rewrite idea (so a handle save never waits) was dropped for
-the notice's button — two writes of one file is two chances to be interrupted.
+changed file. Writing plain first and rewriting after (so a handle save never waits) is rejected in
+favour of the notice's button — two writes of one file is two chances to be interrupted.
 
 `Preferences.save` is where the Save dialog starts (`initialSaveOptions` in `editor/save.ts`):
 `saveOptionsAtom` (this session's confirmed options) wins; else `defaultSaveOptions` with
@@ -150,10 +149,10 @@ encryption, anything else goes unencrypted except PKWARE — and then `save.star
 `SAVE_PRESETS` entry over it. An opened archive's own compression is followed whatever the
 preference says.
 
-### Recovery copies (`editor/recovery.ts`, `services/recovery.ts`, `hooks/useRecovery.ts`, `RecoveryDialog`, 2026-09-25)
+### Recovery copies (`editor/recovery.ts`, `services/recovery.ts`, `services/recoveryCopier.ts`, `hooks/useRecovery.ts`, `RecoveryDialog`)
 
-Slice 1 of `~/preferences-later-plan.md`. A copy per modified open map, in the `recovery` object
-store of the `scmjs` IndexedDB database — `handleStore.ts` went to **VERSION 2** for it (the
+A copy per modified open map, in the `recovery` object
+store of the `scmjs` IndexedDB database — `handleStore.ts` is at **VERSION 2** for it (the
 upgrade only adds missing stores; `onversionchange` closes the connection so an older tab never
 blocks the upgrade; `idbRequest(store, …)` is the shared entry point). A record is
 `{ key: "<session>:<docId>", session, docId, at, name, fileName, width, height, tileset, size,
@@ -164,7 +163,7 @@ goes back to the file; a `DataCloneError` retries without it.
 
 **Which maps, when.** `planRecovery` is pure: write a map that is modified and changed since its
 copy (or never copied); remove the copy of a map no longer modified, no longer open, or with the
-preference off. `RecoveryCopier` (one per store, made by `useRecovery`) marks the *front* map
+preference off. `RecoveryCopier` (one per store, in `services/recoveryCopier.ts`; `useRecovery` only starts it and keeps the timer) marks the *front* map
 changed on any revision atom, `undoStackAtom`, `archiveExtrasAtom` or `mapModifiedAtom` — a parked
 map cannot change, and a switch bumping every revision costs one extra write, nothing more. Writes
 happen on the `Preferences.recovery.minutes` interval (default 2, limits 1–30) and on
@@ -174,10 +173,10 @@ All copies of a pass are built synchronously before the first IndexedDB await, s
 one instant. Over `MAX_COPY_BYTES` (64 MB) is skipped with one `logWarn` per map. Passes are chained
 on one promise, never overlapping.
 
-**When the editor's tree is gone** (2026-10-06). `CrashScreen` calls `writeCopiesNow(store)` as it
+**When the editor's tree is gone.** `CrashScreen` calls `writeCopiesNow(store)` as it
 mounts: one more pass of the same copier, so the preference, the size limit and the "due" rule all
 still apply, and it answers how many maps have a copy for the page to say. For that the copier is
-now kept per store in a `WeakMap` (`copierFor`) instead of made by each mount of `useRecovery` —
+kept per store in a `WeakMap` (`copierFor`) rather than made by each mount of `useRecovery` —
 `App` has unmounted by then, and an `App` mounted again by Try again must find the same `written`
 set, or a save afterwards would not remove the copy and the next start would offer a map that was
 saved. The module's `copier` (what `flushRecovery` / `forgetSessionCopies` use) is still cleared on
@@ -190,7 +189,7 @@ every other session's copies count as left over (a second tab would see the firs
 deletes the old record and the copier writes a fresh one under this session.
 
 **Offer.** `usePreload` calls `offerRecoveryWhenClear` after the preload; it opens `recovery` through
-`whenDialogsClear` — `offerGameDataWhenClear`'s wait (plugins started or 5 s, empty dialog stack),
+`whenDialogsClear` (`services/startupOffers.ts`) — `offerGameDataWhenClear`'s wait (plugins started or 5 s, empty dialog stack),
 factored out so Game Data and Recover Maps come one after the other. File ▸ Recover Maps… opens the
 same dialog; Preferences ▸ Storage has a Recovery copies section (count, size, Discard of leftovers
 only — this session's copies go with their maps). *Clear all data* does not touch them, on purpose:
@@ -201,27 +200,26 @@ nothing was asked. The browser's `beforeunload` leaves them — that is the acci
 Not done: the `.bak`/previous-version slice (2 in the plan); copies of a shared map's guest are
 written like any other; no age limit on leftovers.
 
-### Keeping the file a save replaces (`services/previousVersions.ts`, `desktop/backup.ts`, `PreviousVersionsDialog`, 2026-09-25)
+### Keeping the file a save replaces (`services/previousVersions.ts`, `desktop/backup.ts`, `PreviousVersionsDialog`)
 
-Slice 2 of the plan, widened: `Preferences.save.backup` (default **on**). `saveBytes` / `saveBlob`
+`Preferences.save.backup` (default **on**). `saveBytes` / `saveBlob`
 take an optional `BeforeOverwrite` callback, called by `tellBefore` with `handle.getFile()` *after*
 the readwrite permission and *before* `createWritable` — on the handle route and on the picker
 route (Save As onto an existing file); an empty file (one the picker just made) or an unreadable one
 is skipped, and a throwing callback never stops the write. The callback must read the bytes before
-it returns: a `File` from a handle goes stale once the file changes. `SaveWriter` gained the same
+it returns: a `File` from a handle goes stale once the file changes. `SaveWriter` takes the same
 4th argument, and `saveDocument` passes it only with the preference on (test-pinned).
 
-**Desktop maps go by path, not by handle (fixed 2026-09-26).** The first version asked
-`webUtils.getPathForFile` at save time about the `File` from `handle.getFile()` — which Electron
-answers with **""** (probed in Electron 44: a *dropped* `File` has its path, one read through a
-handle does not), so the live `.bak` never happened and every save fell back to the store
-silently. Now the desktop build never uses browser handles for maps: `services/diskFiles.ts`
+**Desktop maps go by path, not by handle.** Asking `webUtils.getPathForFile` at save time about
+the `File` from `handle.getFile()` does not work: Electron answers **""** (probed in Electron 44: a
+*dropped* `File` has its path, one read through a handle does not), so the live `.bak` never happens
+and every save falls back to the store silently. So the desktop build never uses browser handles for maps: `services/diskFiles.ts`
 `diskHandle(path)` is a `MapFileHandle` whose `getFile` / `createWritable().close()` go to main
 by path (`files.read` / `files.write`), so the atoms, tabs, `saveDocument`, recents and plugins
 need no change. Paths come from main's own dialogs (`files.openDialog` in `pickMapFile`,
 `files.saveDialog` in `saveBlob` for a map-named save), a drop (`files.pathOf(droppedFile)` in
 `droppedHandle` — preload reads the path off the dropped `File`, main registers it) and
-`file:open` (argv / second instance / macOS open-file, now carrying `path`). Main's `MapFiles`
+`file:open` (argv / second instance / macOS open-file, carrying `path`). Main's `MapFiles`
 (`desktop/mapFiles.ts`) only reads/writes/backs up **map files the user gave the app** that way —
 plugins share the page's privileges — and persists the list (`<userData>/map-files.json`, 500) so
 Open Recent works after a restart. The handle store keeps a disk handle as `{ diskPath }`
@@ -229,8 +227,8 @@ Open Recent works after a restart. The handle store keeps a disk handle as `{ di
 cannot be structured-cloned). `BeforeOverwrite` gets the handle as a 2nd argument;
 `keepPrevious(file, handle)` backs up by `handle.path`, and on failure stores the version with
 `bakFailed`, which is logged and raised as a warn toast *every* save ("No .bak was written").
-A recents entry from before the fix is still a browser handle and saves without a `.bak` until
-the map is opened again another way. In the browser nothing changed: the previous versions
+A recents entry an older desktop build stored is still a browser handle and saves without a `.bak`
+until the map is opened again another way. In the browser the backup is the previous versions
 below. Verified live in Electron under WSLg (CDP `Input.dispatchDragEvent` with `files`): drop →
 Ctrl+S, launch argument → Ctrl+S, restart → Open Recent → Ctrl+S, each wrote the `.bak` with the
 old bytes; the native Open / Save As dialogs could not be driven there. Tests:
@@ -249,30 +247,30 @@ Discard). Preferences ▸ Storage has a Previous versions section beside Recover
 Verified headlessly: Save As → Save over an OPFS handle (picker stubbed to OPFS) keeps the version
 and the dialog reopens it.
 
-zlib is Remastered-only (2026-10-17 audit, archive T1): 1.16.1's storm.dll decodes ADPCM, Huffman and
+zlib is Remastered-only: 1.16.1's storm.dll decodes ADPCM, Huffman and
 PKWARE alone — its decompressor, run under Unicorn on the editor's own sectors, refused every zlib
 one and decoded every PKWARE one. The labels, the save warning, scm.ts and the docs say so. The
 scm-sim lifted engine reads archives with mopaq, so it cannot catch this kind of thing.
 
-### The data set member on every way out (C7 audit (2026-11-08, branch `c7-editor`))
+### The data set member on every way out
 
-`scmjs\dataset.json` was written only by Save (`stampDataSet` into `archiveExtrasAtom`); Export, My Maps, shares and
-Test Map's bytes of a map never saved under the set left without it. `services/mapDataSet.ts#withDataSet(extras, set)`
+Save writes `scmjs\dataset.json` into the document (`stampDataSet` into `archiveExtrasAtom`); Export, My Maps, shares
+and Test Map's bytes of a map never saved under the set must carry it too. `services/mapDataSet.ts#withDataSet(extras, set)`
 (pure) and `outgoingExtras(store, extras)` (the set in use; the same Map for the game's own data or a map that already
-says exactly that) now feed `buildOutgoing`'s `document()` (Save, Test Map, `document.export`), `document.export` with
+says exactly that) feed `buildOutgoing`'s `document()` (Save, Test Map, `document.export`), `document.export` with
 `built: false`, and the sync `snapshot()` (shares, someone joining). Only Save changes the document (`stampDataSet` is
 `outgoingExtras` + the atom); the others stamp the outgoing copy, so exporting does not mark the map modified. A joiner's
 extras then hold the member the host's do not — harmless (an extras op carries it back), noted in case it matters.
 The Save dialog's preview bytes are built from the atom's extras; Save stamps first and drops them when it changed.
 `tests/map-dataset.test.ts` "on the way out" (export built and plain, Test Map, snapshot, none for the game's data);
-headless: Diplomacy (no member in the original) exported and Test-Mapped with `{ cosmonarchy-bw, ac3f86533e4b5a31 }`.
+headless: Diplomacy (no member in the original) exported and Test-Mapped with the set's `{ id, hash }`.
 Test Map's hint: `testTargets.ts#dropsDataSet` (StarCraft always; plugin `scm-sim` before 0.16.0) and
 `droppedDataSetHint` — a line in `TestMapDialog`, a warn toast when a plugin target that drops it is started.
 
-**Editor-owned archive members (2026-11-14).** Three now: `scmjs\pins.bin` (terrain.md "Pinned tiles"),
+**Editor-owned archive members.** Three: `scmjs\pins.bin` (terrain.md "Pinned tiles"),
 `scmjs\dataset.json` (gamedata.md) and one `scmjs\borrowed-<tileset>.bin` per tileset a map borrows terrain from
 (terrain.md "Borrowed terrain"). All ride `archiveExtrasAtom`, so Save keeps them like any other file (`keptExtras`, kind
 "file"; *Smallest that plays* keeps them too: it strips editor sections of the CHK, not archive files), they are parked with their map and a shared map sends a
 changed one whole. The game and other editors ignore them. The pins and the borrowed lattices are size-checked against
-the map when read, so a member left at another size reads as none; Resize moves both and its history entry now carries
+the map when read, so a member left at another size reads as none; Resize moves both and its history entry carries
 them (`entry.pins`, `entry.members`).

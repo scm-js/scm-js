@@ -18,20 +18,12 @@ Attribution is not permission. Before publishing a fork or hosting a build, read
 
 ## Getting the files
 
-The recommended source is your own StarCraft installation. Blizzard's free map editor
-download is the fallback for anyone without one. Both are offered by the **Game Data**
-dialog on first use and by **Help ▸ Game Data…** afterwards; the [installing
-guide](installing.md#the-graphics) walks through it.
-
-| Source | What you can do with it |
-| --- | --- |
-| A StarCraft: Remastered installation | Edit, with classic or Remastered graphics; test and play maps; watch replays |
-| A classic StarCraft (1.16) installation | Edit, with classic graphics; test and play maps; watch replays |
-| Blizzard's map editor download | Edit, with classic graphics; watch replays |
-
-The map editor download carries the whole game's files, but it is a map editor's download,
-not the game. A copy made from it is enough to edit maps and watch replays. Testing a map
-or playing one, in the game or on the site's play page, needs StarCraft installed.
+There are three sources: a StarCraft: Remastered installation, a classic StarCraft (1.16)
+installation, and Blizzard's free map editor download, which carries the whole game's
+files but is a map editor's download, not the game. The **Game Data** dialog offers them
+on first use and **Help ▸ Game Data…** afterwards; [The
+graphics](installing.md#the-graphics) in the installing guide has the steps and what each
+source allows. What the files are:
 
 - **A classic installation** has two archives, `StarDat.mpq` and `BrooDat.mpq`, with a
   `patch_rt.mpq` beside them that is applied over both, as the game applies it. Brood

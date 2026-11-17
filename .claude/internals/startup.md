@@ -2,9 +2,9 @@
 
 ### Startup preload (`src/services/preload.ts`, `src/hooks/usePreload.ts`)
 
-The splash used to run a fixed 3.3 s script of invented log lines while the real fetches happened behind
-it, so you landed in the editor on top of the viewport's own "Loading … terrain" plate and unit markers.
-`runPreload` replaces that with an ordered `PreloadTask[]` that actually awaits the work — the startup
+The splash is the real loading, not a timed script: a fixed script over the real fetches lands you in the
+editor on top of the viewport's own "Loading … terrain" plate and unit markers. `runPreload` is an ordered
+`PreloadTask[]` that actually awaits the work — the startup
 tileset (`ensureTileset`), the unit tables (`getUnitAssets`), the GRPs a blank map draws (`warmUnitGrps`),
 and finally the startup document itself (injected by the hook, which subscribes to `scenarioAtom` so it
 does not race `useStartupMap`). Progress lands in `preloadStepAtom` / `preloadLogAtom`; the splash shows
@@ -36,28 +36,28 @@ canvas simply unpainted — so the handover is invisible; change it and `splash.
 `SplashScreen` removes it in a **layout** effect (`splash/bootSplash.ts`, before the frame that would
 show both) and `App` removes it on the `?nosplash` path, where the real splash never mounts. And `App`
 **mounts the chrome two frames late** (`chrome` state): MenuBar, ToolBar, the docks, `MapViewport` and
-`DialogHost` in the first commit is well over a thousand renders, which held the first paint behind it —
-now the splash paints alone and that commit lands while it is already animating. The veil carries
+`DialogHost` in the first commit is well over a thousand renders, which holds the first paint behind it —
+deferred, the splash paints alone and that commit lands while it is already animating. The veil carries
 `.splash-veil.solid` until the chrome is there (nothing behind it to blur yet). Measured on Linux, the
-window went from ~420 ms after launch to ~200 ms, and the frame it shows is the splash rather than an
+window is up ~200 ms after launch rather than ~420 ms, and the frame it shows is the splash rather than an
 empty rectangle. `showWhenReady` in `desktop/main.ts` is what shows it. The saved maximized state is applied
 **there**, not at creation: on Windows `maximize()` is a `ShowWindow` call, so maximizing a
-`show: false` window shows it — which used to put a black window on screen at 140 ms and
-leave every signal below with nothing to do. Neither platform applies the maximize
+`show: false` window shows it — which puts a black window on screen at 140 ms and
+leaves every signal below with nothing to do. Neither platform applies the maximize
 synchronously, though, so a window that is going to be maximized is *created* at the work area
-of the display it opens on (`openingBounds`) — otherwise the first composited frame was the
+of the display it opens on (`openingBounds`) — otherwise the first composited frame is the
 window at its created size in a corner, flashing to full screen a moment later — and
 `keepRestoreBounds` holds the rectangle the user left behind, which `saveWindowState` writes
 while the window is still maximized and the first "restore down" puts it back to. The maximize
 itself lands `MAXIMIZE_AFTER_MS` after the window is up rather than as part of showing it, so
 the frame the window appears with is one the renderer painted for the size it has (a maximize
-in the same frame resized the renderer as the window appeared, leaving the app drawn small in
+in the same frame resizes the renderer as the window appears, leaving the app drawn small in
 the corner until the next frame); `traceBounds` puts the geometry of each step in `startup.log`
 next to a probe of the renderer's own `innerWidth`. It also does not trust `ready-to-show` alone — a hidden window is not guaranteed to be composited at all (Windows),
-and waiting only for that paint meant seconds of no window and then an editor whose splash
-had already run behind nothing. The signals are, in order: the paint, `dom-ready` +
+and waiting only for that paint means seconds of no window and then an editor whose splash
+has already run behind nothing. The signals are, in order: the paint, `dom-ready` +
 `SHOW_AFTER_DOM_MS` (the boot splash is that markup, and the window's `backgroundColor` is
-its backdrop), and `SHOW_LATEST_MS` regardless. The renderer stopped depending on any of it:
+its backdrop), and `SHOW_LATEST_MS` regardless. The renderer does not depend on any of it:
 `SplashScreen` runs its MIN/MAX dwell from the moment the page is **visible**
 (`document.visibilityState`), not from mount, since a page in a hidden window neither
 animates — rAF does not run in one, which is also why `App`'s two-frame chrome deferral has
@@ -68,7 +68,7 @@ stdout too), which is how "it hung and then opened" is told apart from a slow ex
 virus scanner, or the launch path: a Windows build run from `\\wsl.localhost\…` takes 628 ms
 to evaluate its main script and never reaches `dom-ready`, so copy `release/win-unpacked` to
 `/mnt/c/…` before running it (`docs/development.md`, Desktop). The same build, both ways
-(measured 2026-09; `\\wsl.localhost\…` is a network share, and Chromium loads its binaries and
+(`\\wsl.localhost\…` is a network share, and Chromium loads its binaries and
 every asset through it):
 
 | milestone | `/mnt/c/…` | `\\wsl.localhost\…` |
@@ -88,14 +88,14 @@ loads.
 dev-only "Components" performance track made startup unusable: it logs every component render to the
 performance timeline and serialises its props, and mounting the chrome is ~1700 renders in one commit —
 about **seven seconds of unbroken main thread**, during which the splash cannot paint a frame. Measured
-in dev: worst long task 6978 ms → 142 ms with the track off. A production build never had the problem
+in dev: worst long task 6978 ms → 142 ms with the track off. A production build does not have the problem
 (zero long tasks), so this only makes `npm run dev` behave like the built app. It works by hiding
 `console.timeStamp` (part of react-dom's one-time `supportsUserTiming` check) for exactly as long as
 react-dom takes to evaluate — hence "imported first", and hence the microtask that puts it back.
-`VITE_REACT_TRACKS=1` keeps React's track if you want to profile renders. If startup ever feels frozen
-again, measure `longtask` entries before blaming the loading code.
+`VITE_REACT_TRACKS=1` keeps React's track if you want to profile renders. If startup feels frozen,
+measure `longtask` entries before blaming the loading code.
 
-**The start screen waits for all of this** (2026-11-14, `viewport/StartScreen.tsx`): it shows with no map open, and
+**The start screen waits for all of this** (`viewport/StartScreen.tsx`): it shows with no map open, and
 at start there is none until `useStartupMap` has made the blank one, so it is held until `preloadStepAtom.done`
 (whose last task is that map) or a map has been open. The editor does not start on it; see `viewport-ui.md`, "The start screen", for
 what starting on it would take.
@@ -107,9 +107,9 @@ untouched blank the way any first open does. The desktop app and a browser whose
 needs a user gesture, so a toast with a **Reopen** action does it on the click. Nothing
 happens when the recents are empty or the entry has no handle (Firefox, Safari).
 `Preferences.newMap.version` is applied by `newMapInto` after `createScenario` (`setMapVersion`,
-Remastered = VER 206 + STRx); every new map used to be Brood War 205.
+Remastered = VER 206 + STRx).
 
-**Workers on the startup path (2026-11-14).** `main.tsx` imports `services/borrowTableClient.ts` (a few kB, with
+**Workers on the startup path.** `main.tsx` imports `services/borrowTableClient.ts` (a few kB, with
 `editor/borrowWorker.ts#tilesetParts`) to hand the borrowed-terrain scan its worker pool; `borrow.ts` was in the main
 chunk already (the Isometric tab). The worker itself is its own chunk (`borrowTable.worker-*.js`, 5.3 kB) and is started
 only when a scan runs.

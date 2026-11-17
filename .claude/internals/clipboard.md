@@ -2,7 +2,7 @@
 
 ### Cut / Copy / Paste (`src/editor/clipboard.ts`, `src/hooks/useClipboardTools.ts`, `src/editor/history.ts`)
 
-`editor/history.ts` now owns `HistoryEdit` / `HistoryEntry` and `applyEntry` (the fixed list
+`editor/history.ts` owns `HistoryEdit` / `HistoryEntry` and `applyEntry` (the fixed list
 order: terrain `changes`, `isom`, `doodadTiles`, `doodads`, `sprites`, `units`, `locations`,
 `fog`; reversed on undo) — `documentAtoms` re-exports the type. A `Clip` is self-contained
 (size, `era`, MTXM `tiles` *and* TILE `ground`, records with origin-relative pixel positions,
@@ -27,8 +27,8 @@ arms the clipboard layer and the viewport's `onDown` calls `pasteAt(tile)` while
 replace/merge, stranding, edge clipping, the full undo/redo round trip and a fixture-map copy
 into a blank map.
 
-**A stretched paste (2026-11-13).** A press while a clip is armed is now a gesture (`beginPasteGesture`),
-not an immediate `pasteAt`: a click pastes as before; a drag calls `clipTools.stretchTo`, and the
+**A stretched paste.** A press while a clip is armed is a gesture (`beginPasteGesture`),
+not an immediate `pasteAt`: a click pastes in place; a drag calls `clipTools.stretchTo`, and the
 release pastes what `clipTools.ghostAt(tile)` holds — `stretchClip(tileset, clip, parts, axis, steps)`
 from clipboard.ts, the engine of the doodad stretch (`stretch.ts`, notes in `objects.md`) run over the
 clip's *picture* (`clipPicture`: MTXM with Doodads ticked, TILE without). The result is a terrain-only
@@ -43,7 +43,7 @@ not mirrored at all), and the plugin API.
 
 ### Dialog undo (`src/editor/tableHistory.ts`, `recordTables` / `stepTables` in `documentAtoms.ts`)
 
-Added 2026-10-05. A dialog writes its tables and calls `commitSettingsAtom` / `commitTriggersAtom`
+A dialog writes its tables and calls `commitSettingsAtom` / `commitTriggersAtom`
 with no change list, so the change is found afterwards: every followed `Scenario` has a
 **baseline** (a module `WeakMap` keyed by the scenario object — so a parked map keeps its own
 without a `ParkedDocument` field, and a re-parse starts afresh), the commit diffs the map against
@@ -71,12 +71,12 @@ together; `FIELD_SECTIONS` is the `markDirty` map for both) plus the string tabl
   the restore clones too). Same array object as the baseline's `source` = unchanged, no compare.
   Measured (node, dense 16-condition / 64-action records): baseline at open 0.3 ms whatever the
   size; a trigger OK's diff 4 ms at 500 triggers, 35 ms at 5,000, 200 ms at 30,000; a settings OK
-  0.3 ms. JSON text per record, the first attempt, was 136 ms at 5,000.
+  0.3 ms. Comparing JSON text per record instead costs 136 ms at 5,000.
 - **A second limit besides depth.** `withinTablesBudget` drops the oldest steps while the
   trigger records the stack alone keeps alive pass `TABLES_BUDGET` (1,000,000 condition + action
-  rows, roughly 100 MB at the worst). Found while checking the plugins: TrigScript's Apply and
-  Magenta's every edit replace the list through `document.update`, and 200 levels of a
-  several-thousand-trigger build would have been gigabytes. The redo stack is not trimmed (it
+  rows, roughly 100 MB at the worst). TrigScript's Apply and Magenta's every edit replace the
+  list through `document.update`, and 200 levels of a several-thousand-trigger build would be
+  gigabytes. The redo stack is not trimmed (it
   only ever holds what was just on the undo stack).
 - **Labels** default from `tablesKind` (five strings); a caller passes `{ label }` (the plugin
   host passes the update's). `{ extrasBefore }` (Sound Editor, `runUpdate`) adds the archive's
@@ -87,8 +87,8 @@ together; `FIELD_SECTIONS` is the `markDirty` map for both) plus the string tabl
 
 ### Whole-map undo (`WholeState` / `swapWholeState` in `editor/history.ts`, `stepWhole` in `documentAtoms.ts`)
 
-Added 2026-11-07, after an outside review named "Resize and Change Tileset clear the undo
-history" as the editor's most concrete lost-work risk. `resizeDocumentAtom` and
+Resize and Change Tileset are undoable: a change that clears the undo history is the editor's
+most concrete lost-work risk. `resizeDocumentAtom` and
 `changeTilesetAtom` take `takeWholeState(scn)` before the change and push `{ label, changes: [],
 whole }` through `afterWholeDocumentChange(get, set, entry)`. `whole` is the map on the *other*
 side of the step: undo and redo `swapWholeState` it with the scenario's and store what they took
@@ -103,15 +103,15 @@ and `applyEntry` never see one).
   existing array breaks this** — build new arrays, or copy in `takeWholeState`.
 - **Dirty is unioned, never restored.** The swap marks every section the two sides may differ
   in; re-encoding is always safe, emitting the file's bytes is not once something changed them.
-- **Shared maps keep the old behaviour.** `wholeEntry` answers null when `syncTapAtom` owns the
+- **Shared maps drop the history.** `wholeEntry` answers null when `syncTapAtom` owns the
   front map, and the history is dropped: the change went out as a `reset` and every other
   editor's history restarted, so a local undo of it would only be another whole-map reset. An
   entry recorded before sharing began still undoes there, as a reset sent to everyone, and then
   drops the history the same way.
-- `replaceScenarioAtom` (raw section edits, Repair) still drops the history — it installs a new
+- `replaceScenarioAtom` (raw section edits, Repair) drops the history — it installs a new
   `Scenario` object, which a reference swap cannot take back. `tests/whole-history.test.ts`.
 
-### Whole-document undo (`DocumentSide` in `editor/history.ts`, `applyDocumentAtom` / `stepDocument` in `documentAtoms.ts`, 2026-11-16)
+### Whole-document undo (`DocumentSide` in `editor/history.ts`, `applyDocumentAtom` / `stepDocument` in `documentAtoms.ts`)
 
 A third kind of entry that has no other part, beside `tables` and `whole`: `document`, the scenario
 *object* and the archive's extras and stored members as they stand on the other side of the step.

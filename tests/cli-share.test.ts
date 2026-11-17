@@ -2,7 +2,7 @@
  * `scmjs login | logout | account` and `scmjs map share`, against a stand-in of the scmjs.dev server on the loopback
  * address (the routes these commands call, answering as ai-server does). The sign-in page is driven here as the
  * browser would: its script is checked by string, and its posts to the command are made with fetch. The real round —
- * the built command, a local ai-server and Chromium — was run by hand (.claude/internals/cli.md).
+ * the built command, a local ai-server and Chromium — was run by hand (.claude/internals/cli-account.md).
  */
 import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server } from "node:http";

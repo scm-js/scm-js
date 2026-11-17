@@ -10,11 +10,11 @@
  *   the source tiles that are only stand-ins (the nearest picture where the tileset has no copy), so the terrains a
  *   file offers are the ones a scan would;
  * - `borders`: drawn borders between a borrowed terrain and the tileset's own ground (what `provideBorderTable` takes):
- *   per pair, the tiles to lay for each border shape, the shapes named as the editor reads them (`editor/borderLattice.ts`);
+ *   per pair, the tiles to lay for each border shape, the shapes named as the editor reads them (`editor/modTerrain/borderLattice.ts`);
  * - `copies`: copied terrain (what `provideCopies` takes): per block, the terrain copied, the copy's height, the ground
  *   its pieces meet, and the tile standing for each piece of the terrain's edge set.
  *
- * Each tileset's section names the group table its numbers are for (`table`, `editor/pieceLearn.ts#tableHash`, the
+ * Each tileset's section names the group table its numbers are for (`table`, `editor/modTerrain/pieceLearn.ts#tableHash`, the
  * hash learned pieces are kept under); a tileset whose table has another hash does not use the section.
  *
  * Like `mod.json` it is none of the mod's game files, so the mod's hash does not change with it. The reader never

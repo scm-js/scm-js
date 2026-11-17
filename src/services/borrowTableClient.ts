@@ -11,10 +11,10 @@
  * of the host tileset and its picture summary.
  */
 import type { Tileset } from "../formats/tileset/decode";
-import { decodeBorrowTable, tilesetHash, type BorrowTable } from "../editor/borrowTable";
-import { tilesetParts, type BorrowWorkerRequest, type BorrowWorkerResponse, type TilesetParts } from "../editor/borrowWorker";
+import { decodeBorrowTable, tilesetHash, type BorrowTable } from "../editor/modTerrain/borrowTable";
+import { tilesetParts, type BorrowWorkerRequest, type BorrowWorkerResponse, type TilesetParts } from "../editor/modTerrain/borrowWorker";
 import type { BorrowTableMaker } from "./borrow";
-import { decodeCopyBlocks, type CopyBlock, type CopySource } from "../editor/terrainCopyTable";
+import { decodeCopyBlocks, type CopyBlock, type CopySource } from "../editor/modTerrain/terrainCopyTable";
 
 /** The worker could not start, or failed: the caller works the table out itself. */
 export class WorkerUnavailableError extends Error {
@@ -159,7 +159,7 @@ export function resetBorrowWorkerClient(): void {
 }
 
 /**
- * The copied-terrain scan (`editor/terrainCopyTable.ts#findCopyBlocks`) of `tileset`, in a worker of its own started for
+ * The copied-terrain scan (`editor/modTerrain/terrainCopyTable.ts#findCopyBlocks`) of `tileset`, in a worker of its own started for
  * it and ended after it. Rejects with `WorkerUnavailableError` when no worker can run it (the caller works it out on
  * the page), with an `AbortError` when `signal` stops it.
  */

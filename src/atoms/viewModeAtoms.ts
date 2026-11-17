@@ -10,8 +10,8 @@
 import { atom } from "jotai";
 import { t } from "../i18n";
 import { countView } from "../services/usage";
-import type { ViewFlags } from "../editor/view";
-import { logError } from "../editor/log";
+import type { ViewFlags } from "../app/view";
+import { logError } from "../app/log";
 import { locationsAutoHiddenAtom, viewFlagsAtom, viewOnlyAtom } from "./editorAtoms";
 import { mapViewFogAtom, mapViewPointerAtom, shownMapViewAtom, type PluginMapViewEntry, type PluginOverlayEntry } from "./pluginAtoms";
 import { statusMessageAtom } from "./uiAtoms";

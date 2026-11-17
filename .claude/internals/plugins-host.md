@@ -345,8 +345,8 @@ over `editor/clipboard.ts`, sharing the user's clip), `api.exchange` (`.trg` and
 `plugin-api/index.d.ts` (128 KB, where the emitted tree was 61 files and 480 KB), a check that the
 bundle carries no import at all — `jotai` and `react` above all, but a file the bundler missed is
 wrong in the same way — and a `package.json` versioned with the *editor* beside it. Which is why
-`EditorLayer` / `TerrainMode` / `ViewFlags` / `Toast` live in `editor/view.ts`, `Preferences` in
-`editor/preferences.ts` and `DialogId` in `components/dialogs/ids.ts`, re-exported by the atoms.
+`EditorLayer` / `TerrainMode` / `ViewFlags` / `Toast` live in `app/view.ts`, `Preferences` in
+`app/preferences.ts` and `DialogId` in `components/dialogs/ids.ts`, re-exported by the atoms.
 
 `api.document.create(options)` is File ▸ New without React:
 `services/documentActions.ts#newMapInto` (what the hook's `newMap` calls) behind the same

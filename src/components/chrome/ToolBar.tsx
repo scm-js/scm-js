@@ -37,7 +37,7 @@ import { SYMMETRY_MODES, symmetryAvailable, type SymmetryMode } from "../../edit
 import { hotkeysAtom, preferencesAtom } from "../../atoms/preferencesAtoms";
 import { pluginTestTargetsAtom } from "../../atoms/pluginAtoms";
 import { resolveTarget, startTest } from "../../services/testTargets";
-import { shortcutOf } from "../../editor/commands";
+import { shortcutOf } from "../../app/commands";
 import { LAYERS, ZOOM_LEVELS } from "./MenuBar";
 import { pluginText, translate } from "../../i18n";
 import { useT } from "../../i18n/react";

@@ -1,6 +1,6 @@
 /**
  * Tile palette ▸ Pieces ▸ Learn from Maps…: pick a folder, read every map under it against the
- * tables of the data set in use (`editor/pieceLearn.ts`), keep what was learned under those
+ * tables of the data set in use (`editor/modTerrain/pieceLearn.ts`), keep what was learned under those
  * tables (`pieceStore.ts`) and say what came of it, once, as a finished job does: the status
  * line and a toast. Loaded only when the button is pressed: it brings the folder pick and the
  * map reader with it.
@@ -8,14 +8,14 @@
 import { pushToastAtom, statusMessageAtom } from "../atoms/uiAtoms";
 import { learnedPiecesAtom, pieceLearningAtom } from "../atoms/pieceAtoms";
 import { TILESETS, terrainName } from "../data/tilesets";
-import { isMapName, learnFromMaps, piecesPerTileset } from "../editor/pieceLearn";
-import type { PieceEvidence } from "../editor/pieces";
+import { isMapName, learnFromMaps, piecesPerTileset } from "../editor/modTerrain/pieceLearn";
+import type { PieceEvidence } from "../editor/modTerrain/pieces";
 import type { Cv5Group } from "../formats/tileset/decode";
 import { loadTilesetGroups, peekTileset, TILESET_FILENAMES } from "../formats/tileset/load";
 import { pickFolder } from "../plugins/host";
 import { scenarioAtom } from "../atoms/documentAtoms";
 import { gameDataSourceAtom } from "../atoms/gameDataAtoms";
-import { cutBorderTables, emptyBorderEvidence, gatherBorderEvidence, type BorderEvidence } from "../editor/borderTable";
+import { cutBorderTables, emptyBorderEvidence, gatherBorderEvidence, type BorderEvidence } from "../editor/modTerrain/borderTable";
 import { tilesetIndex } from "../formats/chk/scenario";
 import { drawsFromGame } from "./borrow";
 import { forgetLearnedBorders, keepLearnedBorders, learningSetup } from "./borders";

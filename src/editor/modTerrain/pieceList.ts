@@ -5,9 +5,9 @@
  * listed; a cut piece with the same tiles as a provided one is not listed again (the named one
  * wins). Also the flat ground plugins declare for the Rect brush. Pure.
  */
-import { megatileForTile, type Tileset } from "../formats/tileset/decode";
-import { pairTerrain, type TerrainType } from "../formats/tileset/palette";
-import type { TerrainName } from "../data/tilesets";
+import { megatileForTile, type Tileset } from "../../formats/tileset/decode";
+import { pairTerrain, type TerrainType } from "../../formats/tileset/palette";
+import type { TerrainName } from "../../data/tilesets";
 import { pieceBlock } from "./pieces";
 import { entryPieces, type PieceEntry } from "./tileCopies";
 import { HOLE, type TileBlock } from "./tileSheet";

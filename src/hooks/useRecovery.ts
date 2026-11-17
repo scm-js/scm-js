@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { useAtomValue, useStore } from "jotai";
 import { preferencesAtom } from "../atoms/preferencesAtoms";
-import { PREFERENCE_LIMITS } from "../editor/preferences";
+import { PREFERENCE_LIMITS } from "../app/preferences";
 import { flushRecovery, startRecovery } from "../services/recoveryCopier";
 
 /**

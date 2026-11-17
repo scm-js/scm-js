@@ -14,8 +14,8 @@
  * Kept free of the scenario and the i18n catalogue: the scan's worker (`borrowWorker.ts`) runs `findCopyBlocks`.
  * Pure and canvas-free; `tests/terrain-copies.test.ts`.
  */
-import { GroupFlag, megatileHeight, minitileHeight, TileFlag, type Tileset } from "../formats/tileset/decode";
-import { ISOM_TABLES } from "../data/isomTables";
+import { GroupFlag, megatileHeight, minitileHeight, TileFlag, type Tileset } from "../../formats/tileset/decode";
+import { ISOM_TABLES } from "../../data/isomTables";
 
 /* ── Constants (each with its measurement in the internals note) ──────────── */
 

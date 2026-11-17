@@ -3,7 +3,7 @@
  * and laid beside at least one of its sheet neighbours from the same piece — the tile alone
  * says nothing, since a piece's corner tile can be laid on its own anywhere.
  */
-import { tileGroupOf } from "../formats/tileset/decode";
+import { tileGroupOf } from "../../formats/tileset/decode";
 import type { Piece } from "./pieces";
 
 /** A map tile as the pieces name it: `group << 4 | slot`, the group read as the tileset's size says. */

@@ -28,9 +28,9 @@
  * The pure half is tested against stand-ins in `tests/plugin-updates.test.ts`; the pass
  * itself takes its collaborators as `UpdateDeps` for the same reason.
  */
-import type { Toast } from "../editor/view";
-import type { PluginUpdateMode } from "../editor/preferences";
-import { RECHECK_MS } from "../editor/updates";
+import type { Toast } from "../app/view";
+import type { PluginUpdateMode } from "../app/preferences";
+import { RECHECK_MS } from "../app/updates";
 import { installedPluginsAtom, pluginManifestCacheAtom, pluginRuntimesAtom, pluginUpdateCheckAtom, pluginUpdatesAtom, type CachedManifest, type PluginInstall, type PluginRuntime, type PluginUpdateAnswer } from "../atoms/pluginAtoms";
 import { PLUGIN_API_VERSION } from "./api";
 import { defaultPlugins, pluginKey, updateAddress } from "./defaults";

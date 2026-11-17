@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { createStore } from "jotai";
-import type { UpdateAvailability, UpdateSupport } from "../src/gamedata/desktop";
+import type { UpdateAvailability, UpdateSupport } from "../src/app/desktop";
 import {
   canDownload, formatBytes, headline, isNews, progressLabel, RECHECK_MS,
   shouldCheckOnStart, stateFrom, supportOf, updateInfo, type UpdateState,
-} from "../src/editor/updates";
+} from "../src/app/updates";
 import { updateProgressAtom, updateStateAtom } from "../src/atoms/updateAtoms";
 
 const RELEASES = "https://github.com/scm-js/scm-js/releases";

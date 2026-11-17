@@ -18,7 +18,7 @@ import { playerRaceLabel } from "../src/data/players";
 import { dataSetRaces, raceOptions, raceText } from "../src/data/races";
 import { keptRaces, normalizeProfile, RACES_KEY, racesOf } from "../src/gamedata/profiles";
 import { clearStoredDataAtom, clearStoredKeysAtom, exportStoredPreferences, importStoredPreferencesAtom, ownedStoredKeys } from "../src/atoms/preferencesAtoms";
-import { browserStorage } from "../src/atoms/storage";
+import { browserStorage } from "../src/app/storage";
 import { dataSetMod, pickedDataSet } from "../src/gamedata/modInput";
 import { modTree } from "../src/gamedata/archives";
 import { resetAssetSource, setAssetSource, type AssetSource } from "../src/gamedata/source";

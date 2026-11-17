@@ -9,7 +9,7 @@ import { join } from "node:path";
 import type { ModFiles } from "@scm-js/mod";
 import { readTerrainFile, sectionAgainstTable, TERRAIN_FILE, terrainFileCounts, terrainFileOf, type TerrainDrop, type TerrainDropReason, type TerrainFile } from "../../../src/formats/mod/terrain";
 import { decodeCv5 } from "../../../src/formats/tileset/decode";
-import { tableHash } from "../../../src/editor/pieceLearn";
+import { tableHash } from "../../../src/editor/modTerrain/pieceLearn";
 import type { GameFiles } from "../gamefiles";
 import { t } from "../i18n";
 

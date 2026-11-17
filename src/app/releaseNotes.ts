@@ -2,7 +2,7 @@
  * Help ▸ What's New: the release notes in `docs/releases/`, as the editor reads them.
  *
  * The notes are the hand-written top of each GitHub release, kept as Markdown and bundled
- * with the build (`data/releaseNotes.ts`), so the dialog shows the notes of the build that
+ * with the build (`app/bundledReleaseNotes.ts`), so the dialog shows the notes of the build that
  * is running, offline, without asking GitHub anything. This module is the pure part: which
  * notes a build shows, when a new set is worth a notice, and a reader for the small part of
  * Markdown the notes are written in — headings, paragraphs, bullets one level deep, bold,

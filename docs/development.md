@@ -158,11 +158,14 @@ install.html    The page another page of the site frames to install game data
 src/
   atoms/        Jotai state: the open documents and their undo history, UI state, the dialog stack, preferences
   editor/       The edits: invertible change lists per layer, placement checks, settings transactions,
-                save planning, validation, find, statistics, the log
+                save planning, validation, find, statistics
+    modTerrain/ What a mod's tileset adds: borrowed and copied terrain, drawn borders, pieces, the tile sheet
+  app/          The application around the map: the platform and the desktop bridge's types, storage,
+                the log, preferences, commands and their keys, updates, release notes
   data/         Reference tables (tilesets, players, units, upgrades, techs, trigger definitions) and
                 the names read out of the loaded game data
   gamedata/     Where the game files come from: the resolver, the browser's stored copies, extraction,
-                the desktop bridge's types, data sets
+                data sets
   formats/
     chk/        The scenario: container reader, section registry, typed section codecs, new maps
     mpq/        .scm/.scx open and save on top of mopaq
@@ -222,8 +225,8 @@ atoms; change one side and you must change the other.
 
 **Several maps can be open.** The state atoms hold only the map in front; the others are
 parked records that a tab switch swaps in. A new piece of per-document state must be added
-to the park and install lists in `src/atoms/documentAtoms.ts`, or it leaks from one map
-into the next.
+to the table of per-document registers in `src/atoms/documentAtoms.ts`, or it leaks from
+one map into the next.
 
 **Only changed sections are written.** The scenario keeps the set of sections to re-encode
 on save, and everything else goes out byte for byte. Code that changes the scenario must
@@ -512,7 +515,7 @@ Plugins get the same translator on `api.i18n`; see [plugins.md](plugins.md#apii1
 `app://scmjs/`, looks for a StarCraft installation and extracts the game data into the
 app's data folder, opens maps handed over by the file manager, guards the window's close
 while a map has unsaved changes, and holds the updater. `preload.ts` exposes that to the
-page as `window.scmjsDesktop`, typed in `src/gamedata/desktop.ts`.
+page as `window.scmjsDesktop`, typed in `src/app/desktop.ts`.
 
 ```sh
 npm run dev:desktop             # the dev server and the app against it, in one command
@@ -598,7 +601,7 @@ nightlies.
 Windows, the AppImage and the `.deb` install updates themselves. macOS can see an update
 but not install it until the app is code-signed, so it offers the release page. A
 development run and an unpacked Linux folder report that they cannot check.
-`desktop/updater.ts` is the main-process side, `src/editor/updates.ts` the state machine,
+`desktop/updater.ts` is the main-process side, `src/app/updates.ts` the state machine,
 `tests/updates.test.ts` the cases.
 
 ## Releases and hosting

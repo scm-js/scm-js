@@ -7,13 +7,13 @@
  */
 import { beforeEach, describe, expect, it } from "vitest";
 import { createStore } from "jotai";
-import { browserStorage, mergeDefaults } from "../src/atoms/storage";
+import { browserStorage, mergeDefaults } from "../src/app/storage";
 import { DEFAULT_PREFERENCES, exportStoredPreferences, gridLookAtom, importStoredPreferencesAtom, preferencesAtom } from "../src/atoms/preferencesAtoms";
 import { gridSizeAtom, mapModifiedAtom } from "../src/atoms/editorAtoms";
 import { commitEditAtom, pushRecentAtom, recentFilesAtom, scenarioAtom, undoStackAtom } from "../src/atoms/documentAtoms";
 import { createScenario } from "../src/formats/chk/create";
 import { defaultSaveOptions, initialSaveOptions } from "../src/editor/save";
-import { NEVER_RESET, PREFERENCES_PAGE_KEYS, resetPreferences, type Preferences, type PreferencesPage } from "../src/editor/preferences";
+import { NEVER_RESET, PREFERENCES_PAGE_KEYS, resetPreferences, type Preferences, type PreferencesPage } from "../src/app/preferences";
 import { newMapInto } from "../src/services/documentActions";
 
 beforeEach(() => {
@@ -150,7 +150,7 @@ describe("the Preferences dialog's resets", () => {
     for (const page of pages) for (const key of PREFERENCES_PAGE_KEYS[page]) owners.set(key, [...(owners.get(key) ?? []), page]);
     for (const key of NEVER_RESET) owners.set(key, [...(owners.get(key) ?? []), "never reset"]);
     const lost = Object.keys(DEFAULT_PREFERENCES).filter((key) => !owners.has(key));
-    expect(lost, "on no page's list in PREFERENCES_PAGE_KEYS (editor/preferences.ts)").toEqual([]);
+    expect(lost, "on no page's list in PREFERENCES_PAGE_KEYS (app/preferences.ts)").toEqual([]);
     const twice = [...owners].filter(([, where]) => where.length > 1);
     expect(twice, "on more than one list").toEqual([]);
     expect([...owners.keys()].filter((key) => !(key in DEFAULT_PREFERENCES)), "listed but not a preference").toEqual([]);

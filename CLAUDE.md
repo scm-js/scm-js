@@ -26,29 +26,32 @@ reach, and the traps in them are not visible from the code.
 | Working on | Read first |
 | --- | --- |
 | `src/formats/chk/**` — the container, the section registry, `scenario.ts`, `create.ts`, `mpq/scm.ts` | `chk-format.md` |
-| `src/editor/{terrain,isom,blend,heal,pins,fairness,symmetry,terrainCopyTable,terrainCopyLattice}.ts`, `useTerrainTools`, `data/isomTables.ts` | `terrain.md` |
-| `src/editor/{sprites,locations,fog,doodads,stretch,doodadTwin}.ts` and their hooks, `viewport/fog.ts` | `objects.md` |
+| `src/editor/{terrain,isom,blend,heal,pins,fairness,symmetry}.ts`, `src/editor/modTerrain/**` (borrowed and copied terrain, drawn borders, pieces, the tile sheet), `useTerrainTools`, `data/isomTables.ts` | `terrain.md` |
+| `src/editor/{sprites,locations,fog,doodads,stretch,doodadTwin}.ts` and their hooks, `components/viewport/fog.ts` | `objects.md` |
 | `src/formats/{dat,units}/**`, `src/editor/{units,placement}.ts`, `useUnitTools`, `data/units.ts` | `units.md` |
 | `src/editor/{clipboard,history}.ts`, `useClipboardTools` | `clipboard.md` |
 | `src/editor/sync.ts`, `services/sync.ts`, `syncTapAtom`, `api.sync` — shared maps | `sync.md` |
 | `src/editor/{settings,cuwp,tileset}.ts`, `sections/{players,settings,cuwp}.ts`, the Scenario menu's dialogs | `settings.md` |
-| `src/editor/{strings,sounds,stockSounds,switches,textColors}.ts`, `formats/wav.ts`, `audioConvert.ts`, `ui/{ColorCodes,SoundPicker}.tsx` | `strings-sounds.md` |
+| `src/editor/{strings,sounds,stockSounds,switches,textColors}.ts`, `formats/wav.ts`, `services/audioConvert.ts`, `ui/{ColorCodes,SoundPicker}.tsx` | `strings-sounds.md` |
 | `sections/triggers.ts`, `data/triggerDefs.ts`, `formats/triggers/text.ts`, `src/editor/triggers.ts`, trigger claims | `triggers.md` |
 | `src/editor/{save,mapBuild,recovery}.ts`, `services/{mapIo,mapBuild,recovery,previousVersions,diskFiles}.ts`, `desktop/{backup,mapFiles}.ts`, `saveDocument`, `SaveMapDialog`, build steps, recovery copies, `.bak` | `saving.md` |
-| `src/editor/{resize,validate,find,exchange,statistics,startLocations,sections}.ts`; adding an `atomWithStorage` | `editor-operations.md` |
-| `src/editor/{log,diagnostics}.ts`, `DebugConsole`, `useErrorCapture`, adding a log line anywhere | `logging.md` |
+| `src/editor/{resize,validate,find,exchange,statistics,startLocations,sections}.ts`, `src/app/{preferences,storage}.ts`; adding an `atomWithStorage` | `editor-operations.md` |
+| `src/app/{log,diagnostics}.ts`, `DebugConsole`, `useErrorCapture`, adding a log line anywhere | `logging.md` |
 | `src/i18n/**`, `scripts/i18n.mjs`, `ko.json`, any user-visible string through `t()`, `api.i18n` | `i18n.md` |
-| `src/plugins/{host,api,headless}.ts`, `atoms/pluginAtoms.ts` — the contract, transactions, events, UI surfaces, the host without the editor | `plugins-host.md` |
+| `src/plugins/{api,headless}.ts`, `src/plugins/host/**` (`host.ts` re-exports it), `atoms/pluginAtoms.ts` — the contract, transactions, events, UI surfaces, the host without the editor | `plugins-host.md` |
 | `src/plugins/{loader,builtin,defaults,registry,updates}.ts`, `vendor-plugins.mjs`, `*-plugin-types.mjs` | `plugins-loading.md` |
 | A specific plugin repository, or which plugin is the worked example for an API | `plugins-catalogue.md` |
 | `src/gamedata/**`, `scripts/extract-*.mjs`, data sets, `data/gameNames.ts` | `gamedata.md` |
-| `desktop/**`, `electron-builder.yml`, `.github/workflows/*`, `docker/`, in-app updates, cutting a release | `desktop-releases.md` |
+| `desktop/**`, `src/app/{desktop,updates,releaseNotes,bundledReleaseNotes}.ts`, `electron-builder.yml`, `.github/workflows/*`, `docker/`, in-app updates, cutting a release | `desktop-releases.md` |
 | `scripts/build-docs.mjs`, `scripts/lib/docs/**`, `ATTRIBUTION.md`, third-party notices | `docs-site.md` |
 | `src/formats/tileset/**`, `useTileset` | `tileset.md` |
-| `src/components/**`, `MapViewport`, dialogs, hotkeys, drops, the close guard, `services/mapImage.ts` | `viewport-ui.md` |
+| `src/components/**`, `MapViewport` and its hooks, dialogs, hotkeys (`src/app/commands.ts`), `src/app/{platform,view,viewMemory,interfaceSize}.ts`, drops, the close guard, `services/{documentActions,mapImage}.ts` | `viewport-ui.md` |
 | `services/preload.ts`, `usePreload`, the splash, `devReactTracks.ts` | `startup.md` |
 | `e2e/**`, `playwright.config.ts` — the browser tests | `e2e.md` |
-| `cli/**`, `scripts/build-cli.mjs`, `useOpenerHandoff`, `services/editorLink.ts` (a map linked to `scmjs`) — the `scmjs` command; `bot/**`, `scripts/build-bot-types.mjs` — the `@scm-js/bot` types | `cli.md` |
+| `cli/**` — the `scmjs` command | `cli.md`, which routes to the `cli-*.md` note for the area |
+| `useOpenerHandoff`, `services/{editorLink,inbox}.ts` — a map handed or linked to the editor by `scmjs` | `cli-editor.md` |
+| `bot/**`, `scripts/build-bot-types.mjs` — the `@scm-js/bot` types | `cli-bots-plugins.md` |
+| `scripts/build-cli*.mjs`, `scripts/lib/cli-bundle.mjs`, `action/**`, `packaging/**` — how the command is built and shipped | `cli-distribution.md` |
 | `core/**`, `scripts/build-core.mjs`, `src/editor/mapFile.ts` — the `@scm-js/core` package; adding an export, what may not reach the UI | `core.md` |
 | `src/formats/mod/**`, `cli/src/mod/**`, the `mod_*` MCP tools — the mod folder, `scmjs mod` | `mods.md` |
 
@@ -103,6 +106,13 @@ the fastest way to reach a specific UI state — see `docs/development.md` and `
   next on a switch.**
 
 ## Always true
+
+**Layers.** `src/` imports downward only: `i18n`, `lib` → `data`, `formats` → `editor` (what can be
+done to a map) and `app` (the application around it: platform, storage, log, preferences, commands) →
+`gamedata` → `atoms`, `services`, `plugins` → `hooks` → `components`, `pages`. Types are exempt.
+`tests/layering.test.ts` fails on a value import that points upward and lists the few that remain; a
+function that takes a store and is not a hook belongs in `services/`, not in a hook file (the `scmjs`
+bundle reaches the plugin host, and a hook file would bring React into it).
 
 **Dirty sections.** `Scenario.dirty` is a `Set` of section names; on save, `serializeScenario`
 re-encodes only those and emits everything else byte for byte. **Any mutation of scenario state must
@@ -175,7 +185,7 @@ note in the code's. UI copy and docs prose stay plain — no marketing or AI-sou
 
 **UI, briefly.** All state is Jotai; there is no context/provider layering beyond the default store.
 CSS is plain, layered in import order `tokens → base → ui → chrome → panels → viewport → dialogs →
-splash → size` under `src/styles/`, with the design tokens as CSS variables in `tokens.css`. Adding a dialog
+splash → size` under `src/styles/` (`pages.css` is for the pages beside the editor, not the editor), with the design tokens as CSS variables in `tokens.css`. Adding a dialog
 means touching *both* the `DialogId` union (`src/components/dialogs/ids.ts`, re-exported by
 `src/atoms/uiAtoms.ts`) and the `REGISTRY` of `React.lazy` components (`DialogHost.tsx`), and dialog
 modules **must not** be imported statically from anything on the startup path or Vite folds them

@@ -1,6 +1,6 @@
 import type { LoadedDocument } from "../atoms/documentAtoms";
 import { openMapBytes } from "../editor/mapFile";
-import { desktopBridge } from "../gamedata/desktop";
+import { desktopBridge } from "../app/desktop";
 import { diskHandle } from "./diskFiles";
 import { t, msg } from "../i18n";
 

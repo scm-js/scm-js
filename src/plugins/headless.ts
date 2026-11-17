@@ -16,7 +16,7 @@ import { createStore } from "jotai";
 import { archiveExtrasAtom, archiveStoredAtom, builtByAtom, loadDocumentAtom, scenarioAtom } from "../atoms/documentAtoms";
 import { mapModifiedAtom } from "../atoms/editorAtoms";
 import { statusMessageAtom, toastsAtom, type Toast } from "../atoms/uiAtoms";
-import { logEntries, subscribeLog, type LogEntry } from "../editor/log";
+import { logEntries, subscribeLog, type LogEntry } from "../app/log";
 import type { OpenedMap } from "../editor/mapFile";
 import type { EditTransaction, PluginApi, PluginInfo, PluginManifest } from "./api";
 import { pluginIdOf } from "./api";

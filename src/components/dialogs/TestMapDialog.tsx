@@ -5,7 +5,7 @@ import { scenarioAtom } from "../../atoms/documentAtoms";
 import { pluginTestTargetsAtom } from "../../atoms/pluginAtoms";
 import { preferencesAtom } from "../../atoms/preferencesAtoms";
 import { closeDialogAtom, pushToastAtom, statusMessageAtom } from "../../atoms/uiAtoms";
-import { desktopBridge } from "../../gamedata/desktop";
+import { desktopBridge } from "../../app/desktop";
 import { handleStorePersists } from "../../services/handleStore";
 import { canPickTestFolder, runTestMap, testFileName } from "../../services/testMap";
 import { Button, Check, Field, Group } from "../ui";

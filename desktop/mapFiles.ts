@@ -12,7 +12,7 @@
  */
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
-import type { DesktopBackupResult } from "../src/gamedata/desktop";
+import type { DesktopBackupResult } from "../src/app/desktop";
 import { backupMap } from "./backup";
 
 const MAP_FILE = /\.(scm|scx|chk)$/i;

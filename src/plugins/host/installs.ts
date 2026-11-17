@@ -2,7 +2,7 @@
  * Adding, updating and turning on plugins, with what they require.
  */
 import { installedPluginsAtom, pluginManifestCacheAtom, pluginRuntimesAtom, type PluginInstall } from "../../atoms/pluginAtoms";
-import { logWarn } from "../../editor/log";
+import { logWarn } from "../../app/log";
 import { activationOrder, installFor, requiredInstalls, requirementsOf, type ManifestLookup } from "../requires";
 import { specLabel } from "../failures";
 import { canonicalSpec, githubSource, HASH_REF, listTags, newestTag, parseSpec, previewPlugin, resolveCommit, unpin, type LoaderDeps, type PluginPreview, type RepoTag } from "../loader";

@@ -130,7 +130,7 @@ stays English, `label` is the localized composition, shown through `terrainLabel
 A real isometric brush for such ground needs a table nobody ships (type rows, adjacency, and links for groups laid
 out in the mod's own compact blocks, not StarEdit's fourteen shapes) — not attempted.
 
-**The Tile palette's sheet and blocks (`src/editor/tileSheet.ts`, `atoms/tileBlockAtoms.ts`).** Why: a
+**The Tile palette's sheet and blocks (`src/editor/modTerrain/tileSheet.ts`, `atoms/tileBlockAtoms.ts`).** Why: a
 mod's tileset adds thousands of groups (Cosmonarchy's Badlands 1,665 → 4,094, every added one CV5 index 0, no links),
 and laid 16 megatiles wide in group order they form the artist's sheet — ruins, buildings, walls, road diagonals, a
 picture spanning slots *and* groups, neighbours in the sheet designed neighbours on the map. The game's doodads are laid
@@ -170,7 +170,7 @@ data set's profile name (a folder attached with `drawFromModFolder` is named aft
 *Left open:* no auto-scroll while dragging a block past the sheet's edge (the wheel works mid-drag); cutting the
 sheet into named pieces listed like doodads; anything isometric for the added ground; no plugin API for blocks.
 
-**Pieces: the parts of the sheet maps lay whole (`src/editor/pieces.ts`).** *The rule's record.* A tileset is
+**Pieces: the parts of the sheet maps lay whole (`src/editor/modTerrain/pieces.ts`).** *The rule's record.* A tileset is
 a sheet 16 wide; maps are counted a **join** of the sheet at a time (`gatherEvidence`: how often a tile is laid, and how
 often it has its sheet's right / lower neighbour beside / below it). `cutPieces` keeps a join when the two tiles are laid
 together at least half the times the rarer of them is laid (`DEFAULT_CUT.share` 0.5); a piece is a connected run.
@@ -194,7 +194,7 @@ module re-exports it): the map in front's own (one pass over its tiles) merged w
 tileset's table, cut, kept for the last (map, terrain revision, tileset, collection) so the view, Alt+click and the
 plugin API share one cut. The view re-cuts only while it shows, and
 only once the revision has stood still `RECUT_MS` (300): a stroke bumps it every cell. Learning
-(`editor/pieceLearn.ts#learnFromMaps`, pure, files and tables injected; `services/pieceLearning.ts`, imported only when
+(`editor/modTerrain/pieceLearn.ts#learnFromMaps`, pure, files and tables injected; `services/pieceLearning.ts`, imported only when
 the button is pressed, since it brings `plugins/host/ui.ts#pickFolder` and the map reader): every `.scx`/`.scm` of the
 picked folder, opened with `openMapBytes`, counted against `formats/tileset/load.ts#loadTilesetGroups` (the CV5 alone
 from the data set in use, no atlas); a map with a tile `lackedGroups` refuses is skipped as `notOurs`, one that throws as
@@ -212,11 +212,11 @@ Learning writes under the tables of the data set in use (`loadTilesetGroups` for
 keys; *Forget* deletes the same eight; Preferences ▸ Storage ▸ Clear all data (`clearStoredDataAtom`) clears the whole
 store and `learnedPiecesAtom`. `learnedPiecesAtom` holds what was read, by key; the Tile tab reads it on mount so
 Alt+click can use it before the view has been opened, and the plugin host asks for it on first use.
-*Alt+click* (`editor/piecePick.ts#laidPieceAt`, in `useTerrainTools.pickAt`, Tile mode only, before the single-tile
+*Alt+click* (`editor/modTerrain/piecePick.ts#laidPieceAt`, in `useTerrainTools.pickAt`, Tile mode only, before the single-tile
 pick): the cell's tile is a piece's and at least one of its four sheet neighbours from the same piece is laid beside it;
 the precedent is `laidPairAt`. A piece's corner tile laid alone stays a single-tile pick.
 
-**The same tile twice (`src/editor/tileCopies.ts`).** A mod's tileset repeats the game's pictures and its
+**The same tile twice (`src/editor/modTerrain/tileCopies.ts`).** A mod's tileset repeats the game's pictures and its
 own. "The same tile" = the same picture *and* the same flags, the flags being `heal.ts#kindKey` (exported for this; the
 group's flag word and the megatile's sixteen VF4 words). The same picture under other flags is another tile and stays.
 *Grid view*: one entry per exact picture and flags (`uniqueTiles`, the lowest id kept, so the game's tile where a mod
@@ -245,7 +245,7 @@ costs one `mergeEvidence` copy per cut.
 an untyped group), not the same exact tile: on a mod's varied ground the exact-tile region is one tile (measured on
 Scrap Yard). The single-tile fill keeps the exact-tile rule.
 
-**Blocks and pieces on the plugin API**: `plugins-host.md` has the host side. Here: `editor/pieceList.ts`
+**Blocks and pieces on the plugin API**: `plugins-host.md` has the host side. Here: `editor/modTerrain/pieceList.ts`
 (pure) composes what the Pieces view and `api.terrain.pieces()` list — each provided set whose pieces fit the loaded
 table (`blockFits`: every non-hole tile inside the table with a picture), in registration order, then the cut entries
 less any whose member has the same tile set as a provided piece (the named one wins). `declaredTerrains` makes a plugin's
@@ -357,7 +357,7 @@ axes). A water diamond needs four steps to high ground (shore, ground, cliff). A
 fits only a south-west or south-east cliff edge; Remastered's CV5 adds cliff pieces with the VF4 ramp bit that StarEdit's
 placement rule accepts at a ramp's place but that do not walk.
 
-**Borrowed terrain (`editor/borrow.ts`, `editor/borrowLattice.ts`, `services/borrow.ts`).** A mod's tileset
+**Borrowed terrain (`editor/modTerrain/borrow.ts`, `editor/modTerrain/borrowLattice.ts`, `services/borrow.ts`).** A mod's tileset
 holds another game tileset's ground copied in (Cosmonarchy's Badlands: all of Installation's typed groups but two tiles).
 The isometric brush lays it by running **on the source tileset's own tables** and translating each tile it lays to a host
 tile with the same picture. The spike behind it (`~/mods-under-test/_notes/borrowed-isom-findings.md`, code in the
@@ -432,16 +432,16 @@ have a copy that walks the same in the mod's Badlands); the eyedropper does not 
 stroke.
 
 **The scan in a worker (`services/borrowTableClient.ts`, `services/borrowTable.worker.ts`,
-`editor/borrowWorker.ts`).** The tables are worked out in a pool of module workers; the page reads the sources, hashes them, reads kept
+`editor/modTerrain/borrowWorker.ts`).** The tables are worked out in a pool of module workers; the page reads the sources, hashes them, reads kept
 tables from IndexedDB, lists the terrains and stores what lands — short steps — and nothing else.
-*Shape.* `editor/borrowWorker.ts#borrowWorkerHandler` is the whole worker as a function (a Node test drives it); the worker
+*Shape.* `editor/modTerrain/borrowWorker.ts#borrowWorkerHandler` is the whole worker as a function (a Node test drives it); the worker
 module only wires it to `self`. A worker is given the host once (`{kind:"host"}`), then one source at a time (`{kind:
 "table", id}`), so `picturesOf(host)` (WeakMap per Tileset object, rebuilt from the parts once) runs once per worker per
 scan; it answers `progress` (at most every 100 ms) and the `encodeBorrowTable` Int32Array, its buffer transferred. Tilesets
 travel as `TilesetParts`: palette, VR4, VX4 refs, VF4 and the groups packed 18 words a group (index, flag word, sixteen
 megatiles) — not 4,094 `Cv5Group` objects; the arrays are the editor's own, so they are *copied* by the clone, never
 transferred (that would detach the open map's tileset). For the worker to stay small the table half of `borrow.ts` is its
-own module, `editor/borrowTable.ts` (`borrow.ts` re-exports it), and
+own module, `editor/modTerrain/borrowTable.ts` (`borrow.ts` re-exports it), and
 `kindKey` lives in `formats/tileset/kind.ts` (re-exported by `heal.ts`): through `isom.ts` and `data/tilesets.ts`
 the worker would otherwise carry the CHK scenario module and the i18n catalogue. The worker chunk is 5.3 kB.
 *Who uses it.* `services/borrow.ts` takes a `BorrowTableMaker` (`ScanDeps.tables`, default `setBorrowTableMaker`'s, else
@@ -480,7 +480,7 @@ standard, secure scheme through `net.fetch` of the file, as for the transpile an
 not run in Electron. `tests/borrow.test.ts` "the scan's worker": the handler against `borrowTable`, the pool through an
 in-process fake `Worker`, the fallback without `Worker`, a failing worker, a stop.
 
-**A mod's terrain file in the editor (`services/dataSetTerrain.ts`, `editor/terrainFileSection.ts`,
+**A mod's terrain file in the editor (`services/dataSetTerrain.ts`, `editor/modTerrain/terrainFileSection.ts`,
 `services/terrainFileSave.ts`).** While a data set whose kept `terrain.json` (gamedata.md) is in use, its
 sections go into `providedPiecesAtom` / `providedTypesAtom` / `providedBorrowAtom` under the provider
 `@dataset:<id>` (`pieceList.ts#DATA_SET_KEY`; `@` cannot start a plugin id), so every reader that serves the plugins'
@@ -510,7 +510,7 @@ Jungle…); `readTerrainFile` 4–7 ms in Node. Added as a data set from a copy 
 pieces under the set's name with nothing learned, the Isometric tab lists Installation and Jungle World with no scan
 (the same as the scan; a file without `standIns` lists Ashworld too, see mods.md), a Roof stroke lays 208 tiles.
 
-**Drawn borders (`editor/borderLattice.ts`, `borderTable.ts`, `borderPass.ts`, `borderRecord.ts`, `services/borders.ts`).** Where borrowed ground meets the host's own, a mod's maps lay purpose-drawn pieces. The spike
+**Drawn borders (`editor/modTerrain/borderLattice.ts`, `borderTable.ts`, `borderPass.ts`, `borderRecord.ts`, `services/borders.ts`).** Where borrowed ground meets the host's own, a mod's maps lay purpose-drawn pieces. The spike
 (`~/mods-under-test/_notes/borders-findings.md`, "Round two"; code in the `scm-js-borders-spike` worktree's
 `spikes/borders/`) found the method; this is it, built.
 *Shape of a border cell.* The patch's diamonds are laid with the game's brush on a **stand-in** pair of the game's own
@@ -625,7 +625,7 @@ as `debugConsoleAtom`). The panel shows it unchecked and disabled where no borde
 all data also empties `learnedBordersAtom` and the data set's rows of `providedBordersAtom` live, beside their store. The status line's count is walkability only: a drawn tile counts when its walkable minitiles
 (none / some / all) differ from both the patch's tile and the ground's.
 
-**Copied terrain (`editor/terrainCopyTable.ts`, `editor/terrainCopyLattice.ts`, `services/terrainCopies.ts`, `atoms/copyAtoms.ts`,
+**Copied terrain (`editor/modTerrain/terrainCopyTable.ts`, `editor/modTerrain/terrainCopyLattice.ts`, `services/terrainCopies.ts`, `atoms/copyAtoms.ts`,
 `plugins/copies.ts`, `components/panels/CopiedTerrains.tsx`).** A mod's tileset holds one of its own typed
 terrains S again under other flags (`terrainCopies`: the untyped pair S′, "Mud (mid ground)") and, often, S's edge set E
 again beside it: untyped tiles keeping each E piece's picture where the piece shows S, the other side repainted as the

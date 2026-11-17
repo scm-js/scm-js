@@ -3,18 +3,18 @@
  *
  * Only settings something actually reads live here; `PreferencesDialog` shows nothing
  * else. The storage itself (and its memory fallback for when `localStorage` is
- * unavailable) is `atoms/storage.ts`, which also knows how to sweep the lot —
+ * unavailable) is `app/storage.ts`, which also knows how to sweep the lot —
  * `clearStoredDataAtom` at the bottom is Preferences ▸ Clear all data, and
  * `clearStoredKeysAtom` beside it is one row of that list.
  */
 import { atom, type Getter, type Setter } from "jotai";
 import { atomWithStorage, RESET } from "jotai/utils";
-import { DEFAULT_PREFERENCES, type Preferences } from "../editor/preferences";
+import { DEFAULT_PREFERENCES, type Preferences } from "../app/preferences";
 import { resolveLocale } from "../i18n";
 import { installedPluginsAtom, pluginCodeAtom, pluginManifestCacheAtom, pluginUpdateCheckAtom, registryCacheAtom, userRegistriesAtom } from "./pluginAtoms";
-import { browserStorage, mergedStorage, removeStoredKeys, STORAGE_PREFIX, storedKeys, storedValue } from "./storage";
+import { browserStorage, mergedStorage, removeStoredKeys, STORAGE_PREFIX, storedKeys, storedValue } from "../app/storage";
 import { doodadPlacementAtom, doodadThumbSizeAtom, gridSizeAtom, locationSnapAtom, placementOptionsAtom, symmetryOptionsAtom, viewMemoryAtom } from "./editorAtoms";
-import { carryOverViewPreferences, sanitizeViewMemory, VIEW_MEMORY_KEY } from "../editor/viewMemory";
+import { carryOverViewPreferences, sanitizeViewMemory, VIEW_MEMORY_KEY } from "../app/viewMemory";
 import { dockWidthsAtom, panelsAtom, whatsNewSeenAtom } from "./uiAtoms";
 import { consoleHeightAtom, debugConsoleAtom } from "./logAtoms";
 import { clearHandles } from "../services/handleStore";
@@ -24,14 +24,14 @@ import { copyHostsAtom, providedCopiesAtom } from "./copyAtoms";
 import { borrowHostsAtom, providedBorrowAtom } from "./borrowAtoms";
 import { drawnBordersAtom, learnedBordersAtom, providedBordersAtom } from "./borderAtoms";
 import { learnedPiecesAtom, providedPiecesAtom, providedTypesAtom } from "./pieceAtoms";
-import { isDataSetKey } from "../editor/pieceList";
+import { isDataSetKey } from "../editor/modTerrain/pieceList";
 import { recentFilesAtom } from "./documentAtoms";
 import { gameDataProfileAtom, keptRacesAtom, refreshDataSetRacesAtom } from "./gameDataAtoms";
-import { resolveHotkeys } from "../editor/commands";
-import { desktopBridge } from "../gamedata/desktop";
+import { resolveHotkeys } from "../app/commands";
+import { desktopBridge } from "../app/desktop";
 
-export type { Preferences } from "../editor/preferences";
-export { ANIMATION_SPEEDS, animationSpeedIndex, DEFAULT_PREFERENCES } from "../editor/preferences";
+export type { Preferences } from "../app/preferences";
+export { ANIMATION_SPEEDS, animationSpeedIndex, DEFAULT_PREFERENCES } from "../app/preferences";
 
 /**
  * One preference straight from storage, for code that runs before (or outside) the
@@ -64,7 +64,7 @@ export const DEFAULT_GRID_LOOK: GridLook = { color: "#000000", opacity: 28, styl
 const mergedPreferences = mergedStorage(DEFAULT_PREFERENCES);
 /**
  * The preferences' storage. Reading first moves the three View menu ticks an older version
- * kept here into the View menu's own key (`editor/viewMemory.ts`), so they are never read
+ * kept here into the View menu's own key (`app/viewMemory.ts`), so they are never read
  * back into the preferences and written out again.
  */
 const preferencesStorage: typeof mergedPreferences = {

@@ -22,7 +22,7 @@
  * Nothing here is required. With no WebGL, or a context the browser took back, `create`
  * and `draw` answer null and the viewport draws the layer as it stands: still water.
  */
-import type { RemasteredEffects } from "../../editor/preferences";
+import type { RemasteredEffects } from "../../app/preferences";
 import { decodeDxt1, type HdEffects, type HdEffectTextures, type PictureSequence } from "../../formats/tileset/hd";
 
 /** What `draw` needs to know about where the layer sits on the map. */

@@ -8,7 +8,7 @@ import { pickedDataSet } from "../src/gamedata/modInput";
 import { activeProfileId, DEFAULT_PROFILE, isProfileId, normalizeProfile, PROFILE_KEY, profileIdFrom } from "../src/gamedata/profiles";
 import { locateGameData, type LocateDeps } from "../src/gamedata/source";
 import { clearStoredCopy, keepInMemory, listStoredCopies, profileDir, profileOf, readStored, storedCopy, type StoredCopy } from "../src/gamedata/store";
-import { browserStorage } from "../src/atoms/storage";
+import { browserStorage } from "../src/app/storage";
 
 const DATA = join(__dirname, "..", "fixtures", "data");
 const PUBLIC = join(__dirname, "..", "public");

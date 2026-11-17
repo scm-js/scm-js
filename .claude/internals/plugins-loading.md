@@ -215,7 +215,7 @@ shipped.
 `manual` / `auto`, a Select in Preferences ▸ Plugins): `usePlugins` runs
 `runUpdatePass` once per session, `UPDATE_CHECK_DELAY_MS` after the activation pass,
 when `shouldCheckPlugins` says one is due (`pluginUpdateCheckAtom`, `scmjs.plugin-updates`,
-`RECHECK_MS` from `editor/updates.ts`). It reads the **registries**, not the rows'
+`RECHECK_MS` from `app/updates.ts`). It reads the **registries**, not the rows'
 addresses: `checkForUpdate` is two or three unauthenticated GitHub requests against a
 limit of sixty an hour per address, and six plugins on every launch plus a dev reload
 would spend it and then fail the button itself, while the registry index already carries

@@ -1,6 +1,6 @@
 /**
  * The editor's one corner of the browser's storage (the desktop build's too — it is a
- * Chromium window, and `editor/platform.ts` has the word the chrome should use for it):
+ * Chromium window, and `app/platform.ts` has the word the chrome should use for it):
  * every key it writes starts with `scmjs.`
  * (`scmjs.prefs`, `scmjs.grid`, `scmjs.plugins`, `scmjs.plugin-manifests`, and
  * `scmjs.plugin.<id>.…` for whatever a plugin keeps through `api.storage`).

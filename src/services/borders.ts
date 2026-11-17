@@ -1,5 +1,5 @@
 /**
- * Drawn borders, the editor's side (editor/borderTable.ts, borderPass.ts): the tables a borrowed stroke draws borders
+ * Drawn borders, the editor's side (editor/modTerrain/borderTable.ts, borderPass.ts): the tables a borrowed stroke draws borders
  * from, where they come from, and keeping what was learned.
  *
  * A pair's table comes from, first to last: a plugin (`api.terrain.provideBorderTable`), the data set's terrain file
@@ -14,14 +14,14 @@
 import { borrowHostsAtom } from "../atoms/borrowAtoms";
 import { drawnBordersAtom, learnedBordersAtom, providedBordersAtom } from "../atoms/borderAtoms";
 import { TILESETS } from "../data/tilesets";
-import { tilesetHash } from "../editor/borrow";
-import { badlandsStandIns, type StandIns } from "../editor/borderLattice";
-import { warmBorderPass } from "../editor/borderPass";
+import { tilesetHash } from "../editor/modTerrain/borrow";
+import { badlandsStandIns, type StandIns } from "../editor/modTerrain/borderLattice";
+import { warmBorderPass } from "../editor/modTerrain/borderPass";
 import {
   borderClasses, cutBorderTables, decodeBorderEvidence, emptyBorderEvidence, encodeBorderEvidence, pairKey, pairOf,
   type BorderClasses, type BorderEvidence, type BorderPairTable, type BorderSetup,
-} from "../editor/borderTable";
-import type { BorrowContext } from "../editor/borrowLattice";
+} from "../editor/modTerrain/borderTable";
+import type { BorrowContext } from "../editor/modTerrain/borrowLattice";
 import type { Tileset } from "../formats/tileset/decode";
 import { borrowContext, gameOwnTileset, hostKeyOf, readKnownBorrowed } from "./borrow";
 import { browserPieceStore, type PieceStore } from "./pieceStore";

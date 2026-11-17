@@ -623,7 +623,7 @@ release's `terrain.json` as it was, else the one of the folder unpacked over (`m
 cleared, `earlierTerrain`). `mod pack` does not put it in the MPQ (it is not a game file).
 **Borders:** a section may carry `borders: [{ source, terrain, ground, shapes:
 { shape: [tile, …] } }]` — a drawn border between a borrowed terrain (`terrain`, the source's CV5 index) and the host's
-ground (`ground`), shapes named as `editor/borderLattice.ts` reads them (terrain.md "Drawn borders"). Read with the same
+ground (`ground`), shapes named as `editor/modTerrain/borderLattice.ts` reads them (terrain.md "Drawn borders"). Read with the same
 never-throw rules (limits `borders` 2048 rows, 1024 shapes a row, 80 characters a shape, 64 tiles a shape; new drop reason
 `terrain` for an index outside 0–255; a second row for one pair is `duplicate`); `sectionAgainstTable` flags a row with a
 tile the table has no picture for; written one row per line after `borrow`, only when there are any (a file with none

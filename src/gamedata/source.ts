@@ -25,8 +25,8 @@
  * `locateGameData` is the chain over injected probes so the order can be tested without a
  * browser.
  */
-import { desktopBridge, type DesktopBridge } from "./desktop";
-import { hostTerms } from "../editor/platform";
+import { desktopBridge, type DesktopBridge } from "../app/desktop";
+import { hostTerms } from "../app/platform";
 import { activeProfileId, DEFAULT_PROFILE, isDefaultProfile, withRaces, type GameDataProfile } from "./profiles";
 import { installDataSetRaces } from "../data/races";
 import { profileOf, readStored, storedCopy, type StoredCopy } from "./store";

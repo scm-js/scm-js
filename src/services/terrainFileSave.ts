@@ -1,6 +1,6 @@
 /**
  * The Pieces view's **Save as a terrain file…**: `terrain.json` for the tileset in front, from what the editor knows
- * (`editor/terrainFileSection.ts`). A file chosen that already exists and reads keeps its other tilesets' sections and
+ * (`editor/modTerrain/terrainFileSection.ts`). A file chosen that already exists and reads keeps its other tilesets' sections and
  * unknown keys; with none (a download), the data set in use's own kept file is the base, else nothing. Loaded only when
  * the button is pressed.
  */
@@ -10,15 +10,15 @@ import { gameDataSourceAtom } from "../atoms/gameDataAtoms";
 import { providedTypesAtom } from "../atoms/pieceAtoms";
 import { pushToastAtom, statusMessageAtom } from "../atoms/uiAtoms";
 import { TILESETS } from "../data/tilesets";
-import { tableHash } from "../editor/pieceLearn";
-import { terrainFileSection } from "../editor/terrainFileSection";
+import { tableHash } from "../editor/modTerrain/pieceLearn";
+import { terrainFileSection } from "../editor/modTerrain/terrainFileSection";
 import { tilesetIndex } from "../formats/chk/scenario";
 import { emptyTerrainFile, readTerrainFile, TERRAIN_FILE, withTerrainSection, writeTerrainFile, type TerrainFile } from "../formats/mod/terrain";
 import { peekTileset } from "../formats/tileset/load";
 import { t, translate } from "../i18n";
 import { borrowContext, drawsFromGame, hostKeyOf } from "./borrow";
 import { borderTables, prepareBorders } from "./borders";
-import type { BorderPairTable } from "../editor/borderTable";
+import type { BorderPairTable } from "../editor/modTerrain/borderTable";
 import { keptDataSetTerrainText } from "./dataSetTerrain";
 import { saveComposed } from "./mapIo";
 import { sectionsFromStore } from "./pieces";

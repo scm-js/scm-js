@@ -1,11 +1,11 @@
 /**
- * Copied terrain (editor/terrainCopyTable.ts, terrainCopyLattice.ts): what is known per tileset's files, a scan under
+ * Copied terrain (editor/modTerrain/terrainCopyTable.ts, terrainCopyLattice.ts): what is known per tileset's files, a scan under
  * way, and the blocks plugins and data sets hand in. Global, not per document — a table belongs to a tileset's files,
  * whatever map is in front — so nothing here goes into `parkRegisters`.
  */
 import { atom } from "jotai";
-import type { CopyBlock } from "../editor/terrainCopyTable";
-import type { RankedGround } from "../editor/terrainCopyLattice";
+import type { CopyBlock } from "../editor/modTerrain/terrainCopyTable";
+import type { RankedGround } from "../editor/modTerrain/terrainCopyLattice";
 
 /** A block as the editor keeps it: the table's block, the grounds it was counted against and the one it is drawn for. */
 export interface CopyBlockInfo extends CopyBlock {

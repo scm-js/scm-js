@@ -13,7 +13,7 @@ import { saveDocument, type SaveWriter } from "../src/services/documentActions";
 import { Contributions, createPluginApi } from "../src/plugins/host";
 import type { BuildStepInput } from "../src/plugins/api";
 import { openMapFile } from "../src/services/mapIo";
-import { logEntries, resetLogForTests } from "../src/editor/log";
+import { logEntries, resetLogForTests } from "../src/app/log";
 import { resetCountsForTests, waitingCounts } from "../src/services/usage";
 import { testMapBytes } from "../src/services/testMap";
 

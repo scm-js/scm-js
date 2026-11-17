@@ -22,12 +22,12 @@ import { gameDataRevisionAtom, gameDataSourceAtom } from "../atoms/gameDataAtoms
 import { providedPiecesAtom, providedTypesAtom } from "../atoms/pieceAtoms";
 import { pushToastAtom } from "../atoms/uiAtoms";
 import { TILESETS, type TilesetId } from "../data/tilesets";
-import { tableHash } from "../editor/pieceLearn";
-import { DATA_SET_KEY, isDataSetKey } from "../editor/pieceList";
+import { tableHash } from "../editor/modTerrain/pieceLearn";
+import { DATA_SET_KEY, isDataSetKey } from "../editor/modTerrain/pieceList";
 import { tilesetIndex } from "../formats/chk/scenario";
 import { readTerrainFile, type TerrainFile } from "../formats/mod/terrain";
 import { loadTilesetGroups, peekTileset, TILESET_FILENAMES } from "../formats/tileset/load";
-import { logInfo } from "../editor/log";
+import { logInfo } from "../app/log";
 import { t, translate } from "../i18n";
 import { drawsFromGame, refreshProvided } from "./borrow";
 import { browserPieceStore, type PieceStore } from "./pieceStore";

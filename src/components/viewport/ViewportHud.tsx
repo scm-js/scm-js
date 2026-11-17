@@ -19,7 +19,7 @@ import {
 import { mapPickAtom, mapToolAtom, pluginMapButtonsAtom } from "../../atoms/pluginAtoms";
 import { unitLabel } from "../../data/units";
 import { clipSummary } from "../../editor/clipboard";
-import { logError } from "../../editor/log";
+import { logError } from "../../app/log";
 import type { UnitAssets } from "../../formats/units/load";
 import type { useDoodadTools } from "../../hooks/useDoodadTools";
 import { doodadLabel } from "../../formats/tileset/doodads";

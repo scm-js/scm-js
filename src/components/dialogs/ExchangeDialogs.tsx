@@ -10,7 +10,7 @@ import {
   applyStringImport, encodeTrg, formatStringTable, parseStringTable, readTriggerFile, triggersToText, type TriggerFileFormat,
 } from "../../editor/exchange";
 import { applyBriefing, applyTriggers, newStringDrafts, resolveDraftStrings, type StringDrafts } from "../../editor/triggers";
-import { hostTerms } from "../../editor/platform";
+import { hostTerms } from "../../app/platform";
 import type { TriggerRecord } from "../../formats/chk/sections/triggers";
 import { saveBytes } from "../../services/mapIo";
 import { Button, Check, Field, Group, Select } from "../ui";

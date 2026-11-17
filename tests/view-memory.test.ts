@@ -1,5 +1,5 @@
 /**
- * The View menu's remembered ticks (`editor/viewMemory.ts`, `viewMemoryAtom` behind
+ * The View menu's remembered ticks (`app/viewMemory.ts`, `viewMemoryAtom` behind
  * `viewFlagsAtom`): the grid, the location names, the two animations and Remastered
  * Graphics survive a reload, everything else is the session's; a choice an older version
  * kept in the preferences is carried over once; the animations start off under "reduce
@@ -10,7 +10,7 @@
  */
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createStore } from "jotai";
-import { carryOverViewPreferences, sanitizeViewMemory, VIEW_MEMORY_KEY } from "../src/editor/viewMemory";
+import { carryOverViewPreferences, sanitizeViewMemory, VIEW_MEMORY_KEY } from "../src/app/viewMemory";
 
 const mem = new Map<string, string>();
 const storage: Storage = {
@@ -36,7 +36,7 @@ async function reload() {
   const editor = await import("../src/atoms/editorAtoms");
   const prefs = await import("../src/atoms/preferencesAtoms");
   const mode = await import("../src/atoms/viewModeAtoms");
-  const kept = await import("../src/atoms/storage");
+  const kept = await import("../src/app/storage");
   return { store: createStore(), ...editor, ...prefs, toggleFlagAtom: mode.toggleFlagAtom, storedKeys: kept.storedKeys };
 }
 

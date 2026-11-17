@@ -5,8 +5,8 @@
  * same way), and a rectangle of the sheet is a block of tiles that were meant to sit together on
  * the map. Pure: no tileset, no DOM; the caller says which slots are void.
  */
-import type { Scenario } from "../formats/chk/scenario";
-import type { TileChange } from "./terrain";
+import type { Scenario } from "../../formats/chk/scenario";
+import type { TileChange } from "../terrain";
 
 /** Slots in a CV5 group: the sheet's width. */
 export const SHEET_COLUMNS = 16;

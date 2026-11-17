@@ -17,7 +17,7 @@
  * before the first plugin runs.
  */
 import { useEffect } from "react";
-import { log, logError } from "../editor/log";
+import { log, logError } from "../app/log";
 import { messageKind } from "../services/usage";
 
 // React's development double-mount runs the effect twice; the line belongs to the session.

@@ -13,7 +13,7 @@
  * swapped, still count toward the piece; by whole shape the same ramp at three lengths is
  * three shapes and none of them is laid often. Measurements in `.claude/internals/terrain.md`.
  */
-import { DOODAD_GROUP_INDEX, tileGroupOf, type Tileset } from "../formats/tileset/decode";
+import { DOODAD_GROUP_INDEX, tileGroupOf, type Tileset } from "../../formats/tileset/decode";
 import { HOLE, type TileBlock } from "./tileSheet";
 
 /** What maps have shown about one tileset's sheet. Tiles are `group << 4 | slot`. */

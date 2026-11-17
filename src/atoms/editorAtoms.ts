@@ -10,10 +10,10 @@ import { DEFAULT_DOODAD_PLACEMENT, type DoodadPlacementOptions } from "../editor
 import type { FogMode } from "../editor/fog";
 import type { SpriteKind } from "../editor/sprites";
 import { symmetryAvailable, type SymmetryMode } from "../editor/symmetry";
-import type { EditorLayer, TerrainMode, ViewFlags } from "../editor/view";
-import { carryOverViewPreferences, REMEMBERED_FLAGS, sanitizeViewMemory, viewMemoryDefaults, type ViewMemory } from "../editor/viewMemory";
+import type { EditorLayer, TerrainMode, ViewFlags } from "../app/view";
+import { carryOverViewPreferences, REMEMBERED_FLAGS, sanitizeViewMemory, viewMemoryDefaults, type ViewMemory } from "../app/viewMemory";
 import { atomWithStorage, createJSONStorage } from "jotai/utils";
-import { browserStorage, mergedStorage } from "./storage";
+import { browserStorage, mergedStorage } from "../app/storage";
 import { DEFAULT_CLIP_PARTS, type Clip, type ClipParts, type PasteMode } from "../editor/clipboard";
 import type { Rect } from "../editor/terrain";
 
@@ -24,7 +24,7 @@ export const screenAtom = atom<EditorScreen>("splash");
 
 /* ── Layers (classic SCMDraft layer combo) ──────────────── */
 
-export type { EditorLayer, TerrainMode, ViewFlags } from "../editor/view";
+export type { EditorLayer, TerrainMode, ViewFlags } from "../app/view";
 
 export const activeLayerAtom = atom<EditorLayer>("terrain");
 
@@ -211,7 +211,7 @@ export const reducedMotionAtom = atom(systemReducedMotion());
 const viewMemoryJson = createJSONStorage<ViewMemory>(browserStorage);
 /**
  * The View menu ticks the person changed, of the five that are remembered
- * (`editor/viewMemory.ts`), kept under `scmjs.viewMenu`. A choice made under Preferences ▸
+ * (`app/viewMemory.ts`), kept under `scmjs.viewMenu`. A choice made under Preferences ▸
  * View before those ticks left it is carried over the first time this is read.
  */
 export const viewMemoryAtom = atomWithStorage<ViewMemory>("scmjs.viewMenu", {}, {

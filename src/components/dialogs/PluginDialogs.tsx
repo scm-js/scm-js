@@ -18,8 +18,8 @@ import { answerFor, checkAllForUpdates, compareVersions, updateAllPlugins } from
 import { specLabel } from "../../plugins/failures";
 
 import { transferOf } from "../../plugins/images";
-import { hostTerms } from "../../editor/platform";
-import { takesText, type TextTarget } from "../../editor/commands";
+import { hostTerms } from "../../app/platform";
+import { takesText, type TextTarget } from "../../app/commands";
 import { PluginIconView } from "../ui/PluginIconView";
 import { PLUGIN_API_VERSION, type DialogHandle, type DialogSpec, type PluginIcon, type PluginInfo } from "../../plugins/api";
 import { msg, pluginText, t, translate } from "../../i18n";

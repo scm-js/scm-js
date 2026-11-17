@@ -1,5 +1,5 @@
 /**
- * Borrowed terrain, the editor's side (editor/borrow.ts, editor/borrowLattice.ts): where the
+ * Borrowed terrain, the editor's side (editor/modTerrain/borrow.ts, editor/modTerrain/borrowLattice.ts): where the
  * source tilesets come from, the scan that works the tables out, and keeping them.
  *
  * The source is the game's own tileset *beneath* the data set in use — the base a mod's folder is
@@ -18,15 +18,15 @@
 import { borrowHostsAtom, borrowScanAtom, providedBorrowAtom, type BorrowHostInfo, type BorrowSourceInfo } from "../atoms/borrowAtoms";
 import { gameDataSourceAtom } from "../atoms/gameDataAtoms";
 import { TILESETS } from "../data/tilesets";
-import { borrowableTerrains, borrowTable, decodeBorrowTable, encodeBorrowTable, providedTable, tableCounts, tilesetHash, type BorrowTable } from "../editor/borrow";
-import type { BorrowContext } from "../editor/borrowLattice";
+import { borrowableTerrains, borrowTable, decodeBorrowTable, encodeBorrowTable, providedTable, tableCounts, tilesetHash, type BorrowTable } from "../editor/modTerrain/borrow";
+import type { BorrowContext } from "../editor/modTerrain/borrowLattice";
 import { loadTileset, type Tileset } from "../formats/tileset/decode";
 import { peekTileset, TILESET_FILENAMES } from "../formats/tileset/load";
 import { DEFAULT_PROFILE, isDefaultProfile, REMASTERED_PROFILE } from "../gamedata/profiles";
 import { readFrom, type AssetSource } from "../gamedata/source";
 import { readStored } from "../gamedata/store";
 import { BORROW_STORE } from "./handleStore";
-import { logInfo, type LogData } from "../editor/log";
+import { logInfo, type LogData } from "../app/log";
 import { browserStore, type PieceStore } from "./pieceStore";
 import type { Store } from "../atoms/store";
 

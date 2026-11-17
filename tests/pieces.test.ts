@@ -1,7 +1,7 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { cutPieces, decodeEvidence, emptyEvidence, encodeEvidence, gatherEvidence, mergeEvidence, pieceBlock, pieceIndex } from "../src/editor/pieces";
+import { cutPieces, decodeEvidence, emptyEvidence, encodeEvidence, gatherEvidence, mergeEvidence, pieceBlock, pieceIndex } from "../src/editor/modTerrain/pieces";
 import { openMapBytes } from "../src/editor/mapFile";
 import { decodeCv5, type Cv5Group } from "../src/formats/tileset/decode";
 import { mapFiles } from "./support/maps";

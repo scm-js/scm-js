@@ -4,7 +4,7 @@
  * copy says it — `hostTerms()` is the one place that decides.
  */
 import { afterEach, describe, expect, it } from "vitest";
-import { hostTerms, isDesktop } from "../src/editor/platform";
+import { hostTerms, isDesktop } from "../src/app/platform";
 
 const global = globalThis as { scmjsDesktop?: unknown };
 

@@ -5,9 +5,9 @@
  * and counted. Pure apart from what it is handed: the files, the tables and the pause between
  * maps, so a test can run it over files on disk.
  */
-import { lackedGroups } from "../data/remasteredTiles";
-import type { Cv5Group } from "../formats/tileset/decode";
-import { openMapBytes } from "./mapFile";
+import { lackedGroups } from "../../data/remasteredTiles";
+import type { Cv5Group } from "../../formats/tileset/decode";
+import { openMapBytes } from "../mapFile";
 import { cutPieces, emptyEvidence, gatherEvidence, type PieceEvidence } from "./pieces";
 import { emptyBorderEvidence, gatherBorderEvidence, type BorderClasses, type BorderEvidence } from "./borderTable";
 import type { StandIns } from "./borderLattice";

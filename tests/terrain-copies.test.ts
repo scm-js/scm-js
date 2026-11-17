@@ -1,6 +1,6 @@
 /**
- * Copied terrain: the rule and the gate (`editor/terrainCopyTable.ts`), the brush, its member and the re-lay
- * (`editor/terrainCopyLattice.ts`), on a tileset made by code (`support/copyWorld.ts`) so CI runs it all; then the
+ * Copied terrain: the rule and the gate (`editor/modTerrain/terrainCopyTable.ts`), the brush, its member and the re-lay
+ * (`editor/modTerrain/terrainCopyLattice.ts`), on a tileset made by code (`support/copyWorld.ts`) so CI runs it all; then the
  * game's tilesets where they are here, and a mod's where `SCMJS_COSMONARCHY` names one.
  */
 import { existsSync, readdirSync, readFileSync } from "node:fs";
@@ -8,11 +8,11 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { terrainCopies } from "../src/formats/tileset/palette";
 import { loadTileset, megatileForTile, type Tileset } from "../src/formats/tileset/decode";
-import { decodeCopyBlocks, encodeCopyBlocks, findCopyBlocks, pictureKeyOf, type CopyBlock } from "../src/editor/terrainCopyTable";
+import { decodeCopyBlocks, encodeCopyBlocks, findCopyBlocks, pictureKeyOf, type CopyBlock } from "../src/editor/modTerrain/terrainCopyTable";
 import {
   chooseOuter, copyTable, CopyStroke, COPY_MEMBER, decodeCopyMember, encodeCopyMember, groundsOf, groundUnder, paintCount, rankGrounds, relayCopies, resizeCopyMember,
   type CopyGround, type CopyTable,
-} from "../src/editor/terrainCopyLattice";
+} from "../src/editor/modTerrain/terrainCopyLattice";
 import { diamondsOfRect, diamondValue, isomHeight, isomWidth, paintIsomDiamonds, type Diamond } from "../src/editor/isom";
 import { isomValueOf } from "../src/data/isomTables";
 import { applyChanges } from "../src/editor/terrain";

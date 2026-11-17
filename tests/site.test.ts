@@ -5,7 +5,7 @@
  * somebody's own copy of the editor.
  */
 import { afterEach, describe, expect, it } from "vitest";
-import { isOnSite } from "../src/editor/platform";
+import { isOnSite } from "../src/app/platform";
 import { onSite, SITE_ORIGIN, SITE_PAGES, type PageAddress } from "../src/site";
 
 const at = (href: string): PageAddress => {

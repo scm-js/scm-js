@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createStore } from "jotai";
 import { installedPluginsAtom, pluginManifestCacheAtom, pluginRuntimesAtom, pluginUpdateCheckAtom, pluginUpdatesAtom, type PluginRuntime } from "../src/atoms/pluginAtoms";
-import { RECHECK_MS } from "../src/editor/updates";
+import { RECHECK_MS } from "../src/app/updates";
 import { defaultPlugins, pluginKey, updateAddress } from "../src/plugins/defaults";
 import type { UpdateCheck } from "../src/plugins/host";
 import { unpin, type PluginPreview } from "../src/plugins/loader";

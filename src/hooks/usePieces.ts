@@ -3,7 +3,7 @@ import { useAtomValue, useStore } from "jotai";
 import { learnedPiecesAtom } from "../atoms/pieceAtoms";
 import { scenarioAtom } from "../atoms/documentAtoms";
 import type { Tileset } from "../formats/tileset/decode";
-import type { PieceEvidence } from "../editor/pieces";
+import type { PieceEvidence } from "../editor/modTerrain/pieces";
 import { learnedKeyOf, loadLearnedPieces } from "../services/pieces";
 
 export { entriesOf, piecesFromStore, piecesInFront, sectionsFromStore, type PiecesInFront } from "../services/pieces";

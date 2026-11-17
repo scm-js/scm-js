@@ -1,5 +1,5 @@
 /**
- * A made-up world for drawn borders (`editor/borderTable.ts`), built from the editor's own code alone so CI runs the
+ * A made-up world for drawn borders (`editor/modTerrain/borderTable.ts`), built from the editor's own code alone so CI runs the
  * whole path with no game data:
  *
  * - a **source** numbered as the game's Badlands (ERA 0): Dirt (its base ground), Grass and the Grass/Dirt edge set,
@@ -13,7 +13,7 @@
 import { loadTileset, type Tileset } from "../../src/formats/tileset/decode";
 import { createScenario } from "../../src/formats/chk/create";
 import type { Scenario } from "../../src/formats/chk/scenario";
-import { badlandsStandIns, flatTerrainsOf, patternKey, standInShapes, type StandIns } from "../../src/editor/borderLattice";
+import { badlandsStandIns, flatTerrainsOf, patternKey, standInShapes, type StandIns } from "../../src/editor/modTerrain/borderLattice";
 import type { Diamond } from "../../src/editor/isom";
 
 export const DIRT = 2, GRASS = 6, EDGE_SET = 20;

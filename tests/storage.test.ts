@@ -7,7 +7,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it, beforeEach } from "vitest";
 import { createStore } from "jotai";
-import { browserStorage, clearStoredData, removeStoredKeys, STORAGE_PREFIX, storagePersists, storedKeys, storedKeysUnder, storedSize, storedValue } from "../src/atoms/storage";
+import { browserStorage, clearStoredData, removeStoredKeys, STORAGE_PREFIX, storagePersists, storedKeys, storedKeysUnder, storedSize, storedValue } from "../src/app/storage";
 import { clearStoredDataAtom, clearStoredKeysAtom, DEFAULT_PREFERENCES, ownedStoredKeys, preferencesAtom } from "../src/atoms/preferencesAtoms";
 import { gridSizeAtom } from "../src/atoms/editorAtoms";
 import { installedPluginsAtom } from "../src/atoms/pluginAtoms";

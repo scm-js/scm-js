@@ -21,7 +21,7 @@ behind Ctrl+F. `Preferences.multipleMaps` (on by default, Preferences ▸ Genera
 `openTarget` in `services/documentActions.ts` only — see `viewport-ui.md` for the several-maps design. `Preferences.interfaceSize` and `keepNotices` (Preferences ▸ View, both on `PREFERENCES_PAGE_KEYS.view`) are in `viewport-ui.md`: the size is applied by `useApplyPreferences` and, before the first paint, by an inline script in `index.html`, which is why it cannot wait for the store; `mergedStorage` gives both their defaults (100, off) for a stored object without them. Persisted preferences and the grid look live in `atoms/preferencesAtoms.ts`
 (`atomWithStorage`, `getOnInit` because startup hooks read through
 `store.get`) and are applied once by `hooks/useApplyPreferences.ts` before the deep links;
-`atoms/storage.ts` is the one `localStorage` accessor everything persisted shares (a memory
+`app/storage.ts` is the one `localStorage` accessor everything persisted shares (a memory
 `Storage` when the browser has none — `storagePersists()` says which), knows that every key
 the editor writes starts with `scmjs.` (`storedKeys` / `storedSize` / `clearStoredData`),
 carries `mergedStorage(defaults)` — the `atomWithStorage` storage that merges a stored
@@ -96,7 +96,7 @@ that page; there is no separate dialog). `Preferences.undoLevels` is read by
 `sessionViewFlagsAtom` (plain, every tick) under `viewMemoryDefaults(reducedMotionAtom)` under
 `viewMemoryAtom` (`atomWithStorage("scmjs.viewMenu")`, only the ticks the person changed of
 `REMEMBERED_FLAGS` = grid, locationNames, animateWater, animateUnits, hdGraphics —
-`editor/viewMemory.ts`). Its write takes a `SetStateAction` like the old primitive and records
+`app/viewMemory.ts`). Its write takes a `SetStateAction` like the old primitive and records
 in `viewMemoryAtom` every remembered tick whose value changed, so the menu, `toggleFlagAtom`
 (hotkeys, toolbar), the panels, `api.view.setFlags` and `turnOnRemasteredGraphics` all persist
 without knowing. The overlays and the show/hide ticks stay per session (a reload must never

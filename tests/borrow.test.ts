@@ -7,10 +7,10 @@ import { baseTerrain, flatTerrain } from "../src/formats/tileset/terrain";
 import {
   borrowableTerrains, borrowBase, borrowedParts, borrowedTerrainId, borrowTable, copiesOf, decodeBorrowTable, encodeBorrowTable, isBorrowedTerrain, picturesOf,
   providedTable, tableCounts, tilesetHash, type BorrowTable,
-} from "../src/editor/borrow";
+} from "../src/editor/modTerrain/borrow";
 import {
   baseLattice, BorrowStroke, borrowMember, decodeBorrowLattice, encodeBorrowLattice, latticeOf, resizeBorrowMember,
-} from "../src/editor/borrowLattice";
+} from "../src/editor/modTerrain/borrowLattice";
 import { diamondValue, isomHeight, isomWidth, paintIsomDiamonds, setDiamondValue, type Diamond } from "../src/editor/isom";
 import { applyChanges } from "../src/editor/terrain";
 import { isPairTerrain } from "../src/formats/tileset/palette";
@@ -560,7 +560,7 @@ if (modTileset("badlands") && haveInstall) {
 
 /* ── The scan's worker (no game data: the made pair) ── */
 
-import { borrowWorkerHandler, tilesetFromParts, tilesetParts, type BorrowWorkerRequest, type BorrowWorkerResponse } from "../src/editor/borrowWorker";
+import { borrowWorkerHandler, tilesetFromParts, tilesetParts, type BorrowWorkerRequest, type BorrowWorkerResponse } from "../src/editor/modTerrain/borrowWorker";
 import { isStopped, refreshProvided, scanBorrowed, slicedTableMaker } from "../src/services/borrow";
 import { borrowWorkerStats, poolSize, resetBorrowWorkerClient, workerTableMaker } from "../src/services/borrowTableClient";
 import { memoryPieceStore } from "../src/services/pieceStore";

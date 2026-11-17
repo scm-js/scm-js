@@ -7,12 +7,12 @@ import {
 import type { EditTool } from "../editor/history";
 import { archiveExtrasAtom, commitTerrainAtom, pinCellsAtom, pinnedTilesAtom, scenarioAtom, terrainRevisionAtom, tilesetFileNameAtom, type HistoryEntry } from "../atoms/documentAtoms";
 import { borrowHostsAtom } from "../atoms/borrowAtoms";
-import { borrowedParts, isBorrowedTerrain, isTakeBack, TAKE_BACK, type BorrowedTerrain } from "../editor/borrow";
-import { BorrowStroke, borrowMember, withMember, type BorrowStrokeResult } from "../editor/borrowLattice";
+import { borrowedParts, isBorrowedTerrain, isTakeBack, TAKE_BACK, type BorrowedTerrain } from "../editor/modTerrain/borrow";
+import { BorrowStroke, borrowMember, withMember, type BorrowStrokeResult } from "../editor/modTerrain/borrowLattice";
 import { borrowContext, hostKeyOf, peekBorrowContext } from "../services/borrow";
-import { bordersMember } from "../editor/borderRecord";
+import { bordersMember } from "../editor/modTerrain/borderRecord";
 import { copyHostsAtom, type CopyTerrainInfo } from "../atoms/copyAtoms";
-import { copiedParts, CopyStroke, COPY_MEMBER, decodeCopyMember, groundUnder, isCopiedTerrain, patchAt, relayCopies, type CopyStrokeResult } from "../editor/terrainCopyLattice";
+import { copiedParts, CopyStroke, COPY_MEMBER, decodeCopyMember, groundUnder, isCopiedTerrain, patchAt, relayCopies, type CopyStrokeResult } from "../editor/modTerrain/terrainCopyLattice";
 import { chooseBlock, copyHostKey, patchTable, tableFor } from "../services/terrainCopies";
 import { peekBorderSetup } from "../services/borders";
 import { countPins, handLaidCells, withoutPinned } from "../editor/pins";
@@ -23,12 +23,12 @@ import {
 } from "../editor/terrain";
 import { healMiss, healTiles, shownSeams, type HealMiss } from "../editor/heal";
 import { tileBlockAtom } from "../atoms/tileBlockAtoms";
-import { blockCells, layPattern, PatternStroke, type TileBlock } from "../editor/tileSheet";
-import { pieceBlock } from "../editor/pieces";
-import { laidPieceAt } from "../editor/piecePick";
+import { blockCells, layPattern, PatternStroke, type TileBlock } from "../editor/modTerrain/tileSheet";
+import { pieceBlock } from "../editor/modTerrain/pieces";
+import { laidPieceAt } from "../editor/modTerrain/piecePick";
 import { piecesFromStore } from "../services/pieces";
 import { providedTypesAtom } from "../atoms/pieceAtoms";
-import { declaredTerrains } from "../editor/pieceList";
+import { declaredTerrains } from "../editor/modTerrain/pieceList";
 import { mirrorIndices, mirrorPixel, mirrorRect } from "../editor/symmetry";
 import {
   applyIsomChanges, brushDiamonds, diamondAt, hasIsom, isDiamond, isomTables, isomTerrains, isomWidth, paintIsom, type Diamond,
@@ -151,9 +151,9 @@ export function useTerrainTools() {
   const setBlendAnchor = useSetAtom(blendAnchorAtom);
   const stroke = useRef<Stroke | null>(null);
   const isomStroke = useRef<Stroke | null>(null);
-  /** A stroke of a borrowed terrain: the source's lattice behind it (editor/borrowLattice.ts). */
+  /** A stroke of a borrowed terrain: the source's lattice behind it (editor/modTerrain/borrowLattice.ts). */
   const borrowStroke = useRef<BorrowStroke | null>(null);
-  /** A stroke of a copied terrain (editor/terrainCopyLattice.ts), and the ground its block was chosen for. */
+  /** A stroke of a copied terrain (editor/modTerrain/terrainCopyLattice.ts), and the ground its block was chosen for. */
   const copyStroke = useRef<{ stroke: CopyStroke; ground: string } | null>(null);
   /** The last diamond an isometric stroke painted; the brush fires once per diamond. */
   const lastDiamond = useRef<Diamond | null>(null);
@@ -203,7 +203,7 @@ export function useTerrainTools() {
     if (!loaded || !scenarioForTables) return [];
     return copyHosts.get(copyHostKey(tilesetIndex(scenarioForTables), loaded.tileset))?.terrains ?? [];
   }, [loaded, scenarioForTables, copyHosts]);
-  /** Terrains of other tilesets this one can lay (editor/borrow.ts), once a scan or a plugin found them. */
+  /** Terrains of other tilesets this one can lay (editor/modTerrain/borrow.ts), once a scan or a plugin found them. */
   const borrowed = useMemo((): BorrowedTerrain[] => {
     if (!loaded || !scenarioForTables || borrowHosts.size === 0) return [];
     return borrowHosts.get(hostKeyOf(tilesetIndex(scenarioForTables), loaded.tileset))?.sources.flatMap((s) => s.terrains) ?? [];
@@ -458,7 +458,7 @@ export function useTerrainTools() {
     }
     /**
      * Copied terrain the stroke came near is laid again from what of its footprint the lattice still holds as its
-     * ground (editor/terrainCopyLattice.ts#relayCopies): in the same step, the member's change carried with it.
+     * ground (editor/modTerrain/terrainCopyLattice.ts#relayCopies): in the same step, the member's change carried with it.
      */
     const relay = (): { dropped: number; hard: number; member: { name: string; before: Uint8Array | null; after: Uint8Array | null } | null } => {
       const member = store.get(archiveExtrasAtom).get(COPY_MEMBER) ?? null;

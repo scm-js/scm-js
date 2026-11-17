@@ -18,15 +18,15 @@
  *
  * Pure and canvas-free; `tests/terrain-copies.test.ts`.
  */
-import { createScenario } from "../formats/chk/create";
-import type { Scenario } from "../formats/chk/scenario";
-import { megatileForTile, tileGroupOf, type Tileset } from "../formats/tileset/decode";
-import { flatTerrain } from "../formats/tileset/terrain";
-import { isLoosePair } from "../formats/tileset/palette";
-import { isomValueOf } from "../data/isomTables";
-import { SEAM_SHOWS, seamStep, type Side } from "./blend";
-import { diamondsOfRect, diamondValue, isomHeight, isomWidth, paintIsomDiamonds, tilesFromIsom, type Diamond } from "./isom";
-import type { TileChange } from "./terrain";
+import { createScenario } from "../../formats/chk/create";
+import type { Scenario } from "../../formats/chk/scenario";
+import { megatileForTile, tileGroupOf, type Tileset } from "../../formats/tileset/decode";
+import { flatTerrain } from "../../formats/tileset/terrain";
+import { isLoosePair } from "../../formats/tileset/palette";
+import { isomValueOf } from "../../data/isomTables";
+import { SEAM_SHOWS, seamStep, type Side } from "../blend";
+import { diamondsOfRect, diamondValue, isomHeight, isomWidth, paintIsomDiamonds, tilesFromIsom, type Diamond } from "../isom";
+import type { TileChange } from "../terrain";
 import { BLOCK_REACH, flatTerrainsOf, type CopyBlock } from "./terrainCopyTable";
 
 type Isomed = Scenario & { isom: Uint16Array };

@@ -12,7 +12,7 @@ import type {
 import type { Rect } from "../editor/terrain";
 import type { Registry } from "../plugins/registry";
 import type { PluginPreview } from "../plugins/loader";
-import { browserStorage } from "./storage";
+import { browserStorage } from "../app/storage";
 import { activeDocumentIdAtom } from "./documentAtoms";
 
 /* ── Installed (persisted) ──────────────────────────────── */

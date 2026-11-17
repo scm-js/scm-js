@@ -2,7 +2,7 @@
  * Blocks and pieces on the plugin API (`api.terrain.sheet` / `blockFrom` / `pieces` / `pieceAt` /
  * `blockOf` / `cutPieces` / `providePieces` / `provideTypes`, the `block` of `active()`, and the
  * checks `tx.placeBlock` / `tx.fillPattern` run). Over the same functions the Tile palette uses:
- * `editor/tileSheet.ts`, `pieces.ts`, `tileCopies.ts`, `pieceList.ts`, `services/pieces.ts`.
+ * `editor/modTerrain/tileSheet.ts`, `pieces.ts`, `tileCopies.ts`, `pieceList.ts`, `services/pieces.ts`.
  */
 import type { createStore } from "jotai";
 import { mapTilesetAtom } from "../atoms/editorAtoms";
@@ -12,11 +12,11 @@ import { addedGroupsFrom } from "../data/remasteredTiles";
 import { TILESET_BY_ID, TILESETS } from "../data/tilesets";
 import { megatileForTile } from "../formats/tileset/decode";
 import { peekTileset } from "../formats/tileset/load";
-import { cutPieces, emptyEvidence, gatherEvidence, pieceBlock, type Piece } from "../editor/pieces";
-import { collapsePieces } from "../editor/tileCopies";
-import { laidPieceAt } from "../editor/piecePick";
-import type { ListedPiece } from "../editor/pieceList";
-import { blockFromRect, HOLE, sheetRows, SHEET_COLUMNS, type TileBlock } from "../editor/tileSheet";
+import { cutPieces, emptyEvidence, gatherEvidence, pieceBlock, type Piece } from "../editor/modTerrain/pieces";
+import { collapsePieces } from "../editor/modTerrain/tileCopies";
+import { laidPieceAt } from "../editor/modTerrain/piecePick";
+import type { ListedPiece } from "../editor/modTerrain/pieceList";
+import { blockFromRect, HOLE, sheetRows, SHEET_COLUMNS, type TileBlock } from "../editor/modTerrain/tileSheet";
 import { piecesFromStore, sectionsFromStore } from "../services/pieces";
 import { beforeDataSet } from "../services/dataSetTerrain";
 import type { Disposable, PieceSetSpec, TerrainApi, TerrainPiece, TerrainTypeSpec } from "./api";

@@ -5,13 +5,13 @@
  * `turnOnRemasteredGraphics`, `installRemasteredInto`); here there are no atoms, only the
  * storage they are read from, so the two stored choices are written as the atoms would
  * write them: View ▸ Remastered Graphics on (the View menu's remembered ticks,
- * `editor/viewMemory.ts`), and — where the copy went in beside the person's 1.16 one —
+ * `app/viewMemory.ts`), and — where the copy went in beside the person's 1.16 one —
  * that data set chosen.
  *
  * Only ever at that moment, like the dialog's: the options are the user's from then on.
  */
 import { PROFILE_KEY } from "./profiles";
-import { carryOverViewPreferences, VIEW_MEMORY_KEY } from "../editor/viewMemory";
+import { carryOverViewPreferences, VIEW_MEMORY_KEY } from "../app/viewMemory";
 
 export function startWithRemastered(storage: Pick<Storage, "getItem" | "setItem">, profile?: string): void {
   try {

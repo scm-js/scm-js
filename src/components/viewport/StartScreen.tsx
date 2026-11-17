@@ -5,7 +5,7 @@ import { recentFilesAtom, scenarioAtom, type RecentEntry } from "../../atoms/doc
 import { pluginFileTypesAtom } from "../../atoms/pluginAtoms";
 import { preloadStepAtom } from "../../atoms/preloadAtoms";
 import { openDialogAtom } from "../../atoms/uiAtoms";
-import { isOnSite } from "../../editor/platform";
+import { isOnSite } from "../../app/platform";
 import { useMapFileActions } from "../../hooks/useMapFileActions";
 import { clearRecents } from "../../services/documentActions";
 import { locale, t } from "../../i18n";

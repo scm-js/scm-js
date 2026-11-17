@@ -1,5 +1,5 @@
 /**
- * A made-up tileset for copied terrain (`editor/terrainCopyTable.ts`, `terrainCopyLattice.ts`), built from the editor's
+ * A made-up tileset for copied terrain (`editor/modTerrain/terrainCopyTable.ts`, `terrainCopyLattice.ts`), built from the editor's
  * own code alone so CI runs the rule, the gate and the brush with no game data. Numbered as the game's Badlands (ERA 0):
  *
  * - typed flat terrains: Dirt (the base), High Dirt (mid ground), Grass;

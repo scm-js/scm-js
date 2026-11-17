@@ -12,7 +12,7 @@ import { applyChanges, Stroke } from "../src/editor/terrain";
 import {
   blockCells, blockFromRect, blockRect, firstTile, HOLE, layBlock, layPattern, PatternStroke, patternOrigin, patternTileAt, runBounds,
   SHEET_BRIDGE, sheetRows, type TileBlock,
-} from "../src/editor/tileSheet";
+} from "../src/editor/modTerrain/tileSheet";
 import { activeTileAtom } from "../src/atoms/editorAtoms";
 import { commitTerrainAtom, loadDocumentAtom, redoAtom, scenarioAtom, undoAtom } from "../src/atoms/documentAtoms";
 import { tileBlockAtom } from "../src/atoms/tileBlockAtoms";

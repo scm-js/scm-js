@@ -13,9 +13,9 @@
  * Telling a transition piece's shape from its picture alone was tried and failed its control (terrain.md "Drawn
  * borders"), so a table needs maps that lay one, or an author who provides one.
  */
-import { megatileForTile, megatileHeight, tileGroupOf, type Tileset } from "../formats/tileset/decode";
-import { isFlatPair } from "../formats/tileset/palette";
-import { ISOM_TABLES } from "../data/isomTables";
+import { megatileForTile, megatileHeight, tileGroupOf, type Tileset } from "../../formats/tileset/decode";
+import { isFlatPair } from "../../formats/tileset/palette";
+import { ISOM_TABLES } from "../../data/isomTables";
 import type { BorrowTable } from "./borrowTable";
 import { BORDER_MODES, C_O, C_T, C_X, C_Y, diamondsOf, standInFor, standInShapes, type BorderMode, type StandIn, type StandIns } from "./borderLattice";
 

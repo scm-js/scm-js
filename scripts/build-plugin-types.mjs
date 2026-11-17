@@ -2,7 +2,7 @@
  * `npm run build:plugin-types`: the plugin API's type declarations, as **one file**.
  *
  * `src/plugins/api.ts` is the contract, but it reaches sixty-odd of the editor's own
- * modules for the types it names (`editor/view.ts`, `data/triggerDefs.ts`, the CHK
+ * modules for the types it names (`app/view.ts`, `data/triggerDefs.ts`, the CHK
  * sections…). `tsc` emits one `.d.ts` per module, which is a 61-file, 480 KB directory —
  * and every plugin repository used to carry a copy of it, refreshed by hand. Nine copies
  * of a generated tree is nine chances to be out of date with nothing to show it.

@@ -16,7 +16,7 @@
  * Game data is not brought over (it is large, and the editor offers to install it again),
  * and neither is anything kept outside `localStorage`.
  */
-import { browserStorage, STORAGE_PREFIX, storagePersists } from "./atoms/storage";
+import { browserStorage, STORAGE_PREFIX, storagePersists } from "./app/storage";
 import { SHARED_NIGHTLY, SITE_ORIGIN } from "./site";
 
 /** The site, the only origin that asks. */
@@ -26,7 +26,7 @@ export { SITE_ORIGIN };
  * `nightly.editor.scmjs.dev` to `scmjs.dev/nightly/`, and asks its own old address: that
  * Pages site keeps a static `moved.html` at its root (the nightly-site job writes it — the
  * old nightly address is not behind the front-door worker). What it brings is written under
- * the nightly's own keys (`atoms/storage.ts`), and so is the note that it has asked.
+ * the nightly's own keys (`app/storage.ts`), and so is the note that it has asked.
  */
 export const OLD_ORIGIN = SHARED_NIGHTLY ? "https://nightly.editor.scmjs.dev" : "https://editor.scmjs.dev";
 const HANDOFF_URL = `${OLD_ORIGIN}/moved.html`;

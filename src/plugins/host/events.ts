@@ -8,7 +8,7 @@ import { tileBlockAtom } from "../../atoms/tileBlockAtoms";
 import { learnedPiecesAtom, providedPiecesAtom } from "../../atoms/pieceAtoms";
 import { gridLookAtom, preferencesAtom, localeAtom } from "../../atoms/preferencesAtoms";
 import { mapPickAtom, mapToolAtom, pluginCommandsAtom, pluginServicesAtom, pluginOverlaysAtom } from "../../atoms/pluginAtoms";
-import { logError } from "../../editor/log";
+import { logError } from "../../app/log";
 import { gameDataRevisionAtom, gameDataSourceAtom } from "../../atoms/gameDataAtoms";
 import type { DocumentEvent, PluginEvent, CommitEvent, PluginInfo, EventsApi } from "../api";
 import type { Store, Contributions } from "./shared";

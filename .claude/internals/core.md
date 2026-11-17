@@ -127,24 +127,24 @@ For races a mod adds (`mods.md`): `normalizeRaces`, `sameRaces`, `raceLabel`, `r
 `ModManifest.races?`. The editor's `data/races.ts` (installed table, translated text) is not exported.
 
 For the Tile palette's sheet and pieces (the command line and plugins mine maps without the editor):
-`editor/tileSheet.ts` (sheet rows, blocks, laying, the pattern stroke), `editor/pieces.ts` (evidence, the cut, its stored
-form), `editor/pieceLearn.ts` (`learnFromMaps` over `openMapBytes`, `tableHash`), `editor/tileCopies.ts` (the same tile
-twice, `collapsePieces`), `editor/piecePick.ts`, `editor/pieceList.ts` (provided sets beside the cut, declared ground),
+`editor/modTerrain/tileSheet.ts` (sheet rows, blocks, laying, the pattern stroke), `editor/modTerrain/pieces.ts` (evidence, the cut, its stored
+form), `editor/modTerrain/pieceLearn.ts` (`learnFromMaps` over `openMapBytes`, `tableHash`), `editor/modTerrain/tileCopies.ts` (the same tile
+twice, `collapsePieces`), `editor/modTerrain/piecePick.ts`, `editor/modTerrain/pieceList.ts` (provided sets beside the cut, declared ground),
 `heal.ts#kindKey`, `remasteredTiles.ts#addedGroupsFrom`. All pure; the walk stays clean (`pieceList.ts` reaches
 `palette.ts` and `data/tilesets.ts`, already behind the entry). The services (`pieceStore.ts`, `pieces.ts`, the learning)
 are the editor's and not exported.
 
-Borrowed terrain: `editor/borrow.ts` (the copy test, the table, what is offered) and
-`editor/borrowLattice.ts` (the member, `BorrowStroke`) are exported. The lattice module names its member from
+Borrowed terrain: `editor/modTerrain/borrow.ts` (the copy test, the table, what is offered) and
+`editor/modTerrain/borrowLattice.ts` (the member, `BorrowStroke`) are exported. The lattice module names its member from
 `data/tilesets.ts#TILESETS` ids, not `formats/tileset/load.ts#TILESET_FILENAMES` (the same strings): `load.ts` reaches
 `src/gamedata/`, which the layering test refuses. `services/borrow.ts` (scan, IndexedDB, the game's own files under the data
 set) is the editor's and not exported.
 
-The scan in a worker: `editor/borrowTable.ts` (the table half of `borrow.ts`, re-exported by it) and
+The scan in a worker: `editor/modTerrain/borrowTable.ts` (the table half of `borrow.ts`, re-exported by it) and
 `formats/tileset/kind.ts` (`kindKey`, re-exported by `heal.ts`) are behind the entry through `borrow.ts`.
-`editor/borrowWorker.ts` (the worker's handler) is not exported, and nothing behind the entry reaches the worker client:
+`editor/modTerrain/borrowWorker.ts` (the worker's handler) is not exported, and nothing behind the entry reaches the worker client:
 `main.tsx` hands it to `services/borrow.ts`, which is the editor's.
-Drawn borders: `editor/borderLattice.ts`, `borderTable.ts`, `borderPass.ts`, `borderRecord.ts` are exported
+Drawn borders: `editor/modTerrain/borderLattice.ts`, `borderTable.ts`, `borderPass.ts`, `borderRecord.ts` are exported
 (the stand-in reading, evidence and tables, the pass, the record member) and `TAKE_BACK` / `takeBackId` / `isTakeBack` from
 `borrow.ts`; `TerrainFileBorder` beside the other terrain-file types. All pure (no `services/`, no atoms); the editor's
 side — IndexedDB, precedence, the switch — is `services/borders.ts` and stays out.

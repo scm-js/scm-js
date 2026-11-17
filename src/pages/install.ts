@@ -22,7 +22,7 @@
  * somebody who gave the site their Remastered folder to play with expects the editor to
  * draw with it too.
  */
-import { browserStorage } from "../atoms/storage";
+import { browserStorage } from "../app/storage";
 import { copyKind } from "../gamedata/copies";
 import { installFromPickedRemastered } from "../gamedata/install";
 import { REMASTERED_PROFILE } from "../gamedata/profiles";

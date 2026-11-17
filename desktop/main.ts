@@ -6,7 +6,7 @@
  * about unsaved changes (`src/hooks/useCloseGuard.ts`). The extracted files go to the user data
  * directory and are served under the same base as the bundle, so the renderer's ordinary
  * "bundled" probe finds them (`src/gamedata/source.ts`); the IPC here is what the preload
- * exposes as `window.scmjsDesktop` (`src/gamedata/desktop.ts`).
+ * exposes as `window.scmjsDesktop` (`src/app/desktop.ts`).
  *
  * `npm run build:desktop` bundles this with Vite (`desktop/vite.config.ts`) and packages it
  * with electron-builder (`electron-builder.yml`).
@@ -20,7 +20,7 @@ import { pathToFileURL } from "node:url";
 import { lacksPatch, openArchives, readerFor } from "../src/gamedata/archives";
 import { describeExtraction, extractGameData, type GameDataExtraction } from "../src/gamedata/extract";
 import { BUILD_INFO, extractRemastered } from "../src/gamedata/remastered";
-import type { DesktopGameInfo, DesktopLocateResult, DesktopTestResult } from "../src/gamedata/desktop";
+import type { DesktopGameInfo, DesktopLocateResult, DesktopTestResult } from "../src/app/desktop";
 import { updaterIpc } from "./updater";
 import { MapFiles } from "./mapFiles";
 

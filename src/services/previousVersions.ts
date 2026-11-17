@@ -8,7 +8,7 @@
  *
  * Only ever the bytes that were on disk: nothing here reads the open map.
  */
-import { desktopBridge } from "../gamedata/desktop";
+import { desktopBridge } from "../app/desktop";
 import { isDiskHandle } from "./diskFiles";
 import { handleStorePersists, idbRequest, PREVIOUS_STORE } from "./handleStore";
 

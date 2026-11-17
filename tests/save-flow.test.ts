@@ -8,7 +8,7 @@ import { closeDialogAtom, dialogStackAtom, statusMessageAtom, toastsAtom } from 
 import { DEFAULT_SAVE_OPTIONS, type SaveOptions } from "../src/editor/save";
 import { askDialog, saveDocument, type SaveWriter } from "../src/services/documentActions";
 import type { MapFileHandle, SaveOutcome } from "../src/services/mapIo";
-import { logEntries, resetLogForTests } from "../src/editor/log";
+import { logEntries, resetLogForTests } from "../src/app/log";
 
 const handleNamed = (name: string): MapFileHandle => ({
   name,

@@ -1,5 +1,5 @@
 /** The shortcut table F1 shows: every command with the keys it answers to now, then the keys that are not commands. */
-import { COMMAND_GROUPS, COMMANDS, FIXED_KEYS, formatCombo, type ResolvedHotkeys } from "../../editor/commands";
+import { COMMAND_GROUPS, COMMANDS, FIXED_KEYS, formatCombo, type ResolvedHotkeys } from "../../app/commands";
 
 export interface HotkeyRow {
   /** A `msg()` key; `translate` where shown. */

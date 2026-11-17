@@ -26,7 +26,7 @@ import { gameDataSourceAtom } from "../atoms/gameDataAtoms";
 import { dismissToastAtom, openDialogAtom, pushToastAtom } from "../atoms/uiAtoms";
 import { missingTerrain } from "../data/remasteredTiles";
 import { TILESETS } from "../data/tilesets";
-import type { ToastAction } from "../editor/view";
+import type { ToastAction } from "../app/view";
 import { tilesetIndex, type Scenario } from "../formats/chk/scenario";
 import { CV5_ENTRY_BYTES } from "../formats/tileset/decode";
 import { peekTileset, TILESET_FILENAMES, type TilesetFileName } from "../formats/tileset/load";

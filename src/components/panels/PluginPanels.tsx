@@ -14,7 +14,7 @@ import { useAtomValue } from "jotai";
 import { Maximize2, Minimize2, PanelBottomClose, PanelRightClose, X } from "lucide-react";
 import { pluginPanelsAtom, type PluginPanelEntry } from "../../atoms/pluginAtoms";
 import { PluginIconView } from "../ui/PluginIconView";
-import { zoomOf } from "../../editor/interfaceSize";
+import { zoomOf } from "../../app/interfaceSize";
 import { Button, Tip } from "../ui";
 import { t } from "../../i18n";
 

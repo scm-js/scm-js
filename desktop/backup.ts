@@ -1,5 +1,5 @@
 import { copyFileSync, statSync } from "node:fs";
-import type { DesktopBackupResult } from "../src/gamedata/desktop";
+import type { DesktopBackupResult } from "../src/app/desktop";
 
 /**
  * Save's `.bak`: copy a map file to `<path>.bak` before the page writes over it. Only a map

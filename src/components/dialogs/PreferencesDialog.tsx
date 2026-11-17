@@ -46,8 +46,8 @@ import { closeDialogAtom, openDialogAtom } from "../../atoms/uiAtoms";
 import { pluginHotkeysAtom, pluginPreferencesPagesAtom, pluginRuntimesAtom, pluginTestTargetsAtom, type PluginPreferencesPageEntry, type PluginTestTargetEntry } from "../../atoms/pluginAtoms";
 import type { PreferencesPageSpec } from "../../plugins/api";
 import { resolveTarget, STARCRAFT } from "../../services/testTargets";
-import { COMMAND_GROUPS, COMMANDS, FIXED_KEYS, comboOf, commandById, conflictsOf, formatCombo, isModifierKey, reservedReason, resolveHotkeys, takesText, withBinding, type TextTarget } from "../../editor/commands";
-import { logError } from "../../editor/log";
+import { COMMAND_GROUPS, COMMANDS, FIXED_KEYS, comboOf, commandById, conflictsOf, formatCombo, isModifierKey, reservedReason, resolveHotkeys, takesText, withBinding, type TextTarget } from "../../app/commands";
+import { logError } from "../../app/log";
 import { doodadPlacementAtom, gridSizeAtom, locationSnapAtom } from "../../atoms/editorAtoms";
 import { gameDataSourceAtom } from "../../atoms/gameDataAtoms";
 import {
@@ -67,10 +67,10 @@ import {
   type GridStyle,
   type Preferences,
 } from "../../atoms/preferencesAtoms";
-import { STORAGE_PREFIX, storagePersists, storedKeys, storedSize, storedValue } from "../../atoms/storage";
+import { STORAGE_PREFIX, storagePersists, storedKeys, storedSize, storedValue } from "../../app/storage";
 import { MAP_SIZES, TILESETS, type TilesetId } from "../../data/tilesets";
 import { DEFAULT_DOODAD_PLACEMENT } from "../../editor/doodads";
-import { hostTerms, isDesktop } from "../../editor/platform";
+import { hostTerms, isDesktop } from "../../app/platform";
 import {
   changedPreferences,
   DEFAULT_REMASTERED_EFFECTS,
@@ -83,7 +83,7 @@ import {
   type PluginUpdateMode,
   type PreferencesPage,
   type StatusBarCells,
-} from "../../editor/preferences";
+} from "../../app/preferences";
 import { MAP_VERSIONS } from "../../formats/chk/scenario";
 import { saveBytes } from "../../services/mapIo";
 import { listCopies, recoveryPersists, SESSION, type RecoveryEntry } from "../../services/recovery";
@@ -160,7 +160,7 @@ const DEFAULT_WORKING: Working = {
   snapDoodads: DEFAULT_DOODAD_PLACEMENT.snapToGrid,
 };
 
-/** The parts of the working copy outside `Preferences` a page's reset puts back, beside its `PREFERENCES_PAGE_KEYS` (`editor/preferences.ts`). */
+/** The parts of the working copy outside `Preferences` a page's reset puts back, beside its `PREFERENCES_PAGE_KEYS` (`app/preferences.ts`). */
 const PAGE_PARTS: Partial<Record<PreferencesPage, Exclude<keyof Working, "prefs">[]>> = {
   editing: ["gridSize", "look", "snapLocations", "snapDoodads"],
 };

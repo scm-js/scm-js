@@ -6,7 +6,7 @@
 import { describe, expect, it } from "vitest";
 import { PROFILE_KEY, REMASTERED_PROFILE } from "../src/gamedata/profiles";
 import { startWithRemastered } from "../src/gamedata/remasteredDefault";
-import { VIEW_MEMORY_KEY } from "../src/editor/viewMemory";
+import { VIEW_MEMORY_KEY } from "../src/app/viewMemory";
 
 const store = (init: Record<string, string> = {}) => {
   const map = new Map(Object.entries(init));

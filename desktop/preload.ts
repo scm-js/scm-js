@@ -1,10 +1,10 @@
 /**
  * The bridge between the web bundle and the main process: `window.scmjsDesktop`, typed in
- * `src/gamedata/desktop.ts` (keep the two in step). Runs sandboxed; nothing here touches
+ * `src/app/desktop.ts` (keep the two in step). Runs sandboxed; nothing here touches
  * Node beyond `process.argv` and `process.platform`.
  */
 import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from "electron";
-import type { DesktopBridge, UpdateProgress } from "../src/gamedata/desktop";
+import type { DesktopBridge, UpdateProgress } from "../src/app/desktop";
 
 const arg = (name: string) => process.argv.find((a) => a.startsWith(`--${name}=`))?.slice(name.length + 3) ?? "";
 const version = arg("scmjs-version");

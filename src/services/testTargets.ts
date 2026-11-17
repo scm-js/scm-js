@@ -14,7 +14,7 @@ import { scenarioAtom } from "../atoms/documentAtoms";
 import { preferencesAtom } from "../atoms/preferencesAtoms";
 import { pluginTestTargetsAtom, type PluginTestTargetEntry } from "../atoms/pluginAtoms";
 import { openDialogAtom, pushToastAtom, statusMessageAtom } from "../atoms/uiAtoms";
-import { logWarn } from "../editor/log";
+import { logWarn } from "../app/log";
 import type { TestMapFile } from "../plugins/api";
 import { pluginText, t } from "../i18n";
 import { count } from "./usage";

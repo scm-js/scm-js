@@ -4,7 +4,7 @@
  */
 import { t } from "../../i18n";
 import { installedPluginsAtom, pluginCodeAtom, pluginManifestCacheAtom, pluginRuntimesAtom, type CachedManifest, type PluginInstall, type PluginRuntime } from "../../atoms/pluginAtoms";
-import { logError, logInfo, logWarn } from "../../editor/log";
+import { logError, logInfo, logWarn } from "../../app/log";
 import { installFor, requirementsOf } from "../requires";
 import { specLabel } from "../failures";
 import { pluginIdOf, PLUGIN_API_VERSION, type Deactivate, type PluginIcon, type PluginInfo, type PluginManifest, type PluginModule } from "../api";

@@ -1,9 +1,11 @@
 /**
  * Edit ▸ Preferences (Ctrl+,): one dialog with a page list down the left. Every page edits a
  * working copy — the preferences object plus the grid's spacing, look and snaps, which have
- * atoms of their own — written on OK/Apply, so Cancel leaves everything as it was. Reset to
- * defaults puts the whole copy back. `payload.page` opens a page directly (View ▸ Grid
- * Settings… is Editing; a plugin's page is `plugin:<id>`).
+ * atoms of their own — written on OK/Apply, so Cancel leaves everything as it was. Reset
+ * this page puts back what the page in front shows (`PREFERENCES_PAGE_KEYS`); Reset
+ * everything asks first, then does every page, and the plugins' pages mounted so far.
+ * Neither touches `counting` (`NEVER_RESET`). `payload.page` opens a page directly (View ▸
+ * Grid Settings… is Editing; a plugin's page is `plugin:<id>`).
  *
  * The Storage page's clears are the one thing that acts at once, since they reset the live
  * atoms; the working copy re-reads whatever a clear touched so OK afterwards does not write
@@ -17,6 +19,7 @@ import {
   Database,
   Download,
   Eye,
+  FolderOpen,
   Globe,
   HardDrive,
   History,
@@ -59,7 +62,17 @@ import { STORAGE_PREFIX, storagePersists, storedKeys, storedSize, storedValue } 
 import { MAP_SIZES, TILESETS, type TilesetId } from "../../data/tilesets";
 import { DEFAULT_DOODAD_PLACEMENT } from "../../editor/doodads";
 import { hostTerms, isDesktop } from "../../editor/platform";
-import { changedPreferences, DEFAULT_REMASTERED_EFFECTS, PREFERENCE_LIMITS, type LanguagePreference, type NewMapVersion, type PluginUpdateMode, type StatusBarCells } from "../../editor/preferences";
+import {
+  changedPreferences,
+  DEFAULT_REMASTERED_EFFECTS,
+  PREFERENCE_LIMITS,
+  resetPreferences,
+  type LanguagePreference,
+  type NewMapVersion,
+  type PluginUpdateMode,
+  type PreferencesPage,
+  type StatusBarCells,
+} from "../../editor/preferences";
 import { MAP_VERSIONS } from "../../formats/chk/scenario";
 import { saveBytes } from "../../services/mapIo";
 import { listCopies, recoveryPersists, SESSION, type RecoveryEntry } from "../../services/recovery";
@@ -78,13 +91,14 @@ import { GameFolderRow, TestFolderRow, useGameInfo, useTestFolder } from "./Test
 
 /* ── Pages ──────────────────────────────────────────────── */
 
-export type PreferencesPage = "general" | "editing" | "view" | "testing" | "plugins" | "storage" | "hotkeys";
+export type { PreferencesPage };
 
 /** A page id as the payload carries it: a built-in page, or `plugin:<id>` for a plugin's page. */
 type PageId = PreferencesPage | `plugin:${string}`;
 
 const PAGES: { id: PreferencesPage; label: string; icon: ReactNode }[] = [
   { id: "general", label: msg("General"), icon: <Settings2 size={13} /> },
+  { id: "files", label: msg("Files"), icon: <FolderOpen size={13} /> },
   { id: "editing", label: msg("Editing"), icon: <PencilRuler size={13} /> },
   { id: "view", label: msg("View"), icon: <Eye size={13} /> },
   { id: "testing", label: msg("Testing"), icon: <Play size={13} /> },
@@ -134,6 +148,20 @@ const DEFAULT_WORKING: Working = {
   snapDoodads: DEFAULT_DOODAD_PLACEMENT.snapToGrid,
 };
 
+/** The parts of the working copy outside `Preferences` a page's reset puts back, beside its `PREFERENCES_PAGE_KEYS` (`editor/preferences.ts`). */
+const PAGE_PARTS: Partial<Record<PreferencesPage, Exclude<keyof Working, "prefs">[]>> = {
+  editing: ["gridSize", "look", "snapLocations", "snapDoodads"],
+};
+
+/** `w` with the given pages back on their defaults. */
+function resetPages(w: Working, pages: readonly PreferencesPage[]): Working {
+  const next: Working = { ...w, prefs: resetPreferences(w.prefs, pages) };
+  for (const page of pages) {
+    for (const part of PAGE_PARTS[page] ?? []) (next as unknown as Record<string, unknown>)[part] = DEFAULT_WORKING[part];
+  }
+  return next;
+}
+
 /** Which part of the working copy a stored key feeds, for re-reading after a clear. */
 const KEY_PARTS: Record<string, keyof Working> = {
   "scmjs.prefs": "prefs",
@@ -176,6 +204,8 @@ export function PreferencesDialog({ entry }: DialogProps) {
   useEffect(() => {
     if (shownPlugin && !visited.has(shownPlugin.plugin.id)) setVisited(new Set(visited).add(shownPlugin.plugin.id));
   }, [shownPlugin, visited]);
+  /** Reset everything is asking first, in the footer. */
+  const [asking, setAsking] = useState(false);
   const patch = (p: Partial<Preferences>) => setW({ ...w, prefs: { ...w.prefs, ...p } });
   const apply = () => {
     for (const changed of changedPreferences(store.get(preferencesAtom), w.prefs)) count("preferences", changed);
@@ -192,17 +222,39 @@ export function PreferencesDialog({ entry }: DialogProps) {
       try { spec.apply?.(); } catch (err) { logError(name, "The test target's settings apply failed", err); }
     }
   };
-  const reset = () => {
-    setW(DEFAULT_WORKING);
-    if (shownPlugin) {
-      try { shownPlugin.spec.reset?.(); } catch (err) { logError(shownPlugin.plugin.name, "The Preferences page's reset failed", err); }
-    }
-    if (page === "testing") {
-      for (const { name, spec } of targetSettings.current.values()) {
-        try { spec.reset?.(); } catch (err) { logError(name, "The test target's settings reset failed", err); }
-      }
+  const resetPlugin = (e: PluginPreferencesPageEntry) => {
+    try { e.spec.reset?.(); } catch (err) { logError(e.plugin.name, "The Preferences page's reset failed", err); }
+  };
+  const resetTargets = () => {
+    for (const { name, spec } of targetSettings.current.values()) {
+      try { spec.reset?.(); } catch (err) { logError(name, "The test target's settings reset failed", err); }
     }
   };
+  /** Reset this page: only what the page in front shows. */
+  const resetPage = () => {
+    if (page.startsWith("plugin:")) {
+      if (shownPlugin) resetPlugin(shownPlugin);
+      return;
+    }
+    setW(resetPages(w, [page as PreferencesPage]));
+    if (page === "testing") resetTargets();
+  };
+  /**
+   * Reset everything: every built-in page, and the plugins' settings whose page is mounted
+   * (shown at some point since the dialog opened). A page never shown is left alone: its
+   * `reset` is specified for a page that is showing, and its `apply` would not run on OK.
+   */
+  const resetEverything = () => {
+    setW(resetPages(w, PAGES.map((p) => p.id)));
+    for (const e of pluginPages) if (visited.has(e.plugin.id)) resetPlugin(e);
+    resetTargets();
+    setAsking(false);
+  };
+  const pageResettable = page === "storage" ? false : page.startsWith("plugin:") ? !!shownPlugin?.spec.reset : true;
+  const resetTitle =
+    page === "storage" ? t("Nothing on this page is a setting. Its Clear buttons act at once.")
+    : !pageResettable ? t("This page has nothing to put back.")
+    : t("Puts this page's settings back as the editor ships them. Nothing is written until OK or Apply.");
   // After a clear the atoms behind these keys are back on their defaults; follow them.
   const reseed = (keys: string[]) => {
     const now = live();
@@ -216,6 +268,7 @@ export function PreferencesDialog({ entry }: DialogProps) {
 
   const content: Record<PreferencesPage, () => ReactNode> = {
     general: () => <GeneralPage w={w} patch={patch} />,
+    files: () => <FilesPage w={w} patch={patch} />,
     editing: () => <EditingPage w={w} setW={setW} />,
     view: () => <ViewPage w={w} patch={patch} />,
     // Drawn on its own below, kept mounted once shown.
@@ -242,11 +295,28 @@ export function PreferencesDialog({ entry }: DialogProps) {
       tall
       showApply
       onOk={apply}
-      footerLeft={
-        <Button size="sm" onClick={reset} title={t("Every page back to how the editor ships; nothing is written until OK or Apply.")}>
-          <RotateCcw size={11} /> {" "}{t("Reset to defaults")}
-        </Button>
-      }
+      // While Reset everything asks, the question and its two answers stand in for the footer's buttons.
+      footer={asking ? (
+        <>
+          <Button size="sm" onClick={() => setAsking(false)}>{t("Cancel")}</Button>
+          <Button size="sm" variant="danger" onClick={resetEverything}><RotateCcw size={11} /> {" "}{t("Reset everything")}</Button>
+        </>
+      ) : undefined}
+      footerLeft={asking ? (
+        <span className="prefs-reset-ask" role="alert">
+          {t("Put every page back as the editor ships, the language and all hotkeys included? A plugin's settings go back only if its page was opened in this dialog.")}
+          {countingHere() && <>{" "}{t("Privacy stays as it is.")}</>}
+        </span>
+      ) : (
+        <>
+          <Button size="sm" disabled={!pageResettable} onClick={resetPage} title={resetTitle}>
+            <RotateCcw size={11} /> {" "}{t("Reset this page")}
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => setAsking(true)} title={t("Puts every page back as the editor ships, after asking.")}>
+            {t("Reset everything…")}
+          </Button>
+        </>
+      )}
     >
       <div className="split prefs" style={{ ["--split" as string]: "168px" }}>
         <nav className="prefs-nav" aria-label={t("Preferences pages")}>
@@ -336,11 +406,8 @@ export function GridSettingsDialog({ entry }: DialogProps) {
 
 function GeneralPage({ w, patch }: { w: Working; patch: (p: Partial<Preferences>) => void }) {
   const p = w.prefs;
-  const newMap = (n: Partial<Preferences["newMap"]>) => patch({ newMap: { ...p.newMap, ...n } });
   const updates = (u: Partial<Preferences["updates"]>) => patch({ updates: { ...p.updates, ...u } });
   const startup = (s: Partial<Preferences["startup"]>) => patch({ startup: { ...p.startup, ...s } });
-  const save = (s: Partial<Preferences["save"]>) => patch({ save: { ...p.save, ...s } });
-  const recovery = (r: Partial<Preferences["recovery"]>) => patch({ recovery: { ...p.recovery, ...r } });
   return (
     <div className="stack">
       <Section title={t("Language")}>
@@ -381,6 +448,28 @@ function GeneralPage({ w, patch }: { w: Working; patch: (p: Partial<Preferences>
         <Check label={t("Ask before closing or replacing a map with unsaved changes")} checked={p.confirmClose} onChange={(e) => patch({ confirmClose: e.target.checked })} />
         <Hint>{t("Covers closing a tab or the editor, and New, Open or a dropped file replacing the open map.")}</Hint>
       </Section>
+      {countingHere() && (
+        <Section title={t("Privacy")}>
+          <Check label={t("Count which parts of the editor are used")} checked={p.counting} onChange={(e) => patch({ counting: e.target.checked })} />
+          <Hint>
+            {t("Sends the name of what was used, such as a dialog, a tool, a save or the type of a unit placed, the tileset and size of a map opened or made, the name of a mod in use, and where in the editor's code an error happened, with no identifier. The map itself is never sent: not its name, its text or anything typed. Off also stops the visit count for this browser on scmjs.dev.")}{" "}
+            <a href="https://scmjs.dev/privacy.html" target="_blank" rel="noopener noreferrer">{t("What is counted")}</a>
+          </Hint>
+        </Section>
+      )}
+    </div>
+  );
+}
+
+/* ── Files ──────────────────────────────────────────────── */
+
+function FilesPage({ w, patch }: { w: Working; patch: (p: Partial<Preferences>) => void }) {
+  const p = w.prefs;
+  const newMap = (n: Partial<Preferences["newMap"]>) => patch({ newMap: { ...p.newMap, ...n } });
+  const save = (s: Partial<Preferences["save"]>) => patch({ save: { ...p.save, ...s } });
+  const recovery = (r: Partial<Preferences["recovery"]>) => patch({ recovery: { ...p.recovery, ...r } });
+  return (
+    <div className="stack">
       <Section title={t("New scenario")}>
         <div className="form wide">
           <Field label={t("Tileset")}>
@@ -449,15 +538,6 @@ function GeneralPage({ w, patch }: { w: Working; patch: (p: Partial<Preferences>
         </div>
         <Hint>{t("A copy is also made when the editor goes to the background, and is removed when the map is saved or closed. If the editor closes before a map is saved, the copy is offered back at the next start. Copies are kept in {here}, not beside your files.", { here: hostTerms().here })}</Hint>
       </Section>
-      {countingHere() && (
-        <Section title={t("Privacy")}>
-          <Check label={t("Count which parts of the editor are used")} checked={p.counting} onChange={(e) => patch({ counting: e.target.checked })} />
-          <Hint>
-            {t("Sends the name of what was used, such as a dialog, a tool, a save or the type of a unit placed, the tileset and size of a map opened or made, the name of a mod in use, and where in the editor's code an error happened, with no identifier. The map itself is never sent: not its name, its text or anything typed. Off also stops the visit count for this browser on scmjs.dev.")}{" "}
-            <a href="https://scmjs.dev/privacy.html" target="_blank" rel="noopener noreferrer">{t("What is counted")}</a>
-          </Hint>
-        </Section>
-      )}
     </div>
   );
 }
@@ -1087,7 +1167,7 @@ function HotkeysPage({ w, patch }: { w: Working; patch: (p: Partial<Preferences>
     <div className="stack" style={{ height: "100%" }}>
       <div className="row" style={{ justifyContent: "space-between" }}>
         <Hint>{t("Add a key to a command with +, then press the keys. A plugin's keys are tried before the editor's.")}</Hint>
-        <Button size="sm" disabled={Object.keys(overrides).length === 0} onClick={() => { setCapturing(null); patch({ hotkeys: {} }); }}>
+        <Button size="sm" disabled={Object.keys(overrides).length === 0} onClick={() => { setCapturing(null); patch(resetPreferences(w.prefs, ["hotkeys"])); }}>
           <RotateCcw size={11} /> {" "}{t("Reset all hotkeys")}
         </Button>
       </div>

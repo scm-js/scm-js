@@ -2,7 +2,8 @@
  * The preferences added in the Preferences rework, at the points where each takes effect:
  * the merge that gives an old stored object the new fields, the undo depth and recents
  * cap read at commit time, the new map's revision, the Save dialog's starting options,
- * and the preferences file that carries the lot between browsers.
+ * the preferences file that carries the lot between browsers, and what the dialog's two
+ * resets put back.
  */
 import { beforeEach, describe, expect, it } from "vitest";
 import { createStore } from "jotai";
@@ -12,6 +13,7 @@ import { gridSizeAtom, mapModifiedAtom } from "../src/atoms/editorAtoms";
 import { commitEditAtom, pushRecentAtom, recentFilesAtom, scenarioAtom, undoStackAtom } from "../src/atoms/documentAtoms";
 import { createScenario } from "../src/formats/chk/create";
 import { defaultSaveOptions, initialSaveOptions } from "../src/editor/save";
+import { NEVER_RESET, PREFERENCES_PAGE_KEYS, resetPreferences, type Preferences, type PreferencesPage } from "../src/editor/preferences";
 import { newMapInto } from "../src/hooks/useMapFileActions";
 
 beforeEach(() => {
@@ -121,5 +123,53 @@ describe("the preferences file", () => {
     expect(browserStorage().getItem("scmjs.plugin-code")).toBeNull();
     expect(browserStorage().getItem("not.ours")).toBeNull();
     expect(store.set(importStoredPreferencesAtom, { hello: 1 })).toEqual({ ok: false, reason: "not a preferences file" });
+  });
+});
+
+describe("the Preferences dialog's resets", () => {
+  const pages = Object.keys(PREFERENCES_PAGE_KEYS) as PreferencesPage[];
+  /** Every preference moved off its default, so a reset shows in each one. */
+  const changed: Preferences = {
+    ...DEFAULT_PREFERENCES,
+    language: "ko",
+    splash: false,
+    newMap: { ...DEFAULT_PREFERENCES.newMap, tileset: "jungle" },
+    save: { ...DEFAULT_PREFERENCES.save, backup: false },
+    undoLevels: 50,
+    hdGraphics: true,
+    testMap: { ...DEFAULT_PREFERENCES.testMap, dir: "C:/StarCraft" },
+    plugins: { updates: "manual" },
+    hotkeys: { "tools.preferences": [] },
+    counting: false,
+  };
+
+  // The other half of adding a preference: give it the page that shows it, so that page's
+  // Reset puts it back. A key on no page is one neither reset reaches.
+  it("puts every preference on exactly one page, or on the short list a reset never touches", () => {
+    const owners = new Map<string, string[]>();
+    for (const page of pages) for (const key of PREFERENCES_PAGE_KEYS[page]) owners.set(key, [...(owners.get(key) ?? []), page]);
+    for (const key of NEVER_RESET) owners.set(key, [...(owners.get(key) ?? []), "never reset"]);
+    const lost = Object.keys(DEFAULT_PREFERENCES).filter((key) => !owners.has(key));
+    expect(lost, "on no page's list in PREFERENCES_PAGE_KEYS (editor/preferences.ts)").toEqual([]);
+    const twice = [...owners].filter(([, where]) => where.length > 1);
+    expect(twice, "on more than one list").toEqual([]);
+    expect([...owners.keys()].filter((key) => !(key in DEFAULT_PREFERENCES)), "listed but not a preference").toEqual([]);
+  });
+
+  it("puts back only the page it is asked for", () => {
+    const files = resetPreferences(changed, ["files"]);
+    expect(files.newMap).toEqual(DEFAULT_PREFERENCES.newMap);
+    expect(files.save).toEqual(DEFAULT_PREFERENCES.save);
+    expect(files.language).toBe("ko");
+    expect(files.hotkeys).toEqual(changed.hotkeys);
+    expect(resetPreferences(changed, ["storage"])).toEqual(changed);
+    expect(resetPreferences(changed, ["hotkeys"]).hotkeys).toEqual({});
+  });
+
+  it("puts every page back but never turns counting on again", () => {
+    const all = resetPreferences(changed, pages);
+    expect(all).toEqual({ ...DEFAULT_PREFERENCES, counting: false });
+    for (const page of pages) expect(resetPreferences(changed, [page]).counting).toBe(false);
+    expect(resetPreferences(DEFAULT_PREFERENCES, pages).counting).toBe(true);
   });
 });

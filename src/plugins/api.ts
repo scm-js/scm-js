@@ -3885,7 +3885,11 @@ export interface PreferencesPageSpec {
   mount(body: HTMLElement, page: PreferencesPageHost): void | (() => void);
   /** Called on OK and Apply while the dialog is open and the page has been shown. */
   apply?(): void;
-  /** Called by Reset to defaults while the page is the one showing. */
+  /**
+   * Put the page's controls back on their defaults. Called by Reset this page while the
+   * page is the one showing, and by Reset everything when the page has been shown since
+   * the dialog opened (it may be hidden then). A page never shown is not reset.
+   */
   reset?(): void;
 }
 

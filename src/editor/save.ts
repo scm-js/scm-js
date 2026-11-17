@@ -105,7 +105,7 @@ export function formatOf(fileName: string | null | undefined): MapFormat | null 
  * that came in PKWARE-compressed and encrypted, Blizzard's own layout, goes out the same
  * way. A new map, or one opened from a bare .chk, gets StarEdit's layout too, since it is
  * what every build of the game reads — unless `fresh` names another compression for that
- * case (Preferences ▸ General ▸ Saving), which then goes without the encryption.
+ * case (Preferences ▸ Files ▸ Saving), which then goes without the encryption.
  */
 export function defaultSaveOptions(scn: Scenario, origin: MemberInfo | null, fileName: string | null, fresh: "asOpened" | ArchiveCompression = "asOpened"): SaveOptions {
   const format = formatOf(fileName) ?? (scn.fileVersion < 205 ? "scm" : "scx");

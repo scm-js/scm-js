@@ -1415,6 +1415,11 @@
 
 /* ── Preferences: a page list on the left, one page on the right ── */
 .prefs { gap: 14px; }
+/* Reset everything's question, standing in the footer's left while it asks. */
+.prefs-reset-ask {
+  color: var(--text);
+  font-size: var(--fs-sm);
+}
 .prefs-nav {
   display: flex;
   flex-direction: column;

@@ -243,3 +243,40 @@ export function changedPreferences(before: Preferences, after: Preferences): { c
   }
   return out;
 }
+
+/**
+ * The built-in pages of Edit ▸ Preferences, in the order the page list shows them. A
+ * plugin's page is `plugin:<id>` beside these, and is the plugin's to reset.
+ */
+export type PreferencesPage = "general" | "files" | "editing" | "view" | "testing" | "plugins" | "storage" | "hotkeys";
+
+/**
+ * Which keys of `Preferences` each built-in page shows: what its **Reset this page** puts
+ * back, and, all together, what **Reset everything** does. Editing also holds the grid's
+ * spacing, look and snaps, which have atoms of their own and are reset by the dialog beside
+ * these. Every key is on one page or in `NEVER_RESET`; `tests/preferences.test.ts` fails
+ * on a key that is on neither, so a new preference has to be given a page here.
+ */
+export const PREFERENCES_PAGE_KEYS: Record<PreferencesPage, readonly (keyof Preferences)[]> = {
+  general: ["language", "splash", "startup", "updates", "multipleMaps", "confirmClose"],
+  files: ["newMap", "save", "recovery"],
+  editing: ["placement", "undoLevels"],
+  view: ["view", "animateWater", "animateUnits", "animateWaterSpeed", "animateUnitsSpeed", "hdGraphics", "remasteredEffects", "statusBar", "classicText"],
+  testing: ["testMap"],
+  plugins: ["plugins"],
+  storage: [],
+  hotkeys: ["hotkeys"],
+};
+
+/**
+ * Shown on a page but never put back by a reset. `counting` is on by default, so a reset
+ * could only ever turn it back on for someone who turned it off.
+ */
+export const NEVER_RESET: readonly (keyof Preferences)[] = ["counting"];
+
+/** `prefs` with the keys of `pages` back on their defaults, the rest (and `NEVER_RESET`) as they are. */
+export function resetPreferences(prefs: Preferences, pages: readonly PreferencesPage[]): Preferences {
+  const out: Record<string, unknown> = { ...prefs };
+  for (const page of pages) for (const key of PREFERENCES_PAGE_KEYS[page]) out[key] = DEFAULT_PREFERENCES[key];
+  return out as unknown as Preferences;
+}

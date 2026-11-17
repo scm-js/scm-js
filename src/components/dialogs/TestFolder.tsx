@@ -27,10 +27,14 @@ export function useGameInfo(dir: string): { info: DesktopGameInfo | null; refres
   return { info, refresh: () => setRun((n) => n + 1) };
 }
 
-/** The browser's stored test folder: `undefined` while loading, `null` when none is chosen. */
-export function useTestFolder(): [TestFolderHandle | null | undefined, (h: TestFolderHandle | null) => void] {
+/**
+ * The browser's stored test folder: `undefined` while loading, `null` when none is chosen.
+ * Read again whenever `reread` changes, for a copy kept mounted while another copy of the
+ * same row may have changed the folder (Preferences ▸ Testing behind the filter's results).
+ */
+export function useTestFolder(reread?: unknown): [TestFolderHandle | null | undefined, (h: TestFolderHandle | null) => void] {
   const [folder, setFolder] = useState<TestFolderHandle | null | undefined>(undefined);
-  useEffect(() => { void storedTestFolder().then(setFolder); }, []);
+  useEffect(() => { void storedTestFolder().then(setFolder); }, [reread]);
   return [folder, setFolder];
 }
 

@@ -2396,6 +2396,14 @@ Preferences (Ctrl+,) are kept in the browser. Nothing is written until OK or App
 **Reset this page** puts back what the page in front shows. **Reset everything…** asks
 first, then puts every page back, the language and hotkeys included. A plugin's page goes
 back only if it was opened since the dialog opened. Neither reset turns Privacy back on.
+
+The box above the page list finds a setting on any page. Each section whose heading,
+labels or hints hold the words you type is shown under its page's name, and its controls
+work as they do on the page; a plugin's own page is found by the plugin's name. On Hotkeys
+the box narrows the list instead, to the commands whose name or keys match (`save`,
+`Ctrl+S`). Esc empties the box, and Find's keys (Ctrl+F) bring you back to it. Reset this
+page is off while the box shows sections from several pages.
+
 The pages down the left:
 
 **General**

@@ -10,8 +10,15 @@
  * The Storage page's clears are the one thing that acts at once, since they reset the live
  * atoms; the working copy re-reads whatever a clear touched so OK afterwards does not write
  * the old values straight back.
+ *
+ * The filter box above the page list shows, in place of the page, every section of the
+ * built-in pages whose rendered text matches (`preferencesFilter.ts`): the pages are drawn
+ * in full and the sections that do not match are hidden, so the controls are the real ones
+ * and there is no list of keywords to keep. A plugin's page (and a test target's settings)
+ * is matched on its name only and shown as a row that opens it: mounting one would make its
+ * `apply` run on OK. On Hotkeys the box narrows that page's rows instead.
  */
-import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useAtom, useAtomValue, useSetAtom, useStore } from "jotai";
 import {
   ChevronDown,
@@ -31,6 +38,7 @@ import {
   Play,
   Puzzle,
   RotateCcw,
+  Search,
   Settings2,
   Trash2,
 } from "lucide-react";
@@ -38,7 +46,7 @@ import { closeDialogAtom, openDialogAtom } from "../../atoms/uiAtoms";
 import { pluginHotkeysAtom, pluginPreferencesPagesAtom, pluginRuntimesAtom, pluginTestTargetsAtom, type PluginPreferencesPageEntry, type PluginTestTargetEntry } from "../../atoms/pluginAtoms";
 import type { PreferencesPageSpec } from "../../plugins/api";
 import { resolveTarget, STARCRAFT } from "../../services/testTargets";
-import { COMMAND_GROUPS, COMMANDS, FIXED_KEYS, comboOf, commandById, conflictsOf, formatCombo, isModifierKey, reservedReason, resolveHotkeys, withBinding } from "../../editor/commands";
+import { COMMAND_GROUPS, COMMANDS, FIXED_KEYS, comboOf, commandById, conflictsOf, formatCombo, isModifierKey, reservedReason, resolveHotkeys, takesText, withBinding, type TextTarget } from "../../editor/commands";
 import { logError } from "../../editor/log";
 import { doodadPlacementAtom, gridSizeAtom, locationSnapAtom } from "../../atoms/editorAtoms";
 import { gameDataSourceAtom } from "../../atoms/gameDataAtoms";
@@ -51,6 +59,7 @@ import {
   DEFAULT_PREFERENCES,
   exportStoredPreferences,
   gridLookAtom,
+  hotkeysAtom,
   importStoredPreferencesAtom,
   ownedStoredKeys,
   preferencesAtom,
@@ -82,7 +91,7 @@ import { KEEP_PER_FILE, listPrevious, removePrevious, type PreviousEntry } from 
 import { discardCopy, leftoverEntries } from "../../hooks/useRecovery";
 import { formatBytes } from "../../editor/save";
 import { DEFAULT_PROFILE } from "../../gamedata/profiles";
-import { LOCALES, msg, pluginText, t, translate } from "../../i18n";
+import { LOCALES, msg, pluginText, t, tc, translate } from "../../i18n";
 import { STORED_LABELS } from "./storedLabels";
 import { count, countingHere } from "../../services/usage";
 import { Button, Check, Field, IconSelect, NumberInput, Select } from "../ui";
@@ -90,6 +99,7 @@ import DialogFrame from "../ui/DialogFrame";
 import FlagIcon from "../ui/FlagIcon";
 import type { DialogProps } from "./DialogHost";
 import { GameFolderRow, TestFolderRow, useGameInfo, useTestFolder } from "./TestFolder";
+import { filterSections, filterTerms, hotkeyRowMatches, textMatches } from "./preferencesFilter";
 
 /* ── Pages ──────────────────────────────────────────────── */
 
@@ -208,6 +218,63 @@ export function PreferencesDialog({ entry }: DialogProps) {
   }, [shownPlugin, visited]);
   /** Reset everything is asking first, in the footer. */
   const [asking, setAsking] = useState(false);
+
+  // The filter box. With text in it, the results stand in for the page in front, which
+  // stays mounted (hidden) so it comes back as it was; on Hotkeys the box narrows that page.
+  const [query, setQuery] = useState("");
+  const filtering = filterTerms(query).length > 0;
+  const narrowing = filtering && page === "hotkeys";
+  const showResults = filtering && !narrowing;
+  const [box, setBox] = useState<HTMLInputElement | null>(null);
+  const pageBox = useRef<HTMLDivElement>(null);
+  /** Where the page in front was scrolled to when the results took its place. */
+  const savedScroll = useRef(0);
+  const type = (text: string) => {
+    if (!showResults && page !== "hotkeys" && filterTerms(text).length > 0) savedScroll.current = pageBox.current?.scrollTop ?? 0;
+    setQuery(text);
+  };
+  const clearFilter = () => { setQuery(""); box?.focus(); };
+  /** A page chosen in the list: the box is cleared, and the page shows from its top. */
+  const choose = (id: PageId) => { savedScroll.current = 0; setQuery(""); setPage(id); };
+  const wasResults = useRef(false);
+  useLayoutEffect(() => {
+    const el = pageBox.current;
+    if (el && showResults !== wasResults.current) el.scrollTop = showResults ? 0 : savedScroll.current;
+    wasResults.current = showResults;
+  }, [showResults]);
+  // Edit ▸ Find's keys (Ctrl+F unless rebound) put the cursor in the box from anywhere in the dialog.
+  const findKeys = useAtomValue(hotkeysAtom).byCommand["edit.find"];
+  useEffect(() => {
+    const dlg = box?.closest(".dlg");
+    if (!box || !dlg || !findKeys?.length) return;
+    const onKey = (e: Event) => {
+      const k = e as KeyboardEvent;
+      if (k.isComposing) return;
+      const combo = comboOf(k);
+      if (!findKeys.includes(combo)) return;
+      // A plain key is typing when a text field has the cursor.
+      if (!/^(Ctrl|Alt)\+/.test(combo) && takesText(k.target as unknown as TextTarget)) return;
+      k.preventDefault();
+      box.focus();
+      box.select();
+    };
+    dlg.addEventListener("keydown", onKey);
+    return () => dlg.removeEventListener("keydown", onKey);
+  }, [box, findKeys]);
+  const resultsBox = useRef<HTMLDivElement>(null);
+  const [nothing, setNothing] = useState(false);
+  // After every render, and whenever the text inside changes on its own (a lookup that
+  // came back), show the sections that match and hide the rest.
+  useLayoutEffect(() => {
+    const root = resultsBox.current;
+    if (!root) return;
+    const run = () => setNothing(!filterSections(root, query));
+    run();
+    const observer = new MutationObserver(run);
+    observer.observe(root, { childList: true, subtree: true, characterData: true });
+    return () => observer.disconnect();
+  });
+  const testTargets = useAtomValue(pluginTestTargetsAtom);
   const patch = (p: Partial<Preferences>) => setW({ ...w, prefs: { ...w.prefs, ...p } });
   const apply = () => {
     for (const changed of changedPreferences(store.get(preferencesAtom), w.prefs)) count("preferences", changed);
@@ -234,6 +301,7 @@ export function PreferencesDialog({ entry }: DialogProps) {
   };
   /** Reset this page: only what the page in front shows. */
   const resetPage = () => {
+    if (showResults) return;
     if (page.startsWith("plugin:")) {
       if (shownPlugin) resetPlugin(shownPlugin);
       return;
@@ -252,10 +320,14 @@ export function PreferencesDialog({ entry }: DialogProps) {
     resetTargets();
     setAsking(false);
   };
-  const pageResettable = page === "storage" ? false : page.startsWith("plugin:") ? !!shownPlugin?.spec.reset : true;
+  // While the results show there is no page in front, and a reset of one the person
+  // cannot see would be a surprise; Reset everything still works.
+  const pageResettable = showResults || page === "storage" ? false : page.startsWith("plugin:") ? !!shownPlugin?.spec.reset : true;
   const resetTitle =
-    page === "storage" ? t("Nothing on this page is a setting. Its Clear buttons act at once.")
+    showResults ? t("The list shows settings from several pages. Clear the filter or choose a page to reset one page.")
+    : page === "storage" ? t("Nothing on this page is a setting. Its Clear buttons act at once.")
     : !pageResettable ? t("This page has nothing to put back.")
+    : narrowing ? t("Puts every hotkey back, the ones the filter hides included. Nothing is written until OK or Apply.")
     : t("Puts this page's settings back as the editor ships them. Nothing is written until OK or Apply.");
   // After a clear the atoms behind these keys are back on their defaults; follow them.
   const reseed = (keys: string[]) => {
@@ -285,8 +357,43 @@ export function PreferencesDialog({ entry }: DialogProps) {
         <TransferSection onImported={() => setW(live())} />
       </div>
     ),
-    hotkeys: () => <HotkeysPage w={w} patch={patch} />,
+    hotkeys: () => <HotkeysPage w={w} patch={patch} filter={narrowing ? query : ""} />,
   };
+  /** Rows that open a page, in the results; nothing when none matched. */
+  const rowsOf = (rows: { key: number; label: string; to: PageId }[]) => rows.length > 0 && (
+    <div className="col" style={{ gap: 6 }}>
+      {rows.map((r) => <ResultRow key={r.key} label={r.label} onOpen={() => choose(r.to)} />)}
+    </div>
+  );
+  /**
+   * What each page puts in the results: the page itself, drawn whole and filtered by
+   * `filterSections` after it renders. Testing is drawn without the test targets' own
+   * settings and a plugin's page not at all — mounted, either would have its `apply` run
+   * on OK — so they are found by name and shown as a row that opens their page.
+   */
+  const results: Record<PreferencesPage, () => ReactNode> = {
+    ...content,
+    testing: () => (
+      <TestingPage
+        w={w}
+        patch={patch}
+        onClose={() => close(entry.key)}
+        rows={rowsOf(testTargets
+          .filter((e) => e.spec.settings && textMatches(pluginText(e.plugin.id, e.spec.label), query))
+          .map((e) => ({ key: e.key, label: pluginText(e.plugin.id, e.spec.label), to: "testing" })))}
+      />
+    ),
+    plugins: () => (
+      <PluginsPage
+        w={w}
+        patch={patch}
+        onManage={() => open("plugins")}
+        rows={rowsOf(pluginPages.filter((e) => textMatches(e.plugin.name, query)).map((e) => ({ key: e.key, label: e.plugin.name, to: `plugin:${e.plugin.id}` })))}
+      />
+    ),
+    hotkeys: () => <HotkeysPage w={w} patch={patch} filter={query} inResults />,
+  };
+  const placeholder = page === "hotkeys" ? t("Find a command") : t("Find a setting");
 
   return (
     <DialogFrame
@@ -297,6 +404,8 @@ export function PreferencesDialog({ entry }: DialogProps) {
       tall
       showApply
       onOk={apply}
+      // Esc first empties the filter box; with it empty, Esc closes as it always has.
+      onEscapeKeyDown={(e) => { if (query !== "") { e.preventDefault(); clearFilter(); } }}
       // While Reset everything asks, the question and its two answers stand in for the footer's buttons.
       footer={asking ? (
         <>
@@ -321,51 +430,98 @@ export function PreferencesDialog({ entry }: DialogProps) {
       )}
     >
       <div className="split prefs" style={{ ["--split" as string]: "168px" }}>
-        <nav className="prefs-nav" aria-label={t("Preferences pages")}>
-          {PAGES.map((p) => (
-            <div key={p.id} className="col" style={{ gap: 2 }}>
-              <button
-                type="button"
-                className={`prefs-nav-btn ${page === p.id ? "is-active" : ""}`}
-                aria-current={page === p.id ? "page" : undefined}
-                onClick={() => setPage(p.id)}
-              >
-                {p.icon}
-                <span>{translate(p.label)}</span>
-              </button>
-              {p.id === "plugins" && pluginPages.map((e) => {
-                const id: PageId = `plugin:${e.plugin.id}`;
-                return (
+        <div className="prefs-side">
+          {/* A text field, so the dialog puts the cursor here when it opens. */}
+          <div className="prefs-search">
+            <Search size={12} />
+            <input
+              ref={setBox}
+              type="text"
+              className="input"
+              value={query}
+              onChange={(e) => type(e.target.value)}
+              placeholder={placeholder}
+              aria-label={placeholder}
+              title={findKeys?.length ? `${placeholder} (${formatCombo(findKeys[0])})` : undefined}
+              spellCheck={false}
+              autoComplete="off"
+            />
+            {query !== "" && <button type="button" className="clear" onClick={clearFilter} aria-label={t("Clear search")}><X size={11} /></button>}
+          </div>
+          <nav className="prefs-nav" aria-label={t("Preferences pages")}>
+            {PAGES.map((p) => {
+              const front = page === p.id && !showResults;
+              return (
+                <div key={p.id} className="col" style={{ gap: 2 }}>
                   <button
-                    key={e.key}
                     type="button"
-                    className={`prefs-nav-btn nested ${page === id ? "is-active" : ""}`}
-                    aria-current={page === id ? "page" : undefined}
-                    title={e.plugin.name}
-                    onClick={() => setPage(id)}
+                    className={`prefs-nav-btn ${front ? "is-active" : ""}`}
+                    aria-current={front ? "page" : undefined}
+                    onClick={() => choose(p.id)}
                   >
-                    <span>{e.plugin.name}</span>
+                    {p.icon}
+                    <span>{translate(p.label)}</span>
                   </button>
-                );
-              })}
-            </div>
-          ))}
-        </nav>
+                  {p.id === "plugins" && pluginPages.map((e) => {
+                    const id: PageId = `plugin:${e.plugin.id}`;
+                    const here = page === id && !showResults;
+                    return (
+                      <button
+                        key={e.key}
+                        type="button"
+                        className={`prefs-nav-btn nested ${here ? "is-active" : ""}`}
+                        aria-current={here ? "page" : undefined}
+                        title={e.plugin.name}
+                        onClick={() => choose(id)}
+                      >
+                        <span>{e.plugin.name}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              );
+            })}
+          </nav>
+        </div>
         {/* One container for every page, so a visited plugin page stays mounted while a built-in one shows. */}
-        <div className="prefs-page">
-          {!page.startsWith("plugin:") && page !== "testing" && <div className="prefs-builtin" key={page}>{content[page as PreferencesPage]()}</div>}
+        <div className="prefs-page" ref={pageBox}>
+          {!page.startsWith("plugin:") && page !== "testing" && <div className="prefs-builtin" key={page} hidden={showResults}>{content[page as PreferencesPage]()}</div>}
           {(page === "testing" || testingShown) && (
-            <div className="prefs-builtin" style={page === "testing" ? undefined : { display: "none" }}>
-              <TestingPage w={w} patch={patch} targetSettings={targetSettings.current} onClose={() => close(entry.key)} />
+            <div className="prefs-builtin" style={page === "testing" && !showResults ? undefined : { display: "none" }}>
+              <TestingPage w={w} patch={patch} targetSettings={targetSettings.current} reread={page === "testing" && !showResults} onClose={() => close(entry.key)} />
             </div>
           )}
-          {page.startsWith("plugin:") && !shownPlugin && <p className="hint">{t("This plugin has no Preferences page, or is not running.")}</p>}
+          {page.startsWith("plugin:") && !shownPlugin && !showResults && <p className="hint">{t("This plugin has no Preferences page, or is not running.")}</p>}
           {pluginPages.filter((e) => visited.has(e.plugin.id) || e === shownPlugin).map((e) => (
-            <PluginPreferencesPage key={e.key} entry={e} shown={e === shownPlugin} onClose={() => close(entry.key)} />
+            <PluginPreferencesPage key={e.key} entry={e} shown={e === shownPlugin && !showResults} onClose={() => close(entry.key)} />
           ))}
+          {showResults && (
+            <div className="prefs-results" ref={resultsBox}>
+              {PAGES.map((p) => (
+                <div key={p.id} className="prefs-results-page" data-results-page={p.id}>
+                  <h2 className="prefs-results-head">{p.icon}<span>{translate(p.label)}</span></h2>
+                  {results[p.id]()}
+                </div>
+              ))}
+            </div>
+          )}
+          {showResults && nothing && <p className="hint">{t("Nothing matches \"{query}\".", { query: query.trim() })}</p>}
         </div>
       </div>
     </DialogFrame>
+  );
+}
+
+/** In the results, settings a plugin draws: found by the plugin's name, opened by the button. */
+function ResultRow({ label, onOpen }: { label: string; onOpen: () => void }) {
+  return (
+    <div className="row prefs-result-row" data-result-row>
+      <Puzzle size={12} className="dim" />
+      <span className="grow">{label}</span>
+      <Button size="sm" onClick={onOpen} title={t("The plugin draws these settings itself, so the filter finds them by name only.")}>
+        {t("Open the page")}
+      </Button>
+    </div>
   );
 }
 
@@ -444,7 +600,8 @@ function GeneralPage({ w, patch }: { w: Working; patch: (p: Partial<Preferences>
           </>
         )}
       </Section>
-      <Section title={t("Maps")}>
+      {/* "Maps" alone is also the game's folder of that name, which stays as it is. */}
+      <Section title={tc("preferences", "Maps")}>
         <Check label={t("Open each map in its own tab, keeping the others open")} checked={p.multipleMaps} onChange={(e) => patch({ multipleMaps: e.target.checked })} />
         <Hint>{t("Off opens a map in place of the one that is open, as StarEdit does.")}</Hint>
         <Check label={t("Ask before closing or replacing a map with unsaved changes")} checked={p.confirmClose} onChange={(e) => patch({ confirmClose: e.target.checked })} />
@@ -686,7 +843,7 @@ function ViewPage({ w, patch }: { w: Working; patch: (p: Partial<Preferences>) =
             <Field label={t("Ripple pictures a second")}><NumberInput value={fx.rate} min={1} max={60} step={1} width={90} onChange={(v) => effects({ rate: v })} /></Field>
             <Field label={t("Lava heat")}><NumberInput value={fx.heat} min={0} max={4} step={0.1} unit="px" width={110} onChange={(v) => effects({ heat: v })} /></Field>
           </div>
-          <div className="row" style={{ marginTop: 4 }}>
+          <div className="row" style={{ marginTop: 8, marginBottom: 6 }}>
             <Button size="sm" onClick={() => patch({ remasteredEffects: DEFAULT_REMASTERED_EFFECTS })}>{t("Put these back")}</Button>
           </div>
           <Hint>{t("How Remastered's water and lava move while View ▸ Animate Water is on. Sizes are in map pixels, 32 to a tile; a bend or heat of 0 leaves them still. The water speed above applies to these too.")}</Hint>
@@ -718,12 +875,17 @@ type TargetSettings = Map<number, { name: string; spec: PreferencesPageSpec }>;
  * the browser's Maps folder) and those of a plugin's test target (`api.ui.testTarget`).
  * The choice is shown only when a plugin has added a place — on the desktop there is
  * StarCraft alone.
+ *
+ * The filter's results draw it without `targetSettings`: the targets' own settings are not
+ * mounted there (that is what registers their `apply`), and `rows` stand in for them.
+ * `reread` reads the browser's stored folder again when it turns true, since the copy in
+ * the results may have changed it while this one was hidden.
  */
-function TestingPage({ w, patch, targetSettings, onClose }: { w: Working; patch: (p: Partial<Preferences>) => void; targetSettings: TargetSettings; onClose: () => void }) {
+function TestingPage({ w, patch, targetSettings, rows, reread, onClose }: { w: Working; patch: (p: Partial<Preferences>) => void; targetSettings?: TargetSettings; rows?: ReactNode; reread?: boolean; onClose: () => void }) {
   const p = w.prefs;
   const testMap = (tm: Partial<Preferences["testMap"]>) => patch({ testMap: { ...p.testMap, ...tm } });
   const { info, refresh } = useGameInfo(p.testMap.dir);
-  const [folder, setFolder] = useTestFolder();
+  const [folder, setFolder] = useTestFolder(reread);
   const targets = useAtomValue(pluginTestTargetsAtom);
   const chosen = resolveTarget(p.testMap.target, targets);
   const label = (e: PluginTestTargetEntry) => pluginText(e.plugin.id, e.spec.label);
@@ -744,9 +906,9 @@ function TestingPage({ w, patch, targetSettings, onClose }: { w: Working; patch:
       </Hint>
     </Section>
   );
-  const others = targets.filter((e) => e.spec.settings).map((e) => (
-    <TestTargetSettings key={e.key} entry={e} title={label(e)} registry={targetSettings} onClose={onClose} />
-  ));
+  const others = targetSettings
+    ? targets.filter((e) => e.spec.settings).map((e) => <TestTargetSettings key={e.key} entry={e} title={label(e)} registry={targetSettings} onClose={onClose} />)
+    : rows;
   if (isDesktop()) {
     return (
       <div className="stack">
@@ -815,7 +977,8 @@ const UPDATE_HINTS: Record<PluginUpdateMode, string> = {
   auto: msg("Installs what it finds for the plugins you added; a default moves with scmJS's own releases and is only named in the notice."),
 };
 
-function PluginsPage({ w, patch, onManage }: { w: Working; patch: (p: Partial<Preferences>) => void; onManage: () => void }) {
+/** `rows`: in the filter's results, the plugins' own pages that matched by name. */
+function PluginsPage({ w, patch, onManage, rows }: { w: Working; patch: (p: Partial<Preferences>) => void; onManage: () => void; rows?: ReactNode }) {
   const p = w.prefs;
   return (
     <div className="stack">
@@ -837,6 +1000,7 @@ function PluginsPage({ w, patch, onManage }: { w: Working; patch: (p: Partial<Pr
           <Button size="sm" onClick={onManage}><Puzzle size={11} /> {" "}{t("Manage plugins…")}</Button>
         </div>
       </Section>
+      {rows}
     </div>
   );
 }
@@ -1149,7 +1313,12 @@ function TransferSection({ onImported }: { onImported: () => void }) {
 
 /* ── Hotkeys ────────────────────────────────────────────── */
 
-function HotkeysPage({ w, patch }: { w: Working; patch: (p: Partial<Preferences>) => void }) {
+/**
+ * Every command and its keys. `filter` keeps the rows whose name or keys, as shown, match
+ * (the box while this page is in front, or the results); `inResults` draws the table alone,
+ * or nothing when no row matches. A row waiting for keys stays whatever the filter says.
+ */
+function HotkeysPage({ w, patch, filter = "", inResults = false }: { w: Working; patch: (p: Partial<Preferences>) => void; filter?: string; inResults?: boolean }) {
   const desktop = isDesktop();
   const overrides = w.prefs.hotkeys;
   const resolved = useMemo(() => resolveHotkeys(overrides, desktop), [overrides, desktop]);
@@ -1182,6 +1351,87 @@ function HotkeysPage({ w, patch }: { w: Working; patch: (p: Partial<Preferences>
     return () => window.removeEventListener("keydown", onKey, true);
   });
 
+  // The rows the filter keeps, matched on the same strings the rows show.
+  const groups = COMMAND_GROUPS.map((g) => ({
+    group: g,
+    commands: COMMANDS.filter((c) => c.group === g.id && (c.id === capturing || hotkeyRowMatches(translate(c.label), (resolved.byCommand[c.id] ?? []).map(formatCombo), filter))),
+  })).filter((g) => g.commands.length > 0);
+  const pluginRows = pluginHotkeys.filter((h) => hotkeyRowMatches(pluginName(h.pluginId), [h.combo], filter));
+  const fixedRows = FIXED_KEYS.filter(([label, keys]) => hotkeyRowMatches(translate(label), keys.map((k) => translate(k)), filter));
+  const none = groups.length === 0 && pluginRows.length === 0 && fixedRows.length === 0;
+  if (inResults && none) return null;
+
+  const table = (
+    <div className="listbox hotkeys" style={inResults ? undefined : { flex: 1, minHeight: 0 }}>
+      <table className="table">
+        <thead>
+          <tr>
+            <th style={{ width: "36%" }}>{t("Command")}</th>
+            <th>{t("Shortcut")}</th>
+            <th style={{ width: 1 }} />
+          </tr>
+        </thead>
+        <tbody>
+          {groups.map(({ group: g, commands }) => (
+            <Fragment key={g.id}>
+              <tr className="hotkeys-group"><td colSpan={3}>{translate(g.label)}</td></tr>
+              {commands.map((c) => {
+                const keys = resolved.byCommand[c.id] ?? [];
+                const conflicts = conflictsOf(c.id, resolved, pluginCombos);
+                return (
+                  <tr key={c.id}>
+                    <td>{translate(c.label)}</td>
+                    <td className="hotkey-keys">
+                      {keys.map((k) => {
+                        const clash = conflicts.find((x) => x.combo === k);
+                        const also = clash ? [...clash.commands.map((id) => translate(commandById(id)?.label ?? id)), ...clash.plugins.map((n) => t("{plugin} (plugin, tried first)", { plugin: n }))].join(", ") : "";
+                        return (
+                          <span key={k} className={`kbd hotkey-chip${clash ? " is-conflict" : ""}`} title={clash ? t("Also: {also}", { also }) : undefined}>
+                            {formatCombo(k)}
+                            <button type="button" className="hotkey-remove" aria-label={t("Remove {keys}", { keys: formatCombo(k) })} onClick={() => setKeys(c.id, keys.filter((x) => x !== k))}>
+                              <X size={9} />
+                            </button>
+                          </span>
+                        );
+                      })}
+                      {capturing === c.id && <span className="kbd is-capturing">{t("Press keys… (Esc to stop)")}</span>}
+                      {keys.length === 0 && capturing !== c.id && <span className="faint">{t("none")}</span>}
+                    </td>
+                    <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                      <Button size="sm" aria-label={t("Add a key to {command}", { command: translate(c.label) })} title={t("Add a key")} onClick={() => { setNote(null); setCapturing(capturing === c.id ? null : c.id); }}>
+                        <Plus size={11} />
+                      </Button>
+                      {" "}
+                      <Button size="sm" disabled={!(c.id in overrides)} aria-label={t("Put back the keys {command} ships with", { command: translate(c.label) })} title={t("Back to the default")} onClick={() => setKeys(c.id, null)}>
+                        <RotateCcw size={11} />
+                      </Button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </Fragment>
+          ))}
+          {pluginRows.length > 0 && <tr className="hotkeys-group"><td colSpan={3}>{t("Plugins")}</td></tr>}
+          {pluginRows.map((h) => (
+            <tr key={h.key}>
+              <td>{pluginName(h.pluginId)}</td>
+              <td colSpan={2}><span className="kbd">{h.combo}</span></td>
+            </tr>
+          ))}
+          {fixedRows.length > 0 && <tr className="hotkeys-group"><td colSpan={3}>{t("Fixed")}</td></tr>}
+          {fixedRows.map(([label, keys]) => (
+            <tr key={label}>
+              <td>{translate(label)}</td>
+              <td colSpan={2}>{keys.map((k) => <span key={k} className="kbd">{translate(k)}</span>)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+  const warning = note && <p className="hint prefs-hint warn" role="status">{note}</p>;
+  if (inResults) return <div className="stack" data-result-row>{warning}{table}</div>;
+
   return (
     <div className="stack" style={{ height: "100%" }}>
       <div className="row" style={{ justifyContent: "space-between" }}>
@@ -1190,73 +1440,8 @@ function HotkeysPage({ w, patch }: { w: Working; patch: (p: Partial<Preferences>
           <RotateCcw size={11} /> {" "}{t("Reset all hotkeys")}
         </Button>
       </div>
-      {note && <p className="hint prefs-hint warn" role="status">{note}</p>}
-      <div className="listbox hotkeys" style={{ flex: 1, minHeight: 0 }}>
-        <table className="table">
-          <thead>
-            <tr>
-              <th style={{ width: "36%" }}>{t("Command")}</th>
-              <th>{t("Shortcut")}</th>
-              <th style={{ width: 1 }} />
-            </tr>
-          </thead>
-          <tbody>
-            {COMMAND_GROUPS.map((g) => (
-              <Fragment key={g.id}>
-                <tr className="hotkeys-group"><td colSpan={3}>{translate(g.label)}</td></tr>
-                {COMMANDS.filter((c) => c.group === g.id).map((c) => {
-                  const keys = resolved.byCommand[c.id] ?? [];
-                  const conflicts = conflictsOf(c.id, resolved, pluginCombos);
-                  return (
-                    <tr key={c.id}>
-                      <td>{translate(c.label)}</td>
-                      <td className="hotkey-keys">
-                        {keys.map((k) => {
-                          const clash = conflicts.find((x) => x.combo === k);
-                          const also = clash ? [...clash.commands.map((id) => translate(commandById(id)?.label ?? id)), ...clash.plugins.map((n) => t("{plugin} (plugin, tried first)", { plugin: n }))].join(", ") : "";
-                          return (
-                            <span key={k} className={`kbd hotkey-chip${clash ? " is-conflict" : ""}`} title={clash ? t("Also: {also}", { also }) : undefined}>
-                              {formatCombo(k)}
-                              <button type="button" className="hotkey-remove" aria-label={t("Remove {keys}", { keys: formatCombo(k) })} onClick={() => setKeys(c.id, keys.filter((x) => x !== k))}>
-                                <X size={9} />
-                              </button>
-                            </span>
-                          );
-                        })}
-                        {capturing === c.id && <span className="kbd is-capturing">{t("Press keys… (Esc to stop)")}</span>}
-                        {keys.length === 0 && capturing !== c.id && <span className="faint">{t("none")}</span>}
-                      </td>
-                      <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
-                        <Button size="sm" aria-label={t("Add a key to {command}", { command: translate(c.label) })} title={t("Add a key")} onClick={() => { setNote(null); setCapturing(capturing === c.id ? null : c.id); }}>
-                          <Plus size={11} />
-                        </Button>
-                        {" "}
-                        <Button size="sm" disabled={!(c.id in overrides)} aria-label={t("Put back the keys {command} ships with", { command: translate(c.label) })} title={t("Back to the default")} onClick={() => setKeys(c.id, null)}>
-                          <RotateCcw size={11} />
-                        </Button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </Fragment>
-            ))}
-            {pluginHotkeys.length > 0 && <tr className="hotkeys-group"><td colSpan={3}>{t("Plugins")}</td></tr>}
-            {pluginHotkeys.map((h) => (
-              <tr key={h.key}>
-                <td>{pluginName(h.pluginId)}</td>
-                <td colSpan={2}><span className="kbd">{h.combo}</span></td>
-              </tr>
-            ))}
-            <tr className="hotkeys-group"><td colSpan={3}>{t("Fixed")}</td></tr>
-            {FIXED_KEYS.map(([label, keys]) => (
-              <tr key={label}>
-                <td>{translate(label)}</td>
-                <td colSpan={2}>{keys.map((k) => <span key={k} className="kbd">{translate(k)}</span>)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      {warning}
+      {none ? <p className="hint">{t("Nothing matches \"{query}\".", { query: filter.trim() })}</p> : table}
     </div>
   );
 }

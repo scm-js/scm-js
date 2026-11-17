@@ -86,7 +86,10 @@ export interface IconOption {
 /**
  * A select whose rows can carry a drawing — a native `<option>` holds text and nothing else,
  * so this is radix's Select wearing `.select`'s clothes and the menu's list. Plain option
- * lists stay on `Select` above: this one is a popup, and behaves like one.
+ * lists stay on `Select` above: this one is a popup, and behaves like one. Its rows are in
+ * the page only while it is open, so their labels are also written into a `hidden` span:
+ * what reads a control's text, as Preferences' filter does, finds every option as it does
+ * in a native select's `<option>`s.
  */
 export function IconSelect({
   value,
@@ -127,6 +130,7 @@ export function IconSelect({
           </RSelect.Viewport>
         </RSelect.Content>
       </RSelect.Portal>
+      <span hidden>{options.map((o) => translate(o.label)).join("\n")}</span>
     </RSelect.Root>
   );
 }

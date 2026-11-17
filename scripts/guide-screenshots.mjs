@@ -249,7 +249,8 @@ const SCENES = [
     // Where the water and lava are adjusted.
     await p.goto("dialog=preferences&page=view");
     await p.page.locator(".dlg summary", { hasText: "Water and lava" }).click(); await p.wait(400);
-    await p.page.locator(".dlg summary", { hasText: "Water and lava" }).scrollIntoViewIfNeeded(); await p.wait(300);
+    // The page is longer than the dialog: its foot at the bottom, so the settings opened are in the picture.
+    await p.page.locator(".dlg details", { hasText: "Water and lava" }).evaluate((el) => el.scrollIntoView({ block: "end" })); await p.wait(300);
     await p.dialog("preferences-graphics");
   }),
 

@@ -343,7 +343,9 @@ input[type="range"] {
   grid-column: 1 / -1;
 }
 .form.wide {
-  grid-template-columns: 120px minmax(0, 1fr);
+  /* 120px so the fields of every group on a page line up; wider when a label needs it,
+     since a label does not wrap and would otherwise run under its field. */
+  grid-template-columns: minmax(120px, max-content) minmax(0, 1fr);
 }
 .row {
   display: flex;

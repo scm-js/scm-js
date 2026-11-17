@@ -1,4 +1,5 @@
 import { useCallback, useRef, useState, type PointerEvent } from "react";
+import { zoomOf } from "../components/ui/interfaceSize";
 
 /**
  * Pointer-drag resizing for a dock. `side` is where the dock sits, so dragging
@@ -8,10 +9,14 @@ import { useCallback, useRef, useState, type PointerEvent } from "react";
  * The handle captures the pointer: a drag that crosses an iframe (a plugin's map
  * view) still reaches it, and its release always ends the drag. The width is set
  * at most once a frame, since each change lays out the map again.
+ *
+ * The width is the dock's own pixels, which at a larger interface size are larger than the
+ * page's: the pointer's travel is divided by the dock's zoom, so the edge stays under the
+ * pointer, and `max` as a function is handed that zoom to work in the same pixels.
  */
-export function useDockResize(side: "left" | "right", width: number, setWidth: (w: number) => void, min = 180, max: number | (() => number) = 520) {
+export function useDockResize(side: "left" | "right", width: number, setWidth: (w: number) => void, min = 180, max: number | ((zoom: number) => number) = 520) {
   const [dragging, setDragging] = useState(false);
-  const drag = useRef<{ x: number; w: number; max: number; next: number | null; raf: number } | null>(null);
+  const drag = useRef<{ x: number; w: number; zoom: number; max: number; next: number | null; raf: number } | null>(null);
 
   const end = useCallback(() => {
     const d = drag.current;
@@ -28,7 +33,8 @@ export function useDockResize(side: "left" | "right", width: number, setWidth: (
       if (e.button !== 0) return;
       e.preventDefault();
       e.currentTarget.setPointerCapture(e.pointerId);
-      drag.current = { x: e.clientX, w: width, max: typeof max === "function" ? max() : max, next: null, raf: 0 };
+      const zoom = zoomOf(e.currentTarget);
+      drag.current = { x: e.clientX, w: width, zoom, max: typeof max === "function" ? max(zoom) : max, next: null, raf: 0 };
       setDragging(true);
       document.body.classList.add("dock-resizing");
     },
@@ -39,7 +45,7 @@ export function useDockResize(side: "left" | "right", width: number, setWidth: (
     (e: PointerEvent<HTMLDivElement>) => {
       const d = drag.current;
       if (!d) return;
-      const dx = e.clientX - d.x;
+      const dx = (e.clientX - d.x) / d.zoom;
       d.next = Math.round(Math.min(d.max, Math.max(min, side === "left" ? d.w + dx : d.w - dx)));
       if (d.raf) return;
       d.raf = requestAnimationFrame(() => {

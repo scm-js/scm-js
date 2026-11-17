@@ -7,6 +7,7 @@ import {
   blockFromRect, blockRect, runBounds, SHEET_COLUMNS, sheetRows, type SheetRect, type SheetRow as SheetRowInfo, type TileBlock,
 } from "../../editor/tileSheet";
 import { t } from "../../i18n";
+import { zoomOf } from "../ui/interfaceSize";
 
 /** Paint one tile id from the atlas; the null megatile and out-of-range ids draw as void. */
 export function drawTile(ctx: CanvasRenderingContext2D, loaded: LoadedTileset, id: number, x: number, y: number, px: number) {
@@ -101,9 +102,9 @@ const GroupRow = memo(function GroupRow({ loaded, group, tilePx, top, selected, 
   }, [loaded, group, tilePx, w, h, selectedSlot]);
 
   const onClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    const r = e.currentTarget.getBoundingClientRect();
-    const col = Math.floor((e.clientX - r.left) / tilePx);
-    const row = Math.floor((e.clientY - r.top) / tilePx);
+    const r = e.currentTarget.getBoundingClientRect(), zoom = zoomOf(e.currentTarget);
+    const col = Math.floor((e.clientX - r.left) / zoom / tilePx);
+    const row = Math.floor((e.clientY - r.top) / zoom / tilePx);
     const slot = row * COLUMNS + col;
     if (slot < 0 || slot > 15 || !group.slots.includes(slot)) return;
     onSelect((group.group << 4) | slot);
@@ -318,8 +319,9 @@ export function TileSheet({ loaded, groups, selected, block, large, onSelect, on
 
   /** The sheet cell under a client point: content coordinates turned to (row, col), not clamped. */
   const cellAt = (clientX: number, clientY: number) => {
-    const r = contentRef.current!.getBoundingClientRect();
-    const x = clientX - r.left, y = clientY - r.top;
+    const r = contentRef.current!.getBoundingClientRect(), zoom = zoomOf(contentRef.current);
+    // (The page's pixels into the palette's own, which a larger interface size makes larger.)
+    const x = (clientX - r.left) / zoom, y = (clientY - r.top) / zoom;
     return { col: Math.floor((x - SHEET_LABEL_W) / tilePx), y, row: rowAbove(y) };
   };
 
@@ -473,7 +475,7 @@ const GridRow = memo(function GridRow({ loaded, tiles, from, count, cols, top, s
   }, [loaded, tiles, from, count, cols, w, selectedCol]);
 
   const colAt = (e: React.MouseEvent<HTMLCanvasElement>) =>
-    Math.floor((e.clientX - e.currentTarget.getBoundingClientRect().left) / GRID_PX);
+    Math.floor((e.clientX - e.currentTarget.getBoundingClientRect().left) / zoomOf(e.currentTarget) / GRID_PX);
 
   return (
     <canvas

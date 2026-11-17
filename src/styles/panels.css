@@ -16,6 +16,13 @@
   border-left: 1px solid var(--bg-0);
   box-shadow: -1px 0 0 var(--line-hi);
 }
+/* The right dock's panels, in a column of their own beside its edge. */
+.dock-panels {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
 .dock-resizer {
   position: absolute;
   top: 0;

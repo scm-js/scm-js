@@ -151,6 +151,28 @@ export interface Preferences {
    * while a mode is on, and the plugins' items always show.
    */
   statusBar: StatusBarCells;
+  /**
+   * How large the editor's own interface is drawn, in percent: menus, toolbars, panels,
+   * dialogs, notices and the splash. One of `INTERFACE_SIZES`. The map is not scaled by it
+   * (its own zoom decides that), which is why it is not the browser's page zoom; see
+   * `components/ui/interfaceSize.ts`.
+   */
+  interfaceSize: InterfaceSize;
+  /**
+   * Notices stay until they are closed, whatever time their caller asked for (a plugin's
+   * included). Off, a notice leaves after its own time: 6 seconds, 12 for an error, unless
+   * the caller gave another (`atoms/uiAtoms.ts#pushToastAtom`, `toastLifetime`).
+   */
+  keepNotices: boolean;
+}
+
+/** The sizes Preferences ▸ View offers for the interface, in percent. 100 is the editor as it always was. */
+export const INTERFACE_SIZES = [100, 115, 130] as const;
+export type InterfaceSize = (typeof INTERFACE_SIZES)[number];
+
+/** The CSS `zoom` an interface size stands for; anything not offered is 100%. */
+export function interfaceZoom(size: unknown): number {
+  return size === 115 || size === 130 ? size / 100 : 1;
 }
 
 /** See `Preferences.statusBar`, in the order the bar draws them. */
@@ -202,6 +224,8 @@ export const DEFAULT_PREFERENCES: Preferences = {
   hotkeys: {},
   counting: true,
   statusBar: { tile: true, pixel: true, tileId: true, size: true, tileset: true, layer: true, zoom: true, revision: true },
+  interfaceSize: 100,
+  keepNotices: false,
 };
 
 /** The speeds the Preferences sliders offer, slowest first. */
@@ -258,7 +282,7 @@ export const PREFERENCES_PAGE_KEYS: Record<PreferencesPage, readonly (keyof Pref
   general: ["language", "splash", "startup", "updates", "multipleMaps", "confirmClose"],
   files: ["newMap", "save", "recovery"],
   editing: ["placement", "undoLevels"],
-  view: ["view", "animateWaterSpeed", "animateUnitsSpeed", "remasteredEffects", "statusBar", "classicText"],
+  view: ["interfaceSize", "keepNotices", "view", "animateWaterSpeed", "animateUnitsSpeed", "remasteredEffects", "statusBar", "classicText"],
   testing: ["testMap"],
   plugins: ["plugins"],
   storage: [],

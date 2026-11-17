@@ -65,8 +65,10 @@ import { hostTerms, isDesktop } from "../../editor/platform";
 import {
   changedPreferences,
   DEFAULT_REMASTERED_EFFECTS,
+  INTERFACE_SIZES,
   PREFERENCE_LIMITS,
   resetPreferences,
+  type InterfaceSize,
   type LanguagePreference,
   type NewMapVersion,
   type PluginUpdateMode,
@@ -639,6 +641,26 @@ function ViewPage({ w, patch }: { w: Working; patch: (p: Partial<Preferences>) =
   const effects = (v: Partial<Preferences["remasteredEffects"]>) => patch({ remasteredEffects: { ...fx, ...v } });
   return (
     <div className="stack">
+      <Section title={t("Interface")}>
+        <div className="form wide">
+          <Field label={t("Size")}>
+            <Select
+              value={String(p.interfaceSize)}
+              onChange={(e) => patch({ interfaceSize: Number(e.target.value) as InterfaceSize })}
+              options={INTERFACE_SIZES.map((size) => ({ value: String(size), label: `${size}%` }))}
+            />
+          </Field>
+        </div>
+        <Hint>
+          {hostTerms().desktop
+            ? t("Makes the menus, panels, dialogs and notices larger. The map keeps its own zoom.")
+            : t("Makes the menus, panels, dialogs and notices larger. The map keeps its own zoom; the browser's zoom enlarges the map as well.")}
+        </Hint>
+      </Section>
+      <Section title={t("Notices")}>
+        <Check label={t("Keep notices until I close them")} checked={p.keepNotices} onChange={(e) => patch({ keepNotices: e.target.checked })} />
+        <Hint>{t("Otherwise a notice leaves after 6 seconds, and an error after 12.")}</Hint>
+      </Section>
       <Section title={t("Mouse wheel")}>
         <Check radio name="wheel" label={t("Scrolls the map; Ctrl+wheel zooms")} checked={p.view.wheel === "scroll"} onChange={() => view({ wheel: "scroll" })} />
         <Check radio name="wheel" label={t("Zooms; Shift+wheel scrolls sideways")} checked={p.view.wheel === "zoom"} onChange={() => view({ wheel: "zoom" })} />

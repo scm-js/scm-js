@@ -70,6 +70,20 @@ export interface Toast {
   actions?: ToastAction[];
 }
 
+/** How long a notice stays when its caller names no time: 6 seconds, 12 for an error. */
+export function defaultToastTtl(kind: Toast["kind"]): number {
+  return kind === "error" ? 12000 : 6000;
+}
+
+/**
+ * How long a notice stays before it leaves on its own, in milliseconds; 0 keeps it until it
+ * is closed. With Preferences ▸ View ▸ Keep notices until I close them on, that is every
+ * notice, whatever time its caller asked for (a plugin's included).
+ */
+export function toastLifetime(toast: Pick<Toast, "ttl">, keepNotices: boolean): number {
+  return keepNotices ? 0 : Math.max(0, toast.ttl);
+}
+
 /** One of a toast's `actions`. */
 export interface ToastAction {
   label: string;

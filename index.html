@@ -26,6 +26,23 @@
     <meta property="og:image" content="https://scmjs.dev/images/og.jpg" />
     <meta name="twitter:card" content="summary_large_image" />
     <!--
+      Preferences ▸ View ▸ Interface size, on the page before anything paints, so the boot
+      splash below and the editor's first frame are already at it (styles/size.css keys on
+      the attribute). components/ui/interfaceSize.ts#applyInterfaceSize does the same from
+      then on; keep the two in step (tests/interfaceSize.test.ts runs this script). The key
+      is the hosted nightly's own there (vite.config.ts fills it in).
+    -->
+    <script>
+      (function () {
+        try {
+          var size = JSON.parse(localStorage.getItem("%SCMJS_PREFS_KEY%") || "{}").interfaceSize;
+          if (size !== 115 && size !== 130) return;
+          document.documentElement.setAttribute("data-ui-size", String(size));
+          document.documentElement.style.setProperty("--ui-zoom", String(size / 100));
+        } catch (e) {}
+      })();
+    </script>
+    <!--
       The splash before the splash. This paints as soon as the HTML is parsed — before the
       stylesheet arrives, before the ~1 MB module bundle evaluates, before React mounts — and
       that is what decides how soon the desktop window appears at all: `desktop/main.ts` keeps
@@ -153,6 +170,11 @@
       }
       #boot-splash .foot .version { letter-spacing: 0.12em; color: #b43c6e; }
       #boot-splash .foot .author { letter-spacing: 0.08em; color: #5d6675; }
+      /* The interface size, as size.css has it for .splash-card. */
+      :root[data-ui-size] #boot-splash .card {
+        zoom: var(--ui-zoom);
+        width: min(520px, 90vmin / var(--ui-zoom), 72vh / var(--ui-zoom));
+      }
       #boot-splash .skip {
         margin-top: 6px;
         text-align: center;

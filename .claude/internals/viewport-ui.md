@@ -540,5 +540,54 @@ read in the first effect pass is still null.
 - File actions (open/save/new, drag-drop) are in
   `src/hooks/useMapFileActions.ts` and `src/services/mapIo.ts` (File System Access API with
   `<input>`/download fallbacks).
-- CSS is plain, layered in import order `tokens → base → ui → chrome → panels → viewport → dialogs → splash`
+- **Interface size** (2026-11-16, `Preferences.interfaceSize`: 100 / 115 / 130, Preferences ▸ View ▸ Interface;
+  `styles/size.css`, `components/ui/interfaceSize.ts`). At 115 / 130 the root carries `data-ui-size` and
+  `--ui-zoom` (1.15 / 1.3); at 100 neither is there and **no rule of `size.css` applies**, every rule being under
+  `:root[data-ui-size]` (`tests/interfaceSize.test.ts` checks that), so the default is byte for byte what it was
+  (screenshots against `origin/main`: identical). It is CSS `zoom` **per surface**: `.app`'s children but `.body`,
+  `.body`'s but `.map-column`, `.map-column`'s but `.map-stack`, the chrome laid over the map (`.map-view-switch`,
+  `.map-hud`, the notices, the start screen, a plugin's floating panel), and what is portalled to the body (`.dlg`,
+  `[data-radix-popper-content-wrapper] > *` — the content, never the wrapper, which floating-ui positions in page
+  pixels and then measures with the zoomed content inside — the plugin tooltip, the splash card, the crash card).
+  **The map is never inside a zoomed box, and that is the point.** `MapViewport`'s pointer arithmetic is
+  `clientX - rect.left + scrollLeft`: page pixels against the scroller's own, equal only at zoom 1. Rejected:
+  zooming the page and zooming `.map-stack` back by `1 / z` (Chromium multiplies the two to 0.99999994, and
+  `getBoundingClientRect` came back 299.98 for 300); the browser's / Electron's page zoom (it is the map's zoom
+  too, and the map would have to draw at fractional pixels per tile to undo it); scaling the type and spacing
+  tokens (1,174 px literals in `src/styles`, plus inline sizes, icon sizes and virtualised row heights in TS —
+  a rewrite, and plugins would follow only where they use the tokens). **The second trap** is sub-pixel: Chromium
+  draws the map canvas at its box *rounded* to the pixel (checked by comparing a screenshot with `getImageData`:
+  exact at the rounded spot, no resampling) while the pointer is measured against the box itself. 28 px × 1.3 =
+  36.4 put the map's corner at y = 103.19, drawn at 103, and a press on a tile's first row read the row above. So
+  what sits above and left of the map — the menu bar (and its error bar), the toolbar, the tab strip, the left
+  dock (its width also as `--dock-w`) — is sized `calc(round(h × z, 1px) / z + 0.01px)`, which Blink lays out as a
+  whole number of page pixels (the `+ 0.01px` beats the 1/64 px truncation of `h / z × z`). `e2e/interfaceSize.spec.ts`
+  reads the tile under the first and last pixel of a tile and fails (6, 9 for 6, 10) without the rounding.
+  Inside a zoomed surface a length is the surface's own pixels: what comes from the window is divided by `--ui-zoom`
+  (`.dlg`'s `max-width` / `max-height`, `.full` / `.tall`, the select's `--radix-select-trigger-width`, the sound
+  picker's available height, a menu's `--radix-popper-available-height` — menus scroll then — and the splash
+  card's `vmin`, which also gets a `72vh` cap since a 4:5 card is height-bound), and code that turns a pointer
+  position into a place divides by `zoomOf(el)` (`currentCSSZoom`): `useDockResize` (and `max(zoom)` for the right
+  dock's 45%), the console's grip, the bottom plugin strip, a floating plugin panel's drag and grip (its position is
+  kept in its own pixels now), the Tile tab's three hit tests, and the plugin tooltip's placement (sized × zoom,
+  placed ÷ zoom). Radix's slider, the minimap (`box.width` ratio) and Monaco (it walks the ancestors' `zoom`;
+  checked in TrigScript at 130%) need nothing. Two layout steps only under the attribute: the right dock's panels
+  sit in `.dock-panels` (a plain flex column, the same layout at 100%), which scrolls at a larger size instead of
+  running over the status bar, and the toolbar is a size container that drops the Layer / Brush labels below 1240 own px and Players / Triggers / Test's words
+  below 1120 own px (natural width ~1,250 with the brush group). **The same overlap and toolbar crush happen at
+  100% in a window under ~1,050 × 600**; not changed here, to keep 100% untouched. Early: `index.html` sets the
+  attribute in an inline script from `localStorage["%SCMJS_PREFS_KEY%"]` (vite.config fills in the nightly's
+  namespaced key) before the boot splash paints, and its own `:root[data-ui-size] #boot-splash .card` matches
+  `.splash-card`; `useApplyPreferences` keeps it on `interfaceSizeAtom` after. What does not follow: canvases in
+  the chrome (minimap, Tile tab, a plugin's charts) are stretched, not redrawn at the finer density; the rulers
+  stay the map's 20 px; native `title` tooltips and `<select>` popups are the system's. Plugin code that mixes
+  `getBoundingClientRect` / `clientX` with `clientWidth` is off by the zoom: Aftermath's timeline draws its hover
+  line at 1.3× the pointer's offset at 130% (its seek, which uses `rect.width`, is right) — `docs/plugins.md`
+  says how to write it.
+- **Notices kept until closed** (`Preferences.keepNotices`, off by default). `pushToastAtom` still stores the
+  time asked for (`defaultToastTtl`: 6 s, 12 s for an error); `Toasts` asks `toastLifetime(toast, keep)`, which is 0
+  while the preference is on, so a plugin's `ui.toast` with its own time is held too, and turning it off later
+  starts each notice's own time from then. Up to four are shown (`slice(-3)`); while the preference is on and two or
+  more are up, a *Close all* (`dismissAllToastsAtom`) sits above them. Each notice's × is a button, so Tab reaches it.
+- CSS is plain, layered in import order `tokens → base → ui → chrome → panels → viewport → dialogs → splash → size`
   under `src/styles/`; design tokens are CSS variables in `tokens.css`.

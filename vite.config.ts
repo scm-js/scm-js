@@ -35,8 +35,12 @@ export default defineConfig(() => ({
       // The rule is `shortVersion` in src/version.ts (the release plus the channel it was
       // cut on, so a nightly does not read as a release nobody shipped) — copied rather
       // than imported, since this config is its own TypeScript project. Change both.
+      // The interface size's early script reads the preferences under the key this build
+      // keeps them at: the hosted nightly keeps its own (src/atoms/storage.ts#namespaced).
       transformIndexHtml: (html: string) =>
-        html.replace(/%APP_VERSION_SHORT%/g, shortVersion(version)),
+        html
+          .replace(/%APP_VERSION_SHORT%/g, shortVersion(version))
+          .replace(/%SCMJS_PREFS_KEY%/g, process.env.SCMJS_SITE === 'nightly' ? 'scmjs-nightly.prefs' : 'scmjs.prefs'),
     },
     // The page again as `404.html`, which is what GitHub Pages answers a path it has no
     // file for. Links into the editor are paths — a shared map's invite is

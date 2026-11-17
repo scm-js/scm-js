@@ -2,7 +2,7 @@ import { atom } from "jotai";
 import { atomWithStorage, createJSONStorage } from "jotai/utils";
 import { browserStorage } from "./storage";
 import type { DialogId } from "../components/dialogs/ids";
-import type { Toast } from "../editor/view";
+import { defaultToastTtl, type Toast } from "../editor/view";
 import { msg } from "../i18n";
 import { count } from "../services/usage";
 import { viewOnlyAtom, viewOnlyMessage } from "./editorAtoms";
@@ -114,12 +114,18 @@ export const toastsAtom = atom<Toast[]>([]);
 let nextToast = 1;
 export const pushToastAtom = atom(null, (get, set, toast: Omit<Toast, "id" | "ttl"> & { ttl?: number }): number => {
   const id = nextToast++;
-  const ttl = toast.ttl ?? (toast.kind === "error" ? 12000 : 6000);
+  // (The time asked for; Toasts holds every notice instead while Keep notices is on — `toastLifetime`.)
+  const ttl = toast.ttl ?? defaultToastTtl(toast.kind);
   set(toastsAtom, [...get(toastsAtom).slice(-3), { ...toast, id, ttl }]);
   return id;
 });
 
 export const dismissToastAtom = atom(null, (get, set, id: number) => {
   set(toastsAtom, get(toastsAtom).filter((t) => t.id !== id));
+});
+
+/** Every notice gone at once: the Close all over a pile kept by Keep notices until I close them. */
+export const dismissAllToastsAtom = atom(null, (_get, set) => {
+  set(toastsAtom, []);
 });
 

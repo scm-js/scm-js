@@ -1424,7 +1424,8 @@ status bar cell (4) and a map button (5). The icon beside each is the plugin's o
 
 - **`status(text)`** sets the status bar line, and `statusText()` reads it back.
 - **`toast({ kind, title, detail })`** shows a notice over the map that goes away by
-  itself. It is how Save reports.
+  itself, unless the user keeps notices until they close them (Preferences ▸ View). It is
+  how Save reports.
 - **`confirm`, `alert` and `prompt`** ask simple questions in the editor's style.
   `confirm` resolves `false` and `prompt` resolves `null` when the user cancels.
 - **`open(id, payload)`** opens one of the editor's own dialogs, such as `"preferences"`
@@ -1463,6 +1464,16 @@ where the pointer is. A function is called again as the pointer moves, so a char
 what is under it; return null to show nothing at that spot. Leave out the element's
 `title`, or the browser's tooltip shows as well. See [the example in the
 reference](https://docs.scmjs.dev/api/ui/#tooltip).
+
+**A larger interface.** Preferences ▸ View can draw the editor's interface at 115% or
+130%, and your dialogs and panels are drawn at that size with it, whether they use the
+widgets or not. The map, a map view and an overlay are not. Inside a dialog or panel the
+pointer's `clientX` / `clientY` and `getBoundingClientRect()` are in page pixels, while an
+element's `clientWidth`, `offsetWidth` and the lengths you set are in its own, which are
+larger by the same factor. Turn a pointer position into a place in your element with the
+rectangle alone, `(e.clientX - rect.left) / rect.width * element.clientWidth`, or divide
+by `element.currentCSSZoom`. A tooltip function's `offsetX` / `offsetY` are page pixels
+too.
 
 ### Dialogs
 

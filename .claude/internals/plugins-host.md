@@ -132,7 +132,8 @@ the dock stays up with every built-in panel hidden; `grow` gives it the spare he
 `host.ts#addStatusItem`; `StatusBar.tsx` renders the cells after the message with the plugin
 icon or a `.status-spinner` while `busy`), `api.ui.preferencesPage` (`pluginPreferencesPagesAtom`,
 one entry per plugin — a second registration replaces the first; `PreferencesDialog.tsx` lists
-each under Plugins in its nav as `plugin:<id>` and renders `PluginPreferencesPage`, a state-held
+each under Plugins in its nav as `plugin:<id>`, by name (`pluginPagesInOrder`) rather than in
+the order the plugins loaded, and renders `PluginPreferencesPage`, a state-held
 host `div` the spec `mount`s into; a visited page stays mounted hidden until the dialog closes so
 `apply` on OK/Apply sees what the user changed, `reset` goes to the page showing on Reset this
 page and to every visited page on Reset everything (never to an unvisited one); counted as

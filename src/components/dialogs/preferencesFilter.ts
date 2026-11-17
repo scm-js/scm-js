@@ -8,6 +8,15 @@
  * rows show (`hotkeyRowMatches`), since one section there would be the whole list.
  */
 
+/**
+ * Plugins' pages in the order the dialog lists them, under Plugins and in the filter's
+ * results: by the plugin's name, since the order the plugins happened to load in tells the
+ * reader nothing. Case is ignored and a number in a name counts as a number.
+ */
+export function pluginPagesInOrder<T extends { plugin: { name: string } }>(pages: readonly T[]): T[] {
+  return [...pages].sort((a, b) => a.plugin.name.localeCompare(b.plugin.name, undefined, { sensitivity: "base", numeric: true }));
+}
+
 /** Text as the filter compares it: one composition of Hangul, lower case, one kind of minus. */
 function fold(text: string): string {
   return text.normalize("NFC").toLowerCase().replace(/−/g, "-");

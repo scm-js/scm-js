@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { filterTerms, hotkeyRowMatches, keyMatches, textMatches } from "../src/components/dialogs/preferencesFilter";
+import { filterTerms, hotkeyRowMatches, keyMatches, pluginPagesInOrder, textMatches } from "../src/components/dialogs/preferencesFilter";
 import { COMMANDS, formatCombo, resolveHotkeys } from "../src/editor/commands";
 
 describe("Preferences' filter: sections", () => {
@@ -53,5 +53,20 @@ describe("Preferences' filter: the Hotkeys page", () => {
     expect(hotkeyRowMatches("다른 이름으로 저장", ["Ctrl+Shift+S"], "저장")).toBe(true);
     expect(hotkeyRowMatches("다른 이름으로 저장", ["Ctrl+Shift+S"], "")).toBe(true);
     expect(matching("xyzzy")).toEqual([]);
+  });
+});
+
+describe("Preferences: the plugins' pages", () => {
+  const page = (name: string) => ({ key: name, plugin: { name } });
+
+  it("lists them by name, whatever order the plugins loaded in", () => {
+    const loaded = [page("TrigScript"), page("Aftermath"), page("scmjs.dev"), page("Repair"), page("aftermath 2"), page("Stamp 10"), page("Stamp 9")];
+    expect(pluginPagesInOrder(loaded).map((e) => e.plugin.name)).toEqual(["Aftermath", "aftermath 2", "Repair", "scmjs.dev", "Stamp 9", "Stamp 10", "TrigScript"]);
+  });
+
+  it("leaves the list it was given as it was", () => {
+    const loaded = [page("B"), page("A")];
+    pluginPagesInOrder(loaded);
+    expect(loaded.map((e) => e.plugin.name)).toEqual(["B", "A"]);
   });
 });

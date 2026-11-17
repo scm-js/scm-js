@@ -1565,7 +1565,7 @@ example](https://docs.scmjs.dev/api/ui/#statusitemspec) in the reference.
 ### Preferences pages
 
 A plugin's settings belong on a page of its own in Edit ▸ Preferences, listed under
-Plugins, rather than behind a menu item. One page per plugin.
+Plugins by the plugin's name, rather than behind a menu item. One page per plugin.
 
 - **`mount(body)`** fills the page. It runs the first time the page is shown, and the page
   stays mounted until the dialog closes.

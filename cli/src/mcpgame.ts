@@ -1,6 +1,6 @@
 /** The MCP tools that run the map in the game or draw it with the game's graphics, and `doctor`, which says whether they can. */
 import { z } from "zod";
-import { doctorJson, doctorReport, printDoctor } from "./doctor";
+import { doctorJson, doctorReport, printDoctor, readiness, type Check, type ReadyGroup } from "./doctor";
 import { balanceJson, printBalance, runBalance } from "./balance";
 import { parseRaces } from "./ladder";
 import { loadMapInput, type Input, openMap } from "./files";
@@ -137,15 +137,51 @@ export function addGameTools(reg: Reg, { options }: McpContext): void {
   }));
 }
 
+/**
+ * What the tools need, by tool: the doctor tool's summary in place of the commands'. Everything else a tool does needs
+ * nothing beyond scmjs.
+ */
+const TOOL_READY: ReadyGroup[] = [
+  { commands: "map_info, map_check, map_edit and the other map, mod, replay and editor tools", needs: [] },
+  { commands: "map_preview, map_analyze, map_generate, map_terrain, map_doodads", needs: ["StarCraft"] },
+  { commands: "map_trace, map_cost", needs: ["StarCraft", "map"] },
+  { commands: "map_coverage", needs: ["StarCraft", "replay"] },
+  { commands: "map_balance", needs: ["StarCraft", "match", "replay"] },
+];
+/**
+ * The checks a tool can be held up by. Docker, the browser, ffmpeg, the desktop app and Claude Code's settings serve
+ * commands that are not tools; TypeScript only `map_build` of a TrigScript map, which says so itself when it lacks it
+ * (a map maker in Claude Desktop was told to run npm for it).
+ */
+const TOOL_CHECKS = new Set(["Node", "scmjs", "StarCraft", "Game engine", "scmjs.dev"]);
+
+/**
+ * `scmjs doctor` as the tools see it: the checks a tool can be held up by, each said in the tools' terms, and what is
+ * ready by tool. A model read the commands' report to a person in Claude Desktop as "map build is not working, run npm
+ * install typescript", and said twice that the check did not say what a thing was for (2026-11-17).
+ */
+export function doctorForTools(r: Awaited<ReturnType<typeof doctorReport>>): { text: string[]; json: ReturnType<typeof doctorJson> } {
+  const checks = r.checks.filter((c) => TOOL_CHECKS.has(c.what)).map((c): Check => {
+    if (c.what === "Game engine" && !c.engine?.build) return { ...c, note: "map_trace, map_cost, map_coverage and map_balance fetch it from the play page by themselves the first time one runs (about 25 MB). Nothing to install." };
+    if (c.what === "scmjs.dev") return { ...c, note: "share, replay_sync and the library_ tools use the session. account_login signs the person in, in their browser, if they want to.", fix: undefined };
+    return c;
+  });
+  const ready = readiness(r.checks, TOOL_READY);
+  const report = { ...r, checks };
+  // "Tools" heads TypeScript and the sign-in in the commands' report; here a tool is one of these.
+  const text = printDoctor(report, 140, { ready, every: "Every tool is ready on this computer.", notes: true }).map((l) => (visible(l) === "  Tools" ? "  Also used" : l));
+  return { text, json: doctorJson(report, ready) };
+}
+
 export function addDoctorTool(reg: Reg): void {
   reg("doctor", {
     title: "What this computer has",
-    description: "What this computer has of what the tools need beyond Node (scmjs doctor): whether a copy of StarCraft and the game engine are there, which map_trace and map_cost need, TypeScript for map_build, and whether npm has a newer scmjs; for each thing missing, what the person can install or set. Call it before map_trace or map_cost, or when one fails, to know what to tell the person. Changes nothing.",
+    description: "Checks what scmJS can use on this computer: a copy of StarCraft, the game engine, the scmjs.dev sign-in, and whether a newer scmjs is out (scmjs doctor, said in the tools' terms). It ends with which tools are ready, and for each thing missing says what it is for and what the person can install or set. Call it before map_trace or map_cost, when one fails, or when the person asks whether their setup works. Changes nothing.",
     inputSchema: {},
     annotations: { readOnlyHint: true },
   }, tool(async () => {
-    const r = await doctorReport();
-    return ok(printDoctor(r), doctorJson(r));
+    const { text, json } = doctorForTools(await doctorReport());
+    return ok(text, json);
   }));
 }
 

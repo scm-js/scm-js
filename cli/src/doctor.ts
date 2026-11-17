@@ -19,7 +19,7 @@ import { findDesktopApp } from "./open";
 import { findBrowser, NO_BROWSER } from "./browser";
 import { findFfmpeg } from "./export";
 import { noLocalBrowser, readSession, serverLabel, serverUrl, sessionPath } from "./account";
-import { INSTALL, installInfo, installLabel, updateCommand, type Install, type InstallKind } from "./runtime";
+import { INSTALL, installInfo, installLabel, selfCommand, updateCommand, type Install, type InstallKind } from "./runtime";
 import { msg, t, translate } from "./i18n";
 import { CliError, columns, mark, padColumns, pc, visible } from "./ui";
 
@@ -167,8 +167,10 @@ export function mcpAddLine(install: Install = installInfo()): string {
  * `projects`, for each folder. Only those entries are looked at; nothing else in the file is read out or printed.
  * Not having it is no problem, so the state is `ok` either way.
  */
-export function mcpCheck(config = join(homedir(), ".claude.json"), cwd = process.cwd(), add = mcpAddLine()): Check {
+export function mcpCheck(config = join(homedir(), ".claude.json"), cwd = process.cwd(), add = mcpAddLine(), install: Install = installInfo()): Check {
   const what = "MCP";
+  // Started by an AI app from its bundle: whether Claude Code also has it says nothing about this one.
+  if (install.manager === "mcpb") return { what, state: "ok", detail: t("started by your AI app, from an MCP bundle") };
   let cfg: { mcpServers?: Record<string, unknown>; projects?: Record<string, { mcpServers?: Record<string, unknown> } | null> };
   try { cfg = JSON.parse(readFileSync(config, "utf8")); } catch { return { what, state: "ok", detail: pc.dim(t("Claude Code not found")) }; }
   const has = (servers: Record<string, unknown> | undefined) => !!servers && typeof servers === "object" && Object.values(servers).some(startsScmjsMcp);
@@ -226,7 +228,7 @@ export function scmjsDevCheck(file = sessionPath(), server = serverUrl(), headle
   const what = "scmjs.dev";
   const s = readSession(file);
   if (s && s.server === server) return { what, state: "ok", detail: `${t("signed in as {name}", { name: s.name ?? t("(no name)") })}${pc.dim(` · ${file}`)}`, path: file };
-  return { what, state: "ok", detail: pc.dim(s ? t("not signed in to {server}", { server: serverLabel(server) }) : t("not signed in")), note: t("scmjs map share makes links to maps with it."), fix: headless ? "scmjs login --device" : "scmjs login" };
+  return { what, state: "ok", detail: pc.dim(s ? t("not signed in to {server}", { server: serverLabel(server) }) : t("not signed in")), note: t("scmjs map share makes links to maps with it."), fix: `${selfCommand()} login${headless ? " --device" : ""}` };
 }
 
 /**
@@ -250,8 +252,10 @@ export async function doctorReport(): Promise<{ checks: Check[]; blocked: boolea
 export interface Ready { commands: string; ok: boolean; lacks?: string }
 
 /** What each group needs: a check by its name (ready unless it warns), or the engine runner of a kind. */
-type Need = "TypeScript" | "Docker" | "StarCraft" | "Browser" | RunnerKind;
-const READY: { commands: string; needs: Need[] }[] = [
+export type Need = "TypeScript" | "Docker" | "StarCraft" | "Browser" | RunnerKind;
+/** A group of commands (or, for the MCP server's doctor, of tools) and what it needs. */
+export type ReadyGroup = { commands: string; needs: Need[] };
+const READY: ReadyGroup[] = [
   { commands: "map info|check|…", needs: [] },
   { commands: "replay info|open", needs: [] },
   { commands: "mcp", needs: [] },
@@ -272,7 +276,7 @@ const READY: { commands: string; needs: Need[] }[] = [
  * need it; a fetched engine build without a kind's runner blocks that kind's commands (none fetched yet blocks
  * nothing: the first run fetches it); Node too old blocks everything. A check that is not there blocks nothing.
  */
-export function readiness(checks: Check[]): Ready[] {
+export function readiness(checks: Check[], groups: ReadyGroup[] = READY): Ready[] {
   const by = (what: string) => checks.find((c) => c.what === what);
   const nodeBad = by("Node")?.state === "bad";
   const engine = by("Game engine")?.engine;
@@ -280,7 +284,7 @@ export function readiness(checks: Check[]): Ready[] {
     if (n === "TypeScript" || n === "Docker" || n === "StarCraft" || n === "Browser") return by(n)?.state === "warn" || by(n)?.state === "bad" ? n : null;
     return engine?.build && !engine.runners.includes(n) ? "engine runner" : null;
   };
-  return READY.map(({ commands, needs }) => {
+  return groups.map(({ commands, needs }) => {
     const lacks = nodeBad ? "Node" : needs.map(lacking).find((l) => l !== null);
     return lacks ? { commands, ok: false, lacks } : { commands, ok: true };
   });
@@ -291,11 +295,11 @@ export function readiness(checks: Check[]): Ready[] {
  * Code's row is "Claude Code", and a thing that is fine but not there (shown with a dot) is "absent", not "ok" — and
  * what is ready.
  */
-export function doctorJson(r: { checks: Check[]; blocked: boolean; install?: Install }) {
+export function doctorJson(r: { checks: Check[]; blocked: boolean; install?: Install }, ready: Ready[] = readiness(r.checks)) {
   return {
     blocked: r.blocked, ...(r.install ? { install: r.install } : {}),
     checks: r.checks.map((c) => ({ ...c, what: c.what === "MCP" ? "Claude Code" : c.what, state: absent(c) ? "absent" : c.state, detail: visible(c.detail) })),
-    ready: readiness(r.checks),
+    ready,
   };
 }
 
@@ -317,9 +321,9 @@ function lackLine(g: Ready, checks: Check[]): string {
  * The ready summary: one line when every command can run, else a line per group that cannot, with the one thing it
  * lacks and what to do about it.
  */
-export function readyLines(ready: Ready[], checks: Check[] = []): string[] {
+export function readyLines(ready: Ready[], checks: Check[] = [], every = t("Every command is ready on this computer.")): string[] {
   const missing = ready.filter((g) => !g.ok);
-  if (!missing.length) return [`  ${mark.ok} ${pc.bold(t("Every command is ready on this computer."))}`];
+  if (!missing.length) return [`  ${mark.ok} ${pc.bold(every)}`];
   const width = Math.max(...missing.map((g) => g.commands.length));
   return [`  ${pc.bold(t("Not ready"))}`, ...missing.map((g) => `  ${mark.error} ${g.commands.padEnd(width)}  ${pc.dim(lackLine(g, checks))}`)];
 }
@@ -350,7 +354,11 @@ const ABSENT = /^not |(?:않음|못함|없음)$/;
 /** Fine, but not there (no desktop app, Claude Code without scmjs mcp, not signed in): a dot in the text. */
 const absent = (c: Check) => c.state === "ok" && ABSENT.test(valueOf(c).replace(/^scmjs mcp /, ""));
 
-export function printDoctor(r: { checks: Check[]; blocked: boolean }, width = process.stdout.columns || 100): string[] {
+/**
+ * `ready` and `every` replace the commands' summary (the MCP server's doctor names tools); `notes` also prints the note
+ * and fix of a row that is fine but not there (the engine not fetched yet), which a reader without the JSON needs.
+ */
+export function printDoctor(r: { checks: Check[]; blocked: boolean }, width = process.stdout.columns || 100, { ready = readiness(r.checks), every, notes = false }: { ready?: Ready[]; every?: string; notes?: boolean } = {}): string[] {
   const by = (what: string) => r.checks.find((c) => c.what === what);
   const node = by("Node"), self = by("scmjs");
   // The version and Node are the title when they are fine ("scmjs 0.9.0 · the newest · Node v24 · linux x64").
@@ -368,6 +376,7 @@ export function printDoctor(r: { checks: Check[]; blocked: boolean }, width = pr
     lines.push(`${head}${tail ? ` ${tail}` : ""}`.trimEnd());
     // What is wrong and what to do about it, under the row; Claude Code's "not added" is not wrong, so only the line to run.
     if (c.state !== "ok") { if (c.note) lines.push(pc.dim(`      ${c.note}`)); if (c.fix) lines.push(`      ${c.fix}`); }
+    else if (notes && absent(c)) { if (c.note) lines.push(pc.dim(`      ${c.note}`)); if (c.fix) lines.push(`      ${c.fix}`); }
     else if ((c.what === "MCP" || c.what === "scmjs.dev" || c.what === "ffmpeg") && c.fix) lines.push(`      ${pc.dim(c.fix)}`);
   };
   // Node and scmjs are rows only when something is wrong with them.
@@ -380,6 +389,6 @@ export function printDoctor(r: { checks: Check[]; blocked: boolean }, width = pr
     for (const c of rows) row(c);
     lines.push("");
   }
-  lines.push(...(r.blocked ? [`  ${mark.error} ${pc.bold(t("Nothing runs until Node is updated."))}`] : readyLines(readiness(r.checks), r.checks)));
+  lines.push(...(r.blocked ? [`  ${mark.error} ${pc.bold(t("Nothing runs until Node is updated."))}`] : readyLines(ready, r.checks, every)));
   return lines;
 }

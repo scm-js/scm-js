@@ -4,16 +4,20 @@
 // failure. CI runs it on each executable it builds (build.yml's `cli-binary`); by hand:
 //   node scripts/check-cli-binary.mjs cli/dist/bin/scmjs-cli-linux-x64
 //   node scripts/check-cli-binary.mjs <exe> --replay some.rep --game     a replay's info, and the game (needs StarCraft)
+//   node scripts/check-cli-binary.mjs <exe> --mcpb scmjs-mcp-….mcpb      and the MCP bundle, run the way an AI app runs it
 import { spawn, spawnSync } from "node:child_process";
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { delimiter, join, resolve } from "node:path";
+import { delimiter, dirname, join, resolve } from "node:path";
+import { appConfig, askServer } from "./lib/mcpb.mjs";
+import { readZip } from "./lib/zip.mjs";
 
 const args = process.argv.slice(2);
 const exe = args[0] && resolve(args[0]);
 if (!exe || !existsSync(exe)) { console.error("usage: node scripts/check-cli-binary.mjs <executable> [--replay <file>] [--game]"); process.exit(2); }
 const replay = args.includes("--replay") ? resolve(args[args.indexOf("--replay") + 1]) : process.env.SCMJS_TEST_REPLAY;
 const game = args.includes("--game");
+const mcpb = args.includes("--mcpb") ? resolve(args[args.indexOf("--mcpb") + 1]) : null;
 const version = JSON.parse(readFileSync("package.json", "utf8")).version;
 const maps = resolve("tests/maps");
 
@@ -144,6 +148,41 @@ await check("mcp answers initialize and lists its tools", () => new Promise((don
   send({ method: "notifications/initialized" });
   send({ id: 2, method: "tools/list", params: {} });
 }));
+
+if (mcpb) {
+  // Unpacked and started as the app does: the manifest's command with its variables filled, in a folder that is not the
+  // maps folder, with the StarCraft folder left empty. Its tools must find a map by name in the maps folder chosen in
+  // the install dialog, refuse one outside it, and know how they were installed.
+  await check("the MCP bundle, started as an AI app starts it", async () => {
+    const dir = join(work, "extension");
+    const files = readZip(readFileSync(mcpb));
+    for (const f of files) {
+      mkdirSync(dirname(join(dir, f.name)), { recursive: true });
+      writeFileSync(join(dir, f.name), f.bytes);
+      if (f.mode !== null && !windows) chmodSync(join(dir, f.name), f.mode);
+    }
+    const manifest = JSON.parse(readFileSync(join(dir, "manifest.json"), "utf8"));
+    const server = files.find((f) => f.name === manifest.server.entry_point);
+    if (!server) throw new Error(`no ${manifest.server.entry_point} in the bundle`);
+    if (!windows && !((server.mode ?? 0) & 0o100)) throw new Error(`${server.name} is not marked executable in the bundle`);
+    if (!files.some((f) => f.name === manifest.icon)) throw new Error(`no ${manifest.icon} in the bundle`);
+    const maps = join(work, "My Maps");
+    mkdirSync(maps, { recursive: true });
+    cpSync(join(work, "ums.scx"), join(maps, "ums.scx"));
+    const app = appConfig(manifest, dir, { maps_folder: maps }, { DOCUMENTS: work, HOME: work });
+    if (!app.env.SCMJS_STARCRAFT?.includes("${user_config.starcraft}")) throw new Error(`an empty StarCraft folder reached the server as ${JSON.stringify(app.env.SCMJS_STARCRAFT)}; the check expects the placeholder`);
+    const call = (name, a = {}) => ({ method: "tools/call", params: { name, arguments: a } });
+    const { answers: [info, outside, doctor], stderr } = await askServer(app.command, app.args, { cwd: dir, env: { ...env, ...app.env } }, [
+      call("map_info", { path: "ums.scx" }), call("map_info", { path: join(work, "melee.scx") }), call("doctor"),
+    ]);
+    const text = (a) => a.result?.content?.map((c) => c.text ?? "").join("\n") ?? JSON.stringify(a);
+    if (info.result?.isError || !/ums\.scx/.test(text(info))) throw new Error(`map_info on the maps folder's ums.scx: ${text(info)}`);
+    if (!outside.result?.isError || !text(outside).includes("outside the folder the tools work in")) throw new Error(`a map outside the maps folder was not refused: ${text(outside)}`);
+    if (!text(doctor).includes("from an MCP bundle")) throw new Error(`doctor does not know the bundle: ${text(doctor)}`);
+    if (/user_config/.test(text(doctor))) throw new Error(`the empty StarCraft folder reached doctor: ${text(doctor)}`);
+    if (!stderr.includes(`working directory ${maps}`)) throw new Error(`the server did not start in the maps folder: ${stderr}`);
+  });
+}
 
 if (replay && existsSync(replay)) {
   await check("replay info", () => expectRun(scmjs(["replay", "info", replay])));

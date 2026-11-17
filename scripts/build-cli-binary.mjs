@@ -7,12 +7,16 @@
 //   node scripts/build-cli-binary.mjs                      this computer's: cli/dist/bin/scmjs-<os>-<arch>[.exe]
 //   node scripts/build-cli-binary.mjs --target darwin-arm64,darwin-x64 --archive
 //   node scripts/build-cli-binary.mjs --check              and then run the checks of scripts/check-cli-binary.mjs
+//   node scripts/build-cli-binary.mjs --mcpb               and the MCP bundle (.mcpb) for every target, Linux's too
 //
 // Targets: linux-x64, darwin-arm64, darwin-x64, win-x64 (Node's names). A target's blob is made by that target's own
 // Node when it runs here (this computer's; darwin-x64 on Apple silicon through Rosetta), with V8's code cache for a
 // faster start; otherwise without it, which any Node of the same version reads. A macOS executable must be signed
 // to run on Apple silicon: ad hoc (`codesign --sign -`), so only on a Mac. `--archive` packs each into the release's
-// asset (.tar.gz, or .zip for Windows) with LICENSE and the third-party notices, Node's licence among them.
+// asset (.tar.gz, or .zip for Windows) with LICENSE and the third-party notices, Node's licence among them, and for
+// Windows and macOS (the platforms Claude Desktop runs on) also makes the MCP bundle `scmjs-mcp-<os>-<arch>.mcpb`: the
+// same executable with a manifest, which an AI app installs from the one file (scripts/lib/mcpb.mjs). `--mcpb` makes
+// the bundle for any target, for trying one on Linux; the release carries only Windows' and macOS's.
 // The archives sit on one release page beside electron-builder's `${productName}-…` files (scmJS-windows-x64.zip),
 // and GitHub treats asset names case-insensitively: a name here must not equal one of those but for case — 0.12.0's
 // release died on scmjs-windows-x64.zip, hence `scmjs-cli-`. build.yml's release job refuses such a pair before it
@@ -23,17 +27,19 @@ import { createHash } from "node:crypto";
 import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
-import { crc32, deflateRawSync } from "node:zlib";
 import { bundleCli, bundleWeigh, cliVersion } from "./lib/cli-bundle.mjs";
+import { askServer, MCPB_CLI, mcpbAsset, mcpbManifest } from "./lib/mcpb.mjs";
+import { zip } from "./lib/zip.mjs";
 
 const POSTJECT = "postject@1.0.0-alpha.6";
 const FUSE = "NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2";
 /** Node's target names → the asset's (the desktop installers say windows, macos, linux too). */
+/** `platform`: Node's name, as an MCP bundle's manifest names it; `mcpb`: whether the release carries the bundle. */
 const TARGETS = {
-  "linux-x64": { os: "linux", arch: "x64", asset: "scmjs-cli-linux-x64", archive: "tar.gz" },
-  "darwin-arm64": { os: "macos", arch: "arm64", asset: "scmjs-cli-macos-arm64", archive: "tar.gz" },
-  "darwin-x64": { os: "macos", arch: "x64", asset: "scmjs-cli-macos-x64", archive: "tar.gz" },
-  "win-x64": { os: "windows", arch: "x64", asset: "scmjs-cli-windows-x64", archive: "zip", exe: ".exe" },
+  "linux-x64": { os: "linux", arch: "x64", asset: "scmjs-cli-linux-x64", archive: "tar.gz", platform: "linux" },
+  "darwin-arm64": { os: "macos", arch: "arm64", asset: "scmjs-cli-macos-arm64", archive: "tar.gz", platform: "darwin", mcpb: true },
+  "darwin-x64": { os: "macos", arch: "x64", asset: "scmjs-cli-macos-x64", archive: "tar.gz", platform: "darwin", mcpb: true },
+  "win-x64": { os: "windows", arch: "x64", asset: "scmjs-cli-windows-x64", archive: "zip", exe: ".exe", platform: "win32", mcpb: true },
 };
 
 const args = process.argv.slice(2);
@@ -96,33 +102,6 @@ async function nodeLicence() {
   return text;
 }
 
-/** A .zip of `files` (deflated, no folders, no zip64: each well under 4 GB), for Windows, whose Explorer opens one. */
-function zip(files, when = new Date()) {
-  const time = (when.getHours() << 11) | (when.getMinutes() << 5) | (when.getSeconds() >> 1);
-  const date = ((when.getFullYear() - 1980) << 9) | ((when.getMonth() + 1) << 5) | when.getDate();
-  const locals = [], central = [];
-  let offset = 0;
-  for (const f of files) {
-    const name = Buffer.from(f.name, "utf8");
-    const data = deflateRawSync(f.bytes, { level: 9 });
-    const head = Buffer.alloc(30);
-    head.writeUInt32LE(0x04034b50, 0); head.writeUInt16LE(20, 4); head.writeUInt16LE(0x0800, 6); head.writeUInt16LE(8, 8);
-    head.writeUInt16LE(time, 10); head.writeUInt16LE(date, 12); head.writeUInt32LE(crc32(f.bytes), 14);
-    head.writeUInt32LE(data.length, 18); head.writeUInt32LE(f.bytes.length, 22); head.writeUInt16LE(name.length, 26);
-    const dir = Buffer.alloc(46);
-    dir.writeUInt32LE(0x02014b50, 0); dir.writeUInt16LE(20, 4); dir.writeUInt16LE(20, 6); head.copy(dir, 8, 6, 30);
-    dir.writeUInt32LE(offset, 42);
-    locals.push(head, name, data);
-    central.push(dir, name);
-    offset += head.length + name.length + data.length;
-  }
-  const size = central.reduce((n, b) => n + b.length, 0);
-  const end = Buffer.alloc(22);
-  end.writeUInt32LE(0x06054b50, 0); end.writeUInt16LE(files.length, 8); end.writeUInt16LE(files.length, 10);
-  end.writeUInt32LE(size, 12); end.writeUInt32LE(offset, 16);
-  return Buffer.concat([...locals, ...central, end]);
-}
-
 /** Does this Node executable run here (this computer's; an Intel Mac's under Rosetta)? */
 function runsHere(node) {
   try { return execFileSync(node, ["-p", "process.version"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim() === NODE_VERSION; } catch { return false; }
@@ -137,6 +116,15 @@ await bundleCli({ outDir: WORK, install: "binary", version, commit });
 await bundleWeigh({ outDir: WORK });
 const notices = `${readFileSync(join(WORK, "THIRD-PARTY-NOTICES.txt"), "utf8").trimEnd()}\n\n${"=".repeat(80)}\nNode.js ${NODE_VERSION}, which the executable carries\n${"=".repeat(80)}\n\n${await nodeLicence()}`;
 mkdirSync(OUT, { recursive: true });
+
+// The MCP bundles' list of tools, from the server itself: the bundle just built, run by this Node.
+const bundles = targets.filter((target) => flag("--mcpb") || (flag("--archive") && TARGETS[target].mcpb));
+let tools = [];
+if (bundles.length) {
+  const { answers: [list] } = await askServer(process.execPath, [resolve(WORK, "scmjs.cjs"), "mcp"], { cwd: WORK }, [{ method: "tools/list", params: {} }]);
+  tools = list.result?.tools ?? [];
+  if (tools.length < 10) fail(`scmjs mcp listed ${tools.length} tools for the MCP bundle.`);
+}
 
 const made = [];
 for (const target of targets) {
@@ -189,13 +177,37 @@ for (const target of targets) {
     entry.archiveBytes = statSync(archive).size;
     entry.sha256 = sha256(readFileSync(archive));
   }
+  if (bundles.includes(target)) {
+    // The MCP bundle: the manifest at its top, checked by the packer's own validator, and the executable under server/.
+    const exe = `server/scmjs${t.exe ?? ""}`;
+    const stage = join(WORK, `${target}-mcpb`);
+    rmSync(stage, { recursive: true, force: true });
+    mkdirSync(join(stage, "server"), { recursive: true });
+    const manifest = JSON.stringify(mcpbManifest({ version, platform: t.platform, exe, tools }), null, 2);
+    writeFileSync(join(stage, "manifest.json"), manifest);
+    copyFileSync(out, join(stage, exe));
+    copyFileSync("public/icon-512.png", join(stage, "icon.png"));
+    run(process.platform === "win32" ? "npx.cmd" : "npx", ["--yes", MCPB_CLI, "validate", join(stage, "manifest.json")], { quiet: true });
+    const mcpb = resolve(OUT, mcpbAsset(t.os, t.arch));
+    writeFileSync(mcpb, zip([
+      { name: "manifest.json", bytes: Buffer.from(manifest) },
+      { name: exe, bytes: readFileSync(out), mode: 0o755 },
+      { name: "icon.png", bytes: readFileSync(join(stage, "icon.png")) },
+      { name: "LICENSE", bytes: readFileSync("cli/LICENSE") },
+      { name: "THIRD-PARTY-NOTICES.txt", bytes: Buffer.from(notices) },
+    ]));
+    entry.mcpb = mcpb;
+    entry.mcpbBytes = statSync(mcpb).size;
+    entry.mcpbSha256 = sha256(readFileSync(mcpb));
+  }
   made.push(entry);
 }
 
 const mb = (n) => `${(n / 1048576).toFixed(1)} MB`;
-for (const m of made) console.log(`${m.file}: ${mb(m.bytes)}${m.codeCache ? ", code cache" : ""}${m.archive ? `; ${m.archive.slice(resolve(".").length + 1)}: ${mb(m.archiveBytes)}` : ""}`);
+for (const m of made) console.log(`${m.file}: ${mb(m.bytes)}${m.codeCache ? ", code cache" : ""}${m.archive ? `; ${m.archive.slice(resolve(".").length + 1)}: ${mb(m.archiveBytes)}` : ""}${m.mcpb ? `; ${m.mcpb.slice(resolve(".").length + 1)}: ${mb(m.mcpbBytes)}` : ""}`);
 console.log(`scmjs ${version}${commit ? ` (${commit})` : ""} on Node ${NODE_VERSION}, ${((Date.now() - started) / 1000).toFixed(1)} s`);
-if (made.some((m) => m.archive)) writeFileSync(join(OUT, "SHA256SUMS"), made.filter((m) => m.archive).map((m) => `${m.sha256}  ${m.archive.split(/[\\/]/).pop()}\n`).join(""));
+const sums = made.flatMap((m) => [m.archive && [m.sha256, m.archive], m.mcpb && [m.mcpbSha256, m.mcpb]].filter(Boolean));
+if (sums.length) writeFileSync(join(OUT, "SHA256SUMS"), sums.map(([sum, file]) => `${sum}  ${file.split(/[\\/]/).pop()}\n`).join(""));
 if (flag("--check")) {
-  for (const m of made) if (m.runnable) run(process.execPath, ["scripts/check-cli-binary.mjs", m.file]);
+  for (const m of made) if (m.runnable) run(process.execPath, ["scripts/check-cli-binary.mjs", m.file, ...(m.mcpb ? ["--mcpb", m.mcpb] : [])]);
 }

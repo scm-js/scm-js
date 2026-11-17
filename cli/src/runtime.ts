@@ -16,7 +16,8 @@ export type InstallKind = "npm" | "binary";
 /** Set by the build: "binary" for the single executable, "npm" for the package (and a clone's `npm run cli`). */
 export const INSTALL: InstallKind = typeof __SCMJS_INSTALL__ === "string" && __SCMJS_INSTALL__ === "binary" ? "binary" : "npm";
 
-export type Manager = "scoop" | "winget" | "homebrew";
+/** The package manager, or the MCP bundle (`.mcpb`) an AI app such as Claude Desktop installed the executable from. */
+export type Manager = "scoop" | "winget" | "homebrew" | "mcpb";
 export interface Install {
   kind: InstallKind;
   /** The package manager a single executable was installed with, read off where it is; null for a download. */
@@ -37,8 +38,12 @@ export function managerOf(path: string): Manager | null {
   return null;
 }
 
-export function installInfo(kind = INSTALL, path = kind === "binary" ? process.execPath : process.argv[1] ?? ""): Install {
-  return { kind, manager: kind === "binary" ? managerOf(path) : null, path };
+/**
+ * The install this is. An MCP bundle's manifest sets `SCMJS_MCPB` for the server it starts (scripts/lib/mcpb.mjs): the
+ * app unpacks the bundle into a folder of its own, whose name is the app's to choose and not read here.
+ */
+export function installInfo(kind = INSTALL, path = kind === "binary" ? process.execPath : process.argv[1] ?? "", env: NodeJS.ProcessEnv = process.env): Install {
+  return { kind, manager: kind !== "binary" ? null : env.SCMJS_MCPB === "1" ? "mcpb" : managerOf(path), path };
 }
 
 /** The line that updates this install: npm's, the package manager's, or the release page for a download. */
@@ -47,14 +52,26 @@ export function updateCommand(install: Install, pkg = "@scm-js/cli"): string {
   if (install.manager === "scoop") return "scoop update scmjs";
   if (install.manager === "winget") return "winget upgrade scm-js.scmjs";
   if (install.manager === "homebrew") return "brew upgrade scmjs";
+  if (install.manager === "mcpb") return t("install the newest scmjs-mcp-….mcpb from {url} in your AI app", { url: RELEASES_URL });
   return t("download it again from {url}", { url: RELEASES_URL });
+}
+
+/**
+ * How to run this scmjs in a terminal, for a hint that names a command (`scmjs login`). An MCP bundle's executable is
+ * not on PATH, so the hint names it by its path, quoted, with PowerShell's call operator on Windows (the shell
+ * Windows Terminal opens).
+ */
+export function selfCommand(install: Install = installInfo(), platform: NodeJS.Platform = process.platform): string {
+  if (install.manager !== "mcpb") return "scmjs";
+  return platform === "win32" ? `& "${install.path}"` : `"${install.path}"`;
 }
 
 /** How the install is named in `about` and `doctor`. */
 export function installLabel(install: Install): string {
   if (install.kind === "npm") return t("npm package");
   return install.manager === "scoop" ? t("single executable, from Scoop") : install.manager === "winget" ? t("single executable, from winget")
-    : install.manager === "homebrew" ? t("single executable, from Homebrew") : t("single executable");
+    : install.manager === "homebrew" ? t("single executable, from Homebrew") : install.manager === "mcpb" ? t("single executable, from an MCP bundle (.mcpb)")
+    : t("single executable");
 }
 
 /**

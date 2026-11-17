@@ -117,6 +117,39 @@ Most Windows map makers do not have Node, so the release carries one executable 
   harmless, hidden unless postject fails. **A distribution's own Node may lack the SEA fuse** (postject then cannot
   find the sentinel): `--download` uses the official build for the host too.
 
+## The MCP bundle (`scripts/lib/mcpb.mjs`, `scripts/lib/zip.mjs`)
+
+For people who use Claude Desktop and never a terminal: `scmjs-mcp-<windows|macos>-<arch>.mcpb`, one file the app
+installs, asking for the maps folder (`docs/ai-tools.md` "Claude Desktop"). Built by `--archive` for the targets
+with `mcpb: true` (Windows, both Macs; Claude Desktop has no Linux build), or for any target with `--mcpb` (to try
+one on Linux).
+
+- **`server.type: "binary"`, the single executable itself**, not `"node"` with the npm bundle. The node type would
+  be ~5 MB against ~44 MB, but the docs do not say which Node Claude Desktop runs it with (the bundle needs ≥ 22.12),
+  and the game's runners spawn `process.execPath`, which under an app's built-in runtime may be the app. The
+  executable is the one `check-cli-binary.mjs` already proves, runners included.
+- **The manifest** (`mcpbManifest`, `manifest_version` 0.3): command `${__dirname}/server/scmjs[.exe]`, args `mcp
+  --folder ${user_config.maps_folder}`, env `SCMJS_STARCRAFT=${user_config.starcraft}` and `SCMJS_MCPB=1`. Maps
+  folder required and **without a default**: tried in Claude Desktop on Windows (2026-11-17), a default of
+  `${DOCUMENTS}/StarCraft/Maps` was shown in the field as typed, did not count as filled in ("missing required
+  configuration, not enabling automatically" in main.log), and the packer's own rules would pass it to the server
+  unreplaced. The person picks the folder with Browse; the guide names StarCraft's own. `tools` is the
+  server's own list (the CJS bundle run by the build's Node, `askServer`), each description cut to its first
+  sentence; the app shows them before installing. `privacy_policies` is scmjs.dev's, since the account tools talk to
+  it. `compatibility.platforms` is the one platform.
+- **The zip is ours** (`zip` with a per-file `mode`: version made by Unix, external attributes `0o100755 << 16`, as
+  `mcpb pack` writes), not `mcpb pack`: the manifest is validated by **`npx --yes @anthropic-ai/mcpb@2.1.2 validate`**
+  (pinned, through npx as postject is; not a devDependency, 40 packages for one check). Without the mode a Mac app
+  unpacking the bundle would leave the executable unrunnable.
+- **The check** (`check-cli-binary.mjs --mcpb`, passed by the build's `--check`): unpack with `readZip` (modes
+  applied), fill the manifest as the app does (`appConfig`, a copy of the packer's rules for the variables we use,
+  cross-checked by hand against the real `getMcpConfigForManifest`), start it in the unpacked folder with the
+  StarCraft folder empty, and ask `map_info` for the maps folder's `ums.scx` by name, a map outside (refused), and
+  `doctor` (knows the bundle, no `${user_config…}` anywhere).
+- **Asset names**: `scmjs-mcp-` stays apart from `scmjs-cli-` and electron-builder's `scmJS-` in more than case; the
+  release's SHA256SUMS covers them like every asset; the upload-artifact path takes `cli/dist/bin/*.mcpb`.
+- Not signed (`mcpb sign` exists; the app shows "not signed" either way for now).
+
 ## Package managers (`packaging/`)
 
 - Recipes (`packaging/README.md` is the procedure, "Each release" section): a Scoop manifest (autoupdate, hash from

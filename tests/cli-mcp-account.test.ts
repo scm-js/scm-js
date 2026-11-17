@@ -12,7 +12,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { chk, cmds, le16, writeReplay } from "@scm-js/replay/write";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { linkTo, saveSession } from "../cli/src/account";
+import { linkTo, readSession, saveSession } from "../cli/src/account";
 import { createMcpServer, type McpOptions } from "../cli/src/mcp";
 import { readSyncState } from "../cli/src/replaysync";
 import { standInData, startStandIn, TOKENS, type StandIn } from "./support/libraryServer";
@@ -73,23 +73,52 @@ describe("scmjs mcp: the account tools", () => {
     await client.close();
   });
 
-  it("without a session, says how the person signs in, and never signs in itself", async () => {
+  it("without a session, says how the person signs in, and signs in only when account_login is called", async () => {
     rmSync(sessionFile);
     const { client, call } = await connected();
     const who = await call("account_info");
     expect(who.isError).toBeFalsy();
     expect(who.structuredContent).toMatchObject({ signedIn: false });
-    expect(text(who)).toMatch(/^Not signed in to http:\/\/127\.0\.0\.1:\d+\nThe person signs in by running scmjs login in a terminal \(scmjs login --device/);
+    expect(text(who)).toMatch(/^Not signed in to http:\/\/127\.0\.0\.1:\d+\nIf the person wants to sign in, call account_login: it opens the sign-in page in their browser and they sign in there\. \(In a terminal it is scmjs login\.\)/);
     for (const [name, args] of [["library_list", {}], ["share", { paths: ["x.scx"] }], ["library_remove", { what: "Ridge" }], ["replay_sync", { all: true }]] as const) {
       const r = await call(name, args);
       expect(r.isError, name).toBe(true);
-      expect(text(r), name).toMatch(/Not signed in .*\n.*scmjs login/);
+      expect(text(r), name).toMatch(/Not signed in .*\n.*account_login/);
     }
     expect(s.seen).toEqual([]);
     // A session for another server is not sent to this one.
     saveSession({ server: "http://elsewhere.test", session: "sess-ok", name: "Ann", provider: "discord", savedAt: "" }, sessionFile);
     expect(text(await call("library_list"))).toContain(`The session in ${sessionFile} is for http://elsewhere.test`);
     expect(s.seen).toEqual([]);
+    await client.close();
+  });
+
+  it("account_login opens the sign-in page, and keeps the session the person's sign-in hands back", async () => {
+    rmSync(sessionFile, { force: true });
+    let page = "";
+    const { client, call } = await connected({ account: { server: s.base, file: sessionFile, stateFile, replayFolders: () => [replays], settleMs: 0, open: (url) => { page = url; } } });
+    const { tools } = await client.listTools();
+    expect(tools.find((t) => t.name === "account_login")?.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: false, openWorldHint: true });
+    const signing = call("account_login");
+    await expect.poll(() => page).not.toBe("");
+    // The page the person's browser opened hands the session over, as after a Discord sign-in.
+    const origin = new URL(page).origin;
+    const handed = await fetch(`${page}/session`, { method: "POST", headers: { origin, "content-type": "application/json" }, body: JSON.stringify({ session: "sess-ok" }) });
+    expect(await handed.json()).toEqual({ name: "Ann" });
+    const r = await signing;
+    expect(r.isError).toBeFalsy();
+    expect(text(r)).toMatch(/^Signed in to http:\/\/127\.0\.0\.1:\d+ as Ann\nshare, replay_sync and the library_ tools use this session from now on\.$/);
+    expect(r.structuredContent).toMatchObject({ signedIn: true, name: "Ann", provider: "discord" });
+    expect(readSession(sessionFile)).toMatchObject({ server: s.base, session: "sess-ok", name: "Ann" });
+    // A sign-in nobody finishes ends, and keeps nothing.
+    rmSync(sessionFile);
+    const late = await connected({ account: { server: s.base, file: sessionFile, stateFile, replayFolders: () => [replays], settleMs: 0, open: () => {}, signInMs: 150 } });
+    const gaveUp = await late.call("account_login");
+    expect(gaveUp.isError).toBe(true);
+    expect(text(gaveUp)).toMatch(/did not finish/);
+    expect(readSession(sessionFile)).toBeNull();
+    saveSession({ server: s.base, session: "sess-ok", name: "Ann", provider: "discord", savedAt: "" }, sessionFile);
+    await late.client.close();
     await client.close();
   });
 
@@ -127,7 +156,7 @@ describe("scmjs mcp: the account tools", () => {
     const theirs = await call("library_get", { what: link("map", "someoneElsesLink1") });
     expect(theirs.isError).toBe(true);
     expect(text(theirs)).toMatch(/is not a link to anything on your account\nOnly a link to something on the person's own account is taken here.*--allow-outside/);
-    expect(text(await call("library_get", { what: "Ridge", out: join(dir, "outside.scx") }))).toContain("outside the folder the server was started in");
+    expect(text(await call("library_get", { what: "Ridge", out: join(dir, "outside.scx") }))).toContain("outside the folder the tools work in");
     await client.close();
 
     // Started with --allow-outside, anyone's link is read through its public route, as the command does.
@@ -233,7 +262,7 @@ describe("scmjs mcp: asking first", () => {
     expect(text(done)).toMatch(/stored on your account\nNot linked/);
     expect(s.replays).toHaveLength(2);
     expect(s.replays[1].links).toEqual([]);
-    expect(text(await call("share", { paths: [join(dir, "Replays", "x.rep")] }))).toContain("outside the folder the server was started in");
+    expect(text(await call("share", { paths: [join(dir, "Replays", "x.rep")] }))).toContain("outside the folder the tools work in");
     await client.close();
   });
 
@@ -275,7 +304,7 @@ describe("scmjs mcp: asking first", () => {
     expect(later.structuredContent).toMatchObject({ done: false, dryRun: true });
     expect(text(later)).toMatch(/Nothing new to upload/);
 
-    expect(text(await call("replay_sync", { folders: [join(dir, "elsewhere")] }))).toContain("outside the folder the server was started in");
+    expect(text(await call("replay_sync", { folders: [join(dir, "elsewhere")] }))).toContain("outside the folder the tools work in");
     expect(text(await call("replay_sync", { all: true, since: "7d" }))).toMatch(/^all and since both say where to start/);
     await client.close();
   });

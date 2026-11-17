@@ -39,6 +39,7 @@ import { parseWhole } from "./values";
 import { t, translate } from "./i18n";
 import { CliError, dot, gameText, mark, num, pc, size } from "./ui";
 import type { DataSetRace } from "@scm-js/mod";
+import { raiseExitCode } from "./options";
 
 /* ── The replays ────────────────────────────────────────────── */
 
@@ -447,7 +448,7 @@ export async function heatmapMap(
   }
   const t2 = performance.now();
   for (const [k, reason] of errors) skipped.push({ file: taken[k].file, reason: t("the game could not play it: {reason}", { reason }) });
-  if (errors.size) process.exitCode = Math.max(Number(process.exitCode ?? 0), 1);
+  if (errors.size) raiseExitCode(1);
   const played = taken.map((r, k) => ({ r, ev: events[k], k })).filter((x): x is { r: (typeof taken)[number]; ev: GameEvents; k: number } => x.ev !== null);
   if (!played.length) throw new CliError(t("The game played none of the {n, plural, one {# replay} other {# replays}}.", { n: taken.length }), t("Your own copy of StarCraft and replays the game itself plays are what it needs."));
 

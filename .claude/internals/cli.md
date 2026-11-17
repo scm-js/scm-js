@@ -10,7 +10,9 @@ This note is the entry: what holds for every command, where the commands are, an
 
 ## The commands
 
-The program is built in `cli/src/main.ts` (`buildProgram()`); `librarycmd.ts` adds `library`. **`scmjs --help` and
+The program is built in `cli/src/main.ts` (`buildProgram()`), which only calls one `add…Commands(program)` per command
+family (`infocmd.ts`, `mapcmd.ts`, `mapchangecmd.ts`, `gamecmd.ts`, `mapgitcmd.ts`, `sharecmd.ts`, `replaycmd.ts`,
+`modcmd.ts`, `plugincmd.ts`, `accountcmd.ts`, `toolcmd.ts`, `librarycmd.ts`). **`scmjs --help` and
 each noun's `--help` are the list**, and `COMMAND_GROUPS` (main.ts) orders `map` and `mod` verbs under the guide's task
 headings. Today:
 
@@ -30,7 +32,7 @@ headings. Today:
 - **The editor's code, not a copy, through `@scm-js/core`'s surface.** `tests/core.test.ts` refuses an import from
   `src/` in `cli/src/**` that `core/src/index.ts` does not export from that module, so a new need is a core export first
   (`core.md`). Exceptions: `i18n.ts` → `src/i18n`, `run.ts` → `src/plugins/headless.ts`.
-- **Modules return data; only main.ts prints.** The MCP server calls the same functions and its stdout is the protocol,
+- **Modules return data; only the wiring (`main.ts` and the `*cmd.ts` files) prints.** The MCP server calls the same functions and its stdout is the protocol,
   so a module that printed would corrupt it. `print*` functions make lines; `say`/`note` send working lines to stderr.
 - **Exit codes**: 0 done, 1 a failed check or an error during the work, 2 could not start (usage, a missing or wrong
   file, a value refused), 128+n a signal. A loss in a bot game, or nothing to write, is not a failure.

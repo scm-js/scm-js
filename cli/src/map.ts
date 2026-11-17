@@ -4,7 +4,9 @@ import { mapStatistics, type MapStatistics } from "../../src/editor/statistics";
 import { issueCounts, validateScenario, type Issue } from "../../src/editor/validate";
 import type { OpenedMap } from "../../src/editor/mapFile";
 import type { Input } from "./files";
-import { t, translate } from "./i18n";
+import { inEnglish, locale, t, translate } from "./i18n";
+import { baselineEntries, mapKey, matchBaseline, type Baseline } from "./baseline";
+import type { CheckReport } from "./report";
 import { columns, dot, gameLines, gameText, mark, num, pc, rows, size, table } from "./ui";
 
 /** Slots that hold no one: Inactive and Unused. */
@@ -112,6 +114,35 @@ function wrap(text: string, width: number, most = 4): string {
   }
   if (line) lines.push(line);
   return lines.slice(0, most).join("\n") + (lines.length > most ? " …" : "");
+}
+
+/** A check held to a baseline: the baseline's findings (none yet: null), and whether the check writes them anew. */
+export interface CheckBaseline { file: string; known: Baseline | null; writing: boolean }
+
+/**
+ * One map's Check Map, as `map check` prints it and `map_check` answers it: the `--json` shape and the lines, held to
+ * a baseline when there is one. A baseline knows a finding by its English text (the file is shared between
+ * computers), so the findings are matched in English and shown in the reader's language: the check gives the same
+ * findings in the same order. Writing the baseline, `entries` are what it keeps for this map (under `key`).
+ */
+export function checkMap(input: Input, doc: OpenedMap, o: { all?: boolean; strict?: boolean; baseline?: CheckBaseline | null }) {
+  const b = o.baseline ?? null;
+  const r = mapReport(input, doc);
+  const key = b ? mapKey(b.file, input.path) : "";
+  const english = b && locale() !== "en" ? inEnglish(() => mapReport(input, doc).issues) : r.issues;
+  const shownAs = (list: Issue[]) => list.map((i) => r.issues[english.indexOf(i)] ?? i);
+  const matched = b ? matchBaseline(b.known?.maps[key], english, doc.scenario) : null;
+  const m = matched && { ...matched, fresh: shownAs(matched.fresh), suppressed: shownAs(matched.suppressed) };
+  const entries = b?.writing ? baselineEntries(english.filter((i) => o.all || i.level !== "info"), doc.scenario) : null;
+  // Written down as known, nothing fails; else only what the baseline does not hold counts.
+  const issues = b?.writing ? [] : m ? m.fresh : r.issues;
+  const failed = issues.some((i) => i.level === "error" || (o.strict && i.level === "warn"));
+  const listed = (list: Issue[]) => list.filter((i) => o.all || i.level !== "info");
+  const data: CheckReport = { file: input.path, name: r.name, issues: listed(issues), failed };
+  if (!m || !b) return { key, entries, data, lines: [`${pc.bold(input.name)}  ${issueLine(r.issues)}`, ...printIssues(r.issues, !!o.all)] };
+  const shown = b.writing ? listed(m.fresh) : listed(issues);
+  const baseline = { file: b.file, suppressed: listed(m.suppressed).length, fixed: m.fixed.length, new: shown.length, ...(entries ? { written: entries.length } : {}), fixedFindings: m.fixed.map(({ level, where, text }) => ({ level, where, text })) };
+  return { key, entries, data: { ...data, baseline }, lines: b.writing ? [baselineWritten(input.name, baseline, !!b.known?.maps[key])] : [`${pc.bold(input.name)}  ${baselineLine(shown, baseline)}`, ...printIssues(shown, !!o.all)] };
 }
 
 /** What a check held against a baseline says beside the map's name. */

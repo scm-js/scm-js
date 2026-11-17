@@ -206,5 +206,3 @@ inverted and off-map refused), `unitsWhere`.
   output that round-trips through `map settings --json` (the reader's rows are effective values, the writer's are
   patches).
 - `map diff` groups for terrain, doodads, sprites and fog (they show as sections changed).
-- `map run`: React is still in the bundle because `host.ts` and `services/gameData.ts` import helpers from hook files
-  (`cli-distribution.md`).

@@ -195,7 +195,7 @@ tileset's table, cut, kept for the last (map, terrain revision, tileset, collect
 plugin API share one cut. The view re-cuts only while it shows, and
 only once the revision has stood still `RECUT_MS` (300): a stroke bumps it every cell. Learning
 (`editor/pieceLearn.ts#learnFromMaps`, pure, files and tables injected; `services/pieceLearning.ts`, imported only when
-the button is pressed, since it brings `plugins/host.ts#pickFolder` and the map reader): every `.scx`/`.scm` of the
+the button is pressed, since it brings `plugins/host/ui.ts#pickFolder` and the map reader): every `.scx`/`.scm` of the
 picked folder, opened with `openMapBytes`, counted against `formats/tileset/load.ts#loadTilesetGroups` (the CV5 alone
 from the data set in use, no atlas); a map with a tile `lackedGroups` refuses is skipped as `notOurs`, one that throws as
 `unreadable`; a `setTimeout(0)` between maps; progress in `pieceLearningAtom` (the view's one-line header shows it in

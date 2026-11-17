@@ -100,7 +100,7 @@ bodies are compiled — into an IR that TrigScript's own build writes into the s
 (Remastered only). Its README documents the
 language and its internals. What stays here is generic:
 
-- `api.triggers.claim(spec)` (`host.ts`, `pluginTriggerClaimsAtom`, `plugins/claims.ts`): a plugin
+- `api.triggers.claim(spec)` (`plugins/host/triggers.ts`, `pluginTriggerClaimsAtom`, `plugins/claims.ts`): a plugin
   names a run of the trigger list it generates, found by *content* — `spec.locate(list)` is asked
   with whatever list an editor holds, since the Classic editor works on a working copy with local
   inserts — and `TriggerListEditor` badges and locks those rows (`claimBadge`, `claimDescription`,
@@ -112,7 +112,7 @@ language and its internals. What stays here is generic:
   another's commands by id (the scmjs.dev plugin's AI → `trigscript.compile` / `.build` / `.declarations` /
   `.state` / `.print` / `.simulate` / `.triggerAt` / `.open`) learns they arrived — there is
   deliberately no plugin ordering, so `commands.has` at call time is the contract.
-- `api.services` (`pluginServicesAtom`, `host.ts`, the `"services"` event) is the stateful counterpart
+- `api.services` (`pluginServicesAtom`, `plugins/host/commands.ts`, the `"services"` event) is the stateful counterpart
   of commands: a plugin `provide`s one live object under a namespaced name (`qualifyCommand` rules)
   and consumers `get` / `has` / `watch` it — `watch` fires at once with what is there and on every
   change of provider, so activation order does not matter, as with `"commands"`. The editor never

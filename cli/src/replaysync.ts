@@ -32,7 +32,7 @@ import { Client, linkTo, requireSession, serverUrl, sessionPath, type StorageVie
 import { findGameCopy, usualGameFolders } from "./engine";
 import { t } from "./i18n";
 import { replayPicture } from "./replayshare";
-import { CliError, dot, duration, gameText, mark, pc, size, visible } from "./ui";
+import { CliError, dot, duration, gameText, mark, pc, size, visible, printErr } from "./ui";
 
 /** The server's default for one replay (ai-server `maps.maxReplayMb`); a larger file is not sent. */
 export const MAX_REPLAY_BYTES = 8 * 1024 * 1024;
@@ -693,10 +693,10 @@ export async function replaySyncCommand(named: string[], o: ReplaySyncCommandOpt
     ask: tty && since === undefined && !o.all ? askOlder : undefined,
     // (With --json, one object at the end; with --watch too, a line for each upload as it is made.)
     onUpload: o.json && !o.watch ? undefined : (u) => out(o.json ? JSON.stringify({ type: "upload", ...u }) : printSyncUpload(u)),
-    onNote: (line) => process.stderr.write(`${line}\n`),
+    onNote: (line) => printErr(line),
     onWatching: (r) => {
       if (o.json) return;
-      if (r.older.count || r.skipped.length) for (const l of printSyncSummary(r).slice(1)) process.stderr.write(`${l}\n`);
+      if (r.older.count || r.skipped.length) printErr(...printSyncSummary(r).slice(1));
       process.stderr.write(`${mark.info} ${t("Watching for new games. Ctrl+C stops.")}\n`);
     },
   };

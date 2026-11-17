@@ -10,7 +10,7 @@ import { defaultSaveOptions, formatOf, type MapFormat } from "../../src/editor/s
 import { loadTileset } from "../../src/formats/tileset/decode";
 import { buildDoodadCatalogue } from "../../src/formats/tileset/doodads";
 import { MAP_SIZES, TILESETS, type TilesetId } from "../../src/data/tilesets";
-import { parseSize, parseTileset } from "./create";
+import { parseMapSize, parseTileset } from "./create";
 import { writeOutput } from "./exchange";
 import { STDIO } from "./files";
 import { openGameFiles, readTileset } from "./gamefiles";
@@ -39,7 +39,7 @@ export function generateOptions(f: GenerateFlags, random: () => number = Math.ra
   const players = Number(f.players ?? 2);
   if (!(GEN_PLAYERS as readonly number[]).includes(players)) throw new CliError(t("--players takes {list}, not \"{value}\"", { list: GEN_PLAYERS.join(", "), value: String(f.players) }), null, 2);
   const least = smallestSide(players);
-  const { width, height } = parseSize(f.size ?? (least > 128 ? `${least}x${least}` : "128x128"));
+  const { width, height } = parseMapSize(f.size ?? (least > 128 ? `${least}x${least}` : "128x128"));
   if (Math.min(width, height) < least) {
     throw new CliError(t("{width} × {height} is too small for {players} players", { width, height, players }), t("Each side {least} or more ({list}).", { least, list: (MAP_SIZES as readonly number[]).filter((n) => n >= least).join(", ") }), 2);
   }

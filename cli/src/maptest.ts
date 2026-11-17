@@ -38,7 +38,8 @@ import type { ModOverlay } from "./mod/overlay";
 import { unitByName } from "./rush";
 import { gameClock, summarizeRows, type CopyLine, type ReplayCheck, type ReplayPlayerLine } from "./trace";
 import { t } from "./i18n";
-import { CliError, dot, mark, num, pc, plural } from "./ui";
+import { CliError, dot, mark, num, pc, plural, nearPath } from "./ui";
+import { editDistance } from "./words";
 
 /* ── The runner's lines (scm-sim's src/exact/mapTest.ts, through runMap.ts --test) ──────── */
 
@@ -158,17 +159,6 @@ const EXPECT_KEYS: Record<string, readonly string[]> = {
 const FILE_KEYS = ["scenarios", "frames", "seed"] as const;
 const SCENARIO_KEYS = ["name", "frames", "seed", "setup", "steps", "expect", "replay"] as const;
 
-/** How many single-letter changes turn `a` into `b`. */
-function distance(a: string, b: string): number {
-  let row = Array.from({ length: b.length + 1 }, (_, j) => j);
-  for (let i = 1; i <= a.length; i++) {
-    const next = [i];
-    for (let j = 1; j <= b.length; j++) next[j] = Math.min(row[j] + 1, next[j - 1] + 1, row[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
-    row = next;
-  }
-  return row[b.length];
-}
-
 /**
  * Refuses a key the tests do not know, saying where it is and the nearest known key: a misspelt key would otherwise be
  * left out, and a test with "fird": false would check the opposite of what it says. `//` keys are comments.
@@ -176,8 +166,8 @@ function distance(a: string, b: string): number {
 function onlyKnown(e: Raw, known: readonly string[], where: string): void {
   for (const key of Object.keys(e)) {
     if (known.includes(key) || key.startsWith("//")) continue;
-    const near = [...known].sort((a, b) => distance(key.toLowerCase(), a) - distance(key.toLowerCase(), b))[0];
-    const close = near !== undefined && distance(key.toLowerCase(), near) <= Math.max(2, Math.floor(near.length / 3));
+    const near = [...known].sort((a, b) => editDistance(key.toLowerCase(), a) - editDistance(key.toLowerCase(), b))[0];
+    const close = near !== undefined && editDistance(key.toLowerCase(), near) <= Math.max(2, Math.floor(near.length / 3));
     throw bad(where, close ? t("\"{key}\" is not something the tests know: did you mean \"{near}\"?", { key, near }) : t("\"{key}\" is not something the tests know ({known})", { key, known: known.join(", ") }));
   }
 }
@@ -708,7 +698,6 @@ async function runScenario(runner: string, args: string[], engineDir: string, o:
 /* ── The report ─────────────────────────────────────────────── */
 
 const seconds = (ms: number) => `${(ms / 1000).toFixed(1)} s`;
-const shown = (path: string) => { const r = relative(process.cwd(), path); return r && !r.startsWith("..") ? r : path; };
 
 /** A scenario's lines: ✔ or ✖ and its name, then for a failure what did not hold, what the game said, and its replay. */
 export function scenarioLines(r: ScenarioResult): string[] {
@@ -721,7 +710,7 @@ export function scenarioLines(r: ScenarioResult): string[] {
   for (const x of failed) out.push(`      ${mark.error} ${x.what} ${pc.dim("—")} ${x.actual}`);
   for (const n of r.notices.slice(0, 3)) out.push(`      ${pc.dim(t("the game said: {text}", { text: n }))}`);
   if (r.notices.length > 3) out.push(`      ${pc.dim(t("… and {n} more such {n, plural, one {line} other {lines}}", { n: r.notices.length - 3 }))}`);
-  if (r.replay) out.push(`      ${pc.dim(t("replay:"))} ${shown(r.replay)}${pc.dim(t(", open it with"))} scmjs replay open ${shown(r.replay)}`);
+  if (r.replay) out.push(`      ${pc.dim(t("replay:"))} ${nearPath(r.replay)}${pc.dim(t(", open it with"))} scmjs replay open ${nearPath(r.replay)}`);
   return out;
 }
 
@@ -926,11 +915,11 @@ export function recordLines(r: RecordOutcome): string[] {
   // (An entry's first key is its kind, as snapshotExpect writes it.)
   for (const e of r.expect) { const k = Object.keys(e)[0]; kinds.set(k, (kinds.get(k) ?? 0) + 1); }
   const parts = [...kinds].map(([k, n]) => kindCount(k, n));
-  const out = [`${mark.ok} ${t("{replaced, select, yes {Recorded anew} other {Recorded}} {name} into {file}", { replaced: r.replaced ? "yes" : "no", name: pc.bold(JSON.stringify(r.name)), file: shown(r.file) })}${dot}${t("{n} frames", { n: num(r.frame) })} ${pc.dim(`(${gameClock(r.frame)})`)}${dot}${t("{n, plural, one {# expectation} other {# expectations}}", { n: r.expect.length })}${dot}${seconds(r.ms)}`, `  ${pc.dim(parts.join(", "))}`];
+  const out = [`${mark.ok} ${t("{replaced, select, yes {Recorded anew} other {Recorded}} {name} into {file}", { replaced: r.replaced ? "yes" : "no", name: pc.bold(JSON.stringify(r.name)), file: nearPath(r.file) })}${dot}${t("{n} frames", { n: num(r.frame) })} ${pc.dim(`(${gameClock(r.frame)})`)}${dot}${t("{n, plural, one {# expectation} other {# expectations}}", { n: r.expect.length })}${dot}${seconds(r.ms)}`, `  ${pc.dim(parts.join(", "))}`];
   if (r.parted !== null) out.push(`${mark.warn} ${pc.yellow(t("The game parted from the replay at {clock} (frame {n})", { clock: gameClock(r.parted), n: num(r.parted) }))}${t(": this map is not the one the replay was played on, and what came after is not the game in the replay.")}`);
   // The command that runs it: the map as named, and the tests file when it is not the one beside the map.
   const arg = (p: string) => (/[\s"'()]/.test(p) ? JSON.stringify(p) : p);
-  const run = resolve(defaultTests(r.map)) === resolve(r.file) ? arg(r.map) : `${arg(r.map)} ${arg(shown(r.file))}`;
+  const run = resolve(defaultTests(r.map)) === resolve(r.file) ? arg(r.map) : `${arg(r.map)} ${arg(nearPath(r.file))}`;
   out.push(pc.dim(`  ${t("Trim what the test need not hold to. scmjs map test {map} runs it; -u writes in what the game gives after a change.", { map: run })}`));
   return out;
 }

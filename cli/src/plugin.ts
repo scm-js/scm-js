@@ -9,7 +9,7 @@
  *   `?plugin-dev=` (src/hooks/usePluginDev.ts), which installs it the usual way the first time and reloads it on
  *   every change the page is told of here.
  */
-import { spawn, spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, watch, writeFileSync } from "node:fs";
 import { createServer, type ServerResponse } from "node:http";
 import { basename, dirname, extname, join, relative, resolve, sep } from "node:path";
@@ -19,6 +19,7 @@ import { VERSION } from "./about";
 import { EDITOR_URL, openBrowser } from "./open";
 import { t } from "./i18n";
 import { CliError, dot, mark, pc, print } from "./ui";
+import { gitText } from "./git";
 
 /* ── new ───────────────────────────────────────────────── */
 
@@ -28,7 +29,7 @@ export const pluginId = (name: string) => name.normalize("NFKD").replace(/[\u030
 export const nameFromFolder = (folder: string) => basename(folder).replace(/^(?:scmjs-)?plugin-/, "").split(/[-_\s]+/).filter(Boolean).map((w) => w[0].toUpperCase() + w.slice(1)).join(" ") || "My Plugin";
 
 function gitUser(): string {
-  const r = spawnSync("git", ["config", "user.name"], { encoding: "utf8" });
+  const r = gitText(["config", "user.name"]);
   return r.status === 0 ? r.stdout.trim() : "";
 }
 

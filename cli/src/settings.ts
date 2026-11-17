@@ -24,6 +24,9 @@ import { t } from "./i18n";
 import { playerLabel, unitType } from "./objects";
 import { giveHostGame, noHostGame, openHost, type HostGame, type PluginApi } from "./run";
 import { CliError, dot, num, pc, table } from "./ui";
+import { plainAsciiText, setHeader } from "./edit";
+import { writeBack } from "./exchange";
+import type { Input } from "./files";
 
 type Settings = PluginApi["settings"];
 type PlayerView = ReturnType<Settings["players"]>[number];
@@ -455,4 +458,22 @@ export function printSettings(name: string, r: SettingsListing): string[] {
   group(t("Technologies"), r.techs, (x) => x.name, techLine);
   lines.push(r.switches.length ? `${t("Switches")}: ${r.switches.map((w) => `${w.switch} "${w.name}"`).join(", ")}` : `${t("Switches")}: ${pc.dim(t("none named"))}`);
   return lines;
+}
+
+/**
+ * `map set` and `map_set`: the map's header fields and the settings given set on the opened map, which is written
+ * (over itself, or to `out`) when something changed or `always` (a pipe wants the map either way), and never with
+ * `dryRun`. `asciiOnly`: an encoding was asked of a map whose text is plain ASCII, so it has nothing to change.
+ */
+export async function setMap(opened: { input: Input; doc: OpenedMap }, o: { name?: string; description?: string; revision?: string; encoding?: string; settings: MapSettings | null; starcraft?: string; out: string | null; dryRun?: boolean; always?: boolean }) {
+  const { input } = opened;
+  let { doc } = opened;
+  // Plain ASCII is the same in every encoding, and a map does not record the one it was written in: said, not set.
+  const asciiOnly = o.encoding !== undefined && plainAsciiText(doc.scenario);
+  const changes = setHeader(doc, { name: o.name, description: o.description, version: o.revision, encoding: o.encoding });
+  const set = o.settings ? await applySettings(doc, o.settings, { starcraft: o.starcraft }) : null;
+  if (set) doc = set.doc;
+  const changed = changes.length + (set?.changes.length ?? 0);
+  const written = !o.dryRun && (changed || o.out || o.always) ? await writeBack(doc, input.path, o.out) : null;
+  return { changes, set, changed, written, asciiOnly };
 }

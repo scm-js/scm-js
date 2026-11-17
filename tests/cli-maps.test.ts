@@ -16,7 +16,7 @@ import { scenarioName } from "../src/formats/chk/scenario";
 import { PlayerType } from "../src/formats/chk/sections/players";
 import { START_LOCATION } from "../src/data/units";
 import { commandTree, completionScript, SHELLS } from "../cli/src/completion";
-import { nameFromFile, newScenario, parseSize, parseTileset, writeNewMap, type NewMapOptions } from "../cli/src/create";
+import { nameFromFile, newScenario, parseMapSize, parseTileset, writeNewMap, type NewMapOptions } from "../cli/src/create";
 import { diffMaps, printDiff, revisionInput } from "../cli/src/diff";
 import { parseAnchor, pruneStrings, resizeMap, setHeader } from "../cli/src/edit";
 import { dumpMap, printDump, sectionBytes, unitLine } from "../cli/src/dump";
@@ -195,10 +195,10 @@ describe("scmjs map new", () => {
   const base: NewMapOptions = { width: 96, height: 64, tileset: "jungle", name: "Ridge", description: "A test.", version: "broodwar", players: 2, layout: "ring" };
 
   it("reads a size and a tileset the way the New dialog offers them", () => {
-    expect(parseSize("128x96")).toEqual({ width: 128, height: 96 });
-    expect(parseSize("64")).toEqual({ width: 64, height: 64 });
-    expect(parseSize("256 × 192")).toEqual({ width: 256, height: 192 });
-    for (const bad of ["100x100", "128by96", ""]) expect(() => parseSize(bad), bad).toThrow(CliError);
+    expect(parseMapSize("128x96")).toEqual({ width: 128, height: 96 });
+    expect(parseMapSize("64")).toEqual({ width: 64, height: 64 });
+    expect(parseMapSize("256 × 192")).toEqual({ width: 256, height: 192 });
+    for (const bad of ["100x100", "128by96", ""]) expect(() => parseMapSize(bad), bad).toThrow(CliError);
     expect(parseTileset("Jungle World")).toBe("jungle");
     expect(parseTileset("ICE")).toBe("ice");
     expect(() => parseTileset("moon")).toThrow(CliError);

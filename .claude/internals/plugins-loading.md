@@ -126,7 +126,7 @@ per session. For that to work `activatePlugin` returns the load **in flight** fo
 is already loading rather than a resolved promise — React's double mount otherwise has the
 second pass reading the runtimes before a single fetch had finished.
 Adding a plugin goes through a confirmation first: `PluginsDialog`'s Add canonicalises
-the spec (`loader.ts#canonicalSpec`), runs `host.ts#inspectPlugin` → `loader.ts#previewPlugin` —
+the spec (`loader.ts#canonicalSpec`), runs `host/installs.ts#inspectPlugin` → `loader.ts#previewPlugin` —
 `resolveCommit` (GitHub's commits API, one request, no token) then
 `resolvePlugin(..., { entry: false })` on *that commit*, so one `plugin.json`, no entry
 probe and no `import()` — and opens `confirmPlugin` **only once that came back with a
@@ -200,7 +200,7 @@ an untagged commit whose `plugin.json` carries the version already installed, so
 reads `Update to v1.1.2` on a row reading v1.1.2 and taking it stores a commit no release
 names. A prerelease tag is not a release for this. A repository with no release tags still
 falls back to the branch, which is all it has.
-The comparison itself is by **commit** (`host.ts#checkForUpdate`), because comparing spec
+The comparison itself is by **commit** (`host/installs.ts#checkForUpdate`), because comparing spec
 strings calls every tag-pinned install out of date for ever — a tag is never spelt like the
 hash a check resolves — which would have every default offering an update to the code
 it is already running; the installed tag's commit usually comes out of the same tag list

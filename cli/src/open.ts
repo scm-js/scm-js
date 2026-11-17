@@ -5,11 +5,10 @@
  */
 import { spawn, execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
-import { createServer } from "node:http";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
-import { randomBytes } from "node:crypto";
 import type { Input } from "./files";
+import { listenLoopback, loopbackToken, pageWait, requestUrl, takeMessage, type PageMessage } from "./loopback";
 import { qrFor } from "./qr";
 import { t } from "./i18n";
 import { CliError, mark, pc, print } from "./ui";
@@ -73,7 +72,7 @@ export async function openInScmjs(input: Input, options: { browser?: boolean; ed
 }
 
 /** What the opened page says back, forwarded by the loopback page: `scmjs.invite`, `scmjs.waiting`, `scmjs.error`, `scmjs.taken`. */
-export interface HandoverMessage { type: string; [key: string]: unknown }
+export type HandoverMessage = PageMessage;
 
 /**
  * The browser: a page on 127.0.0.1 opens the editor (or the play page) and posts it the file once it says it is
@@ -81,23 +80,16 @@ export interface HandoverMessage { type: string; [key: string]: unknown }
  * page sends back goes to `onMessage`, which a command uses to print what the page reports (a lobby's link).
  */
 async function handOver(input: Input, editor: string, { lobby = false, onMessage, onAddress, timeout = 120_000, what = "the editor", say = print }: { lobby?: boolean; onMessage?: (m: HandoverMessage) => void; onAddress?: (page: string) => void; timeout?: number; what?: string; say?: (...lines: string[]) => void } = {}): Promise<boolean> {
-  const token = randomBytes(12).toString("hex");
+  const token = loopbackToken();
   const target = new URL(editor);
   target.searchParams.set("handoff", "1");
-  let done: (taken: boolean) => void = () => {};
-  const finished = new Promise<boolean>((r) => { done = r; });
-  const server = createServer((req, res) => {
-    const url = new URL(req.url ?? "/", "http://127.0.0.1");
+  const wait = pageWait<boolean>();
+  const { server, origin } = await listenLoopback((req, res) => {
+    const url = requestUrl(req);
     if (url.pathname === `/${token}/file`) { res.writeHead(200, { "content-type": "application/octet-stream" }); res.end(input.bytes); return; }
     if (url.pathname === `/${token}/message` && req.method === "POST") {
-      const chunks: Buffer[] = [];
-      req.on("data", (c: Buffer) => chunks.push(c));
-      req.on("end", () => {
-        res.writeHead(204).end();
-        let m: HandoverMessage | null = null;
-        try { m = JSON.parse(Buffer.concat(chunks).toString("utf8")) as HandoverMessage; } catch { /* not ours */ }
-        if (!m || typeof m.type !== "string") return;
-        if (m.type === "scmjs.taken") done(true);
+      takeMessage(req, res, (m) => {
+        if (m.type === "scmjs.taken") wait.settle(true);
         else onMessage?.(m);
       });
       return;
@@ -105,9 +97,7 @@ async function handOver(input: Input, editor: string, { lobby = false, onMessage
     if (url.pathname === `/${token}`) { res.writeHead(200, { "content-type": "text/html; charset=utf-8" }); res.end(handoffPage(input.name, target.href, token, lobby, what)); return; }
     res.writeHead(404).end();
   });
-  await new Promise<void>((r, j) => { server.once("error", j); server.listen(0, "127.0.0.1", () => r()); });
-  const port = (server.address() as { port: number }).port;
-  const page = `http://127.0.0.1:${port}/${token}`;
+  const page = `${origin}/${token}`;
   onAddress?.(page);
   openBrowser(page);
   // `what` is English for the loopback page; the terminal says it in the reader's language.
@@ -115,9 +105,8 @@ async function handOver(input: Input, editor: string, { lobby = false, onMessage
   // BROWSER=none opens nothing, so the address is the instruction rather than a fallback.
   if (process.env.BROWSER === "none") say(`${mark.info} ${t("Open {page} in your browser to hand {name} to {what, select, play {the play page} other {the editor}}", { page, name: pc.bold(input.name), what: which })}`);
   else say(`${mark.info} ${t("Opening {name} in {what, select, play {the play page} other {the editor}} in your browser", { name: pc.bold(input.name), what: which })}`, pc.dim(`  ${t("If nothing opens, go to {page}", { page })}`));
-  const timer = setTimeout(() => done(false), timeout);
-  const taken = await finished;
-  clearTimeout(timer);
+  const taken = await wait.within(timeout, false);
+  wait.stop();
   server.close();
   if (!taken) throw new CliError(t("{what, select, play {The play page} other {The editor}} did not take the file", { what: which }), t("Open {address} and drop {name} on it.", { address: editor, name: input.name }));
   say(`${mark.ok} ${t("Handed to {what, select, play {the play page} other {the editor}}", { what: which })}`);

@@ -17,12 +17,12 @@ import { TILESETS } from "../../src/data/tilesets";
 import { playerRaceLabel, playerTypeLabel } from "../../src/data/players";
 import { unitName } from "../../src/data/units";
 import { TEXT_ENCODINGS } from "../../src/formats/text/encoding";
-import { spawnSync } from "node:child_process";
 import { basename } from "node:path";
 import { kindOf, type Input } from "./files";
 import { locate } from "./history";
 import { msg, t, translate } from "./i18n";
 import { CliError, mark, num, padColumns, pc, size } from "./ui";
+import { gitBytes, gitText } from "./git";
 
 export type Change = "added" | "removed" | "changed";
 
@@ -294,7 +294,7 @@ export function revisionInput(rev: string, file: string): Input {
   const f = locate(file);
   // `A...` (git's three dots): the commit this branch and A last had in common, so the diff is what the branch did.
   const at = three ? mergeBase(f.root, three[1], three[2] || "HEAD", rev) : rev;
-  const shown = spawnSync("git", ["-C", f.root, "show", `${at}:${f.path}`], { encoding: "buffer", maxBuffer: 512 * 1024 * 1024 });
+  const shown = gitBytes(["-C", f.root, "show", `${at}:${f.path}`], { maxBuffer: 512 * 1024 * 1024 });
   if (shown.status !== 0) throw new CliError(t("git has no {path} at {rev}", { path: f.path, rev }), shown.stderr.toString().trim().split("\n")[0] || null, 2);
   const bytes = new Uint8Array(shown.stdout);
   const name = `${rev}:${basename(file)}`;
@@ -304,7 +304,7 @@ export function revisionInput(rev: string, file: string): Input {
 /** The commit `a` and `b` last had in common (`git merge-base`), for `--rev A...`. */
 function mergeBase(root: string, a: string, b: string, rev: string): string {
   if (a.startsWith("-") || b.startsWith("-")) throw new CliError(t("{rev} is not a revision", { rev }), null, 2);
-  const r = spawnSync("git", ["-C", root, "merge-base", a, b], { encoding: "utf8" });
+  const r = gitText(["-C", root, "merge-base", a, b]);
   if (r.status !== 0) throw new CliError(t("git found nothing {a} and {b} have in common", { a, b }), r.stderr.trim().split("\n")[0] || null, 2);
   return r.stdout.trim();
 }

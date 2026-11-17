@@ -19,7 +19,7 @@ game-data resolution and every uncaught error — tens of lines in a session. Th
 tier (`isVerbose()`) is off until someone is hunting; it is not persisted, because a build
 left tracing every plugin call across sessions is a slow editor nobody asked for.
 
-**Not an atom.** Writes come from `plugins/host.ts`, `graphics.ts`, `services/preload.ts`,
+**Not an atom.** Writes come from `plugins/host/`, `graphics.ts`, `services/preload.ts`,
 `services/documentActions.ts` and a `window.onerror` handler — none of which have a store —
 and a Jotai atom would re-render the panel once per entry. `log.ts` is a plain module with
 its own coalesced subscription (`NOTIFY_MS`, 100 ms); `atoms/logAtoms.ts` holds only the
@@ -112,7 +112,7 @@ mirrored `console.error` is still one per occurrence, which is what `e2e` fails 
 through the store inside a `try` in the handler, never at render — one of its dozen atoms
 may be what failed.
 
-**Instrumentation is one walk, not two hundred call sites.** `host.ts#instrument` wraps
+**Instrumentation is one walk, not two hundred call sites.** `host/instrument.ts#instrument` wraps
 every function on the API object at the bottom of `createPluginApi`. That works because the
 function builds one fresh literal per plugin, so the wrappers are private to it and the path
 they log (`document.edit`, `ui.pickObject`) needs no bookkeeping. Depth 3, plain objects

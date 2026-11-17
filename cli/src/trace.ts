@@ -29,6 +29,8 @@ import { assetFile, INSTALL } from "./runtime";
 import { diffMaps, summarizeDiff } from "./diff";
 import { GAME_TYPES } from "./replay";
 import { t, translate } from "./i18n";
+import { expectKind, loadReplayInput, readInput, STDIO, type Input } from "./files";
+import { checkPlayedMod } from "./replaymod";
 import { CliError, columns, dot, duration, mark, num, pc, table, visible } from "./ui";
 
 /* ── The runner's lines (scm-sim's src/exact/runMap.ts) ──────── */
@@ -431,6 +433,19 @@ export interface ReplayRun {
   scenario: Scenario;
   /** How the given map differs from the replay's, in a few words; null when it does not, or no map was given. */
   differs: string | null;
+}
+
+/**
+ * The replay `--replay` (or `replay`) names, for its game: read, a replay and no pipe, and its mod held to the one laid
+ * over the game (`warn` hears where they differ but can still play).
+ */
+export async function replayForGame(path: string, o: { mod?: string; starcraft?: string; warn: (line: string) => void }): Promise<{ input: Input; rep: Replay }> {
+  const input = await readInput(path);
+  expectKind(input, "replay");
+  if (input.path === STDIO) throw new CliError(t("--replay takes a replay file, not standard input."), null, 2);
+  const rep = await loadReplayInput(input);
+  await checkPlayedMod(rep, input.name, o.mod, o.starcraft, o.warn);
+  return { input, rep };
 }
 
 /**

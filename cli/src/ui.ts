@@ -2,6 +2,7 @@
  * How `scmjs` writes to the terminal: colour through picocolors (off for a pipe, `NO_COLOR` or `--no-color`), a few
  * marks, aligned label/value rows, and StarCraft's own text colours where a map or replay name has them.
  */
+import { relative } from "node:path";
 import pc from "picocolors";
 import { TEXT_CODES } from "../../src/editor/textColors";
 
@@ -23,6 +24,17 @@ export const dot = pc.dim(unicode ? " · " : " - ");
 export function print(...lines: (string | null | undefined | false)[]): void {
   for (const l of lines) if (l !== null && l !== undefined && l !== false) process.stdout.write(l + "\n");
 }
+
+/**
+ * Lines to standard error: progress and notes while standard output holds the result alone (a report, a map in a
+ * pipe, JSON, or a protocol).
+ */
+export function printErr(...lines: (string | null | undefined | false)[]): void {
+  for (const l of lines) if (l !== null && l !== undefined && l !== false) process.stderr.write(l + "\n");
+}
+
+/** A path for a message: relative when it is under the working folder, else as it is. */
+export function nearPath(path: string): string { const r = relative(process.cwd(), path); return r && !r.startsWith("..") ? r : path; }
 
 /**
  * `label  value` rows, the labels padded to one width and dimmed; rows with no value are left out, and a `null`

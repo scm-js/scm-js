@@ -29,6 +29,7 @@ import type { CoverageForm } from "./report";
 import { t, translate } from "./i18n";
 import { parseWhole } from "./values";
 import { CliError, columns, dot, mark, num, pc, table, visible } from "./ui";
+import { raiseExitCode } from "./options";
 
 const USE_MAP_SETTINGS = 10;
 
@@ -277,7 +278,7 @@ export async function runCoverage(input: Input, doc: OpenedMap, sources: readonl
     games.push(...results.filter((x): x is typeof games[number] => x !== null));
   }
   for (const [k, reason] of errors) skipped.push({ file: taken[k].file, reason: t("the game could not play it: {reason}", { reason }) });
-  if (errors.size) process.exitCode = Math.max(Number(process.exitCode ?? 0), 1);
+  if (errors.size) raiseExitCode(1);
 
   // The tests' scenarios, one game each; whether they pass is map test's business, not this one's.
   if (scenarios.length) {

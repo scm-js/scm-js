@@ -11,9 +11,8 @@
  */
 import { spawnSync } from "node:child_process";
 import { createInterface } from "node:readline";
-import { randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import { type IncomingMessage, type ServerResponse } from "node:http";
 import { tempFolder } from "./lifecycle";
 import { basename, dirname, extname, join, relative, resolve } from "node:path";
 import { gunzipSync } from "node:zlib";
@@ -29,6 +28,7 @@ import { GifWriter } from "./gif";
 import { parseClock } from "./watch";
 import { t, translate } from "./i18n";
 import { CliError, duration, mark, num, pc, size } from "./ui";
+import { listenLoopback, loopbackToken, readBody, requestUrl } from "./loopback";
 
 export type ClipFormat = "webm" | "mp4" | "gif";
 
@@ -88,7 +88,7 @@ export function clipFormat(out: string): ClipFormat {
 }
 
 /** `WxH`, each even (video encoders work in pairs of pixels): an odd side is made the next even one, `rounded` then. */
-export function parseSize(spec: string): { width: number; height: number; rounded: boolean } {
+export function parseResolution(spec: string): { width: number; height: number; rounded: boolean } {
   const m = /^(\d+)x(\d+)$/i.exec(spec.trim());
   const width = m ? Number(m[1]) : NaN, height = m ? Number(m[2]) : NaN;
   if (!m || width < 64 || height < 64 || width > 3840 || height > 2160) throw new CliError(t("--resolution takes WxH in pixels, from 64x64 to 3840x2160, not \"{spec}\"", { spec }), null, 2);
@@ -151,7 +151,7 @@ export function planClip(input: Input, rep: Replay, o: ExportOptions, map: { wid
   const format = clipFormat(out);
   const d = format === "gif" ? DEFAULTS.gif : DEFAULTS.video;
   const asked = o.resolution ?? o.size;
-  const { width, height } = asked ? parseSize(asked) : d;
+  const { width, height } = asked ? parseResolution(asked) : d;
   const whole = !!(o.wholeMap ?? o.all);
   const fps = parseFps(o.fps ?? String(d.fps), format);
   const speed = parseSpeed(o.speed ?? "1");
@@ -273,8 +273,6 @@ document.body.append(frame);
 /** `.gz` bytes, or bytes a server sent compressed without saying so, made plain (as `ensureEngine` does). */
 const plain = (bytes: Uint8Array): Uint8Array => (bytes.length > 2 && bytes[0] === 0x1f && bytes[1] === 0x8b ? new Uint8Array(gunzipSync(bytes)) : bytes);
 
-const readBody = (req: IncomingMessage): Promise<Buffer> => new Promise((r, j) => { const parts: Buffer[] = []; req.on("data", (c: Buffer) => parts.push(c)); req.on("end", () => r(Buffer.concat(parts))); req.on("error", j); });
-
 interface Served {
   url: string;
   close(): void;
@@ -314,9 +312,9 @@ async function serve(play: URL, token: string, job: Job, track: Promise<JobTrack
     }
     return p;
   };
-  const server = createServer((req: IncomingMessage, res: ServerResponse) => {
+  const { server, origin } = await listenLoopback((req: IncomingMessage, res: ServerResponse) => {
     void (async () => {
-      const url = new URL(req.url ?? "/", "http://127.0.0.1");
+      const url = requestUrl(req);
       const path = decodeURIComponent(url.pathname);
       const send = (status: number, body: Uint8Array | string, type = "text/plain; charset=utf-8") => { res.writeHead(status, { "content-type": type, "cache-control": "no-store" }); res.end(body); };
       if (path.startsWith(`/${token}/`)) {
@@ -347,9 +345,7 @@ async function serve(play: URL, token: string, job: Job, track: Promise<JobTrack
       send(404, "not found");
     })().catch((e) => { try { res.writeHead(502, { "content-type": "text/plain" }); res.end(String(e instanceof Error ? e.message : e)); } catch { /* gone */ } });
   });
-  await new Promise<void>((r, j) => { server.once("error", j); server.listen(0, "127.0.0.1", () => r()); });
-  const port = (server.address() as { port: number }).port;
-  return { url: `http://127.0.0.1:${port}`, close: () => { server.closeAllConnections?.(); server.close(); } };
+  return { url: origin, close: () => { server.closeAllConnections?.(); server.close(); } };
 }
 
 /* ── Where the action is ───────────────────────────────────────── */
@@ -459,7 +455,7 @@ export async function exportReplay(input: Input, rep: Replay, o: ExportOptions, 
     followedBy = "clicks";
     return followTrack(rep.commands, who.id, { ...options, start: start ? { x: start.x, y: start.y } : null });
   })();
-  const token = randomBytes(12).toString("hex");
+  const token = loopbackToken();
   const record: Record<string, unknown> = {
     width: plan.width, height: plan.height, fps: plan.fps, speed: plan.speed, from: plan.from, to: plan.to, rows: plan.rows,
     whole: plan.camera.kind === "all", camera: plan.camera.kind === "at" ? { x: plan.camera.x, y: plan.camera.y } : null,

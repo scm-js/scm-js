@@ -53,7 +53,20 @@ read in the first effect pass is still null.
   that fails to load rejects the lazy and is a render error like any other) with a `null`
   fallback and `onError` → `closeDialogAtom(entry.key)` + an error toast carrying Show the log:
   the notice cannot be drawn inside the dialog, since `DialogFrame` is part of what failed.
-  `React.lazy` keeps a rejection, so a dialog whose chunk failed stays failed until a reload. The last one is around `<App />` in
+  `React.lazy` keeps a rejection, so a dialog whose chunk failed stays failed until a reload.
+  **A chunk that did not download is not the dialog's fault**: `isChunkLoadError` (`app/chunks.ts`
+  — each browser's message, and an address of the page's own origin, never a plugin's `blob:` or
+  another site's) sends it to `noticeChunkFailure` (`services/chunkFailure.ts`) instead of the
+  dialog's toast: one error notice, `ttl: 0`, deduped while it is on screen, whose Reload runs
+  `writeCopiesNow` and then `location.reload()`. `useChunkFailures` (mounted beside
+  `useErrorCapture`) raises the same notice for every other `import()`: Vite's preload helper
+  dispatches `vite:preloadError` with the error as `payload` for the import's own failure too
+  (`n().catch(o)` in the built helper), not only a dependency's — the listener never calls
+  `preventDefault`, so the caller still fails as before. The dev server has no helper, which is
+  why DialogHost raises it itself. 0.16.0's counted `TypeError` in DialogHost's boundary with no
+  frames of its own was this: Pages deploys replace the whole site, and a tab opened before
+  0.17.0 asked for chunks that were gone — `scripts/keep-old-assets.mjs` keeps them now
+  (`desktop-releases.md`). `e2e/errors.spec.ts` drives both a 404 and an aborted request. The last one is around `<App />` in
   `main.tsx`, inside the jotai `Provider`, and shows `CrashScreen`. Its Try again remounts
   `App` over the same store: the maps, the dialog stack and the plugins are all still there,
   `useStartupMap` steps aside because a scenario is open, `usePlugins` re-activates nothing

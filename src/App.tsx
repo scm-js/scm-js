@@ -21,6 +21,7 @@ import { useRecovery } from "./hooks/useRecovery";
 import { useCloseGuard } from "./hooks/useCloseGuard";
 import { useDesktopFiles } from "./hooks/useDesktopFiles";
 import { useErrorCapture } from "./hooks/useErrorCapture";
+import { useChunkFailures } from "./hooks/useChunkFailures";
 import { useUsageCounts } from "./hooks/useUsageCounts";
 import { droppedHandle } from "./services/mapIo";
 import { watchDataSetTerrain } from "./services/dataSetTerrain";
@@ -85,6 +86,7 @@ export default function App() {
   const [chrome, setChrome] = useState(false);
   // First, so it is listening before the preload and the plugins are.
   useErrorCapture();
+  useChunkFailures();
   useApplyPreferences();
   // Every string in the tree is `t()`'d at render; a new key remounts it all when the
   // language changes, which is rare enough that per-component subscriptions are not worth their weight.

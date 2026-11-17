@@ -1,8 +1,10 @@
 import { lazy, Suspense, type ComponentType, type LazyExoticComponent } from "react";
-import { useAtomValue, useSetAtom } from "jotai";
+import { useAtomValue, useSetAtom, useStore } from "jotai";
 import { debugConsoleAtom } from "../../atoms/logAtoms";
 import { closeDialogAtom, dialogStackAtom, pushToastAtom, type DialogEntry, type DialogId } from "../../atoms/uiAtoms";
 import { t } from "../../i18n";
+import { isChunkLoadError } from "../../app/chunks";
+import { noticeChunkFailure } from "../../services/chunkFailure";
 import { ErrorBoundary, errorText } from "../ui/ErrorBoundary";
 
 export interface DialogProps {
@@ -95,10 +97,14 @@ export default function DialogHost() {
   const close = useSetAtom(closeDialogAtom);
   const pushToast = useSetAtom(pushToastAtom);
   const openConsole = useSetAtom(debugConsoleAtom);
+  const store = useStore();
   // A dialog that cannot render (or whose chunk did not arrive) is closed and said so: the
-  // frame it would have drawn the notice in is part of what failed.
+  // frame it would have drawn the notice in is part of what failed. A chunk that did not
+  // arrive is not the dialog's fault and nothing was lost in it, so that notice is the one
+  // that offers the reload instead (`useChunkFailures` raises the same one, once).
   const failed = (entry: DialogEntry, error: unknown) => {
     close(entry.key);
+    if (isChunkLoadError(error)) { noticeChunkFailure(store); return; }
     pushToast({
       kind: "error",
       title: t("A dialog hit an error and was closed"),

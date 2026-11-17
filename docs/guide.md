@@ -2404,12 +2404,13 @@ The pages down the left:
   and which tool made it, which overlay or layer was shown or hidden, the type of each
   unit placed, the tileset and size of a map opened, or the name of the mod in use when
   the game data is one. When something goes wrong, it sends where in the editor's code the
-  error happened (the file, line and function) and whether the browser was translating the
-  page, but never the error's message. It never sends the map itself, its name, a file
-  name, its text or anything you typed, and nothing that identifies you. Turning it off
-  also stops the visit count for this browser, and the site's [privacy
-  page](https://scmjs.dev/privacy.html) has the same switch and the details. The desktop
-  app and copies of the editor hosted elsewhere count nothing.
+  error happened (the file, line and function, and which part of the editor, such as which
+  dialog) and whether the browser was translating the page, but never the error's message.
+  It never sends the map itself, its name, a file name, its text or anything you typed,
+  and nothing that identifies you. Turning it off also stops the visit count for this
+  browser, and the site's [privacy page](https://scmjs.dev/privacy.html) has the same
+  switch and the details. The desktop app and copies of the editor hosted elsewhere count
+  nothing.
 
 **Files**
 
@@ -2537,6 +2538,15 @@ opens the debug console at the line that says what failed.
 A dialog that fails is closed, and a notice says so with the same **Show the log** button.
 What you had changed in it and not yet applied is lost; what you had applied is in the
 map.
+
+The editor downloads each dialog the first time you open it. If that download fails, the
+dialog does not open and a notice says *Part of the editor could not be downloaded*, with
+a **Reload** button. That happens when the connection drops, or when the page was opened
+several releases ago: scmjs.dev keeps the files of the three releases before the current
+one (the nightly, of the three nightlies before it), and a page older than those asks for
+files that are gone. Reload brings the page up to date. Recovery copies of maps with
+unsaved changes are brought up to date first (unless you switched them off), so the editor
+offers those maps back after the reload.
 
 If the whole editor fails, a plain page takes its place with the error, the end of the
 log, and **Copy the log** and **Save the log…** for a bug report. Your maps are still open

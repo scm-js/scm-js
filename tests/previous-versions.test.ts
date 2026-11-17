@@ -16,7 +16,7 @@ import { mapModifiedAtom } from "../src/atoms/editorAtoms";
 import { DEFAULT_PREFERENCES, preferencesAtom } from "../src/atoms/preferencesAtoms";
 import { toastsAtom } from "../src/atoms/uiAtoms";
 import { DEFAULT_SAVE_OPTIONS } from "../src/editor/save";
-import { saveDocument, type SaveWriter } from "../src/hooks/useMapFileActions";
+import { saveDocument, type SaveWriter } from "../src/services/documentActions";
 import { saveBytes, type MapFileHandle } from "../src/services/mapIo";
 import { KEEP_PER_FILE, KEEP_TOTAL, listPrevious, loadPrevious, overLimits, removePrevious, storePrevious } from "../src/services/previousVersions";
 

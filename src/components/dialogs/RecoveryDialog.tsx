@@ -12,7 +12,7 @@ import { closeDialogAtom } from "../../atoms/uiAtoms";
 import { TILESET_BY_ID, type TilesetId } from "../../data/tilesets";
 import { formatBytes } from "../../editor/save";
 import { hostTerms } from "../../editor/platform";
-import { discardCopy, leftoverEntries, restoreCopy } from "../../hooks/useRecovery";
+import { discardCopy, leftoverEntries, restoreCopy } from "../../services/recoveryCopier";
 import type { RecoveryEntry } from "../../services/recovery";
 import { t, translate } from "../../i18n";
 import { Button } from "../ui";

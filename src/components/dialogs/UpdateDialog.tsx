@@ -7,7 +7,7 @@ import {
   checkForUpdatesAtom, downloadUpdateAtom, openReleasesAtom, updateStateAtom,
 } from "../../atoms/updateAtoms";
 import { canDownload, formatBytes, headline, supportOf } from "../../editor/updates";
-import { guardedAction } from "../../hooks/useMapFileActions";
+import { guardedAction } from "../../services/documentActions";
 import { desktopBridge } from "../../gamedata/desktop";
 import { Button, Group } from "../ui";
 import DialogFrame from "../ui/DialogFrame";

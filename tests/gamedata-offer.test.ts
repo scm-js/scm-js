@@ -2,7 +2,7 @@ import { createStore } from "jotai";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { pluginsStartedAtom } from "../src/atoms/pluginAtoms";
 import { closeDialogAtom, dialogStackAtom, openDialogAtom } from "../src/atoms/uiAtoms";
-import { offerGameDataWhenClear, PLUGIN_WAIT_MS } from "../src/hooks/usePreload";
+import { offerGameDataWhenClear, PLUGIN_WAIT_MS } from "../src/services/startupOffers";
 
 const ids = (store: ReturnType<typeof createStore>) => store.get(dialogStackAtom).map((d) => d.id);
 

@@ -1,16 +1,17 @@
 import { describe, expect, it } from "vitest";
 import { createStore } from "jotai";
 import { createScenario } from "../src/formats/chk/create";
-import { serializeScenario } from "../src/formats/chk/scenario";
+import { serializeScenario, setScenarioName } from "../src/formats/chk/scenario";
 import {
-  activateDocumentAtom, activeDocumentIdAtom, anyModifiedAtom, closeDocumentAtom, documentChangeAtom, documentsAtom, documentTabsAtom, loadDocumentAtom, parkedTilesetsAtom,
-  redoStackAtom, scenarioAtom, undoStackAtom,
+  activateDocumentAtom, activeDocumentIdAtom, anyModifiedAtom, closeDocumentAtom, commitSettingsAtom, documentChangeAtom, documentsAtom, documentTabsAtom, loadDocumentAtom, parkedTilesetsAtom,
+  redoStackAtom, scenarioAtom, settingsRevisionAtom, triggersRevisionAtom, undoStackAtom,
 } from "../src/atoms/documentAtoms";
+import { blendAnchorAtom, doodadPlacingAtom, unitPlacingAtom } from "../src/atoms/editorAtoms";
 import { centerViewOnAtom, clipSelectionAtom, locationsAutoHiddenAtom, viewFlagsAtom, mapFilePathAtom, mapModifiedAtom, mapNameAtom, mapTilesetAtom, mapWidthAtom, selectedUnitsAtom, viewportRectAtom, zoomAtom } from "../src/atoms/editorAtoms";
 import { preferencesAtom } from "../src/atoms/preferencesAtoms";
 import { closeDialogAtom, dialogStackAtom, toastsAtom } from "../src/atoms/uiAtoms";
 import { toggleFlagAtom } from "../src/atoms/viewModeAtoms";
-import { closeDocumentIn, isUntouchedBlank, needsCloseConfirm, newMapInto, openFileInto, openTarget, quitGuard, stepDocumentIn, type PendingAction } from "../src/hooks/useMapFileActions";
+import { closeDocumentIn, isUntouchedBlank, needsCloseConfirm, newMapInto, openFileInto, openTarget, quitGuard, stepDocumentIn, type PendingAction } from "../src/services/documentActions";
 import { Contributions, createPluginApi } from "../src/plugins/host";
 import { tabTitle } from "../src/components/chrome/TabStrip";
 
@@ -127,6 +128,40 @@ describe("several maps open at once", () => {
     expect(store.get(documentChangeAtom).reason).toBe("close");
   });
 
+  it("ends a gesture begun on the map in front when another comes forward", () => {
+    const store = withA();
+    const a = store.get(activeDocumentIdAtom)!;
+    store.set(loadDocumentAtom, { scenario: scn("b"), extras: new Map(), fileName: null, reason: "new", into: "tab" });
+    store.set(unitPlacingAtom, true);
+    store.set(doodadPlacingAtom, true);
+    store.set(blendAnchorAtom, { x: 3, y: 2 });
+
+    store.set(activateDocumentAtom, a);
+    expect(store.get(unitPlacingAtom)).toBe(false);
+    expect(store.get(doodadPlacingAtom)).toBe(false);
+    expect(store.get(blendAnchorAtom)).toBeNull();
+  });
+
+  it("leaves nothing of the last map behind when it closes", () => {
+    const store = withA();
+    store.set(mapModifiedAtom, true);
+    store.set(selectedUnitsAtom, [1]);
+    store.set(undoStackAtom, [{ label: "stroke", changes: [] }]);
+    store.set(unitPlacingAtom, true);
+    const settings = store.get(settingsRevisionAtom), triggers = store.get(triggersRevisionAtom);
+
+    store.set(closeDocumentAtom);
+    expect(store.get(scenarioAtom)).toBeNull();
+    expect(store.get(mapFilePathAtom)).toBeNull();
+    expect(store.get(mapModifiedAtom)).toBe(false);
+    expect(store.get(selectedUnitsAtom)).toEqual([]);
+    expect(store.get(undoStackAtom)).toEqual([]);
+    expect(store.get(unitPlacingAtom)).toBe(false);
+    // Every panel repaints, not only the ones drawn on the map.
+    expect(store.get(settingsRevisionAtom)).toBe(settings + 1);
+    expect(store.get(triggersRevisionAtom)).toBe(triggers + 1);
+  });
+
   it("replaces the map in front when told to, and keeps the slot on a re-parse", () => {
     const store = withA();
     const a = store.get(activeDocumentIdAtom)!;
@@ -144,6 +179,17 @@ describe("several maps open at once", () => {
     expect(bare.get(documentTabsAtom)).toEqual([]);
     bare.set(closeDocumentAtom);
     expect(bare.get(scenarioAtom)).toBeNull();
+  });
+});
+
+describe("what the chrome shows of the scenario", () => {
+  it("follows the scenario after a settings commit, whoever made the change", () => {
+    const store = withA();
+    const scenario = store.get(scenarioAtom)!;
+    setScenarioName(scenario, "renamed");
+    expect(store.get(mapNameAtom)).toBe("a");
+    store.set(commitSettingsAtom);
+    expect(store.get(mapNameAtom)).toBe("renamed");
   });
 });
 

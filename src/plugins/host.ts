@@ -12,8 +12,8 @@ import type { createStore, PrimitiveAtom } from "jotai";
 import {
   activeDoodadAtom, activeLayerAtom, activeSpriteAtom, activeSpriteKindAtom, activeTerrainAtom, activeTileAtom, activeUnitAtom, activeUnitSpriteAtom, brushSizeAtom,
   centerViewOnAtom, clipboardAtom, clipPartsAtom, clipPasteModeAtom, clipPastingAtom, clipSelectionAtom, cursorPixelAtom, cursorTileAtom, doodadPlacementAtom, fogModeAtom, fogPlayersAtom,
-  fogViewPlayerAtom, gridSizeAtom, locationSnapAtom, lockedLayersAtom, mapDescriptionAtom, mapFileHandleAtom, mapFilePathAtom, mapModifiedAtom,
-  mapHeightAtom, mapNameAtom, mapOriginAtom, mapTilesetAtom, mapWidthAtom, placementOptionsAtom, rectVariationAtom, saveOptionsAtom, selectedDoodadsAtom, selectedLocationsAtom, selectedSpritesAtom, selectedUnitsAtom,
+  fogViewPlayerAtom, gridSizeAtom, locationSnapAtom, lockedLayersAtom, mapFileHandleAtom, mapFilePathAtom, mapModifiedAtom,
+  mapHeightAtom, mapOriginAtom, mapTilesetAtom, mapWidthAtom, placementOptionsAtom, rectVariationAtom, saveOptionsAtom, selectedDoodadsAtom, selectedLocationsAtom, selectedSpritesAtom, selectedUnitsAtom,
   spritePlaceOptionsAtom, symmetryAtom, terrainModeAtom, unitOwnerAtom, viewFlagsAtom, viewportRectAtom, viewportRepaintAtom, zoomAtom, ZOOM_STEPS, type EditorLayer,
 } from "../atoms/editorAtoms";
 import {
@@ -103,8 +103,8 @@ import {
 } from "../editor/sections";
 import { serializeChk, type ChkFile } from "../formats/chk/reader";
 import { spriteCatalogue } from "../data/sprites";
-import { spriteName } from "../hooks/useSpriteTools";
-import { doodadLabel } from "../hooks/useDoodadTools";
+import { spriteName } from "../data/sprites";
+import { doodadLabel } from "../formats/tileset/doodads";
 import { checkPlacement } from "../editor/placement";
 import type { DoodadDef } from "../formats/tileset/doodads";
 import { applyChanges, stampTerrain, stampTile, Stroke, type Rect, type TileChange } from "../editor/terrain";
@@ -139,7 +139,7 @@ import { loadImage, readClipboardImage } from "./images";
 import { BUILTIN_PLUGINS } from "./builtin";
 import { defaultPlugins, pluginKey, type DefaultPlugin } from "./defaults";
 import { transpileInBackground } from "./transpileClient";
-import { activateDocumentIn, askDialog, closeDocumentIn, guardedAction, newMapInto, openFileInto, saveDocument } from "../hooks/useMapFileActions";
+import { activateDocumentIn, askDialog, closeDocumentIn, guardedAction, newMapInto, openFileInto, saveDocument } from "../services/documentActions";
 import { DEFAULT_SAVE_OPTIONS, defaultSaveOptions } from "../editor/save";
 import { buildOutgoing } from "../services/mapBuild";
 import { outgoingExtras } from "../services/mapDataSet";
@@ -1100,8 +1100,6 @@ export function runUpdate(store: Store, label: string, build: (tx: UpdateTransac
     // One history entry for the update: the first commit records everything it wrote, under its label.
     store.set(commitTriggersAtom, { notice: false, label, extrasBefore });
     store.set(commitSettingsAtom, { notice: false, label });
-    store.set(mapNameAtom, scenarioName(scn) ?? "");
-    store.set(mapDescriptionAtom, scenarioDescription(scn) ?? "");
     store.set(commitNoticeAtom, { reason: "tables", label, area: null, parts: { ...NO_PARTS, settings: true, triggers: true } });
   };
 

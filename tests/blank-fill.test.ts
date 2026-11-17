@@ -8,7 +8,7 @@ import { mapFilePathAtom, mapModifiedAtom } from "../src/atoms/editorAtoms";
 import { loadTileset } from "../src/formats/tileset/decode";
 import { primeTileset, releaseTileset, type LoadedTileset } from "../src/formats/tileset/load";
 import { NO_DOODADS } from "../src/formats/tileset/doodads";
-import { DEFAULT_NEW_MAP, newMapInto, relayBlankTerrain } from "../src/hooks/useMapFileActions";
+import { DEFAULT_NEW_MAP, newMapInto, relayBlankTerrain } from "../src/services/documentActions";
 
 /**
  * A blank map made while the editor has no graphics is filled with variation 0 everywhere

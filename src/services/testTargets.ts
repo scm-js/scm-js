@@ -10,7 +10,6 @@
  * can open a window — a browser lets a click open a tab, not what follows it later. That
  * is why this does not go through a dialog the way StarCraft does.
  */
-import type { createStore } from "jotai";
 import { scenarioAtom } from "../atoms/documentAtoms";
 import { preferencesAtom } from "../atoms/preferencesAtoms";
 import { pluginTestTargetsAtom, type PluginTestTargetEntry } from "../atoms/pluginAtoms";
@@ -22,8 +21,7 @@ import { count } from "./usage";
 import { gameDataSourceAtom } from "../atoms/gameDataAtoms";
 import { isDefaultProfile } from "../gamedata/profiles";
 import { currentAssetSource } from "../gamedata/source";
-
-type Store = ReturnType<typeof createStore>;
+import type { Store } from "../atoms/store";
 
 /** The editor's own target's id in `testMap.target`. */
 export const STARCRAFT = "starcraft";

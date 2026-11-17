@@ -66,7 +66,7 @@ import { dataSetUnitGroups, RACE_LABEL, starEditUnitGroups, unitLabel, type Race
 import { SPRITE_COUNT, spriteCatalogue, spriteLabel } from "../../data/sprites";
 import { SpriteFlag } from "../../formats/chk/sections/objects";
 import type { SpriteKind } from "../../editor/sprites";
-import { spriteName } from "../../hooks/useSpriteTools";
+import { spriteName } from "../../data/sprites";
 import { useUnitAssets } from "../../hooks/useUnitAssets";
 import type { UnitAssets } from "../../formats/units/load";
 import { Button, Check, Tabs, Tip } from "../ui";

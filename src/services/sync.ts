@@ -13,17 +13,17 @@
  * repainted, the selections follow their records, and the local history forgets the cells
  * someone else has since written.
  */
-import type { createStore } from "jotai";
 import {
+  mirrorTextsAtom,
   activeDocumentIdAtom, archiveExtrasAtom, archiveStoredAtom, commitSettingsAtom, commitTriggersAtom, documentsAtom, doodadsRevisionAtom, isomRevisionAtom, loadDocumentAtom, locationsRevisionAtom, noticeWholeAtom,
   redoStackAtom, scenarioAtom, settingsRevisionAtom, syncTapAtom, terrainRevisionAtom, triggersRevisionAtom, undoStackAtom, unitsRevisionAtom, type SyncTap,
 } from "../atoms/documentAtoms";
 import {
-  mapDescriptionAtom, mapFileHandleAtom, mapFilePathAtom, mapModifiedAtom, mapNameAtom, mapOriginAtom, mapPointerHeldAtom, mapVersionAtom, saveOptionsAtom,
+  mapFileHandleAtom, mapFilePathAtom, mapModifiedAtom, mapOriginAtom, mapPointerHeldAtom, saveOptionsAtom,
   selectedDoodadsAtom, selectedLocationsAtom, selectedSpritesAtom, selectedUnitsAtom,
 } from "../atoms/editorAtoms";
 import { dialogStackAtom, pushToastAtom, statusMessageAtom, type DialogId } from "../atoms/uiAtoms";
-import { mapVersionOf, markDirty, parseScenario, scenarioDescription, scenarioName, serializeScenario, type Scenario } from "../formats/chk/scenario";
+import { markDirty, parseScenario, serializeScenario, type Scenario } from "../formats/chk/scenario";
 import { isLocationUsed } from "../formats/chk/sections/objects";
 import {
   FIELD_SECTIONS, SyncCore, captureFields, captureStrings, forgetCells, isSyncOp, unpack, type FieldsBaseline, type SyncCells, type SyncDoc, type SyncField, type SyncOp,
@@ -35,8 +35,7 @@ import { DEFAULT_SAVE_OPTIONS, defaultSaveOptions } from "../editor/save";
 import { writeMapBytes } from "./mapIo";
 import { outgoingExtras } from "./mapDataSet";
 import type { SyncHold, SyncReport, SyncSession, SyncStartOptions } from "../plugins/api";
-
-type Store = ReturnType<typeof createStore>;
+import type { Store } from "../atoms/store";
 
 export type { SyncHold, SyncReport, SyncSession, SyncStartOptions } from "../plugins/api";
 
@@ -197,9 +196,7 @@ export function startSync(store: Store, options: SyncStartOptions): SyncSession 
         store.set(selectedDoodadsAtom, reselect(scn.doodads, picks.doodads, sameShape));
         store.set(selectedSpritesAtom, reselect(scn.sprites, picks.sprites, sameShape));
         store.set(selectedLocationsAtom, store.get(selectedLocationsAtom).filter((i) => scn.locations[i] && isLocationUsed(scn.locations[i])));
-        store.set(mapNameAtom, scenarioName(scn) ?? store.get(mapFilePathAtom) ?? "Untitled Scenario");
-        store.set(mapDescriptionAtom, scenarioDescription(scn) ?? "");
-        store.set(mapVersionAtom, mapVersionOf(scn.fileVersion));
+        store.set(mirrorTextsAtom);
         for (const a of [terrainRevisionAtom, unitsRevisionAtom, doodadsRevisionAtom, locationsRevisionAtom, isomRevisionAtom, settingsRevisionAtom, triggersRevisionAtom]) {
           store.set(a, store.get(a) + 1);
         }
@@ -253,9 +250,7 @@ export function startSync(store: Store, options: SyncStartOptions): SyncSession 
           const label = t("Put back my changes");
           if (lost.has("triggers") || lost.has("briefing")) store.set(commitTriggersAtom, { label });
           if ([...lost.keys()].some((f) => f !== "triggers" && f !== "briefing")) store.set(commitSettingsAtom, { label });
-          store.set(mapNameAtom, scenarioName(scn) ?? store.get(mapFilePathAtom) ?? "Untitled Scenario");
-          store.set(mapDescriptionAtom, scenarioDescription(scn) ?? "");
-          store.set(mapVersionAtom, mapVersionOf(scn.fileVersion));
+          store.set(mirrorTextsAtom);
         },
       },
     });

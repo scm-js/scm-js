@@ -14,20 +14,13 @@ import { ColorTextField } from "../ui/ColorCodes";
 import DialogFrame from "../ui/DialogFrame";
 import type { DialogProps } from "./DialogHost";
 import { msg, t, translate } from "../../i18n";
+import { NoMap } from "./NoMap";
 
 /** A select over a byte table, keeping a value the table does not list (a map from another editor) selectable as raw. */
 function ByteSelect({ value, onChange, options, disabled }: { value: number; onChange: (v: number) => void; options: { value: number; label: string }[]; disabled?: boolean }) {
   const opts = options.map((o) => ({ value: String(o.value), label: o.label }));
   if (!options.some((o) => o.value === value)) opts.push({ value: String(value), label: t("{value} (raw)", { value }) });
   return <Select value={String(value)} onChange={(e) => onChange(Number(e.target.value))} options={opts} disabled={disabled} />;
-}
-
-function NoMap({ entry, title, icon }: DialogProps & { title: string; icon: React.ReactNode }) {
-  return (
-    <DialogFrame dialogKey={entry.key} title={title} icon={icon} size="sm">
-      <p className="hint">{t("Open or create a map first.")}</p>
-    </DialogFrame>
-  );
 }
 
 /* ── Player Settings ────────────────────────────────────── */

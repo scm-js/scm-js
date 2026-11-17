@@ -30,7 +30,7 @@ import {
 } from "../src/atoms/editorAtoms";
 import { chromeModeAtom, flagOffered, flagShown, overlayOffered, toggleFlagAtom } from "../src/atoms/viewModeAtoms";
 import { preferencesAtom } from "../src/atoms/preferencesAtoms";
-import type { PendingAction } from "../src/hooks/useMapFileActions";
+import type { PendingAction } from "../src/services/documentActions";
 import { closeDialogAtom, dialogStackAtom, statusMessageAtom } from "../src/atoms/uiAtoms";
 import {
   cancelMapPickAtom, cancelMapToolAtom, installedPluginsAtom, mapPickAtom, mapToolAtom, mapToolRevisionAtom, normalizeCombo, overlayVisibilityMemory, pluginCodeAtom,

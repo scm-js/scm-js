@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState, type PointerEvent } from "react";
-import { zoomOf } from "../components/ui/interfaceSize";
+import { zoomOf } from "../editor/interfaceSize";
 
 /**
  * Pointer-drag resizing for a dock. `side` is where the dock sits, so dragging

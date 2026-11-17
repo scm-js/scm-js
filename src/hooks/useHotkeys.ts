@@ -14,7 +14,8 @@ import { dialogStackAtom, openDialogAtom, statusMessageAtom } from "../atoms/uiA
 import { cancelMapPickAtom, cancelMapToolAtom, comboOfEvent, pluginHotkeysAtom } from "../atoms/pluginAtoms";
 import { zoomToAtom } from "../atoms/zoomAtoms";
 import { chromeModeAtom, notOnView, toggleFlagAtom } from "../atoms/viewModeAtoms";
-import { stepDocumentIn, useMapFileActions } from "./useMapFileActions";
+import { useMapFileActions } from "./useMapFileActions";
+import { stepDocumentIn } from "../services/documentActions";
 import { useClipboardTools } from "./useClipboardTools";
 import { t } from "../i18n";
 import { count } from "../services/usage";

@@ -88,7 +88,7 @@ import { MAP_VERSIONS } from "../../formats/chk/scenario";
 import { saveBytes } from "../../services/mapIo";
 import { listCopies, recoveryPersists, SESSION, type RecoveryEntry } from "../../services/recovery";
 import { KEEP_PER_FILE, listPrevious, removePrevious, type PreviousEntry } from "../../services/previousVersions";
-import { discardCopy, leftoverEntries } from "../../hooks/useRecovery";
+import { discardCopy, leftoverEntries } from "../../services/recoveryCopier";
 import { formatBytes } from "../../editor/save";
 import { DEFAULT_PROFILE } from "../../gamedata/profiles";
 import { LOCALES, msg, pluginText, t, tc, translate } from "../../i18n";

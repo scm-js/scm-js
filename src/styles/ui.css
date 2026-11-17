@@ -662,12 +662,6 @@ input[type="range"] {
   background: rgba(217, 83, 79, 0.18);
   color: #ff8a86;
 }
-.sep-v {
-  width: 1px;
-  align-self: stretch;
-  background: var(--border);
-  margin: 4px 4px;
-}
 .sep-h {
   height: 1px;
   background: var(--border);

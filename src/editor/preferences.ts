@@ -155,7 +155,7 @@ export interface Preferences {
    * How large the editor's own interface is drawn, in percent: menus, toolbars, panels,
    * dialogs, notices and the splash. One of `INTERFACE_SIZES`. The map is not scaled by it
    * (its own zoom decides that), which is why it is not the browser's page zoom; see
-   * `components/ui/interfaceSize.ts`.
+   * `editor/interfaceSize.ts`.
    */
   interfaceSize: InterfaceSize;
   /**

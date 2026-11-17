@@ -160,3 +160,8 @@ export function doodadOrigin(def: DoodadDef, x: number, y: number): { x: number;
 export function doodadCenter(def: DoodadDef, tx: number, ty: number): { x: number; y: number } {
   return { x: tx * 32 + def.width * 16, y: ty * 32 + def.height * 16 };
 }
+
+/** A doodad as the editor names it: its group and number. */
+export function doodadLabel(def: DoodadDef): string {
+  return `${def.category} #${def.id}`;
+}

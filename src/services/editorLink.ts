@@ -13,7 +13,6 @@
  * with. The command then needs no installation of its own and lays a mod's ground with the mod's tileset. Only the
  * files in `GAME_FILE` are answered: tables, never a unit's pictures or a sound.
  */
-import type { createStore } from "jotai";
 import { linkedDocumentAtom } from "../atoms/linkAtoms";
 import {
   activeDocumentIdAtom, applyDocumentAtom, archiveExtrasAtom, archiveStoredAtom, commitNoticeAtom, documentsAtom, scenarioAtom, tilesetFileNameAtom,
@@ -37,8 +36,7 @@ import { DEFAULT_IMAGE_OPTIONS, exportMapImage } from "./mapImage";
 import { TRANSIENT } from "./diskFiles";
 import { writeMapBytes, type MapFileHandle } from "./mapIo";
 import { HOLDING_DIALOGS } from "./sync";
-
-type Store = ReturnType<typeof createStore>;
+import type { Store } from "../atoms/store";
 
 /** Where the link's messages go: the page that opened the editor. */
 export interface LinkPort {
@@ -63,7 +61,6 @@ export class LinkRefusal extends Error {
   readonly code: string;
   constructor(code: string, message: string) { super(message); this.code = code; }
 }
-
 
 const LINK = TRANSIENT;
 

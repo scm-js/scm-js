@@ -1,7 +1,7 @@
 import { useAtomValue, useStore } from "jotai";
 import { Eye, X } from "lucide-react";
 import { documentTabsAtom } from "../../atoms/documentAtoms";
-import { activateDocumentIn, closeDocumentIn } from "../../hooks/useMapFileActions";
+import { activateDocumentIn, closeDocumentIn } from "../../services/documentActions";
 import type { OpenDocumentInfo } from "../../plugins/api";
 import { t } from "../../i18n";
 import { useT } from "../../i18n/react";

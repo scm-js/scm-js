@@ -13,7 +13,6 @@
  * count. Anything else it throws (`TypeError`, a class of its own, a step that returns no map)
  * is a bug, logged and counted as an error with its stack.
  */
-import type { createStore } from "jotai";
 import { archiveExtrasAtom, archiveStoredAtom, builtByAtom, scenarioAtom } from "../atoms/documentAtoms";
 import { pluginBeforeBuildAtom, pluginBuildStepsAtom, type PluginBuildStepEntry } from "../atoms/pluginAtoms";
 import { dismissToastAtom, pushToastAtom } from "../atoms/uiAtoms";
@@ -24,8 +23,7 @@ import type { BuildPurpose } from "../plugins/api";
 import { t } from "../i18n";
 import { count, pluginName } from "./usage";
 import { outgoingExtras } from "./mapDataSet";
-
-type Store = ReturnType<typeof createStore>;
+import type { Store } from "../atoms/store";
 
 export interface OutgoingRequest {
   options: SaveOptions;

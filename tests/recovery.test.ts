@@ -13,7 +13,7 @@ import { createScenario } from "../src/formats/chk/create";
 import { markDirty, scenarioName, setScenarioName } from "../src/formats/chk/scenario";
 import { leftoverCopies, planRecovery } from "../src/editor/recovery";
 import { listCopies, putCopy, removeCopy, SESSION, type RecoveryRecord } from "../src/services/recovery";
-import { leftoverEntries, RecoveryCopier, restoreCopy, writeCopiesNow } from "../src/hooks/useRecovery";
+import { leftoverEntries, RecoveryCopier, restoreCopy, writeCopiesNow } from "../src/services/recoveryCopier";
 import { serializeScenario } from "../src/formats/chk/scenario";
 
 afterEach(async () => {

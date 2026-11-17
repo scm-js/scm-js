@@ -14,7 +14,7 @@ import { commitEditAtom, pushRecentAtom, recentFilesAtom, scenarioAtom, undoStac
 import { createScenario } from "../src/formats/chk/create";
 import { defaultSaveOptions, initialSaveOptions } from "../src/editor/save";
 import { NEVER_RESET, PREFERENCES_PAGE_KEYS, resetPreferences, type Preferences, type PreferencesPage } from "../src/editor/preferences";
-import { newMapInto } from "../src/hooks/useMapFileActions";
+import { newMapInto } from "../src/services/documentActions";
 
 beforeEach(() => {
   browserStorage().clear();

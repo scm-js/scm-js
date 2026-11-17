@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { useStore } from "jotai";
 import { brushSizeAtom, mapTilesetAtom, screenAtom, unitOwnerAtom } from "../atoms/editorAtoms";
 import { interfaceSizeAtom, localeAtom, preferencesAtom } from "../atoms/preferencesAtoms";
-import { applyInterfaceSize } from "../components/ui/interfaceSize";
+import { applyInterfaceSize } from "../editor/interfaceSize";
 import { setLocale } from "../i18n";
 
 /**

@@ -21,7 +21,6 @@
  * (`mapDataSet.ts#offerMapDataSet`, also when the person chose to keep the one in use), so
  * nothing is said for it here.
  */
-import type { getDefaultStore } from "jotai";
 import { archiveExtrasAtom } from "../atoms/documentAtoms";
 import { gameDataSourceAtom } from "../atoms/gameDataAtoms";
 import { dismissToastAtom, openDialogAtom, pushToastAtom } from "../atoms/uiAtoms";
@@ -41,8 +40,7 @@ import { attachReaderDataSet, switchDataSet } from "./gameData";
 import { readDataSet } from "./mapDataSet";
 import { keepDataSetTerrain } from "./dataSetTerrain";
 import { terrainFileOf } from "../formats/mod/terrain";
-
-type Store = ReturnType<typeof getDefaultStore>;
+import type { Store } from "../atoms/store";
 
 export interface TerrainNotice {
   title: string;

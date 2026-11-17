@@ -12,12 +12,7 @@ import {
 } from "../editor/sprites";
 import { unitBox, unitGeometry } from "../editor/units";
 import { SpriteFlag, type SpriteRecord } from "../formats/chk/sections/objects";
-import { datCount } from "../formats/dat/dat";
-import { imageGrpPath, requestGrp, unitImageId, type UnitAssets } from "../formats/units/load";
-import { editorFrame } from "../formats/units/sprites";
-import type { Grp } from "../formats/dat/grp";
-import { spriteLabel } from "../data/sprites";
-import { unitLabel } from "../data/units";
+import { spriteFrame, spriteGrp, spriteName } from "../data/sprites";
 import type { MapPoint } from "./useTerrainTools";
 import { useUnitAssets } from "./useUnitAssets";
 import type { Scenario } from "../formats/chk/scenario";
@@ -36,30 +31,6 @@ export interface SpriteGhost {
   x: number;
   y: number;
   box: SpriteBox;
-}
-
-/** The images.dat id a record draws with, or -1 when the tables cannot say. */
-export function spriteImageId(assets: UnitAssets | null, kind: SpriteKind, id: number): number {
-  if (!assets) return -1;
-  if (kind === "pure") return assets.sprites.image[id] ?? -1;
-  return id >= 0 && id < datCount(assets.units.flingy) ? unitImageId(assets, id) : -1;
-}
-
-/** The GRP a record draws with, once loaded (null while loading or when there is none). */
-export function spriteGrp(assets: UnitAssets | null, kind: SpriteKind, id: number): Grp | null {
-  const imageId = spriteImageId(assets, kind, id);
-  const path = imageId >= 0 && assets ? imageGrpPath(assets, imageId) : null;
-  return (path ? requestGrp(path) : null) ?? null;
-}
-
-/** Which frame of its GRP a record shows in the editor, and whether mirrored. */
-export function spriteFrame(assets: UnitAssets, kind: SpriteKind, id: number, flipped: boolean): { frame: number; flip: boolean } {
-  return kind === "unit" ? editorFrame(assets, id, unitImageId(assets, id)) : { frame: 0, flip: flipped };
-}
-
-/** "Terran Marine" for a unit sprite, the sprites.dat label for a pure one. */
-export function spriteName(assets: UnitAssets | null, kind: SpriteKind, id: number): string {
-  return kind === "unit" ? unitLabel(id) : spriteLabel(assets, id);
 }
 
 /**

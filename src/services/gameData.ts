@@ -13,7 +13,6 @@
  * of the game's own data over none is the gentler case the dialog always had: nothing in
  * memory is wrong, only missing, so the failed parts are retried and the rest kept.
  */
-import type { getDefaultStore } from "jotai";
 import { viewFlagsAtom } from "../atoms/editorAtoms";
 import { gameDataProfileAtom, gameDataRevisionAtom, gameDataSourceAtom, keepRacesAtom } from "../atoms/gameDataAtoms";
 import { releaseAllTilesets, retryTilesetParts } from "../formats/tileset/load";
@@ -27,12 +26,11 @@ import { storedPathOf } from "../gamedata/paths";
 import { REMASTERED_PROFILE } from "../gamedata/profiles";
 import { adoptStoredCopy, currentAssetSource, readContext, readFrom, resetAssetSource, resolveAssetSource, setAssetSource, type AssetSource, type DataSetReader } from "../gamedata/source";
 import { clearStoredCopy, listStoredCopies, profileOf } from "../gamedata/store";
-import { relayBlankTerrain } from "../hooks/useMapFileActions";
+import { relayBlankTerrain } from "./documentActions";
 import { clearComposedImages } from "../plugins/graphics";
 import { t } from "../i18n";
 import { count, countDataSetChange, gameDataOf, modOf } from "./usage";
-
-type Store = ReturnType<typeof getDefaultStore>;
+import type { Store } from "../atoms/store";
 
 /** Whether two sources serve the same files: same data set, same kind — a repaint is enough between them. */
 export const sameFiles = (a: AssetSource | null, b: AssetSource) => a !== null && a.kind === b.kind && a.profile.id === b.profile.id;

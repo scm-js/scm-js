@@ -14,7 +14,8 @@
  *    preview can be redrawn at whatever size the chosen terrain needs.
  */
 import { useEffect, useState } from "react";
-import { loadTilesetGraphics, TILESET_FILENAMES, type TilesetFileName } from "../formats/tileset/load";
+import { loadTilesetGraphics } from "../formats/tileset/load";
+import { tilesetFileName } from "../services/preload";
 import type { Tileset } from "../formats/tileset/decode";
 import { baseTerrain } from "../formats/tileset/terrain";
 import { terrainTypes } from "../formats/tileset/palette";
@@ -39,10 +40,6 @@ const pending = new Map<TilesetId, Promise<TilesetThumbs | null>>();
 /** Decodes run one at a time: eight at once is eight live tilesets for no gain. */
 let queue: Promise<unknown> = Promise.resolve();
 
-export function tilesetFileName(id: TilesetId): TilesetFileName {
-  return TILESET_FILENAMES[Math.max(0, TILESETS.findIndex((t) => t.id === id))];
-}
-
 function render(id: TilesetId, tileset: Tileset): TilesetThumbs {
   const info = TILESET_BY_ID[id];
   const types = terrainTypes(tileset, info.terrain);
@@ -58,7 +55,7 @@ function render(id: TilesetId, tileset: Tileset): TilesetThumbs {
 }
 
 /** Cached patches for one tileset; null once it is known there are no graphics for it. */
-export function getTilesetThumbs(id: TilesetId): Promise<TilesetThumbs | null> {
+function getTilesetThumbs(id: TilesetId): Promise<TilesetThumbs | null> {
   const done = thumbs.get(id);
   if (done !== undefined) return Promise.resolve(done);
   const already = pending.get(id);

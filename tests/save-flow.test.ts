@@ -6,7 +6,7 @@ import { archiveExtrasAtom, loadDocumentAtom, recentFilesAtom, scenarioAtom } fr
 import { mapFileHandleAtom, mapFilePathAtom, mapModifiedAtom, mapOriginAtom, saveOptionsAtom } from "../src/atoms/editorAtoms";
 import { closeDialogAtom, dialogStackAtom, statusMessageAtom, toastsAtom } from "../src/atoms/uiAtoms";
 import { DEFAULT_SAVE_OPTIONS, type SaveOptions } from "../src/editor/save";
-import { askDialog, saveDocument, type SaveWriter } from "../src/hooks/useMapFileActions";
+import { askDialog, saveDocument, type SaveWriter } from "../src/services/documentActions";
 import type { MapFileHandle, SaveOutcome } from "../src/services/mapIo";
 import { logEntries, resetLogForTests } from "../src/editor/log";
 

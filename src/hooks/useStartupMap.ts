@@ -7,7 +7,9 @@ import { pushToastAtom } from "../atoms/uiAtoms";
 import { isDesktop } from "../editor/platform";
 import { t } from "../i18n";
 import { loadHandle, type StoredHandle } from "../services/handleStore";
-import { DEFAULT_NEW_MAP, openRecentInto, useMapFileActions } from "./useMapFileActions";
+import { useMapFileActions } from "./useMapFileActions";
+import { DEFAULT_NEW_MAP, openRecentInto } from "../services/documentActions";
+import type { Store } from "../atoms/store";
 
 /**
  * StarEdit opens on a blank Badlands map rather than an empty window, and so does this.
@@ -35,8 +37,6 @@ export function useStartupMap() {
     });
   }, [newMap, store]);
 }
-
-type Store = ReturnType<typeof useStore>;
 
 async function reopenLast(store: Store, last: RecentEntry | undefined) {
   if (!last?.handleKey) return;

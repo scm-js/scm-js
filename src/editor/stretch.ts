@@ -599,3 +599,7 @@ export function stretchFromDrag(dxPx: number, dyPx: number, axes: readonly Stret
   }
   return best;
 }
+
+const AXIS_ARROW: Record<StretchAxis, [forward: string, back: string]> = { se: ["↘", "↖"], ne: ["↗", "↙"], e: ["→", "←"], s: ["↓", "↑"] };
+/** The way a stretch runs, as an arrow. */
+export const stretchArrow = (axis: StretchAxis, steps: number): string => AXIS_ARROW[axis][steps >= 0 ? 0 : 1];

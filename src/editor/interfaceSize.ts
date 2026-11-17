@@ -7,7 +7,7 @@
  * paints, so the boot splash and the first frame are already at the size; keep the two in
  * step (`tests/interfaceSize.test.ts` runs that script).
  */
-import { interfaceZoom } from "../../editor/preferences";
+import { interfaceZoom } from "./preferences";
 
 /** The attribute `styles/size.css` keys on, holding the size in percent. */
 export const SIZE_ATTRIBUTE = "data-ui-size";

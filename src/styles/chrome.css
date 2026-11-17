@@ -34,13 +34,6 @@
   letter-spacing: 0.14em;
   font-size: 11px;
 }
-.brand-mark {
-  width: 14px;
-  height: 14px;
-  background: linear-gradient(135deg, #ffbedc, #b43c6e);
-  clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
-  box-shadow: 0 0 10px rgba(255, 95, 162, 0.5);
-}
 .menu-trigger {
   height: 100%;
   padding: 0 10px;

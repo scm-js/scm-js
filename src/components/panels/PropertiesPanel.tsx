@@ -93,7 +93,7 @@ function TerrainProps() {
       <Row k={t("Brush")}>
         {mode === "isom" || mode === "rect"
           ? <>{brushTerrain ? terrainLabel(brushTerrain) : mode === "isom" && isBorrowedTerrain(terrain) ? borrowedIdLabel(terrain) : mode === "isom" && copiedType ? terrainLabel(copiedType) : translate(terrainName(info, terrain))}{mode === "rect" && variation >= 0 ? <span className="faint"> {t("· var {variation}", { variation })}</span> : null}</>
-          : mode === "heal" ? t("joins that show")
+          : mode === "heal" ? t("seams")
           : mode === "pin" ? t("tiles to keep")
           : <span className="row" style={{ gap: 6 }}><TileThumb loaded={loaded} id={tile} size={16} /><span className="mono">{hexTile(tile)}</span></span>}
       </Row>

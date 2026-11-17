@@ -393,7 +393,7 @@ export default function MapViewport() {
     let movingInView = false;
     if (tiles && tilesetAssets) {
       ({ animated: animatedInView, moving: movingInView } = paintGround(v, groundLayerRef, {
-        scenario, tiles, assets: tilesetAssets, terrainRevision, doodadsRevision, elevation: flags.elevation, buildability: flags.buildability, seams: flags.seams,
+        scenario, tiles, assets: tilesetAssets, terrainRevision, doodadsRevision, elevation: flags.elevation, buildability: flags.buildability, seams: flags.seams || (layer === "terrain" && terrainMode === "heal"),
         pins: flags.pins || (layer === "terrain" && terrainMode === "pin") ? pinned : null,
         unlike: fairness?.report?.mask ?? null,
         lacks: scenario ? mapLacks(tiles, tilesetIndex(scenario), tilesetAssets.tileset.groups.length, terrainRevision + doodadsRevision) : null,

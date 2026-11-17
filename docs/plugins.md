@@ -2576,7 +2576,7 @@ palette's current brush (`active` / `setActive`) and Tools ▸ Symmetry (`symmet
 `setSymmetry`, `mirror`).
 
 For hand-made terrain: `seamStep` is the measure View ▸ Seam Overlay draws by and `seams`
-counts the joins it would draw; `pinned` lists the pinned tiles and `handLaid` the tiles
+counts the seams it would draw; `pinned` lists the pinned tiles and `handLaid` the tiles
 the isometric data does not account for, which are the ones worth pinning before a plugin
 repaints around them; `symmetryShares` says how alike the map is to its image under each
 symmetry mode, and `fairness` is the full report for one mode: the small squares that

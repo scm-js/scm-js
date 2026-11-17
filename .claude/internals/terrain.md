@@ -298,6 +298,15 @@ order against the neighbours as already changed, twice. The brush goes through `
 Tile (`paintsTiles`), so symmetry, the stroke's undo entry and `commitTerrain` are theirs; `tools.heal(rect?)`
 is the tab's button (marked area or whole map, `shownSeams` before and after in the status line).
 ISOM is untouched. `tests/heal.test.ts`.
+*The tab's UX (2026-11-16, after the user found Heal confusing — "what seams are"):* one word, **seam**, in
+every user-visible string (tab, status lines, Properties, guide); "join" stays in code and in the overlay's
+definition only. The map draws the seams while the Heal tab is open (`MapViewport`: `flags.seams` or terrain +
+heal, as the Pin tab does pins); the tab's checkbox is *Always show*. The tab counts seams (`countSeams`, whole
+map, each join once, ~5–6 ms on 128×128; `shownSeams` for a marked area), recounted 200 ms after the revisions
+stop moving (a stroke bumps them every step). Every stroke says what it did: `healStroke` collects the
+footprints (symmetry included), `endStroke` counts seams over them before (from the stroke's `before` tiles) and
+after; a stroke that changed nothing says why through `healMiss` — no seam / only on a doodad's tiles / no
+look-alike. The button uses the same notes.
 
 **Pinned tiles (`src/editor/pins.ts`, terrain mode `"pin"`, 2026-11-13).** A pinned tile is skipped by
 the brushes that lay terrain by rule — `paintIsom` / `paintIsomDiamonds` (`IsomPass.setTile` returns

@@ -395,7 +395,7 @@ they have laid:
 | [Rect](#rect-tile-and-blend) | Paints flat ground of one terrain type, with StarEdit's random variation. No cliffs, no edges. |
 | [Tile](#rect-tile-and-blend) | Lays any single tile, or a [block of tiles](#the-sheet-and-blocks) picked from the tileset's sheet: cliff pieces, doodad pictures, anything the tileset has. |
 | [Blend](#rect-tile-and-blend) | Lays a tile next to one you picked, chosen from those whose facing edge continues it. |
-| [Heal](#heal) | Swaps a tile whose join with its neighbours shows for one that joins better and plays the same. |
+| [Heal](#heal) | Mends seams, the lines where two tiles' pictures do not meet, with look-alike tiles that play the same. |
 | [Pin](#pin) | Lays nothing. It marks tiles that the Isometric, Rect and Heal brushes and the fills then leave alone. |
 
 ![Cliffs and a shore laid by the isometric brush, with a 3×3 brush ghost](images/terrain-isometric.webp)
@@ -521,22 +521,35 @@ replaces what was learned. *Forget* (the eraser beside the line) drops it, and s
 
 ### Heal
 
-Heal mends the joins that [**View ▸ Seam Overlay**](#overlays-and-tools) marks. Drag over
-a join that shows, and where the tileset has another tile that meets the neighbours
-better, that tile is laid instead.
+A **seam** is a line where two tiles' pictures do not meet: one tile ends lighter or
+darker than the next begins. Ground laid with the isometric brush has almost none; they
+show up around hand-placed tiles, stretched ramps and pasted blocks. While the Heal tab is
+open the map marks every seam with a pink line, as [**View ▸ Seam
+Overlay**](#overlays-and-tools) does, and the tab counts them.
 
-![The same ground before and after the Heal brush, with the seam overlay on](images/terrain-heal.webp)
+Drag over a seam, and where the tileset has a look-alike tile that lines up better with
+its neighbours, Heal lays that tile instead.
+
+![The same ground before and after the Heal brush, with the seams marked](images/terrain-heal.webp)
 
 Heal only takes a tile that is the same to the game: it walks, builds and blocks sight
 exactly as the old one does, at the same height, and is the same kind of ground. A stroke
-changes how the map looks and nothing about how it plays. Ground that already joins is
-left as it was laid, and a placed doodad is left whole (convert it to terrain first if its
-tiles are what needs mending).
+changes how the map looks and nothing about how it plays. Ground without a seam is left as
+it was laid.
+
+The status bar says what each stroke did: how many tiles it changed and how many seams
+there were under it before and after. When it changed nothing, it says why:
+
+- **No seam here.** The ground already lines up.
+- **The seam is on a placed doodad.** Heal leaves a doodad whole. Convert it to terrain
+  first if its tiles are what needs mending.
+- **No look-alike tile.** The tileset has no tile that lines up better and plays the same.
+  Mend the seam by hand with the Tile or Blend brush.
 
 The tab's button does the same over the marked area, or over the whole map when nothing is
-marked, and says how many joins showed before and after. On the game's own maps that
-removes about half of the lines and changes one tile in a hundred. A stretched ramp gains
-less, since few tiles play the same as a ramp's.
+marked. On the game's own maps that removes about half of the seams and changes one tile
+in a hundred. A stretched ramp gains less, since few tiles play the same as a ramp's.
+*Always show* keeps the seams marked after you leave the tab.
 
 ### Pin
 
@@ -576,20 +589,21 @@ Two overlays on the View menu show what the ground means to the game:
 
 ![The buildability overlay hatches the tiles a building cannot stand on](images/terrain-buildability.webp)
 
-**View ▸ Seam Overlay** shows where the ground's picture breaks. It draws a line along
-every join between two tiles where the picture steps: one tile ends lighter or darker than
-the next begins, by more than either picture changes by itself at that edge. Rough rock
-hides a join that a smooth slope shows, and the overlay weighs them the same way. The
-stronger the line, the plainer the join.
+**View ▸ Seam Overlay** marks the seams, the places where the ground's picture breaks. It
+draws a line along every join between two tiles where the picture steps: one tile ends
+lighter or darker than the next begins, by more than either picture changes by itself at
+that edge. Rough rock hides a seam that a smooth slope shows, and the overlay weighs them
+the same way. The stronger the line, the plainer the seam. The Heal tab turns the overlay
+on while it is open.
 
-![The seam overlay on a ramp stretched along a cliff: lines where its tiles join visibly](images/terrain-seams.webp)
+![The seam overlay on a ramp stretched along a cliff: lines where its tiles do not meet](images/terrain-seams.webp)
 
-Ground laid by the isometric brush is almost free of lines; a few stand around doodads and
+Ground laid by the isometric brush is almost free of seams; a few stand around doodads and
 cliff faces, where the game's own pieces meet roughly. Hand-placed tiles, a stretched ramp
 and a pasted block show where they need touching up: [Heal](#heal) mends what it can
 without changing how the map plays, and the Tile and Blend brushes are for the rest. The
 overlay compares the classic pictures, so with Remastered Graphics on it marks the same
-joins, whether or not the 2x pictures hide them.
+seams, whether or not the 2x pictures hide them.
 
 **View ▸ Walkability** (Ctrl+Shift+W) draws the ground as a unit walks it: islands, the
 areas the map divides into, the chokes between them with their widths, and the distances
@@ -768,10 +782,10 @@ The editor keeps where copied terrain was painted as a small file inside the map
 (`scmjs\copies.bin`), saved with it, moved by Resize, undone with the stroke and shared on
 a shared map; the game never reads it. When another isometric stroke cuts into a patch,
 the patch is laid again in the same step: the part the ground still holds stays with its
-edges, and what the other stroke took is given to that stroke's ground. A few joins can
-still show where the patch was cut, and a small patch close to the cut can be given up
-entirely; the status line says how many diamonds were given up and how many joins show. A
-tile laid by hand over a patch is left where it is.
+edges, and what the other stroke took is given to that stroke's ground. A few seams can
+show where the patch was cut, and a small patch close to the cut can be given up entirely;
+the status line says how many diamonds were given up and how many seams there are. A tile
+laid by hand over a patch is left where it is.
 
 A terrain is listed only when its pieces walk and build as the original terrain does at
 the copy's height. One whose tileset lacks some of the edge's shapes is listed after the
@@ -833,8 +847,8 @@ Two things it does not do:
   what was laid.
 - **Join the two grounds where no border is known.** Without a [drawn
   border](#drawn-borders) for a pair of grounds, the two simply touch. The status line
-  after a stroke counts the joins that show; the Heal brush softens them, and the pieces
-  view lists the transition pieces the mod's own maps use there.
+  after a stroke counts the seams; the Heal brush softens them, and the pieces view lists
+  the transition pieces the mod's own maps use there.
 
 #### Drawn borders
 
@@ -953,8 +967,8 @@ finds a neighbour, and repeats the tiles that join each other best.
 - **How clean the result is depends on the tileset.** The bridges of Badlands, Space
   Platform and Jungle are drawn to repeat and stretch without a visible join. Cliff ramps
   repeat with a faint join every two tiles, as the long ramps of hand-made maps do. The
-  status bar counts the joins that show and **View ▸ Seam Overlay** marks them; the Heal,
-  Tile and Blend brushes are there to touch them up.
+  status bar counts the seams and **View ▸ Seam Overlay** marks them; the Heal, Tile and
+  Blend brushes are there to touch them up.
 - **Some ramps do not stretch.** A ramp built into a wall, such as the Badlands Structure
   ramp, is two tiles wide with a side wall in each. It has no middle, and stretched it is
   a row of half ramps with wedges of wall between them. The drag does nothing for such a

@@ -99,7 +99,7 @@ import DialogFrame from "../ui/DialogFrame";
 import FlagIcon from "../ui/FlagIcon";
 import type { DialogProps } from "./DialogHost";
 import { GameFolderRow, TestFolderRow, useGameInfo, useTestFolder } from "./TestFolder";
-import { filterSections, filterTerms, hotkeyRowMatches, textMatches } from "./preferencesFilter";
+import { filterSections, filterTerms, hotkeyRowMatches, pluginPagesInOrder, textMatches } from "./preferencesFilter";
 
 /* ── Pages ──────────────────────────────────────────────── */
 
@@ -194,7 +194,8 @@ export function PreferencesDialog({ entry }: DialogProps) {
   const [doodadPlacement, setDoodadPlacement] = useAtom(doodadPlacementAtom);
   const open = useSetAtom(openDialogAtom);
   const close = useSetAtom(closeDialogAtom);
-  const pluginPages = useAtomValue(pluginPreferencesPagesAtom);
+  const loadedPluginPages = useAtomValue(pluginPreferencesPagesAtom);
+  const pluginPages = useMemo(() => pluginPagesInOrder(loadedPluginPages), [loadedPluginPages]);
   const live = (): Working => ({
     prefs: store.get(preferencesAtom),
     gridSize: store.get(gridSizeAtom),

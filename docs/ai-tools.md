@@ -39,13 +39,10 @@ Desktop.
 
    ![Claude Desktop's Extensions page, with an arrow to "Drag .MCPB or .DXT files here to install"](images/ai-desktop-install.webp)
 
-4. Claude Desktop shows what scmJS is. Click **Install**.
-
-   ![The scmJS install dialog, with an arrow to the Install button](images/ai-desktop-dialog.webp)
-
-   The dialog warns that an extension gets access to everything on your computer. It says
-   that about every extension, because an extension is a program that runs as you. scmJS's
-   tools only take files in the maps folder you choose, and its code is public on
+4. Claude Desktop shows what scmJS is. Click **Install**. The dialog warns that an
+   extension gets access to everything on your computer. It says that about every
+   extension, because an extension is a program that runs as you. scmJS's tools only take
+   files in the maps folder you choose, and its code is public on
    [GitHub](https://github.com/scm-js/scm-js).
 5. Claude Desktop then asks for your **Maps folder**. Click **Browse** and choose the
    folder you keep your maps in. StarCraft's own is `Documents\StarCraft\Maps` on Windows
@@ -56,18 +53,13 @@ Desktop.
    Leave **StarCraft folder** empty. It is only needed if scmJS cannot find your copy of
    the game by itself; [When something goes wrong](#when-something-goes-wrong) says how
    you would know. Click **Save**.
-
-   ![The scmJS settings: the maps folder chosen with Browse, the StarCraft folder empty, and Save](images/ai-desktop-folder.webp)
-
 6. Back on the Extensions page, click **scmJS** and switch it on. Claude Desktop leaves it
    off after the install, even once the maps folder is saved.
 
    ![scmJS on the Extensions page, with an arrow to its switch, now Enabled](images/ai-desktop-enabled.webp)
 
-7. Start a new chat. At the top of Claude Desktop's sidebar, click the speech bubble
-   (Chat), not `</>` (Code). If the sidebar is hidden, the panel button at the top left
-   shows it. Claude Desktop gives extensions to its chats only; in a Code session Claude
-   searches your computer for scmJS instead.
+7. Start a new chat: at the top of the sidebar, click the speech bubble (Chat), not `</>`
+   (Code). If the sidebar is hidden, the panel button at the top left shows it.
 
    ![The top of Claude Desktop's sidebar, with an arrow to the Chat button](images/ai-desktop-chat.webp)
 
@@ -85,13 +77,9 @@ scmJS gives Claude a set of tools: its commands for reading and changing maps. C
 before it uses one. Click **Allow once**, or **Always allow** for a tool you are happy to
 let it use without asking.
 
-![Claude asking to use Doctor from scmJS, with an arrow to Allow once](images/ai-desktop-allow.webp)
-
 Here it runs scmJS's own check and tells you what it found: the version, whether it found
 your copy of StarCraft, and whether you are signed in to scmjs.dev. It offers to sign you
 in; that is only needed for sharing and for your scmjs.dev library.
-
-![Claude's answer to "Check my scmJS setup": every tool ready and StarCraft found, then signing in to scmjs.dev when asked](images/ai-desktop-checked.webp)
 
 Then ask about one of your own maps by its file name, for example:
 

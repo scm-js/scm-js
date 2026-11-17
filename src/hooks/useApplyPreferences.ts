@@ -1,13 +1,14 @@
 import { useEffect, useRef } from "react";
 import { useStore } from "jotai";
-import { brushSizeAtom, mapTilesetAtom, screenAtom, unitOwnerAtom, viewFlagsAtom } from "../atoms/editorAtoms";
+import { brushSizeAtom, mapTilesetAtom, screenAtom, unitOwnerAtom } from "../atoms/editorAtoms";
 import { localeAtom, preferencesAtom } from "../atoms/preferencesAtoms";
 import { setLocale } from "../i18n";
 
 /**
  * Put the persisted preferences into the session atoms once at startup: the splash (skip
- * it), the animation flags, the palettes' owner and brush size, and the tileset the
- * startup map (and the preload) use. Runs
+ * it), the palettes' owner and brush size, and the tileset the startup map (and the
+ * preload) use. (The View menu's remembered ticks are their own stored atom,
+ * `viewMemoryAtom`, and need nothing here.) Runs
  * before `useDevDeepLinks` in App, so a `?tileset=` / `?nosplash` link still wins.
  * The language is applied here too, and again whenever the preference changes — it
  * lives outside the atoms (`i18n/index.ts`), since `t()` is called from code with no
@@ -29,7 +30,6 @@ export function useApplyPreferences() {
     applied.current = true;
     const prefs = store.get(preferencesAtom);
     if (!prefs.splash) store.set(screenAtom, "editor");
-    store.set(viewFlagsAtom, { ...store.get(viewFlagsAtom), animateWater: prefs.animateWater, animateUnits: prefs.animateUnits, hdGraphics: prefs.hdGraphics });
     store.set(mapTilesetAtom, prefs.newMap.tileset);
     store.set(unitOwnerAtom, prefs.placement.owner);
     store.set(brushSizeAtom, prefs.placement.brushSize);

@@ -90,7 +90,34 @@ that page; there is no separate dialog any more). `Preferences.undoLevels` is re
 `commitEditAtom` at commit time (a stack already deeper is trimmed at its next commit) and
 `startup.recents` by `pushRecentAtom`; `placement.{owner,brushSize}` seed `unitOwnerAtom` /
 `brushSizeAtom` in `useApplyPreferences`, `placement.locationTiles` is read by
-`useLocationTools.createInView`. Preferences ▸ Storage ▸ Export / Import
+`useLocationTools.createInView`.
+
+**The View menu remembers five ticks (2026-11-16).** `viewFlagsAtom` is a derived atom now:
+`sessionViewFlagsAtom` (plain, every tick) under `viewMemoryDefaults(reducedMotionAtom)` under
+`viewMemoryAtom` (`atomWithStorage("scmjs.viewMenu")`, only the ticks the person changed of
+`REMEMBERED_FLAGS` = grid, locationNames, animateWater, animateUnits, hdGraphics —
+`editor/viewMemory.ts`). Its write takes a `SetStateAction` like the old primitive and records
+in `viewMemoryAtom` every remembered tick whose value changed, so the menu, `toggleFlagAtom`
+(hotkeys, toolbar), the panels, `api.view.setFlags` and `turnOnRemasteredGraphics` all persist
+without knowing. The overlays and the show/hide ticks stay per session (a reload must never
+open a map with its units hidden). Storing only what was *changed* is what lets "reduce motion"
+work: `reducedMotionAtom` is `matchMedia("(prefers-reduced-motion: reduce)")` read once at
+module load, and turns the two animation defaults off; a tick the person set wins. Still one set
+for every open map (not in `parkRegisters`), as before. Before this, Preferences ▸ View had
+Animate water / units and Remastered graphics as "what the View menu starts with", seeded once
+by `useApplyPreferences` — a change there did nothing until the next start. Those three fields
+left `Preferences` (plugins never got a `Preferences` value, only the type's name, and they
+read the ticks through `api.view.flags()`, which now persists). `carryOverViewPreferences`
+moves an old choice once: only a value that differs from the old default (the dialog wrote
+every field on OK, so `true` was not a choice), only when `scmjs.viewMenu` is absent, and it
+then strips the three fields from `scmjs.prefs` so clearing the View menu's row cannot
+resurrect them. It runs in both atoms' `getItem` (module load, onMount) and in
+`startWithRemastered`, and `RELOADS["scmjs.prefs"]` re-reads `viewMemoryAtom` after an
+import of an older file. Note `atomWithStorage`'s `getOnInit` reads storage once at *module*
+load, not per store, so `tests/view-memory.test.ts` simulates a reload with
+`vi.resetModules()` over a stubbed `window.localStorage`.
+
+Preferences ▸ Storage ▸ Export / Import
 (`exportStoredPreferences` / `importStoredPreferencesAtom` in `preferencesAtoms.ts`) carry
 every `scmjs.*` key but the caches and the recents (`NOT_EXPORTED`); an import writes each key,
 `RESET`s the owning atom (that removes the key), writes it again and sets the atom from

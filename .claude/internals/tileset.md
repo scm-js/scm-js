@@ -42,7 +42,7 @@ graphics both fall back to the tileset's flat reference colour, as the viewport 
 
 ### Remastered terrain: the 2x pictures (`hd.ts`, 2026-10-09)
 
-View ▸ Remastered Graphics (`ViewFlags.hdGraphics`, started from `Preferences.hdGraphics` — one
+View ▸ Remastered Graphics (`ViewFlags.hdGraphics`, remembered across sessions in `scmjs.viewMenu` — `editor-operations.md`; one
 switch for this and the 2x sprites, `units.md`; off by
 default) draws megatiles from `tileset/<name>.hd.vr4` — the installation's
 `HD2/TileSet/<name>.dds.vr4`, which `extract.ts` copies when the source has it (only a Remastered

@@ -331,7 +331,8 @@ again. Where it installs: the default copy when there is none or it is the free 
 older Remastered copy; `REMASTERED_PROFILE` beside a classic or mod copy. Since 2026-10-13 (the user:
 a Remastered folder given to the play page should make the editor default to Remastered too) it
 then writes the editor's two stored choices as the atoms would — `hdGraphics: true` into
-`scmjs.prefs`, and the Remastered data set into `scmjs.gameData` when the copy went in beside
+`scmjs.viewMenu` (the View menu's remembered ticks, after `carryOverViewPreferences` so an older
+`scmjs.prefs` choice is not lost; up to 0.16 it went into `scmjs.prefs`), and the Remastered data set into `scmjs.gameData` when the copy went in beside
 another (`gamedata/remasteredDefault.ts`, `tests/remastered-default.test.ts`). Straight to storage
 because `services/gameData` drags the document atoms in; only at that moment, like the dialog's
 `turnOnRemasteredGraphics`. An editor tab already open picks it up at its next load. The message names are a contract with scm-sim's
@@ -355,8 +356,9 @@ input, which is why this was not seen.
 **The option turns itself on once (2026-10-09, the user's call).** A copy made from a Remastered
 installation is mostly Remastered's pictures, and someone who pointed the editor at Remastered and
 then saw the 1.16 graphics would not go looking for a menu item — so
-`services/gameData.ts#turnOnRemasteredGraphics` sets both `ViewFlags.hdGraphics` and
-`Preferences.hdGraphics` at the moment such a copy is made, and never otherwise (switching data
+`services/gameData.ts#turnOnRemasteredGraphics` sets `ViewFlags.hdGraphics` (which `viewFlagsAtom`
+records in `scmjs.viewMenu`; `Preferences.hdGraphics` is gone since the View menu remembers its
+own ticks) at the moment such a copy is made, and never otherwise (switching data
 sets, or a later launch, leaves the user's choice alone). The moments: the dialog's folder route
 with no data (`fromRemastered`), *Add StarCraft: Remastered…* (`installRemasteredInto`), the
 desktop's search / folder buttons when the result's origin is Remastered, and the desktop's silent

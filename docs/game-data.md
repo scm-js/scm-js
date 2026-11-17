@@ -542,8 +542,8 @@ levels, which draw average tile colours, do not animate.
 Remastered's own pictures in place of the classic ones, and switches back at any time. It
 needs game data from a [Remastered installation](#starcraft-remastered); with a 1.16 copy
 the option says so and the classic graphics stay. Installing from Remastered turns the
-option on; from then on it is yours, and Preferences ▸ View holds whether the editor
-starts with it.
+option on; from then on it is yours, and the View menu remembers it from one session to
+the next.
 
 **Terrain.** Remastered keeps one picture per megatile, 64 pixels square where the classic
 one is 32, numbered as the same installation's tile tables are. So the map is untouched,

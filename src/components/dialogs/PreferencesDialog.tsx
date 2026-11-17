@@ -646,17 +646,14 @@ function ViewPage({ w, patch }: { w: Working; patch: (p: Partial<Preferences>) =
         <Hint>{t("Keeps the tile under the pointer in place when the wheel zooms; the menu and keyboard zoom on the centre.")}</Hint>
       </Section>
       <Section title={t("Animation")}>
-        <Check label={t("Animate water and lava")} checked={p.animateWater} onChange={(e) => patch({ animateWater: e.target.checked })} />
-        <Check label={t("Animate units (idle animations)")} checked={p.animateUnits} onChange={(e) => patch({ animateUnits: e.target.checked })} />
-        <div className="form wide" style={{ marginTop: 4 }}>
+        <div className="form wide">
           <SpeedField label={t("Water speed")} value={p.animateWaterSpeed} onChange={(v) => patch({ animateWaterSpeed: v })} />
           <SpeedField label={t("Unit speed")} value={p.animateUnitsSpeed} onChange={(v) => patch({ animateUnitsSpeed: v })} />
         </div>
-        <Hint>{t("The ticks are what the View menu starts with; 1× is the speed the game itself runs at.")}</Hint>
+        <Hint>{t("1× is the speed the game itself runs at. View ▸ Animate Water and Animate Units turn the animations on and off, and the View menu remembers them.")}</Hint>
       </Section>
       <Section title={t("Graphics")}>
-        <Check label={t("Remastered graphics")} checked={p.hdGraphics} onChange={(e) => patch({ hdGraphics: e.target.checked })} />
-        <Hint>{t("What View ▸ Remastered Graphics starts with. It draws terrain, units and sprites from StarCraft: Remastered's own pictures at twice the detail, and needs the Remastered data set (Help ▸ Game Data…).")}</Hint>
+        <Hint>{t("View ▸ Remastered Graphics draws terrain, units and sprites from StarCraft: Remastered's own pictures at twice the detail. It needs the Remastered data set (Help ▸ Game Data…), and the View menu remembers it.")}</Hint>
         <details style={{ marginTop: 6 }}>
           <summary>{t("Water and lava")}</summary>
           <div className="form wide" style={{ marginTop: 6 }}>

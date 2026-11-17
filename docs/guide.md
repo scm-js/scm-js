@@ -187,7 +187,8 @@ in its own tab* in Preferences ▸ General; Open and New then replace the open m
 - **Zoom** with Ctrl++ and Ctrl+−, or the toolbar's magnifiers. Ctrl+0 is 100%, and
   Ctrl+Shift+0 fits the whole map in the window. Preferences ▸ View can make the wheel
   zoom instead of scroll.
-- **The grid** is Ctrl+G. View ▸ Grid Settings… sets its spacing, colour and style.
+- **The grid** is Ctrl+G, and stays on or off as you left it. View ▸ Grid Settings… sets
+  its spacing, colour and style.
 - **The panels** can be hidden from View ▸ Panels, and their widths dragged.
 
 ### Undo
@@ -205,8 +206,9 @@ history as the strokes around it.
 
 The editor can draw a map with the classic graphics or with StarCraft: Remastered's.
 **View ▸ Remastered Graphics** switches between them at any time, for the terrain, the
-units and the sprites together. The switch changes only how the map is drawn. It does not
-touch the map, and the brushes behave the same with it on or off.
+units and the sprites together, and the editor remembers which you chose. The switch
+changes only how the map is drawn. It does not touch the map, and the brushes behave the
+same with it on or off.
 
 Remastered's pictures have twice the detail, which shows most when you zoom in: at 200%
 they are drawn pixel for pixel, where the classic ones are each pixel doubled.
@@ -233,8 +235,7 @@ and where the first one is.
 
 With **View ▸ Animate Water** on, water ripples and lava shimmers as they do in
 Remastered; Desert's tar stays still, as it does in the game. **Preferences ▸ View ▸
-Graphics** sets how strongly and how fast, and whether the editor starts with the
-Remastered graphics on.
+Graphics** sets how strongly and how fast.
 
 A few things differ from the game: units are drawn without its lighting, the minimap keeps
 the classic colours, and an exported map image has still water.
@@ -2434,9 +2435,10 @@ Settings… opens this page); what the palettes start on (the owner of placed un
 brush size, the size of a new location); and how many undo levels each map keeps.
 
 **View**: whether the mouse wheel scrolls (Ctrl+wheel zooms) or zooms, and whether a wheel
-zoom keeps the tile under the pointer in place; whether water and units animate and how
-fast; whether the map starts out drawn with Remastered's graphics; which cells the status
-bar shows; and whether string previews follow Remastered's colour rule or 1.16.1's.
+zoom keeps the tile under the pointer in place; how fast water and units animate, and how
+Remastered's water and lava move; which cells the status bar shows; and whether string
+previews follow Remastered's colour rule or 1.16.1's. Whether water and units animate at
+all, and whether the map is drawn with Remastered's graphics, are ticks on the View menu.
 
 **Testing**: where Test Map sends the map (at scmjs.dev, StarCraft or the browser), the
 folder it writes into for StarCraft, in the desktop app whether the game starts after the
@@ -2467,7 +2469,11 @@ another browser or machine; caches and the recent files stay behind.
 - The browser keeps Ctrl+Tab and Ctrl+W for its own tabs, so Next Map and Close Map start
   with no keys there; give them others if you want them.
 
-The placement options, the panels and the recent files are remembered too.
+The placement options, the panels and the recent files are remembered too, and so are five
+of the View menu's ticks: Grid, Location Names, Animate Water, Animate Units and
+Remastered Graphics. The others, such as the overlays and whether units or doodads are
+shown, start each session on their defaults. If your system is set to reduce motion,
+Animate Water and Animate Units start off until you tick them.
 
 ### What's new
 

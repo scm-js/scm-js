@@ -8,6 +8,7 @@ import { msg } from "../../i18n";
 export const STORED_LABELS: Record<string, string> = {
   "scmjs.prefs": msg("Preferences"),
   "scmjs.grid": msg("Grid look"),
+  "scmjs.viewMenu": msg("View menu ticks"),
   "scmjs.gridSize": msg("Grid spacing"),
   "scmjs.locationSnap": msg("Location snap"),
   "scmjs.placement": msg("Unit placement options"),

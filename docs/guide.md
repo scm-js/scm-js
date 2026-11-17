@@ -2213,10 +2213,11 @@ with each change as one undo step: see [AI tools](ai-tools.md).
 3. The key is checked with Anthropic first, which costs nothing. When it passes, the
    **Tools ▸ AI** menu, the assistant and the AI buttons in the editor's dialogs appear.
 
-No scmjs.dev account is needed for this. Anthropic bills each request to your Anthropic
-account. The key stays in your browser: scmjs.dev passes it on with each AI request and
-keeps no copy. **Forget the key** on the same page removes it, and the AI features with
-it.
+Only an Anthropic key works: the key is checked with Anthropic, and a key for another
+service or for a model running on your own computer is refused. No scmjs.dev account is
+needed for this. Anthropic bills each request to your Anthropic account. The key stays in
+your browser: scmjs.dev passes it on with each AI request and keeps no copy. **Forget the
+key** on the same page removes it, and the AI features with it.
 
 A few things are the same for every feature:
 

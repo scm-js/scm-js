@@ -128,6 +128,15 @@ export function locationIndex(scn: Scenario, ref: string | number): number {
   throw new CliError(t("No location is called \"{name}\"", { name: ref }), have());
 }
 
+/** The area given as `location`, `rect` or `tiles`, with only the keys given; undefined when none was. */
+export function areaOf(a: { location?: string | number; rect?: PixelRect; tiles?: TileRect }): Area | undefined {
+  const area: Area = {};
+  if (a.location !== undefined) area.location = a.location;
+  if (a.rect !== undefined) area.rect = a.rect;
+  if (a.tiles !== undefined) area.tiles = a.tiles;
+  return Object.keys(area).length ? area : undefined;
+}
+
 /**
  * An area as pixels, or null when none was given: `rect` as it is, `tiles` times 32, a location's box. Two of the
  * three at once, an empty or inverted rectangle, and one that leaves the map are errors.

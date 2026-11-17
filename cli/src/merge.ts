@@ -23,12 +23,12 @@ import { actionDef } from "../../src/data/triggerDefs";
 import { unitName } from "../../src/data/units";
 import { TILESETS } from "../../src/data/tilesets";
 import { TEXT_ENCODINGS } from "../../src/formats/text/encoding";
-import { spawnSync } from "node:child_process";
 import { basename, dirname, relative, resolve } from "node:path";
 import { looksLikeChk, type Input } from "./files";
 import { writeBack, writeOutput, type Written } from "./exchange";
 import { msg, t, translate } from "./i18n";
 import { CliError, columns, dot, mark, num, padColumns, pc, table } from "./ui";
+import { gitBytes } from "./git";
 
 export type Side = "ours" | "theirs";
 
@@ -1062,7 +1062,7 @@ const quote = (p: string) => (/^[\w./@+-]+$/.test(p) ? p : `"${p}"`);
  * 2 ours, 3 theirs, read with `git show :n:<path>`.
  */
 export function stagedInputs(file: string): { base: Input; ours: Input; theirs: Input } {
-  const git = (args: string[]) => spawnSync("git", args, { encoding: "buffer", maxBuffer: 512 * 1024 * 1024 });
+  const git = (args: string[]) => gitBytes(args, { maxBuffer: 512 * 1024 * 1024 });
   const top = git(["-C", dirname(resolve(file)), "rev-parse", "--show-toplevel"]);
   if (top.error) throw new CliError(t("git is not installed, or not on PATH"), t("With one map, scmjs map merge reads the three versions git keeps during a merge."), 2);
   if (top.status !== 0) throw new CliError(t("{file} is not in a git repository", { file }), t("Give the three maps: scmjs map merge <base> <ours> <theirs>."), 2);

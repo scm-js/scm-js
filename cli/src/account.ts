@@ -9,15 +9,14 @@
  * Where the browser cannot reach this computer (SSH, a container), `login --device` signs in by code instead
  * (`loginByCode`, ai-server 0.40.0): the person allows a code on the server's own `/device` page from any device.
  */
-import { randomBytes } from "node:crypto";
 import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
-import { createServer, type IncomingMessage } from "node:http";
 import { homedir, hostname } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { openBrowser } from "./open";
 import { qrFor } from "./qr";
 import { t } from "./i18n";
 import { CliError, dot, gameText, mark, pc, print, rows, size, table } from "./ui";
+import { listenLoopback, loopbackToken, pageWait, readText, requestUrl } from "./loopback";
 
 /** The scmjs.dev service the editor's scmjs.dev plugin talks to. */
 export const DEFAULT_SERVER = "https://api.scmjs.dev";
@@ -190,32 +189,30 @@ export async function login(o: LoginOptions = {}): Promise<LoginOutcome> {
   const server = (o.server ?? serverUrl()).replace(/\/+$/, "");
   const file = o.file ?? sessionPath();
   const providerName = PROVIDER_NAMES[provider] ?? provider;
-  const token = randomBytes(12).toString("hex");
-  let finish: (r: { session: string; reply: (status: number, body: unknown) => void } | null) => void = () => {};
-  const arrived = new Promise<{ session: string; reply: (status: number, body: unknown) => void } | null>((r) => { finish = r; });
+  const token = loopbackToken();
+  const wait = pageWait<{ session: string; reply: (status: number, body: unknown) => void } | null>();
   let providerUrl = "";
   let origin = "";
-  const http = createServer((req, res) => {
-    const url = new URL(req.url ?? "/", "http://127.0.0.1");
+  const { server: http, origin: address } = await listenLoopback((req, res) => {
+    const url = requestUrl(req);
     const send = (status: number, type: string, body: string) => { res.writeHead(status, { "content-type": type, "cache-control": "no-store" }); res.end(body); };
     if (url.pathname === `/${token}` && req.method === "GET") return send(200, "text/html; charset=utf-8", loginPage({ providerUrl, providerName, server: new URL(server).origin, token }));
     if (url.pathname === `/${token}/session` && req.method === "POST") {
       // Only the page itself: a fetch from it carries its own origin.
       if (req.headers.origin !== origin) return send(403, "application/json", JSON.stringify({ error: "Not from the sign-in page." }));
-      void readBody(req).then((text) => {
+      void readText(req).then((text) => {
         let session = "";
         try { session = String((JSON.parse(text) as { session?: unknown }).session ?? ""); } catch { /* checked below */ }
         if (!session) return send(400, "application/json", JSON.stringify({ error: "No session came." }));
-        finish({ session, reply: (status, body) => send(status, "application/json", JSON.stringify(body)) });
+        wait.settle({ session, reply: (status, body) => send(status, "application/json", JSON.stringify(body)) });
       });
       return;
     }
     send(404, "text/plain", "Not here.");
   });
-  await new Promise<void>((r, j) => { http.once("error", j); http.listen(0, "127.0.0.1", () => r()); });
-  origin = `http://127.0.0.1:${(http.address() as { port: number }).port}`;
+  origin = address;
   const page = `${origin}/${token}`;
-  const timer = setTimeout(() => finish(null), o.timeoutMs ?? SIGN_IN_TIMEOUT_MS);
+  const arrived = wait.within(o.timeoutMs ?? SIGN_IN_TIMEOUT_MS, null);
   try {
     const client = new Client({ server, fetchImpl: o.fetchImpl });
     try {
@@ -241,22 +238,12 @@ export async function login(o: LoginOptions = {}): Promise<LoginOutcome> {
     got.reply(200, { name: account.name ?? "" });
     return { server, file, provider, account };
   } finally {
-    clearTimeout(timer);
+    wait.stop();
     // (A moment for the page's answer to leave before the server stops.)
     await new Promise((r) => setTimeout(r, 50));
     http.closeAllConnections?.();
     http.close();
   }
-}
-
-function readBody(req: IncomingMessage, max = 16_384): Promise<string> {
-  return new Promise((resolveBody) => {
-    let text = "";
-    req.setEncoding("utf8");
-    req.on("data", (c: string) => { text += c; if (text.length > max) { text = ""; req.destroy(); } });
-    req.on("end", () => resolveBody(text));
-    req.on("error", () => resolveBody(""));
-  });
 }
 
 /**

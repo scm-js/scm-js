@@ -30,12 +30,11 @@
  * `?lift=live`, where they run.
  */
 import { existsSync, readFileSync, statSync } from "node:fs";
-import { createServer } from "node:http";
 import { basename } from "node:path";
 import { Creator } from "mopaq";
-import { randomBytes } from "node:crypto";
 import { gameName, leafOf, type DataSetRace } from "@scm-js/mod";
 import { openBrowser, PLAY_PAGE_URL } from "../open";
+import { listenLoopback, loopbackToken, pageWait, requestUrl, takeMessage } from "../loopback";
 import { t } from "../i18n";
 import { CliError, mark, pc } from "../ui";
 import type { ModSource } from "./source";
@@ -163,21 +162,21 @@ export function handoffExtra(set: PlaySet, o: PlayOptions): HandoffExtra | null 
 
 /** Hands the set to the play page through a loopback page and waits for it to start (or show, or refuse). */
 export async function playOnPage(set: PlaySet, o: PlayOptions = {}): Promise<PlayOutcome> {
-  const token = randomBytes(12).toString("hex");
+  const token = loopbackToken();
   const target = new URL(o.play ?? process.env.SCMJS_PLAY_URL ?? PLAY_PAGE_URL);
   target.searchParams.set("handoff", "1");
   // (the page runs a mod's plugins and FireGraft's exe edits only at ?lift=live)
   if ((o.lift ?? set.plugins + set.firegraft > 0) && !target.searchParams.has("lift")) target.searchParams.set("lift", "live");
   const say = o.live ?? (() => {});
   const outcome: PlayOutcome = { started: false, shown: false, error: null, bot: null, said: [] };
-  let done: () => void = () => {};
-  const finished = new Promise<void>((r) => { done = r; });
+  const wait = pageWait<void>();
+  const done = () => wait.settle();
   const extra = handoffExtra(set, o);
   const botBytes = o.bot && "bytes" in o.bot ? o.bot.bytes : null;
   const manifest = { name: set.name, hash: set.hash, files: set.files.map((f) => ({ path: f.path, size: f.bytes.length })), map: o.map?.name ?? null, ...(extra ? { handoff: extra } : {}) };
   let readies = 0;
-  const server = createServer((req, res) => {
-    const url = new URL(req.url ?? "/", "http://127.0.0.1");
+  const { server, origin } = await listenLoopback((req, res) => {
+    const url = requestUrl(req);
     const p = url.pathname;
     if (p === `/${token}`) { res.writeHead(200, { "content-type": "text/html; charset=utf-8" }); res.end(loopbackPage(set.name, target.href, token)); return; }
     if (p === `/${token}/manifest`) { res.writeHead(200, { "content-type": "application/json" }); res.end(JSON.stringify(manifest)); return; }
@@ -186,13 +185,7 @@ export async function playOnPage(set: PlaySet, o: PlayOptions = {}): Promise<Pla
     if (p === `/${token}/map` && o.map) { res.writeHead(200, { "content-type": "application/octet-stream" }); res.end(o.map.bytes); return; }
     if (p === `/${token}/bot` && botBytes) { res.writeHead(200, { "content-type": "application/octet-stream" }); res.end(botBytes); return; }
     if (p === `/${token}/message` && req.method === "POST") {
-      const chunks: Buffer[] = [];
-      req.on("data", (c: Buffer) => chunks.push(c));
-      req.on("end", () => {
-        res.writeHead(204).end();
-        let m: { type: string; [key: string]: unknown } | null = null;
-        try { m = JSON.parse(Buffer.concat(chunks).toString("utf8")); } catch { /* not ours */ }
-        if (!m || typeof m.type !== "string") return;
+      takeMessage(req, res, (m) => {
         outcome.said.push(m);
         if (typeof m.bot === "string") outcome.bot = m.bot;
         if (m.type === "scmjs.play.started" || m.type === "scmjs.taken") { outcome.started = true; done(); }
@@ -205,16 +198,14 @@ export async function playOnPage(set: PlaySet, o: PlayOptions = {}): Promise<Pla
     }
     res.writeHead(404).end();
   });
-  await new Promise<void>((r, j) => { server.once("error", j); server.listen(0, "127.0.0.1", () => r()); });
-  const page = `http://127.0.0.1:${(server.address() as { port: number }).port}/${token}`;
+  const page = `${origin}/${token}`;
   o.onAddress?.(page);
   openBrowser(page);
   // (BROWSER=none opens nothing: the address is the line, for the person or a script to open)
   if (process.env.BROWSER === "none") say(`${mark.info} ${t("Open {page} in a browser to play {name} on the play page", { page, name: pc.bold(set.name) })}`);
   else say(`${mark.info} ${t("Opening the play page with {name} in your browser", { name: pc.bold(set.name) })}${pc.dim(`\n  ${t("If nothing opens, go to {page}", { page })}`)}`);
-  const timer = setTimeout(() => done(), o.timeout ?? 300_000);
-  await finished;
-  clearTimeout(timer);
+  await wait.within(o.timeout ?? 300_000, undefined);
+  wait.stop();
   server.close();
   if (!outcome.started && !outcome.shown && !outcome.error) throw new CliError(t("The play page did not take the mod"), t("Open {address} and drop the mod's folder on it.", { address: `${target.origin}${target.pathname}` }));
   return outcome;

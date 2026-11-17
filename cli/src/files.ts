@@ -131,6 +131,13 @@ export async function loadMapInput(input: Input): Promise<OpenedMap> {
   }
 }
 
+/** A map named to a command or a tool, read and opened: the input and the parsed document, or a CliError. */
+export async function openMap(file: string): Promise<{ input: Input; doc: OpenedMap }> {
+  const input = await readInput(file);
+  expectKind(input, "map");
+  return { input, doc: await loadMapInput(input) };
+}
+
 export async function loadReplayInput(input: Input): Promise<Replay> {
   try {
     return await parseReplay(input.bytes);

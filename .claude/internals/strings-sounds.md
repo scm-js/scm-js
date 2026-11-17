@@ -36,7 +36,7 @@ names, switch names, trigger comments) deliberately get none of it. `Preferences
 is the 1.16.1 line-break rule, one setting every preview reads (`useClassicText`), shown in
 the String Editor and Preferences ▸ Display. The whole
 module is on the plugin API as **`api.text`** (`TextApi` in `plugins/api.ts`,
-`host.ts#text`), so no plugin carries a copy of the numbering — the Repair plugin's string
+`plugins/host/names.ts#textApi`), so no plugin carries a copy of the numbering — the Repair plugin's string
 finding is `bleedingLines` / `fixBleeding` over `api.query.strings()`, injected into its
 pure `analyze` as `TextHelpers`, and its stacked-text finding is `stackedLines` /
 `flattenStacks` the same way (the lines 1.16.1 drew at more than one alignment at once,

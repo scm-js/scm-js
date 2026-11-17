@@ -4,7 +4,6 @@
  * --batch-check` for all of them), and the blobs themselves in batches through `git cat-file --batch`, each parsed
  * once. `map log` and `map blame` (maplog.ts, blame.ts) are built on it, and `map diff --rev` finds the file with it.
  */
-import { spawnSync } from "node:child_process";
 import { existsSync, statSync } from "node:fs";
 import { basename, dirname, resolve } from "node:path";
 import type { OpenedMap } from "../../src/editor/mapFile";
@@ -12,11 +11,12 @@ import { kindOf, loadMapInput } from "./files";
 import { isWebAddress } from "./weblink";
 import { t } from "./i18n";
 import { CliError } from "./ui";
+import { gitBytes } from "./git";
 
 /** A file in a git repository: the repository's top folder and the file's path from there, with `/`. */
 export interface GitFile { root: string; path: string; name: string }
 
-const git = (args: string[], input?: string) => spawnSync("git", args, { maxBuffer: 2 * 1024 * 1024 * 1024, input: input === undefined ? undefined : Buffer.from(input) });
+const git = (args: string[], input?: string) => gitBytes(args, { maxBuffer: 2 * 1024 * 1024 * 1024, input });
 
 /**
  * Where `file` is in its repository. `--show-prefix` from the file's own folder, so a folder reached through a

@@ -6,6 +6,15 @@ note is `cli.md`.
 
 ## The program (`cli/src/main.ts`)
 
+- **`main.ts` is the shell**: the program, the groups, `finishProgram`, `fileProblem` and `run`. A family's commands
+  are declared in its `*cmd.ts` (`addMapCommands(program)` and the like), which holds the actions and nothing a tool
+  could reuse; what the actions share is `cmdkit.ts` (`say`, `note`, `emit`, `outName`, `editCommand`). **An option
+  several commands take is declared once in `options.ts`** (`--json`, `--starcraft`, `-o/--out`, `--force`,
+  `--dry-run`, the hidden `--engine`/`--play`/`--editor`, `--mod`, `--format`), with the refusals that go with them
+  (`refuseJsonOnPipe`, `refuseBothFromStdin`, `refuseOverwrite`, `raiseExitCode`), so the help text and the message
+  are the same everywhere. The pages a command serves for a browser (sign-in, hand-over to the editor or the play
+  page, a clip, a linked map) share `loopback.ts`: the token, the 127.0.0.1 listener, the message reader and the
+  timed wait; each caller keeps its own page and routes.
 - **Built in `buildProgram()`**, not at module load: the help's descriptions are made when the commands are defined,
   so the language must be chosen first. The module does `if (!VITEST) setLocale(chooseLocale(argv))`, then
   `export const program = buildProgram()`, and runs only `if (!process.env.VITEST)`. Tests therefore import the real

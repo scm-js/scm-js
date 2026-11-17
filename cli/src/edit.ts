@@ -17,6 +17,8 @@ import { unescapeStringText } from "../../src/editor/exchange";
 import { plainText } from "../../src/editor/textColors";
 import { msg, t } from "./i18n";
 import { CliError } from "./ui";
+import { writeBack } from "./exchange";
+import type { Input } from "./files";
 
 export const VERSIONS = Object.keys(MAP_VERSIONS) as MapVersion[];
 export const ENCODINGS = TEXT_ENCODINGS.map((e) => e.id);
@@ -147,4 +149,11 @@ export function pruneScenarioStrings(scn: Scenario, { dryRun = false } = {}): Pr
   const removed = unusedStrings(scn, usages).filter((index) => scn.strings.strings[index] !== "").map((index) => ({ index, text: plainText(scn.strings.strings[index] ?? "") }));
   if (!dryRun && removed.length) applyStrings(scn, deleteUnused(scn.strings.strings, usages), usages);
   return removed;
+}
+
+/** `map resize` and `map_resize`: the map resized as asked and written back (or to `out`); not written with `dryRun`. */
+export async function resizeAndWrite(opened: { input: Input; doc: OpenedMap }, o: { width: number; height: number; anchor: number; clamp: boolean; out: string | null; dryRun?: boolean }) {
+  const result = resizeMap(opened.doc, { width: o.width, height: o.height, anchor: o.anchor, clampLocations: o.clamp });
+  const written = o.dryRun ? null : await writeBack(opened.doc, opened.input.path, o.out);
+  return { result, written };
 }

@@ -32,10 +32,8 @@ import { VERSION } from "./about";
 import { MANIFEST_FILE } from "./archive";
 import { loadTypeScript, mapNames, type TypeScriptModule } from "./build";
 import { folderSource, scenarioFromText, SECTIONS_FILE, TEXT_FOLDER } from "./source";
-import { CliError } from "./ui";
+import { CliError, printErr } from "./ui";
 
-/** Where the server's own words go: standard error, since standard output is the protocol (the client shows it as the server's log). */
-const STDERR = (line: string) => process.stderr.write(`${line}\n`);
 
 /** The plugin's modules the server needs; the bundle inlines them. */
 async function trigscript() {
@@ -233,9 +231,9 @@ export interface LspOptions {
 export async function serveLsp(options: LspOptions = {}): Promise<void> {
   const mapFromOption = mapOption(options.map);
   const stdio = !options.input;
-  const log = options.log ?? STDERR;
+  const log = options.log ?? printErr;
   // Standard output is the protocol from here on: anything the editor's code would print goes to stderr.
-  if (stdio) for (const k of ["log", "info", "debug", "warn", "error"] as const) console[k] = (...a: unknown[]) => STDERR(a.map(String).join(" "));
+  if (stdio) for (const k of ["log", "info", "debug", "warn", "error"] as const) console[k] = (...a: unknown[]) => printErr(a.map(String).join(" "));
   const input = options.input ?? process.stdin, output = options.output ?? process.stdout;
   // A reader and a writer rather than the streams: given streams, the library ends the process when they close.
   const connection: Connection = createConnection(ProposedFeatures.all, new StreamMessageReader(input), new StreamMessageWriter(output));

@@ -17,7 +17,7 @@ import { gunzipSync } from "node:zlib";
 import { spawnOwned } from "./lifecycle";
 import { runnerEnv } from "./runtime";
 import { msg, t, translate } from "./i18n";
-import { CliError, dot, mark, pc } from "./ui";
+import { CliError, dot, mark, pc, printErr } from "./ui";
 
 /** Where the play page is, and so where the engine's files are (`SCMJS_PLAY_URL` for another). */
 export const PLAY_URL = "https://scmjs.dev/play";
@@ -104,7 +104,7 @@ export interface Engine {
  * `--json` command's standard output is its JSON alone). The third argument, once where that line went, is not read.
  */
 export async function ensureEngine(at: string = process.env.SCMJS_PLAY_URL || PLAY_URL, cache = cacheRoot(), _say?: (line: string) => void): Promise<Engine> {
-  const say = (line: string) => { process.stderr.write(`${line}\n`); };
+  const say = (line: string) => printErr(line);
   if (!/^https?:\/\//.test(at)) {
     const dir = resolve(at);
     const current = join(dir, "current.json");

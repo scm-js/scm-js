@@ -2,7 +2,6 @@
  * The `scmjs library` commands: commander's side of library.ts, kept here so main.ts adds them with one call. What
  * a command says goes to standard output, or standard error when the file or the JSON takes standard output.
  */
-import { existsSync } from "node:fs";
 import { type Command, Option } from "commander";
 import { writeOutput } from "./exchange";
 import { STDIO } from "./files";
@@ -11,13 +10,12 @@ import {
   confirmed, getFromLibrary, libraryReport, noteRevision, planRemoval, planUnlink, printGot, printLibrary, removalLines, removeFromLibrary,
   renameMap, storageLine, unlink, unlinkLines, type LibraryPart,
 } from "./library";
-import { CliError, mark, pc, print } from "./ui";
+import { mark, pc, print, printErr } from "./ui";
 import { parseWhole } from "./values";
-
-const toErr = (...lines: (string | null | undefined)[]) => { for (const l of lines) if (l !== null && l !== undefined) process.stderr.write(`${l}\n`); };
+import { jsonOption, outOption, forceOption, dryRunOption, refuseJsonOnPipe, refuseOverwrite } from "./options";
 
 export function addLibraryCommands(program: Command, group: string): void {
-  const json = () => new Option("--json", t("print JSON instead of text, for scripts"));
+  const json = jsonOption;
   const revision = () => new Option("--revision <n>", t("a map's revision by its number; the newest by default"));
   const rev = (v: string | undefined) => (v === undefined ? undefined : parseWhole(v, "revision", 1));
   const library = program.command("library").description(t("your maps and replays on scmjs.dev")).helpGroup(group)
@@ -38,33 +36,33 @@ replay's file name. library get also downloads anyone's map or replay link, with
   library.command("shared").description(t("the maps you are sharing for editing, with their links")).addOption(json()).action(list("shared"));
 
   library.command("get").description(t("download a map or replay from your account, or from anyone's link")).argument("<what>", t("a link, an id, or a name"))
-    .option("-o, --out <file>", t("the file to write; the server's file name in this folder by default; - for standard output"))
-    .addOption(revision()).option("--force", t("overwrite a file that is there")).addOption(json())
+    .addOption(outOption("file", t("the file to write; the server's file name in this folder by default; - for standard output")))
+    .addOption(revision()).addOption(forceOption()).addOption(json())
     .action(async (what: string, o: { out?: string; revision?: string; force?: boolean; json?: boolean }) => {
       const out = o.out;
-      if (out === STDIO && o.json) throw new CliError(t("--json and the file both want standard output"), t("Write the file with --out, or leave --json off."), 2);
+      refuseJsonOnPipe(out === STDIO, o.json, "file");
       const g = await getFromLibrary(what, { revision: rev(o.revision) });
       const path = out ?? g.fileName;
-      if (path !== STDIO && existsSync(path) && !o.force) throw new CliError(t("{file} is there already", { file: path }), t("--force overwrites it, --out names another file."), 2);
+      if (path !== STDIO) refuseOverwrite(path, o.force, t("--force overwrites it, --out names another file."));
       const w = await writeOutput(g.bytes, path);
       const { bytes: _b, ...facts } = g;
       if (o.json) { print(JSON.stringify({ ...facts, bytes: g.bytes.length, written: w }, null, 2)); return; }
       const where = w.path === STDIO ? t("standard output") : w.live ? t("the editor, as one undo step") : pc.cyan(w.path);
       const line = `${mark.ok} ${printGot(g, where)[0]}`;
-      if (w.path === STDIO) toErr(line); else print(line);
+      if (w.path === STDIO) printErr(line); else print(line);
     });
 
   /** Says what goes, asks (or takes --yes), and makes it so; --dry-run stops after saying. */
   const destroy = async <P>(o: { yes?: boolean; dryRun?: boolean; json?: boolean }, plan: P, words: string[], question: string, act: () => Promise<string[]>) => {
     if (o.json && o.dryRun) { print(JSON.stringify({ plan, done: false }, null, 2)); return; }
-    (o.json ? toErr : print)(...words);
+    (o.json ? printErr : print)(...words);
     if (o.dryRun) { print(pc.dim(t("Nothing was changed (--dry-run)."))); return; }
-    if (!(await confirmed(question, { yes: o.yes }))) { (o.json ? toErr : print)(t("Nothing was changed.")); process.exitCode = 1; return; }
+    if (!(await confirmed(question, { yes: o.yes }))) { (o.json ? printErr : print)(t("Nothing was changed.")); process.exitCode = 1; return; }
     const lines = await act();
     if (o.json) print(JSON.stringify({ plan, done: true }, null, 2)); else print(...lines);
   };
   const askOptions = (cmd: Command) => cmd.option("-y, --yes", t("do it without asking (needed where there is no terminal to ask on)"))
-    .option("--dry-run", t("say what would go, and change nothing")).addOption(json());
+    .addOption(dryRunOption(t("say what would go, and change nothing"))).addOption(json());
 
   askOptions(library.command("rm").description(t("delete a map, one of its revisions, or a replay, with their links")).argument("<what>", t("a link, an id, or a name")).addOption(revision()))
     .action(async (what: string, o: { revision?: string; yes?: boolean; dryRun?: boolean; json?: boolean }) => {

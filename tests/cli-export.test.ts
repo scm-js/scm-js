@@ -11,7 +11,7 @@ import type { Command, Replay, ReplayPlayer } from "@scm-js/replay";
 import { describe, expect, it } from "vitest";
 import { browserCandidates, Cdp, findBrowser, NulSplitter } from "../cli/src/browser";
 import { actionTrack, aimOf, clickOf, placesFromAims, placesOf, trackOf } from "../cli/src/camera";
-import { clipFormat, hostPage, pageCachePath, parseAt, parseFps, parseSize, parseSpeed, pickPlayer, planClip, rowsFor, servedGamePath } from "../cli/src/export";
+import { clipFormat, hostPage, pageCachePath, parseAt, parseFps, parseResolution, parseSpeed, pickPlayer, planClip, rowsFor, servedGamePath } from "../cli/src/export";
 import type { Input } from "../cli/src/files";
 import { GifWriter, lzw } from "../cli/src/gif";
 import { CliError } from "../cli/src/ui";
@@ -31,10 +31,10 @@ describe("the clip asked for", () => {
     expect(clipFormat("b.gif")).toBe("gif");
     refused(() => clipFormat("b.avi"), /\.webm, \.mp4 or \.gif/);
     // An odd side is made even, and said so (rounded).
-    expect(parseSize("1281x721")).toEqual({ width: 1282, height: 722, rounded: true });
-    expect(parseSize("1280x720")).toEqual({ width: 1280, height: 720, rounded: false });
-    refused(() => parseSize("10x10"), /--resolution/);
-    refused(() => parseSize("big"), /--resolution/);
+    expect(parseResolution("1281x721")).toEqual({ width: 1282, height: 722, rounded: true });
+    expect(parseResolution("1280x720")).toEqual({ width: 1280, height: 720, rounded: false });
+    refused(() => parseResolution("10x10"), /--resolution/);
+    refused(() => parseResolution("big"), /--resolution/);
     refused(() => clipFormat("ex/noext"), /no extension; a clip is \.webm, \.mp4 or \.gif/);
     expect(parseFps("30", "webm")).toBe(30);
     // A GIF's pictures last whole hundredths: 12 a second is a picture every 8, 12.5 a second.

@@ -22,6 +22,7 @@ import { t } from "../i18n";
 import { CliError } from "../ui";
 import { STDIO } from "../files";
 import { describedSource, folderManifest, type ModSource } from "./source";
+import { refuseJsonOnPipe } from "../options";
 
 export type ModCompression = "zlib" | "pkware" | "none";
 export const MOD_COMPRESSIONS: readonly ModCompression[] = ["zlib", "pkware", "none"];
@@ -220,7 +221,7 @@ export interface PackModOptions extends PackFolderOptions {
 export function checkPackOut(o: { out?: string | null; folder?: string | null; json?: boolean }): void {
   if (o.out && o.folder) throw new CliError(t("--out and --folder: the MPQ or the loose folder, not both."), null, 2);
   if (o.folder === STDIO) throw new CliError(t("--folder writes a folder, which cannot go to standard output."), t("Name a folder, or give --out - for the MPQ."), 2);
-  if (o.out === STDIO && o.json) throw new CliError(t("--json and the MPQ both want standard output"), t("Write the MPQ to a file with --out, or leave --json off."), 2);
+  refuseJsonOnPipe(o.out === STDIO, o.json, "mpq");
   if (o.out && o.out !== STDIO && extname(o.out).toLowerCase() !== ".mpq") throw new CliError(extname(o.out) ? t("--out names a {ext} file; the mod is written as an .mpq", { ext: extname(o.out) }) : t("--out names a file with no extension; the mod is written as an .mpq"), null, 2);
 }
 

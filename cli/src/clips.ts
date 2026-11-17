@@ -9,14 +9,14 @@
  * of the verdict. A clip that fails for the same want would fail for every scenario, so the first failure ends it.
  */
 import { existsSync } from "node:fs";
-import { basename, dirname, join, relative, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { FRAME_MS } from "@scm-js/replay";
 import { findBrowser, NO_BROWSER } from "./browser";
 import { exportReplay, type ExportOptions, type ExportResult } from "./export";
 import { loadReplayInput, readInput, STDIO, type Input } from "./files";
 import { slug, type ScenarioResult } from "./maptest";
 import { t, translate } from "./i18n";
-import { CliError, dot, duration, mark, pc, size } from "./ui";
+import { CliError, dot, duration, mark, pc, size, nearPath } from "./ui";
 
 /** The game before the frame a scenario ended on, and after it, that a clip shows. */
 export const CLIP_BEFORE_MS = 8000;
@@ -83,13 +83,11 @@ export interface ClipOptions {
   browserFound?: string | null;
 }
 
-const shown = (path: string) => { const r = relative(process.cwd(), path); return r && !r.startsWith("..") ? r : path; };
-
 /** One clip's line: where it went, its size and length, and the stretch of the game. */
 export function clipLine(c: Clip): string {
   const span = t("{from}–{to} of the game", { from: duration(c.from * FRAME_MS), to: duration(c.to * FRAME_MS) });
   if (!c.file) return `  ${pc.dim(`· ${t("no clip of {scenario}: {why}", { scenario: c.scenario, why: c.skipped ?? "" })}`)}`;
-  return `  ${mark.ok} ${pc.bold(shown(c.file))}${pc.dim(`${dot}${size(c.bytes ?? 0)}${dot}${duration((c.seconds ?? 0) * 1000)}${dot}${span}`)}`;
+  return `  ${mark.ok} ${pc.bold(nearPath(c.file))}${pc.dim(`${dot}${size(c.bytes ?? 0)}${dot}${duration((c.seconds ?? 0) * 1000)}${dot}${span}`)}`;
 }
 
 /**
@@ -142,7 +140,7 @@ export function clipsSummary(run: ClipRun): string[] {
   const made = run.clips.filter((c) => c.file).length;
   const out: string[] = [];
   if (run.missing) out.push(`${mark.warn} ${pc.yellow(run.missing)}`);
-  else if (made) out.push(pc.dim(`  ${t("{n, plural, one {# clip of the failed scenario} other {# clips of the failed scenarios}} in {dir}", { n: made, dir: shown(run.dir) })}`));
+  else if (made) out.push(pc.dim(`  ${t("{n, plural, one {# clip of the failed scenario} other {# clips of the failed scenarios}} in {dir}", { n: made, dir: nearPath(run.dir) })}`));
   return out;
 }
 

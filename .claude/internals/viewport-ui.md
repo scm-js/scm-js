@@ -446,7 +446,7 @@ read in the first effect pass is still null.
   commit atoms: `commitEditAtom` / `commitTerrainAtom` roll the already-applied entry back
   (`rollbackEntryAtom`), the table commits take the diff and `applyTables(…, "undo")` it, resize /
   change tileset / replace / undo / redo refuse. `canEdit(get, set)` puts the reason on the status
-  bar. Plugins: `assertWritable` in `host.ts` throws from `runTransaction`, `runUpdate`, section
+  bar. Plugins: `assertWritable` in `plugins/host/shared.ts` throws from `runTransaction`, `runUpdate`, section
   writes, `extras`, clipboard cut/paste, `resize`, `changeTileset`, `save`/`saveAs` unless a copy,
   `sync.start`. Exception: `sections.replaceFile(…, { asOpened: true })` is taken (Repair's on-open
   pass is a reading of the file, and replay maps are often protected ones it makes readable).

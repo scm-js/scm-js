@@ -9,7 +9,6 @@
  * parent has was changed by that commit. It stops when nothing is left to explain, so the oldest versions of a long
  * history are not read at all.
  */
-import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { readFileSync, existsSync, statSync } from "node:fs";
 import type { OpenedMap } from "../../src/editor/mapFile";
@@ -31,6 +30,7 @@ import { blobIds, commitsTouching, locate, short, Versions, type Commit } from "
 import { noHistory } from "./maplog";
 import { msg, t, translate } from "./i18n";
 import { CliError, columns, padColumns, pc, size } from "./ui";
+import { gitText } from "./git";
 
 export const BLAME_KINDS = ["settings", "units", "locations", "triggers", "strings"] as const;
 export type BlameKind = (typeof BLAME_KINDS)[number];
@@ -285,7 +285,7 @@ function describeCommits(root: string, hashes: string[]): Map<string, Commit> {
   return out;
 }
 
-const spawnSyncGit = (args: string[]) => spawnSync("git", args, { encoding: "utf8" }).stdout ?? "";
+const spawnSyncGit = (args: string[]) => gitText(args).stdout ?? "";
 
 const KIND_TITLE: Record<BlameKind, string> = { settings: msg("Settings"), units: msg("Units"), locations: msg("Locations"), triggers: msg("Triggers"), strings: msg("Strings") };
 /** ` · path at rev`, after a title. */

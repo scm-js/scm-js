@@ -41,7 +41,7 @@ export interface NewMapOptions {
 }
 
 /** `--size 128x96` (or `128`, square) as width and height, each one of the editor's sizes. */
-export function parseSize(spec: string): { width: number; height: number } {
+export function parseMapSize(spec: string): { width: number; height: number } {
   const m = /^(\d+)(?:\s*[x×*]\s*(\d+))?$/i.exec(spec.trim());
   const sizes = MAP_SIZES as readonly number[];
   if (!m) throw new CliError(t("--size takes WIDTHxHEIGHT, such as 128x96, not \"{spec}\"", { spec }), t("Each is one of {sizes}.", { sizes: sizes.join(", ") }), 2);

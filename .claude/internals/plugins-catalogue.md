@@ -433,7 +433,7 @@ encoded, every occurrence with its offset — `sectionInfos` decorates it with t
 (`SectionKnowledge`: mode, the fixed size for this map, stride, `modelled` from `MODELLED_SECTIONS` in
 `scenario.ts`, which is the list `encodeSection` handles), and the writes (`replaceSectionData`,
 `renameSection`, `insertSection`, `removeSection`, `moveSection`, `editRaw`, `parseRaw`) mutate that
-`ChkFile` and parse a fresh `Scenario` from it. `host.ts#sectionsApi` installs the result through
+`ChkFile` and parse a fresh `Scenario` from it. `host/sections.ts#sectionsApi` installs the result through
 `documentAtoms.ts#replaceScenarioAtom` — `loadDocumentAtom` with the same file name and extras, then
 modified — so a raw edit to any section, modelled or not, reaches the whole editor, at the cost of the
 history (as Resize). `api.names` is the editor's own tables (`UNIT_NAMES`, `UPGRADE_NAMES`,

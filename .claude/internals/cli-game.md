@@ -98,7 +98,7 @@ names the line for a self-hosted runner). Every suite here runs against stand-in
   fired/continued/failed, first/last, lastFail, done); `printTrace` (a table with core's `summarizeTrigger` cut to the
   terminal, then "Never fired" with the condition's name and slot); `costReport`/`printCost` (average and peak ms where
   anything ran, the limits line, the ungrouped line, costliest rows; tiny numbers get more digits). Both open the map
-  first (`openForEdit`) for the row text. `traceJson` / `costJson` are the `--json` shapes, used by the command and the
+  first (`openMap`, `files.ts`) for the row text. `traceJson` / `costJson` are the `--json` shapes, used by the command and the
   MCP tools alike.
 - **`--replay <rep>`**: the map runner's `--play` mode (scm-sim `mapReplay.ts`). The game starts as the replay
   runner starts one (`playableReplay` for a later game's replay); the taps as above, but **`installTriggerTrace` is
@@ -107,7 +107,7 @@ names the line for a self-hosted runner). Every suite here runs against stand-in
   (10,000 by default; `orderDropped` counts the rest). **A map given** is put into the replay (`writeLegacyReplay` with
   the replay's commands and the map's classic scenario): the game loads the map from the replay, so nothing else
   changes. `end` adds `by`, `order`, `check {named, gone, ahead, parted}`, `outcomes`.
-- **`gameRun`** (main.ts, shared by trace and cost): with `--replay`, `replayRun(rep, map|null)` gives the scenario the
+- **`gameRun`** (`gamecmd.ts`, shared by trace and cost; the replay step is `replayForGame` in `trace.ts`, which the tools call too): with `--replay`, `replayRun(rep, map|null)` gives the scenario the
   report is worded against — the given map's **archive chk as stored** (a built map's built scenario, since that is
   what the game runs), else the replay's — and `differs` = `diffMaps` of the two bare chks with `members` dropped (a
   replay holds none) → `summarizeDiff`. `--frames`/`--every` left at their defaults (`getOptionValueSource`) mean the

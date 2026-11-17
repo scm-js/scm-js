@@ -8,7 +8,6 @@
  * written only when absent (or with `--force`), and a git setting that holds another value is left alone (or set, with
  * `--force`).
  */
-import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs";
 import { basename, delimiter, dirname, join, relative, resolve, sep } from "node:path";
 import { VERSION } from "./about";
@@ -17,6 +16,7 @@ import { loadMapInput, readInput } from "./files";
 import { mapReport } from "./map";
 import { msg, t, translate } from "./i18n";
 import { CliError, dot, gameText, mark, pc, table, visible } from "./ui";
+import { gitText } from "./git";
 
 /** The maps a folder holds, by extension. */
 const MAP_FILE = /\.(scx|scm|chk)$/i;
@@ -122,7 +122,7 @@ export interface InitOptions {
 }
 
 function git(dir: string, ...args: string[]): { ok: boolean; out: string; err: string } {
-  const r = spawnSync("git", ["-C", dir, ...args], { encoding: "utf8" });
+  const r = gitText(["-C", dir, ...args]);
   // Only the line end goes: a value may end in a space (the old `^## ` did).
   return { ok: r.status === 0, out: (r.stdout ?? "").replace(/\r?\n$/, ""), err: (r.stderr ?? "").trim() || (r.error?.message ?? "") };
 }

@@ -29,8 +29,14 @@ rush|test|heatmap|triggers edit|strings edit`, `replay watch|export|open|share`,
   `StdioServerTransport`, zod schemas → JSON Schema) brings protocol negotiation, `ping`, errors and a client for the
   tests. Its cost is under 1 MB of the bundle (SDK, zod, zod-to-json-schema, ajv and helpers — all permissive licences,
   in ATTRIBUTION.md's CLI table and the notices).
+- **Tools are registered per family** (`mcpmaps.ts`, `mcpgame.ts`, `mcpeditor.ts`, `mcpreplay.ts`, `mcpmods.ts`,
+  `mcpaccount.ts`) over `mcpkit.ts` (`ok`, `failed`, the path confinement, `noPipe`); `createMcpServer` in `mcp.ts`
+  only calls them and re-exports what the tests import.
 - **One tool per command, the command's functions underneath**: each tool calls the same module the commander action
-  does (`mapReport`, `dumpMap`, `importTriggers`, `writeBack`, …), never main.ts, so the two cannot drift in what they
+  does (`mapReport`, `dumpMap`, `importTriggers`, `writeBack`, …), never the wiring. Where a command is more than one
+  call — check with a baseline, set, resize, opening a map to edit, the replay behind trace and cost — the whole
+  operation is one function both call (`checkMap`, `setMap`, `resizeAndWrite`, `openMap` in `files.ts`,
+  `replayForGame`), so the two cannot drift in what they
   do, only in how they print. This is why modules return data and never `print()`. A result is `content: [{text}]` = the
   command's lines with `visible()` stripping colour, plus `structuredContent` = the `--json` shape (`toJson`:
   Uint8Array → array, Map → object). **No `outputSchema`s**: the shapes are the commands' TypeScript types and would be

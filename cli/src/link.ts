@@ -13,12 +13,13 @@
 import { createHash, randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
-import { createServer, request, type IncomingMessage, type Server, type ServerResponse } from "node:http";
+import { request, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { basename, join, resolve } from "node:path";
 import { cacheRoot } from "./engine";
 import { t } from "./i18n";
 import { EDITOR_URL, openBrowser } from "./open";
 import { CliError, mark, pc } from "./ui";
+import { listenLoopback, loopbackToken, pageWait, readBody, requestUrl } from "./loopback";
 
 /** What a request came back with: the JSON part and, beside it, bytes (a map, a picture). */
 export interface LinkAnswer { result: Record<string, unknown>; bytes: Uint8Array | null }
@@ -63,13 +64,6 @@ function unframe(body: Buffer): { json: Record<string, unknown>; bytes: Uint8Arr
   const rest = at < 0 ? null : body.subarray(at + 1);
   return { json: JSON.parse(head.toString("utf8")) as Record<string, unknown>, bytes: rest && rest.length ? new Uint8Array(rest) : null };
 }
-const bodyOf = (req: IncomingMessage) => new Promise<Buffer>((done, fail) => {
-  const chunks: Buffer[] = [];
-  req.on("data", (c: Buffer) => chunks.push(c));
-  req.on("end", () => done(Buffer.concat(chunks)));
-  req.on("error", fail);
-});
-
 /* ── The owner ──────────────────────────────────────────── */
 
 /** The links this process owns, by path. */
@@ -87,7 +81,7 @@ export interface OpenLinkOptions {
 export class LinkOwner implements Link {
   readonly path: string;
   readonly name: string;
-  private readonly token = randomBytes(12).toString("hex");
+  private readonly token = loopbackToken();
   private readonly key = randomBytes(16).toString("hex");
   private server: Server | null = null;
   private stream: ServerResponse | null = null;
@@ -120,20 +114,18 @@ export class LinkOwner implements Link {
   async open(options: OpenLinkOptions = {}): Promise<void> {
     const editor = new URL(options.editor ?? process.env.SCMJS_EDITOR_URL ?? EDITOR_URL);
     editor.searchParams.set("handoff", "1");
-    const server = createServer((req, res) => { void this.serve(req, res).catch(() => { if (!res.headersSent) res.writeHead(500); res.end(); }); });
+    const { server, port, origin } = await listenLoopback((req, res) => { void this.serve(req, res).catch(() => { if (!res.headersSent) res.writeHead(500); res.end(); }); });
     this.server = server;
-    await new Promise<void>((done, fail) => { server.once("error", fail); server.listen(0, "127.0.0.1", () => done()); });
-    const port = (server.address() as { port: number }).port;
-    const page = `http://127.0.0.1:${port}/${this.token}`;
+    const page = `${origin}/${this.token}`;
     this.pageHtml = linkPage(this.name, editor.href, this.token);
-    const linked = new Promise<string | null>((done) => { this.taken = done; });
+    const linked = pageWait<string | null>();
+    this.taken = linked.settle;
     openBrowser(page);
     const say = options.say ?? (() => {});
     if (process.env.BROWSER === "none") say(`${mark.info} ${t("Open {page} in your browser to link {name} to the editor", { page, name: pc.bold(this.name) })}`);
     else say(`${mark.info} ${t("Opening {name} in the editor in your browser", { name: pc.bold(this.name) })}`, pc.dim(`  ${t("If nothing opens, go to {page}", { page })}`));
-    const timer = setTimeout(() => this.taken?.(null), options.timeout ?? 120_000);
-    const answer = await linked;
-    clearTimeout(timer);
+    const answer = await linked.within(options.timeout ?? 120_000, null);
+    linked.stop();
     this.taken = null;
     if (answer !== "yes") {
       this.end(answer === null ? "not taken" : "not linked");
@@ -190,12 +182,12 @@ export class LinkOwner implements Link {
   }
 
   private async serve(req: IncomingMessage, res: ServerResponse): Promise<void> {
-    const url = new URL(req.url ?? "/", "http://127.0.0.1");
+    const url = requestUrl(req);
     const [, first, second, third] = url.pathname.split("/");
     // A peer: another scmjs process, which read the key from the cache folder.
     if (first === "rpc" && req.method === "POST") {
       if (req.headers["x-scmjs-key"] !== this.key) { res.writeHead(403).end(); return; }
-      const { json, bytes } = unframe(await bodyOf(req));
+      const { json, bytes } = unframe(await readBody(req));
       let out: Buffer;
       try {
         if (json.method === "end") this.end(t("scmjs ended it"));
@@ -227,7 +219,7 @@ export class LinkOwner implements Link {
       return;
     }
     if (second === "up" && req.method === "POST") {
-      const { json, bytes } = unframe(await bodyOf(req));
+      const { json, bytes } = unframe(await readBody(req));
       res.writeHead(200, { "content-type": "application/octet-stream" }).end(await this.fromPage(json, bytes));
       return;
     }
@@ -297,7 +289,7 @@ function post(record: LinkRecord, body: Buffer, timeout: number): Promise<Buffer
   return new Promise<Buffer>((done, fail) => {
     const req = request({ host: "127.0.0.1", port: record.port, path: "/rpc", method: "POST", headers: { "x-scmjs-key": record.key, "content-length": body.length }, timeout }, (res) => {
       if (res.statusCode !== 200) { res.resume(); fail(new Error(`status ${res.statusCode}`)); return; }
-      void bodyOf(res).then(done, fail);
+      void readBody(res).then(done, fail);
     });
     req.on("timeout", () => req.destroy(new Error("timeout")));
     req.on("error", fail);

@@ -20,7 +20,7 @@ whole is `desktop-releases.md`.
   pulls in the `src/` files it imports). **No top-level await anywhere in `cli/src`**: the single executable is
   CommonJS (`main.ts` runs with `void run()`); `tests/cli-binary.test.ts` walks every module with TypeScript's parser for
   an `await` outside a function.
-- **The leave-out plugin** (`scmjs-cli-leave-out`): `host.ts` imports `src/plugins/builtin.ts`, whose `import.meta.glob`
+- **The leave-out plugin** (`scmjs-cli-leave-out`): the host (`host/lifecycle.ts`) imports `src/plugins/builtin.ts`, whose `import.meta.glob`
   of every vendored plugin's `plugin.ts` would be inlined whole by `codeSplitting: false` — TrigScript's workspace,
   Aftermath, the AI assistant, React — nearly doubling the bundle. The plugin resolves `builtin.ts` to empty tables
   (as `build-core.mjs` does) and loads a placeholder for the editor's `ko.json`, which `renderChunk` replaces with the

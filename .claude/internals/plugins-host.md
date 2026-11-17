@@ -8,9 +8,18 @@
 the README and the docs site's home page send a new author to copy; keep it building against the contract.
 Keep the tour in step with `src/plugins/api.ts`,
 which is the contract (types only, `PLUGIN_API_VERSION` bumps on an incompatible change). A plugin
-is `activate(api)` in a `plugin.ts`/`.js` next to a `plugin.json`; `host.ts#createPluginApi` builds
+is `activate(api)` in a `plugin.ts`/`.js` next to a `plugin.json`; `host/pluginApi.ts#createPluginApi` builds
 its `PluginApi` over the Jotai store — no React, no atoms exposed — and a `Contributions` bag every
 `add`/`on` lands in so `deactivatePlugin` sweeps everything back whatever the plugin returned.
+**`src/plugins/host.ts` is re-exports only**; the host is `src/plugins/host/`, one module per area: `shared.ts`
+(the store type, `Contributions`, `assertWritable`, `sealed`), `transaction.ts`, `update.ts`, one file per API group
+(`document`, `sections`, `triggers`, `query`, `view`, `surfaces`, `mapView`, `data`, `commands`, `clipboard`, `events`,
+`settings`, `palette`, `terrain`, `names`, `own`, `ui`), `instrument.ts`, `lifecycle.ts` (activation, describing,
+deactivation) and `installs.ts` / `installList.ts`. `createPluginApi` only assembles the groups, in a fixed order —
+the key order of `api` — and each group is a function of `(store, info, bag)`. Module state has one owner each
+(`actives` and `describing` in `lifecycle.ts`, `switchesWatched` in `mapView.ts`). `api.ui`'s own helpers (`confirm`,
+`alert`, `prompt`, `progress`) call through the `ui` object itself, which is the one `instrument` wraps, so the verbose
+log still shows the calls beneath them. Code outside `src/plugins/` imports from `host.ts` only.
 `api.document.edit(label, tx => …)` is `runTransaction`: an `EditTransaction` whose operations
 **apply as they are called** (later ones see earlier ones) and accumulate change lists in `applyEntry`
 order (terrain through `Stroke`, so a cell written twice is one change), then one `HistoryEntry` goes
@@ -26,9 +35,9 @@ overlay's hooks — each returning a `Disposable` or a cleanup function. The **o
 transaction's builder: `edit` / `update` commit when `build` returns, so an `async` one would commit
 what ran before its first `await` and let the rest mutate the map outside the entry. `Sync<T>` in
 `api.ts` (a conditional type resolving to a sentence when `T` is a promise) makes TypeScript refuse
-it, and `host.ts#checkSyncBuilder` catches it at runtime for a plain-JavaScript plugin — a `notes`
+it, and `host/shared.ts#checkSyncBuilder` catches it at runtime for a plain-JavaScript plugin — a `notes`
 entry and a `console.error`, not a throw. **A transaction is closed when its builder returns**:
-`host.ts#sealed` wraps every function on the `tx` (and the nested function groups of an update's)
+`host/shared.ts#sealed` wraps every function on the `tx` (and the nested function groups of an update's)
 so a handle kept past the return, or the half of an async builder after its first await, throws
 instead of writing to the scenario outside the entry, with nothing recording it. **A builder that throws is rolled back** in `runTransaction`: the change lists it
 accumulated are the inverse, `documentAtoms.ts#rollbackEntryAtom` applies them backwards and
@@ -46,7 +55,7 @@ menu items or edit the map through the old API object. `loadPlugin` takes `{ acc
 and importing the module: the plugin's top-level code never runs. `services.watch` compares the
 registration key, not the object, so re-providing the same object under a new version notifies.
 `tests/plugins.test.ts` pins each. `ProgressHandle` carries `signal` beside `cancelled()`.
-`api.document.open(file)` is File ▸ Open without React: `host.ts#openDocument` builds a `File` and
+`api.document.open(file)` is File ▸ Open without React: `host/document.ts#openDocument` builds a `File` and
 runs `services/documentActions.ts#openFileInto` (what the hook's `openFile` calls), or, when
 `needsCloseConfirm(store)` says the map is modified and Preferences ask, parks an "open"
 `PendingAction` in the Close Scenario dialog: `runPending` answers through its `done` callback, and a
@@ -65,7 +74,7 @@ icon at `menu.add`, so `PluginMenuItem.icon` is always a `PluginIcon`) draws thr
 in the item's indicator slot, and `after` makes `withPluginItems` splice the item under the named
 built-in instead of appending after a separator.
 
-`api.ui.pickArea` / `pickTile` / `pickObject` (`host.ts#pickOnMap`) put one `MapPickRequest` in
+`api.ui.pickArea` / `pickTile` / `pickObject` (`host/surfaces.ts#pickOnMap`) put one `MapPickRequest` in
 `mapPickAtom` (`pluginAtoms.ts`); `MapViewport` serves it ahead of every layer (crosshair, teal
 marquee, HUD chip with the prompt) and calls its `finish` on mouse-up — for `"object"` on
 mouse-down with the unit or location under the pointer (`pickHoverRef`, resolved on every move
@@ -82,7 +91,7 @@ carries files) and `onDrop`. `DialogHandle.setTitle` goes through a title box in
 (they move with the editor); a manifest's `api` is the version the plugin *needs*. Do not bump it
 for additions.
 
-`api.ui.mapTool` (`host.ts#startMapTool`) is the pointer-owning mode a plugin with a drawing tool
+`api.ui.mapTool` (`host/surfaces.ts#startMapTool`) is the pointer-owning mode a plugin with a drawing tool
 needs: one `MapToolRequest` in `mapToolAtom`, served by `MapViewport` after a pick and ahead of
 every layer — `onDown` captures and forwards `MapPointer`s (map px, tile, `inMap`, `down`,
 modifiers; clamped to the map while held), `onLeave` sends one `inMap: false` move, the layer's
@@ -92,7 +101,7 @@ cursor, and the spec's `draw(ctx, view)` runs at the end of the paint pass (`Map
 `cancelMapToolAtom` (Esc in `useHotkeys`, right-click in the viewport) asks the spec's `onCancel`
 first and finishes only when it does not keep the tool; `finish(reason)` is guarded like a pick's,
 clears the atom and tells `onStop` once (`stopped` / `cancelled` / `document` / `replaced` /
-`disabled`). `api.ui.overlay` (`host.ts#registerOverlay`) is the passive counterpart: a `PluginOverlayEntry` in
+`disabled`). `api.ui.overlay` (`host/surfaces.ts#registerOverlay`) is the passive counterpart: a `PluginOverlayEntry` in
 `pluginOverlaysAtom` that `MapViewport` draws at the spec's slot (`above`: after the grid, after the
 objects, or after the hover ghost but before a map tool's drawing) while `visible`, and whose
 `onHover` its `onMove` / `onLeave` feed a `MapPointer` (or null) on every layer and during a tool —
@@ -127,7 +136,7 @@ instead (`DockedPluginPanels` in the same file, rendered by `Docks.tsx` after Pr
 `.panel.plugin-docked` with the built-in panel head; `App.tsx`'s `rightVisible` counts them, so
 the dock stays up with every built-in panel hidden; `grow` gives it the spare height). The other
 "built-in feel" surfaces: `api.ui.statusItem` (`pluginStatusItemsAtom`,
-`host.ts#addStatusItem`; `StatusBar.tsx` renders the cells after the message with the plugin
+`host/surfaces.ts#addStatusItem`; `StatusBar.tsx` renders the cells after the message with the plugin
 icon or a `.status-spinner` while `busy`), `api.ui.preferencesPage` (`pluginPreferencesPagesAtom`,
 one entry per plugin — a second registration replaces the first; `PreferencesDialog.tsx` lists
 each under Plugins in its nav as `plugin:<id>`, by name (`pluginPagesInOrder`) rather than in
@@ -145,7 +154,7 @@ keep it in step when adding one (the Trigger Editor and Mission Briefing lend `s
 would drop unapplied edits; for Trigger Map); `DialogSlotId` widens it to any string because a plugin dialog can
 offer a slot of its own — `DialogSpec.slot = { id, payload, fields }`, passed through by
 `PluginDialog` to the same `DialogFrame` prop — which is how the TrigEdit plugin's Text Trigger
-Editor keeps the scmjs.dev buttons under `"trigedit.text"`) and `api.view.flash` (`host.ts#flashOnMap` resolves the target
+Editor keeps the scmjs.dev buttons under `"trigedit.text"`) and `api.view.flash` (`host/view.ts#flashOnMap` resolves the target
 to boxes in map pixels *at call time* onto `viewFlashesAtom`; `MapViewport` paints them after
 the `"everything"` overlays, gold for `change` and teal for `attention`, and an effect repaints
 every frame while any is live, sweeping the list when the last expires). All additive;
@@ -158,7 +167,7 @@ palette's snap option, `tx.canPlaceUnit` is `checkPlacement` with `placementOpti
 
 A plugin writes to the map in exactly the three ways the editor itself does, and the API names
 them: `document.edit` (terrain and objects, one `HistoryEntry`), **`document.update`**
-(`host.ts#runUpdate` — the tables and settings every dialog's OK writes: `tx.triggers` /
+(`host/update.ts#runUpdate` — the tables and settings every dialog's OK writes: `tx.triggers` /
 `tx.briefing` over `editor/triggers.ts`, `tx.strings` (`internString` / `setString` /
 `applyStrings`), `tx.switches`, `tx.properties`; operations apply as they are called, exactly as
 `runTransaction`'s do — which is what keeps a working-copy ordering hazard, switch names interning
@@ -178,7 +187,7 @@ views without a transaction; `document.resize` is `resizeDocumentAtom` (one `who
 (hit-testing through the layers' own functions, `validateScenario`, `mapStatistics`,
 `findInScenario`, `stringUsages`), `api.view` (`zoomAtom`, `viewportRectAtom`, `centerViewOnAtom`,
 `viewFlagsAtom`, and `goTo` taking the same shape `Issue.target` carries, so a linter can scroll to
-what it found; `reveal` is the shortest move that shows a rect, worked out in `host.ts` against
+what it found; `reveal` is the shortest move that shows a rect, worked out in `host/view.ts` against
 `viewportRectAtom` and `ZOOM_STEPS` — with `fit` the zoom is set first and the target origin is
 measured from the centre, because `MapViewport`'s zoom layout-effect keeps the centre — and posted
 as a `ViewCenterRequest` with `animate` and `done`; `MapViewport` glides there in its own rAF
@@ -211,7 +220,7 @@ while the menu is open) and `pluginContextRows` runs only
 then, after `onContextMenu` has recorded the tile and pixel (`menuTarget`). Rows built on every
 render see the *previous* render's context — null on a fresh map — so any item whose `visible` looks at
 `ctx.point` never shows (found by Magenta's right-click starters).
-The `"document"` event carries a `DocumentEvent { reason, fileName, id }` (`host.ts#documentEvent` over
+The `"document"` event carries a `DocumentEvent { reason, fileName, id }` (`host/events.ts#documentEvent` over
 `documentChangeAtom`, which `loadDocumentAtom` — `reason` on `LoadedDocument`, `"open"` by default, `"new"`
 from File ▸ New, `"replace"` from `replaceScenarioAtom`, `"switch"` from `activateDocumentAtom` and from
 `closeDocumentAtom` when another map takes the front — and `closeDocumentAtom` write; `id` is
@@ -258,7 +267,7 @@ because `.btn` is `inline-flex`, an author rule that beats the browser's own
 work ends. Nothing here tests the widgets' DOM: the test environment is node, and a
 DOM test runner is a dependency the repository does not carry.
 For a plugin keeping clips of its own (Stamp Library):
-`clipboard.capture(source?, { parts? })` (`host.ts#clipboardApi`'s `take` with a parts override, not
+`clipboard.capture(source?, { parts? })` (`host/clipboard.ts#clipboardApi`'s `take` with a parts override, not
 stored), `EditTransaction.paste(clip, tx, ty, { parts?, mode? })` (`pasteClip` run inside
 `runTransaction` — it applies as it builds, so the op only folds its `HistoryEdit` lists into the
 transaction's `Stroke`s and arrays and moves `serial` past `nextSerial(scn)`; defaults are every part
@@ -304,7 +313,7 @@ the types and `entryArea` / `entryParts`: the area is the bounding box of every 
 (terrain, doodad tiles, fog) and of the tile under each object record's position before and after,
 because the history lists are already that — no rescan of the map. ISOM changes are not counted
 separately (they always come with tile changes); a created or rebuilt lattice or a created MASK counts as
-the whole map. `host.ts#commitEvent` adds the document id. `rollbackEntryAtom` sends nothing: nothing
+the whole map. `host/events.ts#commitEvent` adds the document id. `rollbackEntryAtom` sends nothing: nothing
 that was announced changed. Opening, closing and switching are deliberately not commits.
 `tileset.load(id?)` resolves `TILESETS` index → `TILESET_FILENAMES` and calls `ensureTileset`, which
 leaves the map alone and just fills the cache `peekTileset` reads — which is all `renderClip` needed to
@@ -325,7 +334,7 @@ honours the remembered `SaveOptions`), `tx.replaceTerrain` / `fillArea` / `place
 `updateDoodads` / `restoreAnywhere` / `invertFog` / `copyFog` / `floodFog`, `tx.strings.import`,
 `tx.cuwp`, `settings.unitAvailable` / `cuwpSlots`, `query.fogAt` / `strings`
 (`placement` answers null without a map), `terrain.floodRegion` / `blendCandidates` / `flatGroupOf` /
-`symmetry` / `setSymmetry` / `mirror`, `selection.lockedLayers`, `api.clipboard` (`host.ts#clipboardApi`
+`symmetry` / `setSymmetry` / `mirror`, `selection.lockedLayers`, `api.clipboard` (`host/clipboard.ts#clipboardApi`
 over `editor/clipboard.ts`, sharing the user's clip), `api.exchange` (`.trg` and the strings text),
 `palette.placementOptions` / `doodadPlacement` / `locationSnap` / `fogViewPlayer`, `ui.statusText` /
 `toast` / `saveFile` / `ask`, and the `"options"` and `"file"` events. `ui.repaint` bumps
@@ -354,7 +363,7 @@ conveniences the AI features asked for: `document.history()` peeks at both stack
 `PlacementVerdict.reason` (`placement.ts#placementReason`, shared with the Units layer's status line) says the
 problem in words.
 
-`api.document.buildSteps` is the save-time compiler hook — `host.ts#addBuildStep` onto
+`api.document.buildSteps` is the save-time compiler hook — `host/document.ts#addBuildStep` onto
 `pluginBuildStepsAtom` (same plugin + id replaces), `builtBy()` over `builtByAtom`, and
 `ExportOptions.built`. Everything about what it does to the file is in `saving.md`; the host half is
 only the registration.
@@ -384,7 +393,7 @@ additive for a plugin's *type-check* (never its behaviour): a plugin helper type
 
 ### Map buttons (`ui.mapButton`)
 
-`pluginMapButtonsAtom`, `addMapButton` in host.ts (a copy of `addStatusItem`'s shape), drawn by
+`pluginMapButtonsAtom`, `addMapButton` in `host/surfaces.ts` (a copy of `addStatusItem`'s shape), drawn by
 `PluginMapButtons` at the head of `.map-hud` (`viewport/ViewportHud.tsx`) — its own component so a badge
 change does not render the viewport. `.map-hud` has `pointer-events: none`; `.hud-btn` turns
 it back on for the button only. For the scmjs.dev plugin's shared-map chat: nothing else lets a
@@ -422,7 +431,7 @@ native Open dialog still filters to maps — replays reach it by drop. Read as a
 `.rep` is a bare CHK to the reader and becomes an empty 64×64 map, which is what the router prevents.
 
 **Map views** (for Aftermath's Game view). `ui.mapView({ title, mount })` →
-`addMapView` (host.ts): one `div.plugin-map-view-body` made at registration and handed to
+`addMapView` (`host/mapView.ts`): one `div.plugin-map-view-body` made at registration and handed to
 `mount` (none in node, so `mount` is not called in tests), an entry on `pluginMapViewsAtom`,
 and per-map state in `mapViewStateAtom` (`offered` doc → keys in offer order, `shown` doc →
 key; -1 stands for a map with no slot). The rules are the pure steps in
@@ -454,7 +463,7 @@ without `minimap` leaves the minimap to the map. `MapViewport` paints nothing wh
 (`coveredRef` in `scheduleDraw`'s frame and in the animation tick; a pending draw waits and
 one is booked on uncover) — so `api.view.visible()` / `viewportRectAtom` stay at the last
 paint while a view is shown, which is exactly the map's place for the switch. The switch:
-`watchMapViewSwitches` (host.ts, once per store, installed by the first `addMapView`) sees
+`watchMapViewSwitches` (`host/mapView.ts`, once per store, installed by the first `addMapView`) sees
 `mapViewSwitch(before, after)` on the same doc only (a tab switch is not a switch). To a
 view: `spec.onShow(look)` with the previous view's camera or `cameraOfMap(viewportRectAtom)`.
 To the map: when the view had a camera, `mapLookAt` → `zoomAtom` (the tighter of width/height
@@ -589,7 +598,7 @@ storage and source side.
 `gameData.storedPath(member)`; `gameData.rehash(hash | null)` (sync, null when no reader source); `GameDataSource.base`
 also for a reader. `PickFilesOptions.directory` + overloads (`{ directory: true }` → `FolderFile[]`, a third catch-all
 overload so a caller holding a plain `PickFilesOptions` still compiles; the host's implementation is cast to
-`UiApi["pickFiles"]`): `host.ts#pickFolder` = `showDirectoryPicker({ mode: "read", id: "plugin-folder" })` walked
+`UiApi["pickFiles"]`): `host/ui.ts#pickFolder` = `showDirectoryPicker({ mode: "read", id: "plugin-folder" })` walked
 (`folders.ts#directoryHandleFiles`), AbortError → `[]`, any other error → logged, then `<input webkitdirectory>`
 (`folderInputFiles`). Paths from the folder's parent, folder name first, sorted. `FileTypeSpec.openFolder` /
 `acceptsFolder`: a type with `openFolder` registers even with no extensions (left out of `pickerFileTypes`);
@@ -662,7 +671,7 @@ check is to drop a mod's folder in Windows Chrome and read the info line's `byEn
 operating system's own files, `mods.md` "An operating system's files have no line"; for the rest the entry walk is the
 route that sees everything.)
 
-The picker (`host.ts#pickFolder`, so `ui.pickFiles({ directory: true })` and `missingTerrain.ts`'s Choose the mod's folder…) has
+The picker (`host/ui.ts#pickFolder`, so `ui.pickFiles({ directory: true })` and `missingTerrain.ts`'s Choose the mod's folder…) has
 only the handle and cannot be made whole, and cannot honestly say it is short: the handle gives no count of what it skipped, and
 `getFileHandle` / `getDirectoryHandle` by a kept-back name throws `TypeError: Name is not allowed` whether the file is there or
 not (measured), so there is nothing to probe. Nothing is built for it; the readers' docs say which kinds are left out and that
@@ -680,7 +689,7 @@ unstretched, so the footprint's corner is that plus `stretched.offset`; answers 
 when it does not fit; no ground check; at most `MAX_STRETCH_STEPS` 128), `tx.heal(cells)`, `tx.pin(cells,
 on?)`, `terrain.seamStep` / `seams` / `pinned` / `handLaid` / `symmetryShares` / `fairness`,
 `palette.stretchAxes` / `doodadTwin`; types `StretchAxis`, `FairnessReport`, `FairnessPlace`,
-`UnmatchedResource`. **A transaction's rule-based writes skip pinned tiles** (`applyRuled` in `runEdit`:
+`UnmatchedResource`. **A transaction's rule-based writes skip pinned tiles** (`applyRuled` in `runTransaction`:
 `stampTerrain`, `fillFlat`, `fillArea`, `replaceTerrain`, `heal`; `paintIsom` and `tilesFromIsom` pass
 the pins to the pass), because a pin that only the built-in brushes honoured would be undone by the
 first generator plugin; `setTile(s)`, `placeBlend`, `paste` and the doodad calls write through, as the

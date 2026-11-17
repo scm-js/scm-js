@@ -11,7 +11,7 @@ blame `cli-git.md`.
 
 - **The editor's code, not a copy.** A map is opened with core's `openMapBytes` (`src/editor/mapFile.ts`, the
   byte-level half of the editor's `openMapFile`) into an `OpenedMap`: built maps restored, members read, warnings —
-  what the editor would show. `loadMapInput` / `openForEdit` wrap it with the CLI's errors (`MapReadError`, exit 2;
+  what the editor would show. `loadMapInput` / `openMap` (`files.ts`) wrap it with the CLI's errors (`MapReadError`, exit 2;
   `looksLikeScenario` in `readArchive` refuses a file that is not a map).
 - **No game data unless a command asks for it.** Statistics are `mapStatistics` with no tileset or dat (no terrain
   table, no building counts); the check is `validateScenario(scn, { extras })`, so the rules that need the tileset or

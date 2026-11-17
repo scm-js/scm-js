@@ -843,7 +843,7 @@ function ViewPage({ w, patch }: { w: Working; patch: (p: Partial<Preferences>) =
             <Field label={t("Ripple pictures a second")}><NumberInput value={fx.rate} min={1} max={60} step={1} width={90} onChange={(v) => effects({ rate: v })} /></Field>
             <Field label={t("Lava heat")}><NumberInput value={fx.heat} min={0} max={4} step={0.1} unit="px" width={110} onChange={(v) => effects({ heat: v })} /></Field>
           </div>
-          <div className="row" style={{ marginTop: 4 }}>
+          <div className="row" style={{ marginTop: 8, marginBottom: 6 }}>
             <Button size="sm" onClick={() => patch({ remasteredEffects: DEFAULT_REMASTERED_EFFECTS })}>{t("Put these back")}</Button>
           </div>
           <Hint>{t("How Remastered's water and lava move while View ▸ Animate Water is on. Sizes are in map pixels, 32 to a tile; a bend or heat of 0 leaves them still. The water speed above applies to these too.")}</Hint>

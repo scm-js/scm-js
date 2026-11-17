@@ -227,7 +227,7 @@ export function useDoodadTools() {
       const spots = Math.round(long.plan.islandsPerStep * steps) * placed;
       if (spots > 0) notes.push(t("it leaves {n, plural, one {# small spot} other {# small spots}} units cannot walk on, which View ▸ Walkability shows", { n: spots }));
       const shown = Math.round(long.plan.shownPerStep * steps) * placed;
-      if (shown > 0) notes.push(t("{n, plural, one {# of its joins shows} other {# of its joins show}}, which View ▸ Seam Overlay marks", { n: shown }));
+      if (shown > 0) notes.push(t("it leaves {n, plural, one {# seam} other {# seams}}, which View ▸ Seam Overlay marks", { n: shown }));
       setStatus(notes.length ? `${base} — ${notes.join("; ")}` : base);
     } else {
       const base = asTerrain ? t("Placed {what} ({w}×{h}) as terrain at tile {x}, {y} — Esc or right-click to stop placing", where) : t("Placed {what} ({w}×{h}) at tile {x}, {y} — Esc or right-click to stop placing", where);

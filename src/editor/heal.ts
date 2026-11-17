@@ -106,6 +106,43 @@ export function shownSeams(scn: Pick<Scenario, "width" | "height" | "tiles">, ti
 }
 
 /**
+ * How many joins the Seam Overlay draws over the whole map, each once: `shownSeams` of
+ * every cell, without building the set.
+ */
+export function countSeams(scn: Pick<Scenario, "width" | "height" | "tiles">, tileset: Tileset): number {
+  const { width, height, tiles } = scn;
+  let shown = 0;
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const megatile = megatileForTile(tileset, tiles[y * width + x]);
+      if (megatile <= 0) continue;
+      if (x + 1 < width) {
+        const right = megatileForTile(tileset, tiles[y * width + x + 1]);
+        if (right > 0 && seamStep(tileset, megatile, "right", right) > SEAM_SHOWS) shown++;
+      }
+      if (y + 1 < height) {
+        const below = megatileForTile(tileset, tiles[(y + 1) * width + x]);
+        if (below > 0 && seamStep(tileset, megatile, "bottom", below) > SEAM_SHOWS) shown++;
+      }
+    }
+  }
+  return shown;
+}
+
+/** Why healing some cells changed nothing: no seam there, only seams on a placed doodad, or no look-alike tile. */
+export type HealMiss = { why: "none" } | { why: "doodad" | "noMatch"; seams: number };
+
+/** Read after `healTiles` returned no change for the cells of `indices`. */
+export function healMiss(scn: Scenario, tileset: Tileset, indices: Iterable<number>): HealMiss {
+  const cells = [...indices];
+  const seams = shownSeams(scn, tileset, cells);
+  if (seams === 0) return { why: "none" };
+  // Heal leaves a doodad's tiles alone; when every seam is on one, that is the reason.
+  const open = shownSeams(scn, tileset, cells.filter((at) => scn.tiles[at] === scn.editorTiles[at]));
+  return { why: open === 0 ? "doodad" : "noMatch", seams };
+}
+
+/**
  * The changes that mend the joins around the cells of `indices`, in the order given, each
  * against its neighbours as the ones before it left them. Cells under a placed doodad are
  * left alone (the picture there is the doodad's, and trading one of its tiles would strand

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ContextMenu } from "radix-ui";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { Grid3x3, LayoutGrid, Maximize2, Puzzle, Rows3, Search, Shuffle, X } from "lucide-react";
@@ -7,8 +7,10 @@ import {
   rectVariationAtom, symmetryAtom, terrainModeAtom, type TerrainMode,
 } from "../../atoms/editorAtoms";
 import { activeLayerAtom, clipSelectionAtom, pinBrushUnpinsAtom, tileBrowserAtom, viewFlagsAtom } from "../../atoms/editorAtoms";
-import { pinnedTilesAtom, scenarioAtom, terrainRevisionAtom } from "../../atoms/documentAtoms";
+import { doodadsRevisionAtom, pinnedTilesAtom, scenarioAtom, terrainRevisionAtom } from "../../atoms/documentAtoms";
 import { countPins } from "../../editor/pins";
+import { countSeams, shownSeams } from "../../editor/heal";
+import type { Rect } from "../../editor/terrain";
 import { pluginContextItemsAtom } from "../../atoms/pluginAtoms";
 import { openDialogAtom } from "../../atoms/uiAtoms";
 import { pluginContextRows } from "../../plugins/contextMenu";
@@ -479,8 +481,41 @@ function BlendSide({ side, list, loaded, onPick }: { side: Side; list: BlendCand
 }
 
 /**
- * The Heal brush's tab: nothing to pick, so it says what the brush does and offers the
- * same over the marked area or the whole map.
+ * How many seams the overlay draws over the whole map or the marked area, counted again a
+ * moment after the ground stops changing (a stroke bumps the revision on every step).
+ */
+function useSeamCount(area: Rect | null): number | null {
+  const scenario = useAtomValue(scenarioAtom);
+  const { loaded } = useTileset();
+  const terrainRevision = useAtomValue(terrainRevisionAtom);
+  const doodadsRevision = useAtomValue(doodadsRevisionAtom);
+  const [count, setCount] = useState<number | null>(null);
+  const counted = useRef(false);
+  useEffect(() => {
+    if (!scenario || !loaded) {
+      setCount(null);
+      counted.current = false;
+      return;
+    }
+    const timer = setTimeout(() => {
+      counted.current = true;
+      if (!area) {
+        setCount(countSeams(scenario, loaded.tileset));
+        return;
+      }
+      const cells: number[] = [];
+      for (let y = Math.max(0, area.y0); y < Math.min(scenario.height, area.y1); y++) for (let x = Math.max(0, area.x0); x < Math.min(scenario.width, area.x1); x++) cells.push(y * scenario.width + x);
+      setCount(shownSeams(scenario, loaded.tileset, cells));
+    }, counted.current ? 200 : 0);
+    return () => clearTimeout(timer);
+  }, [scenario, loaded, area, terrainRevision, doodadsRevision]);
+  return count;
+}
+
+/**
+ * The Heal brush's tab: nothing to pick, so it says what a seam is and what the brush
+ * does, counts the seams, and offers the same over the marked area or the whole map. The
+ * map shows the seams while the tab is open (MapViewport), as the Pin tab shows the pins.
  */
 function HealTab() {
   const scenario = useAtomValue(scenarioAtom);
@@ -488,11 +523,20 @@ function HealTab() {
   const markedArea = useAtomValue(clipSelectionAtom);
   const [flags, setFlags] = useAtom(viewFlagsAtom);
   const tools = useTerrainTools();
+  const seams = useSeamCount(markedArea);
   return (
-    <div className="hint" style={{ padding: "10px 12px", display: "grid", gap: 10, justifyItems: "start" }}>
-      <div>{t("Drag over joins that show. Where the tileset has a tile that joins its neighbours better and is the same tile to the game (it walks, builds and blocks sight alike, at the same height, and is the same kind of ground), that tile is laid instead. Ground that already joins is left as it is, and so are placed doodads.")}</div>
-      <Check label={t("Show the joins (View ▸ Seam Overlay)")} checked={flags.seams} onChange={(e) => { countView("seams", e.target.checked, "palette"); setFlags({ ...flags, seams: e.target.checked }); }} />
-      <Button size="sm" disabled={!scenario || !loaded} onClick={() => tools.heal(markedArea ?? undefined)}>
+    <div className="hint" style={{ padding: "10px 12px", display: "grid", gridTemplateColumns: "minmax(0, 1fr)", gap: 10, justifyItems: "start" }}>
+      <div>{t("A seam is a line where two tiles' pictures do not meet, often around hand-placed tiles, stretched ramps and pasted blocks. The pink lines on the map mark them.")}</div>
+      <div>{t("Drag over a seam and Heal swaps in a look-alike tile that lines up better. It only uses tiles that play exactly the same (walking, building, height and sight), so the map plays as before. The Tile and Blend brushes are for the seams it leaves.")}</div>
+      {seams !== null && (
+        <div>
+          {markedArea
+            ? t("{n, plural, =0 {No seams} one {# seam} other {# seams}} in the area marked on the Cut / Copy / Paste layer.", { n: seams })
+            : t("{n, plural, =0 {No seams} one {# seam} other {# seams}} on this map.", { n: seams })}
+        </div>
+      )}
+      <Check label={t("Always show (View ▸ Seam Overlay)")} checked={flags.seams} onChange={(e) => { countView("seams", e.target.checked, "palette"); setFlags({ ...flags, seams: e.target.checked }); }} />
+      <Button size="sm" disabled={!scenario || !loaded || seams === 0} onClick={() => tools.heal(markedArea ?? undefined)}>
         {markedArea ? t("Heal the Marked Area") : t("Heal the Whole Map")}
       </Button>
     </div>

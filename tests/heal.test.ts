@@ -7,7 +7,7 @@ import { loadMap } from "../src/formats/mpq/scm";
 import { loadTileset, megatileForTile, tileGroupOf, type Tileset } from "../src/formats/tileset/decode";
 import { TILESET_FILENAMES } from "../src/formats/tileset/load";
 import { SEAM_SHOWS, seamStep } from "../src/editor/blend";
-import { healTiles, shownSeams } from "../src/editor/heal";
+import { countSeams, healMiss, healTiles, shownSeams } from "../src/editor/heal";
 
 /* ── A synthetic tileset ── */
 
@@ -108,6 +108,26 @@ describe("the Heal brush", () => {
     expect(shownSeams(scn, ts, [0])).toBe(1);
     expect(shownSeams(scn, ts, [1])).toBe(2);
   });
+
+  it("counts the whole map's seams as the cells' count does, across rows too", () => {
+    for (const [width, tiles] of [[3, [G, R, G]], [3, [R, R, G, G, R, R]], [2, [R, G, G, R, R, R]], [4, [R, NR, R, NR]]] as const) {
+      const scn = map(width, [...tiles]);
+      expect(countSeams(scn, ts), tiles.join()).toBe(shownSeams(scn, ts, all(scn)));
+    }
+    expect(countSeams(map(2, [R, G, G, R]), ts)).toBe(4);
+  });
+
+  it("says why it changed nothing: no seam, a doodad's seam, or no look-alike tile", () => {
+    expect(healMiss(map(4, [R, NR, R, NR]), ts, [0, 1, 2, 3])).toEqual({ why: "none" });
+    // A seam whose only tile Heal may change is a doodad's.
+    const doodad = map(2, [R, G]);
+    doodad.editorTiles[0] = NR;
+    expect(healMiss(doodad, ts, [0])).toEqual({ why: "doodad", seams: 1 });
+    // The walkable tile ends on green beside red, and has no other tile of its kind to trade for.
+    const walked = map(2, [WALKABLE, R]);
+    expect(healTiles(walked, ts, [0])).toEqual([]);
+    expect(healMiss(walked, ts, [0])).toEqual({ why: "noMatch", seams: 1 });
+  });
 });
 
 /* ── The game's maps, where they are present ── */
@@ -148,6 +168,7 @@ describe.skipIf(!have)("healing the game's own maps", () => {
       expect(changes.length / cells.length, file).toBeLessThan(0.05);
       const after = shownSeams(scn, tileset, cells);
       expect(after, file).toBeLessThanOrEqual(before);
+      expect(countSeams(scn, tileset), file).toBe(after);
       // A second pass finds little left to do: what could be mended was.
       expect(healTiles(scn, tileset, cells).length, file).toBeLessThanOrEqual(changes.length / 4 + 2);
     }

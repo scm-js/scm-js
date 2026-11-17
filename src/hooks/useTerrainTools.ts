@@ -21,7 +21,7 @@ import {
   applyChanges, brushRect, floodRegion, laidPairAt, laidPairs, replaceTerrain, stampTerrain, stampTile,
   Stroke, type Rect, type TerrainPick, type TileChange,
 } from "../editor/terrain";
-import { healTiles, shownSeams } from "../editor/heal";
+import { healMiss, healTiles, shownSeams, type HealMiss } from "../editor/heal";
 import { tileBlockAtom } from "../atoms/tileBlockAtoms";
 import { blockCells, layPattern, PatternStroke, type TileBlock } from "../editor/tileSheet";
 import { pieceBlock } from "../editor/pieces";
@@ -77,7 +77,7 @@ function borrowNote(r: BorrowStrokeResult): string {
     out += t(" — drawn border: {drawn, plural, one {# cell} other {# cells}} drawn, {hard, plural, one {# left} other {# left}} hard", { drawn: r.borders.drawn, hard: r.borders.hard });
     if (r.borders.unlike > 0) out += t(" ({n, plural, one {# border tile walks} other {# border tiles walk}} unlike either side)", { n: r.borders.unlike });
   }
-  if (r.seams > 0) out += t(" — {n, plural, one {# join} other {# joins}} to this map's own ground show (Heal softens them)", { n: r.seams });
+  if (r.seams > 0) out += t(" — {n, plural, one {# seam} other {# seams}} with this map's own ground (Heal softens them)", { n: r.seams });
   if (r.untranslated > 0) out += t(" — {n, plural, one {# tile has} other {# tiles have}} no copy in this tileset and stayed as they were", { n: r.untranslated });
   if (r.standIns > 0) out += t(" — {n, plural, one {# tile is} other {# tiles are}} the nearest picture this tileset has", { n: r.standIns });
   if (r.reset > 0) out += t(" — borrowed ground other tools wrote over was taken as the base ground again ({n, plural, one {# diamond} other {# diamonds}})", { n: r.reset });
@@ -116,12 +116,24 @@ function copyNote(r: CopyStrokeResult, ground: string): string {
 function relayNote(dropped: number, hard: number): string {
   let out = "";
   if (dropped > 0) out += t(" — copied terrain it reached was laid again ({n, plural, one {# diamond} other {# diamonds}} given up)", { n: dropped });
-  if (hard > 0) out += t(" ({n, plural, one {# join shows} other {# joins show}} where it was cut)", { n: hard });
+  if (hard > 0) out += t(" ({n, plural, one {# seam} other {# seams}} where it was cut)", { n: hard });
   return out;
 }
 
 function keptNote(kept: number): string {
   return kept > 0 ? t(" — {n, plural, one {# pinned tile} other {# pinned tiles}} left as laid (the Pin tab unpins)", { n: kept }) : "";
+}
+
+/** What a heal that changed tiles says: how many, and the seams over the cells it went over before and after. */
+function healedNote(n: number, before: number, after: number): string {
+  return t("Healed {n, plural, one {# tile} other {# tiles}}: {before, plural, one {# seam} other {# seams}} before, {after} now", { n, before, after });
+}
+
+/** What a heal that changed nothing says, so a stroke never ends in silence. */
+function healMissNote(miss: HealMiss): string {
+  if (miss.why === "none") return t("No seam here, so nothing to heal.");
+  if (miss.why === "doodad") return t("{n, plural, one {The seam here is} other {The # seams here are}} on a placed doodad, which Heal leaves whole. Convert the doodad to terrain first.", { n: miss.seams });
+  return t("{n, plural, one {# seam here} other {# seams here}}, but this tileset has no look-alike tile that lines up better and plays the same. The Tile and Blend brushes can mend it by hand.", { n: miss.seams });
 }
 
 /**
@@ -154,6 +166,8 @@ export function useTerrainTools() {
   const pinStroke = useRef<{ before: Uint8Array | null; after: Uint8Array | null } | null>(null);
   /** A stroke of the Tile brush with a block: the press set where the pattern's copies line up. */
   const patternStroke = useRef<PatternStroke | null>(null);
+  /** A stroke of the Heal brush: every cell it went over, for the seams its status line counts. */
+  const healStroke = useRef<Set<number> | null>(null);
 
   const info = TILESET_BY_ID[useAtomValue(mapTilesetAtom)];
   const loaded = peekTileset(useAtomValue(tilesetFileNameAtom));
@@ -264,7 +278,9 @@ export function useTerrainTools() {
         setStatus(t("The Heal brush needs the tileset graphics — Help ▸ Game Data…"));
         return null;
       }
-      return unpinned(healTiles(scn, loaded.tileset, footprint(scn, x, y)));
+      const cells = footprint(scn, x, y);
+      if (healStroke.current) for (const at of cells) healStroke.current.add(at);
+      return unpinned(healTiles(scn, loaded.tileset, cells));
     }
     return null;
   }, [store, loaded, currentTerrain, footprint, unpinned, setStatus]);
@@ -410,6 +426,7 @@ export function useTerrainTools() {
     lastDiamond.current = null;
     strokeKept.current = new Set();
     pinStroke.current = null;
+    healStroke.current = mode === "heal" ? new Set() : null;
     // A block is laid only under the pointer: its pictures cannot be mirrored, so symmetry leaves it alone, as it does a paste.
     const block = mode === "tile" ? store.get(tileBlockAtom) : null;
     patternStroke.current = block ? new PatternStroke(block, { x, y }) : null;
@@ -506,6 +523,21 @@ export function useTerrainTools() {
     const changes = s.finish();
     const isom = is?.finish() ?? [];
     const kept = strokeKept.current.size;
+    const healed = healStroke.current;
+    healStroke.current = null;
+    if (healed && loaded) {
+      // The seams over the cells the stroke went over, as they were (its changes are applied as it goes) and as they are.
+      if (changes.length === 0) {
+        setStatus(kept > 0 ? t("Nothing painted: the tiles here are pinned (the Pin tab unpins)") : healMissNote(healMiss(scn, loaded.tileset, healed)));
+        return;
+      }
+      const was = scn.tiles.slice();
+      for (const c of changes) was[c.at] = c.before;
+      const before = shownSeams({ width: scn.width, height: scn.height, tiles: was }, loaded.tileset, healed);
+      const after = shownSeams(scn, loaded.tileset, healed);
+      commitTerrain(scn, { label: strokeLabel.current, tool: strokeTool.current, changes }, healedNote(changes.length, before, after) + keptNote(kept));
+      return;
+    }
     if (changes.length === 0 && isom.length === 0) {
       if (kept > 0) setStatus(t("Nothing painted: the tiles here are pinned (the Pin tab unpins)"));
       return;
@@ -656,7 +688,7 @@ export function useTerrainTools() {
   }, [store, loaded, terrainOf, commitTerrain, setStatus]);
 
   /**
-   * The Heal tab's button: mend the joins that show over the whole map or a rect, as the
+   * The Heal tab's button: mend the seams over the whole map or a rect, as the
    * Heal brush would over each tile. One undo step. Returns how many tiles changed.
    */
   const heal = useCallback((rect?: Rect): number => {
@@ -669,16 +701,16 @@ export function useTerrainTools() {
     const area = rect ?? { x0: 0, y0: 0, x1: scn.width, y1: scn.height };
     const cells: number[] = [];
     for (let y = Math.max(0, area.y0); y < Math.min(scn.height, area.y1); y++) for (let x = Math.max(0, area.x0); x < Math.min(scn.width, area.x1); x++) cells.push(y * scn.width + x);
-    const before = shownSeams(scn, loaded.tileset, cells);
     const changes = withoutPinned(healTiles(scn, loaded.tileset, cells), store.get(pinnedTilesAtom)).changes;
     if (changes.length === 0) {
-      setStatus(before === 0 ? t("No join shows here — nothing to heal.") : t("{n, plural, one {# join shows} other {# joins show}} here, and the tileset has no tile that would mend one and play the same.", { n: before }));
+      setStatus(healMissNote(healMiss(scn, loaded.tileset, cells)));
       return 0;
     }
+    const before = shownSeams(scn, loaded.tileset, cells);
     applyChanges(scn, changes);
     const after = shownSeams(scn, loaded.tileset, cells);
     const label = t("Heal seams");
-    commitTerrain(scn, { label, tool: "healArea", changes }, t("Healed {n, plural, one {# tile} other {# tiles}}: {before} joins showed, {after} still do", { n: changes.length, before, after }));
+    commitTerrain(scn, { label, tool: "healArea", changes }, healedNote(changes.length, before, after));
     return changes.length;
   }, [store, loaded, commitTerrain, setStatus]);
 

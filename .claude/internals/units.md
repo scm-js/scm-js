@@ -4,8 +4,8 @@
 
 `dat.ts` decodes only the fields the editor needs from the Brood War `arr\*.dat` layout (struct of
 arrays; placement box / add-on offset / extents are arrays of structs — the layout is pinned by
-`tests/dat.test.ts` against the real file). `FlingyDat` gained `topSpeed`, `acceleration`, `haltDistance`, `turnRadius` and
-`moveControl` for `scmjs map analyze` (2026-11-08; additive, so the plugin API's `api.data.flingy()` carries them too).
+`tests/dat.test.ts` against the real file). `FlingyDat` also has `topSpeed`, `acceleration`, `haltDistance`, `turnRadius` and
+`moveControl` for `scmjs map analyze` (additive, so the plugin API's `api.data.flingy()` carries them too).
 `speed.ts#walkSpeed`: flingy.dat's top speed / 256 px a frame, except when `moveControl` is 2 (iscript: Marine,
 Zergling, Zealot, Hydralisk, …, whose top speed is a placeholder 1) — then the Walking animation's loop, Σ`move` /
 Σ`wait` (Marine 36/9 = 4, Zealot 4, Zergling 39/7 ≈ 5.57 against BWAPI's 5.49, Hydralisk 3.71 against 3.66; SCV 5). `units/load.ts` fetches the tables once (`getUnitAssets` /
@@ -49,27 +49,25 @@ scripts for reachable images (`walkAnimation`, `IMAGE_SPAWN_OPS`). `UnitAnimator
 per record (matched by object, then by serial across replacements), each a bottom-to-top `images` stack
 running Init → StarEditInit (turreted vehicles) or Built (buildings); `tick()` is one game frame and the
 viewport's rAF loop drives it alongside water cycling (`GAME_FRAME_MS`), repainting only when `tick()`
-reports a change and units are on screen. **What it costs per frame** (2026-10-04): `sync` runs
+reports a change and units are on screen. **What it costs per frame:** `sync` runs
 before every paint and `tick` 24 times a second, both over every unit on the map, so both are built
 to do nothing when nothing happens. `sync` builds its set of live records only once a record turns up
 without a sprite (or the counts differ) — the steady state is one map lookup per unit — and
 `updateDamage` returns before any path lookup for a healthy unit with no flames. `tickSprite` counts
 the waits down and collects the images whose turn it is into a reused list (a script touches only its
 own image and what it spawns, so running them after the countdown is the same as interleaved), and a
-sprite with none due skips `settle` altogether. That is only right because `settle` is now
+sprite with none due skips `settle` altogether. That is only right because `settle` is
 order-independent: it settles the **main image first**, then the rest — a shadow that follows the
-main graphic sits *under* it in the stack and used to read last frame's value, which the next
-tick's settle put right one frame late; with settle skipped on idle frames it would have stayed
-wrong for the whole wait. `tick(view)` still advances every sprite (units placed together pulse
+main graphic sits *under* it in the stack, and settled in stack order it reads last frame's value,
+which the next tick's settle puts right one frame late; with settle skipped on idle frames it would
+stay wrong for the whole wait. `tick(view)` still advances every sprite (units placed together pulse
 together, and would drift apart if the ones out of sight stood still) but reports a change only for
 a sprite standing inside `view`; the viewport passes the visible box plus `UNIT_MARGIN`, the margin
-the draw pass culls by, so a light blinking across the map no longer repaints the screen.
-`tests/animateSynthetic.test.ts` runs the class on a made-up script with no game files; the change
-was also run tick for tick against the previous implementation for 3,000 frames with a seeded
-`Math.random` (identical but for the follower lag). Measured in Node on 1,700 units of that script:
-`sync` 125 → 30 µs a paint; `tick` 83 → 61 µs when most images are waiting and 274 → 290 µs when
-every unit's script runs every few frames — so the interpreter was never the cost, a quarter of a
-millisecond either way. What a tick costs is the *repaint* it asks for, which is what `view` cuts.
+the draw pass culls by, so a light blinking across the map does not repaint the screen.
+`tests/animateSynthetic.test.ts` runs the class on a made-up script with no game files. Measured in
+Node on 1,700 units of that script: `sync` 30 µs a paint (125 when the live set is built every
+time); `tick` 61 µs when most images are waiting and 290 µs when every unit's script runs every few
+frames — so the interpreter is not the cost, a quarter of a millisecond either way. What a tick costs is the *repaint* it asks for, which is what `view` cuts.
 Damage overlays (image 450/472 + the damage `.lo` slot index — the
 22 slots are laid out Terran 0–7, Zerg 8–15, Protoss 16–21 — count from `hitPointsPercent`) are re-evaluated in `sync`; `creategasoverlays` spawns smoke
 from the special `.lo`. `sprites.ts#getImageFrame` is the per-(image, frame, flip, colour, tileset)
@@ -78,7 +76,7 @@ canvas cache; shadows draw as 50% black, `DrawFunction.Remap` images through the
 running game (attacks, sounds, projectile sprites, condition jumps) is a no-op. `tests/iscript.test.ts`
 and `tests/animate.test.ts` run against the real files when `public/` is populated.
 
-### Remastered sprites: the 2x pictures (`dat/anim.ts`, `dds.ts`, 2026-10-09)
+### Remastered sprites: the 2x pictures (`dat/anim.ts`, `dds.ts`)
 
 View ▸ Remastered Graphics (the same switch as the 2x terrain, `tileset.md`) makes
 `sprites.ts#getImageFrame` draw from `unit/hd/main_NNN.anim` — the installation's
@@ -104,19 +102,19 @@ View ▸ Remastered Graphics (the same switch as the 2x terrain, `tileset.md`) m
 - **A rectangle at a time.** A sheet is up to 12 megapixels and a frame is fifty pixels square.
   DXT blocks decode independently, so `dds.ts#decodeDxtRect` decodes only the blocks under the
   frame; no sheet is ever expanded. The parsed anim holds just the file bytes (avg 280 KB).
-- **What a frame is.** `ImageFrame` gained `scale` (canvas pixels per map pixel: 1 or 2) and
-  `width` / `height` stay in *map* pixels, because every draw already gives the destination size
-  from them — so the viewport, ghosts, export and previews needed no change beyond smoothing
+- **What a frame is.** `ImageFrame` has `scale` (canvas pixels per map pixel: 1 or 2) and
+  `width` / `height` stay in *map* pixels, because every draw gives the destination size
+  from them — so the viewport, ghosts, export and previews need nothing for it beyond smoothing
   (`zoom < spritePx`, a 2x sprite is being reduced up to 200%). The two callers that read the
-  canvas's own pixels did: `UnitPreview` crops by `frame.opaque` (the frame's rectangle, which
+  canvas's own pixels do: `UnitPreview` crops by `frame.opaque` (the frame's rectangle, which
   the anim knows without a GRP), and the plugin image producers in `plugins/graphics.ts` pass
   `hd = false`, since `PluginImage` promises a canvas of `width` × `height`.
 - **Colour.** Team colour is the mask's red channel: `rgb × (1 − m) + rgb × team × m`, with
   `team` the brightest entry of the `tunit.pcx` ramp through the tileset palette (the row's own
   colour — 244, 4, 4 for red) or the CRGB value. Shadows are the diffuse alpha as black at half
   strength; `DrawFunction.Remap` effects are already in their own colours with the glow in the
-  alpha and are drawn "lighter" as before, with no remap table.
-- **A file per GRP, not per image (found 2026-10-12, by the user: a Command Center drew its
+  alpha and are drawn "lighter" as the classic ones are, with no remap table.
+- **A file per GRP, not per image (found by the user: a Command Center drew its
   classic body under Remastered's working overlay).** `HD2/anim/` has 868 files for 999 images:
   where two images.dat entries name one GRP only one has a `main_NNN.anim`, and the other is
   drawn from it — a Command Center is image 275 and its file is 63's. 128 of the 131 images
@@ -124,30 +122,29 @@ View ▸ Remastered Graphics (the same switch as the 2x terrain, `tileset.md`) m
   `load.ts#requestAnim` falls to the first of them the manifest's `hd` list has
   (`sharedAnims`, cleared with the data set); and the extraction takes a GRP-mate's file
   where the mate is not itself reachable (329 for 330, 547 for 548 — in `hd` without being in
-  `images`), under the mate's own number, so nothing is stored twice. A copy made before this
-  has 101 of the 103 already and lacks those two until it is installed again.
-- **A frame may reach past the box, and a shared sheet is in the other image's colours (2026-10-13,
-  both found on the play page first and ported from scm-sim's `web/renderer.ts`).** The box is what
+  `images`), under the mate's own number, so nothing is stored twice. An older copy
+  has 101 of the 103 and lacks those two until it is installed again.
+- **A frame may reach past the box, and a shared sheet is in the other image's colours (both
+  found on the play page first and ported from scm-sim's `web/renderer.ts`).** The box is what
   a frame is centred by, not what holds it: an Overlord flying north reaches a tenth of its height
-  past it, a Pylon's shadow does too. `drawAnimFrame` used to push such a frame back inside (the
-  unit jerked between facings, the shadow sat short); it now places the frame at its own offset
+  past it, a Pylon's shadow does too. Pushed back inside the box, such a frame makes the
+  unit jerk between facings and the shadow sit short, so `drawAnimFrame` places the frame at its own offset
   and grows the canvas by the overhang **on both sides**, so the middle is still the box's and
   every caller goes on centring by `width` / `height` — which are therefore per frame, not per
   image. And a glow drawn from a GRP-mate's sheet (`load.ts#animImage` says whose) is that image's
   finished picture: protoss building fire (488–490) came out in the terran fire's orange.
   `glowOrder` turns red, green and blue round to the order that brings the one remap table's
   colour nearest the other's (red and blue swap). How Remastered itself colours it is in no file
-  read here. Neither was looked at in a browser in the editor; the comparison picture in the
-  guide was re-shot after them.
-- **A turret stands where the body's special overlay file says (2026-10-13, found by the user on
+  read here. Neither was looked at in a browser in the editor.
+- **A turret stands where the body's special overlay file says (found by the user on
   a Remastered Siege Tank).** The game sets a subunit's image offset to slot 0 of the body's
   images.dat special overlay `.lo` at the body's frame (`tank.lol`: about 10 px up and 9–13
   behind the hull's middle; `stank.lol` −9, −16; `goliath.lol` all zero) — OpenBW's
   `set_image_offset(…, get_image_lo_offset(main_image, 2, 0))`, and what the play page reads
-  from the engine as each image's own offset. The editor drew the turret at the body's centre in
-  both modes. Classic hid it (the turret's GRP frames sit in the middle of their box, so it read
+  from the engine as each image's own offset. A turret drawn at the body's centre is wrong in
+  both modes. Classic hides it (the turret's GRP frames sit in the middle of their box, so it reads
   as a tank with the turret a little far forward); Remastered's frames have the pivot at the
-  box's middle and the barrels ahead of it, and the turret hung off the front of the hull.
+  box's middle and the barrels ahead of it, so the turret hangs off the front of the hull.
   `animate.ts` pins the pose's turret overlay (`StarEditInit`'s `imgol` of the subunit's image)
   to that slot through `ImageState.lo`, or gives a subunit sprite a `mount`; `settleImage`
   mirrors a pinned x when the body's frame is flipped. The still pose goes through
@@ -167,7 +164,7 @@ View ▸ Remastered Graphics (the same switch as the 2x terrain, `tileset.md`) m
   shadows agree with classic; no errors. Not looked at: a damaged building's fire, cloaked units,
   the unit palette thumbnails, an exported image.
 
-Links and gas the game reads (2026-10-17 audit, OB1/OB3; runs O3/O3b/O7 in the lifted 1.16.1):
+Links and gas the game reads (run in the lifted 1.16.1):
 - The game links an add-on to its building, or two Nydus Canals, only when **both** records name
   each other's serial; the relation word is ignored (StarEdit writes 0x200 on both). `linkPlaced`
   (units.ts) runs after every placement in `useUnitTools.placeAt`: an add-on at `ADDON_OFFSET`
@@ -179,9 +176,9 @@ Links and gas the game reads (2026-10-17 audit, OB1/OB3; runs O3/O3b/O7 in the l
 
 ## Codecs for mods (M2)
 
-Added 2026-11-08 for the mods plan (`scm-sim` branch mods-plan, `docs/mods-plan.md`, slice M2): every data file a mod
-changes, read **and written**, beside the editor's old readers (`dat.ts`, `tbl.ts`, `grp.ts`, `pcx.ts`, `lo.ts`, `iscript.ts` decode only what the
-editor draws; since M4 `dat.ts` reads through `decodeDat` and `iscript.ts` through `readIscriptHeaders` — see
+For the mods plan (scm-sim `docs/mods-plan.md`, slice M2): every data file a mod
+changes, read **and written**, beside the editor's own readers (`dat.ts`, `tbl.ts`, `grp.ts`, `pcx.ts`, `lo.ts`, `iscript.ts` decode only what the
+editor draws; `dat.ts` reads through `decodeDat` and `iscript.ts` through `readIscriptHeaders` — see
 `gamedata.md` "Data sets widened"). All are pure, no
 game data, exported from `@scm-js/core` (index.ts "Mods" block), and walk clean in `tests/core.test.ts`.
 
@@ -270,9 +267,9 @@ game data, exported from `@scm-js/core` (index.ts "Mods" block), and walk clean 
   `fixtures/data/*.mpq` (`tests/support/modFiles.ts`), Cosmonarchy's from `SCMJS_COSMONARCHY` (the download's root);
   both skip when absent.
 
-### The palette's groups under a data set (C7 audit (2026-11-08, branch `c7-editor`))
+### The palette's groups under a data set
 
-`gameNames.ts#unitCatalogue(assets, names)` now also puts ids 0–227 into `extended` when the data set **renamed** the
+`gameNames.ts#unitCatalogue(assets, names)` also puts ids 0–227 into `extended` when the data set **renamed** the
 type (`names.units[id] != null`, i.e. `namesFromAssets`' rule says it differs from the game's own) **and** the set's
 race (group flags) / building / hero flags no longer fit StarEdit's group for that id (`STAREDIT_GROUP_OF`, read off
 `UNIT_GROUPS`' labels: race groups' Units = !building !hero, Buildings = building, Heroes = hero; the neutral groups
@@ -281,6 +278,6 @@ take any neutral). `starEditUnitGroups()` is `UNIT_GROUPS` less those ids (the s
 dialogs, Unit Settings, the trigger unit pick) and `api.palette.unitGroups` read it. Why "renamed": a Remastered or
 StarEdit profile is not the default profile but has the game's data, whose flags do not fit StarEdit's groups either
 (turrets are Terran, the Overmind is in Special) — keyed on the names, the game's data moves nothing under any profile.
-The catalogue now exists for a 228-type set that moved something. Cosmonarchy: Liiralisk (112) and Manifold (16) under
+The catalogue exists for a 228-type set that moved something. Cosmonarchy: Liiralisk (112) and Manifold (16) under
 "Cosmonarchy BW · Zerg/Protoss Units"; Terran Maverick (0) stays in Terran Units; Protoss Heroes keeps 1, Turrets &
 Unused 1, Special 5. `tests/palette-groups.test.ts`.

@@ -278,11 +278,13 @@ describe.skipIf(!haveTypes)("the plugin guide", () => {
 });
 
 /**
- * `docs/file-formats.md` and `docs/game-data.md` are written for readers — map makers,
- * developers, anyone curious about the format — and not as implementation notes (those
- * are `CLAUDE.md` and the source's own comments). Each ends with one "In the source"
- * section that points a developer at the modules; that section is the only place a `src/`
- * path belongs, and an atom or hook name belongs nowhere in them.
+ * The guides are written for readers — map makers, mod makers, developers meeting the
+ * format — and not as implementation notes (those are `.claude/internals/` and the source's
+ * own comments). Each guide in `GUIDES` ends with one "In the source" section that points a
+ * developer at the modules; that section is the only place a `src/` path belongs. The
+ * prose rule also covers the guides with no such section (the user guide, the installing
+ * guide, the three TrigScript guides and the README): no `src/` path at all. An atom or hook
+ * name belongs in none of them.
  */
 describe("the map files and game data guides", () => {
   const GUIDES = ["docs/file-formats.md", "docs/game-data.md", "docs/triggers.md", "docs/chk-format.md", "docs/cli.md", "docs/ai-tools.md", "docs/core.md", "docs/mods.md", "docs/bots.md"];
@@ -299,7 +301,7 @@ describe("the map files and game data guides", () => {
   });
 
   it("keep the editor's internals out of the prose", () => {
-    for (const file of [...GUIDES, "docs/installing.md", "docs/guide.md", "docs/trigscript.md", "README.md"]) {
+    for (const file of [...GUIDES, "docs/installing.md", "docs/guide.md", "docs/trigscript.md", "docs/trigscript-language.md", "docs/trigscript-library.md", "README.md"]) {
       const text = read(file);
       const prose = text.includes(MARKER) ? text.slice(0, text.indexOf(MARKER)) : text;
       const paths = [...prose.matchAll(/\bsrc\/[\w./-]+/g)].map((m) => m[0]);

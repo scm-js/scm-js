@@ -189,6 +189,9 @@ desktop/        The Electron shell: main process, preload bridge, updater
 cli/            The scmjs command line, built from the editor's code into one file (docs/cli.md)
 core/           The @scm-js/core package: one entry file naming the editor's modules it exports (docs/core.md)
 bot/            The @scm-js/bot package: the bot interface's types, copied from the play page's engine (docs/bots.md)
+action/         The scmjs maps GitHub Action: Check Map and a pull request's changes for the maps in a repository
+packaging/      The Scoop, winget and Homebrew recipes for the scmjs program, with placeholders a release fills in
+trailer/        The demo video's script and shot list, recorded by scripts/trailer.mjs
 scripts/        Extraction, vendoring, the desktop and docs builds, plugin typings, screenshots
 tests/          vitest suites; tests/maps holds the maps they open, made by tests/support
 e2e/            Browser tests: Playwright specs that drive the built editor
@@ -641,9 +644,10 @@ pushed to `ghcr.io/scm-js/scm-js` on a tagged release only, as `latest`, the ful
 and the moving `X.Y` and `X`. One manifest covers `linux/amd64` and `linux/arm64`.
 
 ```sh
-docker run --rm -p 8080:80 ghcr.io/scm-js/scm-js:latest   # http://localhost:8080
-npm run build:image                                       # build it locally, tagged scmjs
+npm run build:image     # build it locally, tagged scmjs
 ```
+
+Running the published image is in [Installing](installing.md#in-a-container).
 
 The image carries no game data: `.dockerignore` keeps the extracted trees out and
 `docker/nginx.conf` answers 404 for those paths, so a container asks through Help ▸ Game
@@ -802,28 +806,7 @@ so that picture is taken on Linux.
 
 ## Contributing
 
-- **Keep the documents current.** The sixteen guides under `docs/` are the documentation
-  site and `README.md` is the repository's front page; a behaviour change that is not in
-  them is undocumented. Write them for their readers, with `src/` paths only in a guide's
-  closing *In the source* section. Keep the matching note in `.claude/internals/` in step
-  too.
-- **Nothing of Blizzard's goes into git.** Not the extracted data, not the archives, not
-  the fixture maps. `.gitignore` covers the generated trees; check before adding a test
-  fixture.
-- **Record where adapted code comes from.** The rule is in
-  [ATTRIBUTION.md](../ATTRIBUTION.md#maintenance-rule): a provenance comment beside
-  adapted algorithms and tables, an entry there naming the source and licence, and the
-  original notice kept.
-- **Run what CI runs**: `npm run verify` runs lint, the tests, the build and the browser
-  tests, and ends with a summary for the pull request: what passed, each test suite that
-  skipped (by file and name, with how many tests), and what could not run on your machine
-  at all. With the game data and fixture maps on disk the real-data suites run too, and
-  that is the run that counts for anything under `src/formats/`.
-- **Plugin API changes are additive.** `PLUGIN_API_VERSION` stays where it is for an
-  addition. Document the addition in `docs/plugins.md` and with a doc comment in
-  `src/plugins/api.ts`, which the reference is generated from. The example plugin at
-  [scm-js/plugin-hello-world](https://github.com/scm-js/plugin-hello-world) should keep
-  building.
-- **The plugins are separate repositories** under
-  [github.com/scm-js](https://github.com/scm-js). A change to the editor that a default
-  plugin needs ships by moving that plugin's tag in `src/plugins/defaults.ts`.
+The rules a pull request is held to — what may not go into git, keeping the documents
+current, translations, the plugin API, credit for adapted code, and what to run first —
+are in [CONTRIBUTING.md](../CONTRIBUTING.md), which GitHub shows when a pull request is
+opened.

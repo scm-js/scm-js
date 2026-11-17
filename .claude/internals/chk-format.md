@@ -7,13 +7,13 @@
   size; this mirrors how the game itself resolves duplicated sections (protected maps depend on it).
   A `last`/`first` spec can carry a `minimum`: `combine` passes over shorter copies (they neither
   count nor replace an earlier one), and `SectionKnowledge.minimum` hands it to plugins (Repair's
-  collapse uses it). **STR's is 2, measured 2026-10-14 in Remastered** on La Mancha 1.1 (KeSPA,
-  protected): real 2470-byte `STR ` first, a 1-byte `STR ` near the end. Taking the last copy lost
-  every string, and Repair's on-open collapse then deleted the real table, so the saved map no
-  longer loaded ("intended for use with a StarCraft expansion set", in Brood War mode too). Probe
+  collapse uses it). **STR's is 2, measured in Remastered** on La Mancha 1.1 (KeSPA,
+  protected): real 2470-byte `STR ` first, a 1-byte `STR ` near the end. Taking the last copy loses
+  every string, and Repair's on-open collapse then deletes the real table, so the saved map does
+  not load ("intended for use with a StarCraft expansion set", in Brood War mode too). Probe
   copies settled the rule: two full tables → the second's name shows (last wins); real + a 2-byte
   count-0 table → loads with `<MISSING>` name (the image's spelling) and description (2 bytes counts). **STRx's is 4**,
-  read from Remastered's loader (2026-10-17: `minimum = 2 + 2·isStrx`), not probed. No other
+  read from Remastered's loader (`minimum = 2 + 2·isStrx`), not probed. No other
   section has one — if another decoy turns up, probe it the same way (Maps/Download copies, user
   reads the lobby) before adding one.
   `serializeChk` writes each header's **declared** size, not `data.length`: the two differ only for a
@@ -29,17 +29,16 @@
   sections (via `encodeSection`'s switch) and emits everything else byte for byte. New sections with no
   existing occurrence go in *among* the ones already there, at the place `APPEND_ORDER` ranks them
   (`insertionPoint`: after the last section that comes before them, else at the front) — appending
-  them at the end instead left a map that got its ISOM back with the lattice past FORC, which no
-  editor writes and the Repair plugin then reported as out of order. Any mutation of scenario state must call
+  them at the end instead leaves a map that gets its ISOM back with the lattice past FORC, which no
+  editor writes and the Repair plugin reports as out of order. Any mutation of scenario state must call
   `markDirty(scn, "NAME", ...)` for every section it affects, or the change is silently dropped on save.
-  **The names are typed** (2026-10-06): `markDirty` takes `SectionName`, the union of the
+  **The names are typed**: `markDirty` takes `SectionName`, the union of the
   `MODELLED` tuple that `MODELLED_SECTIONS` is built from, so a misspelt name, a missing trailing
   space (`"STR"`) or a section with no encoder (`"VCOD"` — `encodeSection` answers null for it, and
   a dirty section that encodes to null is *left out of the file*) fails `npm run build`;
   `scenario.typecheck.ts` holds it to that. `strSectionName`, the `*Sections` helpers and `sync.ts`'s
-  `FIELD_SECTIONS` return the union. All 82 existing calls compiled unchanged — there was no typo
-  to find. What this does not catch is a call that is *missing*, and `Scenario.dirty` itself is
-  still `Set<string>`: `editor/sections.ts`, the plugin API's read-only view and a dozen tests
+  `FIELD_SECTIONS` return the union. What this does not catch is a call that is *missing*, and `Scenario.dirty`
+  itself is `Set<string>`: `editor/sections.ts`, the plugin API's read-only view and a dozen tests
   build or edit the set directly, and `tests/` is not type-checked at all.
 - **Text encoding.** `StringTable.encoding` (`text/encoding.ts`, `TextEncoding`) is how the string
   table's bytes spell characters — the file carries no note of it. `decodeStrings` guesses from the
@@ -53,9 +52,9 @@
   decoders differ from the browser's WHATWG ones**: Node's `euc-kr` is KS X 1001 without the CP949
   extension (8822 syllables silently dropped) and its `windows-1252` maps 0x80–0x9F to C1 controls —
   the latter is pinned by hand (`WINDOWS_1252_HIGH`) so tests and the browser agree, the former is
-  skipped in the test (`tests/encoding.test.ts`) and works in Chromium. Before this the table was
-  latin1 both ways and the encoder dropped every character to its low byte, so Korean text opened as
-  mojibake and typing Korean wrote garbage. `setExtendedStrings(true)` moves the encoding to UTF-8
+  skipped in the test (`tests/encoding.test.ts`) and works in Chromium. A latin1 table both ways
+  does not work: the encoder drops every character to its low byte, so Korean text opens as
+  mojibake and typing Korean writes garbage. `setExtendedStrings(true)` moves the encoding to UTF-8
   (Remastered reads STRx as UTF-8 and nothing else reads it); `setTextEncoding` marks the STR/STRx
   section dirty. `create.ts` starts a new map UTF-8. `decodeTbl` (`dat/tbl.ts`) guesses the same way,
   so a localized `stat_txt.tbl` names units in its own language.
@@ -63,7 +62,7 @@
   `encodeSection`, and add a `tests/chk.test.ts` round-trip. A new *registry* entry also needs a page
   in `docs/chk-format.md` and a layout in `scripts/lib/chk-reference.mjs#LAYOUTS`
   (`tests/chkReference.test.ts` fails without them): the reference's facts table, index, value and
-  flag tables are generated from the registry, `create.ts`, `scenario.ts` (`APPEND_ORDER`, now
+  flag tables are generated from the registry, `create.ts`, `scenario.ts` (`APPEND_ORDER`,
   exported for it, `MAP_VERSIONS`, `MODELLED_SECTIONS`) and the codecs' flag consts by
   `npm run docs:reference`; the layouts are written in that module and held to the encoders by
   the test (sizes for every section, offsets for UNIT/THG2/DD2/MRGN/UPRP and the UNIS/UPGS/TECS
@@ -92,18 +91,16 @@
   member encrypted with the offset-adjusted key (StarEdit's extras all are) readable without its
   name. That forces the saved archive's sector size to the source's (`requiredSectorSize`) and
   the hash table to its old size; `planSave`'s fourth argument carries them (`SavePlan.stored`, a
-  warning in words) and `buildMapFile`'s fifth hands them to `saveMap`. Before this, a map with no
-  listfile lost every extra member on save with no warning — the first outside review found it.
+  warning in words) and `buildMapFile`'s fifth hands them to `saveMap`. Without it, a map with no
+  listfile loses every extra member on save with no warning.
   Protectors also point two hash entries at one block, or one block into another, so stored
-  members can share bytes. mopaq before 1.6.1 refused those (`InvalidMember: stored member at
-  offset … overlaps another`) and the map could not be saved at all — the first error the counts
-  caught with a stack, 2026-10-27. 1.6.1 writes them back over each other (one source archive, so
+  members can share bytes. mopaq before 1.6.1 refuses those (`InvalidMember: stored member at
+  offset … overlaps another`), so the map cannot be saved at all; 1.6.1 writes them back over each other (one source archive, so
   the overlapping bytes agree) and refuses only an overlap whose bytes differ; `tests/mpq.test.ts`
   ("share their bytes") is the case. Protectors also write block entries that point past the end
-  of the file, up to 4 GB out. mopaq 1.6.1 handed those over as empty members at that offset and
-  padded the rewrite out to reach them — tens of megabytes of zeros, or a `RangeError` allocating
-  the archive (`new Uint8Array(archiveSize)` in `assemble`, then `new Blob` in `saveBytes`), the
-  0.8.2 error counts, 2026-10-27/28. mopaq 1.6.2 leaves them out of `members()`; `scm.ts`'s
+  of the file, up to 4 GB out. mopaq 1.6.1 hands those over as empty members at that offset and
+  pads the rewrite out to reach them — tens of megabytes of zeros, or a `RangeError` allocating
+  the archive (`new Uint8Array(archiveSize)` in `assemble`, then `new Blob` in `saveBytes`). mopaq 1.6.2 leaves them out of `members()`; `scm.ts`'s
   `hasBytes` drops empty stored members on open *and* in `saveMap`, because recovery copies keep
   the members they were made with. ("past the end of the file" is the test.)
   `saveMap`'s options are compression (`none` / `zlib` / `pkware`),
@@ -111,7 +108,7 @@
   `scenario.chk` was stored (`scenarioInfo`, from `archive.fileInfo`). PKWARE is what StarEdit and the
   game's own maps use (fixture flags `0x80010200`), so it is the one compression every build reads; zlib
   needs 1.16.1+.
-- **Modelling a new section** (checklist; was in `docs/file-formats.md` until 2026-10-16): a codec under
+- **Modelling a new section** (checklist): a codec under
   `sections/`, decode it in `parseScenario`, a case in `encodeSection`, its name in the `MODELLED`
   tuple (`MODELLED_SECTIONS`, the `SectionName` union), and a round trip in `tests/chk.test.ts`. An
   optional section is `null` in the model when the file had none; never write a zeroed one.
@@ -124,9 +121,9 @@
   `docs/chk-format.md` (the encoding guess is on the `STR` page, the `ISOM` explanation is the
   appendix *The isometric record explained* at the end, after every section's page).
 
-### The reference's extras (2026-09-23): ISOM model, examples, pictures, chk.ksy
+### The reference's extras: ISOM model, examples, pictures, chk.ksy
 
-`docs/chk-format.md` now explains ISOM in full (lattice, words, values, 14 shapes, worked
+`docs/chk-format.md` explains ISOM in full (lattice, words, values, 14 shapes, worked
 example, diamonds → tiles, per-tileset value tables), the CV5 group record under MTXM, STR
 control codes and layout facts, a UNIT/STR/ISOM hex example each, VCOD's SHA-256, and a
 "How the sections fit together" page. Everything that can be generated is: `npm run
@@ -153,15 +150,15 @@ build) compiles it to JavaScript and Python, and the generated JS parser read al
 with no disagreement against `parseScenario` (units, sprites, doodads, locations, triggers,
 strings, ISOM, MTXM). Redo that after changing the generator.
 
-Later the same day: a "Protected maps" page (container tricks, section tricks, a reading
+It also has a "Protected maps" page (container tricks, section tricks, a reading
 checklist) and hex examples for THG2, DD2, MRGN, FORC, PUNI and UNIx (`recordDump` in
 `chk-reference.mjs`, from the real encoders; the "is up to date" test covers them). The
 game-behaviour claims on the Protected maps page are the ones the reader, the registry's
-combine modes and the Repair plugin's findings already make; nothing new about the game was
-asserted, so the probe-map pass (melee/UMS reads, bad values, VCOD) is still owed.
+combine modes and the Repair plugin's findings already make; the game's own reads are in
+*What the game does* below.
 
-2026-09-28, seven more pictures from the same module: `chk-repeats.svg` (the three combine
-modes; its section lists come from `SECTION_SPECS`, so `chkDiagrams` now takes `defs`),
+More pictures from the same module: `chk-repeats.svg` (the three combine
+modes; its section lists come from `SECTION_SPECS`, so `chkDiagrams` takes `defs`),
 `chk-doodad-layers.svg`, `chk-tile-lookup.svg` (schematic — no tileset pixels, which would be
 Blizzard art in the repository), and byte rulers for UNIT, THG2 and MRGN drawn from `LAYOUTS`
 (`recordRulerSvg`; each field needs a short label in `RULER_LABELS` or it throws) plus the
@@ -171,7 +168,7 @@ uses the other's exports at module scope. Rendered to PNG for checking with Play
 headless shell (`page.setContent(svg)` + element screenshot); labels that do not fit their box
 go under it with a leader, staggered.
 
-### What the game does (2026-10-15): `scripts/lib/chk-game.mjs`
+### What the game does: `scripts/lib/chk-game.mjs`
 
 The reference's game facts (Read by, Required, The game accepts, More than one copy, the
 index's Map list / Melee / Use Map Settings columns, the "game reads" and "game sizes"
@@ -195,33 +192,33 @@ UMS adds MASK, settings, PUNI, UPRP, MRGN, TRIG) → "Error loading scenario fil
 (STR MBRF) → result ignored. Sizes are exact except MTXM ≤ 131072, FORC ≤ 20 (zero-padded),
 STR/MASK any; records whole. VCOD hashes only OWNR+SIDE (12 × 36-byte lobby records).
 
-Where the editor now follows the game (2026-10-15, the follow-up to the docs pass):
+Where the editor follows the game:
 - `requiredSections(ver, game = "ums")` in create.ts: `REQUIRED_SECTIONS` is what every game
   needs (map list + melee start), plus COLR from 205, plus TRIG, which only Remastered's map
   list needs (the editor follows Remastered there); `"ums"` adds `REQUIRED_UMS_SECTIONS`
   (MASK PUNI UPRP MRGN) and the original five below 205 or the `x` five from 205. A
-  hybrid no longer requires the `x` tables. Check Map: missing "melee" sections are an
+  hybrid does not require the `x` tables. Check Map: missing "melee" sections are an
   error; missing UMS-only ones a warning, an error when the map has triggers.
 - MRGN is written at exactly `locationSlots(fileVersion)` records (64 below 63, 255 from
   63), padded or cut; `setMapVersion` marks MRGN dirty and grows the model when the count
   changes; `locationCapacity` / `firstFreeSlot` stay inside it; Check Map errors on a used
-  location past it. `tests/maps/original.scm` was regenerated (MRGN 1280).
+  location past it. `tests/maps/original.scm` has MRGN 1280.
 - Combine modes: MRGN `last`; the six costs tables `entries` (`EntryLayout` on the spec,
-  `reader.ts#layEntries`; plugin API type `CombineMode` gained the value, additive).
+  `reader.ts#layEntries`; plugin API type `CombineMode` has the value, an addition).
   `readPair` in scenario.ts: 205+ reads `x` alone; 59/63 read the original then the `x`
   one on top — costs tables entry by entry (`lay*Settings`), restrictions replaced whole.
   The one approximation: weapon columns go with the unit types that fire them (units.dat),
   so the parser takes them whole from a later copy that customises any unit type.
-- Settings dialogs' "beyond the original layout" hint now keys on whether the file writes
+- Settings dialogs' "beyond the original layout" hint keys on whether the file writes
   the `x` table, not on `VER`.
 - STR keeps `minimum: 2` (Remastered's rule) on purpose.
 - Remastered was played with twelve probes (the user's maps folder `CHK/Remastered/`,
-  CHECKLIST.txt filled in 2026-10-15). Eleven matched 1.16.1. The one difference: a map
+  CHECKLIST.txt). Eleven matched 1.16.1. The one difference: a map
   with no TRIG is *Invalid Scenario* in Remastered's map list, melee included
   (`REMASTERED_NEEDS` in chk-game.mjs; the page's "Which game" lists the eleven). STR
-  decoys were already known to differ.
+  decoys differ too (above).
 
-Remastered's loader read (2026-10-17, 1.23.10.13515 dump + Ghidra; private ledgers
+Remastered's loader read (1.23.10.13515 dump + Ghidra; private ledgers
 `~/github/scm-sim-reader/chk-ledger/REMASTERED-{loader,strings}.md`, tables in
 `remastered/chk-tables.txt`). Same machinery and tables as 1.16.1, plus: VER 64 (= 63's
 lists, no BW) and 206 (= 205's, needs BW), each with STR (o) + STRx (o) in every pass; the
@@ -235,15 +232,14 @@ colour — the byte makes no difference in a game. UMS TRIG handler obfuscated (
 The page's "Where Remastered differs" and `REMASTERED_VERSIONS` / `REMASTERED_SECTIONS`
 in chk-game.mjs carry it.
 
-Editor follow-ups this found:
-- DONE 2026-10-17: CRGB Palette slots get `[0, 0, COLR]` (was zeros; harmless either way, R13),
-  Check Map warns on COLR ≥ 12 (`settings.md`). A first version that drew from the third byte
-  was reverted after R13.
-- DONE 2026-10-17: VER 64 is `MapVersion` "remasteredHybrid" (label "Remastered 1.21+ without
+What the editor does with it:
+- CRGB Palette slots get `[0, 0, COLR]` (zeros would be harmless too, R13), Check Map warns on
+  COLR ≥ 12 (`settings.md`). Drawing a Palette slot from the third byte is wrong (R13).
+- VER 64 is `MapVersion` "remasteredHybrid" (label "Remastered 1.21+ without
   Brood War"); `isRemasteredRevision` (64, ≥206) gates STRx in `setMapVersion`, the Map
   Revision dialog (which offers 64 only to a file that already is one) and Check Map's Ogg
-  warning. Every numeric `fileVersion` test already treated 64 like 63, as the game does.
-- DONE 2026-10-17: `parseScenario` takes STRx only at VER 64/206 (or when the file has no STR
+  warning. Every numeric `fileVersion` test treats 64 like 63, as the game does.
+- `parseScenario` takes STRx only at VER 64/206 (or when the file has no STR
   at all, so the text still shows — Check Map then errors "strings are in STRx"); an unread
   STRx is never dirty, so it is written back byte for byte. Check Map notes the decoy. STRx
   registry `minimum: 4`.
@@ -252,26 +248,26 @@ Editor follow-ups this found:
   differently.
 - Check Map: CRGB ≠ 32 bytes, DIM > 256 and TRIG ≢ 0 mod 2400 are map-list refusals.
 
-Editor audit against the game (2026-10-17, branch `editor-follows-the-game`; private evidence in
+Editor audit against the game (private evidence in
 `~/github/scm-sim-reader/editor-audit/`, findings C1–C14):
-- `setMapVersion` now calls `addMissingSections`: every `requiredSections(newVer)` name and both
+- `setMapVersion` calls `addMissingSections`: every `requiredSections(newVer)` name and both
   halves `revisionSections` wants are marked dirty when the file lacks them (null settings models
-  take the defaults first). Before, a new map or a 205 map moved to 59/63/64 was saved without
+  take the defaults first). Without it, a new map or a 205 map moved to 59/63/64 is saved without
   UNIS/UPGS/TECS/UPGR/PTEC and refused at the start of a UMS game (run: AUD V59/V63/C59).
-  `tests/support/testMaps.ts` marks those five by hand, which is why the committed maps never showed it.
-- STR offsets are u16 in both games; past 64 KB they wrapped silently (AUD S64K: 126 of 700 strings
+  `tests/support/testMaps.ts` marks those five by hand, so the committed maps do not show it.
+- STR offsets are u16 in both games; past 64 KB they wrap silently (AUD S64K: 126 of 700 strings
   wrong). `layoutStrings` / `stringTableOverflow` in `sections/strings.ts`: the layout is unchanged
   unless it overflows, then the longest blob goes last (only a string's start must fit). Save
   (`saveDocument`) throws `strOverflowText` before writing, so the file on disk stays good; Check
   Map has the same error. Internal round trips (`parseScenario(serializeScenario(…))` in sync, tab
   copies) still wrap — they cannot refuse.
-  2026-10-31: the check refused untouched maps. A file's offsets may point partway into another
+  Checking every save refuses untouched maps: a file's offsets may point partway into another
   string (suffix sharing); decoded, each is its own string, and laid out separately a 40 KB
-  table "overflowed" by 199 strings. Now (1) Save and Check Map ask `unreachableStrings(scn)`,
+  table "overflows" by 199 strings. So (1) Save and Check Map ask `unreachableStrings(scn)`,
   0 unless `STR ` is dirty; (2) the fallback layout (`packed`) also points every string whose
   bytes end another's into it (`suffixHosts`: sort by reversed bytes, a suffix precedes what it
-  ends), so any table decoded from a file fits again once edited; (3) STRx takes `packed` when
-  its plain layout runs past 64 KB, which only overlap produces. The plain layout is still the
+  ends), so any table decoded from a file fits once edited; (3) STRx takes `packed` when
+  its plain layout runs past 64 KB, which only overlap produces. The plain layout is the
   first choice, so ordinary saves and `tests/maps/` keep their bytes.
-- The "STR holds 1024" Check Map error is gone: 1024 is StarEdit's table, the game read string 1500
+- Check Map has no "STR holds 1024" error: 1024 is StarEdit's table, the game reads string 1500
   (AUD S1500). STRx keeps its 65,535 check.

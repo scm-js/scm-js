@@ -3451,289 +3451,21 @@ the terminal](#a-link-to-a-replay).
 ## Mods
 
 A mod is the game with other data: other tables, animation scripts, pictures, sounds,
-strings and AI. `scmjs mod` reads a mod as its makers ship it, unpacks it into a folder of
-text and pictures to edit and keep in git, checks it, compares two versions, packs it back
-into the MPQ the launchers load and hands it to the play page.
-
-This chapter is the commands, in the order you would use them. The [mods guide](mods.md)
-has the folder's form, how [the mod's hash](mods.md#the-mods-hash) is worked out, and how
-the folder works with PyMS, MPQDraft, FireGraft and samase.
-
-Every command takes a mod in any of its forms: a folder (a release's, or one `mod unpack`
-wrote), an `.mpq`, a self-executing `.exe` (MPQDraft's or FireGraft's patcher, read and
-never run) or a `.zip`.
-
-### What a mod holds
-
-```
-$ scmjs mod info MyMod.mpq
-MyMod
-A mod for StarCraft 1.16.1, from an MPQ
-
-  Files   2 · 25 KB
-  Kinds   2 tables (25 KB)
-  Tables  units.dat, weapons.dat
-  Hash    1953f4e2b76b4f0f
-```
-
-A larger mod has more lines: its scripts, the tables that are wider than the game's, the
-plugins and FireGraft files it carries (kept, never run), a self-executing exe's archive,
-the races its `mod.json` [names](mods.md#races-a-mod-adds), what its `terrain.json`
-[declares](mods.md#terrain-a-mod-declares), and the earlier forms of its hash. [What a mod
-is](mods.md#what-a-mod-is) goes through them on Cosmonarchy BW, with what is left out of a
-mod: a copy of the game shipped beside it, and the files an operating system leaves in
-folders.
-
-The command takes several mods at once. `--json` prints the same as data; each mod has
-`file` and `path`, the path as you typed it. Reading a large mod, an `.exe` or a `.zip` of
-hundreds of megabytes, takes several seconds, and a line on standard error tells you it is
-reading.
-
-Something that holds none of the game's files is not a mod. The command names what it is
-instead (a map, a replay, an empty folder, an `.exe` with no archive in it) and exits with
-2. A `mod.json` that is not JSON, a damaged archive and a patcher laid out in an unknown
-way are each reported with the file and the reason.
-
-### A mod as a folder of text
-
-```
-$ scmjs mod unpack MyMod.mpq mymod
-✔ MyMod: 2 files · 857 KB · → mymod
-  As text  2 tables
-  Names    from the game's string tables
-```
-
-`mod unpack` writes the tables as PyDAT's text, the string tables, iscript and AI as
-PyMS's text, the GRPs as PNG sheets and the rest as they are, with a `mod.json` that
-records what each file became. A file is written as text or a picture only when that packs
-back into the same bytes; anything else stays as it is under `files/`, and `mod.json` says
-which and why. [A mod as a folder](mods.md#a-mod-as-a-folder) has the layout.
-
-An edit is a change to a line of text. This is the Marine's rifle in
-`mymod/tables/weapons.txt`, with its damage raised from 6 to 7:
-
-```
-Weapon(0):  # Gauss Rifle
-	…
-	damage_amount 7
-```
-
-`mod pack` puts the folder back into an MPQ. The same folder gives the same MPQ every
-time:
+strings and AI. `scmjs mod` reads a mod as its makers ship it (a folder, an `.mpq`, a
+self-executing `.exe` or a `.zip`), unpacks it into a folder of text and pictures to edit
+and keep in git, checks it, compares two versions, packs it back into the MPQ the
+launchers load and hands it to the play page:
 
 ```sh
-scmjs mod pack mymod -o MyMod.mpq
+scmjs mod info MyMod.mpq
+scmjs mod unpack MyMod.mpq mymod
+scmjs mod build mymod -o MyMod.mpq
+scmjs mod play mymod --map "(2)Ridge.scx"
 ```
 
-A mistake in a folder's text stops the pack, with the file's path from where you ran the
-command and its line: `mymod/tables/units.txt:26: …`.
-
-| Option | What it does |
-| --- | --- |
-| `mod unpack --palette badlands` | Draws the sheets in another tileset's palette |
-| `mod unpack --force` | Replaces a folder an earlier unpack or `mod new` wrote. Without it the command stops, since your edits are there. Only the folder's dot files and folders (`.git`) are kept. A folder holding anything other than a mod folder is refused either way; an empty one is fine |
-| `mod pack -o <file.mpq>` | The MPQ to write; its folder is made when it is not there. `-o -` writes the MPQ to standard output, and the command's own lines go to standard error |
-| `mod pack --compression` | `zlib`, `pkware` or `none` |
-| `mod pack --folder <out>` | Loose files in the game's paths instead of an MPQ, as samase reads them. Not with `-o` |
-
-To start a mod of your own, `mod new` writes an empty folder, or with `--tables` one that
-holds the game's own tables as text, read from your copy of StarCraft:
-
-```
-$ scmjs mod new mymod --name "My Mod" --tables units,weapons
-✔ My Mod: mod.json, README.md, tables/units.txt, tables/weapons.txt in mymod
-  Edit the tables' text, then scmjs mod pack mymod; more of the game's files go under files/ at their paths.
-```
-
-`--tables all` writes all eleven tables.
-
-### Checking and comparing mods
-
-`mod diff` reads as a changelog. With one mod, the other side is your copy of the game:
-
-```
-$ scmjs mod diff mymod
-StarCraft: Remastered 1.23.10.13515 → mymod · 1 change
-
-Tables
-  Terran Marine: ground weapon damage 6 → 7
-```
-
-With two mods, `scmjs mod diff v1.mpq mymod`, it exits with 1 when they differ and 0 when
-they are the same, as `map diff` does. With one it always exits with 0.
-
-`mod check` looks across the tables for mistakes. Here a Ghost was given a weapon the
-weapons table does not have:
-
-```
-$ scmjs mod check mymod
-My Mod · ✖ 1 error (over StarCraft: Remastered 1.23.10.13515)
-  ✖ units 1 (Terran Ghost) ground_weapon: points at weapons 200, past the 130 entries weapons.dat has
-```
-
-An error is something that makes the game stop or draw nothing: a reference past its
-table, an image with no GRP or no animation script, a string past its table, a button set
-or requirement for something that is not there. A warning is something that is probably a
-mistake: a weapon the mod added that no unit carries, a sound row with no file, two units
-with one name. The command exits with 1 on an error. [Looking for
-mistakes](mods.md#looking-for-mistakes) has the full list.
-
-Two more things are checked when the mod has them. A `terrain.json` gets a warning for
-each row the editor would leave out, for a section made for another version of the
-tileset's tile table, and for rows naming tiles the table has no picture for ([Terrain a
-mod declares](mods.md#terrain-a-mod-declares)). And when the mod's files suggest races of
-its own and its `mod.json` names none, one line says so; it is a hint and fails nothing
-([Races a mod adds](mods.md#races-a-mod-adds)).
-
-`mod build` checks, then packs, and stops on an error unless `--ignore-errors`. With the
-Ghost's weapon put right:
-
-```
-$ scmjs mod build mymod -o MyMod.mpq
-My Mod · ✔ nothing found (over StarCraft: Remastered 1.23.10.13515)
-✔ MyMod.mpq: 2 files · zlib · 8.0 KB
-```
-
-These commands read your copy of StarCraft when they find one, as the [commands that need
-StarCraft](#commands-that-need-starcraft) do, for the game's own files under the mod. They
-work without it and tell you what they could not look at.
-
-### Playing a mod on the play page
-
-```sh
-scmjs mod play mymod
-scmjs mod play MyMod.mpq --map "(2)Ridge.scx"
-scmjs mod play "Cosmonarchy BW" --map "(4)Exodus 1.0.scx" --bot cosmonarchy-example --race terran
-scmjs mod play "Cosmonarchy BW" --map "(4)Exodus 1.0.scx" --bot mybot/out/mybot.scmbot --start
-```
-
-`mod play` opens scmjs.dev/play in your browser and hands it every file of the mod, with
-its plugins and FireGraft files, and the mod's hash. The page keeps the files that differ
-from your copy of the game, in your browser. Nothing is uploaded. [On the play
-page](mods.md#on-the-play-page) has what the page does with a mod once it has it.
-
-| Option | What it does |
-| --- | --- |
-| `--map <map>` | Starts this map with the mod. A mod with plugins plays the map with its own settings |
-| `--bot <key or file>` | Puts a [community bot](#bots) on the other side: one of the play page's bots by its key (`cosmonarchy-example`, `mcrave`, `ualbertabot`, `example`), or a `.scmbot` file of your own. The map waits on the page's setup screen with the bot in the row beside yours, and you press Start Game |
-| `--race` | The bot's race where the map leaves it open: zerg, terran, protoss or random, or a race the mod's `mod.json` names, by its name or its number. Needs `--bot` |
-| `--start` | Starts the game at once instead of waiting on the setup screen. Needs `--bot`; a map alone always starts at once |
-| `--json` | The result as JSON on standard output; the page's address and its messages go to standard error |
-
-The command prints what the page told it. With a bot, the last line is the bot's row on
-the setup screen, which says whether the bot was [made for the
-mod](#a-bot-made-for-a-mod), plays vanilla data, or was made for another mod:
-
-```
-Cosmonarchy BW: 7,767 files to hand over (and 10 plugins and FireGraft files) · 931.2 MB · hash c94acdf31982fa4b
-ℹ Opening the play page with Cosmonarchy BW in your browser
-  If nothing opens, go to http://127.0.0.1:33525/58aab12d25f4b5a8cf293c11
-ℹ The play page is ready: the mod is handed over
-ℹ The play page is ready again: the mod is handed over again
-✔ On the play page's setup screen: press Start Game
-  Bot  Cosmonarchy Example — made for Cosmonarchy BW
-```
-
-The play page's own bots need a scmjs.dev account: the page asks you to sign in, and the
-command prints that it is waiting. A bot the page does not have, or a map with no place
-for it, is an error and the command exits with 1. The command waits five minutes for the
-page. With `BROWSER=none` it opens no browser, prints the address and waits for you or a
-script to open it.
-
-For a tool or a page of your own, [The hand-over from the command
-line](mods.md#the-hand-over-from-the-command-line) has the message the page is sent.
-
-### A mod in the game engine
-
-```sh
-scmjs mod test mymod ridge.scx
-scmjs map test ridge.scx --mod mymod
-scmjs map trace ridge.scx --mod MyMod.mpq
-```
-
-`mod test` is `map test` with the mod's files laid over the game's; `map test`,
-`map trace` and `map cost` take `--mod`. These lay the mod's files only and run none of
-its plugins. A scenario with a bot on the other side is not there yet: `map test` plays
-the person's seat and the map's own computers. `bot run` and `bot ladder` take `--mod`
-too, and run the mod's plugins and FireGraft project beside the bot ([a bot on a
-mod](#a-bot-on-a-mod)). With an engine older than the one a command needs, the command
-names the version it needs and stops.
-
-The first line under the run counts the mod's files the game read; `--json` has the same
-under `mod`. A mod that changes animation scripts, pictures, overlays or the sound table
-makes the game read its startup data again, which opens every unit picture the image table
-names. On a Remastered copy the command reads those pictures out of your installation and
-lays them under the mod, so such a mod runs there as on a 1.16.1 copy. They are the
-classic pictures, the same in both.
-
-### A bot made for a mod
-
-```sh
-scmjs mod header "Cosmonarchy BW"
-scmjs mod header MyMod.mpq --out mybot --bot
-scmjs mod header "Cosmonarchy BW" --js
-```
-
-`mod header` writes the mod's units, weapons, upgrades and technologies by name, for a
-[community bot](#bots) made for the mod. It writes two files: `<Mod>.h`, C++ for a BWAPI
-bot built with scmbot, and `<Mod>.ids.json`, the same for other languages. `<Mod>` is the
-mod's name made an identifier (`Cosmonarchy_BW`), or `--namespace`.
-
-```cpp
-#include "Cosmonarchy_BW.h"
-namespace cosmo = Cosmonarchy_BW;
-// …
-if (unit->getType() == cosmo::UnitTypes::Terran_Ministry) unit->train(cosmo::UnitTypes::Terran_Mason);
-```
-
-The header is one namespace. It holds `MOD_NAME` and `MOD_HASH` ([the mod's
-hash](mods.md#the-mods-hash), as `mod info` prints it), the units in `UnitTypes` (each a
-`BWAPI::UnitType` made from its id), the weapons in `WeaponTypes`, the upgrades in
-`UpgradeTypes` and the technologies in `TechTypes`. The same ids are there as plain
-numbers (`constexpr int`) in `Ids::Units`, `Ids::Weapons`, `Ids::Upgrades` and
-`Ids::Techs`. The JSON is
-`{ "mod": { "name", "hash" }, "units": [{ "id", "name", "identifier" }], "weapons", "upgrades", "techs" }`.
-On Cosmonarchy BW the header names 621 units, 330 weapons, 67 upgrades and 54
-technologies. The header says it was generated, from which mod and hash and on what day;
-run the command again rather than edit it.
-
-| Option | What it does |
-| --- | --- |
-| `--out <folder>` | Where the files go; this folder by default |
-| `--bot` | `--out` is a bot's folder, one with `scmbot.json`, which gains `"mod": { "name", "hash" }` (and `"link"` when the mod's `mod.json` has one). The next `scmjs bot build` writes the mod into the `.scmbot` file, and `bot run` and `bot ladder` then say whether the game's mod is the one the bot was made for ([a bot on a mod](#a-bot-on-a-mod)) |
-| `--js` | `<Mod>.mjs` in place of the header, for a JavaScript bot. Not with `--bot`, since it writes no `scmbot.json` |
-| `--namespace <name>` | The C++ namespace and the files' name |
-| `--starcraft <folder>` | The copy of the game whose tables are read for any the mod does not have |
-
-Every name is the mod's. How a name becomes an identifier:
-
-- A unit is named as the editor names it: by the mod's `unitnames.tbl`, else its
-  `stat_txt.tbl`. A weapon, upgrade or technology is named by its table's label in the
-  mod's strings, where a GPTP mod's `rez\stat.txt` fills the entries `stat_txt.tbl` leaves
-  empty. When the mod has a name list of its own with a line for every entry
-  (`arr\weapons.txt`, `upgrades.txt`, `techdata.txt`, as Cosmonarchy ships them), that
-  list is used.
-- Every run of characters other than letters, digits and `_` becomes one `_`:
-  `U-238 Shells` is `U_238_Shells`, and `Terran Ogun (Worker Mode)` is
-  `Terran_Ogun_Worker_Mode`.
-- A name that starts with a digit, or is a C++ keyword or the name of a Windows macro,
-  gets a `_` in front. A name with no such characters left is its kind and id, `Unit_612`.
-- When two entries of a kind have the same name, the first keeps it and each later one
-  gets `_` and its id: `Floor_Hatch_385`.
-- Rows that name nothing are left out: an empty name, "None", "Reserved", "Unused", "*",
-  and a data editor's "Extended Tech #54".
-
-The JavaScript module has the same ids: `MOD_NAME`, `MOD_HASH`, and `UnitTypes`,
-`WeaponTypes`, `UpgradeTypes` and `TechTypes` by name (`UnitTypes.Terran_Mason` is 7),
-with the JSON beside it. Its names follow the same rules with one difference: a C++
-keyword stays as it is (`max`, not `_max`), since any word may name a member of a
-JavaScript object. A JavaScript bot does not need the file to play a mod. In the mod's
-game it is told the mod's name and hash, and its tables call every unit by the same names
-as the module. The module is for an editor's completion, and for ids pinned to one version
-of the mod.
-
-A small bot written against such a header for Cosmonarchy, which mines, builds Stockades
-and attacks with Mavericks, is in the scmbot repository's `examples/cosmonarchy` folder.
+[The commands](mods.md#the-commands) in the mods guide go through each, with its options
+and output; the guide also has the folder's form, [the mod's hash](mods.md#the-mods-hash)
+and how the folder works with PyMS, MPQDraft, FireGraft and samase.
 
 ## Sharing from the terminal
 
@@ -4209,8 +3941,8 @@ scmjs bot build     # out/<key>.scmbot
 With no bot yet, `scmjs bot new` writes one to start from, which mines, trains workers and
 builds supply. A bot for a mod is written against the mod's own names, which
 `scmjs mod header --bot` puts in its folder ([a bot made for a
-mod](#a-bot-made-for-a-mod)). A build needs a licence file for the bot (`LICENSE`, with
-any licence you choose), since it goes into every build and is shown with the bot.
+mod](mods.md#a-bot-for-your-mod)). A build needs a licence file for the bot (`LICENSE`,
+with any licence you choose), since it goes into every build and is shown with the bot.
 `bot new` names `LICENSE` in `scmbot.json` and leaves the file to you; `bot build` says
 when it is missing before Docker starts. When Docker is not installed or not running, or
 the toolchain's image cannot be fetched or started, the command exits with 2.
@@ -4256,9 +3988,9 @@ that keeps its own books from the plain view. Nothing is built:
 `scmjs bot run mybot.js "(2)Jungle Duel.scx"` plays the file as it is, on the same game
 and with the same options, BWAPI telling it the game and carrying out its orders. With
 `--mod`, the bot is told the mod's name and hash and given its tables, every unit called
-by the mod's name ([a bot made for a mod](#a-bot-made-for-a-mod)). A TypeScript file needs
-Node 22.18 or newer, which reads TypeScript itself; with an older Node, compile it to
-JavaScript first. `--data` is for BWAPI bots only. [The bot guide](bots.md) has a first
+by the mod's name ([a bot made for a mod](mods.md#a-bot-for-your-mod)). A TypeScript file
+needs Node 22.18 or newer, which reads TypeScript itself; with an older Node, compile it
+to JavaScript first. `--data` is for BWAPI bots only. [The bot guide](bots.md) has a first
 bot to start from and everything `game` offers.
 
 The bot's own text is printed as it comes. A loss is a result, not a failure: the command
@@ -4300,8 +4032,8 @@ Cosmonarchy Example on (4)Exodus 1.0.scx 128 × 128, desert · computer terran v
 ```
 
 "Made for" means the `.scmbot` file names the mod by the same hash ([a bot made for a
-mod](#a-bot-made-for-a-mod)). A bot that names no mod "plays vanilla data": it plays, and
-reads the mod's types from the game, but its plans are for the game's own units. A bot
+mod](mods.md#a-bot-for-your-mod)). A bot that names no mod "plays vanilla data": it plays,
+and reads the mod's types from the game, but its plans are for the game's own units. A bot
 made for another mod, or for another version of this one, plays all the same, with a
 warning that names both. The game's own computer players are the mod's AI. A mod with
 plugins needs a game of 2 GB and the bot's room above it, which the engine makes; a bot
@@ -4717,16 +4449,16 @@ gives its options.
 
 | Command | What it does |
 | --- | --- |
-| [`scmjs mod info <mods…>`](#what-a-mod-holds) | What a mod is: files by kind, tables and their layouts, plugins and FireGraft files, the game it is for, its hash |
-| [`scmjs mod unpack <mod> <folder>`](#a-mod-as-a-folder-of-text) | The mod as a folder of text and PNG sheets; what would not come back the same is kept as bytes; `--palette` the tileset the sheets are drawn in, `--force` replaces a mod folder that is there |
-| [`scmjs mod pack <folder>`](#a-mod-as-a-folder-of-text) | The folder back into an MPQ (`-o -` to standard output), or `--folder` loose files in the game's paths |
-| [`scmjs mod new <folder>`](#a-mod-as-a-folder-of-text) | An empty mod folder: `mod.json` and a README; `--tables` starts it with the game's own tables as text |
-| [`scmjs mod check <mods…>`](#checking-and-comparing-mods) | Mistakes across the tables: references, pictures, scripts, sounds, buttons, requirements |
-| [`scmjs mod diff <a> [b]`](#checking-and-comparing-mods) | A changelog between two mods (exit 1 when they differ), or what one changes in the game |
-| [`scmjs mod build <folder>`](#checking-and-comparing-mods) | Check, then pack; stops on an error unless `--ignore-errors` |
-| [`scmjs mod play <mod>`](#playing-a-mod-on-the-play-page) | Every file of the mod handed to the play page with its hash; `--map` starts a map with it, `--bot` puts a bot on the other side |
-| [`scmjs mod test <mod> <map> [tests…]`](#a-mod-in-the-game-engine) | `map test` with the mod laid over the game; `map test`, `trace` and `cost` take `--mod` |
-| [`scmjs mod header <mod>`](#a-bot-made-for-a-mod) | The mod's units, weapons, upgrades and techs by name for a bot made for it: a C++ header and JSON; `--bot` writes the mod into the bot's `scmbot.json`; `--js` a JavaScript module in place of the header |
+| [`scmjs mod info <mods…>`](mods.md#what-a-mod-is) | What a mod is: files by kind, tables and their layouts, plugins and FireGraft files, the game it is for, its hash |
+| [`scmjs mod unpack <mod> <folder>`](mods.md#a-folder-to-edit) | The mod as a folder of text and PNG sheets; what would not come back the same is kept as bytes; `--palette` the tileset the sheets are drawn in, `--force` replaces a mod folder that is there |
+| [`scmjs mod pack <folder>`](mods.md#back-into-an-mpq) | The folder back into an MPQ (`-o -` to standard output), or `--folder` loose files in the game's paths |
+| [`scmjs mod new <folder>`](mods.md#starting-a-mod) | An empty mod folder: `mod.json` and a README; `--tables` starts it with the game's own tables as text |
+| [`scmjs mod check <mods…>`](mods.md#looking-for-mistakes) | Mistakes across the tables: references, pictures, scripts, sounds, buttons, requirements |
+| [`scmjs mod diff <a> [b]`](mods.md#a-changelog) | A changelog between two mods (exit 1 when they differ), or what one changes in the game |
+| [`scmjs mod build <folder>`](mods.md#check-then-pack) | Check, then pack; stops on an error unless `--ignore-errors` |
+| [`scmjs mod play <mod>`](mods.md#playing-it) | Every file of the mod handed to the play page with its hash; `--map` starts a map with it, `--bot` puts a bot on the other side |
+| [`scmjs mod test <mod> <map> [tests…]`](mods.md#testing-with-it) | `map test` with the mod laid over the game; `map test`, `trace` and `cost` take `--mod` |
+| [`scmjs mod header <mod>`](mods.md#a-bot-for-your-mod) | The mod's units, weapons, upgrades and techs by name for a bot made for it: a C++ header and JSON; `--bot` writes the mod into the bot's `scmbot.json`; `--js` a JavaScript module in place of the header |
 
 ### `scmjs plugin` and `scmjs bot`
 
@@ -4745,7 +4477,8 @@ gives its options.
 | Command | What it does |
 | --- | --- |
 | [`scmjs login`, `scmjs logout`](#signing-in) | Signs in to scmjs.dev in the browser, or by code with `--device`, and out again |
-| [`scmjs account`](#signing-in) | Who you are signed in as, your storage, the maps you are sharing |
+| [`scmjs account login`, `scmjs account logout`](#signing-in) | The same as `scmjs login` and `scmjs logout` |
+| [`scmjs account`, `scmjs account show`](#signing-in) | Who you are signed in as, your storage, the maps you are sharing |
 | [`scmjs library [maps\|replays\|shared]`](#your-library) | Your maps, replays and maps shared for editing on scmjs.dev, with every link and its opens |
 | [`scmjs library get <what>`](#your-library) | Downloads a map (a revision with `--revision`) or replay from your account, or from anyone's link |
 | [`scmjs library rm\|unlink\|rename\|note`](#your-library) | Deletes a map, revision or replay, removes one link, renames a map, sets a revision's note; asks first, `--yes` in scripts |

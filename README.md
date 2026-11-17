@@ -99,16 +99,12 @@ Plugins ▸ Browse Plugins….
      and your maps stay on your own disk.
    - As a desktop app for Windows, macOS and Linux, from the [releases](../../releases)
      page. It opens a map on a double-click and starts the game for Test Map.
-   - In a container, for a server on your own network:
-     `docker run --rm -p 8080:80 ghcr.io/scm-js/scm-js:latest`, then open
-     `http://localhost:8080`.
+   - In a container, for a server on your own network.
 2. **Point it at your StarCraft folder.** The game's graphics do not ship with the editor.
    On first use it asks for your StarCraft installation, classic (1.16) or Remastered, and
-   reads them from there once; a Remastered folder turns on the Remastered graphics. The
-   desktop app finds an installation on its own.
-3. **No StarCraft installed?** The same dialog offers Blizzard's free StarCraft map editor
-   download instead. It is enough to edit maps and watch replays; testing a map or playing
-   needs StarCraft installed.
+   reads them from there once. Without StarCraft installed, Blizzard's free map editor
+   download is enough to edit maps and watch replays; testing a map or playing needs
+   StarCraft installed.
 
 [Installing](docs/installing.md) has each step in full. Then start with the guide's [first
 map](docs/guide.md#your-first-map).

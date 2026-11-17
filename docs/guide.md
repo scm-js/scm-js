@@ -29,49 +29,30 @@ You do not need to read all of it. Pick the path that matches what you came to d
 
 ## Getting started
 
-There are three ways to run scmJS, each covered in [docs/installing.md](installing.md):
+There are three ways to run scmJS, each covered in [Installing](installing.md):
 
 - **In the browser** at [scmjs.dev/editor](https://scmjs.dev/editor/). Nothing to install,
   and your maps stay on your own disk.
 - **As a desktop app** for Windows, macOS and Linux, from the
   [releases](https://github.com/scm-js/scm-js/releases) page. It finds a StarCraft
   installation on its own and opens a map on a double-click.
-- **In a container**, for a server on your own network:
-  `docker run --rm -p 8080:80 ghcr.io/scm-js/scm-js:latest`, then open
-  `http://localhost:8080`.
+- **In a container**, for a server on your own network ([In a
+  container](installing.md#in-a-container)).
 
 ### The game's graphics
 
-StarCraft's graphics do not ship with the editor. On first use it asks where to get them,
-and the recommended answer is **your StarCraft folder**: the classic game (1.16) or
-StarCraft: Remastered. Choose **Choose the StarCraft folder…** and pick the folder the
-game is installed in, usually `C:\Program Files (x86)\StarCraft`. The browser asks whether
-to upload the folder; nothing leaves your computer, the files are only read. The desktop
-app looks for an installation on its own, and has a **Search this computer** button as
-well. Picking a Remastered folder also turns on [Remastered
-graphics](#classic-or-remastered-graphics).
+StarCraft's graphics do not ship with the editor. On first use it asks for your StarCraft
+folder, classic (1.16) or Remastered, and keeps a copy of what it needs; a Remastered
+folder also turns on [Remastered graphics](#classic-or-remastered-graphics). Without
+StarCraft installed, Blizzard's free map editor download is enough to edit maps and watch
+replays, though not to test or play them. [The graphics](installing.md#the-graphics) in
+the installing guide has the steps and what each choice allows, and [Game
+data](game-data.md) what the files are. Without any graphics the editor still runs, with
+terrain in flat colours and units as coloured markers.
 
-Without StarCraft installed, the dialog offers Blizzard's free StarCraft map editor
-download (83 MB), which carries the graphics. You can also pick `StarDat.mpq`,
-`BrooDat.mpq` and `patch_rt.mpq` from a classic installation by hand. What each source
-allows:
-
-| Where the files come from | Edit maps | Watch replays | Test or play on scmjs.dev |
-| --- | --- | --- | --- |
-| Your StarCraft folder, classic or Remastered | Yes | Yes | Yes |
-| `StarDat.mpq`, `BrooDat.mpq` and `patch_rt.mpq` from a 1.16 installation | Yes | Yes | Yes |
-| Blizzard's map editor download | Yes | Yes | No |
-
-The files are read once and a copy is kept for next time. [The
-graphics](installing.md#the-graphics) has the steps in full. Without any graphics the
-editor still runs, with terrain in flat colours and units as coloured markers.
-
-**Help ▸ Game Data…** opens the same dialog later. It shows where the current copy came
-from and can remove it. Under *Data sets* it installs a mod's files beside the game's and
-switches between them, and offers **Add StarCraft: Remastered…** when you have a classic
-copy and no Remastered one. A tick keeps the extra files the play page needs for real-time
-lighting (about 200 MB more). [Data sets](game-data.md#data-sets) explains how mods are
-installed.
+**Help ▸ Game Data…** opens the same dialog later, to see where the current copy came
+from, remove it, add StarCraft: Remastered beside a classic copy, or install a mod's files
+as a [data set](game-data.md#data-sets).
 
 ### Opening a map
 

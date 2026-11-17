@@ -28,8 +28,8 @@ group names one. `DoodadEdit.tiles` are therefore **MTXM-only** changes (`applyC
 plain sprite, and the tiles are re-recorded as **terrain-layer** changes `{ before: id, after: id }`
 so `applyChanges` copies them into `TILE` and undo (`under`) puts the old ground back. Writing them
 into `TILE` is the point — a terrain-only copy, the ground that returns when a later doodad leaves,
-and anything else reading `TILE` now sees the converted tiles as ground; dropping the record alone
-would have left those readers showing dirt under a ramp the map still draws. `Stroke.finish` keeps a
+and anything else reading `TILE` sees the converted tiles as ground; dropping the record alone
+would leave those readers showing dirt under a ramp the map still draws. `Stroke.finish` keeps a
 change whose `under !== after` even though `before === after`, which is what lets a plugin's
 transaction merge a conversion with a stroke over the same cell in one entry. Cells another edit has
 covered since, or that `TILE` already holds, are skipped. `DoodadPlacementOptions.asTerrain` (the
@@ -38,7 +38,7 @@ the same stamp as terrain-layer changes plus the overlay sprite, no record, one 
 and `sprites`. It is the palette's option only — `tx.placeDoodad` ignores it, since a plugin says what
 it means by calling `convertDoodads`.
 
-**Stretching (`src/editor/stretch.ts`, 2026-11-13).** A drag while a doodad is armed pulls it out along
+**Stretching (`src/editor/stretch.ts`).** A drag while a doodad is armed pulls it out along
 one of four axes — `se` (2, 1), `ne` (2, −1), `e` (2, 0), `s` (0, 1); the across step is two tiles
 because ground is drawn in left/right halves — and places the result as terrain. Why it exists: the long
 ramps and bridges of modern maps are doodads pulled apart by hand with the middle laid again in the gap.
@@ -46,12 +46,11 @@ The cells of the piece on one line along the axis are a *line*; a stretch by `n`
 every line `n` times. `stretchPlan` picks that cell per line (the *cut*) by coordinate descent on the
 total `edgeDistance` (blend.ts) of the piece stretched three steps, starting from the cut straight across
 the centre, with (a) a tile beside bare ground costing `BARE_COST` unless the piece as shipped leaves
-that side of that tile bare, and (b) a small pull towards the centre. Both were found the hard way:
-the first version repeated the middle *index* of each line and laid wall rocks instead of ramp on the
-lines whose middle cell is wall (Badlands #77, line through (1,3)/(3,4)/(5,5)); the second treated a
-missing tile as free and the optimiser opened holes all over the Platform bridges' decks, since a hole
-has no seam. Plans are cached in a `WeakMap` on the piece's `tiles` array (a catalogue's defs are made
-once per tileset); the largest doodads plan in ≤ 12 ms an axis.
+that side of that tile bare, and (b) a small pull towards the centre. Both are needed:
+repeating the middle *index* of each line lays wall rocks instead of ramp on the lines whose middle
+cell is wall (Badlands #77, line through (1,3)/(3,4)/(5,5)); treating a missing tile as free lets the
+optimiser open holes all over the Platform bridges' decks, since a hole has no seam. Plans are cached in a `WeakMap` on the piece's `tiles` array (a catalogue's defs are made
+once per tileset).
 Measured over the eight tilesets (the mean edge distance of the joins a stretch adds, against the Blend
 brush's 16 for a visible seam): bridges along their deck — Badlands 10, Platform 5–7, Jungle 11–13 (drawn
 to repeat; they look seamless), Twilight 15, Desert 20, Ice 26; cliff ramps along their cliff — Ashworld,
@@ -60,7 +59,7 @@ hand-made long ramps look like too); wall ramps (Structure, Temple, Compound, Ou
 no repeating middle. The fill of a cliff ramp along its cliff is > 90% walkable in every tileset, and on
 a plateau painted with the isometric brush a stretched ramp passes `checkDoodadPlacement` wherever the
 cliff runs straight for the stretch, on the cliff's diagonal only — `required` is stretched with the
-tiles, so the existing check, ghost and red cells needed no change. `stretchDoodad` returns a
+tiles, so the existing check, ghost and red cells need no change. `stretchDoodad` returns a
 `StretchedDoodad`: a `DoodadDef` with the larger footprint plus `stretched` (`from`, `offset` of the
 top-left tile, the plan), which is why `ghostAt`, `checkDoodadPlacement`, `drawDoodadGhost`, the
 symmetry images and `placeDoodadAsTerrain` take it as they take any def; only the overlay's position
@@ -69,8 +68,8 @@ names the shipped footprint — so `placeAt` goes the `asTerrain` way whatever t
 The gesture: `ObjectLayer.stretch` (doodads only) turns a placing press that travels into mode
 `"stretch"` instead of `"marquee"`; `stretchFromDrag` takes, among the axes it is given, the one the
 drag lies closest to (distance from the pointer to the axis, among axes with at least one step).
-**Which axes it is given is `soundAxes`, and that rule is the part that cost the most.** The user's first
-try produced junk on three of four drags: a ramp smeared across its cliff, a bridge widened into rail
+**Which axes it is given is `soundAxes`, and that rule is the part that cost the most.** Offering every
+axis produces junk on three of four drags: a ramp smeared across its cliff, a bridge widened into rail
 ends. The seam measure does not tell those from the good ones (Badlands #77: 16.5 along the cliff, 13.3
 straight down, 17.2 across, 20.4 on the other diagonal). What does, over all 40 ramps and 18 bridges:
 (1) for a ramp, `groundContinues` — the share of cell pairs one step apart whose `required` group is the
@@ -80,20 +79,19 @@ facing across the added joins that differ in the VF4 walkable bit — is 0–11%
 13–50% across it (`SOUND_WALK_BREAKS` 0.12; the gap is narrow at the Ice bridges, which join badly either
 way). The ground rule must not be asked of bridges: their ground continues *across* them, along the
 channel (Badlands #329: 83% on the junk axis). Shift (`any`) offers all four.
-A ramp must also have `islandsPerStep === 0` on that axis. The user's next question was a picture of the
-Badlands Structure ramp (#45, 4×4): its ground continues along the wall, so it was offered, and stretched
-it is a row of half ramps with wedges of wall between them (34 of 128 added minitiles unwalkable, seam
+A ramp must also have `islandsPerStep === 0` on that axis. Without that, the Badlands Structure ramp
+(#45, 4×4) is offered — its ground continues along the wall — and stretched it is a row of half ramps with wedges of wall between them (34 of 128 added minitiles unwalkable, seam
 49) — every line along the wall has two cells, a side each, and no middle. The cliff ramps, Low Platform,
 Platform Wall #159, Compound #190/#197 and the catwalks pass; the other wall ramps (Structure,
 Substructure, Temple, Outpost, Basilica, and the twins of the three that pass, which the local search
 cuts a cell differently) are not offered and the status line says the doodad has no middle.
-**Looks alone choose the cut; walkability only reports.** Two attempts to put walking into the objective
-both made it worse and are worth not repeating. A cost per walk-break across added joins drove
+**Looks alone choose the cut; walkability only reports.** Both ways of putting walking into the
+objective make it worse; do not repeat them. A cost per walk-break across added joins drives
 `walkBreaks` under the threshold on every axis (the measure stops discriminating once it is optimised)
-and left the ramp's rocks in place, since they sit at joins the doodad ships with. A cost per extra
-connected piece of wall/floor (`Seams.islands`) got its zero by laying the ramp's *wall* across the slope
-— 79 of 256 added minitiles unwalkable a step instead of 8 — and passed every axis of every bridge.
-What worked is a second pass that cannot make that trade, `borrowFloor`. Within "repeat one cell of each
+and leaves the ramp's rocks in place, since they sit at joins the doodad ships with. A cost per extra
+connected piece of wall/floor (`Seams.islands`) gets its zero by laying the ramp's *wall* across the slope
+— 79 of 256 added minitiles unwalkable a step instead of 8 — and passes every axis of every bridge.
+What works is a second pass that cannot make that trade, `borrowFloor`. Within "repeat one cell of each
 line", Badlands, Jungle, Ashworld, Ice and Twilight cliff ramps cannot avoid repeating a wall tip (two or
 three unwalkable minitiles) on one or two lines: 5–11 unwalkable minitiles a step in a line along the
 ramp's top edge. So on a line whose repeated cell is part floor and part wall, the *added* cells may show
@@ -104,44 +102,44 @@ that runs along the axis (a bridge's rail, a ramp's side): trading that for floo
 stays. Best seam among those that qualify. The count is `Seams.islands` (floor 4-connected, wall
 8-connected, bare cells neither), and what a *step* adds is `islands(3 steps) − islands(2 steps)`, not the
 difference from the shipped piece: pulling the ends apart can part two rocks the doodad ships touching,
-once (Badlands #77: +2 whatever the length), which misreported clean ramps as having spots. Result: all
-twelve cliff ramps and the Low Platform ramps stretch with 0 unwalkable minitiles in the added cells and
-`islandsPerStep` 0; the seam mean also fell (Badlands 16.5 → 13.3). Wall ramps keep theirs (17–66
+once (Badlands #77: +2 whatever the length), which would misreport clean ramps as having spots. With it,
+all twelve cliff ramps and the Low Platform ramps stretch with 0 unwalkable minitiles in the added cells
+and `islandsPerStep` 0, and the seam mean is lower too (Badlands 13.3 rather than 16.5). Wall ramps keep theirs (17–66
 minitiles a step: no middle), and `placeAt` reports `islandsPerStep` × steps in the status line.
-`required` of an added cell stays the repeated cell's, so the ground check is as before. `walkBreaks`,
-the soundness measure, is taken *before* this pass for the reason above. A third pass that swapped in
-same-walkability tiles for better seams changed nothing on any cliff ramp and was removed; the dark
+`required` of an added cell stays the repeated cell's, so the ground check is not affected. `walkBreaks`,
+the soundness measure, is taken *before* this pass for the reason above. A third pass swapping in
+same-walkability tiles for better seams changes nothing on any cliff ramp, so there is none; the dark
 stripe every two columns along a Badlands ramp's lower edge is not something another tile of the doodad
-fixes. Planning is ≤ 35 ms for the largest doodad and axis.
+fixes.
 **Widening a bridge, and the two measures of "the middle".** The user asked for it of the Twilight
-bridge. Across the deck the rails' ends were laid again in place of the road, and three fixes aimed at
-the symptom did nothing or harm (a line *parted* with the gap left bare: no plan changed, bare ground
-beside a rail tip costs more than a second tip; a fill borrowed from the lines beside: Twilight still
-unsound, Ashworld #46 and both Ice bridges lost their axis; a bare gap wherever a wall end would be laid
-again: the tips touch at their corners, so they were never separate islands). The cause was the centre
-pull. It measured a cell's distance from the centre *square to the axis on the tile grid*, and (2, 1) and
+bridge. With a single centre pull the rails' ends are laid again across the deck in place of the road,
+and three fixes aimed at the symptom do nothing or harm (a line *parted* with the gap left bare: no plan
+changes, bare ground beside a rail tip costs more than a second tip; a fill borrowed from the lines
+beside: Twilight stays unsound, Ashworld #46 and both Ice bridges lose their axis; a bare gap wherever a
+wall end would be laid again: the tips touch at their corners, so they are never separate islands). The
+cause is the centre pull measuring a cell's distance from the centre *square to the axis on the tile
+grid*, and (2, 1) and
 (2, −1) are not square to each other there (their dot product is 3): on the isometric ground they are.
 For a long piece crossed the short way that puts "the middle" of the bridge's left end on its far rail
-and of its right end on its near one. `stretchPlan` now searches the cut twice, pulled towards the middle
+and of its right end on its near one. `stretchPlan` searches the cut twice, pulled towards the middle
 measured `square` and measured `isometric` (along the other diagonal: `c / (2·dx) + r / (2·dy)`), and
 keeps the plan with fewer `islandsPerStep`, then fewer `walkBreaks`, then less seam. Neither alone
-works: isometric alone lost the Badlands, Jungle and Ashworld cliff ramps their axis (a seam-better cut
-that leaves rocks), and choosing by seam alone did the same; choosing without `walkBreaks` cost Twilight
-#176 its lengthways axis (3% → 14%). With both, lengthways plans are what they were, all twelve cliff
-ramps are as before, and across the deck is sound for Badlands, all six Platform, both Twilight, both
+works: isometric alone loses the Badlands, Jungle and Ashworld cliff ramps their axis (a seam-better cut
+that leaves rocks), and choosing by seam alone does the same; choosing without `walkBreaks` costs Twilight
+#176 its lengthways axis (3% → 14%). With both, lengthways plans and all twelve cliff ramps are as with
+the square pull alone, and across the deck is sound for Badlands, all six Platform, both Twilight, both
 Desert and Jungle #270/#271 (walk-breaks 0–5%, the added cells 100% road on Badlands). Jungle #268/#269
-(13%) and the Ice bridges (15%) are not offered across; Ice widens straight down. 28 of the 40 ramps are
-offered their diagonal now (more wall ramps than before pass `islandsPerStep === 0`). ≤ 30 ms a plan.
-**Twins (`src/editor/doodadTwin.ts`, 2026-11-13).** Across a left-right mirror (`mirrorsAcross`: modes
+(13%) and the Ice bridges (15%) are not offered across; Ice widens straight down. More wall ramps pass
+`islandsPerStep === 0` with the two pulls than with one.
+**Twins (`src/editor/doodadTwin.ts`).** Across a left-right mirror (`mirrorsAcross`: modes
 `h` and `hv`, element 1) a doodad's image is `mirroredDoodad`: `doodadTwin(tileset, catalogue, def)`, the
 doodad of the same footprint whose tiles in the mirrored cells are the mirrored pictures (mean pixel
 difference ≤ `TWIN_PICTURE` 8; the game's pairs measure 0–5.8, strangers 20+), in groups with the same
 flag word, with at most `TWIN_FLAGS` 20% of minitile flag words unlike the mirrored ones; same category
 first, then fewest unlike flags, then nearest picture; cached per catalogue. **The flags cannot be
-required to match**, which was the first version and found no twin for a Desert ramp or a Platform
-bridge: Blizzard's pairs are pixel mirrors whose VF4 flags were set by hand and not alike — Desert
+required to match**: that finds no twin for a Desert ramp or a Platform bridge, since Blizzard's pairs are pixel mirrors whose VF4 flags were set by hand and not alike — Desert
 Compound 30 of 736 minitiles (walkable, mid, ramp bits), Desert cliff 83 of 736, Ice cliff 16 of 480, a
-Platform bridge 7 of 992; Badlands, Jungle, Ashworld, Twilight cliff ramps exact. The flag check is still
+Platform bridge 7 of 992; Badlands, Jungle, Ashworld, Twilight cliff ramps exact. The flag check is
 what keeps a Compound ramp from pairing with the High Compound ramp of the same picture. `twinDifference`
 is that count and `placeAt` puts it in the status line, since it is a real asymmetry on a mirrored map.
 All 40 ramps and 18 bridges have a twin, and the twin's twin is the doodad. A *stretched* doodad's image
@@ -152,34 +150,33 @@ footprints, `required` through the same kind of map, `stretched.offset.x` mirror
 `placedDoodads` gives a doodad and its twin one `kind` (the lower id), so `withMirrorImages` selects and
 moves the pair. No twin exists for a top-bottom mirror or a turn (the game has no flip bit for it and no
 doodad drawn that way), and those images still try the same doodad. `tests/doodad-twin.test.ts`.
-**Two measures of a join, and why not tiles from outside the doodad (2026-11-13, later).** The cut was
-first searched by `edgeDistance` alone and reported by its mean against 16. The Seam Overlay's `seamStep`
-(edge distance less the two pictures' grain) is what the eye goes by, so the search now runs under each:
+**Two measures of a join, and why not tiles from outside the doodad.** The Seam Overlay's `seamStep`
+(edge distance less the two pictures' grain) is what the eye goes by and `edgeDistance` what the passes
+above measure, so the search runs under each:
 `Seams.cost(…, "edge" | "step")`, four candidate cuts on a diagonal (each middle × each measure), two on a
 straight axis, `borrowFloor`'s tie-break by the same measure as the cut it mends. The plan kept is the one
 with fewer `islandsPerStep`, then fewer `walkBreaks`, then fewer joins the overlay would draw
 (`shownPerStep`), then the smaller sum of their steps, then less edge distance. **Neither measure alone
 works.** By step alone the Badlands, Jungle and Ashworld cliff ramps and Platform #262/#263 lose their
-axis (a cut that leaves rocks). By edge alone the Twilight ramps #154/#161 laid a lamp post and the
-plateau's hexagon paving down the slope (22 joins shown in three steps; 15 now), their twins #155/#162
-were not offered at all, and the Ice bridges were not offered across the deck. Ordering by looks before
-`walkBreaks`, or treating `walkBreaks` only as the threshold it is in `soundAxes`, bought two or three
-fewer joins on the Desert and Twilight bridges for twice the walk-breaks and cost Desert #83 and Twilight
-#176 an axis. With the order above no axis that was offered is lost and none got more joins: over the 69
+axis (a cut that leaves rocks). By edge alone the Twilight ramps #154/#161 lay a lamp post and the
+plateau's hexagon paving down the slope (22 joins shown in three steps, against 15), their twins #155/#162
+are not offered at all, and the Ice bridges are not offered across the deck. Ordering by looks before
+`walkBreaks`, or treating `walkBreaks` only as the threshold it is in `soundAxes`, buys two or three
+fewer joins on the Desert and Twilight bridges for twice the walk-breaks and costs Desert #83 and Twilight
+#176 an axis. Against edge alone, the order above loses no axis and gives none more joins: over the 69
 axes offered, Twilight ramps 22 → 15, Desert Compound ramps 18 → 12 and 30 → 26, Twilight bridges across
-15 → 12 and 17 → 13, Jungle #268/#269 lengthways 3 → 0; newly offered, Twilight #155/#162 and both Ice
-bridges across the deck (clean deck, 9–10 joins in three steps). 30 of 40 ramps are offered now. The
-status line after placing counts `shownPerStep × steps` and names View ▸ Seam Overlay (it used to say
-"its middle does not repeat cleanly" when the mean edge distance passed 16, which for a cliff ramp was
-a coin toss). Planning is twice the work: ≤ 60 ms for the largest doodad and axis, once per doodad.
-*Tiles from outside the doodad: tried, measured better, looked worse, not shipped.* A last pass let the
-added cells of a line show any tile of the tileset that is the same to the game (the Heal brush's rule:
-group flag word and sixteen VF4 words identical, mean colour within `HEAL_SAME_GROUND`) where fewer
-joins would show. Over all offered axes the joins shown fell from 652 to 492 (Badlands #78 12 → 4,
+15 → 12 and 17 → 13, Jungle #268/#269 lengthways 3 → 0; added, Twilight #155/#162 and both Ice
+bridges across the deck (clean deck, 9–10 joins in three steps). 30 of 40 ramps are offered. The
+status line after placing counts `shownPerStep × steps` and names View ▸ Seam Overlay (a warning keyed
+on the mean edge distance passing 16 is a coin toss for a cliff ramp). Planning is twice the work: ≤ 60 ms for the largest doodad and axis, once per doodad.
+*Tiles from outside the doodad measure better and look worse, so they are not used.* A pass letting
+the added cells of a line show any tile of the tileset that is the same to the game (the Heal brush's
+rule: group flag word and sixteen VF4 words identical, mean colour within `HEAL_SAME_GROUND`) where fewer
+joins would show cuts the joins shown over all offered axes from 652 to 492 (Badlands #78 12 → 4,
 Twilight #175 across 12 → 3). The pictures are worse: the only same-kind tiles a slope or a deck has
-outside its doodad are its mirror twin's, so a Twilight bridge got slats running the other way laid
-into its deck in a herringbone, a Badlands slope got the twin's mirrored shading in diamonds, and the low
-edge of a ramp got the pebble doodads (walkable, same flags, same mean colour) one a step. A join
+outside its doodad are its mirror twin's, so a Twilight bridge gets slats running the other way laid
+into its deck in a herringbone, a Badlands slope gets the twin's mirrored shading in diamonds, and the low
+edge of a ramp gets the pebble doodads (walkable, same flags, same mean colour) one a step. A join
 measured on the outermost row of pixels does not see which way a texture runs. The dark stripe on a
 Badlands ramp's low edge is the shadow of its left wall in the one tile that line has, and no tile in
 the tileset is that edge without the shadow. Do not retry this with the same measure; it would take a
@@ -249,12 +246,12 @@ on when the fog layer is entered and back off on leaving if it was the one that 
 `fogImageData` gives the minimap the same picture (also drawn with `multiply`).
 `tests/fog-edit.test.ts` pins the bit semantics and the MASK round trip.
 
-Display follows the game (2026-10-17 audit, PR 3; runs O4, O5, O11 in the lifted 1.16.1 game):
+Display follows the game (audit runs O4, O5, O11 in the lifted 1.16.1 game):
 - THG2 0x4000 is never read by the game; a sprite faces the way its Init script sets. The
-  animator no longer flips on it (StarEdit writes it exactly where that script flips the overlay,
-  so honouring it mirrored those twice: Installation right doors/traps, Ice/Twilight sprites).
+  animator does not flip on it (StarEdit writes it exactly where that script flips the overlay,
+  so honouring it mirrors those twice: Installation right doors/traps, Ice/Twilight sprites).
   The static frame-0 paths (zoomed out, map image) still use it as a stand-in for the script.
-  The palette's Flipped tick is gone; Sprite Properties / the panel keep the bit, labelled 0x4000.
+  The palette has no Flipped tick; Sprite Properties / the panel keep the bit, labelled 0x4000.
 - Inverted MRGN boxes: Bring finds nothing inside (O5), Create Unit uses the centre. Drawn dashed;
   resizing still normalises.
 - MASK: the game sets every tile unexplored before reading it, so `combine` takes a `fill` (MASK

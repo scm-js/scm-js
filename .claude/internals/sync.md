@@ -4,11 +4,10 @@
 
 `docs/plugins.md#apisync` is the plugin author's half and `docs/guide.md#editing-a-map-together`
 the map maker's. The transport is the scmjs.dev plugin's (`plugin-scmjs-dev/share/`), the
-server is ai-server's `src/rooms/` (a sequencer + relay that never opens the map). Built
-2026-09-22 after the user picked "fastify websocket on the existing server", "invite link,
-anyone (typed name)" and "rooms end; people keep their copy". The invite link is
-`<editor>/share/<invite>` (plugin 1.27.0; `?scmjs-room=` before that, dropped with no
-fallback since nobody had used it); the host's only part is the `404.html` copy that lets
+server is ai-server's `src/rooms/` (a sequencer + relay that never opens the map). The user's
+choices: "fastify websocket on the existing server", "invite link, anyone (typed name)" and
+"rooms end; people keep their copy". The invite link is `<editor>/share/<invite>` (from
+plugin 1.27.0; the older `?scmjs-room=` has no fallback, since nobody used it); the host's only part is the `404.html` copy that lets
 GitHub Pages open the editor at that path (see `desktop-releases.md`).
 
 **Model: server-ordered ops, deterministic resolution, client rebase.** Not a CRDT, not OT
@@ -17,7 +16,7 @@ which is a pure function of (map, op), so the copies converge. `SyncCore.receive
 pending (unconfirmed local) ops back, applies the remote one, re-applies the pending ones.
 `tests/sync.test.ts` fuzzes three clients over 100 seeds (plus 15 with an invariant check
 after *every* step: client copy == confirmed ops + its pending ops from scratch). When it
-fails, add that per-step check back first — it found the one real bug in minutes.
+fails, add that per-step check back first — it finds a divergence in minutes.
 
 **Resolution rules (`applyEditOp`).**
 - Grids (MTXM+TILE as `[at, mtxm, tile]` triples, doodad tiles / ISOM / MASK as pairs):
@@ -49,10 +48,10 @@ fails, add that per-step check back first — it found the one real bug in minut
   the op through `applyOp`. Without it the originator's copy is whatever the tool did, and
   any difference from the resolver (a location name reused vs appended, a clamp) is a
   silent divergence. Do not "optimise" this away.
-- **Rollbacks restore contents, not array references.** A fields op that restored
-  `scn.strings.strings = prevArray` resurrected strings a later op had appended to a
-  *different* array object (fieldsRollback had swapped in a copy). Every rollback of the
-  string table now assigns a `slice()` of saved contents, and only when the op touched it.
+- **Rollbacks restore contents, not array references.** A fields op that restores
+  `scn.strings.strings = prevArray` resurrects strings a later op appended to a
+  *different* array object (fieldsRollback swaps in a copy). Every rollback of the
+  string table assigns a `slice()` of saved contents, and only when the op touched it.
 - **Reversed ops** (an undo sent over the wire) apply parts in undo order; their `edit` is
   the entry E they undid (E's `undo` == what was applied, E's `do` == the rollback) — that
   is also exactly what the redo stack needs. TILE on a reversed terrain change is written
@@ -74,7 +73,7 @@ fails, add that per-step check back first — it found the one real bug in minut
 - Selections follow records (identity, then serial+unitId / content), since
   `afterUnitEdit`-style clearing on every remote op would make selecting impossible.
 
-**Resume after a drop (2026-09-23; ai-server 0.14.0, plugin 1.30.0).** No host change:
+**Resume after a drop (ai-server 0.14.0, plugin 1.30.0).** No host change:
 a resume replay is, to `SyncCore`, just late delivery. The server keeps a dropped person
 *away* (1006 only; 1000/1001/1005 is leaving) for `resumeGraceSec`; `hello.resume {token,
 seq}` answers `resumed` with the log after `seq`. The plugin keeps every op the session sent
@@ -88,7 +87,7 @@ every 20 s, with 50 s of silence counting as a drop, catches the half-open socke
 would otherwise sit on. Verified headlessly: server-side `terminate()` mid-session, both
 paths, maps equal after.
 
-**Kept-open maps (2026-09-23; ai-server 0.15.0, plugin 1.31.0).** Server-side only as far
+**Kept-open maps (ai-server 0.15.0, plugin 1.31.0).** Server-side only as far
 as the editor is concerned: a kept room *is* a stored map (`map_rooms` + `room_ops`, the
 room's in-memory id is the map id), loaded on the first hello, flushed every `flushMs`,
 cooled by the sweep once empty (revision from the latest copy, note "Edited together:
@@ -100,7 +99,7 @@ the revision is current. The one host addition is `document.sections.chkOf(file)
 out of an archive), which the owner's "Put #N into the shared map" needs before
 `replaceFile` — that goes out as an ordinary `reset` op, no sync change.
 
-**Undo of a dialog's write (2026-10-05)** is not a new op: `stepTables` applies the entry's
+**Undo of a dialog's write** is not a new op: `stepTables` applies the entry's
 tables with a per-part content check (a table someone else wrote since is left alone) and calls
 `tap.tables()`, so it goes out as an ordinary `fields` op; the drain `rebaseTables` the history's
 own baseline, as it re-captures `base`. See `clipboard.md`, "Dialog undo".
@@ -110,13 +109,13 @@ whole-table LWW, the presence line says who is in which dialog); serial remappin
 presence of the other person's selection. A server refusal of an op (`error.about ===
 "op"`) ends the plugin's session, since the copy no longer matches.
 
-**Verified headlessly 2026-09-22**: local ai-server (PGlite, fake Discord) + Vite + two,
+**Verified headlessly**: local ai-server (PGlite, fake Discord) + Vite + two,
 then three Playwright contexts: share → join from the link → concurrent edits equal →
 Ctrl+Z propagates → stroke hold ("stroke", waiting 1, applied on mouse-up) → rename via
 `document.update` → late joiner after snapshot-please → resize across three → Leave.
 
-**Lost dialog writes are kept (2026-11-07).** Fields ops are per-field LWW, so two people
-pressing OK on the Trigger Editor lost the first one's work silently. `diffFields` now puts
+**Lost dialog writes are kept.** Fields ops are per-field LWW, so two people
+pressing OK on the Trigger Editor would lose the first one's work silently. `diffFields` puts
 `from[f] = fieldHash(base value)` beside each field it sets (cyrb53 of the packed JSON — the
 value itself can be megabytes). `applyFieldsOp` compares it with the field as it stands and
 reports a mismatch in `Applied.overwritten` (the replaced value's packed JSON). The service

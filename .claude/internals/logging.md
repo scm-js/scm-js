@@ -10,7 +10,7 @@ has the paragraph for contributors. This is why it is shaped the way it is.
 before it was read. `plugins/failures.ts` exists because silence was the bug for exactly
 one case (a default plugin that did not load); this is the general answer. There is no
 plugin sandbox and six plugins ship on by default, so "which plugin touched the map" is a
-question the editor could not answer at all before this.
+question the editor cannot answer any other way.
 
 **It records whether the console is open or not.** A log that starts when the window opens
 can only ever catch a second occurrence, and the interesting failures do not repeat on
@@ -20,7 +20,7 @@ tier (`isVerbose()`) is off until someone is hunting; it is not persisted, becau
 left tracing every plugin call across sessions is a slow editor nobody asked for.
 
 **Not an atom.** Writes come from `plugins/host.ts`, `graphics.ts`, `services/preload.ts`,
-`hooks/useMapFileActions.ts` and a `window.onerror` handler — none of which have a store —
+`services/documentActions.ts` and a `window.onerror` handler — none of which have a store —
 and a Jotai atom would re-render the panel once per entry. `log.ts` is a plain module with
 its own coalesced subscription (`NOTIFY_MS`, 100 ms); `atoms/logAtoms.ts` holds only the
 three flags and the derived diagnostics facts. `DebugConsole` bumps one counter on a flush
@@ -44,14 +44,14 @@ more than the buffer ever does, which is the actual performance hazard here, not
 practice was a round-robin, not a loop: the menu bar's `enabled` predicates make each
 plugin ask `document.isOpen()` every time the menu is drawn, so six plugins interleave and
 consecutive-only collapsing (what a browser console does) caught almost none of it. An
-identical line within `COLLAPSE_MS` (1 s) now bumps the entry already in the ring wherever
+identical line within `COLLAPSE_MS` (1 s) bumps the entry already in the ring wherever
 it sits, among the last `COLLAPSE_WATCHED` (64) distinct lines. The bumped entry keeps its
 **first** sighting's time, so the list still reads in order and an entry never drifts; a
 flood that outlasts the window starts another line with its own count rather than becoming
-one number with no shape. A verbose stroke went from ~40 lines to 6.
+one number with no shape. A verbose stroke is 6 lines rather than ~40.
 
 **The console mirror is above the collapse**, so `console.warn` / `console.error` still fire
-once per occurrence exactly as they did before — a stack in a real console is clickable and
+once per occurrence — a stack in a real console is clickable and
 one in a text log is not, and `tests/plugins.test.ts` counts those calls. `info` is not
 mirrored: the always-on tier would fill a developer's console with the editor's own chatter.
 
@@ -64,12 +64,11 @@ beyond its engine and OS (`shortAgent`), and anything from a plugin's stored set
 user guide says what a copy contains before anyone copies it; keep that promise if you add a
 fact here.
 
-**Help ▸ Copy Bug Report carries the log too, capped.** It used to copy the header alone,
-which had the discoverability backwards: the item beside Report an Issue… is the only copy
-most map makers will ever find, and it produced the weaker artifact while the full one hid
-behind View ▸ Debug Console ▸ Copy. The reason it was header-only was size — a GitHub issue
-body stops at 65536 characters and a paste over that is *rejected*, not trimmed, so a bad
-session was a report that could not be filed. `formatLog`'s fourth argument is a character
+**Help ▸ Copy Bug Report carries the log too, capped.** The item beside Report an Issue… is
+the only copy most map makers will ever find, so a header-only copy there would leave the
+stronger artifact hidden behind View ▸ Debug Console ▸ Copy. The cap is for size — a GitHub
+issue body stops at 65536 characters and a paste over that is *rejected*, not trimmed, so an
+uncapped bad session is a report that cannot be filed. `formatLog`'s fourth argument is a character
 budget (`BUG_REPORT_BUDGET`, 48000) over the entries, never the header; it renders newest
 first, stops when the next entry would not fit, and folds what it left out into the same
 `… N earlier entries` line the ring's own drops use, with a different wording and a pointer
@@ -94,13 +93,12 @@ the map path and the user agent: a desktop frame is `file:///C:/Users/<name>/…
 mirror keeps the clickable path a developer needs. A run with one separator and no scheme or
 drive letter in front is left alone, or `bad ratio 3/4` becomes `bad ratio 4`.
 
-**Render errors come from React's root, not from `window.onerror`** (2026-10-06,
-`components/ui/ErrorBoundary.tsx`). Until the boundaries existed a render that threw was
-"uncaught", React re-threw it at the window and `useErrorCapture` logged it — into a
-console that had just been unmounted with the rest of the tree. A boundary keeps the tree,
-but an error a boundary caught is *not* reported to the window (React 19's default for it
-is a bare `console.error`), so adding boundaries alone would have taken render errors out
-of the log altogether. `main.tsx` therefore passes `rootErrorHandlers` to `createRoot`:
+**Render errors come from React's root, not from `window.onerror`**
+(`components/ui/ErrorBoundary.tsx`). Without boundaries a render that throws is "uncaught",
+React re-throws it at the window and `useErrorCapture` logs it — into a console that has
+just been unmounted with the rest of the tree. A boundary keeps the tree, but an error a
+boundary caught is *not* reported to the window (React 19's default for it is a bare
+`console.error`), so boundaries alone take render errors out of the log altogether. `main.tsx` therefore passes `rootErrorHandlers` to `createRoot`:
 `onCaughtError` and `onUncaughtError` both call `logRenderError`, the one place a render
 error is logged whichever boundary caught it — the boundaries themselves log nothing.
 `surface` on the entry is the catching boundary's prop (`info.errorBoundary instanceof
@@ -128,7 +126,7 @@ other: both need their row in `preferencesAtoms.ts#STORED_RESETS` and their labe
 `atoms/logAtoms.ts` rather than in the component so the reset table can import it without
 pulling a component onto the startup path.
 
-**What was left out of the first version**, deliberately: the Electron main process, whose
+**What is left out**, deliberately: the Electron main process, whose
 updater and file logs live outside the renderer and would need a bridge and a merge; and any
 tap on the editor's own hot paths. `tests/log.test.ts` pins the ring, the collapsing, the
 error shapes, the redaction and the header's wording — all of it pure, none of it eyeballed.

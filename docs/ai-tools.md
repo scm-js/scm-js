@@ -393,9 +393,9 @@ command's `--json` data.
 | `map_trace`, `map_cost`, `map_coverage` | The triggers run in the game, what they cost, and which fired across many replays | No |
 | `map_balance` | Games played on a melee map with your bots, to see whether its starts are fair. It takes minutes | No |
 | `replay_info`, `replay_map` | What a replay holds, with `builds` what each player ordered and with `mod` the mod's names; and the replay's map written out | `replay_map` |
-| `mod_info`, `mod_check`, `mod_diff` | [Mods](cli.md#mods): what a mod is, its check, a changelog | No |
-| `mod_unpack`, `mod_pack`, `mod_new`, `mod_header` | The mod as a folder of text and back, a new one, and [the ids for a bot](cli.md#a-bot-made-for-a-mod), written into a bot's folder with `bot` | Yes |
-| `mod_play` | The mod [handed to the play page](cli.md#playing-a-mod-on-the-play-page) with a `map` and a `bot`. It opens your browser and answers with the page's link and what the page told it | No |
+| `mod_info`, `mod_check`, `mod_diff` | [Mods](mods.md#the-commands): what a mod is, its check, a changelog | No |
+| `mod_unpack`, `mod_pack`, `mod_new`, `mod_header` | The mod as a folder of text and back, a new one, and [the ids for a bot](mods.md#a-bot-for-your-mod), written into a bot's folder with `bot` | Yes |
+| `mod_play` | The mod [handed to the play page](mods.md#playing-it) with a `map` and a `bot`. It opens your browser and answers with the page's link and what the page told it | No |
 | `editor_open`, `editor_state`, `editor_show`, `editor_picture`, `editor_save`, `editor_close` | A map [linked to the editor](#working-in-the-editor): open it there, what you have selected and in view, bring a place into view, the map as the editor draws it, save, end the link | `editor_save` |
 | `account_info`, `library_list` | Who is signed in to scmjs.dev, and what the account keeps: maps, replays, the maps shared for editing, each link with its opens | No |
 | `library_get` | A map or replay from the account, downloaded into the folder | Yes |

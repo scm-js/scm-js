@@ -278,11 +278,14 @@ Runners must not outlive scmjs however it dies (`| head`'s EPIPE → `process.ex
   unchanged because `readiness` reads it. `doctorReport`/`doctorJson`/`printDoctor` keep their shapes: the MCP
   `doctor` tool calls them.
 - **`about`** asks `registry.npmjs.org/@scm-js/cli/latest` (2 s timeout) and shows **Newest**: the update line
-  (`updateCommand(install)`: npm's, `scoop update scmjs`, `winget upgrade scm-js.scmjs`, `brew upgrade scmjs`, or the
+  (`updateCommand(install)`: npm's, `scoop update scmjs`, `winget upgrade scm-js.scmjs`, `brew update && brew upgrade scmjs`, or the
   releases page) when this is older (`olderThan`, numeric x.y.z), "this one", "<v> on npm" for a build from a clone, or
   "could not ask npm". **Only `about` and `doctor` ask**, so no command is slowed or nags. `install: { kind, manager,
   path, update }` in the JSON; the manager is read off the executable's path (`managerOf`). npm is asked for both kinds
-  of install: they are released together with one version.
+  of install: they are released together with one version. Homebrew's line starts with `brew update` because
+  `brew upgrade` refreshes a tap only through its auto-update (at most once per `HOMEBREW_AUTO_UPDATE_SECS`, a day by
+  default), and npm has the version before the tap does: a bare `brew upgrade scmjs` said "already installed" for
+  0.15.0 while `about` showed 0.16.0 and the tap on GitHub already had it.
 
 ## Open
 

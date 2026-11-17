@@ -51,7 +51,7 @@ export function updateCommand(install: Install, pkg = "@scm-js/cli"): string {
   if (install.kind === "npm") return `npm install -g ${pkg}@latest`;
   if (install.manager === "scoop") return "scoop update scmjs";
   if (install.manager === "winget") return "winget upgrade scm-js.scmjs";
-  if (install.manager === "homebrew") return "brew upgrade scmjs";
+  if (install.manager === "homebrew") return "brew update && brew upgrade scmjs";
   if (install.manager === "mcpb") return t("install the newest scmjs-mcp-….mcpb from {url} in your AI app", { url: RELEASES_URL });
   return t("download it again from {url}", { url: RELEASES_URL });
 }

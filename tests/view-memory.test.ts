@@ -71,6 +71,22 @@ describe("the View menu's remembered ticks", () => {
     expect(next.store.get(next.viewFlagsAtom)).toMatchObject({ grid: true, animateUnits: false });
   });
 
+
+  it("tells nobody when an update hands back the ticks it was given", async () => {
+    const page = await reload();
+    let told = 0;
+    const stop = page.store.sub(page.viewFlagsAtom, () => { told++; });
+    const before = page.store.get(page.viewFlagsAtom);
+    told = 0;
+    page.store.set(page.viewFlagsAtom, (f) => f);
+    expect(told).toBe(0);
+    expect(page.store.get(page.viewFlagsAtom)).toBe(before);
+    page.store.set(page.viewFlagsAtom, (f) => ({ ...f, fog: true }));
+    expect(told).toBe(1);
+    expect(mem.has(VIEW_MEMORY_KEY)).toBe(false);
+    stop();
+  });
+
   it("writes nothing for a change that leaves the remembered five alone", async () => {
     const page = await reload();
     page.store.set(page.viewFlagsAtom, (f) => ({ ...f, elevation: true }));

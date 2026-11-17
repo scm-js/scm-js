@@ -1,8 +1,10 @@
 import { useEffect, useRef } from "react";
 import { useStore } from "jotai";
 import { brushSizeAtom, mapTilesetAtom, screenAtom, unitOwnerAtom } from "../atoms/editorAtoms";
-import { interfaceSizeAtom, localeAtom, preferencesAtom } from "../atoms/preferencesAtoms";
+import { interfaceSizeAtom, keepNoticesAtom, localeAtom, preferencesAtom } from "../atoms/preferencesAtoms";
+import { toastLimitAtom } from "../atoms/uiAtoms";
 import { applyInterfaceSize } from "../app/interfaceSize";
+import { toastLimit } from "../app/view";
 import { setLocale } from "../i18n";
 
 /**
@@ -16,7 +18,8 @@ import { setLocale } from "../i18n";
  * store, and the document's `lang` follows it so fonts and hyphenation pick the right
  * rules. The interface size likewise: `index.html` puts the stored one on the page before
  * the first paint, and this keeps it on the preference from then on (OK / Apply, a reset, an
- * import).
+ * import). How many notices may be up at once follows Keep notices until I close them
+ * the same way (`toastLimitAtom`).
  */
 export function useApplyPreferences() {
   const store = useStore();
@@ -30,9 +33,13 @@ export function useApplyPreferences() {
     applyLanguage();
     const applySize = () => { if (typeof document !== "undefined") applyInterfaceSize(store.get(interfaceSizeAtom)); };
     applySize();
+    // Kept notices pile up instead of pushing the oldest out, which would leave unseen.
+    const applyNotices = () => store.set(toastLimitAtom, toastLimit(store.get(keepNoticesAtom)));
+    applyNotices();
     const stopLanguage = store.sub(localeAtom, applyLanguage);
     const stopSize = store.sub(interfaceSizeAtom, applySize);
-    const unsubscribe = () => { stopLanguage(); stopSize(); };
+    const stopNotices = store.sub(keepNoticesAtom, applyNotices);
+    const unsubscribe = () => { stopLanguage(); stopSize(); stopNotices(); };
     if (applied.current) return unsubscribe;
     applied.current = true;
     const prefs = store.get(preferencesAtom);

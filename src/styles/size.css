@@ -13,11 +13,14 @@
    Inside a zoomed surface a length is the surface's own pixels, so anything sized from the
    window (vh, vw, vmin, Radix's measured sizes, which are page pixels) is divided by the
    zoom; and code that turns a pointer position into a place in such a surface divides by
-   it too (`zoomOf`). */
+   it too (`zoomOf`).
+
+   `.body` is named from `.app` down: a trigger's row in the Trigger
+   Editor is a `.body` too, and its text would be zoomed a second time inside the dialog. */
 
 :root[data-ui-size] :is(
   .app > :not(.body),
-  .body > :not(.map-column),
+  .app > .body > :not(.map-column),
   .map-column > :not(.map-stack),
   .map-stack > .surface-error,
   .map-view-switch,

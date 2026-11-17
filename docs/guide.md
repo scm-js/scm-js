@@ -2428,11 +2428,13 @@ toolbar, palettes and panels, status bar, dialogs and notices grow, while the ma
 its own zoom and a press on it still lands on the tile under the pointer; in a browser,
 the browser's own zoom enlarges the map as well); whether notices stay until you close
 them, rather than leaving after 6 seconds (12 for an error), with *Close all* above two or
-more; whether the mouse wheel scrolls (Ctrl+wheel zooms) or zooms, and whether a wheel
-zoom keeps the tile under the pointer in place; how fast water and units animate, and how
-Remastered's water and lava move; which cells the status bar shows; and whether string
-previews follow Remastered's colour rule or 1.16.1's. Whether water and units animate at
-all, and whether the map is drawn with Remastered's graphics, are ticks on the View menu.
+more (kept notices pile up instead of the fifth pushing the oldest out, and a pile taller
+than the window scrolls); whether the mouse wheel scrolls (Ctrl+wheel zooms) or zooms, and
+whether a wheel zoom keeps the tile under the pointer in place; how fast water and units
+animate, and how Remastered's water and lava move; which cells the status bar shows; and
+whether string previews follow Remastered's colour rule or 1.16.1's. Whether water and
+units animate at all, and whether the map is drawn with Remastered's graphics, are ticks
+on the View menu.
 
 **Testing**: where Test Map sends the map (at scmjs.dev, StarCraft or the browser), the
 folder it writes into for StarCraft, in the desktop app whether the game starts after the

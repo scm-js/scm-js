@@ -305,7 +305,9 @@ map, each join once, ~5–6 ms on 128×128; `shownSeams` for a marked area), rec
 stop moving (a stroke bumps them every step). Every stroke says what it did: `healStroke` collects the
 footprints (symmetry included), `endStroke` counts seams over them before (from the stroke's `before` tiles) and
 after; a stroke that changed nothing says why through `healMiss` — no seam / only on a doodad's tiles / no
-look-alike. The button uses the same notes.
+look-alike. The button uses the same notes, and like the brush it says the tiles are pinned when pins held
+back every tile it would have changed (not `healMiss`'s "no look-alike", which sends people to the wrong
+brush), and adds the pinned-tiles note when they held back some.
 
 **Pinned tiles (`src/editor/pins.ts`, terrain mode `"pin"`).** A pinned tile is skipped by
 the brushes that lay terrain by rule — `paintIsom` / `paintIsomDiamonds` (`IsomPass.setTile` returns

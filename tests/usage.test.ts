@@ -284,6 +284,12 @@ describe("error counts", () => {
     expect(errorKind("thrown text")).toBe("string");
   });
 
+  it("names one of the editor's chunks that did not download for what it is, not the browser's TypeError", () => {
+    expect(errorKind(new TypeError("Failed to fetch dynamically imported module: https://scmjs.dev/editor/assets/MapDialogs-Ab12Cd34.js"))).toBe("ChunkLoadError");
+    expect(errorKind(new TypeError("Importing a module script failed."))).toBe("ChunkLoadError");
+    expect(errorKind(new TypeError("Failed to fetch dynamically imported module: blob:https://scmjs.dev/0b1c"))).toBe("TypeError");
+  });
+
   it("names what an error event without an error object was, in a word and never its message", () => {
     expect(messageKind("ResizeObserver loop completed with undelivered notifications.")).toBe("ResizeObserver");
     expect(messageKind("ResizeObserver loop limit exceeded")).toBe("ResizeObserver");
@@ -351,7 +357,7 @@ describe("error counts", () => {
     err.stack = commit;
     logRenderError("Render failed", err, `\n${components}`, { surface: "editor" });
     const [line] = waitingCounts();
-    expect(line.props).toMatchObject({ area: "app", type: "NotFoundError", frame0: "fl editor/assets/src-DM4OGw6D.js:8:98049", frame3: "in Pn editor/assets/Panels-Ab12.js:1:500" });
+    expect(line.props).toMatchObject({ area: "app", type: "NotFoundError", surface: "editor", frame0: "fl editor/assets/src-DM4OGw6D.js:8:98049", frame3: "in Pn editor/assets/Panels-Ab12.js:1:500" });
     expect(line.props).not.toHaveProperty("translated");
   });
 

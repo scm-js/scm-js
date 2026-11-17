@@ -31,6 +31,7 @@ import { isDefaultProfile, REMASTERED_PROFILE } from "../gamedata/profiles";
 import { UNIT_TYPES } from "../formats/dat/dat";
 import type { UnitChange } from "../editor/units";
 import { APP_VERSION } from "../version";
+import { isChunkLoadError } from "../app/chunks";
 
 export type CountProps = Record<string, string | number | boolean>;
 
@@ -335,9 +336,14 @@ export function countError(props: CountProps, stack?: string, components?: strin
   count("error", props);
 }
 
-/** An error's kind (`TypeError`, `PluginLoadError`), as long as it is a plain identifier. */
+/**
+ * An error's kind (`TypeError`, `PluginLoadError`), as long as it is a plain identifier. One
+ * of the editor's chunks that did not download is `ChunkLoadError` rather than the browser's
+ * bare `TypeError`, which would leave it looking like a fault in whatever code asked for it.
+ */
 export function errorKind(err: unknown): string {
   if (!(err instanceof Error)) return typeof err;
+  if (isChunkLoadError(err)) return "ChunkLoadError";
   return /^[A-Za-z_$][\w$]{0,39}$/.test(err.name) ? err.name : "other";
 }
 

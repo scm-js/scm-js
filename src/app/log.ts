@@ -214,7 +214,12 @@ export function logRenderError(message: string, err: unknown, componentStack?: s
   const own = err instanceof Error && err.stack ? err.stack.split("\n").slice(0, RENDER_OWN_LINES) : [];
   const inside = (componentStack ?? "").split("\n").map((l) => l.trim()).filter(Boolean)
     .slice(0, RENDER_LINES - own.length).map((l) => l.replace(/^at /, "in "));
-  log("error", "app", withDetail(message, err), data, [...own, ...inside].join("\n") || undefined, { type: errorKind(err) },
+  // The catching boundary's `surface` goes with the count as well: it is one of the editor's
+  // own fixed words ("dialog mapDataSet", "properties panel"), and the component frames are
+  // minified names that need the release's bundle to read.
+  const counted: CountProps = { type: errorKind(err) };
+  if (typeof data?.surface === "string") counted.surface = data.surface.slice(0, 100);
+  log("error", "app", withDetail(message, err), data, [...own, ...inside].join("\n") || undefined, counted,
     { stack: err instanceof Error ? err.stack : undefined, components: componentStack ?? undefined });
 }
 

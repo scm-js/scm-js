@@ -125,6 +125,23 @@ own description and Open Graph tags are for a link to the editor itself; the
 map's in, and sends those pages with `X-Robots-Tag: noindex` — deploy the worker change before an
 editor release carries the tags, or a map card shows the editor's title.
 
+**Each hosted deploy carries the earlier builds' `assets/`** (`scripts/keep-old-assets.mjs`): a Pages
+deploy, and the nightly's force-pushed commit, replace the whole site, and every chunk is named by
+its hash, so a tab opened before a deploy fails the first `import()` it had not made yet — the
+"TypeError … in me … in pm" counted in 0.16.0 was a dialog chunk of 0.16.0 asked for after 0.17.0
+went out. The site carries `asset-versions.json` (`{ versions: [{ version, files }] }`, newest
+first); the `web` job (stable, after `Build (Pages)`, with `pages: read` to ask the Pages API for
+`html_url`) and `nightly-site` (against `NIGHTLY_HOME`+`NIGHTLY_BASE`, sparse-checkout widened to
+the script, cone mode off) read it from the live site, download the newest three earlier
+builds' files not already in `dist`, and write it again with this build on top. Without a list
+(the first deploy after the script landed) it crawls the live pages and every chunk they name
+(`referencedAssets`, which found 145 of 145 in 0.16.0's artifact, the three missing until the
+pages besides `index.html` were seeds). It never fails a deploy; a missing file, or one served
+as `text/html`, is dropped from the list. Paths in the list are checked against
+`assets/<name>` before anything is fetched. ~12 MB a release, so four builds stay well inside
+Pages' 1 GB. The editor's side of the same failure (`ChunkLoadError`, the Reload notice) is in
+`viewport-ui.md`.
+
 **`editor.scmjs.dev` is proxied through Cloudflare (orange cloud, SSL Full)**
 for the link-preview Worker (private repo `scm-js/cloudflare-link-previews`, deployed as
 `scmjs-link-previews`). The Worker runs only on `/map/*` and `/share/*` (zone routes, fail open):
@@ -212,7 +229,9 @@ check, import, `resolveActivate`) / `activate` (the plugin's own `activate`) / `
 (a build step's `applies()`); `useErrorCapture` sends `step` `uncaught` / `rejection`, and for an
 `ErrorEvent` whose `error` is null `type` = `messageKind(message)`: `ResizeObserver`,
 `cross-origin` ("Script error."), else `string` — and
-`frame0`…`frame5` from `stackProps`: an identifier-only function name and the file:line:col for the
+`frame0`…`frame5` from `stackProps` (and, for a render error, the catching boundary's
+`surface`; `type` is `ChunkLoadError` for one of the editor's chunks that did not download,
+`app/chunks.ts`, rather than the browser's bare `TypeError`): an identifier-only function name and the file:line:col for the
 editor's own origin or a `raw.githubusercontent.com/scm-js/…` plugin file, the `blob:` mapped back
 through `noteModuleSource` in `browserLoaderDeps`; any other code is `plugin`/`other`; never the
 message. A render error (`logRenderError`) counts its own stack and React's component stack
@@ -224,7 +243,9 @@ translator moving text React owns is the usual cause of that NotFoundError. `dom
 those calls with a log warning instead (`viewport-ui.md`), so a NotFoundError still counted comes
 from a DOM call the guard does not cover. ai-server's `propsOf` keeps 16 keys of 100 chars, hence one prop a frame; at most 6 lines
 with frames wait at once (`MAX_STACKS_WAITING`) so a 20-line beacon stays under the worker's 16 KB.
-The frames point into the minified bundle — decoding them needs that release's source maps), Preferences Apply (`preferences`, value only when boolean), `useHotkeys` (`key`), MenuBar
+The frames point into the minified bundle, and no source maps are published: to read one, download that release's
+`github-pages` artifact from its Build run (`gh run download <id> -n github-pages`, `tar xf artifact.tar`) — its chunk
+names are the hosted ones, which the release zip's are not (another base path) — and look at the line:column), Preferences Apply (`preferences`, value only when boolean), `useHotkeys` (`key`), MenuBar
 items whose label `isOwnText` (`menu` — a recent file's name is not a catalogue key so never
 sent), and `useUsageCounts` (`start`, `plugin.running`, layer/terrain mode/symmetry/map view
 subscriptions). A new count must keep to that rule; the privacy page and the guide describe it.

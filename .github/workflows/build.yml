@@ -240,9 +240,11 @@ jobs:
     runs-on: ubuntu-latest
     # Everything this job makes leaves it as an artifact, which needs no permission; the
     # jobs that put those somewhere hold the write scopes themselves. The token below is
-    # only there to read public repositories off the shared anonymous rate limit.
+    # only there to read public repositories off the shared anonymous rate limit, and to
+    # ask where the Pages site is served from (`pages: read`, for the earlier releases' files).
     permissions:
       contents: read
+      pages: read
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -353,6 +355,25 @@ jobs:
         env:
           SCMJS_BASE: ${{ vars.PAGES_BASE || format('/{0}/', github.event.repository.name) }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # A deploy replaces the whole site, and a tab opened before it asks for chunks by
+      # their old hashed names the first time it opens a dialog. The last three releases'
+      # `assets/` files go out beside this one's so those tabs keep working
+      # (`scripts/keep-old-assets.mjs`); the site's `asset-versions.json` says which. The
+      # files come from the live site, whose address the Pages API gives; a fork without a
+      # Pages site, or a site without the list, deploys with this build's files alone.
+      - name: Keep the earlier releases' files
+        if: needs.channel.outputs.channel == 'stable'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.channel.outputs.version }}
+        run: |
+          set -euo pipefail
+          site=$(gh api "repos/$GITHUB_REPOSITORY/pages" --jq .html_url 2>/dev/null || true)
+          if [ -z "$site" ]; then
+            echo "::notice::No Pages site to read the earlier releases' files from; deploying this build's alone."
+            exit 0
+          fi
+          node scripts/keep-old-assets.mjs --dist dist --site "$site" --version "$VERSION"
       - uses: actions/upload-pages-artifact@v3
         if: needs.channel.outputs.channel == 'stable'
         with:
@@ -667,7 +688,10 @@ jobs:
       - uses: actions/checkout@v4
         if: vars.NIGHTLY_BASE != ''
         with:
-          sparse-checkout: scripts/nightly-site
+          sparse-checkout: |
+            scripts/nightly-site/
+            scripts/keep-old-assets.mjs
+          sparse-checkout-cone-mode: false
       - uses: actions/download-artifact@v4
         with:
           name: ${{ vars.NIGHTLY_BASE != '' && 'nightly-site-zip' || 'web-zip' }}
@@ -675,6 +699,7 @@ jobs:
         env:
           BASE: ${{ vars.NIGHTLY_BASE }}
           HOME_URL: ${{ vars.NIGHTLY_HOME || 'https://scmjs.dev' }}
+          VERSION: ${{ needs.channel.outputs.version }}
         run: |
           set -euo pipefail
           if [ -z "${BASE:-}" ]; then
@@ -684,6 +709,10 @@ jobs:
           folder="${BASE#/}"; folder="${folder%/}"
           mkdir -p "site/$folder"
           unzip -q scmJS-nightly-site.zip -d "site/$folder"
+          # The last three nightlies' `assets/` files beside tonight's, as the `web` job does
+          # for a release: every nightly replaces the site, so without them each tab open
+          # across one loses the chunks it had not loaded yet (`scripts/keep-old-assets.mjs`).
+          node scripts/keep-old-assets.mjs --dist "site/$folder" --site "$HOME_URL$BASE" --version "$VERSION"
           for page in redirect moved; do
             sed -e "s|__HOME__|$HOME_URL|g" -e "s|__BASE__|$BASE|g" "scripts/nightly-site/$page.html" > "site/$page.html"
           done

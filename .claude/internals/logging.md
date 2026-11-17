@@ -102,7 +102,10 @@ boundary caught is *not* reported to the window (React 19's default for it is a 
 `onCaughtError` and `onUncaughtError` both call `logRenderError`, the one place a render
 error is logged whichever boundary caught it — the boundaries themselves log nothing.
 `surface` on the entry is the catching boundary's prop (`info.errorBoundary instanceof
-ErrorBoundary`), the only name that survives minification; the stack is the first six
+ErrorBoundary`), the only name that survives minification — so it goes with the error's
+**count** too (`surface`, one of the boundaries' fixed English words, cut to 100 chars):
+before it did, a counted render error said only `in me … in pm …`, which takes the
+release's bundle to read (no source maps are published). The stack is the first six
 lines of the error's own and then React's component stack with `at` rewritten to `in`,
 cut so the two halves fit the twelve lines `formatLog` prints. Setting `onUncaughtError`
 replaces React's re-throw, so that case is logged here once instead of there. The

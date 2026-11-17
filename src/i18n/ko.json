@@ -3586,5 +3586,7 @@
   "  {name}: {why}": "  {name}: {why}",
   "  none": "  없음",
   "identity: hash {hash}, without plugins {withoutPlugins}; {lines} lines and {plugins} plugin lines{older, select, none {} other {; older {older}}}{beforeCode, select, none {} other {; before its code had lines {beforeCode}}}{declared, select, none {} other {; mod.json says {declared}}}; code {code, select, yes {yes} other {no}}; startup data read again {startup, select, yes {yes} other {no}}": "식별: 해시 {hash}, 플러그인 없이 {withoutPlugins}; 줄 {lines}개와 플러그인 줄 {plugins}개{older, select, none {} other {; 이전 {older}}}{beforeCode, select, none {} other {; 코드에 줄이 생기기 전 {beforeCode}}}{declared, select, none {} other {; mod.json에 적힌 값 {declared}}}; 코드 {code, select, yes {있음} other {없음}}; 시작 데이터 다시 읽음 {startup, select, yes {예} other {아니요}}",
-  "said: {said}": "알림: {said}"
+  "said: {said}": "알림: {said}",
+  "Part of the editor could not be downloaded": "편집기의 일부를 내려받지 못했습니다",
+  "This page may be older than the editor on the site now, or the connection dropped. Reload to bring it up to date.": "이 페이지가 지금 사이트의 편집기보다 오래되었거나 연결이 끊겼을 수 있습니다. 다시 불러와 최신으로 맞추세요."
 }

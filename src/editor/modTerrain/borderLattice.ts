@@ -13,12 +13,12 @@
  * (`badlandsStandIns`), in a test one made from the brush's own shape definitions. Shape keys are the stand-in's, so a
  * table learned with one is laid with the same one. Pure; `tests/borders.test.ts`.
  */
-import { createScenario } from "../formats/chk/create";
-import type { Scenario } from "../formats/chk/scenario";
-import type { Cv5Group, Tileset } from "../formats/tileset/decode";
-import { flatTerrain } from "../formats/tileset/terrain";
-import { ISOM_TABLES } from "../data/isomTables";
-import { isDiamond, paintIsomDiamonds, type Diamond } from "./isom";
+import { createScenario } from "../../formats/chk/create";
+import type { Scenario } from "../../formats/chk/scenario";
+import type { Cv5Group, Tileset } from "../../formats/tileset/decode";
+import { flatTerrain } from "../../formats/tileset/terrain";
+import { ISOM_TABLES } from "../../data/isomTables";
+import { isDiamond, paintIsomDiamonds, type Diamond } from "../isom";
 
 /** Cell classes for a pair: the patch's terrain (X), the ground around (Y), a transition piece (T), anything else. */
 export const C_O = 0, C_X = 1, C_Y = 2, C_T = 3;

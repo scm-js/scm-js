@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createStore } from "jotai";
 import { pluginFileTypesAtom } from "../src/atoms/pluginAtoms";
 import { folderReadsAtom } from "../src/atoms/uiAtoms";
-import { logEntries, resetLogForTests } from "../src/editor/log";
+import { logEntries, resetLogForTests } from "../src/app/log";
 import { handFilesToPlugins, opensFolders, opensReplays, pickerFileTypes, takeDroppedFolders } from "../src/plugins/fileTypes";
 import { directoryHandleFiles, entryFiles, entryPaths, folderInputFiles, handleFinder, readFound, type DirectoryHandleLike, type EntryLike, type FileHandleLike } from "../src/plugins/folders";
 import type { FolderFile } from "../src/plugins/api";

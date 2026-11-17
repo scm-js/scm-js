@@ -1,18 +1,18 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { borrowTable } from "../src/editor/borrow";
-import { BorrowStroke, borrowMember, latticeOf, type BorrowContext } from "../src/editor/borrowLattice";
-import { bordersMember, decodeBorderRecord, encodeBorderRecord, resizeBorderRecord } from "../src/editor/borderRecord";
-import { badlandsStandIns, flatTerrainsOf, type StandIns } from "../src/editor/borderLattice";
+import { borrowTable } from "../src/editor/modTerrain/borrow";
+import { BorrowStroke, borrowMember, latticeOf, type BorrowContext } from "../src/editor/modTerrain/borrowLattice";
+import { bordersMember, decodeBorderRecord, encodeBorderRecord, resizeBorderRecord } from "../src/editor/modTerrain/borderRecord";
+import { badlandsStandIns, flatTerrainsOf, type StandIns } from "../src/editor/modTerrain/borderLattice";
 import {
   borderClasses, cutBorderTables, decodeBorderEvidence, emptyBorderEvidence, encodeBorderEvidence, gatherBorderEvidence, mergeBorderEvidence, pairKey,
   type BorderEvidence, type BorderSetup,
-} from "../src/editor/borderTable";
+} from "../src/editor/modTerrain/borderTable";
 import { shownSeams } from "../src/editor/heal";
 import { brushDiamonds, diamondAt, diamondsOfRect, isDiamond, isomWidth, tilesFromIsom, type Diamond } from "../src/editor/isom";
 import { openMapBytes, writeMapBytes } from "../src/editor/mapFile";
-import { learnFromMaps } from "../src/editor/pieceLearn";
+import { learnFromMaps } from "../src/editor/modTerrain/pieceLearn";
 import { applyChanges } from "../src/editor/terrain";
 import { readTerrainFile, sectionAgainstTable, writeTerrainFile } from "../src/formats/mod/terrain";
 import { loadTileset, megatileForTile, type Tileset } from "../src/formats/tileset/decode";
@@ -64,7 +64,7 @@ describe("the Drawn borders switch", () => {
     expect(store.get(drawnBordersAtom)).toBe(true);
     store.set(drawnBordersAtom, false);
     expect(store.get(drawnBordersAtom)).toBe(false);
-    const { browserStorage } = await import("../src/atoms/storage");
+    const { browserStorage } = await import("../src/app/storage");
     expect(browserStorage().getItem("scmjs.drawnBorders")).toBe("false"); // what the next page load reads
     store.set(drawnBordersAtom, true);
   });

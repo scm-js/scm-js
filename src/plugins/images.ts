@@ -4,7 +4,7 @@
  * `looksLikeImageUrl`, which `tests/plugins.test.ts` runs in Node.
  */
 import type { DialogTransfer } from "./api";
-import { hostTerms } from "../editor/platform";
+import { hostTerms } from "../app/platform";
 import { t } from "../i18n";
 
 /** The files and plain text a `DataTransfer` (paste or drop) carries. */

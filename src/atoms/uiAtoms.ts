@@ -1,8 +1,8 @@
 import { atom } from "jotai";
 import { atomWithStorage, createJSONStorage } from "jotai/utils";
-import { browserStorage } from "./storage";
+import { browserStorage } from "../app/storage";
 import type { DialogId } from "../components/dialogs/ids";
-import { defaultToastTtl, type Toast } from "../editor/view";
+import { defaultToastTtl, type Toast } from "../app/view";
 import { msg } from "../i18n";
 import { count } from "../services/usage";
 import { viewOnlyAtom, viewOnlyMessage } from "./editorAtoms";

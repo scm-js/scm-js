@@ -19,9 +19,9 @@
  * index (u32) and host tile (u16).
  * Pure; `tests/borders.test.ts`.
  */
-import type { Scenario } from "../formats/chk/scenario";
-import { TILESETS } from "../data/tilesets";
-import { isomHeight, isomWidth } from "./isom";
+import type { Scenario } from "../../formats/chk/scenario";
+import { TILESETS } from "../../data/tilesets";
+import { isomHeight, isomWidth } from "../isom";
 
 type Size = Pick<Scenario, "width" | "height">;
 

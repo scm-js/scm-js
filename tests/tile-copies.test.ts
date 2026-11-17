@@ -2,8 +2,8 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { loadTileset, type Cv5Group, type Tileset } from "../src/formats/tileset/decode";
-import { collapsePieces, COPY_BLOCK_MEAN, pictureKey, samePicture, sameTileKey, uniqueTiles } from "../src/editor/tileCopies";
-import { cutPieces, emptyEvidence, gatherEvidence, type Piece } from "../src/editor/pieces";
+import { collapsePieces, COPY_BLOCK_MEAN, pictureKey, samePicture, sameTileKey, uniqueTiles } from "../src/editor/modTerrain/tileCopies";
+import { cutPieces, emptyEvidence, gatherEvidence, type Piece } from "../src/editor/modTerrain/pieces";
 import { openMapBytes } from "../src/editor/mapFile";
 import { addedGroupsFrom } from "../src/data/remasteredTiles";
 

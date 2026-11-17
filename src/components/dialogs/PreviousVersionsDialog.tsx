@@ -9,7 +9,7 @@ import { useSetAtom, useStore } from "jotai";
 import { Download, FolderOpen, History, Trash2 } from "lucide-react";
 import { closeDialogAtom, pushToastAtom } from "../../atoms/uiAtoms";
 import { formatBytes } from "../../editor/save";
-import { isDesktop } from "../../editor/platform";
+import { isDesktop } from "../../app/platform";
 import { openFileInto } from "../../services/documentActions";
 import { saveBytes } from "../../services/mapIo";
 import { KEEP_PER_FILE, listPrevious, loadPrevious, removePrevious, type PreviousEntry } from "../../services/previousVersions";

@@ -4,7 +4,7 @@
  */
 import type { createStore } from "jotai";
 import { viewOnlyAtom, viewOnlyMessage } from "../../atoms/documentAtoms";
-import { logError, logWarn } from "../../editor/log";
+import { logError, logWarn } from "../../app/log";
 import type { EditResult } from "../api";
 
 export type Store = ReturnType<typeof createStore>;

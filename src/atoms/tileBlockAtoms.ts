@@ -2,7 +2,7 @@ import { atom } from "jotai";
 import { activeTileAtom } from "./editorAtoms";
 import { scenarioAtom, tilesetFileNameAtom } from "./documentAtoms";
 import { gameDataRevisionAtom } from "./gameDataAtoms";
-import { firstTile, HOLE, type TileBlock } from "../editor/tileSheet";
+import { firstTile, HOLE, type TileBlock } from "../editor/modTerrain/tileSheet";
 import type { Scenario } from "../formats/chk/scenario";
 
 interface HeldBlock {

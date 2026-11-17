@@ -9,7 +9,7 @@ import {
   deleteSelectedDoodadsAtom, deleteSelectedLocationsAtom, deleteSelectedSpritesAtom, deleteSelectedUnitsAtom, nudgeSelectedLocationsAtom, redoAtom, scenarioAtom, selectAllAtom, undoAtom,
 } from "../atoms/documentAtoms";
 import { hotkeysAtom } from "../atoms/preferencesAtoms";
-import { commandById, comboOf, firesWhileTyping, isModifierKey, takesText, type TextTarget } from "../editor/commands";
+import { commandById, comboOf, firesWhileTyping, isModifierKey, takesText, type TextTarget } from "../app/commands";
 import { dialogStackAtom, openDialogAtom, statusMessageAtom } from "../atoms/uiAtoms";
 import { cancelMapPickAtom, cancelMapToolAtom, comboOfEvent, pluginHotkeysAtom } from "../atoms/pluginAtoms";
 import { zoomToAtom } from "../atoms/zoomAtoms";
@@ -28,7 +28,7 @@ const MAP_COMMANDS = new Set(["edit.cut", "edit.copy", "edit.paste", "edit.selec
 const isMapCommand = (id: string) => MAP_COMMANDS.has(id) || id.startsWith("layer.");
 
 /**
- * Global editor hotkeys (UI only). The rebindable ones are `editor/commands.ts`, matched
+ * Global editor hotkeys (UI only). The rebindable ones are `app/commands.ts`, matched
  * through `hotkeysAtom`; Delete, Escape and the arrows depend on the layer and stay inline.
  */
 export function useHotkeys() {
@@ -68,7 +68,7 @@ export function useHotkeys() {
 
   useEffect(() => {
     const redoOne = () => { const l = redo(); setStatus(l ? t("Redid: {l}", { l }) : t("Nothing to redo")); };
-    // What each command in `editor/commands.ts` does; the keys come from the resolved table.
+    // What each command in `app/commands.ts` does; the keys come from the resolved table.
     const run: Record<string, () => void> = {
       "file.new": () => open("newMap"),
       "file.open": () => open("openMap"),

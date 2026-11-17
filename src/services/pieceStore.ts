@@ -9,8 +9,8 @@
  */
 import { TILESET_FILENAMES } from "../formats/tileset/load";
 import type { Cv5Group } from "../formats/tileset/decode";
-import { decodeEvidence, encodeEvidence, type PieceEvidence } from "../editor/pieces";
-import { tableHash } from "../editor/pieceLearn";
+import { decodeEvidence, encodeEvidence, type PieceEvidence } from "../editor/modTerrain/pieces";
+import { tableHash } from "../editor/modTerrain/pieceLearn";
 import { idbRequest, PIECES_STORE } from "./handleStore";
 
 export interface PieceStore {

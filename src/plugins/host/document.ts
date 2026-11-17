@@ -4,7 +4,7 @@
 import { mapFileHandleAtom, mapFilePathAtom, mapModifiedAtom, mapOriginAtom, saveOptionsAtom } from "../../atoms/editorAtoms";
 import { activeDocumentIdAtom, archiveExtrasAtom, archiveStoredAtom, builtByAtom, changeTilesetAtom, documentTabsAtom, redoAtom, redoStackAtom, resizeDocumentAtom, scenarioAtom, tilesetFileNameAtom, undoAtom, undoStackAtom, viewOnlyAtom } from "../../atoms/documentAtoms";
 import { nextContributionKey, pluginBeforeBuildAtom, pluginBuildStepsAtom } from "../../atoms/pluginAtoms";
-import { logInfo } from "../../editor/log";
+import { logInfo } from "../../app/log";
 import { TILESETS } from "../../data/tilesets";
 import { scenarioDescription, scenarioName, tilesetIndex } from "../../formats/chk/scenario";
 import { ensureTileset, ensureTileset as loadTilesetFiles, TILESET_FILENAMES } from "../../formats/tileset/load";
@@ -103,7 +103,7 @@ export function documentApi(store: Store, info: PluginInfo, bag: Contributions, 
       if (gone("document.edit")) return { ...EMPTY_RESULT, notes: [DEACTIVATED_NOTE] };
       const result = runTransaction(store, label, build);
       // Counts, never the change lists: an entry that held them would pin every cell
-      // record it touched for as long as the ring holds the line (`editor/log.ts`).
+      // record it touched for as long as the ring holds the line (`app/log.ts`).
       logInfo(info.name, `Edit: ${label}`, {
         changed: result.changed, tiles: result.tiles || undefined, isom: result.isom || undefined,
         units: result.units || undefined, doodads: result.doodads || undefined, sprites: result.sprites || undefined,

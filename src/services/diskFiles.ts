@@ -10,7 +10,7 @@
  * `{ diskPath }` for one and turns it back into a handle on the way out (`storableHandle`
  * / `revivedHandle`).
  */
-import { desktopBridge } from "../gamedata/desktop";
+import { desktopBridge } from "../app/desktop";
 import type { MapFileHandle } from "./mapIo";
 
 export interface DiskMapHandle extends MapFileHandle {

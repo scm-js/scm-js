@@ -14,7 +14,7 @@
 import { useEffect, useState } from "react";
 import { useStore } from "jotai";
 import { diagnosticsTextAtom } from "../../atoms/logAtoms";
-import { formatEntry, formatLog, logDropped, logEntries, logError, subscribeLog } from "../../editor/log";
+import { formatEntry, formatLog, logDropped, logEntries, logError, subscribeLog } from "../../app/log";
 import { writeCopiesNow } from "../../services/recoveryCopier";
 import { saveBlob } from "../../services/mapIo";
 import { t } from "../../i18n";

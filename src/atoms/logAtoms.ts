@@ -1,5 +1,5 @@
 /**
- * The store side of the log (`editor/log.ts`): whether the Debug Console is open, whether
+ * The store side of the log (`app/log.ts`): whether the Debug Console is open, whether
  * the chatty tier is recording, and the facts its header is built from.
  *
  * The entries themselves are *not* in an atom. They are written from `plugins/host/`,
@@ -9,12 +9,12 @@
  */
 import { atom } from "jotai";
 import { atomWithStorage, createJSONStorage } from "jotai/utils";
-import { browserStorage } from "./storage";
-import { setVerbose } from "../editor/log";
-import { baseName } from "../editor/log";
-import { diagnosticsHeader, shortAgent, type DiagnosticsFacts, type PluginFact } from "../editor/diagnostics";
+import { browserStorage } from "../app/storage";
+import { setVerbose } from "../app/log";
+import { baseName } from "../app/log";
+import { diagnosticsHeader, shortAgent, type DiagnosticsFacts, type PluginFact } from "../app/diagnostics";
 import { APP_VERSION } from "../version";
-import { desktopBridge } from "../gamedata/desktop";
+import { desktopBridge } from "../app/desktop";
 import { DEFAULT_PROFILE } from "../gamedata/profiles";
 import { documentsAtom, scenarioAtom } from "./documentAtoms";
 import { mapFilePathAtom, mapHeightAtom, mapModifiedAtom, mapTilesetAtom, mapVersionAtom, mapWidthAtom } from "./editorAtoms";

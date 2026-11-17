@@ -30,7 +30,7 @@ import {
 } from "../editor/sync";
 import { t } from "../i18n";
 import { rebaseTables } from "../editor/tableHistory";
-import { logInfo, logWarn } from "../editor/log";
+import { logInfo, logWarn } from "../app/log";
 import { DEFAULT_SAVE_OPTIONS, defaultSaveOptions } from "../editor/save";
 import { writeMapBytes } from "./mapIo";
 import { outgoingExtras } from "./mapDataSet";

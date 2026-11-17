@@ -18,7 +18,7 @@
  *
  * Imported by `main.tsx` before anything renders.
  */
-import { logWarn } from "./editor/log";
+import { logWarn } from "./app/log";
 import { pageTranslated } from "./services/usage";
 
 type Skipped = (call: "removeChild" | "insertBefore", node: Node) => void;

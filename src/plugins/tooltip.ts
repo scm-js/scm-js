@@ -8,7 +8,7 @@
  * it a read-out for a chart; text is asked once and shows after the editor's usual rest.
  */
 import type { TooltipHandle, TooltipOptions, TooltipPointer } from "./api";
-import { zoomOf } from "../editor/interfaceSize";
+import { zoomOf } from "../app/interfaceSize";
 
 /** The gap between the pointer and the tip, and the margin it keeps from the window's edges. */
 const GAP_X = 14;

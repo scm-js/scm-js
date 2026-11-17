@@ -1,5 +1,5 @@
 /**
- * Copied terrain, the editor's side (editor/terrainCopyTable.ts, terrainCopyLattice.ts): the scan of the tileset in
+ * Copied terrain, the editor's side (editor/modTerrain/terrainCopyTable.ts, terrainCopyLattice.ts): the scan of the tileset in
  * front, keeping what it found, the blocks plugins and data sets hand in, and what a stroke needs.
  *
  * The scan runs by itself when a loaded tileset has a copy (`palette.ts#terrainCopies`; the game's eight have none, so
@@ -17,12 +17,12 @@ import { megatileHeight, type Tileset } from "../formats/tileset/decode";
 import { terrainCopies } from "../formats/tileset/palette";
 import { TILESET_FILENAMES } from "../formats/tileset/load";
 import { providedCopiesAtom as providedRows } from "../atoms/copyAtoms";
-import { tilesetHash } from "../editor/borrowTable";
-import { edgeSetsOf, findCopyBlocks, flatTerrainsOf, gateBlock, type CopyBlock, type CopySource } from "../editor/terrainCopyTable";
+import { tilesetHash } from "../editor/modTerrain/borrowTable";
+import { edgeSetsOf, findCopyBlocks, flatTerrainsOf, gateBlock, type CopyBlock, type CopySource } from "../editor/modTerrain/terrainCopyTable";
 import {
   chooseOuter, copiedTerrainId, copyTable, COUNT_MARGIN, groundsOf, paintCount, rankGrounds, type CopyGround, type CopyPatch, type CopyTable, type RankedGround,
-} from "../editor/terrainCopyLattice";
-import { logInfo } from "../editor/log";
+} from "../editor/modTerrain/terrainCopyLattice";
+import { logInfo } from "../app/log";
 import { browserBorrowStore } from "./borrow";
 import { scenarioAtom, tilesetFileNameAtom } from "../atoms/documentAtoms";
 import { gameDataRevisionAtom } from "../atoms/gameDataAtoms";

@@ -5,7 +5,7 @@
 import { t } from "../../i18n";
 import { mapTilesetAtom, placementOptionsAtom, rectVariationAtom, symmetryAtom } from "../../atoms/editorAtoms";
 import { archiveExtrasAtom, commitTerrainAtom, pinCellsAtom, rollbackEntryAtom, scenarioAtom, tilesetFileNameAtom, type HistoryEntry } from "../../atoms/documentAtoms";
-import { layBlock, layPattern } from "../../editor/tileSheet";
+import { layBlock, layPattern } from "../../editor/modTerrain/tileSheet";
 import { checkedBlock } from "../pieces";
 import { paintBorrowedIn } from "../borrow";
 import { paintCopyIn } from "../copies";
@@ -88,7 +88,7 @@ export function runTransaction(store: Store, label: string, build: (tx: EditTran
   const applyRuled = (changes: TileChange[]) => applyTiles(withoutPinned(changes, pinned()).changes);
   /** The pins file before the transaction's first change to it; undefined while it has made none. */
   let pinsBefore: Uint8Array | null | undefined;
-  /** Each borrowed lattice (editor/borrowLattice.ts) as it was before the transaction first changed it. */
+  /** Each borrowed lattice (editor/modTerrain/borrowLattice.ts) as it was before the transaction first changed it. */
   const membersBefore = new Map<string, Uint8Array | null>();
   const tables = () => peekUnitAssets()?.units ?? null;
 

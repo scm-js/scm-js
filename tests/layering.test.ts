@@ -11,7 +11,7 @@ import { fileURLToPath } from "node:url";
 const TIERS: readonly (readonly string[])[] = [
   ["i18n", "lib", "site.ts", "version.ts"],
   ["data", "formats"],
-  ["editor"],
+  ["editor", "app"],
   ["gamedata"],
   ["atoms", "services", "plugins"],
   ["hooks"],
@@ -23,13 +23,10 @@ const TIERS: readonly (readonly string[])[] = [
  * shrink — an entry that no longer exists fails the test, so it is taken out when it is fixed.
  */
 const KNOWN = [
-  "data/releaseNotes.ts -> editor/releaseNotes.ts",
-  "editor/log.ts -> services/usage.ts",
-  "editor/platform.ts -> gamedata/desktop.ts",
+  "app/log.ts -> services/usage.ts",
   "formats/tileset/load.ts -> gamedata/source.ts",
   "formats/units/load.ts -> editor/stockSounds.ts",
   "formats/units/load.ts -> gamedata/source.ts",
-  "gamedata/profiles.ts -> atoms/storage.ts",
   "hooks/useDevDeepLinks.ts -> components/chrome/MenuBar.tsx",
   "hooks/useDevDeepLinks.ts -> components/dialogs/DialogHost.tsx",
   "plugins/host/mapView.ts -> components/viewport/paint/overView.ts",

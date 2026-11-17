@@ -1,7 +1,7 @@
 /**
  * One plugin's `PluginApi`, assembled from the parts beside this file.
  */
-import { logError, logInfo } from "../../editor/log";
+import { logError, logInfo } from "../../app/log";
 import { createGraphicsApi } from "../graphics";
 import { PLUGIN_API_VERSION, type PluginApi, type PluginInfo } from "../api";
 import { type Store, Contributions } from "./shared";

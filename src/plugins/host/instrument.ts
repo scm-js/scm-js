@@ -1,7 +1,7 @@
 /**
  * The verbose log of what each plugin called.
  */
-import { isVerbose, log, logError } from "../../editor/log";
+import { isVerbose, log, logError } from "../../app/log";
 import type { PluginInfo } from "../api";
 
 /** One argument or logged value, cut to something that fits on a line. A log entry must stay small. */

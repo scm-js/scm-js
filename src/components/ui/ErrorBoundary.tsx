@@ -15,7 +15,7 @@ import { Component, type ReactNode } from "react";
 import type { RootOptions } from "react-dom/client";
 import { useSetAtom } from "jotai";
 import { debugConsoleAtom } from "../../atoms/logAtoms";
-import { logRenderError } from "../../editor/log";
+import { logRenderError } from "../../app/log";
 import { t } from "../../i18n";
 import { Button } from "./index";
 

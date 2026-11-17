@@ -14,7 +14,7 @@
 import type { createStore } from "jotai";
 import { scenarioAtom, tilesetFileNameAtom } from "../atoms/documentAtoms";
 import { displayColorHex, playerTeamColor } from "../data/players";
-import { logError } from "../editor/log";
+import { logError } from "../app/log";
 import { atlasSource, atlasTileSize } from "../formats/tileset/atlas";
 import { megatileForTile } from "../formats/tileset/decode";
 import { ensureTileset, peekTileset, type LoadedTileset } from "../formats/tileset/load";

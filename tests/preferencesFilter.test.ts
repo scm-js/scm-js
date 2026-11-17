@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { filterTerms, hotkeyRowMatches, keyMatches, pluginPagesInOrder, textMatches } from "../src/components/dialogs/preferencesFilter";
-import { COMMANDS, formatCombo, resolveHotkeys } from "../src/editor/commands";
+import { COMMANDS, formatCombo, resolveHotkeys } from "../src/app/commands";
 
 describe("Preferences' filter: sections", () => {
   it("ignores case and spacing, and needs every word", () => {

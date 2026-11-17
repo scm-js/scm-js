@@ -3,12 +3,12 @@ import { useAtomValue, useSetAtom, useStore } from "jotai";
 import { AlertTriangle, Download, FolderOpen, HardDrive, Layers, Search, Trash2 } from "lucide-react";
 import { gameDataRevisionAtom, gameDataSourceAtom } from "../../atoms/gameDataAtoms";
 import { closeDialogAtom, pushToastAtom } from "../../atoms/uiAtoms";
-import { desktopBridge, type DesktopLocateResult } from "../../gamedata/desktop";
+import { desktopBridge, type DesktopLocateResult } from "../../app/desktop";
 import { isGameArchive, madeWithoutPatch } from "../../gamedata/archives";
 import { storedCopy } from "../../gamedata/store";
 import { pickedDataSet } from "../../gamedata/modInput";
 import { applyDataSetTerrain, keepDataSetTerrain } from "../../services/dataSetTerrain";
-import { hostTerms } from "../../editor/platform";
+import { hostTerms } from "../../app/platform";
 import {
   ARCHIVE_NAMES, BLIZZARD_ZIP_URL, installFromFiles, installFromRemastered, installFromZipUrl, isRemasteredFolder, PATCH_NAME, pickArchives,
   type InstallProgress, type RemasteredFolder,

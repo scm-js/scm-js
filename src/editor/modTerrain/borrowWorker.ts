@@ -11,7 +11,7 @@
  * of small objects. The answer is the table as numbers (`encodeBorrowTable`), its buffer
  * transferred.
  */
-import type { Cv5Group, Tileset } from "../formats/tileset/decode";
+import type { Cv5Group, Tileset } from "../../formats/tileset/decode";
 import { borrowTable, encodeBorrowTable } from "./borrowTable";
 import { encodeCopyBlocks, findCopyBlocks, type CopySource } from "./terrainCopyTable";
 
@@ -64,7 +64,7 @@ export type BorrowWorkerRequest =
   | { kind: "host"; host: TilesetParts }
   /** The table from `source` into the host, answered under `id`. */
   | { kind: "table"; id: number; source: TilesetParts }
-  /** The copied-terrain blocks of `tileset` (editor/terrainCopyTable.ts), answered under `id`; the host is not used. */
+  /** The copied-terrain blocks of `tileset` (editor/modTerrain/terrainCopyTable.ts), answered under `id`; the host is not used. */
   | { kind: "copies"; id: number; tileset: TilesetParts; era: number; copies: CopySource[] };
 
 export type BorrowWorkerResponse =

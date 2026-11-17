@@ -10,7 +10,7 @@
  * width (`formats/dat/table.ts`), its tilesets at any size — and nothing in the editor knows
  * which set is loaded beyond what the files say (names, types, pictures) and this label.
  */
-import { browserStorage } from "../atoms/storage";
+import { browserStorage } from "../app/storage";
 import { normalizeRaces, type DataSetRace } from "@scm-js/mod";
 
 export interface GameDataProfile {

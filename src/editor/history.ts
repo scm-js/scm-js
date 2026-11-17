@@ -64,7 +64,7 @@ export interface HistoryEdit {
   pins?: { before: Uint8Array | null; after: Uint8Array | null };
   /**
    * Other editor-owned files of the map's archive the edit changed — a borrowed terrain's lattice
-   * (editor/borrowLattice.ts) — each as it was and as the edit left it, null for none. Put in
+   * (editor/modTerrain/borrowLattice.ts) — each as it was and as the edit left it, null for none. Put in
    * force like `pins`, beside them.
    */
   members?: { name: string; before: Uint8Array | null; after: Uint8Array | null }[];

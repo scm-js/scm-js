@@ -8,7 +8,7 @@ import {
   awaitGrps, getUnitAssets, imageGrpPath, peekUnitAssets, unitImageId,
 } from "../formats/units/load";
 import { fetchAsset, resolveAssetSource } from "../gamedata/source";
-import { logWarn } from "../editor/log";
+import { logWarn } from "../app/log";
 import { t } from "../i18n";
 
 /**

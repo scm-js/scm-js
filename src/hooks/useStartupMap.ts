@@ -4,7 +4,7 @@ import { recentFilesAtom, scenarioAtom, type RecentEntry } from "../atoms/docume
 import { mapTilesetAtom } from "../atoms/editorAtoms";
 import { preferencesAtom } from "../atoms/preferencesAtoms";
 import { pushToastAtom } from "../atoms/uiAtoms";
-import { isDesktop } from "../editor/platform";
+import { isDesktop } from "../app/platform";
 import { t } from "../i18n";
 import { loadHandle, type StoredHandle } from "../services/handleStore";
 import { useMapFileActions } from "./useMapFileActions";

@@ -1,5 +1,5 @@
 /** New, open, save, close and switch, over a store: what the menus, the hotkeys, the plugin host and the tests call. */
-import { baseName, logError, logInfo, logWarn } from "../editor/log";
+import { baseName, logError, logInfo, logWarn } from "../app/log";
 import {
   activateDocumentAtom, activeDocumentIdAtom, anyModifiedAtom, archiveExtrasAtom, archiveStoredAtom, builtByAtom, closeDocumentAtom, documentsAtom, isomRevisionAtom, loadDocumentAtom, pushRecentAtom,
   recentFilesAtom, redoStackAtom, scenarioAtom, terrainRevisionAtom, undoStackAtom, viewOnlyAtom, viewOnlyMessage, type RecentEntry, type ViewOnly,
@@ -16,7 +16,7 @@ import { dialogStackAtom, openDialogAtom, pushToastAtom, statusMessageAtom, type
 import { createScenario } from "../formats/chk/create";
 import { strOverflowText, unreachableStrings } from "../editor/validate";
 import { mapVersionOf, markDirty, parseScenario, serializeScenario, setMapVersion, tilesetIndex, type Scenario } from "../formats/chk/scenario";
-import type { NewMapVersion } from "../editor/preferences";
+import type { NewMapVersion } from "../app/preferences";
 import { ensureTileset, peekTileset, TILESET_FILENAMES } from "../formats/tileset/load";
 import { baseTerrain, flatTerrain } from "../formats/tileset/terrain";
 import { peekUnitAssets } from "../formats/units/load";
@@ -26,7 +26,7 @@ import { openMapFile, saveBytes, type BeforeOverwrite, type MapFileHandle, type 
 import { keepPrevious, type KeptPrevious } from "./previousVersions";
 import { formatBytes, type SaveOptions } from "../editor/save";
 import { buildOutgoing } from "./mapBuild";
-import { hostTerms } from "../editor/platform";
+import { hostTerms } from "../app/platform";
 import { count, extOf, sizeOf } from "./usage";
 import { buildStepName } from "./usageNames";
 import { t, translate } from "../i18n";

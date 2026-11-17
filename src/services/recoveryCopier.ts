@@ -8,7 +8,7 @@ import { preferencesAtom } from "../atoms/preferencesAtoms";
 import type { Store } from "../atoms/store";
 import { openDialogAtom, pushToastAtom, statusMessageAtom } from "../atoms/uiAtoms";
 import { leftoverCopies, planRecovery, recoveryKey } from "../editor/recovery";
-import { baseName, logError, logInfo, logWarn } from "../editor/log";
+import { baseName, logError, logInfo, logWarn } from "../app/log";
 import { parseScenario } from "../formats/chk/scenario";
 import {
   copyOf, entryOf, holdSessionLock, listCopies, liveSessions, loadCopy, MAX_COPY_BYTES, putCopy, removeCopy, SESSION, type RecoveryEntry,

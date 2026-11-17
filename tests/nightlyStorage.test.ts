@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { namespaced } from "../src/atoms/storage";
+import { namespaced } from "../src/app/storage";
 
 /** A plain Storage over a Map, as localStorage behaves. */
 function memory(entries: Record<string, string> = {}): Storage {

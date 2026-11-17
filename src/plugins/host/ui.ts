@@ -4,7 +4,7 @@
 import { viewportRepaintAtom } from "../../atoms/editorAtoms";
 import { closeDialogAtom, dialogStackAtom, openDialogAtom, pushToastAtom, statusMessageAtom } from "../../atoms/uiAtoms";
 import { nextContributionKey, pluginDialogSlotsAtom, pluginPreferencesPagesAtom, pluginTestTargetsAtom, pluginPanelsAtom, pluginFileTypesAtom, type BusyBox, type TitleBox, type MaximizedBox } from "../../atoms/pluginAtoms";
-import { logError, logWarn } from "../../editor/log";
+import { logError, logWarn } from "../../app/log";
 import { folderReading, MAP_EXTENSIONS, normalExtension } from "../fileTypes";
 import type { Rect } from "../../editor/terrain";
 import { alertDialog, confirmDialog, progressPanel, promptDialog } from "../prompts";

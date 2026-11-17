@@ -4,7 +4,7 @@ import { Check, ChevronRight, Dot } from "lucide-react";
 import { useAtom, useAtomValue, useSetAtom, useStore } from "jotai";
 import AppLogo from "../ui/AppLogo";
 import SiteNav from "./SiteNav";
-import { isDesktop, isOnSite } from "../../editor/platform";
+import { isDesktop, isOnSite } from "../../app/platform";
 import { SITE_PAGES } from "../../site";
 import {
   activeLayerAtom,
@@ -25,18 +25,18 @@ import {
 } from "../../atoms/editorAtoms";
 import { chromeModeAtom, flagOffered, flagShown, mapInFront, overlayOffered, toggleFlagAtom } from "../../atoms/viewModeAtoms";
 import { shownZoomAtom, zoomToAtom } from "../../atoms/zoomAtoms";
-import { desktopBridge } from "../../gamedata/desktop";
+import { desktopBridge } from "../../app/desktop";
 import {
   activeDocumentIdAtom, deleteSelectedDoodadsAtom, deleteSelectedLocationsAtom, deleteSelectedSpritesAtom, deleteSelectedUnitsAtom, documentTabsAtom, recentFilesAtom, redoAtom, scenarioAtom,
   selectAllAtom, undoAtom, viewOnlyAtom,
 } from "../../atoms/documentAtoms";
 import { openDialogAtom, panelsAtom, statusMessageAtom, type DialogId, type PanelVisibility } from "../../atoms/uiAtoms";
 import { debugConsoleAtom, diagnosticsTextAtom } from "../../atoms/logAtoms";
-import { BUG_REPORT_BUDGET, formatLog, issueUrl, logDropped, logEntries } from "../../editor/log";
+import { BUG_REPORT_BUDGET, formatLog, issueUrl, logDropped, logEntries } from "../../app/log";
 import { pluginMenuItemsAtom, pluginOverlaysAtom, pluginTestTargetsAtom, setOverlayVisibleAtom, type PluginMenuItem } from "../../atoms/pluginAtoms";
 import { STARCRAFT, startTest } from "../../services/testTargets";
 import { hotkeysAtom } from "../../atoms/preferencesAtoms";
-import { shortcutOf } from "../../editor/commands";
+import { shortcutOf } from "../../app/commands";
 import type { PluginIcon } from "../../plugins/api";
 import { PluginIconView } from "../ui/PluginIconView";
 import { useMapFileActions } from "../../hooks/useMapFileActions";

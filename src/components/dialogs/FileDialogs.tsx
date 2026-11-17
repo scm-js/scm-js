@@ -15,7 +15,7 @@ import { MapPreview, PatchThumb, type PreviewStart } from "./TerrainPreview";
 import { useMapFileActions } from "../../hooks/useMapFileActions";
 import { DEFAULT_NEW_MAP, needsCloseConfirm, openTarget, saveDocument, type PendingAction } from "../../services/documentActions";
 import { preferencesAtom } from "../../atoms/preferencesAtoms";
-import { hostTerms } from "../../editor/platform";
+import { hostTerms } from "../../app/platform";
 import { canPickSaveLocation, droppedHandle, MAP_FILE_ACCEPT, openMapFile, pickMapFile, saveBlob, type PickedMapFile } from "../../services/mapIo";
 import {
   buildMapFile, createBuildCache, DEFAULT_SAVE_OPTIONS, defaultSaveOptions, formatBytes, initialSaveOptions, planSave, SAVE_PRESETS, type MapFormat, type SaveOptions,

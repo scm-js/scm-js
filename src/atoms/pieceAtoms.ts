@@ -1,7 +1,7 @@
 import { atom } from "jotai";
 import type { TilesetId } from "../data/tilesets";
-import type { PieceEvidence } from "../editor/pieces";
-import type { DeclaredTerrain, ProvidedPieceSet } from "../editor/pieceList";
+import type { PieceEvidence } from "../editor/modTerrain/pieces";
+import type { DeclaredTerrain, ProvidedPieceSet } from "../editor/modTerrain/pieceList";
 
 /**
  * The learned pieces read so far, by `pieceStore.ts#piecesKey` (tileset and table): the

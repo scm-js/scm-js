@@ -117,7 +117,7 @@ export interface Preferences {
    */
   testMap: { launch: boolean; dir: string; target: string };
   /**
-   * The desktop build's in-app updates (`editor/updates.ts`, `desktop/updater.ts`); the
+   * The desktop build's in-app updates (`app/updates.ts`, `desktop/updater.ts`); the
    * browser build shows none of this, having nothing to update. `checkOnStart` asks GitHub
    * for a newer version a few seconds after launch and raises a toast when there is one.
    * `nightly` follows the nightly channel instead of the numbered releases — one-way in
@@ -136,7 +136,7 @@ export interface Preferences {
   plugins: { updates: PluginUpdateMode };
   /**
    * Preferences ▸ Hotkeys: the commands whose keys the user changed, by command id
-   * (`editor/commands.ts`), each with its whole list — `[]` leaves it with none. A
+   * (`app/commands.ts`), each with its whole list — `[]` leaves it with none. A
    * command not here has the keys it ships with.
    */
   hotkeys: HotkeyOverrides;
@@ -155,7 +155,7 @@ export interface Preferences {
    * How large the editor's own interface is drawn, in percent: menus, toolbars, panels,
    * dialogs, notices and the splash. One of `INTERFACE_SIZES`. The map is not scaled by it
    * (its own zoom decides that), which is why it is not the browser's page zoom; see
-   * `editor/interfaceSize.ts`.
+   * `app/interfaceSize.ts`.
    */
   interfaceSize: InterfaceSize;
   /**
@@ -275,7 +275,7 @@ export type PreferencesPage = "general" | "files" | "editing" | "view" | "testin
  * spacing, look and snaps, which have atoms of their own and are reset by the dialog beside
  * these. Every key is on one page or in `NEVER_RESET`; `tests/preferences.test.ts` fails
  * on a key that is on neither, so a new preference has to be given a page here. The View
- * menu's remembered ticks (`editor/viewMemory.ts`) are not preferences and no reset touches
+ * menu's remembered ticks (`app/viewMemory.ts`) are not preferences and no reset touches
  * them: they are on no page, and Preferences ▸ Storage clears them.
  */
 export const PREFERENCES_PAGE_KEYS: Record<PreferencesPage, readonly (keyof Preferences)[]> = {

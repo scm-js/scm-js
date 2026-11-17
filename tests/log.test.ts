@@ -2,8 +2,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   baseName, BUG_REPORT_BUDGET, clearLog, formatData, formatEntry, formatLog, ISSUE_URL_LIMIT, issueUrl, log, logDropped,
   logEntries, logError, logRenderError, LOG_CAPACITY, resetLogForTests, scrubFrame, stamp, subscribeLog,
-} from "../src/editor/log";
-import { diagnosticsHeader, shortAgent } from "../src/editor/diagnostics";
+} from "../src/app/log";
+import { diagnosticsHeader, shortAgent } from "../src/app/diagnostics";
 
 // `log` mirrors warn and error to the browser's console on purpose; the suite is not the
 // place to read them.

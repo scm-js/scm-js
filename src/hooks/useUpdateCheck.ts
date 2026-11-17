@@ -1,12 +1,12 @@
 import { useEffect, useRef } from "react";
 import { useStore } from "jotai";
-import { desktopBridge } from "../gamedata/desktop";
+import { desktopBridge } from "../app/desktop";
 import { preferencesAtom } from "../atoms/preferencesAtoms";
 import { openDialogAtom, pushToastAtom } from "../atoms/uiAtoms";
 import {
   checkForUpdatesAtom, lastUpdateCheckAtom, updateDownloadedAtom, updateFailedAtom, updateProgressAtom,
 } from "../atoms/updateAtoms";
-import { shouldCheckOnStart } from "../editor/updates";
+import { shouldCheckOnStart } from "../app/updates";
 import { t } from "../i18n";
 
 /**

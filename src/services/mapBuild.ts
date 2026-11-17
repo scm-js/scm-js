@@ -16,7 +16,7 @@
 import { archiveExtrasAtom, archiveStoredAtom, builtByAtom, scenarioAtom } from "../atoms/documentAtoms";
 import { pluginBeforeBuildAtom, pluginBuildStepsAtom, type PluginBuildStepEntry } from "../atoms/pluginAtoms";
 import { dismissToastAtom, pushToastAtom } from "../atoms/uiAtoms";
-import { logError, logInfo, logWarn } from "../editor/log";
+import { logError, logInfo, logWarn } from "../app/log";
 import { packBuiltMap, type BuiltBy } from "../editor/mapBuild";
 import { buildChk, buildMapFile, keptExtras, planSave, type SaveOptions } from "../editor/save";
 import type { BuildPurpose } from "../plugins/api";

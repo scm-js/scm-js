@@ -3,7 +3,7 @@ import { useAtomValue, useSetAtom } from "jotai";
 import { CircleAlert, CircleCheck, Info, TriangleAlert, X } from "lucide-react";
 import { dismissAllToastsAtom, dismissToastAtom, toastsAtom, type Toast } from "../../atoms/uiAtoms";
 import { keepNoticesAtom } from "../../atoms/preferencesAtoms";
-import { toastLifetime } from "../../editor/view";
+import { toastLifetime } from "../../app/view";
 import { useT } from "../../i18n/react";
 
 const ICONS = { ok: CircleCheck, info: Info, warn: TriangleAlert, error: CircleAlert } as const;

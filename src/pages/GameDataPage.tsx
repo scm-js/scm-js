@@ -7,7 +7,7 @@ import { formatBytes } from "../editor/save";
 import { copyKind, lacksLanguageModule, type CopyKind } from "../gamedata/copies";
 import { resolveAssetSource } from "../gamedata/source";
 import { listStoredCopies, profileOf, type StoredCopy } from "../gamedata/store";
-import { isOnSite } from "../editor/platform";
+import { isOnSite } from "../app/platform";
 import { t } from "../i18n";
 
 /**

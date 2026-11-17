@@ -10,7 +10,7 @@ import { zoomToAtom } from "../../atoms/zoomAtoms";
 import { paintOverView } from "../../components/viewport/paint/overView";
 import { gridLookAtom, preferencesAtom } from "../../atoms/preferencesAtoms";
 import { nextContributionKey, pluginOverlayRevisionAtom, pluginOverlaysAtom, pluginMapViewsAtom, mapViewStateAtom, mapViewCamerasAtom, mapViewFogAtom, mapViewMinimapRevisionAtom, mapViewPointerAtom } from "../../atoms/pluginAtoms";
-import { logError, logWarn } from "../../editor/log";
+import { logError, logWarn } from "../../app/log";
 import type { MapView, MapViewCamera, MapViewHandle, MapViewPointer, MapViewSpec, MapViewWheel, PluginInfo } from "../api";
 import type { Store, Contributions } from "./shared";
 import { ZOOM_RANGE } from "./view";

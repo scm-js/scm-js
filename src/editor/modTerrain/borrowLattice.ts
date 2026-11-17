@@ -19,15 +19,15 @@
  *
  * Pure and canvas-free; `tests/borrow.test.ts`.
  */
-import { markDirty, type Scenario } from "../formats/chk/scenario";
-import { megatileForTile, TileFlag, tileGroupOf, type Tileset } from "../formats/tileset/decode";
-import { flatTerrain } from "../formats/tileset/terrain";
-import { TILESETS } from "../data/tilesets";
-import { ISOM_TABLES, isomValueOf } from "../data/isomTables";
-import { SEAM_SHOWS, seamStep, SIDES, type Side } from "./blend";
+import { markDirty, type Scenario } from "../../formats/chk/scenario";
+import { megatileForTile, TileFlag, tileGroupOf, type Tileset } from "../../formats/tileset/decode";
+import { flatTerrain } from "../../formats/tileset/terrain";
+import { TILESETS } from "../../data/tilesets";
+import { ISOM_TABLES, isomValueOf } from "../../data/isomTables";
+import { SEAM_SHOWS, seamStep, SIDES, type Side } from "../blend";
 import { borrowBase, type BorrowTable } from "./borrow";
-import { diamondsOfRect, diamondValue, isomHeight, isomWidth, paintIsomDiamonds, setDiamondValue, tilesFromIsom, type Diamond } from "./isom";
-import type { TileChange } from "./terrain";
+import { diamondsOfRect, diamondValue, isomHeight, isomWidth, paintIsomDiamonds, setDiamondValue, tilesFromIsom, type Diamond } from "../isom";
+import type { TileChange } from "../terrain";
 import { decodeBorderRecord, emptyRecord, encodeBorderRecord, type BorderRecord } from "./borderRecord";
 import { flatTerrainsOf, standInShapes, type BorderShape } from "./borderLattice";
 import { hostTerrainOf, pairKey, pairStandIn, poolOf, type BorderPairTable, type BorderSetup } from "./borderTable";

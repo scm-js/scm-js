@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { STORAGE_PREFIX } from "../src/atoms/storage";
+import { STORAGE_PREFIX } from "../src/app/storage";
 import { MOVED_KEY, owed, SITE_ORIGIN, takeIn, TRIES_KEY } from "../src/moveIn";
 
 function store(initial: Record<string, string> = {}) {

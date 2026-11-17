@@ -36,7 +36,7 @@ export default defineConfig(() => ({
       // cut on, so a nightly does not read as a release nobody shipped) — copied rather
       // than imported, since this config is its own TypeScript project. Change both.
       // The interface size's early script reads the preferences under the key this build
-      // keeps them at: the hosted nightly keeps its own (src/atoms/storage.ts#namespaced).
+      // keeps them at: the hosted nightly keeps its own (src/app/storage.ts#namespaced).
       transformIndexHtml: (html: string) =>
         html
           .replace(/%APP_VERSION_SHORT%/g, shortVersion(version))

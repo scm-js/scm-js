@@ -10,7 +10,7 @@ import { openMapBytes } from "../src/editor/mapFile";
 import { scenarioName } from "../src/formats/chk/scenario";
 import { printRun, runOnMap, sourceFor, summarizeDiff } from "../cli/src/run";
 import { attachSinks, headlessStore, type LogEntry } from "../src/plugins/headless";
-import { logWarn } from "../src/editor/log";
+import { logWarn } from "../src/app/log";
 import { CliError, visible } from "../cli/src/ui";
 import { testMap } from "./support/maps";
 

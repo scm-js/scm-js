@@ -1,6 +1,6 @@
 /**
  * The Isometric tab's second list: terrains of the game's other tilesets that the tileset in
- * front holds copies of, laid by their own isometric brush (editor/borrow.ts). The scan is asked
+ * front holds copies of, laid by their own isometric brush (editor/modTerrain/borrow.ts). The scan is asked
  * for once per tileset's files (a button that says what it does), then remembered.
  */
 import { useEffect, useState } from "react";
@@ -14,12 +14,12 @@ import { TILESETS, terrainName } from "../../data/tilesets";
 import { drawnBordersAtom, learnedBordersAtom, providedBordersAtom } from "../../atoms/borderAtoms";
 import { bordersKnown, prepareBorders } from "../../services/borders";
 import { peekBorrowContext } from "../../services/borrow";
-import { takeBackId } from "../../editor/borrow";
+import { takeBackId } from "../../editor/modTerrain/borrow";
 import { tilesetIndex } from "../../formats/chk/scenario";
 import { borrowContext, drawsFromGame, forgetBorrowed, hostKeyOf, isStopped, readKnownBorrowed, refreshProvided, scanBorrowed, stopBorrowScan } from "../../services/borrow";
 import type { LoadedTileset } from "../../formats/tileset/load";
 import { Button, Check } from "../ui";
-import { isDataSetKey } from "../../editor/pieceList";
+import { isDataSetKey } from "../../editor/modTerrain/pieceList";
 import { TileThumb } from "./TileBrowser";
 import { t, translate } from "../../i18n";
 

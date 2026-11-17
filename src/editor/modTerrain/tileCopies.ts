@@ -10,8 +10,8 @@
  * re-dithered copy (`COPY_BLOCK_MEAN`, `COPY_CELL_MEAN`). The Sheet and Groups views hide
  * nothing: there a tile's place is the point. Measurements in `.claude/internals/terrain.md`.
  */
-import { groupBuildable, megatileForTile, megatileHeight, TileFlag, tileGroupOf, type Tileset } from "../formats/tileset/decode";
-import { kindKey } from "./heal";
+import { groupBuildable, megatileForTile, megatileHeight, TileFlag, tileGroupOf, type Tileset } from "../../formats/tileset/decode";
+import { kindKey } from "../heal";
 import type { Piece } from "./pieces";
 
 /**

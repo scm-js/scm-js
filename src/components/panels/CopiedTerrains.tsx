@@ -1,6 +1,6 @@
 /**
  * The Isometric tab's copied terrains: a terrain of the tileset held again at another height (the Rect tab's "Mud (mid
- * ground)") whose edge pieces the tileset also holds, laid by the isometric brush (editor/terrainCopyLattice.ts). The
+ * ground)") whose edge pieces the tileset also holds, laid by the isometric brush (editor/modTerrain/terrainCopyLattice.ts). The
  * scan runs by itself (services/terrainCopies.ts); this lists what it found, complete terrains first, then those whose
  * tileset lacks some shapes, marked.
  */

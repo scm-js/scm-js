@@ -2,7 +2,7 @@
  * What is the plugin's own: its translation catalogues and its storage.
  */
 import { addPluginCatalogues, locale as currentLocale, makeTranslator } from "../../i18n";
-import { browserStorage, STORAGE_PREFIX } from "../../atoms/storage";
+import { browserStorage, STORAGE_PREFIX } from "../../app/storage";
 import type { PluginInfo, I18nApi, StorageApi } from "../api";
 import type { Contributions } from "./shared";
 

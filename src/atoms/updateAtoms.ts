@@ -1,6 +1,6 @@
 /**
  * The desktop build's update check, as the renderer holds it. The state machine and every
- * string it shows are `editor/updates.ts` (pure, tested); this is the part that talks to
+ * string it shows are `app/updates.ts` (pure, tested); this is the part that talks to
  * `window.scmjsDesktop.updates` and keeps one answer for the whole app, so the Help item,
  * the startup toast and Preferences all read the same thing.
  *
@@ -8,11 +8,11 @@
  * progress events are subscribed once, by `hooks/useUpdateCheck.ts`.
  */
 import { atom } from "jotai";
-import { desktopBridge } from "../gamedata/desktop";
-import type { UpdateProgress } from "../gamedata/desktop";
-import { INITIAL_UPDATE_STATE, stateFrom, updateInfo, type UpdateState } from "../editor/updates";
+import { desktopBridge } from "../app/desktop";
+import type { UpdateProgress } from "../app/desktop";
+import { INITIAL_UPDATE_STATE, stateFrom, updateInfo, type UpdateState } from "../app/updates";
 
-export type { UpdateState } from "../editor/updates";
+export type { UpdateState } from "../app/updates";
 import { t } from "../i18n";
 
 export const updateStateAtom = atom<UpdateState>(INITIAL_UPDATE_STATE);

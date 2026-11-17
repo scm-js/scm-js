@@ -17,8 +17,8 @@ import {
   selectedUnitsAtom,
 } from "../../atoms/editorAtoms";
 import { peekTileset } from "../../formats/tileset/load";
-import { desktopBridge } from "../../gamedata/desktop";
-import { hostTerms } from "../../editor/platform";
+import { desktopBridge } from "../../app/desktop";
+import { hostTerms } from "../../app/platform";
 import { APP_VERSION } from "../../version";
 import { tilesetFileNameAtom } from "../../atoms/documentAtoms";
 import { doodadLabel } from "../../formats/tileset/doodads";

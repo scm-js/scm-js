@@ -9,7 +9,7 @@ import { SYMMETRY_MODES, symmetryAvailable, symmetryLabel, type SymmetryMode } f
 import { useScenarioForm } from "../../hooks/useScenarioForm";
 import { scenarioAtom } from "../../atoms/documentAtoms";
 import { hotkeysAtom } from "../../atoms/preferencesAtoms";
-import { shortcutOf } from "../../editor/commands";
+import { shortcutOf } from "../../app/commands";
 import { Button, Check, Group } from "../ui";
 import { SymmetryIcon } from "../ui/SymmetryIcon";
 import DialogFrame from "../ui/DialogFrame";

@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { useStore } from "jotai";
-import { desktopBridge } from "../gamedata/desktop";
+import { desktopBridge } from "../app/desktop";
 import { diskHandle } from "../services/diskFiles";
 import { openGivenFiles } from "../services/documentActions";
 

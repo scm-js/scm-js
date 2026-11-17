@@ -8,11 +8,11 @@ import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
 import { describe, expect, it } from "vitest";
 import { createStore } from "jotai";
-import { mergeDefaults } from "../src/atoms/storage";
+import { mergeDefaults } from "../src/app/storage";
 import { pushToastAtom, toastsAtom } from "../src/atoms/uiAtoms";
-import { applyInterfaceSize, SIZE_ATTRIBUTE, type SizeRoot } from "../src/editor/interfaceSize";
-import { DEFAULT_PREFERENCES, INTERFACE_SIZES, interfaceZoom } from "../src/editor/preferences";
-import { defaultToastTtl, toastLifetime } from "../src/editor/view";
+import { applyInterfaceSize, SIZE_ATTRIBUTE, type SizeRoot } from "../src/app/interfaceSize";
+import { DEFAULT_PREFERENCES, INTERFACE_SIZES, interfaceZoom } from "../src/app/preferences";
+import { defaultToastTtl, toastLifetime } from "../src/app/view";
 
 /** A stand-in for `document.documentElement`: what it was given, as the page would have it. */
 function fakeRoot() {

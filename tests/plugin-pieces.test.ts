@@ -8,7 +8,7 @@ import { scenarioAtom, undoAtom, undoStackAtom } from "../src/atoms/documentAtom
 import { activeTileAtom, mapTilesetAtom } from "../src/atoms/editorAtoms";
 import { providedTypesAtom } from "../src/atoms/pieceAtoms";
 import { tileBlockAtom } from "../src/atoms/tileBlockAtoms";
-import { declaredTerrains } from "../src/editor/pieceList";
+import { declaredTerrains } from "../src/editor/modTerrain/pieceList";
 import { replaceTerrain, stampTerrain } from "../src/editor/terrain";
 import { TILESETS } from "../src/data/tilesets";
 import { Contributions, createPluginApi } from "../src/plugins/host";

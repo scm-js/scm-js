@@ -7,8 +7,8 @@ import { describe, expect, it } from "vitest";
 import {
   compareVersions, isPrerelease, notesVersionFor, parseInline, parseNotes, shouldAnnounce,
   type Block, type Inline, type ListItem,
-} from "../src/editor/releaseNotes";
-import { RELEASE_NOTES } from "../src/data/releaseNotes";
+} from "../src/app/releaseNotes";
+import { RELEASE_NOTES } from "../src/app/bundledReleaseNotes";
 
 describe("versions", () => {
   it("orders by release number, numerically", () => {

@@ -1,12 +1,12 @@
 /**
- * Drawn borders (editor/borderTable.ts): what is known per host and source, what plugins and the data set's terrain
+ * Drawn borders (editor/modTerrain/borderTable.ts): what is known per host and source, what plugins and the data set's terrain
  * file provide, and the switch. Global, not per document: a table belongs to a pair of tilesets' contents, whatever map
  * is in front, so nothing here goes into `parkRegisters`.
  */
 import { atom } from "jotai";
 import { atomWithStorage, createJSONStorage } from "jotai/utils";
-import { browserStorage } from "./storage";
-import type { BorderEvidence } from "../editor/borderTable";
+import { browserStorage } from "../app/storage";
+import type { BorderEvidence } from "../editor/modTerrain/borderTable";
 
 /** Evidence learned from maps, by `{host tilesetHash}/{source tilesetHash}` (null: read, and none is kept). */
 export const learnedBordersAtom = atom<Readonly<Record<string, BorderEvidence | null>>>({});

@@ -2,7 +2,7 @@
  * Commands and services, and the menus and keys that run them.
  */
 import { nextContributionKey, normalizeCombo, pluginCommandsAtom, pluginContextItemsAtom, pluginServicesAtom, pluginHotkeysAtom, pluginMenuItemsAtom, pluginRuntimesAtom } from "../../atoms/pluginAtoms";
-import { logError, logWarn } from "../../editor/log";
+import { logError, logWarn } from "../../app/log";
 import { pluginIdOf, type CommandInfo, type ServiceInfo, type PluginInfo, type ContextMenuContext, type ContextMenuApi, type HotkeyApi, type MenuApi, type ServicesApi, type CommandsApi } from "../api";
 import { countPluginUse, pluginName } from "../../services/usage";
 import type { Store, Contributions } from "./shared";

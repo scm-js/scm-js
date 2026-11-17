@@ -3,7 +3,7 @@
  * first. The text is a few tens of kilobytes that only Help ▸ What's New reads, so this
  * module is reached through `import()` alone — never statically from the startup path.
  */
-import { compareVersions, type ReleaseNotes } from "../editor/releaseNotes";
+import { compareVersions, type ReleaseNotes } from "./releaseNotes";
 
 const files = import.meta.glob(["../../docs/releases/*.md", "!**/README.md"], { eager: true, query: "?raw", import: "default" }) as Record<string, string>;
 

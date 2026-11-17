@@ -21,9 +21,9 @@
  * tileset when a candidate gets that far, and the long loops `await` a pause now and then.
  * Pure and canvas-free; `tests/borrow.test.ts`.
  */
-import type { Tileset } from "../formats/tileset/decode";
-import { TILESETS } from "../data/tilesets";
-import { isomTables, isomTerrains } from "./isom";
+import type { Tileset } from "../../formats/tileset/decode";
+import { TILESETS } from "../../data/tilesets";
+import { isomTables, isomTerrains } from "../isom";
 import { sourceTiles, type BorrowTable } from "./borrowTable";
 
 // The table itself (the copy test, `borrowTable`, keeping it) is its own module, which the scan's worker loads.

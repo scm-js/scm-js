@@ -76,7 +76,7 @@ export function terrainTypes(tileset: Tileset | null, names: readonly TerrainNam
  */
 export const PAIR_TERRAIN = 0x10000;
 
-/** A pair id: from `PAIR_TERRAIN` up to the borrowed terrains' range (`editor/borrow.ts#BORROWED_TERRAIN`, 0x40000). */
+/** A pair id: from `PAIR_TERRAIN` up to the borrowed terrains' range (`editor/modTerrain/borrow.ts#BORROWED_TERRAIN`, 0x40000). */
 export const isPairTerrain = (id: number): boolean => id >= PAIR_TERRAIN && id < 0x40000;
 export const pairTerrainId = (group: number): number => PAIR_TERRAIN + (group & ~1);
 export const pairTerrainGroup = (id: number): number => id - PAIR_TERRAIN;

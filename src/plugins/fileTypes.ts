@@ -7,7 +7,7 @@
  */
 import type { createStore } from "jotai";
 import { pluginFileTypesAtom, type PluginFileTypeEntry } from "../atoms/pluginAtoms";
-import { logError, logInfo, logWarn } from "../editor/log";
+import { logError, logInfo, logWarn } from "../app/log";
 import { folderReadsAtom, type FolderRead } from "../atoms/uiAtoms";
 import type { FolderFile } from "./api";
 import { droppedFileReader, droppedFolders, entryPaths, readFound, type DataTransferLike, type DroppedFolder } from "./folders";

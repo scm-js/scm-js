@@ -3,7 +3,7 @@ import { atomWithStorage } from "jotai/utils";
 import { DEFAULT_PROFILE, racesTableWith } from "../gamedata/profiles";
 import { currentAssetSource, setAssetSource, type AssetSource } from "../gamedata/source";
 import type { DataSetRace } from "@scm-js/mod";
-import { mergedStorage } from "./storage";
+import { mergedStorage } from "../app/storage";
 
 /**
  * The session's game data source as the chrome sees it (`gamedata/source.ts` is the

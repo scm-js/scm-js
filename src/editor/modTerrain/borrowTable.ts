@@ -4,8 +4,8 @@
  * so the scan's worker (`services/borrowTable.worker.ts`) carries only this and the tileset
  * decoder. Pure and canvas-free; `tests/borrow.test.ts`.
  */
-import { megatileForTile, type Tileset } from "../formats/tileset/decode";
-import { kindKey } from "../formats/tileset/kind";
+import { megatileForTile, type Tileset } from "../../formats/tileset/decode";
+import { kindKey } from "../../formats/tileset/kind";
 
 /** A copy's 4 × 4-pixel block means are within this much a channel of the source's, on average over the blocks. */
 export const BORROW_BLOCK = 2.5;

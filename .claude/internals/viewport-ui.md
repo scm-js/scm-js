@@ -92,7 +92,7 @@ read in the first effect pass is still null.
   page edits one working copy — the `Preferences` object plus the grid's spacing, look and
   snaps, which keep their own atoms — written on OK/Apply. The footer has two resets, both
   on the working copy only. **Reset this page** puts back what the page in front shows:
-  `PREFERENCES_PAGE_KEYS` in `editor/preferences.ts` is the one page → `Preferences` keys
+  `PREFERENCES_PAGE_KEYS` in `app/preferences.ts` is the one page → `Preferences` keys
   table, and the dialog's `PAGE_PARTS` adds Editing's grid parts; on Testing it also calls
   the mounted test targets' `reset`, on a plugin page that page's `spec.reset`; disabled on
   Storage (nothing there is a setting) and on a plugin page with no `reset`. **Reset
@@ -161,9 +161,19 @@ read in the first effect pass is still null.
   `zoomAnchorRef` holds the pointer position when `view.zoomToCursor` is on; the zoom
   `useLayoutEffect` keeps that point in place, or the centre when nothing set it (menu,
   keyboard, toolbar).
-- **The viewport is five files and a folder**.
-  `MapViewport.tsx` keeps what needs the component: the atoms, the refs, the frame scheduling,
-  the animation / glide / zoom / wheel / auto-pan effects, and the pointer handlers. Around it:
+- **The viewport is a component, its hooks and a folder of painters**.
+  `MapViewport.tsx` keeps what needs the component: the atoms, the refs more than one hook reads
+  (scroller, canvas, rulers, hover, gesture, pick hover) and the render. Its hooks, in the order it calls
+  them — **which is the order their effects run in, so a new effect goes in the hook whose position it
+  needs**: `useFrameLoop.ts` (`useViewportSize`, `useFrameLoop` with `scheduleDraw`, `useRepaints` with
+  `REPAINT_ATOMS` and the animation loop), `useViewMotion.ts` (the glide, recentring, the zoom anchor and
+  the wheel; it owns `panRef` and `zoomAnchorRef`), `useViewportDraw.ts` (`draw` and its caches) and
+  `useViewportPointer.ts` (hit tests, `gestureFor`, the handlers; it owns `lastMoveRef`). `autoPan.ts` is
+  the edge pan as a plain function (`autoPanner`, `panFrame`). `viewportState.ts` is the one
+  `ViewportState` object the component builds and hands to draw and pointer: **a new value `draw` reads is
+  added in four places** — `ViewportState`, the component's object, `draw`'s destructuring and its
+  dependency list. A ref passed into a hook appears in that hook's dependency lists (lint requires it);
+  refs never change identity, so no effect runs more often for it. Around them:
   - `paint/` — the draw passes, plain functions of a `PaintView` (context, scale, scroll, size,
     visible tiles, fonts) and the thing they draw: `ground.ts` (the cached terrain layer, the
     loading plate, the no-graphics noise), `grid.ts` (grid, rulers, symmetry axes), `objects.ts`
@@ -298,7 +308,7 @@ read in the first effect pass is still null.
   entry; Cosmonarchy's Badlands through the mod-folder notice (folder handed over in 1.7 s), its added groups as the
   sheet, a 12×10 building and a 4×9 wall pattern laid; no console errors.
 - **The Tile tab's Pieces view** (`panels/TilePieces.tsx`, rule and numbers in `terrain.md` "Pieces"). The
-  fourth `TileView`. Entries (`collapsePieces`) laid out in shelves by `editor/pieceShelves.ts#shelfLayout` at 16 px a tile,
+  fourth `TileView`. Entries (`collapsePieces`) laid out in shelves by `editor/modTerrain/pieceShelves.ts#shelfLayout` at 16 px a tile,
   a piece wider than the panel scaled to the largest whole pixel size that fits; windowed by `shelvesIn` over the shelf
   tops with 400 px to spare, one canvas per piece drawn in its own outline (holes left transparent). 3,372 entries on the
   mod's Badlands scroll without a hitch in headless Chromium. Filter and search apply by any member's first group (the
@@ -388,7 +398,7 @@ read in the first effect pass is still null.
   they still nudge, but only while something is selected. Verified headlessly: a rect
   stroke carried 950 px past the edge as one continuous line, the pan stopped on release, hovering
   the band with no button did nothing.
-- `src/editor/platform.ts` is what the chrome says about the shell it is in: `isDesktop()`
+- `src/app/platform.ts` is what the chrome says about the shell it is in: `isDesktop()`
   (the Electron bridge is there) and `hostTerms()`, which answers the words — "browser" /
   "app", "this browser" / "this app", "Browser" / "Application" for a heading, and where a
   download lands. The desktop build is the same bundle in a Chromium window, so every
@@ -474,7 +484,7 @@ read in the first effect pass is still null.
   `127.0.0.1` and the path starts with `/editor/` (a stand-in for the site: `npm run dev:site`). It is the scm-sim
   plugin's `simAddress` rule on purpose — where the play page is, the site is — and the two must stay in step. The
   desktop app is refused first, whatever its window loaded. `SITE_ORIGIN` lives in `site.ts` (`moveIn.ts` re-exports
-  it; `site.ts` must stay free of imports, since `atoms/storage.ts` and `moveIn.ts` read it before storage is).
+  it; `site.ts` must stay free of imports, since `app/storage.ts` and `moveIn.ts` read it before storage is).
   `tests/site.test.ts`. **Off the site**: `MenuBar` renders a plain `div.brand` and the bare
   `.menubar-doc`. On it: `a.brand` (scm in the pink, JS in `--text`, as the splash title; `/` or `/ko/` by the editor's
   language, the site header's own rule), and after the menus `.menubar-rest` holding the map's name and `SiteNav`
@@ -545,7 +555,7 @@ read in the first effect pass is still null.
   (`services/documentActions.ts`, the gate `document.open` / `document.create` share). Electron fires
   `beforeunload` on a window close too but a value returned there cancels it *silently*, which
   is why the browser half is skipped whenever the bridge is there.
-- Hotkeys: `src/editor/commands.ts` is the one list of rebindable commands (id, label, group,
+- Hotkeys: `src/app/commands.ts` is the one list of rebindable commands (id, label, group,
   `defaults` / `webDefaults`, `inText`, `inDialogs`) and the combo grammar (`comboOf`: Ctrl
   folds Cmd in, letters/digits from `e.key` when it is one else from `e.code` — so AZERTY
   Ctrl+A is Ctrl+A but Ctrl+Shift+0 is not `)` and a Hangul layout still hits Ctrl+S; `+` is
@@ -575,7 +585,7 @@ read in the first effect pass is still null.
   `src/services/documentActions.ts` (the hook `useMapFileActions` wraps it for components) and `src/services/mapIo.ts` (File System Access API with
   `<input>`/download fallbacks).
 - **Interface size** (2026-11-16, `Preferences.interfaceSize`: 100 / 115 / 130, Preferences ▸ View ▸ Interface;
-  `styles/size.css`, `editor/interfaceSize.ts`). At 115 / 130 the root carries `data-ui-size` and
+  `styles/size.css`, `app/interfaceSize.ts`). At 115 / 130 the root carries `data-ui-size` and
   `--ui-zoom` (1.15 / 1.3); at 100 neither is there and **no rule of `size.css` applies**, every rule being under
   `:root[data-ui-size]` (`tests/interfaceSize.test.ts` checks that), so the default is byte for byte what it was
   (screenshots against `origin/main`: identical). It is CSS `zoom` **per surface**: `.app`'s children but `.body`,

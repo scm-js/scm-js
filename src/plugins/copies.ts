@@ -1,7 +1,7 @@
 /**
  * Copied terrain on the plugin API (`api.terrain.copies` / `provideCopies`, and the `tx.paintCopy` the transaction runs
- * through `paintCopyIn`). Over the same functions the Isometric tab uses: `editor/terrainCopyTable.ts`,
- * `editor/terrainCopyLattice.ts`, `services/terrainCopies.ts`.
+ * through `paintCopyIn`). Over the same functions the Isometric tab uses: `editor/modTerrain/terrainCopyTable.ts`,
+ * `editor/modTerrain/terrainCopyLattice.ts`, `services/terrainCopies.ts`.
  */
 import type { createStore } from "jotai";
 import { copyHostsAtom, providedCopiesAtom, type ProvidedCopy } from "../atoms/copyAtoms";
@@ -9,12 +9,12 @@ import { archiveExtrasAtom, scenarioAtom, tilesetFileNameAtom } from "../atoms/d
 import { TILESET_BY_ID, TILESETS } from "../data/tilesets";
 import type { Diamond } from "../editor/isom";
 import type { TileChange } from "../editor/terrain";
-import { copiedParts, CopyStroke, COPY_MEMBER, groundUnder, isCopiedTerrain, patchAt } from "../editor/terrainCopyLattice";
+import { copiedParts, CopyStroke, COPY_MEMBER, groundUnder, isCopiedTerrain, patchAt } from "../editor/modTerrain/terrainCopyLattice";
 import { tilesetIndex, type Scenario } from "../formats/chk/scenario";
 import { peekTileset } from "../formats/tileset/load";
 import { chooseBlock, copyHostKey, patchTable, republish, scanCopies, tableFor } from "../services/terrainCopies";
 import { beforeDataSet } from "../services/dataSetTerrain";
-import { isDataSetKey } from "../editor/pieceList";
+import { isDataSetKey } from "../editor/modTerrain/pieceList";
 import type { CopiedTerrainInfo, CopyBlockSpec, Disposable, TerrainApi } from "./api";
 import { t } from "../i18n";
 

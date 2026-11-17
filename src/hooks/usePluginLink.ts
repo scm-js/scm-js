@@ -4,7 +4,7 @@ import { screenAtom } from "../atoms/editorAtoms";
 import { installedPluginsAtom, pluginRuntimesAtom, pluginsStartedAtom } from "../atoms/pluginAtoms";
 import { openDialogAtom, pushToastAtom } from "../atoms/uiAtoms";
 import { t } from "../i18n";
-import { logWarn } from "../editor/log";
+import { logWarn } from "../app/log";
 import { effectiveInstalls, enableWithRequirements } from "../plugins/host";
 import { PLUGIN_PARAM, pluginLinkAction } from "../plugins/link";
 

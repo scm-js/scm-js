@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   COMMANDS, comboOf, conflictsOf, firesWhileTyping, formatCombo, pluginComboAsCommand, reservedReason, resolveHotkeys, shortcutOf, takesText, withBinding, type KeyLike,
-} from "../src/editor/commands";
-import { DEFAULT_PREFERENCES } from "../src/editor/preferences";
+} from "../src/app/commands";
+import { DEFAULT_PREFERENCES } from "../src/app/preferences";
 
 const key = (k: string, code: string, mods: Partial<KeyLike> = {}): KeyLike => ({ key: k, code, ctrlKey: false, metaKey: false, altKey: false, shiftKey: false, ...mods });
 

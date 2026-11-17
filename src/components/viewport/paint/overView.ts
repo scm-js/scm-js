@@ -5,7 +5,7 @@
  * objects, fog and the tools' drawing — are the map's own and stay behind the view.
  */
 import type { MapView, OverlayAbove } from "../../../plugins/api";
-import type { ViewFlags } from "../../../editor/view";
+import type { ViewFlags } from "../../../app/view";
 import type { GridLook } from "../../../atoms/preferencesAtoms";
 import type { ViewLocation } from "../../../atoms/documentAtoms";
 import type { PluginOverlayEntry } from "../../../atoms/pluginAtoms";

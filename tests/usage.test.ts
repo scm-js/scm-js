@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { count, countError, countPlacedUnits, countView, countingWanted, countPluginUse, countReplays, countDataSetChange, errorKind, extOf, flushCounts, gameDataOf, messageKind, modOf, noteModuleSource, OFF_KEY, pluginCountName, resetCountsForTests, setCounting, stackProps, waitingCounts } from "../src/services/usage";
-import { logError, logRenderError, resetLogForTests } from "../src/editor/log";
+import { logError, logRenderError, resetLogForTests } from "../src/app/log";
 import { createStore } from "jotai";
 import { activatePlugin, runCommand } from "../src/plugins/host";
 import type { LoaderDeps } from "../src/plugins/loader";
 import type { PluginApi } from "../src/plugins/api";
-import { changedPreferences, DEFAULT_PREFERENCES } from "../src/editor/preferences";
+import { changedPreferences, DEFAULT_PREFERENCES } from "../src/app/preferences";
 import type { AssetSource } from "../src/gamedata/source";
 import { DEFAULT_PROFILE, REMASTERED_PROFILE } from "../src/gamedata/profiles";
 import type { UnitRecord } from "../src/formats/chk/sections/objects";

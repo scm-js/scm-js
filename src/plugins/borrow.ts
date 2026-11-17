@@ -1,15 +1,15 @@
 /**
  * Borrowed terrain on the plugin API (`api.terrain.borrowed` / `provideBorrowTable`, and the
  * `tx.paintBorrowed` the transaction runs through `paintBorrowedIn`). Over the same functions the
- * Isometric tab uses: `editor/borrow.ts`, `editor/borrowLattice.ts`, `services/borrow.ts`.
+ * Isometric tab uses: `editor/modTerrain/borrow.ts`, `editor/modTerrain/borrowLattice.ts`, `services/borrow.ts`.
  */
 import type { createStore } from "jotai";
 import { borrowHostsAtom, providedBorrowAtom, type ProvidedBorrow } from "../atoms/borrowAtoms";
 import { archiveExtrasAtom, scenarioAtom, tilesetFileNameAtom } from "../atoms/documentAtoms";
 import { gameDataSourceAtom } from "../atoms/gameDataAtoms";
 import { TILESET_BY_ID, TILESETS } from "../data/tilesets";
-import { borrowedParts, isBorrowedTerrain } from "../editor/borrow";
-import { BorrowStroke, borrowMember } from "../editor/borrowLattice";
+import { borrowedParts, isBorrowedTerrain } from "../editor/modTerrain/borrow";
+import { BorrowStroke, borrowMember } from "../editor/modTerrain/borrowLattice";
 import type { Diamond } from "../editor/isom";
 import type { TileChange } from "../editor/terrain";
 import { tilesetIndex, type Scenario } from "../formats/chk/scenario";
@@ -17,11 +17,11 @@ import { peekTileset } from "../formats/tileset/load";
 import { borrowContext, drawsFromGame, hostKeyOf, peekBorrowContext, readKnownBorrowed, isStopped, refreshProvided, scanBorrowed } from "../services/borrow";
 import type { BorderTableSpec, BorrowedTerrainInfo, BorrowTableSpec, Disposable, TerrainApi } from "./api";
 import { providedBordersAtom, type ProvidedBorder } from "../atoms/borderAtoms";
-import { bordersMember } from "../editor/borderRecord";
+import { bordersMember } from "../editor/modTerrain/borderRecord";
 import { bordersKnown, peekBorderSetup, prepareBorders } from "../services/borders";
 import { t } from "../i18n";
 import { beforeDataSet } from "../services/dataSetTerrain";
-import { isDataSetKey } from "../editor/pieceList";
+import { isDataSetKey } from "../editor/modTerrain/pieceList";
 
 type Store = ReturnType<typeof createStore>;
 interface Bag { add(dispose: () => void): Disposable }

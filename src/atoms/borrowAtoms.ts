@@ -1,10 +1,10 @@
 /**
- * Borrowed terrain (editor/borrow.ts): what is known per host tileset and how a scan is going.
+ * Borrowed terrain (editor/modTerrain/borrow.ts): what is known per host tileset and how a scan is going.
  * Global, not per document: a table belongs to a pair of tilesets' contents, whatever map is in
  * front, so nothing here goes into `parkRegisters`.
  */
 import { atom } from "jotai";
-import type { BorrowedTerrain, BorrowKind } from "../editor/borrow";
+import type { BorrowedTerrain, BorrowKind } from "../editor/modTerrain/borrow";
 
 export interface BorrowSourceInfo {
   sourceEra: number;

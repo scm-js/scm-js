@@ -23,7 +23,7 @@ import type { FogMode } from "../editor/fog";
 import type { SpriteKind } from "../editor/sprites";
 import type { UnitGroup } from "../data/units";
 import type { SpriteGroup } from "../data/sprites";
-import type { EditorLayer, TerrainMode, ViewFlags, Toast } from "../editor/view";
+import type { EditorLayer, TerrainMode, ViewFlags, Toast } from "../app/view";
 import type { Align, BleedingLine, CodeEffect, RunOptions, StackedLine, TextCode, TextLine, TextRun } from "../editor/textColors";
 import type { DialogId } from "../components/dialogs/ids";
 import type { MapImageOptions } from "../services/mapImage";
@@ -67,7 +67,7 @@ import type { StretchAxis } from "../editor/stretch";
 import type { FairnessPlace, FairnessReport, UnmatchedResource } from "../editor/fairness";
 import type { Clip, ClipParts, PasteMode, PasteResult } from "../editor/clipboard";
 import type { StringImport } from "../editor/exchange";
-import type { Preferences } from "../editor/preferences";
+import type { Preferences } from "../app/preferences";
 import type { IconKind, IconLook } from "../formats/units/icons";
 
 export type {

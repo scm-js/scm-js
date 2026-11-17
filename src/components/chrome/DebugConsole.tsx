@@ -1,5 +1,5 @@
 /**
- * View ▸ Debug Console: the log (`editor/log.ts`) as a strip along the bottom of the
+ * View ▸ Debug Console: the log (`app/log.ts`) as a strip along the bottom of the
  * window, and the Copy button that turns a session into something a user can paste into a
  * bug report.
  *
@@ -17,10 +17,10 @@ import { useAtom, useAtomValue } from "jotai";
 import { consoleHeightAtom, debugConsoleAtom, diagnosticsTextAtom, logVerboseAtom } from "../../atoms/logAtoms";
 import { pushToastAtom, statusMessageAtom } from "../../atoms/uiAtoms";
 import { useSetAtom } from "jotai";
-import { clearLog, formatData, formatLog, logDropped, logEntries, stamp, subscribeLog, type LogEntry, type LogLevel } from "../../editor/log";
+import { clearLog, formatData, formatLog, logDropped, logEntries, stamp, subscribeLog, type LogEntry, type LogLevel } from "../../app/log";
 import { saveBlob } from "../../services/mapIo";
 import { t } from "../../i18n";
-import { zoomOf } from "../../editor/interfaceSize";
+import { zoomOf } from "../../app/interfaceSize";
 
 /** Rows put in the DOM. Everything older is in the buffer and in a copy; it is not on screen. */
 const SHOWN = 400;

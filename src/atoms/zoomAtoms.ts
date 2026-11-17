@@ -10,7 +10,7 @@ import { mapHeightAtom, mapWidthAtom, viewportRectAtom, zoomAtom, zoomToFitAtom,
 import { mapViewCamerasAtom, shownMapViewAtom, type PluginMapViewEntry } from "./pluginAtoms";
 import { fitLook, lookAtZoom, stepZoom, zoomOfView, type ViewSize } from "../plugins/mapViews";
 import type { MapViewCamera } from "../plugins/api";
-import { logError } from "../editor/log";
+import { logError } from "../app/log";
 
 /** A zoom command: a step in or out, one of the levels, or the whole map. */
 export type ZoomTo = "in" | "out" | "fit" | number;

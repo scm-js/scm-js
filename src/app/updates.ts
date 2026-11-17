@@ -13,7 +13,7 @@
  * release page. And a check that failed is an ordinary state (the machine is offline),
  * never an exception: `UpdateAvailability` carries `status: "error"` rather than throwing.
  */
-import type { UpdateAvailability, UpdateProgress, UpdateSupport } from "../gamedata/desktop";
+import type { UpdateAvailability, UpdateProgress, UpdateSupport } from "./desktop";
 import { t } from "../i18n";
 
 export type UpdateState =

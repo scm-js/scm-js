@@ -14,7 +14,7 @@ back and handed to the editor (`guardClose` / `closeIpc`, `src/hooks/useCloseGua
 one window; the search order is AppImage dir /
 next to the executable / userData / env / the platform's install paths (so two archives dropped beside
 the app are found). `preload.ts` is
-the bridge, typed in `src/gamedata/desktop.ts`; `tsconfig.desktop.json` type-checks it.
+the bridge, typed in `src/app/desktop.ts`; `tsconfig.desktop.json` type-checks it.
 
 `app://scmjs` being an **origin** is the thing that catches people out. A plugin's `fetch` carries it,
 so a server whose CORS allowance lists the web origins alone answers the desktop build and the
@@ -306,17 +306,17 @@ is the only choice that can never be too high, so nothing has to be decided in a
 whether the next release is 0.9.0 or 1.0.0. That leaves package.json meaning the **last
 released version**, which is true without anyone maintaining it.
 
-### What's New (`src/editor/releaseNotes.ts`, `data/releaseNotes.ts`, `WhatsNewDialog.tsx`, `hooks/useWhatsNew.ts`)
+### What's New (`src/app/releaseNotes.ts`, `app/bundledReleaseNotes.ts`, `WhatsNewDialog.tsx`, `hooks/useWhatsNew.ts`)
 
 Help ▸ What's New… (`DialogId` `"whatsNew"`, its own chunk; the About
 dialog's version line opens it too) shows `docs/releases/*.md` — the files the release job
-already reads — **bundled at build time**, not fetched: `data/releaseNotes.ts` is an eager
+already reads — **bundled at build time**, not fetched: `app/bundledReleaseNotes.ts` is an eager
 `import.meta.glob(…, "?raw")` reached only through `import()` (the dialog's chunk and the
 hook's delayed import), ~27 KB that never touches the startup path. Bundled rather than
 asked of GitHub so it works offline, has no rate limit and always describes the running
 build. Both builds, web included — the web build updates silently and has no other way to say so.
 
-`editor/releaseNotes.ts` is the pure part (`tests/release-notes.test.ts`). It reads a
+`app/releaseNotes.ts` is the pure part (`tests/release-notes.test.ts`). It reads a
 deliberate subset of Markdown into a tree React draws — no `marked` (a dev dependency of
 the docs site only) and no `innerHTML`; only `http(s)` links become links. The test parses
 every committed notes file and fails on syntax the reader would show raw, so the subset is
@@ -339,11 +339,11 @@ write theirs), so an existing user is told and a fresh install starts quietly. T
 Not done: the update dialog does not show the *incoming* version's notes (`UpdateInfo.notes`
 is carried from electron-updater and unused by `UpdateDialog.tsx`).
 
-### In-app updates (`desktop/updater.ts`, `src/editor/updates.ts`)
+### In-app updates (`desktop/updater.ts`, `src/app/updates.ts`)
 
 Desktop only. `desktop/updater.ts` is `electron-updater` over the releases the workflow publishes
 (required lazily — Rollup keeps it behind a memoised factory — since `main.ts` is on the critical
-path to the first frame); `editor/updates.ts` is the pure state machine and every string shown
+path to the first frame); `app/updates.ts` is the pure state machine and every string shown
 (`stateFrom`, `headline`, `canDownload`, `shouldCheckOnStart`, `tests/updates.test.ts`);
 `atoms/updateAtoms.ts` holds one answer for the whole app; `hooks/useUpdateCheck.ts` is the startup
 check and the single subscription to the updater's progress/downloaded/error events;

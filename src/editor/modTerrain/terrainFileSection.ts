@@ -7,7 +7,7 @@
 import type { BorrowTable } from "./borrowTable";
 import type { BorderPairTable } from "./borderTable";
 import type { DeclaredTerrain, PieceSection } from "./pieceList";
-import { emptyTerrainSection, TERRAIN_LIMITS, type TerrainFileCopy, type TerrainFileSection } from "../formats/mod/terrain";
+import { emptyTerrainSection, TERRAIN_LIMITS, type TerrainFileCopy, type TerrainFileSection } from "../../formats/mod/terrain";
 
 export function terrainFileSection(table: string, sections: readonly PieceSection[], declared: readonly DeclaredTerrain[], borrow: readonly { source: string; table: BorrowTable }[], borders: readonly { source: string; table: BorderPairTable }[] = [], copies: readonly TerrainFileCopy[] = []): TerrainFileSection {
   const out = emptyTerrainSection(table);

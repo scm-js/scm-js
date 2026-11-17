@@ -11,7 +11,7 @@
  * platform APIs themselves; a term here never gates behaviour.
  */
 
-import { desktopBridge } from "../gamedata/desktop";
+import { desktopBridge } from "./desktop";
 import { msg, translate } from "../i18n";
 import { onSite } from "../site";
 

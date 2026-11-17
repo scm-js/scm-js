@@ -6,7 +6,7 @@
  */
 import { useEffect, useState } from "react";
 import { FolderOpen, RefreshCw } from "lucide-react";
-import { desktopBridge, type DesktopGameInfo } from "../../gamedata/desktop";
+import { desktopBridge, type DesktopGameInfo } from "../../app/desktop";
 import { canPickTestFolder, forgetTestFolder, pickTestFolder, storedTestFolder, type TestFolderHandle } from "../../services/testMap";
 import { t } from "../../i18n";
 import { Button } from "../ui";

@@ -6,9 +6,9 @@ import { preferencesAtom } from "../../atoms/preferencesAtoms";
 import {
   checkForUpdatesAtom, downloadUpdateAtom, openReleasesAtom, updateStateAtom,
 } from "../../atoms/updateAtoms";
-import { canDownload, formatBytes, headline, supportOf } from "../../editor/updates";
+import { canDownload, formatBytes, headline, supportOf } from "../../app/updates";
 import { guardedAction } from "../../services/documentActions";
-import { desktopBridge } from "../../gamedata/desktop";
+import { desktopBridge } from "../../app/desktop";
 import { Button, Group } from "../ui";
 import DialogFrame from "../ui/DialogFrame";
 import type { DialogProps } from "./DialogHost";
@@ -17,7 +17,7 @@ import { t } from "../../i18n";
 /**
  * Help ▸ Check for Updates…, and where the startup toast's Download leads.
  *
- * One dialog for every state the check can be in (`editor/updates.ts` holds the machine
+ * One dialog for every state the check can be in (`app/updates.ts` holds the machine
  * and the words). The thing it is careful about is not promising what the platform cannot
  * do: a build that can check but not install — macOS while unsigned, a Linux `.deb`
  * install — gets the release page rather than a progress bar, and says why.

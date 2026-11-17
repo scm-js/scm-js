@@ -15,7 +15,7 @@ import { preferencesAtom } from "../atoms/preferencesAtoms";
 import { defaultSaveOptions } from "../editor/save";
 import { buildOutgoing } from "./mapBuild";
 import { scenarioName } from "../formats/chk/scenario";
-import { desktopBridge, type DesktopGameInfo } from "../gamedata/desktop";
+import { desktopBridge, type DesktopGameInfo } from "../app/desktop";
 import { ensurePermission, loadHandle, removeHandle, storeHandle, type StoredHandle } from "./handleStore";
 import { saveBytes } from "./mapIo";
 import { t } from "../i18n";

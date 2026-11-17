@@ -110,6 +110,6 @@ happens when the recents are empty or the entry has no handle (Firefox, Safari).
 Remastered = VER 206 + STRx).
 
 **Workers on the startup path.** `main.tsx` imports `services/borrowTableClient.ts` (a few kB, with
-`editor/borrowWorker.ts#tilesetParts`) to hand the borrowed-terrain scan its worker pool; `borrow.ts` was in the main
+`editor/modTerrain/borrowWorker.ts#tilesetParts`) to hand the borrowed-terrain scan its worker pool; `borrow.ts` was in the main
 chunk already (the Isometric tab). The worker itself is its own chunk (`borrowTable.worker-*.js`, 5.3 kB) and is started
 only when a scan runs.

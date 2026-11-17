@@ -1,8 +1,8 @@
 import { useEffect, useRef } from "react";
 import { useStore } from "jotai";
-import { storedKeys } from "../atoms/storage";
+import { storedKeys } from "../app/storage";
 import { openDialogAtom, pushToastAtom, whatsNewSeenAtom } from "../atoms/uiAtoms";
-import { notesVersionFor, shouldAnnounce } from "../editor/releaseNotes";
+import { notesVersionFor, shouldAnnounce } from "../app/releaseNotes";
 import { APP_VERSION } from "../version";
 import { t } from "../i18n";
 
@@ -34,7 +34,7 @@ export function useWhatsNew() {
     const returning = storedKeys().some((key) => key !== "scmjs.whatsNew");
     // Late enough that the splash has gone; the notes are a chunk of their own, fetched here.
     setTimeout(() => {
-      void import("../data/releaseNotes").then(({ RELEASE_NOTES }) => {
+      void import("../app/bundledReleaseNotes").then(({ RELEASE_NOTES }) => {
         const current = notesVersionFor(APP_VERSION, RELEASE_NOTES.map((n) => n.version));
         if (!current) return;
         const seen = store.get(whatsNewSeenAtom);

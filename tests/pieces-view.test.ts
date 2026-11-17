@@ -5,11 +5,11 @@ import { createScenario } from "../src/formats/chk/create";
 import { decodeCv5, type Cv5Group } from "../src/formats/tileset/decode";
 import { writeMapBytes } from "../src/editor/mapFile";
 import { applyChanges } from "../src/editor/terrain";
-import { layBlock } from "../src/editor/tileSheet";
-import { cutPieces, emptyEvidence, gatherEvidence, pieceBlock, pieceIndex } from "../src/editor/pieces";
-import { shelfLayout, shelvesIn } from "../src/editor/pieceShelves";
-import { isMapName, learnFromMaps, piecesPerTileset, tableHash, type LearnFile } from "../src/editor/pieceLearn";
-import { laidPieceAt } from "../src/editor/piecePick";
+import { layBlock } from "../src/editor/modTerrain/tileSheet";
+import { cutPieces, emptyEvidence, gatherEvidence, pieceBlock, pieceIndex } from "../src/editor/modTerrain/pieces";
+import { shelfLayout, shelvesIn } from "../src/editor/modTerrain/pieceShelves";
+import { isMapName, learnFromMaps, piecesPerTileset, tableHash, type LearnFile } from "../src/editor/modTerrain/pieceLearn";
+import { laidPieceAt } from "../src/editor/modTerrain/piecePick";
 import { forgetLearned, memoryPieceStore, piecesKey, readLearned, writeLearned } from "../src/services/pieceStore";
 import { testMapFiles } from "./support/maps";
 

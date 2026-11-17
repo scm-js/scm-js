@@ -1,6 +1,6 @@
 import { tileBlockAtom } from "../../atoms/tileBlockAtoms";
 import { providedTypesAtom } from "../../atoms/pieceAtoms";
-import { declaredTerrains } from "../../editor/pieceList";
+import { declaredTerrains } from "../../editor/modTerrain/pieceList";
 import { useState } from "react";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { Crosshair, MousePointer2, SquareDashed, Trash2 } from "lucide-react";
@@ -26,8 +26,8 @@ import { displayColorHex, PLAYER_COLORS, playerColorIndex } from "../../data/pla
 import { FOG_PLAYERS, fogCount, fogPlayersAt, playerBit } from "../../editor/fog";
 import { fogPlayersLabel } from "../../hooks/useFogTools";
 import { terrainName, TILESET_BY_ID } from "../../data/tilesets";
-import { isBorrowedTerrain } from "../../editor/borrow";
-import { isCopiedTerrain } from "../../editor/terrainCopyLattice";
+import { isBorrowedTerrain } from "../../editor/modTerrain/borrow";
+import { isCopiedTerrain } from "../../editor/modTerrain/terrainCopyLattice";
 import { copyHostsAtom } from "../../atoms/copyAtoms";
 import { copyHostKey } from "../../services/terrainCopies";
 import { borrowedIdLabel } from "../../hooks/useTerrainTools";

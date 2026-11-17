@@ -15,7 +15,7 @@
  * Pure, so the wording is tested rather than eyeballed (`tests/plugins.test.ts`). The
  * hook that owns the activation pass (`hooks/usePlugins.ts`) is what pushes it.
  */
-import type { Toast } from "../editor/view";
+import type { Toast } from "../app/view";
 import type { CachedManifest, PluginInstall, PluginRuntime } from "../atoms/pluginAtoms";
 import { t } from "../i18n";
 

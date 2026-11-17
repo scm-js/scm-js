@@ -5,7 +5,7 @@ import { msg, t, translate } from "../../i18n";
 import { scenarioAtom } from "../../atoms/documentAtoms";
 import { statusMessageAtom } from "../../atoms/uiAtoms";
 import { mapPickAtom, mapToolAtom, mapToolRevisionAtom, nextContributionKey, overlayMemoryKey, overlayVisibilityMemory, pluginOverlayRevisionAtom, pluginOverlaysAtom, pluginMapButtonsAtom, pluginStatusItemsAtom, setOverlayVisibleAtom, type MapPickKind, type MapPickResult } from "../../atoms/pluginAtoms";
-import { logError } from "../../editor/log";
+import { logError } from "../../app/log";
 import type { MapToolHandle, MapToolSpec, MapToolStopReason, OverlayHandle, OverlaySpec, PickObjectOptions, StatusItemHandle, StatusItemSpec, MapButtonHandle, MapButtonSpec, PluginInfo } from "../api";
 import type { Store, Contributions } from "./shared";
 

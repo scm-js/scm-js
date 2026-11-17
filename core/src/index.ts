@@ -93,37 +93,37 @@ export {
   encodeBorrowTable, decodeBorrowTable, borrowedTerrainId, isBorrowedTerrain, borrowedParts, BORROWED_TERRAIN, BORROW_BLOCK, BORROW_PIXEL,
   TAKE_BACK, takeBackId, isTakeBack,
   type BorrowTable, type BorrowKind, type BorrowedTerrain, type Copy, type Pictures, type Slicing,
-} from "../../src/editor/borrow";
+} from "../../src/editor/modTerrain/borrow";
 export {
   BorrowStroke, borrowMember, BORROW_MEMBERS, encodeBorrowLattice, decodeBorrowLattice, latticeOf, baseLattice, resizeBorrowMember, borrowedCells,
   type BorrowContext, type BorrowStrokeResult,
-} from "../../src/editor/borrowLattice";
+} from "../../src/editor/modTerrain/borrowLattice";
 // Copied terrain: a terrain of the tileset held again at another height, with the edge pieces it holds for it there,
 // found from the tileset's files and laid by the isometric brush through a shadow lattice.
 export {
   findCopyBlocks, gateBlock, edgeSetsOf, blockKey, encodeCopyBlocks, decodeCopyBlocks, KEPT_BLOCKS, GATE_FLAGS,
   type CopyBlock, type CopySource, type CopyStatus, type EdgeSetInfo,
-} from "../../src/editor/terrainCopyTable";
+} from "../../src/editor/modTerrain/terrainCopyTable";
 export {
   CopyStroke, copyTable, relayCopies, paintCount, rankGrounds, chooseOuter, groundUnder, groundsOf, patchAt,
   COPY_MEMBER, encodeCopyMember, decodeCopyMember, resizeCopyMember, COPIED_TERRAIN, copiedTerrainId, isCopiedTerrain, copiedParts,
   type CopyTable, type CopyGround, type RankedGround, type CopyPatch, type CopyStrokeResult, type RelayResult,
-} from "../../src/editor/terrainCopyLattice";
+} from "../../src/editor/modTerrain/terrainCopyLattice";
 // Drawn borders: where borrowed ground meets the tileset's own, the tileset's border pieces, learned from maps or given.
 export {
   badlandsStandIns, BADLANDS_STANDIN, standInShapes, diamondsOf, patternKey, flatTerrainsOf, BORDER_MODES,
   type StandIn, type StandIns, type BorderMode, type BorderShape, type StandInLaid,
-} from "../../src/editor/borderLattice";
+} from "../../src/editor/modTerrain/borderLattice";
 export {
   borderClasses, gatherBorderEvidence, mergeBorderEvidence, cutBorderTables, emptyBorderEvidence, encodeBorderEvidence, decodeBorderEvidence,
   sheetPool, poolOf, pairKey, pairOf, pairStandIn, hostTerrainOf, cellKind,
   type BorderEvidence, type BorderClasses, type BorderSourceCtx, type BorderPairTable, type BorderSetup,
-} from "../../src/editor/borderTable";
-export { layBorder, warmBorderPass, type BorderCell, type BorderPassResult } from "../../src/editor/borderPass";
+} from "../../src/editor/modTerrain/borderTable";
+export { layBorder, warmBorderPass, type BorderCell, type BorderPassResult } from "../../src/editor/modTerrain/borderPass";
 export {
   bordersMember, BORDER_MEMBERS, encodeBorderRecord, decodeBorderRecord, resizeBorderRecord, emptyRecord,
   type BorderRecord,
-} from "../../src/editor/borderRecord";
+} from "../../src/editor/modTerrain/borderRecord";
 export { applyChanges, type TileChange } from "../../src/editor/terrain";
 export { checkDoodadPlacement, placeDoodad, applyDoodadChanges, DEFAULT_DOODAD_PLACEMENT, type DoodadPlacementOptions, type DoodadEdit } from "../../src/editor/doodads";
 export { symmetryImages, mirroredOwner, type SymmetryMode, type SymmetryImage } from "../../src/editor/symmetry";
@@ -133,21 +133,21 @@ export { symmetryImages, mirroredOwner, type SymmetryMode, type SymmetryImage } 
 export {
   sheetRows, runBounds, blockFromRect, blockRect, blockCells, layBlock, layPattern, patternOrigin, patternTileAt, firstTile, PatternStroke,
   HOLE, SHEET_COLUMNS, SHEET_BRIDGE, type SheetRow, type SheetRect, type TileBlock,
-} from "../../src/editor/tileSheet";
+} from "../../src/editor/modTerrain/tileSheet";
 export {
   gatherEvidence, mergeEvidence, cutPieces, pieceBlock, pieceIndex, emptyEvidence, encodeEvidence, decodeEvidence, DEFAULT_CUT,
   type PieceEvidence, type Piece, type CutOptions,
-} from "../../src/editor/pieces";
-export { learnFromMaps, piecesPerTileset, tableHash, isMapName, type LearnFile, type LearnResult, type LearnDeps, type SkipReason } from "../../src/editor/pieceLearn";
+} from "../../src/editor/modTerrain/pieces";
+export { learnFromMaps, piecesPerTileset, tableHash, isMapName, type LearnFile, type LearnResult, type LearnDeps, type SkipReason } from "../../src/editor/modTerrain/pieceLearn";
 export {
   collapsePieces, entryPieces, uniqueTiles, sameTileKey, pictureKey, samePicture, COPY_BLOCK_MEAN, COPY_CELL_MEAN,
   type PieceEntry, type FlagDifference,
-} from "../../src/editor/tileCopies";
-export { laidPieceAt, sheetTile } from "../../src/editor/piecePick";
+} from "../../src/editor/modTerrain/tileCopies";
+export { laidPieceAt, sheetTile } from "../../src/editor/modTerrain/piecePick";
 export {
   pieceSections, declaredTerrains, blockTiles, blockFits,
   type ProvidedPiece, type ProvidedPieceSet, type DeclaredTerrain, type ListedPiece, type PieceSection,
-} from "../../src/editor/pieceList";
+} from "../../src/editor/modTerrain/pieceList";
 export { kindKey } from "../../src/editor/heal";
 export { addedGroupsFrom } from "../../src/data/remasteredTiles";
 // The flat ground a new map is filled with: the tileset's own tiles when it is loaded, the base-ground ids without it (as the editor does without game data).

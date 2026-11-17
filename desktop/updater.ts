@@ -26,7 +26,7 @@
  * bar that is going to fail at the end.
  */
 import { app, ipcMain, shell, type BrowserWindow } from "electron";
-import type { UpdateAvailability, UpdateProgress, UpdateSupport } from "../src/gamedata/desktop";
+import type { UpdateAvailability, UpdateProgress, UpdateSupport } from "../src/app/desktop";
 
 /** The releases page, for every case that cannot install and for "what changed". */
 const RELEASES_URL = "https://github.com/scm-js/scm-js/releases";

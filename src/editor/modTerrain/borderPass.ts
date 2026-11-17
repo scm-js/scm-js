@@ -11,8 +11,8 @@
  * Measured in the spike (terrain.md "Drawn borders"): this is what works; the same picture shared between shapes, the
  * pool without the judge, and choosing a rect's two tiles together were tried and are not here. Pure.
  */
-import { edgeGrain, edgeTable, SEAM_SHOWS, seamStep, type Side } from "./blend";
-import { megatileForTile, type Tileset } from "../formats/tileset/decode";
+import { edgeGrain, edgeTable, SEAM_SHOWS, seamStep, type Side } from "../blend";
+import { megatileForTile, type Tileset } from "../../formats/tileset/decode";
 import type { BorderPairTable } from "./borderTable";
 
 export interface BorderCell {

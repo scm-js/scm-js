@@ -9,7 +9,7 @@ import { isAnywhereIntact, locationCapacity, locationName } from "../../editor/l
 import { applyStrings, deleteUnused, readStrings, stringCapacity, stringUsages, type StringUsage } from "../../editor/strings";
 import { addSound, applySounds, findMember, normalizeMember, orphanSounds, readWavs, removeSound, soundBytes, soundList, wavMemberName, type SoundRow } from "../../editor/sounds";
 import { applySwitchNames, readSwitchNames, switchUsage } from "../../editor/switches";
-import { hostTerms } from "../../editor/platform";
+import { hostTerms } from "../../app/platform";
 import { useLocationTools } from "../../hooks/useLocationTools";
 import { useScenarioForm } from "../../hooks/useScenarioForm";
 import { ANYWHERE_INDEX, ELEVATIONS, isLocationUsed } from "../../formats/chk/sections/objects";

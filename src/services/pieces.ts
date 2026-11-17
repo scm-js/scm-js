@@ -8,9 +8,9 @@ import { mapTilesetAtom } from "../atoms/editorAtoms";
 import { scenarioAtom, terrainRevisionAtom } from "../atoms/documentAtoms";
 import { tilesetIndex, type Scenario } from "../formats/chk/scenario";
 import type { Tileset } from "../formats/tileset/decode";
-import { cutPieces, emptyEvidence, gatherEvidence, mergeEvidence, pieceIndex, type Piece, type PieceEvidence } from "../editor/pieces";
-import { collapsePieces, type PieceEntry } from "../editor/tileCopies";
-import { pieceSections, type PieceSection } from "../editor/pieceList";
+import { cutPieces, emptyEvidence, gatherEvidence, mergeEvidence, pieceIndex, type Piece, type PieceEvidence } from "../editor/modTerrain/pieces";
+import { collapsePieces, type PieceEntry } from "../editor/modTerrain/tileCopies";
+import { pieceSections, type PieceSection } from "../editor/modTerrain/pieceList";
 import { browserPieceStore, piecesKey, readLearned } from "./pieceStore";
 import type { Store } from "../atoms/store";
 

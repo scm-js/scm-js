@@ -3,7 +3,7 @@
  * its minitile flags mean. Both are a property of the tile, so both live in one cached
  * layer that a paint copies with a single `drawImage`.
  */
-import type { RemasteredEffects } from "../../../editor/preferences";
+import type { RemasteredEffects } from "../../../app/preferences";
 import type { LoadedTileset } from "../../../formats/tileset/load";
 import { atlasSource, atlasTileSize } from "../../../formats/tileset/atlas";
 import { groupBuildable, megatileForTile, megatileHeight, minitileHeight, tileGroupOf } from "../../../formats/tileset/decode";

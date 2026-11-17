@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { useAtomValue, useStore } from "jotai";
 import { anyModifiedAtom } from "../atoms/documentAtoms";
 import { preferencesAtom } from "../atoms/preferencesAtoms";
-import { desktopBridge } from "../gamedata/desktop";
+import { desktopBridge } from "../app/desktop";
 import { quitGuard } from "../services/documentActions";
 import { forgetSessionCopies } from "../services/recoveryCopier";
 

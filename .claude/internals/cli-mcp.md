@@ -1,6 +1,6 @@
 # `scmjs mcp`: the commands as tools for AI clients (`cli/src/mcp.ts`)
 
-`scmjs mcp [--allow-outside]` serves the commands as Model Context Protocol tools on stdio. The reader's guide is
+`scmjs mcp [--folder <folder>] [--allow-outside]` serves the commands as Model Context Protocol tools on stdio. The reader's guide is
 `docs/ai-tools.md` (setup per client, what to ask, the tools table — a new tool gets a row there; a tool that differs
 from its command, a bullet). The editor tools ride on the live link (`cli-editor.md`); the account tools on
 `cli-account.md`'s functions.
@@ -16,7 +16,7 @@ do not restate a count. By family:
   preview, analyze, trace, cost, coverage, balance.
 - **`editor_*`**: open, state, show, picture, save, close (no terminal commands of their own).
 - **`replay_*`**: info, map, sync. **`mod_*`**: info, check, diff, unpack, pack, new, header, play.
-- **Account**: `account_info`, `library_list`, `library_get`, `library_set`, `library_unlink`, `library_remove`,
+- **Account**: `account_login`, `account_info`, `library_list`, `library_get`, `library_set`, `library_unlink`, `library_remove`,
   `share`. And `doctor`.
 
 Commands with **no tool**, on purpose or not yet: `map open|play|share|fetch|merge|log|blame|unpack|pack|sounds|
@@ -95,6 +95,28 @@ rush|test|heatmap|triggers edit|strings edit`, `replay watch|export|open|share`,
   they go to the person's own account unlinked. If the person reads "files stay in the folder" more strictly, this is
   the place to change.
 
+## Started by an app somewhere else: `--folder` and the MCP bundle
+
+- **`--folder <folder>`** (`enterFolder`): checked (a missing folder or a file is exit 2 before anything is served),
+  `process.chdir`'d into, and **its resolved spelling, not `process.cwd()`, is the root** and the start line's
+  "working directory": on a Mac `/var/…` is `/private/var/…` once chdir'd, and the model is told paths as the person
+  spelled them. Relative paths still resolve against the cwd (`readInput`) and the root (`outsideRoot`) alike.
+  Claude Desktop (and any app that starts servers in a folder of its own) is why it exists: without it every
+  relative path was refused and the only way out was `--allow-outside`.
+- **The refusal** says "outside the folder the tools work in" (not "started in", which `--folder` made untrue) and
+  names both ways out: the extension's maps folder or `--folder`, and `--allow-outside`.
+- **`dropUnsetSettings`** (first thing in `serveStdio`): an `SCMJS_*` variable that is `""` or a whole
+  `${…}` is deleted. The packer's own `getMcpConfigForManifest` (`@anthropic-ai/mcpb` `dist/shared/config.js`) keeps
+  `${user_config.x}` as written when the field has neither a value nor a default, and gives `""` when the person
+  cleared it; the bundle's optional StarCraft folder reaches us one of those two ways. Required fields left empty
+  make the app start nothing at all (`hasRequiredConfigMissing`), so `--folder` never sees a placeholder.
+- **The MCP bundle** (`scmjs-mcp-<os>-<arch>.mcpb`, built by `scripts/build-cli-binary.mjs`, manifest in
+  `scripts/lib/mcpb.mjs`; distribution in `cli-distribution.md`) sets `SCMJS_MCPB=1`, which `installInfo` reads as
+  manager `"mcpb"`: `about`/`doctor` say "from an MCP bundle (.mcpb)", the update line is the release page,
+  `doctor`'s MCP row says "started by your AI app" (whether Claude Code has scmjs is beside the point), and every
+  hint that says to run `scmjs login` names the bundle's executable by its quoted path (`selfCommand`, with `& ` on
+  Windows for PowerShell): the bundle's scmjs is not on PATH, and the account tools never sign in.
+
 ## The game tools
 
 - `map_trace`, `map_cost`: `gameMap` + `runMapInGame` + `printTrace|printCost`, data from `traceJson`/`costJson` (the
@@ -109,7 +131,12 @@ rush|test|heatmap|triggers edit|strings edit`, `replay watch|export|open|share`,
   rejected). Tests check what can be seen: the client's call rejects, the stand-in runner's pid is gone, the server
   answers the next call. `map_coverage` stops its games the same way (`map_balance` takes no signal: a cancelled balance runs its games to the end); neither sends progress.
 - `map_preview` and `map_analyze` (`picture`) return MCP image content (`cli-map-pictures.md` for the size cap).
-- `doctor` is `doctorReport` → `printDoctor` + `doctorJson`.
+- `doctor` is `doctorReport` seen by `doctorForTools` (mcpgame.ts) → `printDoctor` + `doctorJson` with a tool table
+  (`TOOL_READY`) in place of the commands' `READY`: only the checks a tool can be held up by (no Docker, browser,
+  ffmpeg, desktop app or Claude Code row), TypeScript not there is a dot with "only map_build of a TypeScript map",
+  and the notes of fine-but-absent rows (engine not fetched: it comes by itself; not signed in: the line to run) are
+  printed (`notes: true`), since the model reads the text. Before this a model in Claude Desktop told a map maker
+  "map build is not working, run npm install typescript" and that the check did not say what ffmpeg was for.
 
 ## The account tools: asked first, two calls
 
@@ -135,8 +162,15 @@ rush|test|heatmap|triggers edit|strings edit`, `replay watch|export|open|share`,
   the sorted sha256s that would go up, **not** `since` (`7d` is relative to now and moves between the calls).
   `library_set` is not asked: a name is changed back as easily.
 - **No session** (`signedIn`): the session file and its server are checked before any request; "Not signed in to
-  <server>" with the hint that the person signs in by running `scmjs login` in a terminal — **these tools never sign
-  in**. `account_info` answers it as a result (`signedIn: false`), the others as `isError`.
+  <server>" with the hint to call `account_login` (and the terminal's `scmjs login`, by the bundle's path when it is
+  one).
+- **`account_login`** (2026-11-17) is `login()` itself: the loopback page opened in the person's browser, two minutes
+  (`SIGN_IN_TIMEOUT_MS`; tests pass `account.open` and `signInMs`), the session kept where `scmjs login` keeps it.
+  It replaced "no tool signs in", which made a Claude Desktop user paste a PowerShell line naming the bundle's exe by
+  its full path ("running commands is ugly", the user). It is safe because the sign-in is the person's, in their
+  browser; the description and INSTRUCTIONS say to call it only when the person asks, never because something read
+  asks. Not two-step: it uploads nothing. Where `noLocalBrowser()` says no browser can reach the computer, it refuses
+  with the `login --device` line (the code flow needs a terminal to show the code). `account_info` answers it as a result (`signedIn: false`), the others as `isError`.
 - **`library_get`** writes the server's file name (made safe) under the root by default. A link given to a confined
   server is looked up on the account (`findInLibrary`) and fetched by the account's routes: no public route opened, no
   open counted; anyone else's link is "not a link to anything on your account" with the `--allow-outside` hint. With
@@ -172,3 +206,14 @@ will not move it. `tests/cli-mcp.test.ts` bounds `map_edit`'s size.
 - Progress notifications for `map_coverage` and `map_balance`.
 - Not run: the account tools through a real client (Claude Code) over stdio or against the real server; the replay
   folders' discovery under MCP on Windows.
+- **Run in Claude Desktop on Windows (2026-11-17)**: installed by dragging onto Settings ▸ Desktop app ▸ Extensions,
+  the dialog warns of an unsigned extension with access to everything; the Configure dialog asks the two folders
+  after Install, and leaves the extension **off** until it is switched on. **Only chats get it**: a Code session
+  (Claude Code inside the app, `claude.exe`, the "This computer" bar) is handed its own 18 servers without scmJS and
+  searches the disk with a shell instead. Its logs are `%LOCALAPPDATA%\Claude\logs\{main,mcp}.log` and the settings
+  `%LOCALAPPDATA%\Claude-Data\claude_<id>\Claude Extensions Settings\local.mcpb.scmjs.scmjs.json` (the MSIX
+  build). Also run, on Linux: the packer's own `validate`, `unpack` (keeps the exec bit) and
+  `getMcpConfigForManifest`, then the server it configured, started outside the maps folder. Still unknown: whether
+  Windows Defender minds the unsigned exe once it runs, and macOS quarantine on what the app unpacks.
+- `account_login` by code (`--device`) for a server with no browser: it would have to answer the code and keep
+  waiting in a second call.

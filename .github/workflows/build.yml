@@ -60,6 +60,8 @@
 #   https://github.com/scm-js/scm-js/releases/download/nightly/scmJS-windows-x64-setup.exe
 #   https://github.com/scm-js/scm-js/releases/latest/download/scmjs-cli-windows-x64.zip  (the command line;
 #     scmjs-cli-macos-arm64.tar.gz, scmjs-cli-macos-x64.tar.gz, scmjs-cli-linux-x64.tar.gz and SHA256SUMS too)
+#   https://github.com/scm-js/scm-js/releases/latest/download/scmjs-mcp-windows-x64.mcpb  (the AI tools as an MCP
+#     bundle for Claude Desktop; scmjs-mcp-macos-arm64.mcpb and scmjs-mcp-macos-x64.mcpb too)
 #
 # That is why `electron-builder.yml` names the assets without the version in them: the
 # redirect can only work against a fixed file name. The version is in the release title,
@@ -502,7 +504,10 @@ jobs:
   # is made portable, without the cache). Each runner runs scripts/check-cli-binary.mjs
   # over what it can run: the map commands, `map build` with TypeScript from a project,
   # `map run`, `mcp`, and a script run as Node the way the game's runners are, with no
-  # Node on PATH. On a pull request the archives stay an artifact (this job is read-only,
+  # Node on PATH. The Windows and macOS runners also make the MCP bundle for Claude Desktop
+  # (scmjs-mcp-<os>-<arch>.mcpb: the same executable with a manifest), validate the manifest
+  # with the packer's own command and start the bundle the way the app does. On a pull
+  # request the archives stay an artifact (this job is read-only,
   # as `web` is) so they can be tried before merging; on the nightly and stable channels
   # the `release` job attaches them beside the installers. npm's `cli` job is separate
   # and unchanged: the package and the executables are built from one source.
@@ -544,6 +549,7 @@ jobs:
           path: |
             cli/dist/bin/*.tar.gz
             cli/dist/bin/*.zip
+            cli/dist/bin/*.mcpb
           if-no-files-found: error
 
   # `@scm-js/core`, the editor's map code as a library (core/, docs/core.md), on npm. Built

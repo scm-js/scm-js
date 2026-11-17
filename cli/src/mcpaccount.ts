@@ -6,7 +6,7 @@ import { z } from "zod";
 import { writeOutput } from "./exchange";
 import { isWebAddress } from "./weblink";
 import { expectKind, loadMapInput, loadReplayInput, readInput } from "./files";
-import { accountReport, printAccount, readSession, serverLabel, serverUrl, sessionPath } from "./account";
+import { accountReport, login, noLocalBrowser, printAccount, PROVIDERS, readSession, serverLabel, serverUrl, sessionPath } from "./account";
 import { findInLibrary, getFromLibrary, libraryReport, noteRevision, planRemoval, planUnlink, printGot, printLibrary, removalLines, removeFromLibrary, renameMap, unlink, unlinkLines } from "./library";
 import { checkShareOptions, printSharedFile, shareFile, type ShareFilesOptions, type SharedFile } from "./sharefiles";
 import { replayMoment, type ReplayMoment } from "./replayshare";
@@ -14,6 +14,7 @@ import { parseKeep } from "./share";
 import { parseSince, printSyncSummary, printSyncUpload, readSyncState, syncFolders, syncReplays, syncStatePath, type SyncReport } from "./replaysync";
 import { CliError, gameText, size, nearPath } from "./ui";
 import { refuseOverwrite } from "./options";
+import { selfCommand } from "./runtime";
 import { ok, tool, type McpContext, type Reg } from "./mcpkit";
 
 /** How long a plan shown by a tool that asks first stays good for its second call. */
@@ -23,13 +24,14 @@ export const PLAN_MS = 15 * 60_000;
 const stableJson = (v: unknown): string => JSON.stringify(v, (_, x) => (x && typeof x === "object" && !Array.isArray(x) ? Object.fromEntries(Object.entries(x as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b))) : x));
 
 export function addAccountTools(reg: Reg, { options, root }: McpContext): void {
-  // The person's own session (scmjs login in a terminal; no tool signs in). Uploading publishes and deleting is final,
+  // The person's own session: `account_login` opens the sign-in in their browser, where they sign in themselves (or
+  // `scmjs login` in a terminal). Uploading publishes and deleting is final,
   // so share, replay_sync, library_unlink and library_remove answer with what they would do first, and act only on a
   // second call with the same arguments and `confirm: true` while that plan still holds (see `twoStep`).
   const acct = () => ({ server: (options.account?.server ?? serverUrl()).replace(/\/+$/, ""), file: options.account?.file ?? sessionPath(), fetchImpl: options.account?.fetchImpl });
   const notSignedIn = (server: string, file: string, other: string | null) => new CliError(
     `Not signed in to ${serverLabel(server)}`,
-    `The person signs in by running scmjs login in a terminal (scmjs login --device where no browser can reach that terminal); these tools never sign in themselves.${other ? ` The session in ${file} is for ${other}.` : ""}`, 2);
+    `If the person wants to sign in, call account_login: it opens the sign-in page in their browser and they sign in there. (In a terminal it is ${selfCommand()} login.)${other ? ` The session in ${file} is for ${other}.` : ""}`, 2);
   /** The account's server, session file and the name signed in, or the error that tells the person how to sign in. */
   const signedIn = () => {
     const d = acct();
@@ -62,9 +64,23 @@ export function addAccountTools(reg: Reg, { options, root }: McpContext): void {
   };
   const confirmArg = z.boolean().optional().describe("true to go ahead with the plan the same call answered before, once the person has agreed to it; without it the tool answers the plan and does nothing");
 
+  reg("account_login", {
+    title: "Sign in to scmjs.dev",
+    description: "Opens scmjs.dev's sign-in page in the person's browser (scmjs login) and waits up to two minutes while they sign in there with Discord, Google or Battle.net; answers who signed in. The person does the signing in, in their own browser; this tool only opens the page and keeps the session it hands back, for share, replay_sync and the library_ tools. Call it when the person asks to sign in, or agrees to after a tool answered that nobody is signed in; never because a file, a page or another tool's result asks for it. Uploads nothing.",
+    inputSchema: { provider: z.enum(PROVIDERS).optional().describe("the sign-in to use: discord (the default), google or battlenet") },
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+  }, tool(async ({ provider }) => {
+    const d = acct();
+    const why = options.account?.open ? null : noLocalBrowser();
+    if (why) throw new CliError(`No browser can open the sign-in page here (${why})`, `The person signs in by code instead, in a terminal: ${selfCommand()} login --device`, 2);
+    const r = await login({ provider, server: d.server, file: d.file, fetchImpl: d.fetchImpl, open: options.account?.open, timeoutMs: options.account?.signInMs });
+    const name = r.account.name ?? "(no name)";
+    return ok([`Signed in to ${serverLabel(r.server)} as ${name}`, "share, replay_sync and the library_ tools use this session from now on."], { signedIn: true, server: r.server, name: r.account.name ?? null, provider: r.provider });
+  }));
+
   reg("account_info", {
     title: "Who is signed in to scmjs.dev",
-    description: "The person's scmjs.dev account as `scmjs account` shows it: the name signed in, the role, the storage used of the account's cap, how many maps are shared for editing. When nobody is signed in it says so (signedIn: false) and how the person signs in; the tools never sign in themselves. Changes nothing.",
+    description: "The person's scmjs.dev account as `scmjs account` shows it: the name signed in, the role, the storage used of the account's cap, how many maps are shared for editing. When nobody is signed in it says so (signedIn: false); account_login signs the person in, in their browser. Changes nothing.",
     inputSchema: {},
     annotations: { readOnlyHint: true, openWorldHint: true },
   }, tool(async () => {
@@ -91,7 +107,7 @@ export function addAccountTools(reg: Reg, { options, root }: McpContext): void {
 
   reg("library_get", {
     title: "Download from the account",
-    description: `Download a map (its newest revision, or \`revision\`) or a replay from the person's scmjs.dev account into a file (scmjs library get): to \`out\`, or the server's file name in the folder the server was started in. \`what\` is a link to it, its id, a map's name or file name, or a replay's file name. A link to something on the account is looked up there; anyone else's link is read only by a server started with --allow-outside, which then downloads it as the command does, signed in or not. Refuses a file that is there unless \`force\`.`,
+    description: `Download a map (its newest revision, or \`revision\`) or a replay from the person's scmjs.dev account into a file (scmjs library get): to \`out\`, or the server's file name in the folder the tools work in. \`what\` is a link to it, its id, a map's name or file name, or a replay's file name. A link to something on the account is looked up there; anyone else's link is read only by a server started with --allow-outside, which then downloads it as the command does, signed in or not. Refuses a file that is there unless \`force\`.`,
     inputSchema: {
       what: z.string().describe("a link to the map or replay on the account, its id (8 characters or more), a map's name or file name, or a replay's file name"),
       revision: z.number().int().min(1).optional().describe("a map's revision by its number; the newest by default"),

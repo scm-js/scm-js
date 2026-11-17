@@ -302,6 +302,21 @@ from "The AI" in the user guide, which covers the editor's own assistant. `docs/
 short `## AI tools` with the one line that sets it up and a pointer, so `/cli/ai-tools/` is still a
 page; the `###` sections that lived under it have no redirect (a fragment cannot be forwarded).
 
+- **Two readers, in that order.** The top (intro, Getting started, What to ask, Working in the editor,
+  When something goes wrong) is for a map maker who has never opened a terminal: three ways in (Tools ▸
+  AI, Claude Desktop, the rest), Claude Desktop step by step with the `.mcpb` from
+  `/releases/latest/download/`, checking it works by asking "Check my scmJS setup", requests with the
+  tool output they produce (`crossing.scx` is `map_generate` seed 2026, the map both reused pictures
+  show), and a table of what you see / what to do. From "Changing a map" down is the reference, kept as
+  it was: the calls, the account, the tools, files and the game. "AI app" is the app, "tool" the MCP tool;
+  the old "AI tool" for the app is gone from the body.
+- **Four Claude Desktop pictures** (`ai-desktop-*.webp`, 2026-11-17), taken by the user on Windows and marked by
+  `scripts/pictures/mark-screenshot.mjs` with the specs in `scripts/pictures/ai-desktop.json` (crop, dashed ring,
+  arrow, label; names pixelated; the originals are not kept): install (drag onto Settings ▸ Desktop app ▸
+  Extensions), enabled (the switch), chat (the Chat button, not Code), map (a map and its minimap). Only steps where
+  people get stuck get one; the user agreed to cut the Install dialog, the folder dialog, the Allow prompt and the
+  setup check's answer (in #303's first commit if wanted). Retake when Claude Desktop's screens change; keep names
+  and account out of them.
 - **What lives where.** The guide has the reader's path: setting up, a first request, what to ask,
   working in the editor, changing a map, the tools, files and the game. The commands themselves
   (`map open --live`, `map edit`, `map units`) stay in `docs/cli.md` and are linked, not repeated;

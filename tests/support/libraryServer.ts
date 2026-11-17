@@ -105,6 +105,8 @@ export async function startStandIn(data: { maps: StandInMap[]; replays: StandInR
         const { links: _l, id: _i, ...facts } = replayView(r);
         return send(200, { replay: { ...facts, token: l.token } });
       }
+      // The sign-in's start (account_login): the provider's page, here a page of this server.
+      if (route === "POST /v1/auth/start") return send(200, { url: `http://${req.headers.host}/provider?state=st-1` });
       if (auth !== "Bearer sess-ok") return send(401, { error: { code: "unauthorized", message: "Sign in before using map storage." } });
       if (route === "GET /v1/account") return send(200, { account: { kind: "account", name: "Ann", role: "free", providers: ["discord"], storage: storage() } });
       if (route === "GET /v1/storage") return send(200, { storage: storage() });

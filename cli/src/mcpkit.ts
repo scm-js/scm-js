@@ -65,9 +65,9 @@ export function noPipe(...paths: (string | undefined)[]): void {
 const PATH_ARGS = ["path", "out", "a", "b", "paths", "replays", "baseline", "mod", "map", "bot", "folder", "folders", "replay", "plugin"] as const;
 
 /**
- * A path a tool was given that is outside `root`, the folder the server was started in: the server an AI drives keeps
- * to that folder unless started with --allow-outside. `bot` may be a play page bot's key and `plugin` a github: or
- * URL source; neither is a path then.
+ * A path a tool was given that is outside `root`, the folder the tools work in (the one the server was started in, or
+ * `--folder`): the server an AI drives keeps to that folder unless started with --allow-outside. `bot` may be a play
+ * page bot's key and `plugin` a github: or URL source; neither is a path then.
  */
 export function outsideRoot(args: Record<string, unknown>, root: string): string | null {
   for (const key of PATH_ARGS) {
@@ -104,9 +104,9 @@ export const tool = <T>(fn: (args: T, extra: Extra) => Promise<CallToolResult>, 
     const a = args as { path?: string; out?: string; a?: string; b?: string; paths?: string[] };
     noPipe(a.path, a.out, a.a, a.b, ...(a.paths ?? []));
     const web = root === null ? null : webLinkArg(args as Record<string, unknown>);
-    if (web !== null) throw new CliError(`${web} is a link, and the tools read files in the folder the server was started in (${root})`, "The person can download it with scmjs library get, or start the server with scmjs mcp --allow-outside, which lets the tools read scmjs.dev links too.", 2);
+    if (web !== null) throw new CliError(`${web} is a link, and the tools read files in the folder they work in (${root})`, "The person can download it with scmjs library get, or start the server with scmjs mcp --allow-outside, which lets the tools read scmjs.dev links too.", 2);
     const outside = root === null ? null : outsideRoot(args as Record<string, unknown>, root);
-    if (outside !== null) throw new CliError(`${outside} is outside the folder the server was started in (${root})`, "The tools read and write files in that folder only; the person can start the server with scmjs mcp --allow-outside to lift that.", 2);
+    if (outside !== null) throw new CliError(`${outside} is outside the folder the tools work in (${root})`, "The tools read and write files in that folder only. The person can choose another folder (the maps folder in the Claude Desktop extension's settings, or scmjs mcp --folder <folder>), or start the server with scmjs mcp --allow-outside to lift that.", 2);
     try {
       return await fn(args, extra);
     } catch (e) {
@@ -146,6 +146,9 @@ export interface McpAccountOptions {
   /** The replay folders `replay_sync` takes when none is named (StarCraft's own, found as the command finds them). */
   replayFolders?: () => string[];
   settleMs?: number;
+  /** `account_login`'s browser and how long it waits: tests open the page themselves. */
+  open?: (url: string) => void;
+  signInMs?: number;
 }
 
 /** The copy of the game, named: the same argument on every tool that reads one, so said briefly. */

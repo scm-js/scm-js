@@ -4141,8 +4141,11 @@ what your account keeps. With Claude Code, once, in the folder your maps are in:
 claude mcp add scmjs -- npx -y @scm-js/cli mcp
 ```
 
-[AI tools](ai-tools.md) is its guide: setting it up for other tools, what to ask, working
-on the map open in the editor, and every tool.
+An app that starts the server in a folder of its own takes `--folder <your maps folder>`
+after `mcp`. Claude Desktop installs it from one file, the `scmjs-mcp-….mcpb` for your
+computer on the release page, and asks for the maps folder itself. [AI tools](ai-tools.md)
+is its guide: setting it up in each app, what to ask, working on the map open in the
+editor, and every tool.
 
 ## For developers
 
@@ -4484,7 +4487,7 @@ gives its options.
 | [`scmjs library rm\|unlink\|rename\|note`](#your-library) | Deletes a map, revision or replay, removes one link, renames a map, sets a revision's note; asks first, `--yes` in scripts |
 | [`scmjs doctor`](#checking-your-setup) | What this computer has for each command, and what is missing |
 | [`scmjs about`](#updating) | This version, whether there is a newer one, and the links |
-| [`scmjs mcp`](ai-tools.md) | The map commands and your scmjs.dev account as an MCP server for AI tools, kept to the folder it starts in (and to files, not links) unless `--allow-outside`; uploads and deletions asked first |
+| [`scmjs mcp`](ai-tools.md) | The map commands and your scmjs.dev account as an MCP server for AI apps, kept to the folder it starts in or the one `--folder` names (and to files, not links) unless `--allow-outside`; uploads and deletions asked first |
 | [`scmjs lsp`](#trigscript-in-your-text-editor) | A TrigScript language server for your text editor: errors, completions, hovers, go to definition |
 | [`scmjs completion <shell>`](#shell-completion) | A completion script for bash, zsh or fish |
 

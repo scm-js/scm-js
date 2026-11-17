@@ -1,71 +1,161 @@
 # AI tools
 
-`scmjs mcp` lets an AI tool on your computer, such as Claude Code, Cursor or Claude
-Desktop, work on your maps. You ask in words, and the model reads, checks, changes and
-runs the map with the editor's own code. With the map open in the editor, you watch each
-change arrive and undo the ones you do not want. Once you have signed in, it can also
-share maps and replays and fetch what your scmjs.dev account keeps.
+You can ask an AI app such as Claude about your StarCraft maps in plain words, and it
+works on them with scmJS: "what is wrong with this map?", "give Player 1 six more
+Marines", "make me a four-player desert map". It reads and changes the maps in your maps
+folder with the editor's own code, so what it tells you about a map is what Check Map in
+the editor would show. With the map open in the editor, you watch each change arrive and
+can undo it.
 
-![Big Game Hunters linked to an AI tool: the squad it placed is one step in Edit ▸ Undo](images/ai-linked.webp)
+![Big Game Hunters linked to an AI app: the squad it placed is one step in Edit ▸ Undo](images/ai-linked.webp)
 
-This guide is for the AI tool you already use. The editor also has an assistant of its own
-under **Tools ▸ AI**, which the user guide covers in [The AI](guide.md#the-ai).
+There are three ways to use it:
+
+| | What you need | Good for |
+| --- | --- | --- |
+| **Tools ▸ AI** in the editor | Nothing to install | Asking about the map you have open. The user guide covers it in [The AI](guide.md#the-ai) |
+| **Claude Desktop** | The Claude app and one file from scmJS | Any map in your maps folder, from a chat window |
+| **Claude Code, Cursor and others** | [`scmjs`](cli.md#installing), or Node.js | People who already work in a terminal or a code editor |
+
+This guide is about the last two. If you have not used a terminal before, use Claude
+Desktop.
 
 ## Getting started
 
-Add the server to your AI tool once, then ask about a map.
+### Claude Desktop
 
-### Setting it up
+1. Install [Claude Desktop](https://claude.ai/download) and sign in.
+2. Download the scmJS extension for your computer:
+   - [Windows](https://github.com/scm-js/scm-js/releases/latest/download/scmjs-mcp-windows-x64.mcpb)
+   - [Mac with Apple silicon (M1 or
+     later)](https://github.com/scm-js/scm-js/releases/latest/download/scmjs-mcp-macos-arm64.mcpb)
+   - [Mac with an Intel
+     processor](https://github.com/scm-js/scm-js/releases/latest/download/scmjs-mcp-macos-x64.mcpb)
 
-You need [`scmjs`](cli.md#installing), or Node.js for `npx` to fetch it. The AI tool
-starts `scmjs mcp` itself and talks to it over the [Model Context
-Protocol](https://modelcontextprotocol.io); you never run it by hand.
+   On a Mac, **Apple menu ▸ About This Mac** says which you have: "Chip" means Apple
+   silicon, "Processor … Intel" means Intel.
+3. In Claude Desktop, open **Settings ▸ Desktop app ▸ Extensions** and drag the file you
+   downloaded onto the page.
 
-With Claude Code, once, in the folder your maps are in:
+   ![Claude Desktop's Extensions page, with an arrow to "Drag .MCPB or .DXT files here to install"](images/ai-desktop-install.webp)
+
+4. Claude Desktop shows what scmJS is. Click **Install**. The dialog warns that an
+   extension gets access to everything on your computer. It says that about every
+   extension, because an extension is a program that runs as you. scmJS's tools only take
+   files in the maps folder you choose, and its code is public on
+   [GitHub](https://github.com/scm-js/scm-js).
+5. Claude Desktop then asks for your **Maps folder**. Click **Browse** and choose the
+   folder you keep your maps in. StarCraft's own is `Documents\StarCraft\Maps` on Windows
+   (inside your OneDrive folder if Documents is kept there), and
+   `~/Library/Application Support/Blizzard/StarCraft/Maps` on a Mac. The AI can read and
+   change files in that folder and the folders inside it, and nowhere else.
+
+   Leave **StarCraft folder** empty. It is only needed if scmJS cannot find your copy of
+   the game by itself; [When something goes wrong](#when-something-goes-wrong) says how
+   you would know. Click **Save**.
+6. Back on the Extensions page, click **scmJS** and switch it on. Claude Desktop leaves it
+   off after the install, even once the maps folder is saved.
+
+   ![scmJS on the Extensions page, with an arrow to its switch, now Enabled](images/ai-desktop-enabled.webp)
+
+7. Start a new chat: at the top of the sidebar, click the speech bubble (Chat), not `</>`
+   (Code). If the sidebar is hidden, the panel button at the top left shows it.
+
+   ![The top of Claude Desktop's sidebar, with an arrow to the Chat button](images/ai-desktop-chat.webp)
+
+You do not need a terminal or Node.js: the extension carries everything it needs. To
+update it, download the newest file and drag it onto the Extensions page the same way. You
+can change the maps folder later under **Settings ▸ Desktop app ▸ Extensions ▸ scmJS**.
+
+### Checking that it works
+
+In a new chat, ask:
+
+> Check my scmJS setup.
+
+scmJS gives Claude a set of tools: its commands for reading and changing maps. Claude asks
+before it uses one. Click **Allow once**, or **Always allow** for a tool you are happy to
+let it use without asking.
+
+Here it runs scmJS's own check and tells you what it found: the version, whether it found
+your copy of StarCraft, and whether you are signed in to scmjs.dev. It offers to sign you
+in; that is only needed for sharing and for your scmjs.dev library.
+
+Then ask about one of your own maps by its file name, for example:
+
+> What is in ridge.scx?
+
+If Claude says there is no such file, see [When something goes
+wrong](#when-something-goes-wrong).
+
+### Claude Code
+
+Once, in the folder your maps are in. This adds scmJS to Claude Code as an MCP server, the
+way AI apps reach outside tools, and `npx` fetches it; that needs Node.js 22.12 or newer:
 
 ```sh
 claude mcp add scmjs -- npx -y @scm-js/cli mcp
 ```
 
-If `scmjs` is installed, from a package manager, a download or `npm install -g`, name it
-directly instead, which starts faster:
+If `scmjs` is installed (from a package manager, a download or `npm install -g`), name it
+directly instead. It starts faster:
 
 ```sh
 claude mcp add scmjs -- scmjs mcp
 ```
 
-`scmjs doctor` prints the line for your copy, and its Claude Code line reads "scmjs mcp
-added" once the server is known. Inside Claude Code, `/mcp` shows whether it is connected.
-The line above adds the server for you alone. To add it for everyone who works on a
-repository of maps, put `--scope project` after `add`: Claude Code then writes it to
-`.mcp.json` at the repository's top, for you to commit.
+`scmjs doctor` prints the exact line for your install, and says "scmjs mcp added" once
+Claude Code has it. Inside Claude Code, `/mcp` shows whether it is connected. The line
+above adds the server for you alone. To add it for everyone who works on a repository of
+maps, put `--scope project` after `add`: Claude Code then writes it to `.mcp.json` at the
+repository's top, for you to commit.
 
-Other tools take the same thing as JSON:
+### Cursor and other apps
+
+Other apps take the same thing as JSON. Name your maps folder after `--folder` (with your
+own user name in place of `me`), since an app may start the server in a folder of its own:
 
 ```json
-{ "mcpServers": { "scmjs": { "command": "npx", "args": ["-y", "@scm-js/cli", "mcp"] } } }
+{ "mcpServers": { "scmjs": { "command": "npx", "args": ["-y", "@scm-js/cli", "mcp", "--folder", "C:\\Users\\me\\Documents\\StarCraft\\Maps"] } } }
 ```
 
-| Tool | Where the JSON goes |
+| App | Where the JSON goes |
 | --- | --- |
-| Cursor | `.cursor/mcp.json` in the maps folder, or `~/.cursor/mcp.json` for every folder, with `"type": "stdio"` added beside `command` |
-| Claude Desktop | `claude_desktop_config.json`, which Settings ▸ Developer ▸ Edit Config opens |
-| Other tools | Their own MCP settings; each tool's documentation says where |
+| Cursor | `.cursor/mcp.json` in the maps folder, or `~/.cursor/mcp.json` for every folder. Cursor also wants `"type": "stdio",` before `"command"` |
+| Claude Desktop, without the extension | `claude_desktop_config.json`, which **Edit config** on the same Extensions page opens; restart Claude Desktop after saving it |
+| Other apps | Their own MCP settings; each app's documentation says where |
 
-The tools take paths in the folder the server was started in, and refuse a path outside
-it. An AI tool that works in a project folder, as Claude Code does, starts the server
-there, so the paths are files in your maps folder. When a tool starts the server somewhere
-else, the first refusal names the folder it was started in. Add `--allow-outside` after
-`mcp` then, and the tools take paths anywhere on the computer.
+`npx` needs Node.js 22.12 or newer. With `scmjs` installed, put `"command": "scmjs"` and
+`"args": ["mcp", "--folder", "…"]` instead.
 
-### A first request
+### The maps folder
 
-Start the AI tool in your maps folder and ask about a map:
+The tools take paths in one folder and refuse a path outside it, so the AI cannot reach
+the rest of your computer. That folder is:
+
+- the **Maps folder** you chose, with the Claude Desktop extension;
+- the folder named after `--folder`, when there is one;
+- otherwise the folder the app started the server in. Claude Code starts it in the folder
+  you ran `claude mcp add` in.
+
+When a path is refused, the answer names the folder the tools work in. To let the tools
+take paths anywhere on the computer, add `--allow-outside` after `mcp`.
+
+## What to ask
+
+Ask as you would ask a person who knows StarCraft maps. You do not need to name tools; the
+AI chooses which to use. Here is Claude Desktop asked about a map, then for its minimap:
+
+![Claude describing crossing.scx (size, players, resources, Check Map) and then showing its minimap](images/ai-desktop-map.webp)
+
+Below are a few more requests with what scmJS answers. The answers are real, from scmJS's
+sample maps; your AI app puts them in its own words.
+
+### Is anything wrong with this map?
 
 > What is in ums.scx, and does Check Map find anything?
 
-The model calls `map_info` and `map_check`, and answers from what they return. This is
-`map_check` on the test map:
+The AI reads the map (`map_info`) and runs Check Map on it (`map_check`), which answers:
 
 ```
 ums.scx  ▲ 1 warning
@@ -73,38 +163,97 @@ ums.scx  ▲ 1 warning
     does not end when a player's units are gone. · Triggers
 ```
 
-The tools run the same code as the editor and the commands, so what the model is told
-about a map is what Check Map in the editor would show.
+Then ask it to fix what it found:
 
-### What to ask
+> Add a trigger that makes Player 1 lose when they have no units left.
 
-Ask as you would ask a person who has the commands. The model chooses which tools to call;
-these are the ones each request is for.
+### Change a message
 
-| A request | The tools for it |
+> Change the opening message to "Hold the ridge." and show me what changed.
+
+The AI takes the triggers out as text, changes the message, puts them back, and compares
+the map before and after. The comparison it reads you includes:
+
+```
+Triggers +1 −1
+  − Player 1: Always() → Display Text Message(Always Display, "Hold the base."); Play WAV(…
+  + Player 1: Always() → Display Text Message(Always Display, "Hold the ridge."); Play WAV(…
+```
+
+### Watch the changes in the editor
+
+> Open ums.scx in the editor so I can watch what you change.
+
+The map opens in the scmJS editor in your browser, and every change after that arrives
+there, one step in **Edit ▸ Undo** each. Select some units and ask:
+
+> Make the units I have selected invincible.
+
+[Working in the editor](#working-in-the-editor) has the rest.
+
+### Make a melee map
+
+> Make me a four-player desert map.
+
+```
+✔ crossing.scx: 128 × 128 · Desert · 4 players · seed 2026 · 29 KB
+  Laid out   mirrored both ways · an open middle · 4 ramps · 2 free bases
+  Balance    walks the symmetry makes equal differ by 1.5% start to start, 5.0% to the free bases
+  Check Map  no errors or warnings
+```
+
+![The four-player desert map made from seed 2026](images/cli-generated-map.webp)
+
+Each start has a main on high ground with a ramp, a natural, and a way to the middle. The
+same seed makes the same map, so you can ask for "the same map, but jungle".
+
+### Is it fair?
+
+> Is crossing.scx fair? Where are the chokes?
+
+The AI reads the layout (`map_analyze`): the walk from each start to the others, by ground
+and by air, how long a Zergling or a Marine takes, and the narrowest point on each way. It
+ends with the verdicts:
+
+```
+✔ Every start's walks to its opponents match the others', nearest to farthest, within 2%; near and far pairs differ by 53%.
+✔ Every main has 9 mineral fields and 1 geyser, 13,500 minerals and 5,000 gas.
+✔ Naturals 33 tiles from their mains by ground.
+✔ Every main's way out is 3.5 tiles at its narrowest.
+```
+
+Ask for the picture too, and the AI shows you the walks it measured:
+
+![The layout of the same map: white walks between the starts, yellow walks to the naturals, a circle on each natural and an orange square on each ramp](images/cli-map-analyze.webp)
+
+### Share it
+
+> Share crossing.scx with a link.
+
+Once you are [signed in](#your-scmjsdev-account), the AI first tells you what would
+happen: the map is stored on your account, and anyone who has the link can open it.
+Nothing is uploaded until you say yes. Then it gives you the link.
+
+### More to ask
+
+| A request | The tools the AI uses |
 | --- | --- |
-| "What is in ridge.scx, and does Check Map find anything?" | `map_info`, `map_check` |
 | "Which triggers never fire, and why?" | `map_trace` |
-| "Open ridge.scx in the editor so I can watch what you change." | `editor_open` |
-| "Make the units I have selected invincible." | `editor_state`, `map_edit` |
-| "Change the opening message to 'Hold the ridge.' and show me what changed." | `map_triggers_export`, `map_triggers_import`, `map_diff` |
 | "Which of my maps still mention the Marine?" | `map_find` |
 | "Give Player 1 six more Marines in the Base location and make the Ghost invincible." | `map_units`, `map_locations`, `map_edit` |
 | "Put a plateau in the middle with a ramp on its south side, and a few lakes around it." | `map_terrain`, `map_edit`, `map_preview` |
-| "Make me a four-player desert map to start from." | `map_generate` |
 | "Make Player 3 a Protoss computer in the second force, and give Zerglings 50 hit points." | `map_settings`, `map_set` |
 | "Show me the map." | `map_preview`, which answers with the picture |
-| "Is this melee map fair? Where are the chokes?" | `map_analyze` |
 | "Do the triggers slow the game down?" | `map_cost` |
 | "Which triggers never fired in the replays in replays/?" | `map_coverage` |
-| "What changed in ridge.scx since the last commit?" | `map_diff` with `rev` |
+| "What changed in ridge.scx since the last commit?" (for maps kept in git) | `map_diff` with `rev` |
 | "How much smaller can this map get?" | `map_optimize`, a dry run |
 | "What does this mod change in the game?" | `mod_info`, `mod_diff` |
-| "Share ridge.scx with a link." | `share`, which asks first ([Your scmjs.dev account](#your-scmjsdev-account)) |
+| "Upload the games I played this week." | `replay_sync`, which asks first |
 
 ## Working in the editor
 
-Ask the model to open the map in the editor, or link it yourself with
+Ask the AI to open the map in the editor, or link it yourself with
 [`scmjs map open --live`](cli.md#keeping-a-map-linked-to-the-editor). The map opens in the
 editor in your browser, and from then on the tools work on the map in front of you.
 
@@ -112,9 +261,9 @@ editor in your browser, and from then on the tools work on the map in front of y
 | --- | --- |
 | A tool that reads the map | Reads what the editor has, your unsaved changes included |
 | A tool that changes the map | Changes it in the editor. **Edit ▸ Undo** names the tool and takes its change back whole |
-| The file on disk | Changes only on a save: yours with **File ▸ Save**, or the model's with `editor_save` |
+| The file on disk | Changes only on a save: yours with **File ▸ Save**, or the AI's with `editor_save` |
 
-The model can also use what is on your screen:
+The AI can also use what is on your screen:
 
 - **What you have selected.** `editor_state` tells it which units and locations are
   selected and which part of the map is in view, so "these units" and "here" mean
@@ -122,19 +271,37 @@ The model can also use what is on your screen:
 - **Pointing.** `editor_show` brings a place into view and flashes it, with the units or
   locations it names selected.
 - **A picture.** `editor_picture` is the map as the editor draws it, with the editor's own
-  game data, so the model needs no copy of StarCraft to look at the map.
-- **The editor's game data.** Terrain, doodads and a unit's numbers on a linked map are
-  laid with the tileset and tables the editor has, a mod's included, so `map_edit`,
-  `map_terrain`, `map_doodads` and `map_set` need no copy of StarCraft on a linked map.
+  game data, so the AI needs no copy of StarCraft to look at the map.
+- **The editor's game data.** On a linked map, terrain, doodads and unit stats use the
+  editor's game data, a mod's included, so `map_edit`, `map_terrain`, `map_doodads` and
+  `map_set` need no copy of StarCraft.
 
 If you edit the map while a tool is working on it, the tool starts again from what the
-editor has now, and your edit is kept. The status bar shows **Linked** while the map is
-linked. The link ends with `editor_close`, when you close the map or the small scmjs tab
-beside it, or when the AI tool stops the server; the map stays open. The [command line
+editor has now, and your edit is kept.
+
+The status bar shows **Linked** while the map is linked. Opening the map also opens a
+small scmjs tab in your browser beside the editor, which carries the link. The link ends
+when the AI closes it (`editor_close`), when you close the map or that tab, or when the AI
+app stops; the map stays open. The [command line
 guide](cli.md#keeping-a-map-linked-to-the-editor) has the rest: what waits for a dialog,
-what stays on your computer, and that the desktop app does not link yet.
+what stays on your computer, and that the scmJS desktop app does not link yet.
+
+## When something goes wrong
+
+| What you see | What to do |
+| --- | --- |
+| The AI does not seem to know scmJS, says it has no such tools, or searches your computer for scmJS instead | In Claude Desktop, check that scmJS is switched on under **Settings ▸ Desktop app ▸ Extensions** (it is off after the install), and start a new chat. A Code session in Claude Desktop does not get extensions: ask in a chat. In other apps, restart the app after changing its MCP settings. |
+| "No file ridge.scx" | The map is not in the maps folder, or its name is spelt differently. Ask "which maps are in my maps folder?", move the map there, or choose another maps folder. |
+| "… is outside the folder the tools work in" | The AI was given a path outside the maps folder. Move the map into it, or choose another maps folder: **Settings ▸ Desktop app ▸ Extensions ▸ scmJS** in Claude Desktop, `--folder` elsewhere. |
+| The extension shows an error and its tools never appear | Check that the maps folder in its settings still exists. scmJS will not start with a folder that is gone. |
+| Pictures, terrain or running a map in the game "need a copy of StarCraft" | Install StarCraft from Battle.net, or set the **StarCraft folder** in the extension's settings to where your copy is. Elsewhere, set `SCMJS_STARCRAFT` in the app's MCP settings. [The tools that need the game](#the-tools-that-need-the-game) lists which tools these are. |
+| "Not signed in to scmjs.dev" | Ask the AI to sign you in. It opens scmjs.dev's sign-in page in your browser; sign in there with Discord, Google or Battle.net, and the AI is told who you are. |
+| "npx: command not found" or a Node.js error | Claude Code, Cursor and the JSON setup start `scmjs` through Node.js 22.12 or newer. Install Node.js, or install `scmjs` and name it instead of `npx`. |
 
 ## Changing a map
+
+This part and the ones after it show exactly what the AI sends to scmJS and gets back. You
+do not need them to use it, but they help when you want to know why it did what it did.
 
 The model changes a map with the same tools whether it is linked to the editor or a file
 on disk. A file is written over unless the tool is given `out`.
@@ -297,15 +464,23 @@ from [your copy of the game](#the-tools-that-need-the-game); the rest needs none
 
 ## Your scmjs.dev account
 
-Once you have signed in with [`scmjs login`](cli.md#signing-in) in a terminal, the model
-can use your [scmjs.dev account](guide.md#your-scmjsdev-account) too: list what it keeps,
-download a map or replay into the folder, share files with a link, and upload your new
-replays. The tools use the session the commands keep. They never sign in themselves:
-without a session they answer that you need to run `scmjs login` (or
-`scmjs login --device` where no browser can reach the terminal), and the model tells you.
+Ask the AI to sign you in:
+
+> Sign me in to scmjs.dev.
+
+It opens scmjs.dev's sign-in page in your browser (`account_login`). You sign in there
+with Discord, Google or Battle.net, as in the editor, and the AI is told who signed in.
+From then on it can use your [scmjs.dev account](guide.md#your-scmjsdev-account): list
+what it keeps, download a map or replay into the folder, share files with a link, and
+upload your new replays. The AI never signs in on its own: the sign-in is yours, in your
+browser, and it waits two minutes for you. The session is the one
+[`scmjs login`](cli.md#signing-in) keeps, so signing in once, either way, serves the tools
+and the commands. Where no browser can reach the computer, `scmjs login --device` in a
+terminal signs in by code.
 
 | A request | The tools for it |
 | --- | --- |
+| "Sign me in to scmjs.dev." | `account_login` |
 | "Who am I signed in as, and how much storage is left?" | `account_info` |
 | "Which of my maps have links, and how often were they opened?" | `library_list` |
 | "Download revision 2 of Ridge." | `library_get` |
@@ -343,7 +518,7 @@ Anyone with the link opens a copy in their editor, without signing in.
 
 The two calls are there because a model can be asked to do things by what it reads: a
 map's text, a replay's chat, a page or a file. With them, an upload or a deletion is never
-one quiet step; what it would do is in front of you before it happens. Your AI tool also
+one quiet step; what it would do is in front of you before it happens. Your AI app also
 asks you before it calls a tool that changes something, unless you have told it not to,
 and you can leave these four unapproved.
 
@@ -370,10 +545,10 @@ and you can leave these four unapproved.
 
 ## The tools
 
-There are 54. Each but the `editor_` tools is a command of the [command line
-guide](cli.md), and its arguments are the command's options by name: `--dry-run` is
-`dryRun`, `--in` is `in`. A tool answers with the command's text and, beside it, the
-command's `--json` data.
+There are 55. Each but the `editor_` tools and `account_login` is a command of the
+[command line guide](cli.md), and its arguments are the command's options by name:
+`--dry-run` is `dryRun`, `--in` is `in`. A tool answers with the command's text and,
+beside it, the command's `--json` data.
 
 | Tools | What they do | Write files |
 | --- | --- | --- |
@@ -397,6 +572,7 @@ command's `--json` data.
 | `mod_unpack`, `mod_pack`, `mod_new`, `mod_header` | The mod as a folder of text and back, a new one, and [the ids for a bot](mods.md#a-bot-for-your-mod), written into a bot's folder with `bot` | Yes |
 | `mod_play` | The mod [handed to the play page](mods.md#playing-it) with a `map` and a `bot`. It opens your browser and answers with the page's link and what the page told it | No |
 | `editor_open`, `editor_state`, `editor_show`, `editor_picture`, `editor_save`, `editor_close` | A map [linked to the editor](#working-in-the-editor): open it there, what you have selected and in view, bring a place into view, the map as the editor draws it, save, end the link | `editor_save` |
+| `account_login` | scmjs.dev's sign-in page opened in the person's browser, and the session they sign in to kept, as `scmjs login` keeps it | No |
 | `account_info`, `library_list` | Who is signed in to scmjs.dev, and what the account keeps: maps, replays, the maps shared for editing, each link with its opens | No |
 | `library_get` | A map or replay from the account, downloaded into the folder | Yes |
 | `share`, `replay_sync` | Maps and replays uploaded to the account, with links or (for `replay_sync`) without. [Asked first](#asked-first) | No |
@@ -431,9 +607,10 @@ A few tools differ from their commands:
 
 The rest of the commands are not tools: `map test`, `map rush`, `map heatmap`, `map log`,
 `map blame`, `map merge`, `map unpack` and `pack`, `map sounds`, `map fetch`, `map share`
-and `replay share` (`share` does both), `login` and `logout`, `replay sync --watch`,
-`replay watch` and `export`, the bot and plugin commands, and `init`. An AI tool that can
-run commands in a terminal, as Claude Code can, runs those as you would.
+and `replay share` (`share` does both), `logout` (`account_login` is the browser sign-in;
+`login --device` is not a tool), `replay sync --watch`, `replay watch` and `export`, the
+bot and plugin commands, and `init`. An AI app that can run commands in a terminal, as
+Claude Code can, runs those as you would.
 
 ## Your files and the game
 
@@ -442,12 +619,12 @@ copy of StarCraft.
 
 ### What the tools can do to your files
 
-- **They stay in the maps folder**, unless you started the server with `--allow-outside`.
-  There are two exceptions, both only read: `starcraft`, the folder of your copy of the
-  game, and StarCraft's own replay folders, from which `replay_sync` uploads replays when
-  it is not given `folders` in the maps folder. They take no [scmjs.dev
-  links](cli.md#links-in-place-of-files) either, since fetching one reaches past the
-  folder; with `--allow-outside` they read links as the commands do, or
+- **They stay in [the maps folder](#the-maps-folder)**, unless you started the server with
+  `--allow-outside`. There are two exceptions, both only read: `starcraft`, the folder of
+  your copy of the game, and StarCraft's own replay folders, from which `replay_sync`
+  uploads replays when it is not given `folders` in the maps folder. They take no
+  [scmjs.dev links](cli.md#links-in-place-of-files) either, since fetching one reaches
+  past the folder; with `--allow-outside` they read links as the commands do, or
   `scmjs library get` downloads one into the folder first.
 - **A tool that changes a map writes over it** unless given `out`, like the command. Keep
   your maps in git, or ask for copies. Every tool that only reads is marked so for the AI
@@ -458,7 +635,7 @@ copy of StarCraft.
   misspelt `dryRun` cannot write over a map:
   ``map_strings_prune: `dry_run` is not an argument of map_strings_prune: it takes `path`, `dryRun`, `out` ``.
 - **`map_run` runs a plugin, which is code, with your privileges**, as `scmjs map run`
-  does, and a plugin named by `github:` or a URL is fetched first. The AI tool asks you
+  does, and a plugin named by `github:` or a URL is fetched first. The AI app asks you
   before it calls a tool, and you can leave this one unapproved.
 - **Nothing else goes on the network** except what the commands themselves fetch: the game
   engine the first time a map is run in the game, and npm's newest version for `doctor`.
@@ -468,7 +645,9 @@ copy of StarCraft.
 
 ### What the tools can do to your account
 
-- **Nothing until you sign in**, in a terminal, with `scmjs login`. The tools use that
+- **Nothing until you sign in**, in your browser when you ask the AI (`account_login`), or
+  in a terminal with `scmjs login`. The AI is told never to sign in because something it
+  read asks it to, and the sign-in itself is always yours to do. The tools use that
   session, and only with the server it is for: a session for a local server is not sent to
   scmjs.dev.
 - **`account_info` and `library_list` only read.**
@@ -493,13 +672,13 @@ to the editor these read the editor's game data and need no copy here. `map_run`
 script the game's data when a copy is there, and runs without when it is not: the terrain
 and doodad parts of the plugin API then do nothing and say so. `doctor` tells the model
 whether the game and the engine are there and what you would need to install, so it can
-tell you instead of failing. When the game is not in one of the usual places, the model
-can pass its folder as `starcraft`, or you can set `SCMJS_STARCRAFT` in the tool's MCP
-settings.
+tell you instead of failing. When the game is not in one of the usual places, set the
+**StarCraft folder** in the Claude Desktop extension's settings, or `SCMJS_STARCRAFT` in
+another app's MCP settings; the model can also pass the folder as `starcraft`.
 
 A trace or cost run takes a few seconds and plays at most ten minutes of game.
 `map_coverage` plays whole replays and `map_balance` whole games, so they take as long as
-the commands do. While a trace or cost run plays, an AI tool that shows progress is sent
+the commands do. While a trace or cost run plays, an AI app that shows progress is sent
 the frame reached, and cancelling the request stops the game.
 
 ## In the source

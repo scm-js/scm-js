@@ -10,7 +10,7 @@ import ts from "typescript";
 import { describe, expect, it } from "vitest";
 import { newestLine } from "../cli/src/about";
 import { mcpAddLine, MCP_ADD, mcpCheck, nodeCheck, versionCheck } from "../cli/src/doctor";
-import { INSTALL, installInfo, installLabel, managerOf, RELEASES_URL, runnerEnv, scriptArgv, updateCommand, type Install } from "../cli/src/runtime";
+import { INSTALL, installInfo, installLabel, managerOf, RELEASES_URL, runnerEnv, scriptArgv, selfCommand, updateCommand, type Install } from "../cli/src/runtime";
 import { VERSION } from "../cli/src/about";
 import { dot, visible } from "../cli/src/ui";
 
@@ -30,6 +30,25 @@ describe("how scmjs was installed", () => {
     expect(managerOf("/usr/local/Cellar/scmjs/0.12.0/bin/scmjs")).toBe("homebrew");
     expect(managerOf("/home/me/bin/scmjs")).toBeNull();
     expect(managerOf("C:\\tools\\scmjs.exe")).toBeNull();
+  });
+
+  it("knows an MCP bundle by the setting its manifest gives the server, wherever the app unpacked it", () => {
+    const fromBundle = installInfo("binary", "C:\\Users\\me\\AppData\\Roaming\\Claude\\Claude Extensions\\scmjs\\server\\scmjs.exe", { SCMJS_MCPB: "1" });
+    expect(fromBundle.manager).toBe("mcpb");
+    expect(installLabel(fromBundle)).toBe("single executable, from an MCP bundle (.mcpb)");
+    expect(updateCommand(fromBundle)).toBe(`install the newest scmjs-mcp-….mcpb from ${RELEASES_URL} in your AI app`);
+    expect(installInfo("npm", "/x/scmjs.mjs", { SCMJS_MCPB: "1" }).manager).toBeNull();
+  });
+
+  it("names the bundle's executable by its path where a hint says to run scmjs, since it is not on PATH", () => {
+    const win = installInfo("binary", "C:\\Users\\me\\AppData\\Roaming\\Claude\\Claude Extensions\\scmjs\\server\\scmjs.exe", { SCMJS_MCPB: "1" });
+    expect(selfCommand(win, "win32")).toBe('& "C:\\Users\\me\\AppData\\Roaming\\Claude\\Claude Extensions\\scmjs\\server\\scmjs.exe"');
+    const mac = installInfo("binary", "/Users/me/Library/Application Support/Claude/Claude Extensions/scmjs/server/scmjs", { SCMJS_MCPB: "1" });
+    expect(selfCommand(mac, "darwin")).toBe('"/Users/me/Library/Application Support/Claude/Claude Extensions/scmjs/server/scmjs"');
+    expect(selfCommand(binary("/home/me/bin/scmjs"), "linux")).toBe("scmjs");
+    // Whether Claude Code has scmjs says nothing about the server an app started from its bundle.
+    expect(mcpCheck("/nonexistent/.claude.json", "/maps", "claude mcp add …", mac)).toMatchObject({ state: "ok", detail: "started by your AI app, from an MCP bundle" });
+    expect(mcpCheck("/nonexistent/.claude.json", "/maps", "claude mcp add …", mac).fix).toBeUndefined();
   });
 
   it("says how to update each kind", () => {

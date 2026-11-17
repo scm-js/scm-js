@@ -89,16 +89,14 @@ export interface Preferences {
    * in tiles.
    */
   placement: { owner: number; brushSize: number; locationTiles: number };
-  /** Initial View ▸ Animate Water / Animate Units. */
-  animateWater: boolean;
-  animateUnits: boolean;
-  /** Initial View ▸ Remastered Graphics: the 2x terrain and sprites, where the data set in use has them. */
-  hdGraphics: boolean;
   /** How Remastered's water and lava move — the part of the effect the game's files do not fix. */
   remasteredEffects: RemasteredEffects;
   /**
    * How fast the two animations run, as a multiple of the game's own speed (1 = the
    * game's "Fastest"). One of `ANIMATION_SPEEDS`; applied live, not just at startup.
+   * Whether they run at all is View ▸ Animate Water / Animate Units, which the View menu
+   * remembers itself (`ViewFlags`, `api.view.flags()`), as it does Remastered Graphics;
+   * up to 0.16 those three were fields here too.
    */
   animateWaterSpeed: number;
   animateUnitsSpeed: number;
@@ -194,9 +192,6 @@ export const DEFAULT_PREFERENCES: Preferences = {
   undoLevels: 200,
   view: { wheel: "scroll", zoomToCursor: true },
   placement: { owner: 0, brushSize: 1, locationTiles: 4 },
-  animateWater: true,
-  animateUnits: true,
-  hdGraphics: false,
   remasteredEffects: DEFAULT_REMASTERED_EFFECTS,
   animateWaterSpeed: 1,
   animateUnitsSpeed: 1,
@@ -255,13 +250,15 @@ export type PreferencesPage = "general" | "files" | "editing" | "view" | "testin
  * back, and, all together, what **Reset everything** does. Editing also holds the grid's
  * spacing, look and snaps, which have atoms of their own and are reset by the dialog beside
  * these. Every key is on one page or in `NEVER_RESET`; `tests/preferences.test.ts` fails
- * on a key that is on neither, so a new preference has to be given a page here.
+ * on a key that is on neither, so a new preference has to be given a page here. The View
+ * menu's remembered ticks (`editor/viewMemory.ts`) are not preferences and no reset touches
+ * them: they are on no page, and Preferences ▸ Storage clears them.
  */
 export const PREFERENCES_PAGE_KEYS: Record<PreferencesPage, readonly (keyof Preferences)[]> = {
   general: ["language", "splash", "startup", "updates", "multipleMaps", "confirmClose"],
   files: ["newMap", "save", "recovery"],
   editing: ["placement", "undoLevels"],
-  view: ["view", "animateWater", "animateUnits", "animateWaterSpeed", "animateUnitsSpeed", "hdGraphics", "remasteredEffects", "statusBar", "classicText"],
+  view: ["view", "animateWaterSpeed", "animateUnitsSpeed", "remasteredEffects", "statusBar", "classicText"],
   testing: ["testMap"],
   plugins: ["plugins"],
   storage: [],

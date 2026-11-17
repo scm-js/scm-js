@@ -1,4 +1,4 @@
-import { atom } from "jotai";
+import { atom, type SetStateAction } from "jotai";
 import { t } from "../i18n";
 import type { MapFileHandle } from "../services/mapIo";
 import type { MemberInfo } from "../formats/mpq/scm";
@@ -11,6 +11,7 @@ import type { FogMode } from "../editor/fog";
 import type { SpriteKind } from "../editor/sprites";
 import { symmetryAvailable, type SymmetryMode } from "../editor/symmetry";
 import type { EditorLayer, TerrainMode, ViewFlags } from "../editor/view";
+import { carryOverViewPreferences, REMEMBERED_FLAGS, sanitizeViewMemory, viewMemoryDefaults, type ViewMemory } from "../editor/viewMemory";
 import { atomWithStorage, createJSONStorage } from "jotai/utils";
 import { browserStorage, mergedStorage } from "./storage";
 import { DEFAULT_CLIP_PARTS, type Clip, type ClipParts, type PasteMode } from "../editor/clipboard";
@@ -197,7 +198,34 @@ export interface ViewCenterRequest {
 }
 export const centerViewOnAtom = atom<ViewCenterRequest | null>(null);
 
-export const viewFlagsAtom = atom<ViewFlags>({
+/** The system asks for less motion: the animations start off until the person sets them. Read once, at startup. */
+function systemReducedMotion(): boolean {
+  try {
+    return typeof window !== "undefined" && !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+  } catch {
+    return false;
+  }
+}
+export const reducedMotionAtom = atom(systemReducedMotion());
+
+const viewMemoryJson = createJSONStorage<ViewMemory>(browserStorage);
+/**
+ * The View menu ticks the person changed, of the five that are remembered
+ * (`editor/viewMemory.ts`), kept under `scmjs.viewMenu`. A choice made under Preferences ▸
+ * View before those ticks left it is carried over the first time this is read.
+ */
+export const viewMemoryAtom = atomWithStorage<ViewMemory>("scmjs.viewMenu", {}, {
+  ...viewMemoryJson,
+  getItem: (key, initial) => {
+    carryOverViewPreferences(browserStorage());
+    return sanitizeViewMemory(viewMemoryJson.getItem(key, initial));
+  },
+  // (Another tab's change arrives through here.)
+  subscribe: viewMemoryJson.subscribe && ((key, callback, initial) => viewMemoryJson.subscribe!(key, (value) => callback(sanitizeViewMemory(value)), initial)),
+}, { getOnInit: true });
+
+/** The session's ticks; the remembered five are read from `viewMemoryAtom` over these. */
+const sessionViewFlagsAtom = atom<ViewFlags>({
   // StarEdit draws no grid until you ask for one, and terrain reads better without it.
   grid: false,
   locations: true,
@@ -216,6 +244,25 @@ export const viewFlagsAtom = atom<ViewFlags>({
   animateUnits: true,
   hdGraphics: false,
 });
+
+/**
+ * The View menu's ticks, one object for everything that reads or sets them (the menu, the
+ * hotkeys, the panels, `api.view`). Five are remembered across sessions — the grid, the
+ * location names, the two animations and Remastered Graphics — however they are changed:
+ * a write that changes one of them records it in `viewMemoryAtom`. The rest are this
+ * session's. One set for every open map, as before.
+ */
+export const viewFlagsAtom = atom(
+  (get): ViewFlags => ({ ...get(sessionViewFlagsAtom), ...viewMemoryDefaults(get(reducedMotionAtom)), ...get(viewMemoryAtom) }),
+  (get, set, update: SetStateAction<ViewFlags>) => {
+    const before = get(viewFlagsAtom);
+    const next = typeof update === "function" ? update(before) : update;
+    set(sessionViewFlagsAtom, next);
+    const changed: ViewMemory = {};
+    for (const k of REMEMBERED_FLAGS) if (next[k] !== before[k]) changed[k] = next[k];
+    if (Object.keys(changed).length > 0) set(viewMemoryAtom, { ...get(viewMemoryAtom), ...changed });
+  },
+);
 
 /**
  * The Locations toggle was turned off by opening a map whose locations are scrambled

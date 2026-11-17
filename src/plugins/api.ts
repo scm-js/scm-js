@@ -1803,6 +1803,10 @@ export interface ViewApi {
   /** The View menu's ticks: grid, locations, units, sprites, doodads, fog, … */
   flags(): ViewFlags;
   /**
+   * Set some of the View menu's ticks, as the person would from the menu. The editor
+   * remembers five of them from one session to the next (`grid`, `locationNames`,
+   * `animateWater`, `animateUnits`, `hdGraphics`), so a plugin that changes one of those
+   * for a moment should put it back; the rest start each session on their defaults.
    * @example
    * api.view.setFlags({ grid: !api.view.flags().grid });
    */

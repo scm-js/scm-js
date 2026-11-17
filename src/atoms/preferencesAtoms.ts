@@ -13,7 +13,8 @@ import { DEFAULT_PREFERENCES, type Preferences } from "../editor/preferences";
 import { resolveLocale } from "../i18n";
 import { installedPluginsAtom, pluginCodeAtom, pluginManifestCacheAtom, pluginUpdateCheckAtom, registryCacheAtom, userRegistriesAtom } from "./pluginAtoms";
 import { browserStorage, mergedStorage, removeStoredKeys, STORAGE_PREFIX, storedKeys, storedValue } from "./storage";
-import { doodadPlacementAtom, doodadThumbSizeAtom, gridSizeAtom, locationSnapAtom, placementOptionsAtom, symmetryOptionsAtom } from "./editorAtoms";
+import { doodadPlacementAtom, doodadThumbSizeAtom, gridSizeAtom, locationSnapAtom, placementOptionsAtom, symmetryOptionsAtom, viewMemoryAtom } from "./editorAtoms";
+import { carryOverViewPreferences, sanitizeViewMemory, VIEW_MEMORY_KEY } from "../editor/viewMemory";
 import { dockWidthsAtom, panelsAtom, whatsNewSeenAtom } from "./uiAtoms";
 import { consoleHeightAtom, debugConsoleAtom } from "./logAtoms";
 import { clearHandles } from "../services/handleStore";
@@ -60,8 +61,22 @@ export interface GridLook {
 
 export const DEFAULT_GRID_LOOK: GridLook = { color: "#000000", opacity: 28, style: "lines" };
 
+const mergedPreferences = mergedStorage(DEFAULT_PREFERENCES);
+/**
+ * The preferences' storage. Reading first moves the three View menu ticks an older version
+ * kept here into the View menu's own key (`editor/viewMemory.ts`), so they are never read
+ * back into the preferences and written out again.
+ */
+const preferencesStorage: typeof mergedPreferences = {
+  ...mergedPreferences,
+  getItem: (key, initial) => {
+    carryOverViewPreferences(browserStorage());
+    return mergedPreferences.getItem(key, initial);
+  },
+};
+
 // getOnInit: the startup hooks read these through `store.get` before anything subscribes.
-export const preferencesAtom = atomWithStorage<Preferences>("scmjs.prefs", DEFAULT_PREFERENCES, mergedStorage(DEFAULT_PREFERENCES), { getOnInit: true });
+export const preferencesAtom = atomWithStorage<Preferences>("scmjs.prefs", DEFAULT_PREFERENCES, preferencesStorage, { getOnInit: true });
 
 /**
  * The language the preference resolves to — what `useApplyPreferences` hands
@@ -105,6 +120,8 @@ export const hotkeysAtom = atom((get) => resolveHotkeys(get(hotkeyOverridesAtom)
 const STORED_RESETS: Record<string, (set: Setter) => void> = {
   "scmjs.prefs": (set) => set(preferencesAtom, RESET),
   "scmjs.grid": (set) => set(gridLookAtom, RESET),
+  // The grid, location names, animations and Remastered Graphics go back to their defaults on screen.
+  "scmjs.viewMenu": (set) => set(viewMemoryAtom, RESET),
   "scmjs.gridSize": (set) => set(gridSizeAtom, RESET),
   "scmjs.locationSnap": (set) => set(locationSnapAtom, RESET),
   "scmjs.placement": (set) => set(placementOptionsAtom, RESET),
@@ -196,7 +213,12 @@ export const importStoredPreferencesAtom = atom(null, (get, set, file: unknown):
  * storage in step without a reload. Every key in `STORED_RESETS` is here.
  */
 const RELOADS: Record<string, (get: Getter, set: Setter) => void> = {
-  "scmjs.prefs": (_get, set) => set(preferencesAtom, mergedStorage(DEFAULT_PREFERENCES).getItem("scmjs.prefs", DEFAULT_PREFERENCES)),
+  "scmjs.prefs": (_get, set) => {
+    // A file from before the View menu remembered its ticks may carry them here: they move to the View menu's key.
+    set(preferencesAtom, preferencesStorage.getItem("scmjs.prefs", DEFAULT_PREFERENCES));
+    if (storedValue(VIEW_MEMORY_KEY) !== null) set(viewMemoryAtom, sanitizeViewMemory(parsed(VIEW_MEMORY_KEY, {})));
+  },
+  "scmjs.viewMenu": (_get, set) => set(viewMemoryAtom, sanitizeViewMemory(parsed(VIEW_MEMORY_KEY, {}))),
   "scmjs.grid": (_get, set) => set(gridLookAtom, mergedStorage(DEFAULT_GRID_LOOK).getItem("scmjs.grid", DEFAULT_GRID_LOOK)),
   "scmjs.gridSize": (_get, set) => set(gridSizeAtom, parsed("scmjs.gridSize", 32)),
   "scmjs.locationSnap": (_get, set) => set(locationSnapAtom, parsed("scmjs.locationSnap", 32)),

@@ -16,7 +16,6 @@
 import type { getDefaultStore } from "jotai";
 import { viewFlagsAtom } from "../atoms/editorAtoms";
 import { gameDataProfileAtom, gameDataRevisionAtom, gameDataSourceAtom, keepRacesAtom } from "../atoms/gameDataAtoms";
-import { preferencesAtom } from "../atoms/preferencesAtoms";
 import { releaseAllTilesets, retryTilesetParts } from "../formats/tileset/load";
 import { resetUnitAssets, retryFailedParts } from "../formats/units/load";
 import { clearFrameCache } from "../formats/units/sprites";
@@ -62,10 +61,10 @@ export function adoptSource(store: Store, next: AssetSource, switched: boolean):
  * just been made from a Remastered installation: someone who pointed the editor at
  * Remastered and then saw the 1.16 pictures would not go looking for a menu item, and the
  * copy they just waited for is mostly those pictures. Only ever at that moment — the
- * option is the user's from then on, and unticking it (or the preference) stays unticked.
+ * option is the user's from then on, and unticking it stays unticked (the View menu
+ * remembers it, `viewFlagsAtom`).
  */
 export function turnOnRemasteredGraphics(store: Store): void {
-  if (!store.get(preferencesAtom).hdGraphics) store.set(preferencesAtom, { ...store.get(preferencesAtom), hdGraphics: true });
   if (!store.get(viewFlagsAtom).hdGraphics) store.set(viewFlagsAtom, { ...store.get(viewFlagsAtom), hdGraphics: true });
 }
 

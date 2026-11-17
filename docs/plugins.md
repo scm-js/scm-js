@@ -2313,7 +2313,9 @@ if (at) {
 Where the map view is looking, and showing the user something.
 
 - `zoom` / `setZoom`, `visible()`, `center(x, y)`, `cursorTile()`, the View menu's options
-  (`flags` / `setFlags`) and grid size.
+  (`flags` / `setFlags`) and grid size. The grid, location names, the two animations and
+  Remastered graphics are remembered between sessions, so a plugin that changes one of
+  them for a moment should set it back.
 - `goTo(target)` scrolls to a tile, unit, sprite or location and selects it, or opens the
   Trigger Editor on a trigger (`{ kind: "trigger", index }`).
 - `reveal(rect)` glides the view to show an area, and resolves `false` if the user moved

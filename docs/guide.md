@@ -2473,7 +2473,8 @@ The placement options, the panels and the recent files are remembered too, and s
 of the View menu's ticks: Grid, Location Names, Animate Water, Animate Units and
 Remastered Graphics. The others, such as the overlays and whether units or doodads are
 shown, start each session on their defaults. If your system is set to reduce motion,
-Animate Water and Animate Units start off until you tick them.
+Animate Water and Animate Units start off until you tick them. Preferences' resets leave
+these ticks alone; their row on the Storage page puts them back.
 
 ### What's new
 

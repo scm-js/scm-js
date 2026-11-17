@@ -115,7 +115,8 @@ resurrect them. It runs in both atoms' `getItem` (module load, onMount) and in
 `startWithRemastered`, and `RELOADS["scmjs.prefs"]` re-reads `viewMemoryAtom` after an
 import of an older file. Note `atomWithStorage`'s `getOnInit` reads storage once at *module*
 load, not per store, so `tests/view-memory.test.ts` simulates a reload with
-`vi.resetModules()` over a stubbed `window.localStorage`.
+`vi.resetModules()` over a stubbed `window.localStorage`. Preferences' Reset this page / Reset everything (`PREFERENCES_PAGE_KEYS`) never touch
+the five: they are not `Preferences`, and only Storage's row (or Clear all data) resets them.
 
 Preferences ▸ Storage ▸ Export / Import
 (`exportStoredPreferences` / `importStoredPreferencesAtom` in `preferencesAtoms.ts`) carry

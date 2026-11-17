@@ -250,13 +250,15 @@ export type PreferencesPage = "general" | "files" | "editing" | "view" | "testin
  * back, and, all together, what **Reset everything** does. Editing also holds the grid's
  * spacing, look and snaps, which have atoms of their own and are reset by the dialog beside
  * these. Every key is on one page or in `NEVER_RESET`; `tests/preferences.test.ts` fails
- * on a key that is on neither, so a new preference has to be given a page here.
+ * on a key that is on neither, so a new preference has to be given a page here. The View
+ * menu's remembered ticks (`editor/viewMemory.ts`) are not preferences and no reset touches
+ * them: they are on no page, and Preferences ▸ Storage clears them.
  */
 export const PREFERENCES_PAGE_KEYS: Record<PreferencesPage, readonly (keyof Preferences)[]> = {
   general: ["language", "splash", "startup", "updates", "multipleMaps", "confirmClose"],
   files: ["newMap", "save", "recovery"],
   editing: ["placement", "undoLevels"],
-  view: ["view", "animateWater", "animateUnits", "animateWaterSpeed", "animateUnitsSpeed", "hdGraphics", "remasteredEffects", "statusBar", "classicText"],
+  view: ["view", "animateWaterSpeed", "animateUnitsSpeed", "remasteredEffects", "statusBar", "classicText"],
   testing: ["testMap"],
   plugins: ["plugins"],
   storage: [],

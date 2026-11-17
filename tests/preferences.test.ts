@@ -136,7 +136,7 @@ describe("the Preferences dialog's resets", () => {
     newMap: { ...DEFAULT_PREFERENCES.newMap, tileset: "jungle" },
     save: { ...DEFAULT_PREFERENCES.save, backup: false },
     undoLevels: 50,
-    hdGraphics: true,
+    classicText: true,
     testMap: { ...DEFAULT_PREFERENCES.testMap, dir: "C:/StarCraft" },
     plugins: { updates: "manual" },
     hotkeys: { "tools.preferences": [] },

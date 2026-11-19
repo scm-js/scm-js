@@ -104,8 +104,9 @@ Most Windows map makers do not have Node, so the release carries one executable 
   - **`weigh.mjs`** (map cost hands its path to the map runner): `assetFile` writes the SEA asset to
     `cacheRoot()/weigh/<version>-weigh.mjs` (compared each run, written via `.part` + rename), reaching `node:sea` through
     `process.getBuiltinModule` — no static import of `node:sea`.
-  - **TypeScript**: `findTypeScript` skips "beside the command" in the binary; the project (cwd) and `npm root -g`
-    remain. doctor's TypeScript note adds that npm comes with Node.
+  - **TypeScript**: beside the command means beside the executable in the binary (`locateTypeScript`:
+    `<exe's folder>/typescript/lib/typescript.js`), which only the MCP bundle has; the project (cwd) comes first and
+    `npm root -g` last. doctor's TypeScript note adds that npm comes with Node.
   - `about` and `doctor` say `single executable[, from Scoop|winget|Homebrew]` and offer `updateCommand(install)`;
     `nodeCheck` is never bad; Claude Code's fix is the package manager's `scmjs` or the executable's own path
     (`cli-shell.md`).
@@ -148,6 +149,14 @@ one on Linux).
   `doctor` (knows the bundle, no `${user_config…}` anywhere).
 - **Asset names**: `scmjs-mcp-` stays apart from `scmjs-cli-` and electron-builder's `scmJS-` in more than case; the
   release's SHA256SUMS covers them like every asset; the upload-artifact path takes `cli/dist/bin/*.mcpb`.
+- **The bundle carries TypeScript** (`typescriptFiles("server")`, 65 files, 9.7 MB, 1.7 MB packed): `lib/typescript.js`,
+  the standard library from `lib.es2023.d.ts` down (what `libText` walks), a `package.json` of name, version, licence
+  and `main` (the version for doctor, and so Node reads the compiler as CommonJS), `LICENSE.txt` and
+  `ThirdPartyNoticeText.txt`. A map maker in Claude Desktop has no npm, and `map_build` was closed to them. Only the
+  bundle: the archives for Scoop, winget and Homebrew stay as they were (their users have a terminal). Fetching
+  `typescript.js` from a CDN at first use was the other way; it needs the network from a server kept to a folder and
+  pins nothing. The check writes a script with `map_script_import` and builds it with `map_build`, in two starts (the
+  server answers requests as they come, so a build sent with the import raced it).
 - Not signed (`mcpb sign` exists; the app shows "not signed" either way for now).
 
 ## Package managers (`packaging/`)

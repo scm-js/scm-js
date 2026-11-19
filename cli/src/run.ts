@@ -121,7 +121,7 @@ export function nodeLoaderDeps(options: NodeLoaderOptions = {}): LoaderDeps {
       return res.text();
     },
     transpile: async (source, fileName) => {
-      if (!options.typescript) throw new Error(t("{file} is TypeScript, and no TypeScript is installed here to compile it; build the plugin, or npm install typescript.", { file: fileName }));
+      if (!options.typescript) throw new Error(t("{file} is TypeScript, and no TypeScript is installed here to compile it; build the plugin, or npm install typescript@6.", { file: fileName }));
       return transpileTs(await options.typescript(), source, fileName);
     },
     createModuleUrl: (code, sourceUrl) => {
@@ -292,7 +292,7 @@ export async function runOnMap(doc: OpenedMap, inputPath: string, inputBytes: Ui
   const note = (e: RunEvent) => { events.push(e); options.live?.(eventLine(e)); };
   // TypeScript only when a `.ts` turns up: a built plugin or a JavaScript script needs none.
   let typescript: ReturnType<typeof loadTypeScript> | null = null;
-  const deps = nodeLoaderDeps({ typescript: async () => (await (typescript ??= loadTypeScript())).ts });
+  const deps = nodeLoaderDeps({ typescript: async () => (await (typescript ??= loadTypeScript(process.cwd(), "plugin"))).ts });
   let host: HeadlessHost;
   let game: HostGame | null = null;
   try {

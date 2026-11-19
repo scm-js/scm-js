@@ -12,7 +12,7 @@ lazily in an `addHelpText` function) and the tests know the list without reachin
 do not restate a count. By family:
 
 - **`map_*`**: info, check, dump, find, diff, triggers_export, triggers_import, strings_export, strings_import,
-  strings_prune, set, settings, resize, new, build, run, units, locations, edit, terrain, doodads, generate, optimize,
+  strings_prune, script_export, script_import, script_api, set, settings, resize, new, build, run, units, locations, edit, terrain, doodads, generate, optimize,
   preview, analyze, trace, cost, test, coverage, balance.
 - **`editor_*`**: open, state, show, picture, save, close (no terminal commands of their own).
 - **`replay_*`**: info, map, sync. **`mod_*`**: info, check, diff, unpack, pack, new, header, play.
@@ -218,6 +218,49 @@ could only be done by writing `<map>.tests.json` with a shell. A chat client has
 - Checked on the real game with the capstone map (text read, victory and defeat told apart, an order to a tile, a kept
   replay traced). Not done: `clips`, `update`, `record`; scenarios in parallel; the same report from the command.
 
+## The script tools: TrigScript for a model
+
+`map_build` was there from the start and could not be used: no tool gave a map a script ("has no TrigScript script …
+the editor writes one"), and Claude Desktop's bundle had no TypeScript. A model wrote 17 raw triggers for a small RPG
+and would have written 300 for a large one. Three tools, named as the triggers' and strings' are. The terminal has
+the same three as `scmjs map script export | import | api` (`script.ts`, `cli-maps.md`): the user's rule is that the
+commands match the tools where they can, so a tool that gains something gets its flag too. What differs is only where
+the files are: text in the tool's arguments, files and folders on disk for the command. `importScript` (write, then
+compile-check) is the one function under both; the tool keeps its own lines, which name tools, not commands.
+
+- **`map_script_export`** (read-only): the files with their text, main.ts first, and the state in a line (`applied`,
+  with the block's trigger numbers; `unbuilt`; `stale`). Over 60 KB it lists the files and asks for names; media a
+  script imports (`.video`, `.image`, `.sound`, `.notes`) is named, never printed. A map with none answers with a
+  one-line starter and names the other two tools.
+- **`map_script_import`**: `files` is a patch (name → whole text, null removes; the rest stay), so a fix sends one
+  file. It writes the map first (`writeBack`, one undo step on a linked map), then compiles what it wrote
+  (`buildMap(…, { check: true })`) and answers with `file:line:column error …` or "compiles: N triggers". **The files
+  are kept when they do not compile**, and it is not `isError`: the triggers in the map are untouched until
+  `map_build`, the editor treats changed files as work in progress the same way, and a script of several files could
+  not otherwise be fixed one file at a time. No TypeScript → written and "Not compiled: …". A bare `.chk` is refused
+  (nowhere to keep members). The description carries what a model needs to start: one whole trigger, the names of the
+  common conditions and actions, how the map's things are written, and that code around `trigger()` runs at build
+  time; it points at `map_script_api` for the rest.
+- **`map_script_api`** (read-only, no game, no TypeScript): the plugin's generated declarations for the map, searched
+  (`scriptapi.ts`). They are what the editor's code window completes from, with the documentation in JSDoc, and at
+  some 350 KB cannot be handed over. `apiEntries` cuts the text into a declaration with its comment, by the
+  generator's section lines, and stops at the repeat of every name inside `declare module "trigscript"`. `searchApi`
+  takes words that must all be there, ranks an exact name, then a name that holds them, then a mention, gives a long
+  entry (the units table, `interface Unit`) by its matching members unless its own name was asked for, and stops at
+  14,000 characters naming what it left out. `apiOverview` (no `search`, about 5 KB) is the opening comment and every
+  name by section, the map's own locations, switches and sounds listed (unnamed `Switch12` left out) and the game's
+  tables counted. The parser knows only the layout; `tests/cli-script.test.ts` holds it to the real text where the
+  plugin is vendored.
+- `map_build` says "map_script_import writes one into the map" for a map with no script (asked before `buildMap`, whose
+  own hint names the editor's menu for the terminal).
+- **doctor for tools shows TypeScript again**, with a row for `map_build` and the compile check in what is ready. It
+  was taken out when a model sent a Claude Desktop map maker to npm; the bundle now carries TypeScript, and without
+  the row a model was told every tool was ready beside a TypeScript `map_build` could not use.
+- Played on the real game: a two-file script with a wrong location name, the corrected file, the build, and `map_test`
+  reading the text its trigger shows. Not done: a script's own tests through a tool beyond `map_build`'s `test`;
+  libraries of other plugins (a script that imports one needs the map's copy, which only the editor makes); the
+  language guides (`docs/trigscript*.md`) are not searchable from a tool, only the declarations.
+
 ## Size of the tool list
 
 The whole `tools/list` is around 90 KB. **Where the weight is**: descriptions about 40%, schemas the rest; by family
@@ -232,10 +275,9 @@ will not move it. `tests/cli-mcp.test.ts` bounds `map_edit`'s size.
   list materially. Proposed, not built.
 - Tools for `map merge`, `map rush`, `map heatmap`, `map fetch`, `map log|blame`, `map unpack|pack` and
   map sounds.
-- From the capstone, after `map_test`: a way to give a map its TrigScript script through the tools (`map_build` says
-  "has no TrigScript script" and points at the editor) and TypeScript for the Claude Desktop bundle; `map_build` with
-  TypeScript 7 fails "version.cjs is not TypeScript" while `doctor` says every tool is ready; lookups a model has no
-  source for (unit names, one whole trigger and one briefing trigger in `map_triggers_import`'s description, the docs);
+- From the capstone, after `map_test` and the script tools: lookups a model has no source for (unit names for the
+  trigger text form, one whole trigger and one briefing trigger in `map_triggers_import`'s description, the docs and
+  the TrigScript guides);
   doodads with names and drawn in `map_preview`, and a zoomed picture; `map_set` giving a unit a name the game will
   not show, silently; no tool lists or deletes files in the folder.
 - `map_balance` passing the request's signal on, as `map_coverage` does.

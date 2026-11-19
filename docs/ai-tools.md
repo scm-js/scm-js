@@ -226,6 +226,33 @@ Ask for the picture too, and the AI shows you the walks it measured:
 
 ![The layout of the same map: white walks between the starts, yellow walks to the naturals, a circle on each natural and an orange square on each ramp](images/cli-map-analyze.webp)
 
+### Write the triggers as a script
+
+> Give village.scx a script: a greeting at the Elder, the Captain and the Smithy.
+
+For more than a handful of triggers, the AI writes a [TrigScript](trigscript.md) script in
+place of triggers by hand: TypeScript in which one function can make many triggers, and
+the map's locations, switches and units are checked by name. It looks up what a script can
+call for your map (`map_script_api`), writes the script's files into the map
+(`map_script_import`), and is told at once whether they compile. Here it asked for a
+location the map does not have:
+
+```
+village.scx: main.ts, greet.ts added
+main.ts:3:63 error Property 'Smithy' does not exist on type '{ … readonly Elder: Location<1>; readonly Captain: Location<2>; readonly Shop: Location<...>; … }'.
+✖ 1 error in the script. The files are kept in the map; send the corrected ones.
+```
+
+It sends the corrected file, the script compiles, and `map_build` puts its triggers into
+the map beside the ones made by hand:
+
+```
+✔ village.scx: 3 triggers → #18–#20 · written to village.scx · 29 KB  TrigScript 4.5.0, TypeScript 6.0.3
+```
+
+The script stays in the map: Triggers ▸ TrigScript… in the editor opens the same files,
+and you or the AI can go on from either side.
+
 ### Does it work?
 
 > Play the first quest in village.scx and tell me whether it works.
@@ -579,7 +606,7 @@ and you can leave these four unapproved.
 
 ## The tools
 
-There are 56. Each but the `editor_` tools and `account_login` is a command of the
+There are 59. Each but the `editor_` tools and `account_login` is a command of the
 [command line guide](cli.md), and its arguments are the command's options by name:
 `--dry-run` is `dryRun`, `--in` is `in`. A tool answers with the command's text and,
 beside it, the command's `--json` data.
@@ -594,6 +621,8 @@ beside it, the command's `--json` data.
 | `map_edit` | [A list of edits](cli.md#editing-units-locations-sprites-and-fog) to units, locations, sprites, fog, [terrain and doodads](cli.md#painting-terrain-and-placing-doodads), applied together or not at all | Yes |
 | `map_settings` | [The players, the forces](cli.md#players-forces-and-other-settings), and the unit, upgrade and technology settings and switch names the map changes | No |
 | `map_set` | The map's name, description and revision, and [its players, forces, unit, upgrade and technology settings and switch names](cli.md#players-forces-and-other-settings) | Yes |
+| `map_script_export`, `map_script_api` | [The map's TrigScript script](#write-the-triggers-as-a-script) as text, with whether the map's triggers are built from it; and what a script can call, looked up by word, with the map's own locations, switches and units by name | No |
+| `map_script_import` | Files of the script written into the map, passed inline, and compiled: the errors come back as `file:line:column`. The map's triggers change only with `map_build` | Yes |
 | `map_resize`, `map_new`, `map_build`, `map_run` | Scenario ▸ Resize, a new map, the TrigScript build, a plugin run over the map | Yes |
 | `map_generate` | [A symmetric melee map from a seed](cli.md#a-melee-map-from-a-seed), walked and checked before it is written | Yes |
 | `map_optimize` | The map made smaller | Only with `write: true` |
@@ -633,6 +662,11 @@ A few tools differ from their commands:
   failed, and [the rest with `--show`](cli.md#seeing-what-a-game-did). `only` takes a list
   of names where the command takes `--only` once a name. It has no `clips` and no
   `update`.
+- `map_script_export`, `map_script_import` and `map_script_api` are
+  [`scmjs map script export`, `import` and `api`](cli.md#a-maps-script-as-files). The
+  tools pass the files' text inline: `map_script_import` takes `files` as names with text,
+  and `null` for a file to remove, where the command reads files and folders and takes
+  `--remove`. `map_script_api` takes the map as `path` and the words as `search`.
 - `map_set` takes the settings as arguments (`players`, `forces`, `units`, `upgrades`,
   `techs`, `switches`), where the command takes a file with `--settings`.
 - `map_edit` takes the list itself as `edits`, where the command takes a file. An edit
@@ -718,6 +752,10 @@ whether the game and the engine are there and what you would need to install, so
 tell you instead of failing. When the game is not in one of the usual places, set the
 **StarCraft folder** in the Claude Desktop extension's settings, or `SCMJS_STARCRAFT` in
 another app's MCP settings; the model can also pass the folder as `starcraft`.
+
+`map_build` and the compile check of `map_script_import` need TypeScript 6. The Claude
+Desktop extension carries its own copy. Elsewhere, install it once in the maps folder with
+`npm install typescript@6`; `doctor` says whether it found one it can use.
 
 A trace or cost run takes a few seconds and plays at most ten minutes of game. A test
 scenario takes about two seconds and plays at most an hour. `map_coverage` plays whole

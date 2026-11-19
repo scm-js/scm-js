@@ -65,8 +65,12 @@ scmjs about
 However it is installed, `scmjs` runs every command, and the package manager and download
 versions bring their own copy of Node. The one thing they leave out is TypeScript, which
 `map build` and plugins written in TypeScript need. Install it with npm, in the map's
-project (`npm install typescript`) or globally; `scmjs` looks in both places, and
-[`scmjs doctor`](#checking-your-setup) says whether it found it.
+project (`npm install typescript@6`) or globally; `scmjs` looks in both places, and
+[`scmjs doctor`](#checking-your-setup) says whether it found it. A map's script compiles
+with TypeScript 6. TypeScript 7 is a different kind of program that `scmjs` cannot drive,
+and TypeScript 5 refuses the settings a script is checked with, so either is passed over
+and `doctor` says "too new" or "too old". The [extension for Claude Desktop](ai-tools.md)
+carries its own copy.
 
 ### A first look
 
@@ -193,6 +197,7 @@ scmjs map trace map.scx                         # which triggers fire in the gam
 scmjs map test map.scx                          # run map.tests.json in the game
 scmjs map test map.scx --clips                  # and a GIF of each failed scenario's end
 scmjs map test map.scx --show                   # and what each game did: lines shown, triggers fired
+scmjs map script import map.scx script/         # put a TrigScript script's files into the map
 scmjs map trace --replay bug.rep --order        # which triggers fired in a played game, and when
 scmjs map coverage map.scx replays/             # which triggers never fired in any of those games
 scmjs replay watch game.rep                     # a replay in the terminal
@@ -1641,11 +1646,11 @@ An error in the script is printed as `main.ts:12:5 error …`, a failing test wi
 and line, and the command exits with 1 with nothing written.
 
 The compiler is TrigScript's own, the version this release of the editor ships, so the
-command and the editor build the same map. It compiles with TypeScript, which is not part
-of the command: install it in the map's project (`npm install typescript`) or globally
-(`npm install -g typescript`). A sound of two seconds or more is encoded as Ogg Vorbis
-with an encoder the command fetches once, unless the project has `wasm-media-encoders`
-installed.
+command and the editor build the same map. It compiles with TypeScript 6, which is not
+part of the command: install it in the map's project (`npm install typescript@6`) or
+globally (`npm install -g typescript@6`). A sound of two seconds or more is encoded as Ogg
+Vorbis with an encoder the command fetches once, unless the project has
+`wasm-media-encoders` installed.
 
 Two things differ from the editor. In the tests, a unit type's hit points come only from
 the map's own unit settings: the editor falls back on the game's unit data for a type the
@@ -1653,6 +1658,71 @@ map leaves at its defaults, and the command does not have that data. A test that
 a Marine's 40 hit points should set them in the map. And programs that other plugins add
 to a build are not built here: a map with Magenta's triggers is refused, and is built by
 saving it in the editor.
+
+### A map's script as files
+
+A map with a script keeps the script's files inside it. `scmjs map script` takes them out
+and puts them in, so a script can be written in any editor and a map can be given one
+without opening the editor. `import` puts files into the map and says at once whether the
+script compiles:
+
+```
+$ scmjs map script import ridge.scx script/
+ridge.scx: arrive.ts, main.ts added · written to ridge.scx · 4.3 KB
+main.ts:4:18 error Property 'Gate' does not exist on type '{ … readonly Base: Location<1>; readonly Nest: Location<2>; readonly Middle: Location<3>; … }'.
+✖ 1 error in the script. The files are kept in the map: import the corrected ones.
+```
+
+The script named a location the map does not have, and the error lists the ones it has.
+The files are in the map all the same, so the corrected file alone is enough:
+
+```
+$ scmjs map script import ridge.scx script/main.ts
+ridge.scx: main.ts changed · written to ridge.scx · 4.3 KB
+✔ compiles: 2 triggers · TrigScript 4.5.0, TypeScript 6.0.3
+The map's triggers are as they were: scmjs map build applies the script.
+```
+
+Importing never changes the map's triggers.
+[`scmjs map build`](#building-a-trigscript-map) makes them from the script.
+
+A file goes in under its own name, so `script/main.ts` is `main.ts`. A folder gives every
+`.ts` and `.tsx` file in it at its path inside the folder, so `script/quests/shop.ts` is
+`quests/shop.ts`; declaration files and `node_modules` are passed over. `-` reads
+`main.ts` from standard input. A script starts at `main.ts`, and the other files are
+imported from it. Files that are not named stay as they are; `--remove quests/old.ts`
+takes one out. The command exits with 1 when the script does not compile, and `--out`
+writes the map to another file.
+
+`export` gives the files back. With no folder it prints them, each under a line with its
+name when there is more than one, and says on standard error how the script stands to the
+map's triggers. Naming files prints only those, and `--out` writes them into a folder:
+
+```
+$ scmjs map script export ridge.scx --out script
+✔ ridge.scx: 2 files, 362 B · applied: triggers #4 to #5 of the map are this script's
+  main.ts → script/main.ts
+  arrive.ts → script/arrive.ts
+```
+
+"Applied" means the map's triggers are what the files compile to. "Not applied" means the
+files changed since the last build, or were never built.
+
+`api` looks up what a script can call. With no words it lists every function, type and
+table by name; with words it prints the declarations that hold all of them, each with its
+documentation. `--map` uses that map's own names, so its locations, switches and sounds
+are there as a script writes them:
+
+```
+$ scmjs map script api bring --map ridge.scx
+// ── Conditions ──
+/** Bring — Player, Unit, Location, Comparison, Amount */
+declare function bring(player: Player, unit: UnitType, location: Location, comparison: Comparison | number, amount: number): Condition;
+…
+```
+
+The [TrigScript guide](trigscript.md) explains the language. For a script with media
+files, or to see every file of the archive, use [`map unpack`](#the-archive-as-a-folder).
 
 ### Running a plugin over a map
 
@@ -4452,6 +4522,7 @@ gives its options.
 | [`scmjs map optimize <map>`](#making-a-map-smaller) | The map made smaller: unused sounds, files and strings out, compressed again; `--strip-editor` drops the editor-only sections too |
 | [`scmjs map unpack <map>`, `scmjs map pack <folder>`](#the-archive-as-a-folder) | The map's archive as a folder of files, and back; `pack --out -`, `--dry-run` |
 | [`scmjs map unpack <map> --text`](#a-map-as-a-folder-of-text) | The scenario as text files to keep in git; `map pack` builds the map from them |
+| [`scmjs map script export\|import\|api`](#a-maps-script-as-files) | The map's TrigScript script as files and back, compiled as it goes in (`--remove`, `-` for `main.ts` on standard input); `api` looks up what a script can call, with `--map` for the map's own names |
 | [`scmjs map build <map>`](#building-a-trigscript-map) | Builds the map's TrigScript script into it, as Save does |
 | [`scmjs map run <plugin> <map>`](#running-a-plugin-over-a-map) | Runs a plugin, or a script written like one, over the map, with the game's data when a copy is there; `--no-game` |
 | [`scmjs map diff <a> <b>`](#comparing-two-maps) | What changed between two maps, or since a git revision with `--rev` (`--rev main...` for what a branch changed); `--picture` shows where |

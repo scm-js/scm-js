@@ -28,7 +28,7 @@ import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, s
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { bundleCli, bundleWeigh, cliVersion } from "./lib/cli-bundle.mjs";
-import { askServer, MCPB_CLI, mcpbAsset, mcpbManifest } from "./lib/mcpb.mjs";
+import { askServer, MCPB_CLI, mcpbAsset, mcpbManifest, typescriptFiles } from "./lib/mcpb.mjs";
 import { zip } from "./lib/zip.mjs";
 
 const POSTJECT = "postject@1.0.0-alpha.6";
@@ -195,6 +195,8 @@ for (const target of targets) {
       { name: "icon.png", bytes: readFileSync(join(stage, "icon.png")) },
       { name: "LICENSE", bytes: readFileSync("cli/LICENSE") },
       { name: "THIRD-PARTY-NOTICES.txt", bytes: Buffer.from(notices) },
+      // TypeScript beside the executable, for map_build: the person the bundle is for has no npm to install it with.
+      ...typescriptFiles("server"),
     ]));
     entry.mcpb = mcpb;
     entry.mcpbBytes = statSync(mcpb).size;

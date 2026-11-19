@@ -138,6 +138,11 @@ one on Linux).
   server's own list (the CJS bundle run by the build's Node, `askServer`), each description cut to its first
   sentence; the app shows them before installing. `privacy_policies` is scmjs.dev's, since the account tools talk to
   it. `compatibility.platforms` is the one platform.
+  **Three boolean settings** (`mod_tools`, `replay_tools`, `account_tools`, default false) reach the server as
+  `SCMJS_TOOLS_MODS|REPLAYS|ACCOUNT` and switch on the sets of tools beside the map tools (`toolSetsOf`,
+  `cli-mcp.md`); an unreplaced placeholder is dropped by `dropUnsetSettings`, which leaves the set off. The manifest's
+  `tools` are the ones served as installed (the list is asked of `scmjs mcp` with no flag) and `tools_generated` is
+  true, since a ticked set adds its own. The bundle check lists the tools as installed and with two sets ticked.
 - **The zip is ours** (`zip` with a per-file `mode`: version made by Unix, external attributes `0o100755 << 16`, as
   `mcpb pack` writes), not `mcpb pack`: the manifest is validated by **`npx --yes @anthropic-ai/mcpb@2.1.2 validate`**
   (pinned, through npx as postject is; not a devDependency, 40 packages for one check). Without the mode a Mac app

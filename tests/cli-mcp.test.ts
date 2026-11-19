@@ -11,7 +11,7 @@ import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { findGameCopy } from "../cli/src/engine";
-import { argumentError, createMcpServer, INSTRUCTIONS, MAX_FRAMES, outsideRoot, unreadableLine, type McpOptions } from "../cli/src/mcp";
+import { argumentError, createMcpServer, INSTRUCTIONS, MAX_FRAMES, outsideRoot, toolSetsOf, unreadableLine, type McpOptions, type ToolSet } from "../cli/src/mcp";
 import { classicCopy, FAKE_TEST_RUNNER, stagedEngine } from "./support/mapRunner";
 import { TEST_MAPS_DIR } from "./support/maps";
 import { emptyDat, encodeDat } from "../src/formats/dat/table";
@@ -72,6 +72,49 @@ describe("scmjs mcp", () => {
     expect([most("map_trace"), most("map_cost")]).toEqual([MAX_FRAMES.trace, MAX_FRAMES.cost]);
     expect(client.getInstructions()).toBe(INSTRUCTIONS);
     expect(INSTRUCTIONS).toMatch(/map_trace and map_cost .* copy of StarCraft .* doctor says whether/);
+  });
+
+  it("serves the map tools alone or with the sets asked for, and says which are switched off and how to switch them on", async () => {
+    const served = async (sets?: readonly ToolSet[]) => {
+      const { server, tools } = createMcpServer({ sets });
+      const [a, b] = InMemoryTransport.createLinkedPair();
+      const c = new Client({ name: "test", version: "1" });
+      await Promise.all([server.connect(a), c.connect(b)]);
+      const instructions = c.getInstructions() ?? "";
+      await c.close();
+      return { tools, instructions };
+    };
+    const other = (tools: string[]) => tools.filter((n) => /^(mod_|replay_|account_|library_)|^share$/.test(n));
+    const all = await served();
+    expect(all.tools).toHaveLength(59);
+    expect(all.instructions).toBe(INSTRUCTIONS);
+    expect(all.instructions).not.toMatch(/Switched off/);
+    const maps = await served([]);
+    expect(maps.tools).toHaveLength(40);
+    expect(other(maps.tools)).toEqual([]);
+    // Everything a map maker asks for is there: the map and editor tools, doctor, the game and the pictures.
+    for (const name of ["map_info", "map_edit", "map_test", "map_script_import", "map_build", "map_preview", "map_analyze", "editor_open", "doctor"]) expect(maps.tools, name).toContain(name);
+    expect(maps.instructions).not.toMatch(/mod_unpack writes|library_get downloads|replay_map writes/);
+    expect(maps.instructions).toMatch(/Switched off on this server: the mod tools \(mod_info, .*\); the replay tools \(replay_info, replay_map\); the scmjs\.dev account tools \(account_login, .*share, replay_sync\)\. When the person asks .* Settings ▸ Desktop app ▸ Extensions ▸ scmJS, and elsewhere by starting the server with --tools all \(or --tools mods,replays,account\)\.$/);
+    const some = await served(["mods", "account"]);
+    expect(other(some.tools).sort()).toEqual(other(all.tools).filter((n) => n !== "replay_info" && n !== "replay_map").sort());
+    expect(some.instructions).toMatch(/mod_unpack writes it as a folder of text/);
+    expect(some.instructions).toMatch(/Switched off on this server: the replay tools \(replay_info, replay_map\)\. .*--tools all \(or --tools replays\)\.$/);
+    // The sets in the order the server names them, whatever order they were asked in.
+    expect((await served(["account", "mods"])).tools).toEqual(some.tools);
+  });
+
+  it("reads which sets to serve from --tools, else from the settings an MCP bundle hands over, else the map tools alone", () => {
+    expect(toolSetsOf(undefined, {})).toEqual([]);
+    expect(toolSetsOf("all", {})).toEqual(["mods", "replays", "account"]);
+    expect(toolSetsOf("maps", { SCMJS_TOOLS_MODS: "true" })).toEqual([]);
+    expect(toolSetsOf("account, mods", {})).toEqual(["mods", "account"]);
+    expect(toolSetsOf("Replays maps", {})).toEqual(["replays"]);
+    expect(toolSetsOf(undefined, { SCMJS_TOOLS_MODS: "true", SCMJS_TOOLS_REPLAYS: "false", SCMJS_TOOLS_ACCOUNT: " TRUE " })).toEqual(["mods", "account"]);
+    expect(toolSetsOf(undefined, { SCMJS_TOOLS_MODS: "${user_config.mod_tools}", SCMJS_TOOLS_ACCOUNT: "" })).toEqual([]);
+    const refused = (flag: string) => { try { toolSetsOf(flag, {}); } catch (e) { return [(e as CliError).exitCode, (e as Error).message]; } return null; };
+    expect(refused("mod")).toEqual([2, '--tools takes all, maps, or any of mods, replays, account, not "mod"']);
+    expect(refused(" ")).toEqual([2, '--tools takes all, maps, or any of mods, replays, account, not " "']);
   });
 
   it("reads a map: the info lines without colour, and the report as structured data", async () => {

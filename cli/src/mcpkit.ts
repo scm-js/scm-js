@@ -133,8 +133,17 @@ export const WIDTH = 140;
  * Where the game tools' engine and weigher come from when not from the play page and beside the command: for tests,
  * which hand the server a staged folder and a stand-in. A person sets `SCMJS_PLAY_URL` in the client's settings instead.
  */
+/**
+ * The sets of tools a server may leave out. The map tools (`map_*`, `editor_*`, `doctor`) are always there; these are
+ * for the people who work on mods, read replays, or keep maps and replays on scmjs.dev.
+ */
+export const TOOL_SETS = ["mods", "replays", "account"] as const;
+export type ToolSet = (typeof TOOL_SETS)[number];
+
 export interface McpOptions {
   engine?: string; weigh?: string;
+  /** The sets served beside the map tools; every set when left out (`scmjs mcp` itself starts with none: `toolSetsOf`). */
+  sets?: readonly ToolSet[];
   /** Keep the tools' paths inside this folder (the command passes its working directory unless --allow-outside). */
   root?: string;
   /** The account tools' server, session file, fetch, replay sync state and replay folders: for tests, which hand a stand-in. */

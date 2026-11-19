@@ -64,10 +64,13 @@ a newer scmjs; then the commands this computer can run now. Nothing is changed. 
   program.command("mcp").description(t("these commands as an MCP server, for AI tools")).helpGroup(t("This tool:"))
     .option("--folder <folder>", t("the folder the tools work in, when the AI tool starts the server somewhere else"))
     .option("--allow-outside", t("let the tools read and write files outside this folder, and read scmjs.dev links"))
+    .option("--tools <sets>", t("the sets of tools beside the map tools: all, or any of mods, replays, account (the map tools alone by default)"))
     // The tools' names from the server itself, so the list is never short of one; made only when the help is shown.
     .addHelpText("after", () => "\n" + t(`Speaks the Model Context Protocol on standard input and output, so an AI tool that runs on this computer (Claude
 Code, Cursor, VS Code, …) can read, check, search, compare and change maps with the same code these commands use.
-Each tool is a command, with its options as arguments by the same names:`) + "\n" + wrapWords(createMcpServer().tools.join(", "), 116, "  ") + "\n" + t(`The tools that run the game or draw it (map_preview, map_analyze, map_trace, map_cost, map_test, map_coverage, map_balance) need a
+Each tool is a command, with its options as arguments by the same names:`) + "\n" + wrapWords(createMcpServer().tools.join(", "), 116, "  ") + "\n" + t(`The map tools (map_…, editor_…, doctor) are always served. The rest come in three sets that --tools switches on:
+mods (mod_…), replays (replay_info, replay_map) and account (account_…, library_…, share, replay_sync), as in
+--tools mods,account, or --tools all for every one.`) + "\n" + t(`The tools that run the game or draw it (map_preview, map_analyze, map_trace, map_cost, map_test, map_coverage, map_balance) need a
 copy of StarCraft here, as the commands do; doctor says whether there is one. The account tools (account_info, library_…,
 share, replay_sync) use the session scmjs login keeps, and share, replay_sync, library_unlink and library_remove first
 say what they would do and act only when called again with confirm. Paths are files in the folder the tool started the
@@ -78,7 +81,7 @@ Claude Code, in your maps folder:`) + `
 ${t("Anything else takes the same thing as JSON:")}
   { "mcpServers": { "scmjs": { "command": "npx", "args": ["-y", "@scm-js/cli", "mcp", "--folder", "<your maps folder>"] } } }`)
     // English whatever the language: the tools' descriptions and results are read by the model, not shown.
-    .action(async (o: { allowOutside?: boolean; folder?: string }) => { setLocale("en"); await serveStdio({ allowOutside: !!o.allowOutside, folder: o.folder }); });
+    .action(async (o: { allowOutside?: boolean; folder?: string; tools?: string }) => { setLocale("en"); await serveStdio({ allowOutside: !!o.allowOutside, folder: o.folder, tools: o.tools }); });
 
   // Hidden from the overview, which holds 23 lines (banner.ts): an editor starts it, and docs/cli.md says how.
   program.command("lsp", { hidden: true }).description(t("a TrigScript language server, for text editors")).helpGroup(t("This tool:"))

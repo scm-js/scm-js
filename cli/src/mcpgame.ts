@@ -17,7 +17,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { defaultOut, defaultTests, happened, happenedLines, planInline, readMapForTests, readTests, runTests, saveScenarios, testJson, type Happened, type PlannedScenario, type ScenarioResult } from "./maptest";
 import { CliError, nearPath, num, plural, visible, printErr } from "./ui";
-import { path, ok, noPipe, outsideRoot, tool, MAX_FRAMES, FRAMES, WIDTH, starcraftArg, type Extra, type McpContext, type Reg } from "./mcpkit";
+import { path, ok, noPipe, outsideRoot, tool, MAX_FRAMES, FRAMES, WIDTH, starcraftArg, TOOL_SETS, type Extra, type McpContext, type Reg, type ToolSet } from "./mcpkit";
 
 /** A frame as the trace gives it: the game's clock. */
 const clock = gameClock;
@@ -232,8 +232,8 @@ export function addGameTools(reg: Reg, { options, root }: McpContext): void {
  * What the tools need, by tool: the doctor tool's summary in place of the commands'. Everything else a tool does needs
  * nothing beyond scmjs.
  */
-const TOOL_READY: ReadyGroup[] = [
-  { commands: "map_info, map_check, map_edit and the other map, mod, replay and editor tools", needs: [] },
+const toolReady = (sets: readonly ToolSet[]): ReadyGroup[] => [
+  { commands: `map_info, map_check, map_edit and the other map${sets.includes("mods") ? ", mod" : ""}${sets.includes("replays") ? ", replay" : ""} and editor tools`, needs: [] },
   { commands: "map_preview, map_analyze, map_generate, map_terrain, map_doodads", needs: ["StarCraft"] },
   { commands: "map_build, and the compile check of map_script_import", needs: ["TypeScript"] },
   { commands: "map_trace, map_cost, map_test", needs: ["StarCraft", "map"] },
@@ -253,29 +253,32 @@ const TOOL_CHECKS = new Set(["Node", "scmjs", "TypeScript", "StarCraft", "Game e
  * ready by tool. A model read the commands' report to a person in Claude Desktop as "map build is not working, run npm
  * install typescript", and said twice that the check did not say what a thing was for (2026-11-17).
  */
-export function doctorForTools(r: Awaited<ReturnType<typeof doctorReport>>): { text: string[]; json: ReturnType<typeof doctorJson> } {
-  const checks = r.checks.filter((c) => TOOL_CHECKS.has(c.what)).map((c): Check => {
+export function doctorForTools(r: Awaited<ReturnType<typeof doctorReport>>, sets: readonly ToolSet[] = TOOL_SETS): { text: string[]; json: ReturnType<typeof doctorJson> & { toolSets: { on: string[]; off: string[] } } } {
+  // The sign-in serves the account tools alone: with them switched off it is nothing a person here needs to hear about.
+  const checks = r.checks.filter((c) => TOOL_CHECKS.has(c.what) && (c.what !== "scmjs.dev" || sets.includes("account"))).map((c): Check => {
     if (c.what === "Game engine" && !c.engine?.build) return { ...c, note: "map_trace, map_cost, map_coverage and map_balance fetch it from the play page by themselves the first time one runs (about 25 MB). Nothing to install." };
     // The Claude Desktop extension carries its own, so a map maker there is never sent to npm for it.
     if (c.what === "TypeScript" && c.state !== "ok") return { ...c, note: "map_build and the compile check of map_script_import use it (TypeScript 6); every other tool works without. In a terminal, in the maps folder: npm install typescript@6.", fix: undefined };
     if (c.what === "scmjs.dev") return { ...c, note: "share, replay_sync and the library_ tools use the session. account_login signs the person in, in their browser, if they want to.", fix: undefined };
     return c;
   });
-  const ready = readiness(r.checks, TOOL_READY);
+  const ready = readiness(r.checks, toolReady(sets));
   const report = { ...r, checks };
+  const off = TOOL_SETS.filter((set) => !sets.includes(set));
   // "Tools" heads TypeScript and the sign-in in the commands' report; here a tool is one of these.
   const text = printDoctor(report, 140, { ready, every: "Every tool is ready on this computer.", notes: true }).map((l) => (visible(l) === "  Tools" ? "  Also used" : l));
-  return { text, json: doctorJson(report, ready) };
+  if (off.length) text.push("", `Switched off on this server: the ${off.join(", ").replace(/, ([^,]*)$/, " and $1")} tools. The person switches them on in the Claude Desktop extension's settings (Settings ▸ Desktop app ▸ Extensions ▸ scmJS), or elsewhere by starting the server with --tools all.`);
+  return { text, json: { ...doctorJson(report, ready), toolSets: { on: ["maps", ...sets], off } } };
 }
 
-export function addDoctorTool(reg: Reg): void {
+export function addDoctorTool(reg: Reg, sets: readonly ToolSet[] = TOOL_SETS): void {
   reg("doctor", {
     title: "What this computer has",
     description: "Checks what scmJS can use on this computer: a copy of StarCraft, the game engine, the scmjs.dev sign-in, and whether a newer scmjs is out (scmjs doctor, said in the tools' terms). It ends with which tools are ready, and for each thing missing says what it is for and what the person can install or set. Call it before map_trace or map_cost, when one fails, or when the person asks whether their setup works. Changes nothing.",
     inputSchema: {},
     annotations: { readOnlyHint: true },
   }, tool(async () => {
-    const { text, json } = doctorForTools(await doctorReport());
+    const { text, json } = doctorForTools(await doctorReport(), sets);
     return ok(text, json);
   }));
 }

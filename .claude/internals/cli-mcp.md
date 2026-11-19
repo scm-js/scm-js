@@ -13,14 +13,14 @@ do not restate a count. By family:
 
 - **`map_*`**: info, check, dump, find, diff, triggers_export, triggers_import, strings_export, strings_import,
   strings_prune, set, settings, resize, new, build, run, units, locations, edit, terrain, doodads, generate, optimize,
-  preview, analyze, trace, cost, coverage, balance.
+  preview, analyze, trace, cost, test, coverage, balance.
 - **`editor_*`**: open, state, show, picture, save, close (no terminal commands of their own).
 - **`replay_*`**: info, map, sync. **`mod_*`**: info, check, diff, unpack, pack, new, header, play.
 - **Account**: `account_login`, `account_info`, `library_list`, `library_get`, `library_set`, `library_unlink`, `library_remove`,
   `share`. And `doctor`.
 
 Commands with **no tool**, on purpose or not yet: `map open|play|share|fetch|merge|log|blame|unpack|pack|sounds|
-rush|test|heatmap|triggers edit|strings edit`, `replay watch|export|open|share`, `mod build|test`, `bot *`, `plugin *`,
+rush|heatmap|triggers edit|strings edit`, `replay watch|export|open|share`, `mod build|test`, `bot *`, `plugin *`,
 `init`, `login`. (`share` covers map and replay sharing; `editor_open` covers opening.)
 
 ## Design
@@ -188,6 +188,36 @@ rush|test|heatmap|triggers edit|strings edit`, `replay watch|export|open|share`,
   replays, rooms and public link routes), with `McpOptions.account` handing the server, session file, fetch, sync
   state, replay folders and settle time.
 
+## `map_test`: the model at the controls
+
+The tool a model checks its own work with, and the one tool that differs from its command in what it is for. Found by
+the capstone of 2026-11-18 (an RPG built through the 0.17.0 tools alone, `~/github/scm-js-capstone/WALLS.md`): the map
+was built and passing its check by call 28 of 66, and the other 38 calls went on finding out whether it worked, which
+could only be done by writing `<map>.tests.json` with a shell. A chat client has no shell.
+
+- **Scenarios inline** (`scenarios`, loose objects: `z.record`) in the tests file's own form, planned by
+  `planInline` (maptest.ts) as if they were in `<map>.tests.json`: that is where `save` writes them (`saveScenarios`:
+  same name replaced, others appended, the file made) and where a scenario's `replay` is looked for. The grammar is in
+  the description, because nothing else the model is handed has it; `planScenario`'s own errors (nearest key, the
+  map's names) do the validating, so there is no zod copy of the grammar to keep. With neither `scenarios` nor `tests`
+  it plays the file beside the map; `only` picks by name.
+- **A scenario may expect nothing** when given inline: a model asks "what happens if" as often as "does this hold".
+  It is marked `·`, counted as "expected nothing", and `save` refuses it (a tests file's scenarios all expect).
+- **The answer says what happened, not only what failed** (`happened` in maptest.ts, `testLines` in mcpgame.ts, from
+  `runTests`' `onEnd`): every expectation with what the game gave, held or not; how the game ended and for whom; the
+  person's minerals and gas; each line shown once with its time; the map's triggers that fired, by when first; an
+  order that found no unit. The model has no screen, and "the trigger holding the text fired" is not "the words were
+  shown". Lists are cut at 30 (`all`). The wording is English and lives in mcpgame.ts, not behind `t()`: the server
+  speaks English.
+- **A failed scenario is not `isError`**: the tool did its job; the verdict line says. Its replay is kept in
+  `<map>.tests/` as the command keeps it, and the line names `map_trace`'s `replay` for the full table. So the tool is
+  not read-only (`readOnlyHint: false, destructiveHint: false`).
+- **Kept to the folder**: `tests` is a path argument (`PATH_ARGS`); an inline scenario's `replay` is checked in the
+  handler, since it is inside a value.
+- `MAX_FRAMES.test` is an hour of play: the answer is a few lines whatever the length.
+- Checked on the real game with the capstone map (text read, victory and defeat told apart, an order to a tile, a kept
+  replay traced). Not done: `clips`, `update`, `record`; scenarios in parallel; the same report from the command.
+
 ## Size of the tool list
 
 The whole `tools/list` is around 90 KB. **Where the weight is**: descriptions about 40%, schemas the rest; by family
@@ -200,8 +230,14 @@ will not move it. `tests/cli-mcp.test.ts` bounds `map_edit`'s size.
 
 - `scmjs mcp --tools map,editor`: a server started with a subset of the families — the one change that would shrink the
   list materially. Proposed, not built.
-- Tools for `map merge`, `map rush`, `map test`, `map heatmap`, `map fetch`, `map log|blame`, `map unpack|pack` and
+- Tools for `map merge`, `map rush`, `map heatmap`, `map fetch`, `map log|blame`, `map unpack|pack` and
   map sounds.
+- From the capstone, after `map_test`: a way to give a map its TrigScript script through the tools (`map_build` says
+  "has no TrigScript script" and points at the editor) and TypeScript for the Claude Desktop bundle; `map_build` with
+  TypeScript 7 fails "version.cjs is not TypeScript" while `doctor` says every tool is ready; lookups a model has no
+  source for (unit names, one whole trigger and one briefing trigger in `map_triggers_import`'s description, the docs);
+  doodads with names and drawn in `map_preview`, and a zoomed picture; `map_set` giving a unit a name the game will
+  not show, silently; no tool lists or deletes files in the folder.
 - `map_balance` passing the request's signal on, as `map_coverage` does.
 - Progress notifications for `map_coverage` and `map_balance`.
 - Not run: the account tools through a real client (Claude Code) over stdio or against the real server; the replay

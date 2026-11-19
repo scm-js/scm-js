@@ -169,6 +169,21 @@ scenario fails for a real reason: ums.scx has no ground, so a Marine is unplacea
   `order` (move/attack/patrol/stop/hold, the person's units of a type in a location) and `chat` — the person's own
   commands, so they are in the replay's stream. Names through `triggerNames(scn)` with `unitByName` as the fallback;
   triggers by number or Comment (`triggerComment`, core).
+- **An order to a tile** (`"to": [x, y]`, `Names.place`): a one-tile location written into a free slot of the **copy**
+  with no name (`nameIndex` 0), so no string is added and the map is not touched; the same tile is the same location.
+  The runner takes only location numbers, and a model testing an RPG added waypoint locations to the real map just to
+  walk a hero somewhere (the capstone, 2026-11-18). A map with every slot taken is told to name a location.
+- **The command has what the tool has** (the user: "cli should match if possible"): `-` among the tests files reads
+  scenarios from standard input (`readTests(…, { from })`: planned as if in `<map>.tests.json`, named "standard input"
+  in errors and the header, `expect` may be left out), `--save` keeps them (`saveScenarios`; a piped object with its
+  own `frames` or `seed` beside the scenarios is refused, since they would be dropped), `--only <name>` (repeatable;
+  an unknown name is refused with the names there are), `--show` prints `happenedLines` under each scenario and
+  `--all` leaves its lists whole. A scenario that expects nothing shows what happened without `--show`, is marked ℹ
+  and is counted as played, not passed. `--json` always has `happened` a scenario. `happenedLines` is the one worded
+  list for both (the tool passes "`all`" for the flag's name). `mod test` declares the same flags.
+- **For the `map_test` tool** (`cli-mcp.md`): `planInline` plans scenarios handed over as values (no `expect` allowed),
+  `happened` is what a game did whatever was expected (pure, from the runner's end line), `saveScenarios` writes them
+  into a tests file by name.
 - **Expectations** (`judge`, pure): trigger fired (a number = exactly, `">= n"`, true/false), switch, deaths,
   minerals/gas, units (a count the runner answers), text (substring of any line shown; **decoded with the map's
   encoding**, `shownText` — the runner hands bytes as char codes, and a Korean map's text could never match before),
@@ -328,5 +343,5 @@ scenario fails for a real reason: ums.scx has no ground, so a Marine is unplacea
 - `map balance`: fixed starts and computer-vs-computer in the match runner; balance over several maps at once; a
   `--pairs` copy with only two start locations was decided against as the default (the AIs scout fewer places, so
   first contact would read early).
-- MCP tools for `map rush`, `map test` (and `record`) and `map heatmap`. (`map_trace`/`map_cost` take `replay`,
+- MCP tools for `map rush`, `map test record` and `map heatmap` (`map_test` plays scenarios, `cli-mcp.md`). (`map_trace`/`map_cost` take `replay`,
   `order`, `every` and `mod`.)

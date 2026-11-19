@@ -23,7 +23,8 @@ import { removeFolder, tempFolder } from "./lifecycle";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { createInterface } from "node:readline";
 import { readArchive, writeArchiveBytes } from "../../src/editor/mapFile";
-import { mapVersionOf, parseScenario, serializeScenario, type Scenario } from "../../src/formats/chk/scenario";
+import { mapVersionOf, markDirty, parseScenario, serializeScenario, type Scenario } from "../../src/formats/chk/scenario";
+import { locationCapacity } from "../../src/editor/locations";
 import { changeMapVersion } from "../../src/editor/settings";
 import { applyTriggers, newAction, newCondition, newTrigger, readTriggers, triggerNames } from "../../src/editor/triggers";
 import { parseTriggers, triggerComment, TriggerTextError, type TriggerNames } from "../../src/formats/triggers/text";
@@ -227,6 +228,28 @@ class Names {
       : t("the map has no location {value}", { value: JSON.stringify(v) }));
   }
   locationName(l: number): string { return this.t.location(l); }
+  /** The places an order was aimed at by tile, each a location of the copy: `x,y` to its number. */
+  private readonly places = new Map<string, number>();
+  /**
+   * A tile as somewhere an order can go: a location of one tile in a free slot of the copy, with no name, so the copy's
+   * strings stay as the map's. The map itself is not touched; the game is handed the copy.
+   */
+  place(v: readonly unknown[], where: string): number {
+    const [x, y] = v;
+    if (v.length !== 2 || typeof x !== "number" || typeof y !== "number" || !Number.isInteger(x) || !Number.isInteger(y) || x < 0 || y < 0 || x >= this.scn.width || y >= this.scn.height)
+      throw bad(where, t("takes a location's name or a tile as [x, y] on the map ({width} × {height}), not {value}", { width: this.scn.width, height: this.scn.height, value: JSON.stringify(v) }));
+    const key = `${x},${y}`, known = this.places.get(key);
+    if (known !== undefined) return known;
+    // The table at its full size, then the lowest slot that holds nothing (63 is Anywhere's).
+    const locations = this.scn.locations;
+    while (locations.length < locationCapacity(this.scn)) locations.push({ left: 0, top: 0, right: 0, bottom: 0, nameIndex: 0, elevationFlags: 0 });
+    const slot = locations.findIndex((l, i) => i !== 63 && i < locationCapacity(this.scn) && l.nameIndex === 0 && l.left === l.right && l.top === l.bottom);
+    if (slot < 0) throw bad(where, t("the map has no free location to stand for a tile: aim the order at one of its locations by name"));
+    this.scn.locations[slot] = { left: x * 32, top: y * 32, right: x * 32 + 32, bottom: y * 32 + 32, nameIndex: 0, elevationFlags: 0 };
+    markDirty(this.scn, "MRGN");
+    this.places.set(key, slot + 1);
+    return slot + 1;
+  }
   /** A switch, 0-based: its name, "Switch 3", or its number from 1. */
   switch(v: unknown, where: string): number {
     if (typeof v === "number" && Number.isInteger(v) && v >= 1 && v <= 256) return v - 1;
@@ -331,7 +354,7 @@ function commandOf(e: Raw, at: number, names: Names, where: string): RunnerStep 
   onlyKnown(e, ["order", ...ENTRY_KEYS.order, "at"], where);
   const order = String(e.order).toLowerCase() as OrderKind;
   if (!ORDERS.includes(order)) throw bad(`${where}.order`, t("takes {list}, not {value}", { list: ORDERS.join(", "), value: JSON.stringify(e.order) }));
-  const to = order === "stop" || order === "hold" ? 0 : e.to === undefined ? (() => { throw bad(where, t("a {order} order needs \"to\": the location to {order} to", { order })); })() : names.location(e.to, `${where}.to`);
+  const to = order === "stop" || order === "hold" ? 0 : e.to === undefined ? (() => { throw bad(where, t("a {order} order needs \"to\": the location to {order} to", { order })); })() : Array.isArray(e.to) ? names.place(e.to, `${where}.to`) : names.location(e.to, `${where}.to`);
   return { frame: at, kind: "order", order, unit: e.unit === undefined ? UnitClass.Any : names.unit(e.unit, `${where}.unit`), location: e.location === undefined ? 0 : names.location(e.location, `${where}.location`), to };
 }
 
@@ -469,24 +492,62 @@ function lineOf(text: string, name: string): number | null {
 }
 
 /** A tests file read: its scenarios planned against the map's scenario as the game runs it. */
-export function readTests(file: string, text: string, chk: Uint8Array, defaults: { frames: number; seed: number }): PlannedScenario[] {
+export function readTests(file: string, text: string, chk: Uint8Array, defaults: { frames: number; seed: number }, handed?: { from: string }): PlannedScenario[] {
+  // Text handed over rather than read from `file` (standard input) is named by where it came from, and is planned as
+  // if it were in `file`: where it goes when kept, and where a replay it names is looked for.
+  const label = handed?.from ?? basename(file);
   let raw: unknown;
-  try { raw = JSON.parse(text); } catch (e) { throw new CliError(t("{file} is not JSON: {error}", { file: basename(file), error: e instanceof Error ? e.message : String(e) }), null, 2); }
+  try { raw = JSON.parse(text); } catch (e) { throw new CliError(t("{file} is not JSON: {error}", { file: label, error: e instanceof Error ? e.message : String(e) }), null, 2); }
   const top = Array.isArray(raw) ? { scenarios: raw } : raw;
-  if (!isObject(top) || !Array.isArray(top.scenarios)) throw new CliError(t("{file} has no \"scenarios\" list.", { file: basename(file) }), t("A tests file is {shape}.", { shape: '{ "scenarios": [ { "name": …, "setup": […], "steps": […], "expect": […] } ] }' }), 2);
-  if (!Array.isArray(raw)) onlyKnown(top, FILE_KEYS, basename(file));
-  const d = { frames: top.frames === undefined ? defaults.frames : framesOf(top.frames, `${basename(file)}: frames`), seed: top.seed === undefined ? defaults.seed : Number(top.seed) };
-  if (!Number.isInteger(d.seed) || d.seed < 0) throw bad(`${basename(file)}: seed`, t("takes a whole number, not {value}", { value: JSON.stringify(top.seed) }));
-  const planned = top.scenarios.map((s, i) => planScenario(chk, s as Raw, file, i, d, text));
+  if (!isObject(top) || !Array.isArray(top.scenarios)) throw new CliError(t("{file} has no \"scenarios\" list.", { file: label }), t("A tests file is {shape}.", { shape: '{ "scenarios": [ { "name": …, "setup": […], "steps": […], "expect": […] } ] }' }), 2);
+  if (!Array.isArray(raw)) onlyKnown(top, FILE_KEYS, label);
+  const d = { frames: top.frames === undefined ? defaults.frames : framesOf(top.frames, `${label}: frames`), seed: top.seed === undefined ? defaults.seed : Number(top.seed) };
+  if (!Number.isInteger(d.seed) || d.seed < 0) throw bad(`${label}: seed`, t("takes a whole number, not {value}", { value: JSON.stringify(top.seed) }));
+  const planned = top.scenarios.map((s, i) => planScenario(chk, s as Raw, file, i, d, handed ? "" : text));
   // Two of a name would be told apart nowhere: not in the report, not in their replays' names.
   const seen = new Set<string>();
   for (const p of planned) {
-    // A scenario that holds the game to nothing passes whatever happens: a mistake, not a test.
-    if (!p.expect.length) throw bad(`${basename(file)}: "${p.name}"`, t("expects nothing, so it would pass whatever the game did: give it an \"expect\" list"));
+    // A scenario that holds the game to nothing passes whatever happens: a mistake, not a test. Handed over, it is
+    // run to see what the game does, and the report says what that was.
+    if (!p.expect.length && !handed) throw bad(`${label}: "${p.name}"`, t("expects nothing, so it would pass whatever the game did: give it an \"expect\" list"));
+    if (seen.has(p.name.toLowerCase())) throw bad(label, t("has two scenarios named \"{name}\": a name is a scenario's own", { name: p.name }));
+    seen.add(p.name.toLowerCase());
+  }
+  return planned;
+}
+
+/**
+ * Scenarios handed over as values rather than read from a file (the `map_test` tool's `scenarios`): planned as a tests
+ * file's are, named as if they were in `file` (where they go when kept, and where a `replay` is looked for). One that
+ * expects nothing is taken: it is run to see what the game does.
+ */
+export function planInline(chk: Uint8Array, raws: readonly unknown[], file: string, defaults: { frames: number; seed: number }): PlannedScenario[] {
+  const planned = raws.map((s, i) => planScenario(chk, s as Raw, file, i, defaults));
+  const seen = new Set<string>();
+  for (const p of planned) {
     if (seen.has(p.name.toLowerCase())) throw bad(basename(file), t("has two scenarios named \"{name}\": a name is a scenario's own", { name: p.name }));
     seen.add(p.name.toLowerCase());
   }
   return planned;
+}
+
+/**
+ * Scenarios written into a tests file, as they were given: one of a name that is there is replaced, the others are
+ * added at the end, and the file is made when it is not there. Each must have a name and expect something, as a tests
+ * file's scenarios do.
+ */
+export function saveScenarios(file: string, raws: readonly unknown[]): { added: string[]; replaced: string[] } {
+  const { doc, list } = testsDocument(file);
+  const added: string[] = [], replaced: string[] = [];
+  for (const raw of raws) {
+    const name = isObject(raw) && typeof raw.name === "string" ? raw.name.trim() : "";
+    if (!name) throw bad(basename(file), t("a scenario that is kept needs a \"name\""));
+    if (!isObject(raw) || !Array.isArray(raw.expect) || !raw.expect.length) throw bad(`${basename(file)}: "${name}"`, t("expects nothing, so it would pass whatever the game did: give it an \"expect\" list"));
+    const at = list.findIndex((x) => isObject(x) && typeof x.name === "string" && x.name.trim().toLowerCase() === name.toLowerCase());
+    if (at < 0) { list.push(raw); added.push(name); } else { list[at] = raw; replaced.push(name); }
+  }
+  writeFileSync(file, `${formatTests(doc)}\n`);
+  return { added, replaced };
 }
 
 /** The tests a map has when none are named: `<map>.tests.json` beside it. */
@@ -545,6 +606,74 @@ export function judge(p: PlannedScenario, end: Pick<TestEndLine, "frame" | "ende
   });
 }
 
+/** What a scenario's game did, whatever was expected of it: for a reader who is finding out rather than checking. */
+export interface Happened {
+  frame: number;
+  ended: boolean;
+  /** The person's seat (from 0) and what it ends with. */
+  person: number;
+  minerals: number;
+  gas: number;
+  /** The players the game gave an outcome (from 0). */
+  outcomes: { player: number; outcome: "victory" | "defeat" | "draw" }[];
+  /** Each line the game showed, once, at the frame it first came. */
+  texts: { frame: number; text: string }[];
+  /** The map's own triggers that fired (rows from 0), in the order they first did. */
+  fired: { row: number; comment: string | null; fired: number; first: number }[];
+  /** The person's orders that found no unit to give them to. */
+  idle: { frame: number; kind: string }[];
+}
+
+export function happened(p: PlannedScenario, start: Pick<TestStartLine, "localPlayer">, end: Pick<TestEndLine, "frame" | "ended" | "trace" | "observed">): Happened {
+  const shift = p.before.length, o = end.observed;
+  const rows = summarizeRows(end.trace.filter((l) => l.row >= shift && l.row < shift + p.rows).map((l) => ({ ...l, row: l.row - shift })), p.rows);
+  const names = triggerNames(p.scenario), triggers = readTriggers(p.scenario);
+  const texts: Happened["texts"] = [], seen = new Set<string>();
+  for (const x of o.texts) {
+    const text = shownText(x.text, p.encoding).trim();
+    if (!text || seen.has(text)) continue;
+    seen.add(text);
+    texts.push({ frame: x.frame, text });
+  }
+  return {
+    frame: end.frame, ended: end.ended, person: start.localPlayer,
+    minerals: o.resources[start.localPlayer]?.[0] ?? 0, gas: o.resources[start.localPlayer]?.[1] ?? 0,
+    outcomes: o.outcomes.flatMap((outcome, player) => (outcome ? [{ player, outcome }] : [])),
+    texts,
+    fired: rows.filter((s) => s.fired > 0).sort((a, b) => (a.firstFired ?? 0) - (b.firstFired ?? 0) || a.row - b.row)
+      .map((s) => ({ row: s.row, comment: triggerComment(triggers[shift + s.row], names)?.trim() || null, fired: s.fired, first: s.firstFired ?? 0 })),
+    idle: o.steps.filter((x) => x.kind === "order" && x.units === 0).map((x) => ({ frame: x.frame, kind: x.kind })),
+  };
+}
+
+/** Lines of a list (the lines shown, the triggers fired) before it says how many more there were. */
+const MOST_HAPPENED = 30;
+
+/**
+ * What a scenario's game did as lines, under the scenario's own: where it ran to and how it ended, the person's
+ * resources, an order that found no unit, each line shown and each trigger that fired, by when first. `more` is what
+ * lists a cut list whole, as the reader writes it (`--all`, or the tool's argument).
+ */
+export function happenedLines(h: Happened, all: boolean, more: string): string[] {
+  const outcomes = h.outcomes.map((x) => t("Player {n} {outcome, select, victory {victory} defeat {defeat} other {draw}}", { n: x.player + 1, outcome: x.outcome })).join(", ");
+  const end = h.ended ? (outcomes ? t("the game ended, {outcomes}", { outcomes }) : t("the game ended")) : t("the game was still going");
+  const out = [`      ${t("ran to {clock} (frame {frame}): {end}; Player {n} has {minerals} minerals and {gas} gas", { clock: gameClock(h.frame), frame: num(h.frame), end, n: h.person + 1, minerals: num(h.minerals), gas: num(h.gas) })}`];
+  for (const x of h.idle) out.push(`      ▲ ${t("the order at {clock} found no unit to give it to", { clock: gameClock(x.frame) })}`);
+  const cut = <T>(list: T[]) => (all ? list : list.slice(0, MOST_HAPPENED));
+  const rest = (n: number) => `        ${t("… and {n} more ({flag} lists them)", { n: n - MOST_HAPPENED, flag: more })}`;
+  if (h.texts.length) {
+    out.push(`      ${t("shown ({n, plural, one {# line} other {# lines}}):", { n: h.texts.length })}`);
+    for (const x of cut(h.texts)) out.push(`        ${gameClock(x.frame)}  ${JSON.stringify(x.text.length > 200 ? `${x.text.slice(0, 200)}…` : x.text)}`);
+    if (!all && h.texts.length > MOST_HAPPENED) out.push(rest(h.texts.length));
+  } else out.push(`      ${t("shown: nothing")}`);
+  if (h.fired.length) {
+    out.push(`      ${t("fired ({n, plural, one {# trigger} other {# triggers}}), by when first:", { n: h.fired.length })}`);
+    for (const x of cut(h.fired)) out.push(`        ${gameClock(x.first)}  #${x.row + 1}${x.comment ? ` ${JSON.stringify(x.comment)}` : ""}${x.fired > 1 ? ` × ${num(x.fired)}` : ""}`);
+    if (!all && h.fired.length > MOST_HAPPENED) out.push(rest(h.fired.length));
+  } else out.push(`      ${t("fired: none of the map's triggers")}`);
+  return out;
+}
+
 /* ── Running ────────────────────────────────────────────────── */
 
 export interface ScenarioResult {
@@ -588,6 +717,8 @@ export interface TestRunOptions {
   onEnd?: (p: PlannedScenario, start: TestStartLine, end: TestEndLine) => void;
   /** No line a scenario as it ends (`recordTest` says what it recorded instead). */
   quiet?: boolean;
+  /** Lines under a scenario's own as it ends: what its game did (`--show`), for one that asks. */
+  after?: (r: ScenarioResult, p: PlannedScenario, start: TestStartLine, end: TestEndLine) => string[];
   /** A mod laid over the game: `folder` writes its files in the game's paths and says where (asked once the engine is known to take one). */
   mod?: { layers: () => Promise<string[]>; report?: (m: RunnerModReport) => RunnerModReport; tag?: ModOverlay["tag"] };
 }
@@ -658,7 +789,7 @@ export async function runTests(mapName: string, scenarios: PlannedScenario[], me
       const notices = end.observed.texts.filter((t) => /^WARNING:/i.test(plainText(t.text))).map((t) => plainText(t.text));
       const r: ScenarioResult = { name: p.name, file: p.file, index: p.index, line: p.line, ok, playing: p.replay, parted: end.check?.parted ?? null, updated, frame: end.frame, ended: end.ended, seed: p.seed, results, replay, notices: [...new Set(notices)], steps: end.observed.steps, ms: end.ms.total };
       out.push(r);
-      if (!o.quiet) o.live?.(scenarioLines(r).join("\n"));
+      if (!o.quiet) o.live?.([...scenarioLines(r), ...(o.after?.(r, p, start, end) ?? [])].join("\n"));
     } finally {
       removeFolder(dir);
     }
@@ -703,7 +834,7 @@ const seconds = (ms: number) => `${(ms / 1000).toFixed(1)} s`;
 export function scenarioLines(r: ScenarioResult): string[] {
   const failed = r.results.filter((x) => !x.ok);
   const parted = r.parted !== null ? [`      ${mark.warn} ${pc.yellow(t("the game parted from the replay at {clock} (frame {n})", { clock: gameClock(r.parted), n: num(r.parted) }))}${pc.dim(t(": the map has changed too much for this game; what came after is not what was played"))}`] : [];
-  const head = `  ${r.ok ? mark.ok : mark.error} ${r.ok ? r.name : pc.bold(r.name)}  ${pc.dim(`${seconds(r.ms)}${r.playing ? `${dot}${basename(r.playing)}` : ""}${dot}${r.results.length ? t("{held} of {n, plural, one {# expectation} other {# expectations}} held", { held: r.results.length - failed.length, n: r.results.length }) : t("expects nothing")}`)}`;
+  const head = `  ${!r.results.length ? mark.info : r.ok ? mark.ok : mark.error} ${r.ok ? r.name : pc.bold(r.name)}  ${pc.dim(`${seconds(r.ms)}${r.playing ? `${dot}${basename(r.playing)}` : ""}${dot}${r.results.length ? t("{held} of {n, plural, one {# expectation} other {# expectations}} held", { held: r.results.length - failed.length, n: r.results.length }) : t("expects nothing")}`)}`;
   if (r.updated.length) return [head, `      ${pc.cyan("✎")} ${t("{n, plural, one {# expectation} other {# expectations}} written anew from this game:", { n: r.updated.length })}`, ...r.updated.slice(0, 10).map((x) => `        ${x.what} ${pc.dim("→")} ${x.actual}`), ...(r.updated.length > 10 ? [pc.dim(`        ${t("… and {n} more", { n: r.updated.length - 10 })}`)] : []), ...parted];
   if (r.ok) return [head, ...parted];
   const out = [head, ...parted];
@@ -715,8 +846,9 @@ export function scenarioLines(r: ScenarioResult): string[] {
 }
 
 /** The line before the scenarios: the map, its triggers, how many scenarios from where, the game's files. */
-export function testHeader(mapName: string, rows: number, scenarios: PlannedScenario[], start: TestStartLine | null): string {
-  const files = [...new Set(scenarios.map((s) => basename(s.file)))];
+export function testHeader(mapName: string, rows: number, scenarios: PlannedScenario[], start: TestStartLine | null, from?: readonly string[]): string {
+  // `from` names where the scenarios came from when that is not their file (standard input).
+  const files = from ?? [...new Set(scenarios.map((s) => basename(s.file)))];
   return `${pc.bold(mapName)}${start ? ` ${pc.dim(`${start.map.width} × ${start.map.height}, ${start.map.tileset}`)}` : ""}${dot}${t("{n, plural, one {# trigger} other {# triggers}}", { n: rows })}${dot}${t("{n, plural, one {# scenario} other {# scenarios}}", { n: scenarios.length })} ${pc.dim(`(${files.join(", ")})`)}${start ? `${dot}${t("{copy} files", { copy: start.copy === "remastered" ? t("Remastered") : "1.16.1" })}` : ""}`;
 }
 
@@ -728,8 +860,13 @@ export function updateSkipped(scenarios: readonly Pick<PlannedScenario, "name" |
 }
 
 export function testSummary(run: Pick<TestRun, "scenarios" | "ms">): string {
-  const failed = run.scenarios.filter((s) => !s.ok).length, n = run.scenarios.length;
+  // A scenario that expects nothing was played, not judged: it is neither passed nor failed.
+  const judged = run.scenarios.filter((s) => s.results.length || !s.ok), open = run.scenarios.length - judged.length;
+  const failed = judged.filter((s) => !s.ok).length, n = judged.length;
   const time = pc.dim(`(${seconds(run.ms)})`);
+  const played = t("{n, plural, one {# scenario} other {# scenarios}} played, expecting nothing", { n: open });
+  if (!n) return `${mark.info} ${played} ${time}`;
+  if (open) return `${failed ? mark.error : mark.ok} ${failed ? t("{failed} of {n, plural, one {# scenario} other {# scenarios}} failed", { failed, n }) : t("{n, plural, one {# scenario} other {# scenarios}} passed", { n })}${dot}${played} ${time}`;
   return failed
     ? `${mark.error} ${n === 1 ? t("the scenario failed") : t("{failed} of {n, plural, one {# scenario} other {# scenarios}} failed", { failed, n })} ${time}`
     : `${mark.ok} ${n === 1 ? t("the scenario passed") : n === 2 ? t("both scenarios passed") : t("all {n} scenarios passed", { n })} ${time}`;

@@ -192,6 +192,7 @@ scmjs map optimize map.scx --dry-run            # what would make the map smalle
 scmjs map trace map.scx                         # which triggers fire in the game
 scmjs map test map.scx                          # run map.tests.json in the game
 scmjs map test map.scx --clips                  # and a GIF of each failed scenario's end
+scmjs map test map.scx --show                   # and what each game did: lines shown, triggers fired
 scmjs map trace --replay bug.rep --order        # which triggers fired in a played game, and when
 scmjs map coverage map.scx replays/             # which triggers never fired in any of those games
 scmjs replay watch game.rep                     # a replay in the terminal
@@ -2702,7 +2703,7 @@ A name the map does not have is an error that lists the names it does have.
 | Entry | Does |
 | --- | --- |
 | `{ "create": unit, "player": p, "count": n, "location": l }` | Creates the units (one unless `count` says) |
-| `{ "kill": unit, "player": p, "count": n, "location": l }` | Kills the units (all of them unless `count` says) |
+| `{ "kill": unit, "player": p, "count": n, "location": l }` | Kills the units (all of them unless `count` says), as Kill Unit does: it adds to no death count, so a Deaths condition does not see it. Set the count with `deaths`, or create units that fight |
 | `{ "remove": unit, "player": p, "count": n, "location": l }` | Removes the units, as Remove Unit does |
 | `{ "give": unit, "player": p, "to": q, "count": n, "location": l }` | Gives the units to player `q` |
 | `{ "switch": s, "state": "set" }` | Sets the switch (`"clear"` and `"toggle"` too) |
@@ -2717,7 +2718,7 @@ above, or one of these, which are your own commands as a player would give them:
 
 | Entry | Does |
 | --- | --- |
-| `{ "at": t, "order": "move", "unit": u, "location": l, "to": m }` | Orders your units of that type in location `l` to location `m`: `"move"`, `"attack"` (attack-move) or `"patrol"`; `"stop"` and `"hold"` need no `to`. `unit` is Any unit and `location` Anywhere when left out |
+| `{ "at": t, "order": "move", "unit": u, "location": l, "to": m }` | Orders your units of that type in location `l` to location `m`: `"move"`, `"attack"` (attack-move) or `"patrol"`; `"stop"` and `"hold"` need no `to`. `unit` is Any unit and `location` Anywhere when left out. `to` may also be a tile, `[x, y]`, so the map needs no location for every place a test walks to |
 | `{ "at": t, "chat": "text" }` | Sends a chat line, which shows on screen like any other |
 
 You play the map's first slot that is open to a person, as when you start the map alone,
@@ -2796,6 +2797,49 @@ it on a runner of your own that has the game.
 
 A test cannot yet have a player leave (you are the only person in the game) or give the
 computers' own commands, except by playing a replay of a game where they did.
+
+### Seeing what a game did
+
+A passing scenario prints one line. `--show` adds what its game did: where it ran to and
+how it ended, the lines you were shown, and the map's triggers that fired, in the order
+they first did.
+
+```
+$ scmjs map test ums.scx --only "the opening text shows" --show
+ums.scx 64 × 64, badlands · 3 triggers · 1 scenario (ums.tests.json) · 1.16.1 files
+  ✔ the opening text shows  0.8 s · 2 of 2 expectations held
+      ran to 0:10 (frame 240): the game was still going; Player 1 has 0 minerals and 0 gas
+      shown (6 lines):
+        0:00  "WARNING: Unit unplaceable! (Terran Marine) (1040,976)"
+        …
+        0:00  "Hold the base."
+      fired (1 trigger), by when first:
+        0:00  #1 "Opening"
+
+✔ the scenario passed (1.1 s)
+```
+
+A list longer than 30 lines is cut unless `--all` is given. `--only` plays the scenario of
+that name and no other; give it again for each further one.
+
+To try something without writing a file, send the scenarios on standard input with `-` in
+place of a tests file: a list of scenarios, or a whole tests file. A scenario sent this
+way may leave `expect` out. It is then played to see what happens, and what its game did
+is printed without `--show`:
+
+```
+$ echo '[{"name": "what happens in ten seconds", "frames": "0:10"}]' | scmjs map test ums.scx -
+ums.scx 64 × 64, badlands · 3 triggers · 1 scenario (standard input) · 1.16.1 files
+  ℹ what happens in ten seconds  0.8 s · expects nothing
+      ran to 0:10 (frame 240): the game was still going; Player 1 has 0 minerals and 0 gas
+      …
+
+ℹ 1 scenario played, expecting nothing (1.2 s)
+```
+
+`--save` writes the scenarios read from standard input into `<map>.tests.json` once they
+have been played, replacing one of the same name. A scenario that is kept needs a name and
+something to expect. `--json` has what each game did as `happened` beside its results.
 
 ### A test from a replay
 
@@ -4417,7 +4461,7 @@ gives its options.
 | [`scmjs map trace <map>`](#which-triggers-fire) | Runs the triggers in the game: which fired, how often, which never did and why |
 | [`scmjs map trace [map] --replay <rep>`](#triggers-in-a-replays-game) | The same for a replay's game: when each trigger fired, and `--order` lists every firing in turn |
 | [`scmjs map cost <map>`](#what-the-triggers-cost) | What the triggers cost Remastered each frame, and the costliest; `--replay` as for `map trace` |
-| [`scmjs map test <map> [tests…]`](#testing-a-maps-triggers) | Plays the map's test scenarios in the game, with a replay of each that fails and, with `--clips`, a GIF of its end; `-u` rewrites what a replay's scenario expects |
+| [`scmjs map test <map> [tests…]`](#testing-a-maps-triggers) | Plays the map's test scenarios in the game, with a replay of each that fails and, with `--clips`, a GIF of its end; `--show` says what each game did, `--only` picks scenarios by name, `-` reads scenarios from standard input and `--save` keeps them; `-u` rewrites what a replay's scenario expects |
 | [`scmjs map test record <map> <rep>`](#a-test-from-a-replay) | A test scenario from a replay, its expectations taken from the end of the game |
 | [`scmjs map coverage <map> [replays…]`](#which-triggers-fired-across-many-games) | Plays many replays on the map: which triggers fired in how many games, and which never did |
 | [`scmjs map analyze <map>`](#a-maps-layout) | A melee map's layout in a second: starts, mains, naturals, the walks between starts, their narrowest points, the ground's shares and verdicts; `--out` draws them |

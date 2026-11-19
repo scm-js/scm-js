@@ -12,11 +12,11 @@ import { costJson, gameMap, printCost, printTrace, removeGameMap, replayRun, run
 import { printRush, runRush, rushJson, unitByName } from "./rush";
 import { balanceJson, printBalance, runBalance, startPlaces } from "./balance";
 import { CLIP_KINDS, clipsDir, clipsSummary, makeClips, type ClipKind, type ClipRun } from "./clips";
-import { expectKind, loadReplayInput, readInput, STDIO, openMap } from "./files";
+import { expectKind, loadReplayInput, readInput, readTextArg, STDIO, openMap } from "./files";
 import { refuseModReplay } from "./replaymod";
 import { githubCoverageAnnotations, githubTestAnnotations, junitCoverageXml, junitTestXml, sarifCoverageJson, sarifTestJson, type Format, type TestReport } from "./report";
 import { coverageForm, coverageJson, coverageScenario, printCoverage, runCoverage } from "./coverage";
-import { defaultOut, defaultTests, readMapForTests, readTests, recordLines, recordTest, runTests, testHeader, testJson, testSummary, updateSkipped, updateTests, type PlannedScenario } from "./maptest";
+import { defaultOut, defaultTests, happened, happenedLines, readMapForTests, readTests, recordLines, recordTest, runTests, saveScenarios, testHeader, testJson, testSummary, updateSkipped, updateTests, type Happened, type PlannedScenario } from "./maptest";
 import { previewMap, PNG_SCALES } from "./preview";
 import { analyzeMap } from "./analyze";
 import { heatmapMap, type HeatmapOptions as HeatmapFlags } from "./heatmap";
@@ -81,8 +81,22 @@ const replayFlags = (cmd: Command) => cmd
   .option("--replay <file>", t("play a replay's game instead: its players' commands, on its own map or on the map named"))
   .option("--order", t("with --replay, list every firing in the order the game ran it"));
 
+/** The scenarios of a tests file's text as they were written, to keep: a list, or the list under "scenarios". */
+function scenariosOf(text: string): unknown[] {
+  const raw = JSON.parse(text) as unknown;
+  if (Array.isArray(raw)) return raw;
+  const top = raw as { scenarios: unknown[] } & Record<string, unknown>;
+  // The file's own frames and seed are not the scenarios': kept without them, a scenario would run otherwise next time.
+  const beside = Object.keys(top).filter((k) => k !== "scenarios");
+  if (beside.length) throw new CliError(t("--save keeps scenarios, and standard input also has {keys} beside them.", { keys: beside.join(", ") }), t("Give each scenario its own frames and seed, and send the list."), 2);
+  return top.scenarios;
+}
+
+/** `map test --json` with what each scenario's game did beside its results. */
+const withHappened = <T extends { scenarios: object[] }>(json: T, what: readonly (Happened | null)[]) => ({ ...json, scenarios: json.scenarios.map((s, i) => ({ ...s, happened: what[i] ?? null })) });
+
 /** `map test` (and `mod test`, which names the mod first): the map's scenarios played in the game, with `--mod` laid over it. */
-export async function mapTestAction(file: string, testFiles: string[], o: { json?: boolean; format: string; out?: string; frames: string; seed: string; update?: boolean; clips?: string | true; clipsFormat?: ClipKind; starcraft?: string; engine?: string; mod?: string }, cmd?: Command) {
+export async function mapTestAction(file: string, testFiles: string[], o: { json?: boolean; format: string; out?: string; frames: string; seed: string; update?: boolean; clips?: string | true; clipsFormat?: ClipKind; starcraft?: string; engine?: string; mod?: string; only?: string[]; save?: boolean; show?: boolean; all?: boolean }, cmd?: Command) {
   // An optional value takes the next word, so `--clips ums.tests.json` would read the tests file as the folder.
   if (typeof o.clips === "string" && /\.json$/i.test(o.clips)) { testFiles.push(o.clips); o.clips = true; }
   checkFormat(o.format);
@@ -91,24 +105,50 @@ export async function mapTestAction(file: string, testFiles: string[], o: { json
   if (o.clips === undefined && cmd?.getOptionValueSource("clipsFormat") === "cli") throw new CliError(t("--clips-format says what the clips are: use it with --clips."), null, 2);
   const format: Format = o.json ? "json" : (o.format as Format);
   const defaults = { frames: parseFrames(o.frames), seed: whole(o.seed, "seed") };
+  // `-` among the tests files: scenarios on standard input, played as if they were in the map's own tests file.
+  const piped = testFiles.includes(STDIO);
+  if (piped && file === STDIO) throw new CliError(t("The map and the scenarios cannot both come from standard input"), t("Name one of them as a file."), 2);
+  if (testFiles.filter((f) => f === STDIO).length > 1) throw new CliError(t("Standard input is read once: name - once."), null, 2);
+  if (o.save && !piped) throw new CliError(t("--save keeps the scenarios read from standard input: give - as a tests file."), null, 2);
+  if (o.all && !o.show && !piped) throw new CliError(t("--all lists what --show cuts: use it with --show."), null, 2);
   const input = await readInput(file);
   expectKind(input, "map");
   if (input.path === STDIO && !testFiles.length) throw new CliError(t("A map read from standard input has no tests beside it: name the tests file."), null, 2);
   const files = testFiles.length ? testFiles : [defaultTests(input.path)];
+  const beside = defaultTests(input.path);
   const map = await readMapForTests(input.bytes);
   const scenarios: PlannedScenario[] = [];
+  let handed: string | null = null;
   for (const f of files) {
+    if (f === STDIO) {
+      handed = new TextDecoder().decode(await readTextArg(STDIO));
+      scenarios.push(...readTests(beside, handed, map.chk, defaults, { from: t("standard input") }));
+      continue;
+    }
     if (!existsSync(f)) throw new CliError(t("No tests file {file}", { file: f }), testFiles.length ? null : t("A map's tests are in {tests} beside it, or name the file: scmjs map test {map} <tests.json>. docs.scmjs.dev/cli/ has the file's form.", { tests: relative(process.cwd(), f) || f, map: file }), 2);
     scenarios.push(...readTests(f, await readFile(f, "utf8"), map.chk, defaults));
   }
   if (!scenarios.length) throw new CliError(t("{n, plural, one {{files} has no scenarios.} other {{files} have no scenarios.}}", { n: files.length, files: files.join(", ") }), null, 2);
+  if (o.only?.length) {
+    const wanted = o.only.map((n) => n.trim().toLowerCase());
+    const unknown = o.only.filter((n) => !scenarios.some((p) => p.name.toLowerCase() === n.trim().toLowerCase()));
+    if (unknown.length) throw new CliError(t("No scenario is named {names}", { names: unknown.map((n) => JSON.stringify(n)).join(", ") }), t("The scenarios there are: {names}.", { names: scenarios.map((p) => JSON.stringify(p.name)).join(", ") }), 2);
+    scenarios.splice(0, scenarios.length, ...scenarios.filter((p) => wanted.includes(p.name.toLowerCase())));
+  }
   const text = format === "text";
+  // What each game did, for --json always and for the text with --show; a scenario that expects nothing has only that to say.
+  const seen = new Map<PlannedScenario, Happened>();
   if (text && scenarios[0].converted) print(pc.dim(t("{name} is in the StarCraft 1.00 form, which the engine does not run: each scenario runs a copy converted to Brood War", { name: input.name })));
   const overlay = overlayOf(o);
   const run = await runTests(input.name, scenarios, map, {
     out: o.out ?? defaultOut(input.path === STDIO ? input.name : input.path), starcraft: o.starcraft, engine: o.engine, update: !!o.update, mod: overlay ?? undefined,
-    live: text ? (line) => print(line) : undefined, onStart: text ? (start) => { print(testHeader(input.name, scenarios[0].rows, scenarios, start)); if (start?.mod) print(modWords(start.mod)); } : undefined,
+    live: text ? (line) => print(line) : undefined, onStart: text ? (start) => { print(testHeader(input.name, scenarios[0].rows, scenarios, start, piped ? files.map((f) => (f === STDIO ? t("standard input") : basename(f))) : undefined)); if (start?.mod) print(modWords(start.mod)); } : undefined,
+    onEnd: (p, start, end) => { seen.set(p, happened(p, start, end)); },
+    after: (r, p) => (o.show || !r.results.length ? happenedLines(seen.get(p)!, !!o.all, "--all").map((l) => pc.dim(l)) : []),
   }).finally(() => overlay?.remove());
+  const what = scenarios.map((p) => seen.get(p) ?? null);
+  const kept = o.save ? saveScenarios(beside, scenariosOf(handed!)) : null;
+  if (kept && text) print(`${pc.cyan("✎")} ${t("Kept in {file}: {added} added, {replaced} replaced", { file: relative(process.cwd(), beside) || beside, added: kept.added.length, replaced: kept.replaced.length })}`);
   const written = o.update ? updateTests(run.scenarios) : [];
   if (o.update) { const left = updateSkipped(scenarios); if (left) process.stderr.write(`${mark.info} ${left}\n`); }
   if (text) for (const w of written) print(`${pc.cyan("✎")} ${t("{n, plural, one {# expectation} other {# expectations}} written into {file}", { n: w.expectations, file: relative(process.cwd(), w.file) || w.file })}`);
@@ -130,7 +170,7 @@ export async function mapTestAction(file: string, testFiles: string[], o: { json
   // What the game said in a failed scenario (a unit it could not place) is often why: carried with its last failure.
   const failuresOf = (s: (typeof run.scenarios)[number]) => s.results.filter((x) => !x.ok).map((x, i, all) => (i === all.length - 1 && s.notices.length ? { ...x, actual: [x.actual, ...s.notices.map((n) => t("the game said: {text}", { text: n }))].join("\n") } : x));
   const report: TestReport = { map: input.path, name: input.name, cases: run.scenarios.map((s) => ({ name: s.name, file: s.file, line: s.line, ok: s.ok, ms: s.ms, failures: failuresOf(s), replay: s.replay, clip: clipOf(s) })) };
-  if (format === "json") print(JSON.stringify({ ...testJson(input.path === STDIO ? input.name : input.path, run), ...(clips ? { clips: clips.clips.map((c) => ({ ...c, file: c.file && (relative(process.cwd(), c.file) || c.file) })), clipsMissing: clips.missing } : {}) }, null, 2));
+  if (format === "json") print(JSON.stringify({ ...withHappened(testJson(input.path === STDIO ? input.name : input.path, run), what), ...(kept ? { saved: { file: beside, ...kept } } : {}), ...(clips ? { clips: clips.clips.map((c) => ({ ...c, file: c.file && (relative(process.cwd(), c.file) || c.file) })), clipsMissing: clips.missing } : {}) }, null, 2));
   else if (format === "github") print(...githubTestAnnotations([report]));
   else if (format === "junit") process.stdout.write(junitTestXml([report]));
   else if (format === "sarif") process.stdout.write(sarifTestJson([report], VERSION));
@@ -292,11 +332,15 @@ as for scmjs bot ladder. Exits 1 when a game could not be played, 2 when the map
       if (r.report.games.some((g) => !g.result.end || g.result.end.by === "desync")) process.exitCode = 1;
     });
 
-  const test = map.command("test").description(t("runs the map's tests in the game: each scenario set up, played and checked, a replay of each that failed")).argument("<map>", t("the map")).argument("[tests...]", t("tests files (JSON); <map>.tests.json beside the map by default")).addOption(json)
+  const test = map.command("test").description(t("runs the map's tests in the game: each scenario set up, played and checked, a replay of each that failed")).argument("<map>", t("the map")).argument("[tests...]", t("tests files (JSON); <map>.tests.json beside the map by default; - reads scenarios from standard input")).addOption(json)
     .addOption(formatOption())
     .addOption(outOption("folder", t("where the replays of failing scenarios go (<map>.tests/ beside the map)")))
     .option("--frames <n>", t("frames a scenario runs when it does not say (24 a second)"), "2400")
     .option("--seed <n>", t("the game's seed when a scenario does not say; the same seed and map give the same game"), "1")
+    .option("--only <name>", t("play only the scenario of this name; give it again for another"), (v: string, before?: string[]) => [...(before ?? []), v])
+    .option("--show", t("under each scenario, what its game did: how it ended, the lines shown, the triggers that fired"))
+    .option("--all", t("with --show, every line shown and trigger fired; long lists are cut otherwise"))
+    .option("--save", t("write the scenarios read from standard input into <map>.tests.json, one of the same name replaced"))
     .option("-u, --update", t("a scenario driven by a replay: write what the game gives now into the expectations that no longer hold"))
     .option("--clips [folder]", t("a clip of the last seconds of each failed scenario's game, drawn in a browser (<map>.clips/ beside the map)"))
     .addOption(new Option("--clips-format <kind>", t("the clips' kind")).choices(CLIP_KINDS).default("gif"))
@@ -308,6 +352,8 @@ hold at the end (a trigger fired or never did, a switch, a death count, units in
 Each scenario is one game with nobody playing but the steps; one that fails says what did not hold and keeps its
 replay. A scenario may name a replay instead ("replay": "game.rep"): its players' commands are the game, played on
 this map; scmjs map test record makes one from a replay, and -u writes in what such a scenario's game gives now.
+Scenarios on standard input (- as a tests file) are played as the file's are, and one of them may leave "expect" out
+to see what the game does; --save then keeps them in <map>.tests.json. --show says what every scenario's game did.
 --clips keeps a GIF (or a WebM) of each failed scenario: the 8 seconds of its game before the frame it ended on and 2
 after, drawn as scmjs replay export draws a replay, so it needs a browser too; without one the tests still run.
 Exits 1 when a scenario fails, 2 when the tests or the map cannot be read or the game could not start.

@@ -226,6 +226,39 @@ Ask for the picture too, and the AI shows you the walks it measured:
 
 ![The layout of the same map: white walks between the starts, yellow walks to the naturals, a circle on each natural and an orange square on each ramp](images/cli-map-analyze.webp)
 
+### Does it work?
+
+> Play the first quest in village.scx and tell me whether it works.
+
+The AI plays the map in the game itself (`map_test`): it orders your units about as you
+would, makes things happen at set times, and reads what came of it. Here it walks the hero
+to the Elder, to the crate and back, on a small RPG map:
+
+```
+village.scx: 17 triggers, 1 scenario played
+  ✔ the lost medicine  3 of 3 expectations held
+      ✔ "QUEST COMPLETE: The Lost Medicine" was shown: shown at frame 901
+      ✔ Player 1 has exactly 100 minerals: it has 100
+      ✔ switch "Q1 done" is set: it is set
+      ran to 0:45 (frame 1,080): the game was still going; Player 1 has 100 minerals and 0 gas
+      shown (13 lines):
+        0:04  "QUEST STARTED: The Lost Medicine. Fetch the crate from the forest edge."
+        0:22  "You pick up the medicine crate. Take it back to the Village Elder."
+        0:38  "QUEST COMPLETE: The Lost Medicine. +100 minerals."
+        …
+      fired (6 triggers), by when first:
+        0:04  #4 "q1 start: talk to elder"
+        0:22  #5 "q1 fetch: pick up crate"
+        0:38  #6 "q1 done: crate returned"
+        …
+```
+
+So an AI that has written triggers for you can check them before it says they work, and
+tell you what the player would see. Ask it to keep the checks ("and keep that as a test"):
+they go into `village.tests.json` beside the map, and "run the tests for village.scx"
+plays them again after the next change. They are the same tests
+[`scmjs map test`](cli.md#testing-a-maps-triggers) runs.
+
 ### Share it
 
 > Share crossing.scx with a link.
@@ -239,6 +272,7 @@ Nothing is uploaded until you say yes. Then it gives you the link.
 | A request | The tools the AI uses |
 | --- | --- |
 | "Which triggers never fire, and why?" | `map_trace` |
+| "What happens if the hero walks into the lair before the third quest?" | `map_test` |
 | "Which of my maps still mention the Marine?" | `map_find` |
 | "Give Player 1 six more Marines in the Base location and make the Ghost invincible." | `map_units`, `map_locations`, `map_edit` |
 | "Put a plateau in the middle with a ramp on its south side, and a few lakes around it." | `map_terrain`, `map_edit`, `map_preview` |
@@ -545,7 +579,7 @@ and you can leave these four unapproved.
 
 ## The tools
 
-There are 55. Each but the `editor_` tools and `account_login` is a command of the
+There are 56. Each but the `editor_` tools and `account_login` is a command of the
 [command line guide](cli.md), and its arguments are the command's options by name:
 `--dry-run` is `dryRun`, `--in` is `in`. A tool answers with the command's text and,
 beside it, the command's `--json` data.
@@ -566,6 +600,7 @@ beside it, the command's `--json` data.
 | `map_preview` | The map as a picture: the answer is the PNG itself, so a model that can see images sees the map | No |
 | `map_analyze` | A melee map's layout: starts, naturals, the walks between starts, their narrowest points and the verdicts; with `picture`, the PNG too | No |
 | `map_trace`, `map_cost`, `map_coverage` | The triggers run in the game, what they cost, and which fired across many replays | No |
+| `map_test` | [Scenarios played on the map](#does-it-work): units ordered about and things made to happen at set times, then what held, what was shown, which triggers fired and how the game ended | The replay of a scenario that failed; with `save`, the tests file |
 | `map_balance` | Games played on a melee map with your bots, to see whether its starts are fair. It takes minutes | No |
 | `replay_info`, `replay_map` | What a replay holds, with `builds` what each player ordered and with `mod` the mod's names; and the replay's map written out | `replay_map` |
 | `mod_info`, `mod_check`, `mod_diff` | [Mods](mods.md#the-commands): what a mod is, its check, a changelog | No |
@@ -590,6 +625,14 @@ A few tools differ from their commands:
 - `map_trace` and `map_cost` take `mod`, `replay`, `order` and `every`, as the commands
   take `--mod`, `--replay`, `--order` and `--every`. With `replay`, the map's `path` may
   be left out.
+- `map_test` takes the scenarios themselves as `scenarios`, in [the tests file's
+  form](cli.md#the-tests-file), where the command reads them from standard input, and
+  tests files in `tests`. A scenario given this way may leave `expect` out, to see what
+  the game does. The answer always lists every expectation with what the game gave, then
+  how the game ended, the lines shown and the triggers that fired; the command prints what
+  failed, and [the rest with `--show`](cli.md#seeing-what-a-game-did). `only` takes a list
+  of names where the command takes `--only` once a name. It has no `clips` and no
+  `update`.
 - `map_set` takes the settings as arguments (`players`, `forces`, `units`, `upgrades`,
   `techs`, `switches`), where the command takes a file with `--settings`.
 - `map_edit` takes the list itself as `edits`, where the command takes a file. An edit
@@ -664,7 +707,7 @@ copy of StarCraft.
 ### The tools that need the game
 
 `map_preview`, `map_analyze`, `map_terrain`, `map_doodads`, `map_generate`, `map_trace`,
-`map_cost`, `map_coverage` and `map_balance` need [your copy of the
+`map_cost`, `map_test`, `map_coverage` and `map_balance` need [your copy of the
 game](cli.md#commands-that-need-starcraft), and the ones that run it fetch the engine the
 first time. `map_edit` needs it for terrain, doodads, `snap` and `check`, and for nothing
 else; `map_set` needs it for a unit's, upgrade's or technology's numbers. On a map linked
@@ -676,10 +719,11 @@ tell you instead of failing. When the game is not in one of the usual places, se
 **StarCraft folder** in the Claude Desktop extension's settings, or `SCMJS_STARCRAFT` in
 another app's MCP settings; the model can also pass the folder as `starcraft`.
 
-A trace or cost run takes a few seconds and plays at most ten minutes of game.
-`map_coverage` plays whole replays and `map_balance` whole games, so they take as long as
-the commands do. While a trace or cost run plays, an AI app that shows progress is sent
-the frame reached, and cancelling the request stops the game.
+A trace or cost run takes a few seconds and plays at most ten minutes of game. A test
+scenario takes about two seconds and plays at most an hour. `map_coverage` plays whole
+replays and `map_balance` whole games, so they take as long as the commands do. While a
+trace or cost run plays, an AI app that shows progress is sent the frame reached, and
+cancelling the request stops the game.
 
 ## In the source
 

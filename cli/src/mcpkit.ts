@@ -62,7 +62,7 @@ export function noPipe(...paths: (string | undefined)[]): void {
 }
 
 /** The arguments that name a file or folder on this computer (`starcraft`, the game's own folder, is not confined). */
-const PATH_ARGS = ["path", "out", "a", "b", "paths", "replays", "baseline", "mod", "map", "bot", "folder", "folders", "replay", "plugin"] as const;
+const PATH_ARGS = ["path", "out", "a", "b", "paths", "replays", "baseline", "mod", "map", "bot", "folder", "folders", "replay", "plugin", "tests"] as const;
 
 /**
  * A path a tool was given that is outside `root`, the folder the tools work in (the one the server was started in, or
@@ -120,9 +120,10 @@ export const tool = <T>(fn: (args: T, extra: Extra) => Promise<CallToolResult>, 
 /**
  * The longest run each game tool takes: ten minutes of play, a few seconds of running. A trace's result is a line
  * per trigger; a cost's carries five numbers a frame (about 150 KB of structured data at the cap), which is as much
- * as a model should be handed in one result.
+ * as a model should be handed in one result. A test scenario answers with a few lines whatever its length, so it may
+ * run an hour of play.
  */
-export const MAX_FRAMES = { trace: 24 * 60 * 10, cost: 24 * 60 * 10 } as const;
+export const MAX_FRAMES = { trace: 24 * 60 * 10, cost: 24 * 60 * 10, test: 24 * 60 * 60 } as const;
 /** The run the commands make by default (`--frames 2400`): 100 seconds of play. */
 export const FRAMES = 2400;
 /** Columns for a trigger's text in the trace and cost tables: wider than a terminal, since nobody wraps them. */

@@ -12,7 +12,7 @@ import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { findGameCopy } from "../cli/src/engine";
 import { argumentError, createMcpServer, INSTRUCTIONS, MAX_FRAMES, outsideRoot, unreadableLine, type McpOptions } from "../cli/src/mcp";
-import { classicCopy, stagedEngine } from "./support/mapRunner";
+import { classicCopy, FAKE_TEST_RUNNER, stagedEngine } from "./support/mapRunner";
 import { TEST_MAPS_DIR } from "./support/maps";
 import { emptyDat, encodeDat } from "../src/formats/dat/table";
 import { encodeTblFile } from "../src/formats/dat/tblFile";
@@ -54,7 +54,7 @@ describe("scmjs mcp", () => {
   it("lists the tools with what each is for, and says how they fit together", async () => {
     const { tools } = await client.listTools();
     const names = tools.map((t) => t.name).sort();
-    expect(names).toEqual(["account_info", "account_login", "doctor", "editor_close", "editor_open", "editor_picture", "editor_save", "editor_show", "editor_state", "library_get", "library_list", "library_remove", "library_set", "library_unlink", "map_analyze", "map_balance", "map_build", "map_check", "map_cost", "map_coverage", "map_diff", "map_doodads", "map_dump", "map_edit", "map_find", "map_generate", "map_info", "map_locations", "map_new", "map_optimize", "map_preview", "map_resize", "map_run", "map_set", "map_settings", "map_strings_export", "map_strings_import", "map_strings_prune", "map_terrain", "map_trace", "map_triggers_export", "map_triggers_import", "map_units", "mod_check", "mod_diff", "mod_header", "mod_info", "mod_new", "mod_pack", "mod_play", "mod_unpack", "replay_info", "replay_map", "replay_sync", "share"]);
+    expect(names).toEqual(["account_info", "account_login", "doctor", "editor_close", "editor_open", "editor_picture", "editor_save", "editor_show", "editor_state", "library_get", "library_list", "library_remove", "library_set", "library_unlink", "map_analyze", "map_balance", "map_build", "map_check", "map_cost", "map_coverage", "map_diff", "map_doodads", "map_dump", "map_edit", "map_find", "map_generate", "map_info", "map_locations", "map_new", "map_optimize", "map_preview", "map_resize", "map_run", "map_set", "map_settings", "map_strings_export", "map_strings_import", "map_strings_prune", "map_terrain", "map_test", "map_trace", "map_triggers_export", "map_triggers_import", "map_units", "mod_check", "mod_diff", "mod_header", "mod_info", "mod_new", "mod_pack", "mod_play", "mod_unpack", "replay_info", "replay_map", "replay_sync", "share"]);
     for (const t of tools) {
       expect(t.description?.length ?? 0, t.name).toBeGreaterThan(60);
       expect((t.inputSchema as { properties?: object }).properties, t.name).toBeDefined();
@@ -331,6 +331,92 @@ const copy = (() => { try { return findGameCopy(process.env.SCMJS_STARCRAFT); } 
 /** A real replay, where one is at hand (none is committed): a path in SCMJS_TEST_REPLAY, else scm-sim's test replay beside this clone. */
 const REPLAY = process.env.SCMJS_TEST_REPLAY ?? join(homedir(), "github", "scm-sim", "data", "replays", "legacy_cp949.rep");
 
+describe("scmjs mcp: map_test", () => {
+  const answer = join(tmp(), "answer.json");
+  const fired = (row: number, n: number, first: number | null) => ({ player: 0, row, fired: n, continued: 0, failed: 0, firstFired: first, lastFired: first, lastFail: null, flags: 0 });
+  beforeAll(() => {
+    process.env.SCMJS_TEST_ANSWER = answer;
+    writeFileSync(answer, JSON.stringify({ frame: 240, ended: true, trace: [fired(0, 1, 2), fired(2, 1, 95)], observed: { switches: [0], resources: [[150, 0]], outcomes: ["victory", null, null, null, null, null, null, null], texts: [{ frame: 2, text: "Hold the base." }, { frame: 95, text: "The alarm is raised." }] } }));
+  });
+  afterAll(() => { delete process.env.SCMJS_TEST_ANSWER; });
+  /** The server kept to a folder with a copy of the test map in it, over the test runner's stand-in. */
+  async function staged() {
+    const dir = tmp(), map = join(dir, "ums.scx");
+    copyFileSync(join(TEST_MAPS_DIR, "ums.scx"), map);
+    const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    const c = await connected({ engine: stagedEngine(tmp(), true, FAKE_TEST_RUNNER).dir, root: dir });
+    return { ...c, dir, map, starcraft: classicCopy(tmp()), done: async () => { stderr.mockRestore(); await c.client.close(); } };
+  }
+
+  it("plays scenarios given inline and says what held, how the game ended, what was shown and which triggers fired", async () => {
+    const { call, map, dir, starcraft, done } = await staged();
+    try {
+      const r = await call("map_test", { path: map, starcraft, scenarios: [
+        { name: "the alarm", frames: "0:10", steps: [{ at: 24, order: "move", to: [10, 12] }], expect: [{ switch: "Alarm raised" }, { outcome: "victory", player: 1 }, { text: "alarm" }, { minerals: ">= 500", player: 1 }] },
+        { name: "look" },
+      ] });
+      expect(r.isError).toBeFalsy();
+      const lines = text(r).split("\n");
+      expect(lines[0]).toBe("ums.scx: 3 triggers, 2 scenarios played");
+      expect(lines.slice(1, 6)).toEqual([
+        "  ✖ the alarm  3 of 4 expectations held",
+        '      ✔ switch "Alarm raised" is set: it is set',
+        "      ✔ Player 1's game ended in victory: it ended in victory",
+        '      ✔ "alarm" was shown: shown at frame 95',
+        "      ✖ Player 1 has at least 500 minerals: it has 150",
+      ]);
+      expect(lines[6]).toMatch(/^      replay of this game: .*ums\.tests.the-alarm\.rep \(map_trace takes it as `replay`/);
+      expect(lines.slice(7, 14)).toEqual([
+        "      ran to 0:10 (frame 240): the game ended, Player 1 victory; Player 1 has 150 minerals and 0 gas",
+        "      shown (2 lines):",
+        '        0:00  "Hold the base."',
+        '        0:04  "The alarm is raised."',
+        "      fired (2 triggers), by when first:",
+        '        0:00  #1 "Opening"',
+        "        0:04  #3",
+      ]);
+      expect(lines).toContain("  · look  expects nothing");
+      expect(lines.at(-1)).toBe("✖ 1 failed, 1 expected nothing");
+      const data = r.structuredContent as { passed: number; failed: number; scenarios: { name: string; ok: boolean; happened: { ended: boolean; outcomes: unknown[]; texts: unknown[] } }[] };
+      expect([data.failed, data.scenarios.map((x) => x.name)]).toEqual([1, ["the alarm", "look"]]);
+      expect(data.scenarios[0].happened).toMatchObject({ ended: true, minerals: 150, outcomes: [{ player: 0, outcome: "victory" }] });
+      // The failed game's replay is kept beside the map; nothing else was written, the map least of all.
+      expect(existsSync(join(dir, "ums.tests", "ums.tests.the-alarm.rep"))).toBe(true);
+      expect(existsSync(join(dir, "ums.tests.json"))).toBe(false);
+      expect(readFileSync(map)).toEqual(readFileSync(join(TEST_MAPS_DIR, "ums.scx")));
+    } finally { await done(); }
+  });
+
+  it("keeps scenarios with `save`, plays the file with the path alone, and picks scenarios by name", async () => {
+    const { call, map, dir, starcraft, done } = await staged();
+    try {
+      const none = await call("map_test", { path: map, starcraft });
+      expect([none.isError, text(none)]).toEqual([true, `No tests file ${join(dir, "ums.tests.json")}\nGive the scenarios to play in \`scenarios\`; with \`save\` they are written to that file.`]);
+      const kept = await call("map_test", { path: map, starcraft, save: true, scenarios: [{ name: "wins", expect: [{ outcome: "victory", player: 1 }] }, { name: "ends", expect: [{ ended: true }] }] });
+      expect(text(kept)).toMatch(/✔ 2 passed\nKept in .*ums\.tests\.json: 2 added\. map_test with the path alone plays the file\.$/);
+      expect(JSON.parse(readFileSync(join(dir, "ums.tests.json"), "utf8")).scenarios.map((x: { name: string }) => x.name)).toEqual(["wins", "ends"]);
+      expect(text(await call("map_test", { path: map, starcraft })).split("\n")[0]).toBe("ums.scx: 3 triggers, 2 scenarios played");
+      const one = await call("map_test", { path: map, starcraft, only: ["Ends"] });
+      expect(text(one).split("\n").slice(0, 2)).toEqual(["ums.scx: 3 triggers, 1 scenario played", "  ✔ ends  1 of 1 expectation held"]);
+      expect(text(await call("map_test", { path: map, starcraft, only: ["nope"] }))).toMatch(/^No scenario is named "nope" in /);
+      // A scenario that expects nothing is played but not kept: a tests file's scenarios all expect something.
+      const open = await call("map_test", { path: map, starcraft, save: true, scenarios: [{ name: "look" }] });
+      expect([open.isError, text(open)]).toEqual([true, 'ums.tests.json: "look": expects nothing, so it would pass whatever the game did: give it an "expect" list']);
+      expect((await call("map_test", { path: map, starcraft, save: true })).isError).toBe(true);
+    } finally { await done(); }
+  });
+
+  it("refuses what it cannot play before any game starts: a misspelt key, a path outside the folder, a run too long", async () => {
+    const { call, map, starcraft, done } = await staged();
+    try {
+      expect(text(await call("map_test", { path: map, starcraft, scenarios: [{ name: "a", expect: [{ trigger: 1, fird: true }] }] }))).toBe('ums.tests.json: "a": expect[0]: "fird" is not something the tests know: did you mean "fired"?');
+      expect(text(await call("map_test", { path: map, starcraft, tests: ["../other.tests.json"] }))).toMatch(/^\.\.\/other\.tests\.json is outside the folder the tools work in/);
+      expect(text(await call("map_test", { path: map, starcraft, scenarios: [{ name: "a", replay: "../../game.rep", expect: [{ ended: true }] }] }))).toMatch(/^\.\.\/\.\.\/game\.rep is outside the folder the tools work in/);
+      expect(text(await call("map_test", { path: map, starcraft, scenarios: [{ name: "a", frames: MAX_FRAMES.test + 1 }] }))).toMatch(/^"a" runs 86,401 frames: a scenario here runs 86,400 at most/);
+    } finally { await done(); }
+  });
+});
+
 describe("scmjs mcp: the picture and the replay's map", () => {
   it("lists map_preview and replay_map with their annotations", async () => {
     const { client } = await connected();
@@ -529,7 +615,7 @@ describe("scmjs mcp: map_units, map_locations, map_edit", () => {
 
   it("lists them: the two readers read only, the editor writes, and an edit is one flat object", async () => {
     const { tools } = await client.listTools();
-    expect(tools).toHaveLength(55);
+    expect(tools).toHaveLength(56);
     for (const name of ["map_units", "map_locations"]) expect(tools.find((t) => t.name === name)?.annotations?.readOnlyHint, name).toBe(true);
     const edit = tools.find((t) => t.name === "map_edit")!;
     expect(edit.annotations?.destructiveHint).toBe(true);

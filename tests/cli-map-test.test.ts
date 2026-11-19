@@ -10,14 +10,15 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
-  compareOf, compareWords, defaultOut, defaultTests, firstInGame, formatTests, framesOf, holds, judge, planScenario, readMapForTests, readTests, recordLines, recordTest, REPLAY_END, runTests, scenarioLines,
-  secondOf, shownText, slug, snapshotExpect, testSummary, updateTests, type Observed, type PlannedScenario,
+  compareOf, compareWords, defaultOut, defaultTests, firstInGame, formatTests, framesOf, happened, happenedLines, holds, judge, planInline, planScenario, readMapForTests, readTests, recordLines, recordTest, REPLAY_END, runTests, saveScenarios, scenarioLines,
+  secondOf, shownText, slug, snapshotExpect, testSummary, updateTests, type Happened, type Observed, type PlannedScenario, type ScenarioResult,
 } from "../cli/src/maptest";
 import { githubTestAnnotations, junitTestXml, sarifTestJson, type TestReport } from "../cli/src/report";
 import { CliError, visible } from "../cli/src/ui";
 import { buildProgram, typedOptions } from "../cli/src/main";
 import type { Command } from "commander";
 import { ActionType, ConditionType } from "../src/formats/chk/sections/triggers";
+import { parseScenario, serializeScenario } from "../src/formats/chk/scenario";
 import { testMap } from "./support/maps";
 import { classicCopy, FAKE_TEST_RUNNER, OLD_TEST_RUNNER, stagedEngine } from "./support/mapRunner";
 
@@ -365,9 +366,114 @@ describe("scmjs map test, trace and balance: options that cannot go together", (
     expect(await refused(["map", "test", "nowhere.scx", "--json", "--format", "junit"])).toEqual([2, "--json and --format junit both say what standard output holds: give one."]);
     expect(await refused(["map", "test", "nowhere.scx", "--clips-format", "webm"])).toEqual([2, "--clips-format says what the clips are: use it with --clips."]);
     expect(await refused(["map", "test", "nowhere.scx", "--frames", "soon"])).toEqual([2, '--frames takes a number of frames or a time (m:ss), not "soon"']);
+    expect(await refused(["map", "test", "nowhere.scx", "--save"])).toEqual([2, "--save keeps the scenarios read from standard input: give - as a tests file."]);
+    expect(await refused(["map", "test", "nowhere.scx", "--all"])).toEqual([2, "--all lists what --show cuts: use it with --show."]);
+    expect(await refused(["map", "test", "-", "-"])).toEqual([2, "The map and the scenarios cannot both come from standard input"]);
+    expect(await refused(["map", "test", "nowhere.scx", "-", "-"])).toEqual([2, "Standard input is read once: name - once."]);
     expect(await refused(["map", "trace", "--replay", "nowhere.rep", "--seed", "3"])).toEqual([2, "--seed does nothing with --replay: the game plays with the replay's own seed."]);
     expect(await refused(["map", "trace", "nowhere.scx", "--every", "often"])).toEqual([2, '--every takes a whole number, not "often"']);
     expect(await refused(["map", "balance", "nowhere.scx", "--bots", "a.scmbot", "--games", "3", "--seeds", "1,2"])).toEqual([2, "--games and --seeds both say which games to play: give one."]);
+  });
+});
+
+describe("scmjs map test: what a tool hands over and is told", () => {
+  const fired = (row: number, n: number, first: number | null) => ({ player: 0, row, fired: n, continued: 0, failed: 0, firstFired: first, lastFired: first, lastFail: null, flags: 0 });
+
+  it("aims an order at a tile through a location of the copy alone, with no string added", async () => {
+    const map = await ums();
+    const before = parseScenario(map.chk);
+    const p = await plan({ name: "walk", steps: [{ at: 24, order: "move", to: [10, 12] }, { at: 48, order: "attack", to: [10, 12] }, { at: 72, order: "move", to: [3, 4] }] });
+    const [a, b, c] = p.spec.steps as { to: number }[];
+    // One location a tile, in slots the map does not use; the same tile is the same location.
+    expect(a.to).toBe(b.to);
+    expect(c.to).not.toBe(a.to);
+    expect(before.locations[a.to - 1].right - before.locations[a.to - 1].left).toBe(0);
+    expect(p.scenario.locations[a.to - 1]).toEqual({ left: 320, top: 384, right: 352, bottom: 416, nameIndex: 0, elevationFlags: 0 });
+    expect(p.scenario.strings.strings).toEqual(before.strings.strings);
+    // The copy the game is handed holds it; the map's own bytes were never touched.
+    expect(parseScenario(serializeScenario(p.scenario)).locations[a.to - 1].left).toBe(320);
+    expect((await refused(() => plan({ name: "off", steps: [{ at: 1, order: "move", to: [64, 0] }] }))).message).toMatch(/steps\[0\]\.to: takes a location's name or a tile as \[x, y\] on the map \(64 × 64\), not \[64,0\]/);
+    expect((await refused(() => plan({ name: "off", steps: [{ at: 1, order: "move", to: [1] }] }))).message).toMatch(/a tile as \[x, y\]/);
+  });
+
+  it("plans scenarios given as values, one that expects nothing among them, and refuses two of a name", async () => {
+    const map = await ums();
+    const planned = planInline(map.chk, [{ name: "look", frames: "0:10" }, { expect: [{ ended: false }] }], "ums.tests.json", DEFAULTS);
+    expect(planned.map((p) => [p.name, p.frames, p.expect.length])).toEqual([["look", 240, 0], ["scenario 2", 2400, 1]]);
+    expect(() => planInline(map.chk, [{ name: "a" }, { name: "A" }], "ums.tests.json", DEFAULTS)).toThrow(/two scenarios named "A"/);
+    expect(() => planInline(map.chk, [{ name: "a", stpes: [] }], "ums.tests.json", DEFAULTS)).toThrow(/"stpes" is not something the tests know: did you mean "steps"\?/);
+  });
+
+  it("says what a game did: the end, the person's resources, each line once, the map's triggers in the order they fired, orders that found no unit", async () => {
+    const p = await plan({ name: "x", setup: [{ switch: 1 }] });
+    const observed: Observed = { ...nothing(0), resources: [[100, 25], ...Array.from({ length: 11 }, () => [0, 0] as [number, number])], outcomes: ["victory", null, "defeat", null, null, null, null, null],
+      texts: [{ frame: 2, text: "Hold the base." }, { frame: 33, text: "Hold the base." }, { frame: 64, text: "\x04Well done" }, { frame: 70, text: "  " }],
+      steps: [{ frame: 24, kind: "order", units: 0 }, { frame: 48, kind: "order", units: 2 }, { frame: 60, kind: "chat" }] };
+    // Row 0 is the setup's trigger: the map's own rows come after it, and are numbered as the map has them.
+    const h = happened(p, { localPlayer: 0 }, { frame: 190, ended: true, trace: [fired(0, 1, 0), fired(1, 1, 2), fired(2, 0, null), fired(3, 4, 1)], observed });
+    expect(h).toEqual({
+      frame: 190, ended: true, person: 0, minerals: 100, gas: 25,
+      outcomes: [{ player: 0, outcome: "victory" }, { player: 2, outcome: "defeat" }],
+      texts: [{ frame: 2, text: "Hold the base." }, { frame: 64, text: "Well done" }],
+      fired: [{ row: 2, comment: null, fired: 4, first: 1 }, { row: 0, comment: "Opening", fired: 1, first: 2 }],
+      idle: [{ frame: 24, kind: "order" }],
+    });
+  });
+
+  it("reads scenarios handed over on standard input: named by where they came from, one that expects nothing taken", async () => {
+    const map = await ums();
+    const from = { from: "standard input" };
+    // A list or a whole tests file; planned as if in the map's own tests file, which is where they are kept.
+    const listed = readTests("ums.tests.json", '[{ "name": "look", "frames": "0:10" }]', map.chk, DEFAULTS, from);
+    expect(listed.map((p) => [p.name, p.frames, p.expect.length, p.file, p.line])).toEqual([["look", 240, 0, "ums.tests.json", null]]);
+    const whole = readTests("ums.tests.json", '{ "frames": 100, "scenarios": [{ "name": "a", "expect": [{ "ended": false }] }] }', map.chk, DEFAULTS, from);
+    expect(whole.map((p) => [p.name, p.frames])).toEqual([["a", 100]]);
+    // The same text read as the file's own is refused: a test that expects nothing passes whatever happens.
+    expect(() => readTests("ums.tests.json", '[{ "name": "look" }]', map.chk, DEFAULTS)).toThrow(/ums\.tests\.json: "look".*expects nothing/s);
+    expect(() => readTests("ums.tests.json", "[{", map.chk, DEFAULTS, from)).toThrow(/^standard input is not JSON/);
+    expect(() => readTests("ums.tests.json", '{ "tests": [] }', map.chk, DEFAULTS, from)).toThrow(/^standard input has no "scenarios" list/);
+    expect(() => readTests("ums.tests.json", '[{ "name": "a" }, { "name": "A" }]', map.chk, DEFAULTS, from)).toThrow(/standard input.*two scenarios named "A"/s);
+  });
+
+  it("words what a game did under its scenario, lists cut at 30 unless all are asked for", () => {
+    const h: Happened = {
+      frame: 190, ended: true, person: 0, minerals: 1500, gas: 25, outcomes: [{ player: 0, outcome: "victory" }, { player: 2, outcome: "defeat" }],
+      texts: Array.from({ length: 32 }, (_, i) => ({ frame: i * 24, text: `line ${i + 1}` })),
+      fired: [{ row: 2, comment: null, fired: 4, first: 1 }, { row: 0, comment: "Opening", fired: 1, first: 2 }], idle: [{ frame: 24, kind: "order" }],
+    };
+    const lines = happenedLines(h, false, "--all").map((l) => l.trim());
+    expect(lines.slice(0, 3)).toEqual(["ran to 0:08 (frame 190): the game ended, Player 1 victory, Player 3 defeat; Player 1 has 1,500 minerals and 25 gas", "▲ the order at 0:01 found no unit to give it to", "shown (32 lines):"]);
+    expect(lines.slice(3, 5)).toEqual(['0:00  "line 1"', '0:01  "line 2"']);
+    expect(lines).toContain("… and 2 more (--all lists them)");
+    expect(lines.slice(-3)).toEqual(["fired (2 triggers), by when first:", "0:00  #3 × 4", '0:00  #1 "Opening"']);
+    const all = happenedLines(h, true, "`all`");
+    expect(all.filter((l) => l.includes('"line '))).toHaveLength(32);
+    expect(all.join("\n")).not.toMatch(/more/);
+    const quiet = happenedLines({ ...h, ended: false, outcomes: [], texts: [], fired: [], idle: [] }, false, "--all").map((l) => l.trim());
+    expect(quiet).toEqual(["ran to 0:08 (frame 190): the game was still going; Player 1 has 1,500 minerals and 25 gas", "shown: nothing", "fired: none of the map's triggers"]);
+  });
+
+  it("counts a scenario that expects nothing as played, neither passed nor failed", () => {
+    const one = (name: string, ok: boolean, results: number) => ({ name, ok, results: Array(results).fill({ ok }), ms: 800, playing: null, parted: null, updated: [], notices: [], replay: null }) as unknown as ScenarioResult;
+    const said = (scenarios: ScenarioResult[]) => visible(testSummary({ scenarios, ms: 1200 }));
+    expect(said([one("look", true, 0)])).toBe("ℹ 1 scenario played, expecting nothing (1.2 s)");
+    expect(said([one("a", true, 2), one("look", true, 0)])).toBe("✔ 1 scenario passed · 1 scenario played, expecting nothing (1.2 s)");
+    expect(said([one("a", false, 2), one("b", true, 1), one("look", true, 0)])).toBe("✖ 1 of 2 scenarios failed · 1 scenario played, expecting nothing (1.2 s)");
+    expect(said([one("a", true, 2), one("b", true, 1)])).toBe("✔ both scenarios passed (1.2 s)");
+    expect(visible(scenarioLines(one("look", true, 0))[0])).toMatch(/^ {2}ℹ look/);
+  });
+
+  it("keeps scenarios in a tests file: one of a name replaced, the rest added, the file made when it is not there", async () => {
+    const file = join(tmp(), "ums.tests.json");
+    expect(saveScenarios(file, [{ name: "a", expect: [{ ended: false }] }, { name: "b", frames: 100, expect: [{ ended: true }] }])).toEqual({ added: ["a", "b"], replaced: [] });
+    expect(saveScenarios(file, [{ name: "A", frames: "0:05", expect: [{ ended: true }] }, { name: "c", expect: [{ switch: 1 }] }])).toEqual({ added: ["c"], replaced: ["A"] });
+    const read = readTests(file, readFileSync(file, "utf8"), (await ums()).chk, DEFAULTS);
+    expect(read.map((p) => [p.name, p.frames])).toEqual([["A", 120], ["b", 100], ["c", 2400]]);
+    // What a tests file would refuse is not written, and the file stays as it was.
+    const was = readFileSync(file, "utf8");
+    expect(() => saveScenarios(file, [{ name: "d", expect: [{ ended: true }] }, { name: "e" }])).toThrow(/"e": expects nothing/);
+    expect(() => saveScenarios(file, [{ expect: [{ ended: true }] }])).toThrow(/needs a "name"/);
+    expect(readFileSync(file, "utf8")).toBe(was);
   });
 });
 

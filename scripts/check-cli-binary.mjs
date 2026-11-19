@@ -174,14 +174,21 @@ if (mcpb) {
     const call = (name, a = {}) => ({ method: "tools/call", params: { name, arguments: a } });
     // Two minutes: the copy unpacked here is a new file, which Rosetta translates again before an Intel Mac's build
     // runs on Apple silicon; that first start took longer than 20 s on CI.
-    const { answers: [info, outside, doctor], stderr } = await askServer(app.command, app.args, { cwd: dir, env: { ...env, ...app.env }, timeout: 120000 }, [
+    const { answers: [info, outside, doctor, script], stderr } = await askServer(app.command, app.args, { cwd: dir, env: { ...env, ...app.env }, timeout: 120000 }, [
       call("map_info", { path: "ums.scx" }), call("map_info", { path: join(work, "melee.scx") }), call("doctor"),
+      // A script written and built with the TypeScript the bundle carries: there is no other on a map maker's computer.
+      call("map_script_import", { path: "ums.scx", out: "scripted.scx", files: { "main.ts": 'trigger(P1, [always()], [displayText("From the bundle.")]);\n' } }),
     ]);
+    // (A second start: the server answers requests as they come, and the build needs the file the import wrote.)
+    const { answers: [built] } = await askServer(app.command, app.args, { cwd: dir, env: { ...env, ...app.env }, timeout: 120000 }, [call("map_build", { path: "scripted.scx" })]);
     const text = (a) => a.result?.content?.map((c) => c.text ?? "").join("\n") ?? JSON.stringify(a);
     if (info.result?.isError || !/ums\.scx/.test(text(info))) throw new Error(`map_info on the maps folder's ums.scx: ${text(info)}`);
     if (!outside.result?.isError || !text(outside).includes("outside the folder the tools work in")) throw new Error(`a map outside the maps folder was not refused: ${text(outside)}`);
     if (!text(doctor).includes("from an MCP bundle")) throw new Error(`doctor does not know the bundle: ${text(doctor)}`);
     if (/user_config/.test(text(doctor))) throw new Error(`the empty StarCraft folder reached doctor: ${text(doctor)}`);
+    if (script.result?.isError || !/✔ compiles: 1 trigger/.test(text(script))) throw new Error(`map_script_import did not compile with the bundle's TypeScript: ${text(script)}`);
+    if (built.result?.isError || !/1 trigger/.test(text(built))) throw new Error(`map_build did not build with the bundle's TypeScript: ${text(built)}`);
+    if (!files.some((f) => f.name === "server/typescript/LICENSE.txt")) throw new Error("the bundle carries TypeScript without its licence");
     if (!stderr.includes(`working directory ${maps}`)) throw new Error(`the server did not start in the maps folder: ${stderr}`);
   });
 }

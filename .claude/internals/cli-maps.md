@@ -230,10 +230,22 @@ extension the bytes call for when the name has none, `-2`/`-3` on a case-insensi
   bundle's `codeSplitting: false`; `import type` stays static), so `main.ts` and the other suites load without them and
   a missing module is a CliError naming `npm run vendor:plugins`; `tests/cli-build.test.ts` is `describe.skipIf(!have)`;
   CI's `web` job vendors before `npm test`; `build-cli.mjs` vendors when `plugins/trigscript/vendored.json` is missing.
-- **TypeScript is not bundled** (10 MB; `npx @scm-js/cli info` must not download it): `findTypeScript` resolves
+- **TypeScript is not bundled** (10 MB; `npx @scm-js/cli info` must not download it): `locateTypeScript` resolves
   `typescript` from the working directory's project, then from beside the command (`createRequire(import.meta.url)` — a
-  clone, a global install beside a global TypeScript, or `npx -p @scm-js/cli -p typescript`; skipped in the single
-  executable), then `npm root -g`; missing → CliError with the install line. The compiler takes `ts` as a parameter and
+  clone, a global install beside a global TypeScript, or `npx -p @scm-js/cli -p typescript`; in the single executable,
+  the copy an MCP bundle carries beside it, `cli-distribution.md`), then `npm root -g`; missing → CliError with the
+  install line. **A script compiles with TypeScript 6 and no other.** 7 cannot be used by anything: its package has no
+  compiler to call from JavaScript (`main` is `lib/version.cjs`), and `npm install typescript` now gives it. 5 cannot
+  compile a script: the plugin's `scriptCompilerOptions` are CommonJS modules with the bundler's resolution, which 5
+  refuses as an options error on line 1 of every script ("Option 'bundler' can only be used when 'module' is set to
+  'preserve' or to 'es2015' or later"; 6 allows it). Found 2026-11-19 by running `map script import` with 5.9.3; the
+  earlier "5 or 6" was doctor finding the package, never a compile. `locateTypeScript(…, use)` takes what it is for:
+  `"script"` (the default: `map build`, the import's check, the language server) takes major 6 only, `"plugin"`
+  (`run.ts`, which only turns a plugin's source into JavaScript) takes 5 too. One that cannot be used is passed over
+  for the next place and kept in `unusable`; when nothing else is found the error names its version and path and says
+  `npm install typescript@6` (every install hint says `@6`, since the bare name gives 7), and doctor's row reads
+  "7.0.2 is too new" or "5.9.3 is too old". Before this `map_build` said "version.cjs is
+  not TypeScript" while doctor showed TypeScript as found (the capstone, 2026-11-18). The compiler takes `ts` as a parameter and
   imports it `import type` only. The standard library text is built from the found TypeScript's `lib/` as
   `bundle/lib.mjs#defaultLib` does (`lib.es2023.d.ts` + references). The user chose this over fetching `typescript.js`
   from jsDelivr (the editor's worker does that); add the fetch only if people ask.
@@ -249,6 +261,20 @@ extension the bytes call for when the name has none, `-2`/`-3` on a case-insensi
   `buildChk` → `buildOwnMap` → `packBuiltMap({ …, steps: [{ id: "trigscript/build", label: "TrigScript" }] })`. A
   `.chk` output with programs is refused as the editor refuses it. Magenta's member (`magenta\magenta.json`) →
   CliError: its contributions API is the editor's and no plugins run here.
+- **`map script export | import | api`** (`script.ts`): the terminal's side of the `map_script_*` tools. `import`
+  takes files (in under their base name), folders (every `.ts`/`.tsx` at its path inside; `.d.ts` and `node_modules`
+  passed over, since an editor's project has them) and `-` (main.ts from standard input), plus `--remove`; a name given
+  twice is refused. It exits 1 when the script does not compile, with the files written all the same. `export` prints
+  the text to stdout with the state line on stderr (a pipe gets the script alone; one file is printed bare, several
+  each under `// ── name ──`), or writes a folder with `--out`; a map with no script is an error (exit 1), where the
+  tool answers with how to write one. `api` takes the words as arguments and the map as `--map`.
+- **The script's files without the editor** (for the `map_script_*` tools, `cli-mcp.md`): `readScript` is
+  `scriptState` said as `none | applied | unbuilt | stale`; `changeScript` patches the files (a name with text written,
+  null removed, the rest kept) through the plugin's `readFiles` / `withFiles`, and compiles nothing. It refuses a name
+  outside the plugin's `FILE_NAME`, **and a folder that is only dots** (the plugin's rule lets `../x.ts` through; the
+  member would be `trigscript\..\x.ts`), a script left without its entry file, the last file's removal (the triggers
+  would be left behind with a manifest and no source) and a Magenta map. `scriptDeclarations` is the plugin's
+  `generateDeclarations` over `mapNames`, some 350 KB for a map.
 - **Output**: one line (triggers range, programs, sounds, tests, written to, size, TrigScript and TypeScript versions);
   diagnostics as `main.ts:3:27 error …` (tsc's shape); failing tests with name and line; exit 1 and nothing written on
   either. `--test` runs the script's tests first (a failing test refuses the build); `--check` compiles (and tests,

@@ -4,12 +4,38 @@
 // it by scripts/check-cli-binary.mjs --mcpb. The format is the one `npx @anthropic-ai/mcpb` packs and validates
 // (github.com/modelcontextprotocol/mcpb, MANIFEST.md); the build validates each manifest with that command.
 import { spawn } from "node:child_process";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 /** The packer's command line, pinned, through npx as postject is: only the build runs it. */
 export const MCPB_CLI = "@anthropic-ai/mcpb@2.1.2";
 
 /** The asset's name: beside `scmjs-cli-<os>-<arch>.<zip|tar.gz>`, whose names it must not equal but for case. */
 export const mcpbAsset = (os, arch) => `scmjs-mcp-${os}-${arch}.mcpb`;
+
+/**
+ * The copy of TypeScript a bundle carries beside its executable (`<exe's folder>/typescript/`), as files to zip:
+ * `map_build` and the check of `map_script_import` compile a map's TrigScript with it, and the person an AI app
+ * installs the bundle for has no npm to install one with. Only what the command reads: the compiler
+ * (`lib/typescript.js`), the standard library's declarations from `lib.es2023.d.ts` down (what `build.ts#libText`
+ * walks), `package.json` (the version, and so that Node reads the compiler as CommonJS), and the licence and notices
+ * Apache-2.0 asks to travel with it. `under` is the executable's folder inside the bundle.
+ */
+export function typescriptFiles(under, root = "node_modules/typescript") {
+  const libs = new Set();
+  const walk = (name) => {
+    if (libs.has(name)) return;
+    libs.add(name);
+    for (const m of readFileSync(join(root, "lib", name), "utf8").matchAll(/\/\/\/ <reference lib="([^"]+)" \/>/g)) walk(`lib.${m[1]}.d.ts`);
+  };
+  walk("lib.es2023.d.ts");
+  const { name, version, license } = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
+  const files = ["LICENSE.txt", "ThirdPartyNoticeText.txt", "lib/typescript.js", ...[...libs].sort().map((l) => `lib/${l}`)];
+  return [
+    { name: `${under}/typescript/package.json`, bytes: Buffer.from(`${JSON.stringify({ name, version, license, main: "./lib/typescript.js" }, null, 2)}\n`) },
+    ...files.map((f) => ({ name: `${under}/typescript/${f}`, bytes: readFileSync(join(root, f)) })),
+  ];
+}
 
 /** The first sentence of a tool's description, for the list the app shows before it installs the bundle. */
 export function firstSentence(text) {

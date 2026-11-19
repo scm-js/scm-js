@@ -13,7 +13,7 @@ import { spawnSync } from "node:child_process";
 import { newestVersion, olderThan, PACKAGE, VERSION } from "./about";
 import { dockerVersion } from "./bot";
 import { cacheRoot, findGameCopy } from "./botrun";
-import { findTypeScript } from "./build";
+import { locateTypeScript, typeScriptVersion } from "./build";
 import { RUNNERS, unpatchedCopy, type RunnerKind } from "./engine";
 import { findDesktopApp } from "./open";
 import { findBrowser, NO_BROWSER } from "./browser";
@@ -55,16 +55,16 @@ export function nodeCheck(version = process.version, kind: InstallKind = INSTALL
 }
 
 export function typescriptCheck(cwd = process.cwd()): Check {
-  const path = findTypeScript(cwd);
-  if (!path) return { what: "TypeScript", state: "warn", detail: t("not found"), fix: t("npm install typescript   (in the map's project, or npm install -g typescript)"), note: t("scmjs map build and a .ts plugin under scmjs map run compile with it.") + (INSTALL === "binary" ? ` ${t("It is installed with npm, which comes with Node.")}` : "") };
-  // `path` is typescript/lib/typescript.js; the package.json two folders up says the version.
-  let version = "";
-  for (let dir = dirname(path); dir !== dirname(dir); dir = dirname(dir)) {
-    try {
-      const pkg = JSON.parse(readFileSync(join(dir, "package.json"), "utf8")) as { name?: string; version?: string };
-      if (pkg.name === "typescript") { version = pkg.version ?? ""; break; }
-    } catch { /* not this folder */ }
+  const { path, unusable } = locateTypeScript(cwd);
+  // One that is there and cannot be used is said, with the version that can: "not found" would send people to install what they have.
+  if (!path && unusable.length) {
+    const { version, path: where } = unusable[0];
+    const detail = Number(version.split(".")[0]) >= 7 ? t("{version} is too new", { version }) : t("{version} is too old", { version });
+    return { what: "TypeScript", state: "warn", detail: `${detail}${pc.dim(` · ${where}`)}`, fix: t("npm install typescript@6   (in the map's project)"), note: t("TrigScript compiles with TypeScript 6; scmjs map build and a .ts plugin under scmjs map run use it.") };
   }
+  if (!path) return { what: "TypeScript", state: "warn", detail: t("not found"), fix: t("npm install typescript@6   (in the map's project, or npm install -g typescript@6)"), note: t("scmjs map build and a .ts plugin under scmjs map run compile with it.") + (INSTALL === "binary" ? ` ${t("It is installed with npm, which comes with Node.")}` : "") };
+  // `path` is typescript/lib/typescript.js; the package.json two folders up says the version.
+  const version = typeScriptVersion(path);
   return { what: "TypeScript", state: "ok", detail: `${version || t("found")}${pc.dim(` · ${path}`)}`, path: dirname(dirname(path)) };
 }
 

@@ -11,7 +11,8 @@
  *      (`packBuiltMap`), so the editor restores the map it was and the game plays the build.
  *
  * TypeScript is the compiler's front end and ten megabytes, so it is not bundled: it is found where the map's project
- * keeps it, next to this command, or installed globally, and named when it is missing (`loadTypeScript`).
+ * keeps it, next to this command, or installed globally, and named when it is missing (`loadTypeScript`). The MCP
+ * bundle an AI app installs carries a copy beside its executable, since its user has no npm to install one with.
  */
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
@@ -48,7 +49,7 @@ import { CliError, dot, mark, pc, size } from "./ui";
  */
 async function trigscript() {
   try {
-    const [compiler, names, libraries, backend, vorbis, script, version] = await Promise.all([
+    const [compiler, names, libraries, backend, vorbis, script, version, declarations] = await Promise.all([
       import("../../plugins/trigscript/compiler/compiler"),
       import("../../plugins/trigscript/compiler/names"),
       import("../../plugins/trigscript/compiler/libraries"),
@@ -56,8 +57,9 @@ async function trigscript() {
       import("../../plugins/trigscript/compiler/vorbis"),
       import("../../plugins/trigscript/script"),
       import("../../plugins/trigscript/version"),
+      import("../../plugins/trigscript/compiler/declarations"),
     ]);
-    return { ...compiler, ...names, ...libraries, ...backend, ...vorbis, ...script, TRIGSCRIPT_VERSION: version.VERSION };
+    return { ...compiler, ...names, ...libraries, ...backend, ...vorbis, ...script, TRIGSCRIPT_VERSION: version.VERSION, generateDeclarations: declarations.generateDeclarations };
   } catch (e) {
     if ((e as NodeJS.ErrnoException)?.code !== "ERR_MODULE_NOT_FOUND") throw e;
     throw new CliError(t("The TrigScript compiler is not in this build of scmjs."), t("In a clone, npm run vendor:plugins fetches the plugins the editor ships, then build the command again."));
@@ -88,38 +90,89 @@ export interface TypeScriptModule {
 /** What TrigScript's own tests build the standard library from (`bundle/lib.mjs`). */
 const LIB_ENTRY = "lib.es2023.d.ts";
 
+/** The line that installs a TypeScript the compiler can drive (`init.ts#TYPESCRIPT` writes the same into a new project). */
+const INSTALL_TYPESCRIPT = "npm install typescript@6";
+
 /**
- * TypeScript from the map's project (`from`, the working directory), else from beside this command (a clone, or a
- * global install next to a global TypeScript; not for the single executable), else from npm's global folder. A CliError, with the install line,
- * when there is none.
+ * TypeScript from the map's project (`from`, the working directory), else from beside this command (a clone, a global
+ * install next to a global TypeScript, or the copy an MCP bundle carries beside its executable), else from npm's
+ * global folder. A CliError, with the install line, when there is none, or when the only one there is too new to use.
  */
-export async function loadTypeScript(from = process.cwd()): Promise<TypeScriptModule> {
-  const path = findTypeScript(from);
-  if (!path) {
-    throw new CliError(t("TrigScript compiles with TypeScript, and none is installed here."), t("npm install typescript in the map's project, or npm install -g typescript, then build again."));
+export async function loadTypeScript(from = process.cwd(), use: TypeScriptUse = "script"): Promise<TypeScriptModule> {
+  const found = locateTypeScript(from, process.execPath, INSTALL, use);
+  if (!found.path) {
+    const other = found.unusable[0];
+    if (other && use === "script") throw new CliError(t("TrigScript compiles with TypeScript 6, and the one here is {version} ({path}).", { version: other.version, path: other.path }), t("{install} in the map's project, then build again.", { install: INSTALL_TYPESCRIPT }));
+    if (other) throw new CliError(t("A plugin in TypeScript is compiled with TypeScript 5 or 6, and the one here is {version} ({path}).", { version: other.version, path: other.path }), t("{install} in the map's project.", { install: INSTALL_TYPESCRIPT }));
+    throw new CliError(t("TrigScript compiles with TypeScript, and none is installed here."), t("{install} in the map's project, or npm install -g typescript@6, then build again.", { install: INSTALL_TYPESCRIPT }));
   }
-  const mod = (await import(pathToFileURL(path).href)) as { default?: typeof TS } & typeof TS;
+  const mod = (await import(pathToFileURL(found.path).href)) as { default?: typeof TS } & typeof TS;
   const ts = mod.default ?? mod;
-  if (typeof ts.createSourceFile !== "function") throw new CliError(t("{path} is not TypeScript.", { path }));
-  return { ts, path, version: ts.version, lib: libText(dirname(path)) };
+  if (typeof ts.createSourceFile !== "function") throw new CliError(t("{path} is not TypeScript.", { path: found.path }));
+  return { ts, path: found.path, version: ts.version, lib: libText(dirname(found.path)) };
 }
 
-/** Where `typescript` is: the working directory's project, beside the command, then the global folder; null when nowhere. */
-export function findTypeScript(from: string): string | null {
+/** The version of the `typescript` package a file is in ("" when no package.json above it says). */
+export function typeScriptVersion(path: string): string {
+  for (let dir = dirname(path); dir !== dirname(dir); dir = dirname(dir)) {
+    try {
+      const pkg = JSON.parse(readFileSync(join(dir, "package.json"), "utf8")) as { name?: string; version?: string };
+      if (pkg.name === "typescript") return pkg.version ?? "";
+    } catch { /* not this folder */ }
+  }
+  return "";
+}
+
+/** What a TypeScript is wanted for: a map's script (`map build`, the language server), or a plugin's source under `map run`. */
+export type TypeScriptUse = "script" | "plugin";
+
+/**
+ * TypeScript 7 is the compiler rewritten as a program: its package has no compiler to call from JavaScript, which is
+ * how it is driven here (its `main` is a file that only says the version), so nothing can use it. A script needs 6:
+ * TrigScript checks a script with options TypeScript 5 refuses together (CommonJS modules found by the bundler's
+ * rules: "Option 'bundler' can only be used when 'module' is set to 'preserve' or to 'es2015' or later"), so every
+ * script fails on its first line there. A plugin's source is only turned into JavaScript, which 5 does as well.
+ */
+const usable = (version: string, use: TypeScriptUse) => {
+  const major = Number(version.split(".")[0]);
+  return !Number.isFinite(major) || major === 0 || (major < 7 && (use === "plugin" || major >= 6));
+};
+
+/**
+ * Where a `typescript` the compiler can use is: the working directory's project, beside the command, then the global
+ * folder. One that is found and cannot be used (7 or newer; for a script, 5 or older too) is passed over for the next
+ * place, and said.
+ */
+export function locateTypeScript(from: string, exe = process.execPath, install = INSTALL, use: TypeScriptUse = "script"): { path: string | null; unusable: { path: string; version: string }[] } {
   const tries: (() => string)[] = [
     () => createRequire(join(resolve(from), "package.json")).resolve("typescript"),
     // Beside the command: a clone, or a global install next to a global TypeScript. The single executable has no
-    // folder of packages beside it, so it looks in the project and npm's global folder only.
-    () => { if (INSTALL === "binary") throw new Error("no folder beside"); return createRequire(import.meta.url).resolve("typescript"); },
+    // folder of packages beside it; an MCP bundle puts a copy in `typescript/` there (scripts/build-cli-binary.mjs).
+    () => {
+      if (install !== "binary") return createRequire(import.meta.url).resolve("typescript");
+      const carried = join(dirname(exe), "typescript", "lib", "typescript.js");
+      if (!existsSync(carried)) throw new Error("no copy beside the executable");
+      return carried;
+    },
     () => {
       const root = execFileSync(process.platform === "win32" ? "npm.cmd" : "npm", ["root", "-g"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], shell: process.platform === "win32" }).trim();
       return createRequire(join(root, "package.json")).resolve("typescript");
     },
   ];
+  const unusable: { path: string; version: string }[] = [];
   for (const attempt of tries) {
-    try { return attempt(); } catch { /* the next place */ }
+    let path: string;
+    try { path = attempt(); } catch { continue; }
+    const version = typeScriptVersion(path);
+    if (usable(version, use)) return { path, unusable };
+    unusable.push({ path, version });
   }
-  return null;
+  return { path: null, unusable };
+}
+
+/** Where a usable `typescript` is; null when nowhere (`locateTypeScript` says what was passed over). */
+export function findTypeScript(from: string): string | null {
+  return locateTypeScript(from).path;
 }
 
 /** The standard library as the plugin concatenates it (`bundle/lib.mjs#defaultLib`), from this TypeScript's `lib/`. */
@@ -163,6 +216,78 @@ export async function loadVorbis(from = process.cwd()): Promise<VorbisEncoder> {
 /** Magenta's member (`plugins/trigscript/service.ts#MAGENTA_MEMBER`): a map it has triggers in. */
 const MAGENTA_MEMBER = "magenta\\magenta.json";
 const memberKey = (name: string) => name.replace(/\//g, "\\").toLowerCase();
+
+/* ── The script's files, read and written without the editor ─────────────────── */
+
+/** A map's script as it stands: its files, and whether the map's triggers are what they compile to. */
+export interface ScriptReport {
+  /** The files by name, with their text. Empty when the map has no script. */
+  files: Record<string, string>;
+  /**
+   * `none`: no script. `applied`: the triggers in the map are this script's. `unbuilt`: the files changed since the
+   * triggers were made from them, or were never built. `stale`: the script's triggers were edited or removed by hand.
+   */
+  state: "none" | "applied" | "unbuilt" | "stale";
+  /** The script's triggers in the list (0-based start), when they are there. */
+  block: { start: number; count: number } | null;
+  /** Programs the script had when it was last built: a map with any needs StarCraft: Remastered. */
+  programs: number;
+  /** The libraries of other plugins' the map keeps a copy of. */
+  libraries: { id: string; label: string; version: string }[];
+  trigscript: string;
+}
+
+export async function readScript(doc: OpenedMap): Promise<ScriptReport> {
+  const { scriptState, TRIGSCRIPT_VERSION }: TrigScript = await trigscript();
+  const state = scriptState(readTriggers(doc.scenario), doc.extras);
+  return {
+    files: state.files ?? {},
+    state: !state.files ? "none" : state.stale ? "stale" : state.unbuilt ? "unbuilt" : "applied",
+    block: state.block ? { start: state.block.start, count: state.block.count } : null,
+    programs: state.programs, libraries: state.libraries, trigscript: TRIGSCRIPT_VERSION,
+  };
+}
+
+export interface ScriptChange { added: string[]; changed: string[]; removed: string[]; unchanged: string[] }
+
+/**
+ * Files of the script put into the map's members (`trigscript\\`), as the editor's script window keeps them: a name
+ * with text is written, a name with null is removed, and the files not named stay. Nothing is compiled or applied:
+ * the map's triggers stay as they are until a build. Refused: a name a script cannot use, a file to remove that is
+ * not there, a script left without its first file, and taking the last file out (the editor takes a script out of a
+ * map with its triggers; here the triggers would be left behind).
+ */
+export async function changeScript(doc: OpenedMap, changes: Readonly<Record<string, string | null>>): Promise<ScriptChange> {
+  const { readFiles, withFiles, FILE_NAME, entryOf }: TrigScript = await trigscript();
+  if ([...doc.extras.keys()].some((k) => memberKey(k) === MAGENTA_MEMBER)) {
+    throw new CliError(t("{file} has Magenta's triggers in it, and Magenta writes the script of such a map.", { file: String(doc.fileName) }), t("Change the triggers in Magenta, in the editor."));
+  }
+  const files = { ...readFiles(doc.extras) };
+  const out: ScriptChange = { added: [], changed: [], removed: [], unchanged: [] };
+  for (const [name, text] of Object.entries(changes)) {
+    const path = name.replace(/\\/g, "/").replace(/^(?:\.\/|trigscript\/)/i, "");
+    // (The plugin's rule lets a folder be "..": a member named trigscript\\..\\x would be written outside the script by whatever unpacks the map.)
+    if (!FILE_NAME.test(path) || path.split("/").some((part) => /^\.+$/.test(part))) throw new CliError(t("{name} is not a name a script's file can have.", { name: JSON.stringify(name) }), t("Letters, digits, _, - and ., folders with /, ending in .ts or .tsx: main.ts, quests/shop.ts."), 2);
+    if (text === null) {
+      if (!(path in files)) throw new CliError(t("The script has no file {name} to remove.", { name: path }), Object.keys(files).length ? t("It has {list}.", { list: Object.keys(files).join(", ") }) : null, 2);
+      delete files[path];
+      out.removed.push(path);
+    } else if (!(path in files)) { files[path] = text; out.added.push(path); }
+    else if (files[path] !== text) { files[path] = text; out.changed.push(path); }
+    else out.unchanged.push(path);
+  }
+  const left = Object.keys(files);
+  if (!left.length) throw new CliError(t("That would leave the map with no script, and its triggers behind."), t("Take a script out of a map in the editor: Triggers ▸ TrigScript…"), 2);
+  if (!(entryOf(left) in files)) throw new CliError(t("A script starts at main.ts, and this one would have none."), t("Write main.ts too; it imports the other files."), 2);
+  doc.extras = withFiles(doc.extras, files);
+  return out;
+}
+
+/** The declarations a script of this map is checked against: the language, then the map's own names (`scriptapi.ts` searches them). */
+export async function scriptDeclarations(doc: OpenedMap | null): Promise<string> {
+  const { generateDeclarations, defaultScriptNames }: TrigScript = await trigscript();
+  return generateDeclarations(doc ? await mapNames(doc.scenario, doc.extras) : defaultScriptNames());
+}
 
 /** The identifiers the script uses for the map's things, from the scenario — what the plugin reads off the editor's API. */
 export async function mapNames(scn: Scenario, extras: ReadonlyMap<string, Uint8Array>): Promise<ScriptNames> {

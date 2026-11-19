@@ -162,7 +162,7 @@ export const COMMAND_GROUPS: Record<string, [heading: string, names: string[]][]
   map: [
     [msg("Looking inside a map:"), ["info", "check", "dump", "find", "preview", "sounds", "analyze"]],
     [msg("Making a map:"), ["new", "generate", "fetch"]],
-    [msg("Changing a map:"), ["set", "settings", "resize", "units", "locations", "terrain", "doodads", "edit", "triggers", "strings", "optimize", "unpack", "pack", "build", "run"]],
+    [msg("Changing a map:"), ["set", "settings", "resize", "units", "locations", "terrain", "doodads", "edit", "triggers", "strings", "optimize", "unpack", "pack", "script", "build", "run"]],
     [msg("Maps in git:"), ["diff", "log", "blame", "merge"]],
     [msg("Running a map in the game:"), ["trace", "cost", "test", "coverage", "rush", "balance", "heatmap"]],
     [msg("Sharing:"), ["open", "play", "share"]],

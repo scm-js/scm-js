@@ -235,16 +235,18 @@ export function addGameTools(reg: Reg, { options, root }: McpContext): void {
 const TOOL_READY: ReadyGroup[] = [
   { commands: "map_info, map_check, map_edit and the other map, mod, replay and editor tools", needs: [] },
   { commands: "map_preview, map_analyze, map_generate, map_terrain, map_doodads", needs: ["StarCraft"] },
+  { commands: "map_build, and the compile check of map_script_import", needs: ["TypeScript"] },
   { commands: "map_trace, map_cost, map_test", needs: ["StarCraft", "map"] },
   { commands: "map_coverage", needs: ["StarCraft", "replay"] },
   { commands: "map_balance", needs: ["StarCraft", "match", "replay"] },
 ];
 /**
  * The checks a tool can be held up by. Docker, the browser, ffmpeg, the desktop app and Claude Code's settings serve
- * commands that are not tools; TypeScript only `map_build` of a TrigScript map, which says so itself when it lacks it
- * (a map maker in Claude Desktop was told to run npm for it).
+ * commands that are not tools. TypeScript is `map_build`'s and the compile check's: it was left out once, after a
+ * map maker in Claude Desktop was told to run npm for it, and then a model was told "every tool is ready" beside a
+ * TypeScript 7 that `map_build` cannot use. The Claude Desktop bundle now carries its own, so there it reads as found.
  */
-const TOOL_CHECKS = new Set(["Node", "scmjs", "StarCraft", "Game engine", "scmjs.dev"]);
+const TOOL_CHECKS = new Set(["Node", "scmjs", "TypeScript", "StarCraft", "Game engine", "scmjs.dev"]);
 
 /**
  * `scmjs doctor` as the tools see it: the checks a tool can be held up by, each said in the tools' terms, and what is
@@ -254,6 +256,8 @@ const TOOL_CHECKS = new Set(["Node", "scmjs", "StarCraft", "Game engine", "scmjs
 export function doctorForTools(r: Awaited<ReturnType<typeof doctorReport>>): { text: string[]; json: ReturnType<typeof doctorJson> } {
   const checks = r.checks.filter((c) => TOOL_CHECKS.has(c.what)).map((c): Check => {
     if (c.what === "Game engine" && !c.engine?.build) return { ...c, note: "map_trace, map_cost, map_coverage and map_balance fetch it from the play page by themselves the first time one runs (about 25 MB). Nothing to install." };
+    // The Claude Desktop extension carries its own, so a map maker there is never sent to npm for it.
+    if (c.what === "TypeScript" && c.state !== "ok") return { ...c, note: "map_build and the compile check of map_script_import use it (TypeScript 6); every other tool works without. In a terminal, in the maps folder: npm install typescript@6.", fix: undefined };
     if (c.what === "scmjs.dev") return { ...c, note: "share, replay_sync and the library_ tools use the session. account_login signs the person in, in their browser, if they want to.", fix: undefined };
     return c;
   });

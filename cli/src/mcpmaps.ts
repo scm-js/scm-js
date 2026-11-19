@@ -1,11 +1,13 @@
 /** The MCP tools that read and change a map: what `scmjs map` does, a tool per command. */
 import { z } from "zod";
-import { buildMap, loadTypeScript, printBuild } from "./build";
+import { buildMap, loadTypeScript, printBuild, readScript, scriptDeclarations, type ScriptReport } from "./build";
+import { importScript } from "./script";
+import { apiEntries, apiOverview, searchApi } from "./scriptapi";
 import { LAYOUTS, nameFromFile, NEW_VERSIONS, parseMapSize, parseTileset, writeNewMap, type NewMapVersion } from "./create";
 import { diffMaps, printDiff, revisionInput } from "./diff";
 import { dumpMap, printDump } from "./dump";
 import { ANCHORS, ENCODINGS, parseAnchor, pruneStrings, VERSIONS, resizeAndWrite } from "./edit";
-import { exportStrings, exportTriggers, importStrings, importTriggers, writeBack, writeOutput } from "./exchange";
+import { exportStrings, exportTriggers, importStrings, importTriggers, outputFormat, writeBack, writeOutput } from "./exchange";
 import { optimizeJson, optimizeMap, printOptimize } from "./optimize";
 import { expectKind, loadMapInput, readInput, openMap } from "./files";
 import { findInMap, KINDS, parseKinds, printHits } from "./find";
@@ -18,7 +20,7 @@ import { DOODAD_ROWS, GRID_COLUMNS, listDoodads, listTerrain, printDoodads, prin
 import { anySettings, listSettings, printSettings, SETTING_GROUPS, SETTINGS, type MapSettings, setMap } from "./settings";
 import { GEN_PLAYERS, GEN_STYLES, GEN_SYMMETRIES } from "./generate";
 import { printGenerated, runGenerate } from "./generatecmd";
-import { CliError, nearPath } from "./ui";
+import { CliError, nearPath, num, plural, size } from "./ui";
 import { refuseOverwrite } from "./options";
 import { path, out, ok, written, noPipe, tool, starcraftArg, type Reg } from "./mcpkit";
 
@@ -226,13 +228,90 @@ export function addMapTools(reg: Reg): void {
     return ok([`${nearPath(r.path)}: ${r.width} × ${r.height}, ${r.tileset}, ${r.version}${r.starts ? `, ${r.starts} start locations` : ""} (${r.bytes} bytes)`], r);
   }));
 
+  /** A script's state in a line: whether the map's triggers are what the files compile to. */
+  const stateLine = (r: ScriptReport): string => {
+    const block = r.block ? `triggers #${r.block.start + 1} to #${r.block.start + r.block.count}` : "no triggers";
+    if (r.state === "applied") return `applied: ${block} of the map are this script's${r.programs ? `, with ${plural(r.programs, "program")} (the map needs StarCraft: Remastered)` : ""}`;
+    if (r.state === "unbuilt") return `not applied: the files changed since the map's triggers were made from them${r.block ? ` (${block})` : ", or were never built"}; map_build applies them`;
+    return "its triggers were edited or removed outside the script, so map_build refuses: the editor's TrigScript window chooses what becomes of them";
+  };
+  /** Text handed back in one answer before it asks for the files by name. */
+  const MOST_SCRIPT = 60_000;
+  const STARTER = 'trigger(P1, [bring(P1, units.AnyUnit, locations.Beacon, ">=", 1)], [displayText("You found the beacon."), victory()]);';
+
+  reg("map_script_export", {
+    title: "The map's TrigScript script",
+    description: `The script a map keeps, as text (TrigScript: TypeScript that makes the map's triggers when it is built, https://docs.scmjs.dev/trigscript/): its files, main.ts first, and whether the triggers in the map are what the files compile to. A script suits a map with more than a handful of triggers: functions, loops and constants in place of triggers repeated by hand, and names checked against the map. \`files\` picks which files to give the text of; a long script lists its files and asks for names. A map with no script says so: map_script_import writes one.`,
+    inputSchema: { path, files: z.array(z.string()).optional().describe("the files to give the text of (main.ts, quests/shop.ts); all of them when left out") },
+    annotations: { readOnlyHint: true },
+  }, tool(async ({ path: file, files: wanted }) => {
+    const { input, doc } = await openMap(file);
+    const r = await readScript(doc);
+    const data = { file: input.name, state: r.state, block: r.block, programs: r.programs, libraries: r.libraries, trigscript: r.trigscript, files: Object.entries(r.files).map(([name, text]) => ({ name, bytes: Buffer.byteLength(text), lines: text.split("\n").length })) };
+    if (r.state === "none") return ok([`${input.name} has no TrigScript script.`, `map_script_import writes one: a file main.ts, such as  ${STARTER}`, "map_script_api says what a script can call, with this map's own locations, switches and units by name."], data);
+    const names = Object.keys(r.files).sort((a, b) => Number(b === "main.ts" || b === "main.tsx") - Number(a === "main.ts" || a === "main.tsx") || a.localeCompare(b));
+    const missing = (wanted ?? []).filter((n) => !(n in r.files));
+    if (missing.length) throw new CliError(`The script has no file ${missing.join(", ")}`, `It has ${names.join(", ")}.`, 2);
+    const total = names.reduce((n, name) => n + r.files[name].length, 0);
+    const lines = [`${input.name}: ${plural(names.length, "file")}, ${size(total)} · ${stateLine(r)}`];
+    for (const l of r.libraries) lines.push(`library ${l.id} ${l.version} (${l.label}), the map's own copy`);
+    // Media a script imports (a video, an image, a sound, notes) is data, not something to read: named, not printed.
+    const readable = (name: string) => /\.tsx?$/i.test(name);
+    const give = wanted ?? (total <= MOST_SCRIPT ? names.filter(readable) : []);
+    for (const name of names) if (!give.includes(name)) lines.push(`  ${name}  ${size(Buffer.byteLength(r.files[name]))}, ${plural(r.files[name].split("\n").length, "line")}`);
+    if (!wanted && total > MOST_SCRIPT) lines.push(`The script is long: name the files to read in \`files\`.`);
+    for (const name of give) lines.push("", `── ${name} ──`, r.files[name]);
+    return ok(lines, { ...data, text: Object.fromEntries(give.map((n) => [n, r.files[n]])) });
+  }));
+
+  reg("map_script_import", {
+    title: "Write the map's TrigScript script",
+    description: `Write files of the map's TrigScript script into it and compile them: \`files\` maps a file's name to its whole text (null removes a file), and files not named stay as they are, so after the first time send only what changes. The first file is main.ts; others are imported from it (import { shop } from "./shop"). The answer says whether the script compiles, with each error as file:line:column, and the files are kept in the map either way, so a script can be fixed over several calls. The map's triggers do not change here: map_build applies the script once it compiles, and map_test then plays the map. A script is TypeScript whose trigger() calls each become a trigger of the map, in order: ${STARTER} Conditions and actions are functions named as the trigger window names them (bring, deaths, switchIs, always; displayText, createUnit, setSwitch, setResources, setDeaths, moveUnit, wait, preserve, victory, defeat); the map's things are locations.Name, switches.Name, units.TerranMarine, P1 to P8, AllPlayers, CurrentPlayer, players.Force1, and a name the map does not have is a compile error that says so. A comparison is ">=", "<=" or "=="; an amount change is "set", "add" or "subtract". Ordinary TypeScript around them (const, functions, for loops, arrays) runs at build time and is how one function makes many triggers. Code inside program(() => { … }) runs in the game instead and needs StarCraft: Remastered; leave it out of a map that should play on 1.16.1. map_script_api looks up any function, type or name with its documentation; ask it before guessing a signature. Compiling needs TypeScript on this computer (the Claude Desktop extension carries it); without it the files are written and not checked.`,
+    inputSchema: { path, files: z.record(z.string(), z.string().nullable()).describe("file name → its whole text, or null to remove it: { \"main.ts\": \"…\", \"old.ts\": null }"), out },
+    annotations: { destructiveHint: true },
+  }, tool(async ({ path: file, files, out: to }) => {
+    if (!Object.keys(files).length) throw new CliError("`files` is empty: give at least one file, such as main.ts", null, 2);
+    const { input, doc } = await openMap(file);
+    if (outputFormat(doc, input.path, to ?? null) === "chk") throw new CliError("A bare .chk has nowhere to keep a script.", "Write an .scx instead: give `out` a name ending in .scx.", 2);
+    const r = await importScript(doc, input.path, files, to ?? null);
+    const { check, unchecked, written: w, compiles: _compiles, ...change } = r;
+    const said = [change.added.length ? `${change.added.join(", ")} added` : "", change.changed.length ? `${change.changed.join(", ")} changed` : "", change.removed.length ? `${change.removed.join(", ")} removed` : "", change.unchanged.length ? `${change.unchanged.join(", ")} as it was` : ""].filter(Boolean).join("; ");
+    const lines = [`${input.name}: ${said}`];
+    if (check && check.ok) lines.push(`✔ compiles: ${plural(check.triggerCount, "trigger")}${check.programs ? `, ${plural(check.programs, "program")} (the map will need StarCraft: Remastered)` : ""}${check.testCount ? `, ${plural(check.testCount, "test")} not run` : ""}  TrigScript ${check.trigscript}, TypeScript ${check.typescript}`);
+    else if (check) {
+      for (const d of check.diagnostics) lines.push(`${d.file}:${d.line}:${d.column} error ${d.message.split("\n").join("\n    ")}`);
+      lines.push(`✖ ${plural(check.diagnostics.length, "error")} in the script. The files are kept in the map; send the corrected ones.`);
+    } else lines.push(`Not compiled: ${unchecked}`);
+    lines.push(written(w), check?.ok ? "The map's triggers are as they were: map_build applies the script." : "The map's triggers are as they were.");
+    return ok(lines, { file: input.name, ...change, compiles: check ? check.ok : null, diagnostics: check?.diagnostics ?? [], triggers: check?.triggerCount ?? null, programs: check?.programs ?? null, unchecked, written: w });
+  }));
+
+  reg("map_script_api", {
+    title: "Look up what a TrigScript script can call",
+    description: "TrigScript's functions, types and names, as they are for one map (its locations, switches and sounds by the names a script writes, and the units as the map names them), each with its documentation. With no `search`: what a script is, and every function, type and table by name, to search from. With `search`: the declarations whose name, documentation or signature hold every word given (\"display text\", \"deaths\", \"marine\", \"sleep\", \"Unit\"), a name that matches first. Without `path` the names are the game's own. Read-only; needs no copy of StarCraft and no TypeScript.",
+    inputSchema: { path: path.optional().describe("the map whose names to use; the game's own names when left out"), search: z.string().optional().describe("words to look for, all of which must be there: a function, a type, a unit, a word of the documentation") },
+    annotations: { readOnlyHint: true },
+  }, tool(async ({ path: file, search }) => {
+    const opened = file ? await openMap(file) : null;
+    const text = await scriptDeclarations(opened?.doc ?? null);
+    const entries = apiEntries(text);
+    const of = opened ? `as ${opened.input.name} has them` : "with the game's own names";
+    if (!search?.trim()) return ok([`TrigScript, ${of}. \`search\` gives a name's declaration and documentation.`, "", ...apiOverview(text, entries)], { entries: entries.length });
+    const found = searchApi(entries, search);
+    if (!found.shown) return ok([`Nothing in TrigScript holds ${search.trim().split(/[\s,]+/).map((w) => JSON.stringify(w)).join(" and ")} (${of}). Fewer words find more; with no \`search\` every name is listed.`], { shown: 0, more: [] });
+    const lines = [...found.lines];
+    if (found.more.length) lines.push(`… and ${num(found.more.length)} more that match, not shown: ${found.more.slice(0, 40).join(", ")}${found.more.length > 40 ? ", …" : ""}. More words narrow it.`);
+    return ok(lines, { shown: found.shown, more: found.more });
+  }));
+
   reg("map_build", {
     title: "Build a TrigScript map",
-    description: "Apply the map's TrigScript script and build its programs into the file, as Save does in the editor; `check` compiles (and tests, with `test`) and writes nothing. Needs TypeScript installed on this computer. Compile errors and failing tests come back as text, and nothing is written then.",
+    description: "Apply the map's TrigScript script (map_script_export reads it, map_script_import writes it) and build its programs into the file, as Save does in the editor: the script's triggers take their place in the map's trigger list, the triggers made by hand around them left alone. `check` compiles (and tests, with `test`) and writes nothing. Needs TypeScript on this computer (the Claude Desktop extension carries it). Compile errors and failing tests come back as text, and nothing is written then.",
     inputSchema: { path, out, check: z.boolean().optional(), test: z.boolean().optional() },
     annotations: { destructiveHint: true },
   }, tool(async ({ path: file, out: to, check, test }) => {
     const { input, doc } = await openMap(file);
+    if ((await readScript(doc)).state === "none") throw new CliError(`${input.name} has no TrigScript script.`, "map_script_import writes one into the map.");
     const r = await buildMap(doc, input.path, await loadTypeScript(), { check: !!check, test: !!test, out: to ?? null });
     return { ...ok(printBuild(input.name, r), { file: input.name, ...r }), ...(r.ok ? {} : { isError: true }) };
   }));

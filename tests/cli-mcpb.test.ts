@@ -104,15 +104,26 @@ describe("doctor, as the tools see it", () => {
     ] as Check[],
   };
 
-  it("leaves out what no tool uses (TypeScript too: map_build says so itself), and says what the rest is for", () => {
-    const { text, json } = doctorForTools(report);
+  it("leaves out what no tool uses, and says what the rest is for", () => {
+    // The bundle carries TypeScript beside its executable, so a map maker's check finds it.
+    const carried = { ...report, checks: report.checks.map((c) => (c.what === "TypeScript" ? { what: "TypeScript", state: "ok", detail: "6.0.3 · C:\\x\\typescript\\lib\\typescript.js" } as Check : c)) };
+    const { text, json } = doctorForTools(carried);
     const plain = text.map(visible).join("\n");
-    for (const gone of ["Docker", "Browser", "ffmpeg", "Desktop app", "Claude Code", "TypeScript", "npm", "scmjs.exe"]) expect(plain).not.toContain(gone);
+    for (const gone of ["Docker", "Browser", "ffmpeg", "Desktop app", "Claude Code", "npm", "scmjs.exe"]) expect(plain).not.toContain(gone);
     expect(plain).toContain("fetch it from the play page by themselves the first time one runs");
     expect(plain).toContain("account_login signs the person in, in their browser");
     expect(plain).toContain("  Also used");
+    expect(plain).toMatch(/✔ TypeScript +6\.0\.3/);
     expect(plain).toMatch(/✔ Every tool is ready on this computer\.$/);
     expect(json.ready.every((g) => g.ok)).toBe(true);
-    expect(json.checks.map((c) => c.what)).toEqual(["Node", "scmjs", "StarCraft", "Game engine", "scmjs.dev"]);
+    expect(json.checks.map((c) => c.what)).toEqual(["Node", "scmjs", "TypeScript", "StarCraft", "Game engine", "scmjs.dev"]);
+  });
+
+  it("says so when there is no TypeScript a build can use, and that only the build waits on it", () => {
+    const { text, json } = doctorForTools(report);
+    const plain = text.map(visible).join("\n");
+    expect(plain).toContain("map_build and the compile check of map_script_import use it (TypeScript 6); every other tool works without.");
+    expect(plain).not.toMatch(/Every tool is ready/);
+    expect(json.ready.filter((g) => !g.ok)).toEqual([{ commands: "map_build, and the compile check of map_script_import", ok: false, lacks: "TypeScript" }]);
   });
 });

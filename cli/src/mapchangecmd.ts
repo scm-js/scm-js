@@ -6,7 +6,8 @@ import { relative } from "node:path";
 import { Command, Option } from "commander";
 import { listMembers, MANIFEST_FILE, packMap, unpackMap } from "./archive";
 import { START_LOCATION, unitName } from "../../src/data/units";
-import { buildMap, loadTypeScript, printBuild } from "./build";
+import { buildMap, loadTypeScript, printBuild, readScript } from "./build";
+import { importScript, lookUpApi, printScriptImport, scriptFilesFrom, scriptFilesWanted, scriptHeader, scriptText, writeScriptFiles } from "./script";
 import { parseMapSize } from "./create";
 import { ANCHORS, parseAnchor, pruneStrings, VERSIONS, ENCODINGS, resizeAndWrite } from "./edit";
 import { exportStrings, exportTriggers, importStrings, importTriggers, writeBack, writeOutput, type Written } from "./exchange";
@@ -24,7 +25,7 @@ import { editInEditor, type EditKind, type EditOutcome } from "./texteditor";
 import { t, translate } from "./i18n";
 import { CliError, columns, dot, mark, num, padColumns, pc, print, size } from "./ui";
 import { parseWhole } from "./values";
-import { piping, say, outName } from "./cmdkit";
+import { piping, say, outName, note } from "./cmdkit";
 import { jsonOption, starcraftOption, outOption, mapOutOption, forceOption, dryRunOption, refuseBothFromStdin, refuseJsonOnPipe } from "./options";
 
 export function addMapChangeCommands(map: Command): void {
@@ -544,15 +545,68 @@ under sound\\ is one of the game's own sounds.`));
       print(...printSounds(r, (s) => ("file" in s && s.file ? relative(r.dir ?? "", s.file) : s.name)).map((l, i) => (i === 0 ? `${r.written ? mark.ok : mark.info} ${l}${where}` : l)));
     });
 
+  const script = map.command("script").description(t("a map's TrigScript script as files, and back; what a script can call"))
+    .addHelpText("after", t(`
+A map with a script keeps its files inside it (Triggers ▸ TrigScript… in the editor). export writes them out, import
+puts files in and says at once whether the script compiles, and scmjs map build then makes the map's triggers from
+it. api looks up a function, a type or one of the map's own names. docs.scmjs.dev/trigscript/ is the guide.`));
+  script.command("export").description(t("the script's files as text (to stdout), or as files in a folder with --out")).argument("<map>", t("the map; - reads it from standard input")).argument("[files...]", t("only these files of the script (main.ts, quests/shop.ts)")).addOption(json)
+    .addOption(outOption("folder", t("write the files into this folder, at their names, instead of to stdout")))
+    .action(async (file: string, wanted: string[], o: { json?: boolean; out?: string }) => {
+      if (o.out === STDIO) throw new CliError(t("--out names a folder here; without it the text goes to standard output"), null, 2);
+      const { input, doc } = await openMap(file);
+      const r = await readScript(doc);
+      const names = scriptFilesWanted(input.name, file, r, wanted);
+      const written = o.out ? await writeScriptFiles(o.out, r, names) : null;
+      if (o.json) { print(JSON.stringify({ file: input.path, state: r.state, block: r.block, programs: r.programs, libraries: r.libraries, trigscript: r.trigscript, files: names.map((n, i) => ({ name: n, bytes: Buffer.byteLength(r.files[n]), lines: r.files[n].split("\n").length, ...(written ? { path: written[i] } : { text: r.files[n] }) })) }, null, 2)); return; }
+      // The text is the output; what it is goes beside it, on standard error, so a pipe gets the script alone.
+      if (!written) { note(scriptHeader(input.name, r)); process.stdout.write(scriptText(r, names)); return; }
+      print(`${mark.ok} ${scriptHeader(input.name, r)}`, ...written.map((path, i) => `  ${names[i]} ${pc.dim("→")} ${pc.cyan(relative(process.cwd(), path) || path)}`));
+    });
+  script.command("import").description(t("put files into the map's script and compile it; the map's triggers stay until map build")).argument("<map>", t("the map to change; - reads it from standard input")).argument("[from...]", t("script files, or folders of them; - reads main.ts from standard input")).addOption(json)
+    .addOption(mapOutOption())
+    .option("--remove <name>", t("take this file out of the script; give it again for another"), (v: string, before?: string[]) => [...(before ?? []), v])
+    .addHelpText("after", t(`
+A file goes in under its own name (src/main.ts is main.ts); a folder gives every .ts and .tsx file in it at its path
+inside the folder (quests/shop.ts). Files of the script that are not named stay as they are, so one corrected file is
+enough. The script starts at main.ts. The files are written whether or not they compile, and the errors come as
+file:line:column. Compiling needs TypeScript 6 on this computer: npm install typescript@6. Exits 1 when the
+script does not compile.`))
+    .action(async (file: string, from: string[], o: { json?: boolean; out?: string; remove?: string[] }) => {
+      if (!from.length && !o.remove?.length) throw new CliError(t("map script import needs the files to put in: name them, or a folder of them."), null, 2);
+      if (file === STDIO && from.includes(STDIO)) throw new CliError(t("The map and the script cannot both come from standard input"), t("Name one of them as a file."), 2);
+      const changes: Record<string, string | null> = await scriptFilesFrom(from);
+      for (const name of o.remove ?? []) {
+        if (name in changes) throw new CliError(t("{name} is both given and removed.", { name }), null, 2);
+        changes[name] = null;
+      }
+      const { input, doc } = await openMap(file);
+      const piped = piping(input, o);
+      const r = await importScript(doc, input.path, changes, o.out ?? null);
+      const { check, ...rest } = r;
+      if (o.json) print(JSON.stringify({ file: input.path, ...rest, diagnostics: check?.diagnostics ?? [], triggers: check?.triggerCount ?? null, programs: check?.programs ?? null }, null, 2));
+      else say(piped, ...printScriptImport(input.name, r));
+      if (r.compiles === false) process.exitCode = 1;
+    });
+  script.command("api").description(t("look up what a script can call: a function, a type, a unit, one of the map's own names")).argument("[words...]", t("words to look for, all of which must be there; none lists every name")).addOption(json)
+    .option("--map <map>", t("use this map's names: its locations, switches, sounds and units as it names them"))
+    .action(async (words: string[], o: { json?: boolean; map?: string }) => {
+      const opened = o.map ? await openMap(o.map) : null;
+      const r = await lookUpApi(opened?.doc ?? null, opened?.input.name ?? null, words.join(" "));
+      if (o.json) { print(JSON.stringify({ map: opened?.input.path ?? null, search: words.join(" ") || null, entries: r.entries, shown: r.shown, more: r.more, text: r.lines.join("\n") }, null, 2)); return; }
+      print(...r.lines);
+    });
+
   map.command("build").description(t("apply the map's TrigScript script and build its programs, as Save does")).argument("<map>").addOption(json)
     .addOption(mapOutOption(t("write the built map here instead of over the map; - for standard output")))
     .option("--check", t("compile (and test, with --test) and write nothing"))
     .option("--test", t("run the script's tests first; a failing test refuses the build"))
     .addHelpText("after", t(`
-The script is the one the map keeps (Triggers ▸ TrigScript… in the editor). Its trigger() calls go into the trigger
-list and its program()s are built into the file, with the map as you edit it kept beside them, so it opens in the
-editor as it was. Needs TypeScript on this computer: npm install typescript. Exits 1 when the script does not
-compile, a test fails or the build is refused; nothing is written then.`))
+The script is the one the map keeps (Triggers ▸ TrigScript… in the editor, or scmjs map script import). Its
+trigger() calls go into the trigger list and its program()s are built into the file, with the map as you edit it
+kept beside them, so it opens in the editor as it was. Needs TypeScript 6 on this computer: npm install
+typescript@6. Exits 1 when the script does not compile, a test fails or the build is refused; nothing is written
+then.`))
     .action(async (file: string, o: { json?: boolean; out?: string; check?: boolean; test?: boolean }) => {
       const { input, doc } = await openMap(file);
       const piped = !o.check && piping(input, o);

@@ -50,7 +50,9 @@ export function firstSentence(text) {
  * list (name, description). The maps folder is asked for (Browse, no default), and handed over as `--folder`: an app starts the server in a
  * folder of its own choosing, and the tools keep to the one folder they work in. The StarCraft folder may be left
  * empty, in which case the app passes its `${user_config.starcraft}` unreplaced and the server drops it
- * (`dropUnsetSettings`). `SCMJS_MCPB` tells `about` and `doctor` how the executable was installed.
+ * (`dropUnsetSettings`). The three checkboxes switch on the sets of tools beside the map tools (`toolSetsOf` reads
+ * them as "true" or "false"; a placeholder left unreplaced is dropped, which leaves the set off).
+ * `SCMJS_MCPB` tells `about` and `doctor` how the executable was installed.
  */
 export function mcpbManifest({ version, platform, exe, tools }) {
   return {
@@ -63,7 +65,8 @@ export function mcpbManifest({ version, platform, exe, tools }) {
       "Ask about the maps in your maps folder and have them changed: what a map holds and what Check Map finds, its triggers and strings as text, units, locations, terrain, doodads, players and forces, a new melee map from a seed.",
       "With a copy of StarCraft on the computer, the tools also draw a map, read a melee map's layout and run a map's triggers in the game.",
       "Ask to open the map in the scmJS editor and each change arrives there as one step you can undo.",
-      "The tools read and write files in the maps folder you choose, and nowhere else. Sharing a map or replay to scmjs.dev, or deleting one there, is described to you first and done only when you agree.",
+      "The tools read and write files in the maps folder you choose, and nowhere else.",
+      "Tools for mods, for replays and for your scmjs.dev account are off until you switch them on in the extension's settings. Sharing a map or replay to scmjs.dev, or deleting one there, is described to you first and done only when you agree.",
     ].join("\n\n"),
     author: { name: "scmJS", url: "https://scmjs.dev" },
     repository: { type: "git", url: "https://github.com/scm-js/scm-js" },
@@ -77,11 +80,12 @@ export function mcpbManifest({ version, platform, exe, tools }) {
       mcp_config: {
         command: `\${__dirname}/${exe}`,
         args: ["mcp", "--folder", "${user_config.maps_folder}"],
-        env: { SCMJS_STARCRAFT: "${user_config.starcraft}", SCMJS_MCPB: "1" },
+        env: { SCMJS_STARCRAFT: "${user_config.starcraft}", SCMJS_TOOLS_MODS: "${user_config.mod_tools}", SCMJS_TOOLS_REPLAYS: "${user_config.replay_tools}", SCMJS_TOOLS_ACCOUNT: "${user_config.account_tools}", SCMJS_MCPB: "1" },
       },
     },
     tools: tools.map((t) => ({ name: t.name, description: firstSentence(t.description ?? "") })),
-    tools_generated: false,
+    // The list is the map tools', which are always served; a set switched on in the settings adds its own.
+    tools_generated: true,
     keywords: ["StarCraft", "Brood War", "map editor", "scm", "scx", "triggers"],
     license: "MIT",
     privacy_policies: ["https://scmjs.dev/privacy.html"],
@@ -99,6 +103,27 @@ export function mcpbManifest({ version, platform, exe, tools }) {
         type: "directory",
         title: "StarCraft folder (optional)",
         description: "Only needed when scmJS does not find your copy of StarCraft by itself. Pictures of a map, terrain, doodads and running a map in the game use it.",
+        required: false,
+      },
+      mod_tools: {
+        type: "boolean",
+        title: "Mod tools",
+        description: "Tools for StarCraft mods: read one, check it, unpack it to edit, pack it and play it. Start a new chat after changing this.",
+        default: false,
+        required: false,
+      },
+      replay_tools: {
+        type: "boolean",
+        title: "Replay tools",
+        description: "Tools that read a replay (its players, map and length) and write out the map it was played on. Start a new chat after changing this.",
+        default: false,
+        required: false,
+      },
+      account_tools: {
+        type: "boolean",
+        title: "scmjs.dev account tools",
+        description: "Tools for your scmjs.dev account: sign in, list and download your maps and replays, share one with a link, and upload new replays. Start a new chat after changing this.",
+        default: false,
         required: false,
       },
     },

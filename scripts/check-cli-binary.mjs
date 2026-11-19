@@ -190,6 +190,17 @@ if (mcpb) {
     if (built.result?.isError || !/1 trigger/.test(text(built))) throw new Error(`map_build did not build with the bundle's TypeScript: ${text(built)}`);
     if (!files.some((f) => f.name === "server/typescript/LICENSE.txt")) throw new Error("the bundle carries TypeScript without its licence");
     if (!stderr.includes(`working directory ${maps}`)) throw new Error(`the server did not start in the maps folder: ${stderr}`);
+    // The sets of tools the settings' checkboxes switch on: off as installed, on when ticked.
+    const list = async (settings) => {
+      const ticked = appConfig(manifest, dir, { maps_folder: maps, ...settings }, { DOCUMENTS: work, HOME: work });
+      const { answers: [tools] } = await askServer(ticked.command, ticked.args, { cwd: dir, env: { ...env, ...ticked.env }, timeout: 120000 }, [{ method: "tools/list", params: {} }]);
+      return (tools.result?.tools ?? []).map((t) => t.name);
+    };
+    const plain = await list({}), ticked = await list({ mod_tools: true, account_tools: true });
+    const extra = plain.filter((n) => /^(mod_|replay_|account_|library_)|^share$/.test(n));
+    if (extra.length || !plain.includes("map_info")) throw new Error(`as installed the bundle serves ${extra.join(", ") || "no map_info"}; the map tools alone are expected`);
+    if (plain.join() !== manifest.tools.map((t) => t.name).join()) throw new Error("the manifest's tools are not the ones the bundle serves as installed");
+    if (!ticked.includes("mod_info") || !ticked.includes("share") || ticked.includes("replay_info")) throw new Error(`with the mod and account tools ticked the bundle serves ${ticked.filter((n) => !plain.includes(n)).join(", ") || "nothing more"}`);
   });
 }
 

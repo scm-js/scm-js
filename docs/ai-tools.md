@@ -67,6 +67,13 @@ You do not need a terminal or Node.js: the extension carries everything it needs
 update it, download the newest file and drag it onto the Extensions page the same way. You
 can change the maps folder later under **Settings ▸ Desktop app ▸ Extensions ▸ scmJS**.
 
+The extension starts with the tools for maps. Three more sets are off until you tick them
+on the same settings page: **Mod tools**, **Replay tools** and **scmjs.dev account
+tools**. Start a new chat after ticking one. They are separate because every tool is
+something the AI reads at the start of each chat and something you are asked to allow, and
+most people working on a map never use those three. [The tools](#the-tools) lists what is
+in each set.
+
 ### Checking that it works
 
 In a new chat, ask:
@@ -78,7 +85,8 @@ before it uses one. Click **Allow once**, or **Always allow** for a tool you are
 let it use without asking.
 
 Here it runs scmJS's own check and tells you what it found: the version, whether it found
-your copy of StarCraft, and whether you are signed in to scmjs.dev. It offers to sign you
+your copy of StarCraft, and which sets of tools are switched off. With the scmjs.dev
+account tools switched on, it also says whether you are signed in and offers to sign you
 in; that is only needed for sharing and for your scmjs.dev library.
 
 Then ask about one of your own maps by its file name, for example:
@@ -103,6 +111,10 @@ directly instead. It starts faster:
 ```sh
 claude mcp add scmjs -- scmjs mcp
 ```
+
+Either line gives the AI the tools for maps. For the mod, replay and scmjs.dev account
+tools as well, add `--tools all` at the end, or name the sets you want:
+`--tools mods,account`.
 
 `scmjs doctor` prints the exact line for your install, and says "scmjs mcp added" once
 Claude Code has it. Inside Claude Code, `/mcp` shows whether it is connected. The line
@@ -290,9 +302,10 @@ plays them again after the next change. They are the same tests
 
 > Share crossing.scx with a link.
 
-Once you are [signed in](#your-scmjsdev-account), the AI first tells you what would
-happen: the map is stored on your account, and anyone who has the link can open it.
-Nothing is uploaded until you say yes. Then it gives you the link.
+This needs the [scmjs.dev account tools](#the-tools) switched on. Once you are [signed
+in](#your-scmjsdev-account), the AI first tells you what would happen: the map is stored
+on your account, and anyone who has the link can open it. Nothing is uploaded until you
+say yes. Then it gives you the link.
 
 ### More to ask
 
@@ -309,8 +322,8 @@ Nothing is uploaded until you say yes. Then it gives you the link.
 | "Which triggers never fired in the replays in replays/?" | `map_coverage` |
 | "What changed in ridge.scx since the last commit?" (for maps kept in git) | `map_diff` with `rev` |
 | "How much smaller can this map get?" | `map_optimize`, a dry run |
-| "What does this mod change in the game?" | `mod_info`, `mod_diff` |
-| "Upload the games I played this week." | `replay_sync`, which asks first |
+| "What does this mod change in the game?" | `mod_info`, `mod_diff` (the mod tools) |
+| "Upload the games I played this week." | `replay_sync`, which asks first (the account tools) |
 
 ## Working in the editor
 
@@ -353,6 +366,7 @@ what stays on your computer, and that the scmJS desktop app does not link yet.
 | --- | --- |
 | The AI does not seem to know scmJS, says it has no such tools, or searches your computer for scmJS instead | In Claude Desktop, check that scmJS is switched on under **Settings ▸ Desktop app ▸ Extensions** (it is off after the install), and start a new chat. A Code session in Claude Desktop does not get extensions: ask in a chat. In other apps, restart the app after changing its MCP settings. |
 | "No file ridge.scx" | The map is not in the maps folder, or its name is spelt differently. Ask "which maps are in my maps folder?", move the map there, or choose another maps folder. |
+| The AI says the mod, replay or account tools are switched off | They are separate sets, off at first. In Claude Desktop, tick the set under **Settings ▸ Desktop app ▸ Extensions ▸ scmJS** and start a new chat. In other apps, add `--tools all` (or `--tools mods,account`) after `mcp` in the app's MCP settings and restart it. |
 | "… is outside the folder the tools work in" | The AI was given a path outside the maps folder. Move the map into it, or choose another maps folder: **Settings ▸ Desktop app ▸ Extensions ▸ scmJS** in Claude Desktop, `--folder` elsewhere. |
 | The extension shows an error and its tools never appear | Check that the maps folder in its settings still exists. scmJS will not start with a folder that is gone. |
 | Pictures, terrain or running a map in the game "need a copy of StarCraft" | Install StarCraft from Battle.net, or set the **StarCraft folder** in the extension's settings to where your copy is. Elsewhere, set `SCMJS_STARCRAFT` in the app's MCP settings. [The tools that need the game](#the-tools-that-need-the-game) lists which tools these are. |
@@ -525,7 +539,9 @@ from [your copy of the game](#the-tools-that-need-the-game); the rest needs none
 
 ## Your scmjs.dev account
 
-Ask the AI to sign you in:
+The account tools are a set of their own, switched off at first: tick **scmjs.dev account
+tools** in the Claude Desktop extension's settings, or start the server with
+`--tools account` (or `--tools all`). Then ask the AI to sign you in:
 
 > Sign me in to scmjs.dev.
 
@@ -606,10 +622,22 @@ and you can leave these four unapproved.
 
 ## The tools
 
-There are 59. Each but the `editor_` tools and `account_login` is a command of the
-[command line guide](cli.md), and its arguments are the command's options by name:
-`--dry-run` is `dryRun`, `--in` is `in`. A tool answers with the command's text and,
-beside it, the command's `--json` data.
+There are 59. They come in four sets. The map tools are always there; the other three are
+switched on in the Claude Desktop extension's settings, or with `--tools` after `mcp`
+(`--tools mods,account`, or `--tools all`). When a set is off, the AI is told so and can
+say how to switch it on.
+
+| Set | Name for `--tools` | Tools | How many |
+| --- | --- | --- | --- |
+| Maps | always on | `map_…`, `editor_…`, `doctor` | 40 |
+| Mods | `mods` | `mod_…` | 8 |
+| Replays | `replays` | `replay_info`, `replay_map` | 2 |
+| scmjs.dev account | `account` | `account_…`, `library_…`, `share`, `replay_sync` | 9 |
+
+Each but the `editor_` tools and `account_login` is a command of the [command line
+guide](cli.md), and its arguments are the command's options by name: `--dry-run` is
+`dryRun`, `--in` is `in`. A tool answers with the command's text and, beside it, the
+command's `--json` data.
 
 | Tools | What they do | Write files |
 | --- | --- | --- |

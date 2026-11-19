@@ -1,6 +1,6 @@
 # `scmjs mcp`: the commands as tools for AI clients (`cli/src/mcp.ts`)
 
-`scmjs mcp [--folder <folder>] [--allow-outside]` serves the commands as Model Context Protocol tools on stdio. The reader's guide is
+`scmjs mcp [--folder <folder>] [--allow-outside] [--tools <sets>]` serves the commands as Model Context Protocol tools on stdio. The reader's guide is
 `docs/ai-tools.md` (setup per client, what to ask, the tools table — a new tool gets a row there; a tool that differs
 from its command, a bullet). The editor tools ride on the live link (`cli-editor.md`); the account tools on
 `cli-account.md`'s functions.
@@ -268,6 +268,26 @@ the `map_*` tools are about two thirds. Repeated argument descriptions are not t
 `starcraftArg` and `path` saved 1.5%); `"$schema"` (one per tool, the SDK's) and numeric bounds are small. What is left
 is description that carries instruction (`map_edit`'s, terrain kinds first) and schema that carries shape, so shaving
 will not move it. `tests/cli-mcp.test.ts` bounds `map_edit`'s size.
+
+**Tool sets** (2026-11-19, on the user's "Is 59 tools too many"): with the script tools the list was 100 KB (about
+28,000 tokens in an app that loads every tool up front, and one approval a tool in Claude Desktop). The capstone run
+touched 26 of the 59 and none of the mod, replay or account tools. So `scmjs mcp` serves the map tools (`map_*`,
+`editor_*`, `doctor`: 40) and three sets are asked for: `mods` (8), `replays` (`replay_info`, `replay_map`) and
+`account` (`account_*`, `library_*`, `share`, `replay_sync`: 9), 27% of the text between them.
+- `TOOL_SETS` / `McpOptions.sets` (`mcpkit.ts`): `createMcpServer` with no `sets` registers everything (tests, the
+  help text's list); `serveStdio` asks `toolSetsOf(flag)`: `--tools all | maps | mods,account`, else the environment
+  (`SCMJS_TOOLS_MODS|REPLAYS|ACCOUNT` = true/1/yes/on, which is how the bundle's checkboxes arrive), else none. A name
+  it does not know is exit 2. The registration order is unchanged, so `tools` is the same list with gaps.
+- **A model must know what is off**, or asked to share a map it says scmJS cannot, or looks for another way.
+  `instructionsFor(sets)` builds the instructions from parts (`ABOUT_MAPS`, `ABOUT_REPLAYS`, `ABOUT_MODS`,
+  `ABOUT_ACCOUNT`) and ends with "Switched off on this server: …" naming the tools and both ways to switch them on.
+  `doctor` says the same in a closing line, drops the scmjs.dev row when `account` is off (a sign-in nobody can use),
+  and has `toolSets: { on, off }` in its data. `INSTRUCTIONS` is the text with every set on.
+- **This changed the default** for everyone who starts `scmjs mcp` (0.17.0 served all 59): the release notes must say
+  `--tools all`. A tool's arguments that name a mod or a replay (`map_trace`'s `mod`, `replay`) are the map tools' own
+  and stay.
+- Not done: a lookup in place of `map_edit`'s and `map_set`'s long descriptions (20 KB of the 73 KB the map tools
+  are); merging tools behind an `action` argument was considered and left, since the separate ones are picked right.
 
 ## Open
 

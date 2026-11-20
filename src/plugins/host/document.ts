@@ -10,7 +10,8 @@ import { scenarioDescription, scenarioName, tilesetIndex } from "../../formats/c
 import { ensureTileset, ensureTileset as loadTilesetFiles, TILESET_FILENAMES } from "../../formats/tileset/load";
 import type { BeforeBuildSpec, BuildStepSpec, Disposable, PluginInfo, NewDocumentOptions, OpenDocumentOptions, DocumentApi, SyncApi } from "../api";
 import { activateDocumentIn, askDialog, closeDocumentIn, guardedAction, newMapInto, openFileInto, saveDocument } from "../../services/documentActions";
-import { DEFAULT_SAVE_OPTIONS, defaultSaveOptions } from "../../editor/save";
+import { DEFAULT_SAVE_OPTIONS, defaultSaveOptions, referencedMembers } from "../../editor/save";
+import { unreachableStored, withoutUnreachable } from "../../formats/mpq/scm";
 import { buildOutgoing } from "../../services/mapBuild";
 import { outgoingExtras } from "../../services/mapDataSet";
 import { writeTestFile } from "../../services/testMap";
@@ -211,6 +212,33 @@ export function documentApi(store: Store, info: PluginInfo, bag: Contributions, 
         store.set(archiveExtrasAtom, next);
         store.set(mapModifiedAtom, true);
         return true;
+      },
+    },
+    archive: {
+      unreachable: () => {
+        const scn = scenario();
+        return scn ? unreachableStored(store.get(archiveStoredAtom), referencedMembers(scn)) : { count: 0, size: 0 };
+      },
+      dropUnreachable: (options = {}) => {
+        const scn = scenario(), before = store.get(archiveStoredAtom);
+        const none = { count: 0, undo: () => {} };
+        if (!scn || !before || gone("document.archive.dropUnreachable")) return none;
+        const { count } = unreachableStored(before, referencedMembers(scn));
+        if (count === 0) return none;
+        assertWritable(store);
+        const after = withoutUnreachable(before, referencedMembers(scn));
+        const doc = store.get(activeDocumentIdAtom);
+        store.set(archiveStoredAtom, after);
+        if (!options.asOpened) store.set(mapModifiedAtom, true);
+        return {
+          count,
+          // Only onto the same map, and only while nothing else has replaced what was set.
+          undo: () => {
+            if (store.get(activeDocumentIdAtom) !== doc || store.get(archiveStoredAtom) !== after) return;
+            store.set(archiveStoredAtom, before);
+            if (!options.asOpened) store.set(mapModifiedAtom, true);
+          },
+        };
       },
     },
     sections: sectionsApi(store, () => !bag.disposed),

@@ -103,6 +103,21 @@
   the archive (`new Uint8Array(archiveSize)` in `assemble`, then `new Blob` in `saveBytes`). mopaq 1.6.2 leaves them out of `members()`; `scm.ts`'s
   `hasBytes` drops empty stored members on open *and* in `saveMap`, because recovery copies keep
   the members they were made with. ("past the end of the file" is the test.)
+  Protectors also size the hash table to their files and fill it with nameless decoys: laid
+  over it, a save had no slot for its own `(listfile)` (or a new WAV, or a build's source
+  member) and mopaq threw `HashTableFull` from `assemble` — every save of that map failed,
+  0.17.0's counts, 2026-11-19 (1 user × 6). `fitStored` (in `saveMap`, and `planSave` for the
+  dialog's warning and `PlannedStored.dropped`) now counts the room first; short, it keeps only
+  the stored members a name reaches — `unreadable`, or a name the scenario refers to *now*
+  (`referenced`, passed by every caller as `referencedMembers`, lazily where it needs a parse:
+  Repair may have mended STR after the open, so a sound name can appear later) matched by the
+  entry's two name hashes (`stored.ts#entryNames`) — and with none left writes a fresh table.
+  Then it drops the `(listfile)`; past that it throws a plain message. The game opens a member
+  only by a name from the scenario, all of which `readMembers` probed, so nothing playable is
+  lost. Why not grow the table instead: a copy of the table tiled k times keeps every lookup
+  (the probe walk mod N is the same), a mopaq change not made yet. `api.document.archive`
+  (`unreachable`, `dropUnreachable({ asOpened })` → `{ count, undo }`) lets Repair offer the
+  same drop on open (`tests/mpq.test.ts` "no room", "come to name"; `tests/plugins.test.ts`).
   `saveMap`'s options are compression (`none` / `zlib` / `pkware`),
   StarEdit-style encryption, sector size (4096, Blizzard's) and the listfile; `loadMap` reports how
   `scenario.chk` was stored (`scenarioInfo`, from `archive.fileInfo`). PKWARE is what StarEdit and the

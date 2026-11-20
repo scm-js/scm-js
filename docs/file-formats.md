@@ -28,6 +28,14 @@ they are still listed and editable. Any member it cannot name is carried across 
 exactly as stored, and the Save dialog says how many there are. A bare `.chk` cannot hold
 them.
 
+Carrying a member as stored keeps the archive's hash table, the index of its files, at its
+old size. Protectors often size that table to the files they wrote and fill it with
+members nothing names, so a save may have no room for its own files. The game opens a
+member only by a name the scenario carries, so a member that no such name reaches is never
+opened. When the table is full, the save leaves those members out and writes a new table,
+and the Save dialog says how many it leaves out. If it still has no room, it drops the
+archive's file list next, since the game does not read it.
+
 The Save dialog's **Archive** fold decides how the scenario is stored:
 
 | Option | What it means |

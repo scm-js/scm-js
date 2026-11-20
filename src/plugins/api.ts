@@ -767,8 +767,44 @@ export interface DocumentApi {
    */
   changeTileset(options: ChangeTilesetOptions): Promise<ChangeTilesetResult | null>;
   readonly extras: ExtrasApi;
+  /** The archive's members the editor could not read by name. */
+  readonly archive: ArchiveApi;
   readonly sections: SectionsApi;
   readonly buildSteps: BuildStepsApi;
+}
+
+/**
+ * The members of the map's archive the editor could not read by name — no `(listfile)`
+ * names them and the scenario refers to none of them. They are not in `extras`; Save
+ * writes them back exactly as they were stored, in the hash-table slots they came from.
+ *
+ * The game opens a member only by a name the scenario carries, so a member no such name
+ * reaches is never opened. On a protected map they are mostly decoys, put there to fill
+ * the hash table so that an editor has no room to add a file. When the table has no room
+ * for what a save writes, Save leaves them out on its own; `dropUnreachable` does it now.
+ *
+ * @example
+ * api.events.on("document", (e) => {
+ *   if (e.reason !== "open") return;
+ *   const { count } = api.document.archive.unreachable();
+ *   if (count > 0) api.document.archive.dropUnreachable({ asOpened: true });
+ * });
+ */
+export interface ArchiveApi {
+  /**
+   * The members no name the map refers to reaches, as the scenario stands now: how many,
+   * and the bytes they take in the archive. Zero with no map open, for a bare `.chk`, and
+   * for a map whose every member has a name.
+   */
+  unreachable(): { count: number; size: number };
+  /**
+   * Leave those members out of the next save, which then writes the archive with a hash
+   * table of its own size. A member a name reaches — the map refers to it, or it has a name
+   * but bytes this build cannot decode — stays. `asOpened` keeps the map unmodified, as
+   * `sections.replaceFile` does, for a repair made as the map opens. `undo` puts them back
+   * while the same map is in front and nothing else has changed them.
+   */
+  dropUnreachable(options?: { asOpened?: boolean }): { count: number; undo(): void };
 }
 
 /** What a raw section edit reported: the parser's remarks about the file it produced. */

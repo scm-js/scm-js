@@ -13,7 +13,8 @@
  * Pure: no store, no DOM. `services/mapBuild.ts` runs the steps; this file packs and unpacks.
  */
 import { loadMap, readMembers, requiredSectorSize, saveMap, STAREDIT_SECTOR_SIZE, type StoredMembers } from "../formats/mpq/scm";
-import type { SaveOptions } from "./save";
+import { referencedMembers, type SaveOptions } from "./save";
+import { parseScenario } from "../formats/chk/scenario";
 
 /** The archive folder the editor keeps its own members in. */
 export const BUILD_FOLDER = "scmjs\\";
@@ -123,6 +124,8 @@ export async function packBuiltMap(input: PackInput): Promise<Uint8Array> {
       [BUILD_MANIFEST_MEMBER, new TextEncoder().encode(JSON.stringify(manifest))],
     ]),
     stored: input.stored,
+    // Parsed only when the stored members do not fit and the names are asked for.
+    referenced: (function* () { yield* referencedMembers(parseScenario(out.chk)); })(),
     compress: compression,
     encrypt,
     sectorSize: requiredSectorSize(input.stored, compression === "zlib" ? 0x10000 : STAREDIT_SECTOR_SIZE),

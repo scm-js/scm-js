@@ -566,6 +566,30 @@ describe("plugin api", () => {
     expect(api.document.info()!.fileName).toBe("again.chk");
   });
 
+  it("counts the archive members no name reaches and leaves them out, as opened or as an edit", async () => {
+    const { store, scn } = blankStore();
+    store.set(preferencesAtom, { ...store.get(preferencesAtom), confirmClose: false });
+    const api = createPluginApi(store, { id: "t", name: "T", source: "s" }, new Contributions());
+    expect(api.document.archive.unreachable()).toEqual({ count: 0, size: 0 });
+    expect(api.document.archive.dropUnreachable().count).toBe(0);
+    // A protected map: no (listfile), one member nothing names.
+    const bytes = await saveMap(serializeScenario(scn), { extras: new Map([["decoy\\x.bin", new Uint8Array([1, 2, 3])]]), listfile: false });
+    expect(await api.document.open(bytes, "p.scx")).toBe(true);
+    expect(api.document.archive.unreachable()).toEqual({ count: 1, size: 3 });
+    const dropped = api.document.archive.dropUnreachable({ asOpened: true });
+    expect(dropped.count).toBe(1);
+    expect(api.document.archive.unreachable()).toEqual({ count: 0, size: 0 });
+    expect(api.document.info()!.modified).toBe(false);
+    dropped.undo();
+    expect(api.document.archive.unreachable()).toEqual({ count: 1, size: 3 });
+    // As an edit, the map is modified; an undo after something else replaced the members does nothing.
+    const again = api.document.archive.dropUnreachable();
+    expect(api.document.info()!.modified).toBe(true);
+    expect(await api.document.open(bytes, "p.scx")).toBe(true);
+    again.undo();
+    expect(api.document.archive.unreachable()).toEqual({ count: 1, size: 3 });
+  });
+
   it("asks before replacing a modified map, and answers false when the user keeps it", async () => {
     const { store } = blankStore();
     const api = createPluginApi(store, { id: "t", name: "T", source: "s" }, new Contributions());

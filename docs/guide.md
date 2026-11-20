@@ -1595,7 +1595,8 @@ away underneath and can be left alone:
   with. The sounds and the files plugins keep in the archive each have a tick, so a copy
   for release can leave them out. Files in the archive the editor cannot name, which are
   common in protected maps, are kept exactly as they were, and the fold says how many
-  there are.
+  there are. When the archive has no room for them and the files the save writes, the ones
+  the map never refers to are left out, and the dialog says so: the game cannot open them.
 - **Sections** (folded): every section the file will hold, with its size and whether it
   changed, was left out or was merged.
 

@@ -20,10 +20,10 @@
 import { combine, serializeChk, type ChkFile, type ChkSection } from "../formats/chk/reader";
 import { SECTION_SPECS, sizeOf, specFor } from "../formats/chk/sections/registry";
 import type { Scenario } from "../formats/chk/scenario";
-import { unencodableStrings } from "../formats/chk/sections/strings";
+import { getString, unencodableStrings } from "../formats/chk/sections/strings";
 import { textEncodingInfo } from "../formats/text/encoding";
 import { t, translate } from "../i18n";
-import { requiredSectorSize, saveMap, STAREDIT_SECTOR_SIZE, type ArchiveCompression, type MemberInfo, type StoredMembers } from "../formats/mpq/scm";
+import { fitStored, requiredSectorSize, saveMap, STAREDIT_SECTOR_SIZE, type ArchiveCompression, type MemberInfo, type StoredMembers } from "../formats/mpq/scm";
 
 /**
  * The archive folder the TrigScript plugin keeps its files in (`trigscript\main.ts` and
@@ -35,6 +35,23 @@ import { requiredSectorSize, saveMap, STAREDIT_SECTOR_SIZE, type ArchiveCompress
 export const SCRIPT_FOLDER = "trigscript\\";
 export const SCRIPT_MEMBER = `${SCRIPT_FOLDER}main.ts`;
 export const MANIFEST_MEMBER = `${SCRIPT_FOLDER}build.json`;
+
+/**
+ * Every archive path the scenario itself names: the WAV table's entries and the `wav`
+ * argument of every trigger and briefing action, plus the members the TrigScript
+ * plugin keeps its entry file and build manifest in (the manifest then names the rest,
+ * see `scriptMembersFromManifest`). What `readMembers` probes an archive for when its
+ * (listfile) is gone — the one way a protected map's sounds get their names back.
+ */
+export function referencedMembers(scn: Scenario): string[] {
+  const out = new Set<string>();
+  const add = (index: number) => { const path = index > 0 ? getString(scn.strings, index) : null; if (path) out.add(path); };
+  for (const index of scn.wavs ?? []) add(index);
+  for (const t of scn.triggers) for (const a of t.actions) for (const s of actionStrings(a, false)) if (s.kind === "wav") add(s.index);
+  for (const t of scn.briefing) for (const a of t.actions) for (const s of actionStrings(a, true)) if (s.kind === "wav") add(s.index);
+  return [...out, SCRIPT_MEMBER, MANIFEST_MEMBER];
+}
+
 
 /**
  * The script's other files, from its build manifest: the manifest lists every file the
@@ -52,6 +69,7 @@ export function scriptMembersFromManifest(bytes: Uint8Array): string[] {
   }
 }
 import { currentChk } from "./sections";
+import { actionStrings } from "./triggers";
 
 export type MapFormat = "scx" | "scm" | "chk";
 
@@ -176,6 +194,12 @@ export interface PlannedStored {
   size: number;
   /** False for a bare .chk, the one format that cannot carry them. */
   kept: boolean;
+  /**
+   * How many of them are left out: nothing in the map names them, and the hash table they
+   * pin has no room for them and the files the save writes (`fitStored`). The game never
+   * opens such a member; a protector puts them there to fill the table.
+   */
+  dropped: number;
 }
 
 export interface SavePlan {
@@ -259,8 +283,9 @@ export function planSave(scn: Scenario, extras: Map<string, Uint8Array>, options
     name, size: data.length, kind: extraKind(name), kept: options.format !== "chk" && !omitted.has(name.toLowerCase()),
   }));
 
+  const fit = storedMembers ? fitStored(storedMembers, 1 + planned.filter((e) => e.kept).length, true, referencedMembers(scn)) : null;
   const stored: PlannedStored | null = storedMembers && storedMembers.members.length > 0
-    ? { members: storedMembers, count: storedMembers.members.length, size: storedMembers.members.reduce((n, m) => n + m.data.length, 0), kept: options.format !== "chk" }
+    ? { members: storedMembers, count: storedMembers.members.length, size: storedMembers.members.reduce((n, m) => n + m.data.length, 0), kept: options.format !== "chk", dropped: fit?.dropped ?? 0 }
     : null;
 
   const warnings: string[] = [];
@@ -276,8 +301,11 @@ export function planSave(scn: Scenario, extras: Map<string, Uint8Array>, options
   if (options.format === "chk" && (extras.size > 0 || stored)) {
     warnings.push(t("A bare .chk is the scenario alone: the archive's other files are not written."));
   }
-  if (stored?.kept) {
-    const n = stored.count;
+  if (stored?.kept && stored.dropped > 0) {
+    warnings.push(t("{n, plural, one {# archive member nothing in the map names is} other {# archive members nothing in the map names are}} left out: the archive's hash table has no room for them and the files this save writes. The game never opens them; a protector puts them there to fill the table.", { n: stored.dropped }));
+  }
+  if (stored?.kept && stored.count > stored.dropped) {
+    const n = stored.count - stored.dropped;
     warnings.push(t("{n, plural, one {# archive member has no name the editor knows{decoded}; it is} other {# archive members have no name the editor knows{decoded}; they are}} written back exactly as stored, and the archive keeps its {sectorSize}-byte sectors{zlib}.", { n, decoded: stored.members.unreadable.length > 0 ? t(", or could not be decoded") : "", sectorSize: stored.members.sectorSize, zlib: options.compression === "zlib" && stored.members.sectorSize !== 0x10000 ? t(" (zlib would otherwise use 64 KB ones)") : "" }));
   }
   const sounds = planned.filter((e) => e.kind === "sound" && !e.kept && options.format !== "chk").length;
@@ -322,10 +350,11 @@ export async function buildMapFile(scn: Scenario, extras: Map<string, Uint8Array
   plan ??= planSave(scn, extras, options, stored);
   const chk = buildChk(plan);
   if (options.format === "chk") return chk;
-  const kept = plan.stored?.kept ? plan.stored.members : null;
+  const kept = plan.stored?.kept && plan.stored.count > plan.stored.dropped ? plan.stored.members : null;
   return saveMap(chk, {
     extras: keptExtras(plan, extras),
     stored: kept,
+    referenced: referencedMembers(scn),
     compress: options.compression,
     encrypt: options.encrypt,
     sectorSize: requiredSectorSize(kept, options.compression === "zlib" ? 0x10000 : STAREDIT_SECTOR_SIZE),

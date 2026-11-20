@@ -102,7 +102,7 @@ export interface WriteArchiveOptions {
 export function writeArchiveBytes(chk: Uint8Array, options: WriteArchiveOptions = {}): Promise<Uint8Array> {
   const compression = options.compression ?? "none";
   return saveMap(chk, {
-    extras: options.extras, stored: options.stored ?? null, compress: compression, encrypt: options.encrypt ?? false, listfile: options.listfile ?? true, carryStored: options.carryStored,
+    extras: options.extras, stored: options.stored ?? null, referenced: (function* () { yield* referencedMembers(parseScenario(chk)); })(), compress: compression, encrypt: options.encrypt ?? false, listfile: options.listfile ?? true, carryStored: options.carryStored,
     sectorSize: requiredSectorSize(options.stored, compression === "zlib" ? 0x10000 : STAREDIT_SECTOR_SIZE),
   });
 }

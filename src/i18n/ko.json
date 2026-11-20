@@ -2745,6 +2745,8 @@
   "Switch names and the sound list are lost to editors; the game does not read them.": "스위치 이름과 사운드 목록은 에디터에서 사라집니다. 게임은 읽지 않습니다.",
   "{unknown, plural, one {# section} other {# sections}} with names the format reference does not know are left out. Another editor or a protector may have put them there.": "형식 참조 문서에 없는 이름의 섹션 {unknown, plural, other {#개}}를 제외합니다. 다른 에디터나 보호 도구가 넣었을 수 있습니다.",
   "A bare .chk is the scenario alone: the archive's other files are not written.": ".chk만 저장하면 시나리오만 남습니다. 아카이브의 다른 파일은 쓰이지 않습니다.",
+  "{n, plural, one {# archive member nothing in the map names is} other {# archive members nothing in the map names are}} left out: the archive's hash table has no room for them and the files this save writes. The game never opens them; a protector puts them there to fill the table.": "맵에서 아무것도 이름으로 가리키지 않는 아카이브 멤버 {n, plural, other {#개}}는 빠집니다. 아카이브의 해시 테이블에 이 멤버들과 이번 저장이 쓰는 파일을 모두 넣을 자리가 없기 때문입니다. 게임은 이 멤버들을 열지 않습니다. 프로텍터가 테이블을 채우려고 넣어 둔 것입니다.",
+  "The archive has no room for the files this save writes: its hash table is filled by members the editor could not read.": "아카이브에 이번 저장이 쓰는 파일을 넣을 자리가 없습니다. 해시 테이블이 에디터가 읽지 못한 멤버로 차 있습니다.",
   "{n, plural, one {# archive member has no name the editor knows{decoded}; it is} other {# archive members have no name the editor knows{decoded}; they are}} written back exactly as stored, and the archive keeps its {sectorSize}-byte sectors{zlib}.": "에디터가 이름을 모르는{decoded} 아카이브 멤버 {n, plural, other {#개}}는 저장된 그대로 다시 쓰이며, 아카이브는 {sectorSize}바이트 섹터를 유지합니다{zlib}.",
   ", or could not be decoded": ", 또는 디코딩 불가",
   " (zlib would otherwise use 64 KB ones)": " (zlib는 원래 64 KB 섹터를 씁니다)",

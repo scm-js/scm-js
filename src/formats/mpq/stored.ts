@@ -37,16 +37,27 @@ const CRYPT = (() => {
   return table;
 })();
 
-/** The file key of a member: the hash of its name after the last slash, as the game takes it (ASCII upper case). */
-export function fileKey(name: string, offset: number, size: number, adjusted: boolean): number {
-  const plain = name.slice(Math.max(name.lastIndexOf("\\"), name.lastIndexOf("/")) + 1);
+/** MPQ's string hash of type `table` (0x100 name A, 0x200 name B, 0x300 file key), ASCII upper case, slashes as given. */
+function hashName(name: string, table: number): number {
   let s1 = 0x7fed7fed, s2 = 0xeeeeeeee;
-  for (let i = 0; i < plain.length; i++) {
-    let c = plain.charCodeAt(i) & 0xff;
+  for (let i = 0; i < name.length; i++) {
+    let c = name.charCodeAt(i) & 0xff;
     if (c >= 0x61 && c <= 0x7a) c -= 0x20;
-    s1 = (CRYPT[HASH_FILE_KEY + c] ^ ((s1 + s2) >>> 0)) >>> 0;
+    s1 = (CRYPT[table + c] ^ ((s1 + s2) >>> 0)) >>> 0;
     s2 = (c + s1 + s2 + ((s2 << 5) >>> 0) + 3) >>> 0;
   }
+  return s1;
+}
+
+/** Whether a hash entry is the one a lookup of `name` matches: the two name hashes it compares. */
+export function entryNames(entry: HashEntry, name: string): boolean {
+  const path = name.replace(/\//g, "\\");
+  return entry.hashA === hashName(path, 0x100) && entry.hashB === hashName(path, 0x200);
+}
+
+/** The file key of a member: the hash of its name after the last slash, as the game takes it (ASCII upper case). */
+export function fileKey(name: string, offset: number, size: number, adjusted: boolean): number {
+  const s1 = hashName(name.slice(Math.max(name.lastIndexOf("\\"), name.lastIndexOf("/")) + 1), HASH_FILE_KEY);
   return adjusted ? ((s1 + offset) ^ size) >>> 0 : s1;
 }
 

@@ -32,6 +32,12 @@ the CLI's `map set` decodes member-for-member identical and is smaller than the 
 Fortress ran 200 frames in the game. A recovery copy restored in a later session has new arrays: those sounds are
 written as PCM then (not fixed).
 
+**A full hash table (2026-11-19).** Stored members pin the source's hash table at its size; when it has no room for
+the save's own files `saveMap` leaves out the stored members no name reaches, then the `(listfile)` (`fitStored`;
+the story and the rules are in `chk-format.md`). `planSave` asks the same function so the dialog warns, and
+`buildMapFile` passes `stored: null` when every one goes. `referencedMembers` moved from `sounds.ts` to `save.ts`
+(re-exported) so `save.ts` can call it without an import cycle.
+
 **Bytes with no scenario are refused.** `readArchive` (so `openMapBytes`, the editor's open, the CLI)
 throws `MapLoadError` when the chk has no complete section of a name in `SECTION_SPECS` (`looksLikeScenario`): a text
 file renamed `.scx`, 0 bytes, random bytes, an archive whose `staredit\scenario.chk` is garbage. Before, `parseScenario`

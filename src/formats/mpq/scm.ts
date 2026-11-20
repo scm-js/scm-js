@@ -1,6 +1,6 @@
 import { Archive, Creator, MpqError, type CompressionMethod, type HashEntry, type StoredMember } from "mopaq";
 import { t } from "../../i18n";
-import { keepStoredForm, packStored, REMASTERED_ONLY_METHODS, storedFormOf, storedMethods } from "./stored";
+import { entryNames, keepStoredForm, packStored, REMASTERED_ONLY_METHODS, storedFormOf, storedMethods } from "./stored";
 
 /** Where StarCraft keeps the scenario inside the archive. */
 export const SCENARIO_PATH = "staredit\\scenario.chk";
@@ -136,6 +136,12 @@ export interface SaveOptions {
   /** Write a (listfile) naming the members (default on). The game never reads it. */
   listfile?: boolean;
   /**
+   * The names the scenario refers to (its sounds, a script's files). When the hash table the
+   * stored members pin has no room for the files written here, a stored member one of these
+   * names reaches is kept and the rest are left out (`fitStored`).
+   */
+  referenced?: Iterable<string>;
+  /**
    * Carry a member whose bytes were read from a form the writer cannot make (`keepStoredForm`: StarEdit's ADPCM
    * sounds) as it was stored, while the bytes are unchanged (default on). Off writes every member afresh.
    */
@@ -155,9 +161,11 @@ export const STAREDIT_SECTOR_SIZE = 4096;
 export async function saveMap(chk: Uint8Array, options: SaveOptions = {}): Promise<Uint8Array> {
   const method: CompressionMethod | false = options.compress === "zlib" || options.compress === "pkware" ? options.compress : false;
   const encrypt = options.encrypt ?? false;
-  const members = options.stored?.members.filter(hasBytes) ?? [];
-  const stored = options.stored && members.length > 0 ? options.stored : null;
   const extras = [...(options.extras ?? [])].filter(([name]) => normalize(name) !== normalize(SCENARIO_PATH));
+  const fit = fitStored(options.stored ?? null, 1 + extras.length + (options.editorMembers?.size ?? 0), options.listfile ?? true, options.referenced);
+  if (!fit) throw new Error(t("The archive has no room for the files this save writes: its hash table is filled by members the editor could not read."));
+  const members = fit.members;
+  const stored = options.stored && members.length > 0 ? options.stored : null;
   // A member read from a form the writer cannot make (StarEdit's ADPCM sounds) and handed back unchanged goes in as it
   // was stored, as long as it fits the archive being written: the same sector size, a slot in the same hash table.
   let hashTable: readonly HashEntry[] | null = stored?.hashTable ?? null;
@@ -177,7 +185,7 @@ export async function saveMap(chk: Uint8Array, options: SaveOptions = {}): Promi
       carriedNames.add(name);
     }
   }
-  const listfile = options.listfile ?? true;
+  const listfile = fit.listfile;
   const creator = new Creator({
     sectorSize,
     // With members carried, the list is written here: the writer's own names only the files it encodes.
@@ -200,6 +208,59 @@ export async function saveMap(chk: Uint8Array, options: SaveOptions = {}): Promi
   }
   for (const [name, data] of options.editorMembers ?? []) creator.addFile(name, data, { compress: "zlib", encrypt: false });
   return creator.writeAsync();
+}
+
+/** What a save carries of the stored members (`fitStored`). */
+export interface StoredFit {
+  /** The members carried as stored, pinned to their hash slots. */
+  members: StoredMember[];
+  /** Members left out: nothing names them and the hash table had no room with them in it. */
+  dropped: number;
+  /** Whether a `(listfile)` is written: false when one was asked for and the table has no room for it. */
+  listfile: boolean;
+}
+
+/**
+ * Which stored members a save carries. They are laid over the hash table they came from, which
+ * keeps its size, and every file the save writes by name (`files`: the scenario, the extras,
+ * the editor's members; the `(listfile)` on top) needs a free slot in it. A protector sizes
+ * the table to its files and fills it with members nothing names, so on such a map there may
+ * be none. The game opens a member only by a name the scenario carries, and every such name
+ * was tried when the map was opened (and is tried again here, with `referenced`), so the
+ * members no name reaches are never opened: when they do not fit, they are left out, and with
+ * none left the archive is written afresh with a table of its own size. A member read by name
+ * whose bytes could not be decoded (`unreadable`) is always kept. Last, the `(listfile)` is
+ * dropped — the game never reads it. Null when even that leaves no room.
+ */
+export function fitStored(stored: StoredMembers | null, files: number, listfile: boolean, referenced: Iterable<string> = []): StoredFit | null {
+  const all = stored?.members.filter(hasBytes) ?? [];
+  if (!stored || all.length === 0) return { members: [], dropped: 0, listfile };
+  const room = (kept: number) => stored.hashTable.length - kept;
+  if (room(all.length) >= files + (listfile ? 1 : 0)) return { members: all, dropped: 0, listfile };
+  const reached = reachedStored(stored, referenced);
+  if (reached.length === 0 || room(reached.length) >= files + (listfile ? 1 : 0)) return { members: reached, dropped: all.length - reached.length, listfile };
+  if (room(reached.length) >= files) return { members: reached, dropped: all.length - reached.length, listfile: false };
+  return null;
+}
+
+/** The stored members a name reaches: one the scenario refers to (`referenced`), or one read by name but not decoded. */
+function reachedStored(stored: StoredMembers, referenced: Iterable<string>): StoredMember[] {
+  const named = [...stored.unreadable, ...referenced];
+  return stored.members.filter((m) => hasBytes(m) && named.some((name) => entryNames(m.hash, name)));
+}
+
+/** The stored members no name the scenario refers to reaches (`fitStored`): how many, and their bytes. */
+export function unreachableStored(stored: StoredMembers | null, referenced: Iterable<string> = []): { count: number; size: number } {
+  if (!stored) return { count: 0, size: 0 };
+  const reached = new Set(reachedStored(stored, referenced));
+  const lost = stored.members.filter((m) => hasBytes(m) && !reached.has(m));
+  return { count: lost.length, size: lost.reduce((n, m) => n + m.data.length, 0) };
+}
+
+/** The stored members without the ones no name reaches; null when none is left. */
+export function withoutUnreachable(stored: StoredMembers, referenced: Iterable<string> = []): StoredMembers | null {
+  const members = reachedStored(stored, referenced);
+  return members.length === 0 ? null : { ...stored, members };
 }
 
 /**

@@ -69,7 +69,10 @@ own Tools item on an older editor.
 body over given bytes, `noDownload` so a browser with no test folder answers null rather than downloading a copy the plugin already
 saved — `document.renderImage()` is `exportMapImage` (null without the tileset or a canvas), and
 `document.extras` reads and writes `archiveExtrasAtom` (setting marks the map modified) so a plugin
-can keep a file of its own in the archive. `MenuItemSpec.icon` (`"plugin"` resolves to the manifest
+can keep a file of its own in the archive. `document.archive` (2026-11-19, for Repair) counts and drops the
+`archiveStoredAtom` members no name reaches (`unreachableStored` / `withoutUnreachable` against
+`referencedMembers` of the scenario now); `asOpened` leaves `mapModifiedAtom` alone, and `undo` restores only
+while the same document is in front and the atom still holds what the drop set. `MenuItemSpec.icon` (`"plugin"` resolves to the manifest
 icon at `menu.add`, so `PluginMenuItem.icon` is always a `PluginIcon`) draws through `PluginIconView`
 in the item's indicator slot, and `after` makes `withPluginItems` splice the item under the named
 built-in instead of appending after a separator.

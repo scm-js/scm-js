@@ -1970,6 +1970,11 @@ The open map as a whole.
 - **Files inside the archive:** `extras` lists, reads and writes files stored next to the
   scenario (`list`, `get`, `set`, `remove`). Keep yours in a folder of your own
   (`my-plugin\notes.json`); they are written on the next Save.
+- **Files no name reaches:** `archive.unreachable()` counts the archive's members that
+  neither a file list nor anything in the map names. Save writes them back as they were
+  stored; the game never opens them, and on a protected map they are mostly decoys.
+  `archive.dropUnreachable({ asOpened })` leaves them out of the next save, and its
+  `undo()` puts them back.
 
 Reading, and a file of the plugin's own that travels with the map:
 

@@ -2,13 +2,13 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { Creator } from "mopaq";
 import { parseScenario, serializeScenario, scenarioName } from "../src/formats/chk/scenario";
-import { loadMap, looksLikeMpq, readMembers, saveMap, SCENARIO_PATH } from "../src/formats/mpq/scm";
+import { fitStored, loadMap, looksLikeMpq, readMembers, saveMap, SCENARIO_PATH, unreachableStored } from "../src/formats/mpq/scm";
 import { createScenario } from "../src/formats/chk/create";
 import { applySounds, referencedMembers, wavMemberName } from "../src/editor/sounds";
 import { internString } from "../src/editor/settings";
 import { openMapFile, writeMapBytes } from "../src/services/mapIo";
 import { mapFiles } from "./support/maps";
-import { MANIFEST_MEMBER, SCRIPT_MEMBER, scriptMembersFromManifest } from "../src/editor/save";
+import { DEFAULT_SAVE_OPTIONS, MANIFEST_MEMBER, planSave, SCRIPT_MEMBER, scriptMembersFromManifest } from "../src/editor/save";
 
 describe("mpq container", () => {
   it("recognises a bare chk as not an archive", () => {
@@ -160,6 +160,67 @@ describe("members without a file list", () => {
     const saved = await loadMap(out);
     expect(await saved.archive!.readFileAsync("unknown\\member.bin")).toEqual(other);
     expect(await saved.archive!.readFileAsync(WAV)).toEqual(sound);
+  });
+
+  /**
+   * A protector's table sized to its files: four slots holding the scenario, the sound and two
+   * members nothing names. Laid over it, a save had no slot for its (listfile) — mopaq's
+   * `HashTableFull`, and the map could not be saved at all (0.17.0's error counts).
+   */
+  async function fullTable(scn = (() => { const s = createScenario({ width: 32, height: 32, era: 0 }); const w = s.wavs!.slice(); w[0] = internString(s, WAV); applySounds(s, w); return s; })()) {
+    const probe = (await loadMap(await saveMap(new Uint8Array(8), { listfile: false }))).archive!;
+    const blank = probe.hashEntries().find((h) => h.blockIndex === 0xffffffff)!;
+    const c = new Creator({ sectorSize: 4096, listfile: false, hashTable: Array.from({ length: 4 }, () => ({ ...blank })) });
+    c.addFile(SCENARIO_PATH, serializeScenario(scn), { compress: "pkware" });
+    c.addFile(WAV, sound, { compress: "pkware" });
+    c.addFile("unknown\\a.bin", other);
+    c.addFile("unknown\\b.bin", new Uint8Array([1, 2, 3, 4]));
+    const doc = await openMapFile(new File([(await c.writeAsync()) as unknown as BlobPart], "probe.scx"));
+    expect(doc.stored!.members).toHaveLength(2);
+    expect(doc.stored!.hashTable).toHaveLength(4);
+    return doc;
+  }
+
+  it("leaves out the members nothing names when the hash table has no room for the save's files", async () => {
+    const doc = await fullTable();
+    const plan = planSave(doc.scenario, doc.extras, { ...DEFAULT_SAVE_OPTIONS, format: "scx" }, doc.stored);
+    expect(plan.stored!.dropped).toBe(2);
+    expect(plan.warnings.join(" ")).toMatch(/2 archive members nothing in the map names are left out/);
+    expect(plan.warnings.join(" ")).not.toMatch(/written back exactly as stored/);
+    const saved = await loadMap(await writeMapBytes(doc.scenario, { format: "scx", extras: doc.extras, stored: doc.stored }));
+    expect(await saved.archive!.readFileAsync(WAV)).toEqual(sound);
+    expect(saved.archive!.fileInfo("unknown\\a.bin")).toBeNull();
+    expect(saved.archive!.members()).toHaveLength(3);
+    expect(saved.files).toEqual([SCENARIO_PATH, WAV]);
+  });
+
+  it("keeps a stored member the scenario has come to name, and drops the (listfile) before it", async () => {
+    const doc = await fullTable();
+    // As when Repair mends the strings after the map was opened: the table now names both.
+    const wavs = doc.scenario.wavs!.slice();
+    wavs[1] = internString(doc.scenario, "unknown\\a.bin");
+    applySounds(doc.scenario, wavs);
+    expect(planSave(doc.scenario, doc.extras, { ...DEFAULT_SAVE_OPTIONS, format: "scx" }, doc.stored).stored!.dropped).toBe(1);
+    const one = await loadMap(await writeMapBytes(doc.scenario, { format: "scx", extras: doc.extras, stored: doc.stored }));
+    expect(await one.archive!.readFileAsync("unknown\\a.bin")).toEqual(other);
+    expect(one.archive!.fileInfo("unknown\\b.bin")).toBeNull();
+    expect(one.files).not.toBeNull();
+    // Both named: they fill two slots, the scenario and the sound the other two, and the (listfile) goes.
+    wavs[2] = internString(doc.scenario, "unknown\\b.bin");
+    applySounds(doc.scenario, wavs);
+    const both = await loadMap(await writeMapBytes(doc.scenario, { format: "scx", extras: doc.extras, stored: doc.stored }));
+    expect(both.files).toBeNull();
+    expect(await both.archive!.readFileAsync("unknown\\b.bin")).toEqual(new Uint8Array([1, 2, 3, 4]));
+    expect(await both.archive!.readFileAsync(WAV)).toEqual(sound);
+    // One more file and nothing can give way: a plain message, not mopaq's.
+    await expect(writeMapBytes(doc.scenario, { format: "scx", extras: new Map([...doc.extras, ["more.txt", other]]), stored: doc.stored })).rejects.toThrow(/no room for the files this save writes/);
+  });
+
+  it("counts the stored members no name reaches", async () => {
+    const doc = await fullTable();
+    expect(unreachableStored(doc.stored, referencedMembers(doc.scenario))).toEqual({ count: 2, size: 8 });
+    expect(unreachableStored(doc.stored, ["UNKNOWN/A.BIN"])).toEqual({ count: 1, size: 4 });
+    expect(fitStored(doc.stored, 1, true)).toEqual({ members: doc.stored!.members, dropped: 0, listfile: true });
   });
 
   it("fills in what an incomplete file list leaves out", async () => {

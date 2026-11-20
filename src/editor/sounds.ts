@@ -10,7 +10,6 @@ import { defaultWavs, WAV_SLOTS } from "../formats/chk/sections/sounds";
 import { actionStrings } from "./triggers";
 import type { TriggerRecord } from "../formats/chk/sections/triggers";
 import { internString } from "./settings";
-import { MANIFEST_MEMBER, SCRIPT_MEMBER } from "./save";
 import { t } from "../i18n";
 
 export type Extras = ReadonlyMap<string, Uint8Array>;
@@ -60,21 +59,8 @@ export function wavUsage(scn: Scenario, stringIndex: number): string[] {
   return out;
 }
 
-/**
- * Every archive path the scenario itself names: the WAV table's entries and the `wav`
- * argument of every trigger and briefing action, plus the members the TrigScript
- * plugin keeps its entry file and build manifest in (the manifest then names the rest,
- * see `scriptMembersFromManifest`). What `readMembers` probes an archive for when its
- * (listfile) is gone — the one way a protected map's sounds get their names back.
- */
-export function referencedMembers(scn: Scenario): string[] {
-  const out = new Set<string>();
-  const add = (index: number) => { const path = index > 0 ? getString(scn.strings, index) : null; if (path) out.add(path); };
-  for (const index of scn.wavs ?? []) add(index);
-  for (const t of scn.triggers) for (const a of t.actions) for (const s of actionStrings(a, false)) if (s.kind === "wav") add(s.index);
-  for (const t of scn.briefing) for (const a of t.actions) for (const s of actionStrings(a, true)) if (s.kind === "wav") add(s.index);
-  return [...out, SCRIPT_MEMBER, MANIFEST_MEMBER];
-}
+/** Every archive path the scenario itself names: `referencedMembers`, kept in `save.ts` beside the writer that asks it. */
+export { referencedMembers } from "./save";
 
 export function readWavs(scn: Scenario): number[] {
   return scn.wavs ? scn.wavs.slice() : defaultWavs();

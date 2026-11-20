@@ -291,6 +291,8 @@ It looks for:
 
 - a missing required section, a repeated section, or one of the wrong size;
 - a stripped isometric record;
+- files in the archive that nothing names, which the game never opens. Protectors add them
+  to fill the archive's index, the hash table, so an editor has no room for its own files;
 - content problems, such as strings whose colours look different in Remastered, which
   changed how a line break resets the colour.
 

@@ -53,7 +53,7 @@ export interface DefaultPlugin {
 export const DEFAULT_REMOTE_PLUGINS: readonly DefaultPlugin[] = [
   { spec: "github:scm-js/plugin-aftermath@v0.27.2", enabled: true },
   { spec: "github:scm-js/plugin-paint@v1.1.0", enabled: true },
-  { spec: "github:scm-js/plugin-repair@v1.6.3", enabled: true },
+  { spec: "github:scm-js/plugin-repair@v1.7.0", enabled: true },
   { spec: "github:scm-js/plugin-scm-sim@v0.21.0", enabled: true },
   { spec: "github:scm-js/plugin-scmjs-dev@v1.41.1", enabled: true },
   { spec: "github:scm-js/plugin-scm-scx@v1.4.0", enabled: true },

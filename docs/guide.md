@@ -2500,7 +2500,8 @@ The Repair plugin checks every map as it opens, the way the game reads it. Prote
 in particular often have parts missing, damaged or repeated.
 
 - **Safe repairs are made at once**: the ones that only write what the game already does,
-  or put back what the editor needs, such as the isometric record a protector stripped.
+  or put back what the editor needs, such as the isometric record a protector stripped, or
+  leaving out the files a protector added to the archive that nothing in the map names.
   They do not mark the map as changed, and the next save writes them.
 - **Judgement calls are left to you**, such as a player slot with a race the game does not
   have. A cell in the status bar (*Repaired 3 · 1 to review*) opens a list that says what

@@ -284,6 +284,19 @@ describe("error counts", () => {
     expect(errorKind("thrown text")).toBe("string");
   });
 
+  it("adds mopaq's kind of error, from its fixed list, and never the detail naming the archive's files", async () => {
+    const { MpqError } = await import("mopaq");
+    expect(errorKind(new MpqError("HashTableFull", "no free slot in a hash table of 4 for staredit\\scenario.chk"))).toBe("MpqError: HashTableFull");
+    expect(errorKind(new Error("Not a readable MPQ archive", { cause: new MpqError("Corrupted", "Hash table extends beyond archive") }))).toBe("Error: MpqError Corrupted");
+    const opened = new Error("x", { cause: new MpqError("NoHeader") });
+    opened.name = "MapLoadError";
+    expect(errorKind(opened)).toBe("MapLoadError: MpqError NoHeader");
+    // A kind not on the list, or an error that only calls itself MpqError, is the name alone.
+    const forged = Object.assign(new Error("x"), { name: "MpqError", kind: "my map.scx" });
+    expect(errorKind(forged)).toBe("MpqError");
+    expect(errorKind(new Error("x", { cause: "text" }))).toBe("Error");
+  });
+
   it("names one of the editor's chunks that did not download for what it is, not the browser's TypeError", () => {
     expect(errorKind(new TypeError("Failed to fetch dynamically imported module: https://scmjs.dev/editor/assets/MapDialogs-Ab12Cd34.js"))).toBe("ChunkLoadError");
     expect(errorKind(new TypeError("Importing a module script failed."))).toBe("ChunkLoadError");

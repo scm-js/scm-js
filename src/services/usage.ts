@@ -32,6 +32,7 @@ import { UNIT_TYPES } from "../formats/dat/dat";
 import type { UnitChange } from "../editor/units";
 import { APP_VERSION } from "../version";
 import { isChunkLoadError } from "../app/chunks";
+import type { MpqErrorKind } from "mopaq";
 
 export type CountProps = Record<string, string | number | boolean>;
 
@@ -344,7 +345,26 @@ export function countError(props: CountProps, stack?: string, components?: strin
 export function errorKind(err: unknown): string {
   if (!(err instanceof Error)) return typeof err;
   if (isChunkLoadError(err)) return "ChunkLoadError";
-  return /^[A-Za-z_$][\w$]{0,39}$/.test(err.name) ? err.name : "other";
+  const name = /^[A-Za-z_$][\w$]{0,39}$/.test(err.name) ? err.name : "other";
+  // mopaq's error, or one that wraps it (a map that would not open is a MapLoadError with the
+  // MpqError as its cause), says which: `MpqError: HashTableFull` is a cause, `MpqError` alone is not.
+  const own = mpqKind(err);
+  if (own) return `${name}: ${own}`;
+  const inner = mpqKind(err.cause);
+  return inner ? `${name}: MpqError ${inner}` : name;
+}
+
+/**
+ * mopaq's error kinds. The list is fixed, so a kind goes with the count; the error's `detail`,
+ * which names the archive's files, never does. Read by name rather than `instanceof`, which
+ * would pull the archive code into the startup chunk.
+ */
+const MPQ_KINDS: ReadonlySet<string> = new Set<MpqErrorKind>(["NoHeader", "IoError", "UnsupportedVersion", "Corrupted", "FileNotFound", "UnsupportedCompression", "InvalidMember", "HashTableFull"]);
+
+function mpqKind(err: unknown): string | null {
+  if (!(err instanceof Error) || err.name !== "MpqError") return null;
+  const kind = (err as { kind?: unknown }).kind;
+  return typeof kind === "string" && MPQ_KINDS.has(kind) ? kind : null;
 }
 
 /**

@@ -50,6 +50,11 @@ Plugins ▸ Browse Plugins….
   See [AI tools](docs/ai-tools.md).
 - **Several people on one map.** Share the open map and anyone with the link edits it with
   you, live. See [Editing a map together](docs/guide.md#editing-a-map-together).
+- **Bots.** Play against a computer player somebody wrote on the play page, or write one:
+  a JavaScript bot is one file, and a BWAPI bot in C++ is built into one. `scmjs bot`
+  plays them against each other from a terminal. See [Bots](docs/bots.md).
+- **A library for your own tools.** `@scm-js/core` is the editor's map code as an npm
+  package, for scripts that read and change maps. See [The library](docs/core.md).
 - **Triggers as code.** [TrigScript](docs/trigscript.md) writes triggers in TypeScript,
   with tests and a simulator; for Remastered it also builds code that runs in the game
   itself.
@@ -135,6 +140,13 @@ same release as the editor at [scmjs.dev/editor](https://scmjs.dev/editor/).
 | [docs/core.md](docs/core.md) | `@scm-js/core`, the editor's map code as an npm package for scripts and tools of your own |
 | [docs/development.md](docs/development.md) | Running from source, the desktop app and the container, releases, contributing |
 | [ATTRIBUTION.md](ATTRIBUTION.md) | Provenance of adapted algorithms, tables and dependencies |
+
+## Other repositories
+
+The plugins, the plugin registry, the website, the documentation site, the replay and mod
+readers (`@scm-js/replay`, `@scm-js/mod`), the bot builder and the package-manager
+installers each have a repository of their own. The [scm-js
+organisation](https://github.com/scm-js) lists them all, with what each one is.
 
 ## License
 

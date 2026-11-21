@@ -82,6 +82,9 @@ export {
   decodeWav, decodePcmWav, decodeImaAdpcm, encodeWav, isPlainPcm, canDecodeWav, wavFrames, wavCodecName, WAV_FORMAT, type PcmAudio, type WavBits,
 } from "../../src/formats/wav";
 export { resizeScenario, resizeOffset, type ResizeOptions, type ResizeResult } from "../../src/editor/resize";
+// Two maps held against each other (`scmjs map diff`, the editor's Compare Maps): the tiles that differ and the places
+// they make, the units added, removed, moved or changed, the locations by slot. From the first map to the second.
+export { diffChanges, unitChanges, locationChanges, changedPlaces, anyChange, unitKey, locationText, TILE_KIND, MOVE_RADIUS, type Change, type DiffChanges, type DiffCounts, type UnitDifference, type LocationDifference, type TileBox, type ChangedPlace } from "../../src/editor/compare";
 export { placeStartLocations, idealStarts, playableCount, DEFAULT_START_PLACEMENT, type StartLayout, type StartPlacementOptions, type StartPlacementResult } from "../../src/editor/startLocations";
 export { DEFAULT_PLACEMENT, type PlacementOptions } from "../../src/editor/placement";
 // Terrain and doodads as the editor lays them: the isometric brush (it needs the tileset's CV5 to say which tile joins

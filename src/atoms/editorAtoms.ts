@@ -239,6 +239,7 @@ const sessionViewFlagsAtom = atom<ViewFlags>({
   seams: false,
   pins: false,
   asymmetry: false,
+  changes: false,
   startLocations: true,
   animateWater: true,
   animateUnits: true,

@@ -17,6 +17,7 @@ import { t } from "../../i18n";
 import { objectGestureOn } from "./gestures";
 import { drawBlendAnchor, drawBrushSquare, drawClipGhost, drawDoodadGhost, drawIsomDiamonds, drawSpriteGhosts, drawTileGhost, drawUnitGhosts } from "./paint/ghosts";
 import { drawGrid, drawRuler, drawSymmetryAxes } from "./paint/grid";
+import { drawChangedGround, drawChangedObjects } from "./paint/changes";
 import { EffectPass } from "./effectPass";
 import { paintFlatGround, paintGround, paintLoadingPlate, type GroundLayer } from "./paint/ground";
 import { drawLocationHandles, drawLocations, drawStartLocations } from "./paint/locations";
@@ -59,7 +60,7 @@ export function useEffectPass() {
 export function useViewportDraw(state: ViewportState): { draw: () => void; inView: InView } {
   const {
     scrollerRef, canvasRef, topRef, leftRef, hoverRef, hoverPointRef, gestureRef, pickHoverRef, store,
-    size, tileset, flags, gridSize, gridLook, brush, tilesetAssets, tilesetLoading, terrainRevision, doodadsRevision, pinned, fairness,
+    size, tileset, flags, gridSize, gridLook, brush, tilesetAssets, tilesetLoading, terrainRevision, doodadsRevision, pinned, fairness, comparison,
     locations, startLocations, blendAnchor, animator, showFog, fogViewPlayer, fogMode, clip, clipParts, clipSelection, symmetry, flashes,
     waterSpeed, effectTune, effectPass,
     scenario, mapW, mapH, zoom, tilePx, worldW, worldH, layer, terrainMode, unitAssets,
@@ -150,6 +151,7 @@ export function useViewportDraw(state: ViewportState): { draw: () => void; inVie
     } else {
       paintFlatGround(v, tileset.color);
     }
+    if (comparison && scenario) drawChangedGround(v, comparison.changes, comparison.sameTileset);
     if (flags.grid) drawGrid(v, gridSize, gridLook);
     drawOverlays("terrain");
 
@@ -212,6 +214,7 @@ export function useViewportDraw(state: ViewportState): { draw: () => void; inVie
       }
     }
     if (flags.startLocations) drawStartLocations(v, startLocations, paint.colorOf);
+    if (comparison && scenario) drawChangedObjects(v, comparison.changes, unitTables);
     drawOverlays("objects");
 
     // Fog of war: over units, locations and markers alike, since in game it hides all of them.
@@ -323,7 +326,7 @@ export function useViewportDraw(state: ViewportState): { draw: () => void; inVie
       lastViewportRect.current = rect;
       setViewportRect(rect);
     }
-  }, [size, tilePx, zoom, mapW, mapH, worldW, worldH, tileset, flags, gridSize, gridLook, layer, brush, setViewportRect, scenario, tilesetAssets, terrainRevision, pinned, fairness, locations, startLocations, terrainMode, painting, blending, blendAnchor, tools, tilesetLoading, unitsEditing, unitPlacing, unitTools, unitAssets, animator, selectedUnits, showFog, fogViewPlayer, fogPainting, fogMode, doodadsEditing, doodadPlacing, doodadTools, doodadsRevision, selectedDoodads, clipEditing, clipPasting, clip, clipParts, clipSelection, clipTools, picking, mapPick, tooling, mapTool, overlays, spritesEditing, spritePlacing, spriteTools, selectedSprites, locationsEditing, locationTools, selectedLocations, symmetry, flashes, waterSpeed, effectTune, effectPass, store, scrollerRef, canvasRef, gestureRef, hoverPointRef, hoverRef, pickHoverRef, topRef, leftRef]);
+  }, [size, tilePx, zoom, mapW, mapH, worldW, worldH, tileset, flags, gridSize, gridLook, layer, brush, setViewportRect, scenario, tilesetAssets, terrainRevision, pinned, fairness, comparison, locations, startLocations, terrainMode, painting, blending, blendAnchor, tools, tilesetLoading, unitsEditing, unitPlacing, unitTools, unitAssets, animator, selectedUnits, showFog, fogViewPlayer, fogPainting, fogMode, doodadsEditing, doodadPlacing, doodadTools, doodadsRevision, selectedDoodads, clipEditing, clipPasting, clip, clipParts, clipSelection, clipTools, picking, mapPick, tooling, mapTool, overlays, spritesEditing, spritePlacing, spriteTools, selectedSprites, locationsEditing, locationTools, selectedLocations, symmetry, flashes, waterSpeed, effectTune, effectPass, store, scrollerRef, canvasRef, gestureRef, hoverPointRef, hoverRef, pickHoverRef, topRef, leftRef]);
 
   return { draw, inView: { animatedInViewRef, movingInViewRef, unitsInViewRef } };
 }

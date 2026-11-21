@@ -1631,9 +1631,47 @@ failure instead.
 scmjs.dev account as a numbered revision with a note. It does not change where Ctrl+S
 writes. See [Keeping maps on scmjs.dev](#keeping-maps-on-scmjsdev).
 
-To see what changed between two saved versions of a map, `scmjs map diff` compares them
-from a terminal and `--picture` draws where; [Maps in git](cli.md#maps-in-git) covers
-keeping maps in git.
+### Comparing two maps
+
+**Tools ▸ Compare Maps…** holds the open map against another one and marks on the map
+where they differ: what changed since the last version, what a co-author did to their
+copy, or what you have changed since a moment ago.
+
+Choose what to compare with:
+
+- **Another open map.** Open the other version in a tab of its own (File ▸ Open…, or File
+  ▸ Previous Versions… for a version a save replaced) and pick it from the list. The other
+  map is taken as the older of the two, so a unit this map has and the other has not is
+  said as *added*.
+- **This map as it is now.** The editor keeps a copy of the map as it stands, and from
+  then on shows everything you change. The copy lasts until you choose something else or
+  close the map.
+
+The dialog then says what differs, with a button for each place that goes there:
+
+- **The ground:** how many tiles differ, joined into places where they touch, the largest
+  first.
+- **Units:** added, removed, moved, or changed where they stand (hit points, resources and
+  the other properties). A unit removed and one of the same type and player added within
+  four tiles of it count as one unit that moved.
+- **Locations:** added, removed, or moved, resized or renamed. Anywhere is left out.
+
+**View ▸ Differences** draws the same on the map and follows your edits as you make them.
+It can be turned on once the map has something to compare with. Ground that differs is
+magenta. What this map has and the other has not is green, what only the other has is red
+and dashed where it was, and what moved or changed is yellow, with a line from where a
+moved unit stood.
+
+What a map is compared with belongs to that map: each open map has its own, and switching
+tabs brings it back. Comparing changes nothing in either map.
+
+Two maps of different sizes are compared from the top left corner, and the tiles only one
+of them has are not counted as differences. Two maps of different tilesets have their
+units and locations compared but not their ground, since a tile number means another
+picture in each. A doodad shows as the ground it changes. Sprites, fog, triggers, strings,
+players and the other settings are not compared here: `scmjs map diff` lists the triggers,
+strings, players and forces from a terminal, and its `--picture` draws the same marks as a
+picture for a review. [Maps in git](cli.md#maps-in-git) covers keeping maps in git.
 
 ### Recovery copies
 

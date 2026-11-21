@@ -39,6 +39,7 @@ import { useTileset } from "../../hooks/useTileset";
 import { useMissingTerrain } from "../../hooks/useMissingTerrain";
 import { paintsTiles, useTerrainTools, type MapPoint } from "../../hooks/useTerrainTools";
 import { useFairness } from "../../hooks/useFairness";
+import { useCompare } from "../../hooks/useCompare";
 import { mapPickAtom, mapViewStateAtom, mapToolAtom, pluginOverlaysAtom, shownMapViewAtom, viewFlashesAtom } from "../../atoms/pluginAtoms";
 import type { PickedObject } from "../../plugins/api";
 import PluginPanels from "../panels/PluginPanels";
@@ -187,6 +188,8 @@ export default function MapViewport() {
   useMissingTerrain(tilesetAssets);
   // View ▸ Symmetry Differences: measured only while it is on.
   const fairness = useFairness(flags.asymmetry, tilesetAssets?.tileset ?? null);
+  // View ▸ Differences: compared only while it is on.
+  const comparison = useCompare(flags.changes);
 
   const tilePx = TILE * zoom;
   const worldW = mapW * tilePx;
@@ -194,7 +197,7 @@ export default function MapViewport() {
 
   const state: ViewportState = {
     scrollerRef, canvasRef, topRef, leftRef, hoverRef, hoverPointRef, gestureRef, pickHoverRef, store,
-    size, tileset, flags, gridSize, gridLook, brush, tilesetAssets, tilesetLoading, terrainRevision, doodadsRevision, pinned, fairness,
+    size, tileset, flags, gridSize, gridLook, brush, tilesetAssets, tilesetLoading, terrainRevision, doodadsRevision, pinned, fairness, comparison,
     locations, startLocations, blendAnchor, animator, showFog, fogViewPlayer, fogMode, clip, clipParts, clipSelection, symmetry, flashes,
     waterSpeed, effectTune, effectPass,
     scenario, mapW, mapH, zoom, tilePx, worldW, worldH, layer, lockedLayers, viewOnly, terrainMode, unitAssets,

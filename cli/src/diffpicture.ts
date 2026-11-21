@@ -18,9 +18,9 @@ import type { OpenedMap } from "../../src/editor/mapFile";
 import { unitGeometry } from "../../src/editor/units";
 import type { UnitsDat } from "../../src/formats/dat/dat";
 import { tilesetIndex, type Scenario } from "../../src/formats/chk/scenario";
-import type { LocationRecord, UnitRecord } from "../../src/formats/chk/sections/objects";
+import { ANYWHERE_INDEX, type LocationRecord } from "../../src/formats/chk/sections/objects";
 import { MEGATILE_PX } from "../../src/formats/tileset/decode";
-import { locationChanges, unitKey, type Change } from "./diff";
+import { anyChange, diffChanges, TILE_KIND, type Change, type DiffChanges, type DiffCounts, type TileBox, type UnitDifference } from "../../src/editor/compare";
 import { writeOutput, type Written } from "./exchange";
 import { STDIO, type Input } from "./files";
 import { openGameFiles, type GameFiles } from "./gamefiles";
@@ -33,149 +33,18 @@ import {
 import { msg, t, translate } from "./i18n";
 import { CliError, columns, dot, mark, num, pc, size } from "./ui";
 
-/* ── What changed, without graphics ─────────────────────────── */
+/* ── What changed, without graphics: src/editor/compare.ts, which the editor draws from too ── */
 
-/** A tile on the canvas: the same in both maps, another id, in the first or the second map only, or in neither. */
-export const TILE = { same: 0, changed: 1, aOnly: 2, bOnly: 3, neither: 4 } as const;
-
-/** A removed and an added unit of one type and owner this near (map pixels) are one unit moved: four tiles. */
-export const MOVE_RADIUS = 4 * MEGATILE_PX;
+export { anyChange, diffChanges, MOVE_RADIUS, unitChanges } from "../../src/editor/compare";
+export type { DiffChanges, DiffCounts, LocationDifference as LocationChange, TileBox, UnitDifference as UnitChange } from "../../src/editor/compare";
+type UnitChange = UnitDifference;
+/** A tile on the canvas, as the comparison names it. */
+export const TILE = TILE_KIND;
 /** Slot 63 is Anywhere, the whole map: it changes with every resize and says nothing drawn round the edge. */
-const ANYWHERE = 63;
-
-export interface UnitChange {
-  /** `moved`: a removed and an added unit paired by type, owner and nearness; `changed`: paired where it stood. */
-  change: "added" | "removed" | "moved" | "changed";
-  unitId: number;
-  owner: number;
-  /** Where it is (where it was, for a removed unit), in map pixels. */
-  x: number;
-  y: number;
-  /** Where a moved unit was. */
-  from?: { x: number; y: number };
-}
-
-export interface LocationChange { index: number; change: Change; a?: LocationRecord; b?: LocationRecord }
-
-/** A box of tiles. */
-export interface TileBox { x: number; y: number; width: number; height: number }
-
-export interface DiffCounts {
-  /** Tiles both maps have whose ids differ. */
-  tiles: number;
-  /** Tiles only one of the maps has (one of them was resized). */
-  resized: number;
-  unitsAdded: number;
-  unitsRemoved: number;
-  unitsMoved: number;
-  /** Paired where they stood: the same type, owner and place, another property (hit points, resources, …). */
-  unitsChanged: number;
-  locations: number;
-}
-
-export interface DiffChanges {
-  /** The canvas in tiles: the larger of the two maps each way. */
-  width: number;
-  height: number;
-  /** A `TILE` value per canvas tile, row by row. */
-  tiles: Uint8Array;
-  units: UnitChange[];
-  locations: LocationChange[];
-  counts: DiffCounts;
-  bounds: { tiles: TileBox | null; all: TileBox | null };
-  /** The second map's units that are in the first as they are. */
-  kept: UnitRecord[];
-}
-
-/**
- * Units added and removed as `map diff` counts them (the record but its serial), then each removed one paired with
- * the nearest added one of the same type and owner within `radius` map pixels, nearest pairs first: moved, or
- * changed where it stood.
- */
-export function unitChanges(as: readonly UnitRecord[], bs: readonly UnitRecord[], radius = MOVE_RADIUS): { changes: UnitChange[]; kept: UnitRecord[] } {
-  const count = new Map<string, number>();
-  for (const u of as) count.set(unitKey(u), (count.get(unitKey(u)) ?? 0) + 1);
-  const added: UnitRecord[] = [], kept: UnitRecord[] = [];
-  for (const u of bs) {
-    const k = unitKey(u), n = count.get(k) ?? 0;
-    if (n > 0) { count.set(k, n - 1); kept.push(u); } else added.push(u);
-  }
-  const removed: UnitRecord[] = [];
-  for (const u of as) {
-    const k = unitKey(u), n = count.get(k) ?? 0;
-    if (n > 0) { count.set(k, n - 1); removed.push(u); }
-  }
-  const byKind = new Map<string, number[]>();
-  added.forEach((u, j) => { const k = `${u.unitId}:${u.owner}`; byKind.set(k, [...(byKind.get(k) ?? []), j]); });
-  const pairs: { i: number; j: number; d: number }[] = [];
-  removed.forEach((r, i) => {
-    for (const j of byKind.get(`${r.unitId}:${r.owner}`) ?? []) {
-      const d = Math.hypot(added[j].x - r.x, added[j].y - r.y);
-      if (d <= radius) pairs.push({ i, j, d });
-    }
-  });
-  pairs.sort((p, q) => p.d - q.d || p.i - q.i || p.j - q.j);
-  const usedA = new Set<number>(), usedB = new Set<number>();
-  const paired: UnitChange[] = [];
-  for (const { i, j, d } of pairs) {
-    if (usedA.has(i) || usedB.has(j)) continue;
-    usedA.add(i); usedB.add(j);
-    const r = removed[i], u = added[j];
-    paired.push(d === 0 ? { change: "changed", unitId: u.unitId, owner: u.owner, x: u.x, y: u.y } : { change: "moved", unitId: u.unitId, owner: u.owner, x: u.x, y: u.y, from: { x: r.x, y: r.y } });
-  }
-  const one = (change: "added" | "removed") => (u: UnitRecord): UnitChange => ({ change, unitId: u.unitId, owner: u.owner, x: u.x, y: u.y });
-  return {
-    changes: [...removed.filter((_, i) => !usedA.has(i)).map(one("removed")), ...added.filter((_, j) => !usedB.has(j)).map(one("added")), ...paired],
-    kept,
-  };
-}
-
+const ANYWHERE = ANYWHERE_INDEX;
 /** A location's box, the right way round. */
 const boxOf = (l: LocationRecord) => ({ left: Math.min(l.left, l.right), top: Math.min(l.top, l.bottom), right: Math.max(l.left, l.right), bottom: Math.max(l.top, l.bottom) });
 
-/** Everything `--picture` marks, from the two scenarios alone: the tiles compared by id, the units paired, the locations by slot. */
-export function diffChanges(a: Scenario, b: Scenario, radius = MOVE_RADIUS): DiffChanges {
-  const width = Math.max(a.width, b.width), height = Math.max(a.height, b.height);
-  const tiles = new Uint8Array(width * height);
-  let changed = 0, resized = 0;
-  const grow = (box: { x0: number; y0: number; x1: number; y1: number } | null, x0: number, y0: number, x1: number, y1: number) =>
-    box ? { x0: Math.min(box.x0, x0), y0: Math.min(box.y0, y0), x1: Math.max(box.x1, x1), y1: Math.max(box.y1, y1) } : { x0, y0, x1, y1 };
-  let tileBox: { x0: number; y0: number; x1: number; y1: number } | null = null;
-  for (let ty = 0; ty < height; ty++) {
-    for (let tx = 0; tx < width; tx++) {
-      const inA = tx < a.width && ty < a.height, inB = tx < b.width && ty < b.height;
-      let v: number = TILE.neither;
-      if (inA && inB) v = (a.tiles[ty * a.width + tx] ?? 0) !== (b.tiles[ty * b.width + tx] ?? 0) ? TILE.changed : TILE.same;
-      else if (inA) v = TILE.aOnly;
-      else if (inB) v = TILE.bOnly;
-      tiles[ty * width + tx] = v;
-      if (v === TILE.changed) { changed++; tileBox = grow(tileBox, tx, ty, tx + 1, ty + 1); }
-      else if (v === TILE.aOnly || v === TILE.bOnly) resized++;
-    }
-  }
-  const { changes: units, kept } = unitChanges(a.units, b.units, radius);
-  const locations: LocationChange[] = locationChanges(a, b).map(({ index, change }) => ({
-    index, change, ...(change !== "added" ? { a: a.locations[index] } : {}), ...(change !== "removed" ? { b: b.locations[index] } : {}),
-  }));
-  let all = tileBox;
-  const T = MEGATILE_PX;
-  const at = (x: number, y: number) => { const tx = Math.max(0, Math.min(width - 1, Math.floor(x / T))), ty = Math.max(0, Math.min(height - 1, Math.floor(y / T))); all = grow(all, tx, ty, tx + 1, ty + 1); };
-  for (const u of units) { at(u.x, u.y); if (u.from) at(u.from.x, u.from.y); }
-  for (const l of locations) {
-    if (l.index === ANYWHERE) continue;
-    for (const r of [l.a, l.b]) if (r) { const bx = boxOf(r); at(bx.left, bx.top); at(Math.max(bx.left, bx.right - 1), Math.max(bx.top, bx.bottom - 1)); }
-  }
-  const asBox = (b: { x0: number; y0: number; x1: number; y1: number } | null): TileBox | null => (b ? { x: b.x0, y: b.y0, width: b.x1 - b.x0, height: b.y1 - b.y0 } : null);
-  const n = (c: UnitChange["change"]) => units.filter((u) => u.change === c).length;
-  return {
-    width, height, tiles, units, locations, kept,
-    counts: { tiles: changed, resized, unitsAdded: n("added"), unitsRemoved: n("removed"), unitsMoved: n("moved"), unitsChanged: n("changed"), locations: locations.length },
-    bounds: { tiles: asBox(tileBox), all: asBox(all) },
-  };
-}
-
-/** Whether there is anything to mark. */
-export const anyChange = (c: DiffCounts): boolean => Object.values(c).some((n) => n > 0);
 
 /* ── The pictures ───────────────────────────────────────────── */
 

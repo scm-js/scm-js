@@ -35,7 +35,7 @@ reach, and the traps in them are not visible from the code.
 | `src/editor/{strings,sounds,stockSounds,switches,textColors}.ts`, `formats/wav.ts`, `services/audioConvert.ts`, `ui/{ColorCodes,SoundPicker}.tsx` | `strings-sounds.md` |
 | `sections/triggers.ts`, `data/triggerDefs.ts`, `formats/triggers/text.ts`, `src/editor/triggers.ts`, trigger claims | `triggers.md` |
 | `src/editor/{save,mapBuild,recovery}.ts`, `services/{mapIo,mapBuild,recovery,previousVersions,diskFiles}.ts`, `desktop/{backup,mapFiles}.ts`, `saveDocument`, `SaveMapDialog`, build steps, recovery copies, `.bak` | `saving.md` |
-| `src/editor/{resize,validate,find,exchange,statistics,startLocations,sections}.ts`, `src/app/{preferences,storage}.ts`; adding an `atomWithStorage` | `editor-operations.md` |
+| `src/editor/{resize,validate,find,exchange,statistics,startLocations,sections,compare}.ts`, `useCompare`, `src/app/{preferences,storage}.ts`; adding an `atomWithStorage` | `editor-operations.md` |
 | `src/app/{log,diagnostics}.ts`, `DebugConsole`, `useErrorCapture`, adding a log line anywhere | `logging.md` |
 | `src/i18n/**`, `scripts/i18n.mjs`, `ko.json`, any user-visible string through `t()`, `api.i18n` | `i18n.md` |
 | `src/plugins/{api,headless}.ts`, `src/plugins/host/**` (`host.ts` re-exports it), `atoms/pluginAtoms.ts` — the contract, transactions, events, UI surfaces, the host without the editor | `plugins-host.md` |

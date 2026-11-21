@@ -27,6 +27,7 @@ export type DialogId =
   | "autoStarts"
   | "testMap"
   | "symmetry"
+  | "compareMaps"
   | "gridSettings"
   | "preferences"
   | "shortcuts"

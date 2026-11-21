@@ -356,3 +356,4 @@ export function MapRevisionDialog({ entry }: DialogProps) {
 
 /** Tools ▸ Symmetry… lives in its own file (editor/symmetry.ts is the model); re-exported here so the registry's import stays put. */
 export { SymmetryDialog } from "./SymmetryDialog";
+export { CompareDialog } from "./CompareDialog";

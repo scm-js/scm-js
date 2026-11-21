@@ -11,6 +11,7 @@ import type { TilesetInfo } from "../../data/tilesets";
 import type { UnitAnimator } from "../../formats/units/animate";
 import type { TilesetState } from "../../hooks/useTileset";
 import type { Fairness } from "../../hooks/useFairness";
+import type { Comparison } from "../../hooks/useCompare";
 import type { EffectPass } from "./effectPass";
 import type { PickedObject } from "../../plugins/api";
 import type { MapPoint, useTerrainTools } from "../../hooks/useTerrainTools";
@@ -59,6 +60,8 @@ export interface ViewportState {
   doodadsRevision: number;
   pinned: Of<typeof pinnedTilesAtom>;
   fairness: Fairness | null;
+  /** View ▸ Differences: the map held against the one it is compared with, or null. */
+  comparison: Comparison | null;
   locations: Of<typeof locationsAtom>;
   startLocations: Of<typeof startLocationsAtom>;
   blendAnchor: Of<typeof blendAnchorAtom>;

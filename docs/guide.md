@@ -1657,9 +1657,10 @@ The dialog then says what differs, with a button for each place that goes there:
 - **Locations:** added, removed, or moved, resized or renamed. Anywhere is left out.
 
 **View ▸ Differences** draws the same on the map and follows your edits as you make them.
-Ground that differs is magenta. What this map has and the other has not is green, what
-only the other has is red and dashed where it was, and what moved or changed is yellow,
-with a line from where a moved unit stood.
+It can be turned on once the map has something to compare with. Ground that differs is
+magenta. What this map has and the other has not is green, what only the other has is red
+and dashed where it was, and what moved or changed is yellow, with a line from where a
+moved unit stood.
 
 What a map is compared with belongs to that map: each open map has its own, and switching
 tabs brings it back. Comparing changes nothing in either map.

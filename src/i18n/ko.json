@@ -1464,6 +1464,7 @@
   "The two maps are of different tilesets, so their ground cannot be compared tile by tile. Units and locations are compared.": "두 맵의 타일셋이 달라 지형을 타일 단위로 비교할 수 없습니다. 유닛과 로케이션은 비교합니다.",
   "The two maps are of different sizes: {n, plural, one {# tile is} other {# tiles are}} in only one of them. They are compared from the top left corner.": "두 맵의 크기가 다릅니다. 타일 {n, plural, other {#개}}는 한쪽 맵에만 있습니다. 왼쪽 위 모서리를 기준으로 비교합니다.",
   "The ground, the units and the locations are the same in both maps.": "두 맵의 지형, 유닛, 로케이션이 같습니다.",
+  "The units and the locations are the same in both maps.": "두 맵의 유닛과 로케이션이 같습니다.",
   "{n, plural, one {# tile differs} other {# tiles differ}} in {places, plural, one {# place} other {# places}}:": "{places, plural, other {#곳}}에서 타일 {n, plural, other {#개}}가 다릅니다:",
   "Tiles {x0}–{x1}, {y0}–{y1}: {n, plural, one {# tile} other {# tiles}}": "타일 {x0}–{x1}, {y0}–{y1}: 타일 {n, plural, other {#개}}",
   "Units: {added} added, {removed} removed, {moved} moved, {changed} changed where they stand.": "유닛: 추가 {added}, 삭제 {removed}, 이동 {moved}, 제자리에서 변경 {changed}.",

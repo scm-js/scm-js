@@ -606,8 +606,9 @@ export const redoStackAtom = atom<HistoryEntry[]>([]);
  * The map the one in front is held against (Tools ▸ Compare Maps…), or null: another open
  * map as it stands, or a copy of this one taken at some moment. View ▸ Differences marks
  * the map with what `useCompare` finds between the two. It is the other map's own
- * scenario, not a copy of it, so the marks follow edits on either side; closing the other
- * map leaves it as it was when closed.
+ * scenario, not a copy of it, so the marks follow edits on either side, and when that map
+ * is read again into a new object the base moves to it (`followReplacedMap`); closing the
+ * other map leaves it as it was when closed.
  */
 export const compareBaseAtom = atom<CompareBase | null>(null);
 
@@ -714,6 +715,21 @@ const DOCUMENT_LINES: Partial<Record<DocumentChangeReason, string>> = {
 };
 
 /**
+ * The map in front is about to be another object and still the same map (a plugin's section
+ * edit, a linked command, a shared map's whole-map change, the undo of one). The maps parked
+ * behind it that are compared with it hold the object, so they move to the new one.
+ */
+function followReplacedMap(get: Getter, set: Setter, next: Scenario) {
+  const before = get(scenarioAtom);
+  if (!before || before === next) return;
+  const docs = get(documentsAtom);
+  if (!docs.some((d) => d.parked?.compare?.scenario === before)) return;
+  set(documentsAtom, docs.map((d) => (d.parked?.compare?.scenario === before
+    ? { ...d, parked: { ...d.parked, compare: { ...d.parked.compare, scenario: next } } }
+    : d)));
+}
+
+/**
  * Put a record into the registers — the one write behind opening, switching and closing
  * onto a neighbour — mirroring the scenario's fields into the atoms the chrome displays and
  * bumping every revision, since everything drawn is now another object. Selections, the
@@ -727,6 +743,7 @@ function installRegisters(get: Getter, set: Setter, p: ParkedDocument, reason: D
     file: baseName(p.fileName), width: scenario.width, height: scenario.height,
     tileset: TILESETS[tilesetIndex(scenario)]?.id, version: scenario.fileVersion, open: get(documentsAtom).length,
   });
+  if (reason === "replace") followReplacedMap(get, set, scenario);
   set(documentChangeAtom, { reason, scenario });
   set(scenarioAtom, scenario);
   // From here on a dialog's write can be told from the tables as they were (dialog undo).

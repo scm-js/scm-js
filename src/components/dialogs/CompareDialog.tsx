@@ -3,10 +3,9 @@ import { GitCompareArrows } from "lucide-react";
 import { compareBaseAtom, documentsAtom, documentTabsAtom, scenarioAtom } from "../../atoms/documentAtoms";
 import { centerViewOnAtom, viewFlagsAtom } from "../../atoms/editorAtoms";
 import { closeDialogAtom } from "../../atoms/uiAtoms";
-import { anyChange } from "../../editor/compare";
+import { anyChange, scenarioCopy } from "../../editor/compare";
 import { locationName } from "../../editor/locations";
 import { plainText } from "../../editor/textColors";
-import { parseScenario, serializeScenario } from "../../formats/chk/scenario";
 import { ANYWHERE_INDEX } from "../../formats/chk/sections/objects";
 import { unitLabel } from "../../data/units";
 import { useCompare, type Comparison } from "../../hooks/useCompare";
@@ -34,7 +33,7 @@ function Findings({ comparison, show }: { comparison: Comparison; show: (x: numb
     <div className="col" style={{ gap: 6 }}>
       {!sameTileset && <p className="hint">{t("The two maps are of different tilesets, so their ground cannot be compared tile by tile. Units and locations are compared.")}</p>}
       {c.resized > 0 && <p className="hint">{t("The two maps are of different sizes: {n, plural, one {# tile is} other {# tiles are}} in only one of them. They are compared from the top left corner.", { n: c.resized })}</p>}
-      {nothing && <p className="hint">{t("The ground, the units and the locations are the same in both maps.")}</p>}
+      {nothing && <p className="hint">{sameTileset ? t("The ground, the units and the locations are the same in both maps.") : t("The units and the locations are the same in both maps.")}</p>}
       {sameTileset && c.tiles > 0 && (
         <>
           <p className="hint">{t("{n, plural, one {# tile differs} other {# tiles differ}} in {places, plural, one {# place} other {# places}}:", { n: c.tiles, places: places.length })}</p>
@@ -116,7 +115,7 @@ export function CompareDialog({ entry }: DialogProps) {
   };
   const keepNow = () => {
     if (!scenario) return;
-    setBase({ name: t("This map as it was at {time}", { time: new Date().toLocaleTimeString() }), scenario: parseScenario(serializeScenario(scenario)) });
+    setBase({ name: t("This map as it was at {time}", { time: new Date().toLocaleTimeString() }), scenario: scenarioCopy(scenario) });
   };
   const setShown = (on: boolean, via: "dialog") => {
     if (flags.changes !== on) countView("changes", on, via);

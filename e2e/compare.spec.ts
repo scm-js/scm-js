@@ -37,3 +37,39 @@ test("says what changed since the map was kept, and marks it on the map", async 
   await page.locator(".menubar").getByRole("menuitem", { name: "View", exact: true }).click();
   await expect(page.getByRole("menu").getByRole("menuitemcheckbox", { name: "Differences", exact: true })).toBeChecked();
 });
+
+test("offers Differences only with something to compare with, and does not call two tilesets' ground the same", async ({ editor, page }) => {
+  await editor.open();
+  await editor.dismissGameDataOffer();
+  await editor.openMap(MELEE);
+
+  const view = page.locator(".menubar").getByRole("menuitem", { name: "View", exact: true });
+  const differences = page.getByRole("menu").getByRole("menuitemcheckbox", { name: "Differences", exact: true });
+  await view.click();
+  await expect(differences).toBeDisabled();
+  await expect(differences).not.toBeChecked();
+  await page.keyboard.press("Escape");
+
+  await editor.menu("Tools", "Compare Maps…");
+  const compare = editor.dialog("Compare Maps");
+  await compare.getByRole("button", { name: "Compare with this map as it is now" }).click();
+  await compare.locator(".dlg-footer").getByRole("button", { name: "Close" }).click();
+  await expect(compare).toHaveCount(0);
+
+  await view.click();
+  await expect(differences).toBeEnabled();
+  await page.keyboard.press("Escape");
+
+  // Another tileset, with the units and locations left as they are.
+  await editor.menu("File", "Map Properties…");
+  const properties = editor.dialog("Map Properties");
+  const tileset = properties.locator("select").first();
+  await tileset.selectOption((await tileset.inputValue()) === "ice" ? "desert" : "ice");
+  await properties.getByRole("button", { name: "OK" }).click();
+  await expect(properties).toHaveCount(0);
+
+  await editor.menu("Tools", "Compare Maps…");
+  await expect(compare).toContainText("their ground cannot be compared");
+  await expect(compare).toContainText("The units and the locations are the same in both maps.");
+  await expect(compare).not.toContainText("The ground, the units and the locations are the same");
+});

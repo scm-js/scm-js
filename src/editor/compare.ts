@@ -18,6 +18,13 @@ export type Change = "added" | "removed" | "changed";
 /** What the open map is held against: a map and what to call it. */
 export interface CompareBase { name: string; scenario: Scenario }
 
+/**
+ * A map as it stands, to compare with later. Cloned rather than saved and read again: a
+ * save turns characters the map's encoding cannot hold into `?` and a read guesses the
+ * encoding anew, and either would show as a renamed location with nothing changed.
+ */
+export const scenarioCopy = (s: Scenario): Scenario => structuredClone(s);
+
 /** A unit as a comparison matches it: the whole record but its serial number. */
 export const unitKey = (u: UnitRecord) => JSON.stringify({ ...u, serial: 0 });
 

@@ -196,10 +196,15 @@ Tools ▸ Compare Maps… and View ▸ Differences: the map in front held agains
   field `compare`, optional on `ParkedDocument` so records made by tests and older callers need not name it). It
   holds **the other map's own `Scenario` object**, not a copy: nothing is cloned to compare with an open tab, and the
   marks follow edits on either side (the front map's revisions are bumped on every switch, which is what re-runs the
-  memo). Closing the other map leaves the object alive and compared with, under the name it had; the dialog shows
-  that as a "kept" option. "This map as it is now" is the one clone, `parseScenario(serializeScenario(scn))`, the
-  same idiom `sync.ts` uses. A `replace` (a plugin's section edit, a linked command) keeps the base; a map arriving
-  starts with none. Not persisted, not in recovery copies.
+  memo). The dialog and the parked records match the other map by that object, so when the other map is read again
+  into a new one (a plugin's section edit, a linked command, a shared map's whole-map change, the undo of one),
+  `followReplacedMap` in `installRegisters` moves every parked base to it; every new `Scenario` object for an open map
+  passes there. Closing the other map leaves the object alive and compared with, under the name it had; the dialog
+  shows that as a "kept" option. "This map as it is now" is the one clone, `scenarioCopy` (`structuredClone`). **Not
+  `parseScenario(serializeScenario(scn))`**, the idiom `sync.ts` uses: a save writes `?` for what the encoding cannot
+  hold and a read guesses the encoding again, so the copy's location names could differ from the map's with nothing
+  changed. A `replace` of the map in front keeps its own base; a map arriving starts with none. Not persisted, not in
+  recovery copies.
 - **`useCompare(enabled)`** recomputes on the terrain, units and locations revisions. Measured cost is one pass over
   the tiles and a `JSON.stringify` per unit on both sides; it runs only while View ▸ Differences is on or the dialog
   is open. Two tilesets: `sameTileset` false, the ground is neither drawn nor listed (ids of two tilesets mean nothing
@@ -210,7 +215,8 @@ Tools ▸ Compare Maps… and View ▸ Differences: the map in front held agains
   view. Tiles only the base has (it is larger) lie off the map and are not drawn; tiles only the front map has get a
   pale wash.
 - **`changes` is a `ViewFlags` field**, a session tick like `asymmetry` (not one of the five remembered,
-  `tests/view-memory.test.ts`), and not in `READ_BY_VIEWS`, so a plugin's view does not offer it.
+  `tests/view-memory.test.ts`), and not in `READ_BY_VIEWS`, so a plugin's view does not offer it. The menu item is
+  off and unticked while the map in front has no base, so a tick with no marks cannot read as "no differences".
 - **Not compared**: sprites, doodad records (a doodad shows as its MTXM tiles), fog, triggers, strings, settings.
   `cli/src/diff.ts#diffMaps` has the text half of those, with the CLI's own translator; bringing it into the dialog
   means moving it under `src/editor/` and exporting it from core the same way.

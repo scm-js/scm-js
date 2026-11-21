@@ -27,7 +27,7 @@ import { chromeModeAtom, flagOffered, flagShown, mapInFront, overlayOffered, tog
 import { shownZoomAtom, zoomToAtom } from "../../atoms/zoomAtoms";
 import { desktopBridge } from "../../app/desktop";
 import {
-  activeDocumentIdAtom, deleteSelectedDoodadsAtom, deleteSelectedLocationsAtom, deleteSelectedSpritesAtom, deleteSelectedUnitsAtom, documentTabsAtom, recentFilesAtom, redoAtom, scenarioAtom,
+  activeDocumentIdAtom, compareBaseAtom, deleteSelectedDoodadsAtom, deleteSelectedLocationsAtom, deleteSelectedSpritesAtom, deleteSelectedUnitsAtom, documentTabsAtom, recentFilesAtom, redoAtom, scenarioAtom,
   selectAllAtom, undoAtom, viewOnlyAtom,
 } from "../../atoms/documentAtoms";
 import { openDialogAtom, panelsAtom, statusMessageAtom, type DialogId, type PanelVisibility } from "../../atoms/uiAtoms";
@@ -263,13 +263,15 @@ function useMenus(): Menu[] {
   const [redoLabel, redo] = useAtom(redoAtom);
   const clipTools = useClipboardTools();
   const hasClip = useAtomValue(clipboardAtom) !== null;
+  const hasCompareBase = useAtomValue(compareBaseAtom) !== null;
 
-  const flag = (k: keyof ViewFlags, label: string, shortcut?: string): Item => ({
+  // `unavailable`: nothing for this tick to show yet, so it is neither on nor offered.
+  const flag = (k: keyof ViewFlags, label: string, shortcut?: string, unavailable = false): Item => ({
     kind: "check",
     label,
     shortcut,
-    checked: flagShown(mode, flags, k),
-    disabled: !flagOffered(mode, k),
+    checked: !unavailable && flagShown(mode, flags, k),
+    disabled: unavailable || !flagOffered(mode, k),
     onChange: (v) => toggleFlag(k, v),
   });
   const panel = (k: keyof PanelVisibility, label: string): Item => ({
@@ -418,7 +420,7 @@ function useMenus(): Menu[] {
         flag("seams", msg("Seam Overlay")),
         flag("pins", msg("Pinned Tiles")),
         flag("asymmetry", msg("Symmetry Differences")),
-        flag("changes", msg("Differences")),
+        flag("changes", msg("Differences"), undefined, !hasCompareBase),
         // Plugin overlays (`api.ui.overlay`), each a tick like the built-in ones.
         ...overlays.map((o): Item => ({ kind: "check", label: o.spec.name, pluginId: o.plugin.id, checked: o.visible, disabled: !overlayOffered(mode, o), onChange: (v) => { setOverlayVisible(o.key, v); } })),
         sep,

@@ -50,6 +50,7 @@ const REGISTRY: Record<DialogId, LazyExoticComponent<Dialog>> = {
   mapRevision: from(map, (m) => m.MapRevisionDialog),
   gridSettings: from(prefs, (m) => m.GridSettingsDialog),
   symmetry: from(map, (m) => m.SymmetryDialog),
+  compareMaps: from(map, (m) => m.CompareDialog),
   playerSettings: from(player, (m) => m.PlayerSettingsDialog),
   forceSettings: from(player, (m) => m.ForceSettingsDialog),
   playerColors: from(player, (m) => m.PlayerColorsDialog),

@@ -57,7 +57,7 @@ describe("the View menu's remembered ticks", () => {
     const next = await reload();
     expect(next.store.get(next.viewFlagsAtom)).toEqual({
       grid: true, locationNames: false, animateWater: false, animateUnits: true, hdGraphics: true,
-      elevation: false, fog: false, buildability: false, seams: false, pins: false, asymmetry: false,
+      elevation: false, fog: false, buildability: false, seams: false, pins: false, asymmetry: false, changes: false,
       units: true, doodads: true, startLocations: true, locations: true, sprites: true,
     });
   });

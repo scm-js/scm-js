@@ -418,6 +418,7 @@ function useMenus(): Menu[] {
         flag("seams", msg("Seam Overlay")),
         flag("pins", msg("Pinned Tiles")),
         flag("asymmetry", msg("Symmetry Differences")),
+        flag("changes", msg("Differences")),
         // Plugin overlays (`api.ui.overlay`), each a tick like the built-in ones.
         ...overlays.map((o): Item => ({ kind: "check", label: o.spec.name, pluginId: o.plugin.id, checked: o.visible, disabled: !overlayOffered(mode, o), onChange: (v) => { setOverlayVisible(o.key, v); } })),
         sep,
@@ -483,6 +484,7 @@ function useMenus(): Menu[] {
         sep,
         dlg(msg("Check Map…"), "validateMap"),
         dlg(msg("Statistics…"), "statistics"),
+        dlg(msg("Compare Maps…"), "compareMaps", undefined, hasMap && !onMap),
         sep,
         // Test Map goes where Preferences ▸ Testing says; each place also has an item of its own once there is more than one.
         { kind: "item", label: msg("Test Map"), shortcut: key("tools.testMap"), onSelect: () => { startTest(store); } },

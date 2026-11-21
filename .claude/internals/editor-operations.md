@@ -176,3 +176,42 @@ Check Map follows the game (evidence `~/github/scm-sim-reader/editor-audit/`):
   (LOOP L7.4). Wait slot: any non-hyper trigger with a Wait (or a Transmission for a human) of a
   hyper player; above-and-not-preserved is the one harmless case.
 - Placement puts mineral fields and geysers on Player 12 (`ghostAt`), as StarEdit does.
+
+### Compare Maps (`src/editor/compare.ts`, `hooks/useCompare.ts`, `dialogs/CompareDialog.tsx`, `viewport/paint/changes.ts`)
+
+Tools ▸ Compare Maps… and View ▸ Differences: the map in front held against another, marked on the map.
+
+- **One comparison, two front ends.** `compare.ts` is the pure half of `scmjs map diff --picture` moved out of
+  `cli/src/diffpicture.ts` (`diffChanges`, `unitChanges`, `locationChanges`, `unitKey`, `locationText`) plus
+  `changedPlaces` (changed tiles flood-filled into boxes, 8-connected, largest first — `fairness.ts`'s places, per
+  tile). The CLI imports it back, so the picture in a review and the editor's marks cannot disagree, and
+  `tests/cli-diffpicture.test.ts` stays its test. Because the CLI may take from `src/` only what `@scm-js/core`
+  exports (`tests/core.test.ts`), the names are in the core entry and in `docs/core.md`'s table: **they are public
+  API now and stay** (`core.md`). `TILE` became `TILE_KIND` and the types `UnitChange` / `LocationChange` became `UnitDifference` /
+  `LocationDifference` for that surface (`editor/units.ts` and `editor/locations.ts` already export those names); `diffpicture.ts` keeps the old names as
+  aliases for its own callers.
+- **Direction**: `diffChanges(base, front)` — the other map is the older one, so what only the front map has is
+  "added". The dialog says so; there is no swap button.
+- **`compareBaseAtom`** (`documentAtoms.ts`) is `{ name, scenario } | null`, a per-document register (in `REGISTERS`,
+  field `compare`, optional on `ParkedDocument` so records made by tests and older callers need not name it). It
+  holds **the other map's own `Scenario` object**, not a copy: nothing is cloned to compare with an open tab, and the
+  marks follow edits on either side (the front map's revisions are bumped on every switch, which is what re-runs the
+  memo). Closing the other map leaves the object alive and compared with, under the name it had; the dialog shows
+  that as a "kept" option. "This map as it is now" is the one clone, `parseScenario(serializeScenario(scn))`, the
+  same idiom `sync.ts` uses. A `replace` (a plugin's section edit, a linked command) keeps the base; a map arriving
+  starts with none. Not persisted, not in recovery copies.
+- **`useCompare(enabled)`** recomputes on the terrain, units and locations revisions. Measured cost is one pass over
+  the tiles and a `JSON.stringify` per unit on both sides; it runs only while View ▸ Differences is on or the dialog
+  is open. Two tilesets: `sameTileset` false, the ground is neither drawn nor listed (ids of two tilesets mean nothing
+  to each other; the CLI draws side by side for the same reason).
+- **Drawing** (`paint/changes.ts`) is two passes straight onto the canvas, not into the cached ground layer:
+  `drawChangedGround` before the grid (visible tiles only), `drawChangedObjects` after the start locations and
+  before the fog. The colours are `diffpicture.ts`'s. A mark is at least 7 px so a marine shows with the whole map in
+  view. Tiles only the base has (it is larger) lie off the map and are not drawn; tiles only the front map has get a
+  pale wash.
+- **`changes` is a `ViewFlags` field**, a session tick like `asymmetry` (not one of the five remembered,
+  `tests/view-memory.test.ts`), and not in `READ_BY_VIEWS`, so a plugin's view does not offer it.
+- **Not compared**: sprites, doodad records (a doodad shows as its MTXM tiles), fog, triggers, strings, settings.
+  `cli/src/diff.ts#diffMaps` has the text half of those, with the CLI's own translator; bringing it into the dialog
+  means moving it under `src/editor/` and exporting it from core the same way.
+

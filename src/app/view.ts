@@ -36,6 +36,8 @@ export interface ViewFlags {
   pins: boolean;
   /** Where the map does not play as its image under the symmetry does (editor/fairness.ts), per small square. */
   asymmetry: boolean;
+  /** What differs from the map this one is compared with (editor/compare.ts): tiles, units and locations. */
+  changes: boolean;
   startLocations: boolean;
   /** Cycle the palette so water and lava animate as they do in game. */
   animateWater: boolean;

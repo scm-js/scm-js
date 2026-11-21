@@ -11,7 +11,6 @@ import type { OpenedMap } from "../../src/editor/mapFile";
 import { fingerprintTrigger, readBriefing, readTriggers, triggerNames } from "../../src/editor/triggers";
 import { summarizeTrigger } from "../../src/formats/triggers/text";
 import { forceName } from "../../src/editor/settings";
-import { locationName } from "../../src/editor/locations";
 import { plainText } from "../../src/editor/textColors";
 import { TILESETS } from "../../src/data/tilesets";
 import { playerRaceLabel, playerTypeLabel } from "../../src/data/players";
@@ -23,8 +22,10 @@ import { locate } from "./history";
 import { msg, t, translate } from "./i18n";
 import { CliError, mark, num, padColumns, pc, size } from "./ui";
 import { gitBytes, gitText } from "./git";
+import { locationChanges, locationText, unitKey, type Change } from "../../src/editor/compare";
 
-export type Change = "added" | "removed" | "changed";
+export { locationChanges, unitKey };
+export type { Change };
 
 export interface FieldChange { field: string; a: string; b: string }
 /**
@@ -112,26 +113,7 @@ function multiset<T>(as: readonly T[], bs: readonly T[], key: (t: T) => string, 
 }
 
 const owner = (o: number) => (o === 11 ? "Neutral" : o < 8 ? `Player ${o + 1}` : `Owner ${o}`);
-/** A unit as `map diff` matches it: the whole record but its serial number. */
-export const unitKey = (u: UnitRecord) => JSON.stringify({ ...u, serial: 0 });
 const unitText = (u: UnitRecord) => `${unitName(u.unitId)} (${owner(u.owner)}) at ${u.x},${u.y}${u.resourceAmount ? `, ${u.resourceAmount.toLocaleString("en-US")} resources` : ""}`;
-
-const locationText = (s: Scenario, i: number) => { const l = s.locations[i]; return `${plainText(locationName(s, i))} ${l.left},${l.top}–${l.right},${l.bottom}${l.elevationFlags ? ` flags ${l.elevationFlags}` : ""}`; };
-
-/** Locations by slot: placed on one side only (added, removed), or on both with another name, place or flags (changed). */
-export function locationChanges(a: Scenario, b: Scenario): { index: number; change: Change }[] {
-  const out: { index: number; change: Change }[] = [];
-  const n = Math.max(a.locations.length, b.locations.length);
-  const placed = (s: Scenario, i: number) => { const l = s.locations[i]; return !!l && (l.left !== l.right || l.top !== l.bottom); };
-  for (let i = 0; i < n; i++) {
-    const pa = placed(a, i), pb = placed(b, i);
-    if (!pa && !pb) continue;
-    if (pa && !pb) out.push({ index: i, change: "removed" });
-    else if (!pa && pb) out.push({ index: i, change: "added" });
-    else if (locationText(a, i) !== locationText(b, i)) out.push({ index: i, change: "changed" });
-  }
-  return out;
-}
 
 function locations(a: Scenario, b: Scenario): Entry[] {
   return locationChanges(a, b).map(({ index: i, change }) =>

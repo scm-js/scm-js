@@ -61,7 +61,7 @@ the engine. `map heatmap` draws on the same pieces but needs the engine (`cli-ga
 - Options on the existing command, additive: no flag = the text form. `--out` and `--side-by-side` imply `--picture`;
   `--scale/--width/--blocks/--starcraft` without it are refused (exit 2). The exit code is the comparison's (1 when
   different), picture or not.
-- **Pure top half**: `diffChanges(a, b)` (no graphics) → a canvas the larger map each way, a `TILE` value per canvas
+- **Pure top half** — now `src/editor/compare.ts`, which the editor's Compare Maps draws from too (`editor-operations.md`); `diffpicture.ts` re-exports it under the names it had (`TILE`, `UnitChange`, `LocationChange`): `diffChanges(a, b)` (no graphics) → a canvas the larger map each way, a `TILE` value per canvas
   tile (same / changed id / a only / b only / neither — **compared by position**, so a resize anchored elsewhere than
   top-left shows everything changed), `unitChanges`, `locationChanges` by slot (the same function `map diff` uses, so
   the two agree), counts, `bounds.tiles` and `bounds.all`. `changePicture(a, b, graphics, …)`; `sideBySide(…)` → `a |

@@ -368,11 +368,12 @@ function mpqKind(err: unknown): string | null {
 }
 
 /**
- * What an error event with no error object was, as the counts name it: a word from a fixed
- * list, never the message. The browser sends only a message for two common things, neither
- * of them a throw in the editor's code. One is the ResizeObserver notice, when an observer's
- * callback changes the layout it measured. The other is "Script error.", a throw in a script
- * from another origin (an extension, say) whose details the browser keeps back.
+ * What an error event with no error object was: a word from a fixed list, never the message.
+ * The browser sends only a message for two common things, neither of them a throw in the
+ * editor's code. One is the ResizeObserver notice, when an observer's callback changes the
+ * layout it measured; `logWindowError` logs that as a warning and does not count it. The
+ * other is "Script error.", a throw in a script from another origin (an extension, say)
+ * whose details the browser keeps back, counted under this word.
  */
 export function messageKind(message: string | undefined): string {
   if (/^ResizeObserver loop/i.test(message ?? "")) return "ResizeObserver";

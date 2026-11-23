@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { count, countError, countPlacedUnits, countView, countingWanted, countPluginUse, countReplays, countDataSetChange, errorKind, extOf, flushCounts, gameDataOf, messageKind, modOf, noteModuleSource, OFF_KEY, pluginCountName, resetCountsForTests, setCounting, stackProps, waitingCounts } from "../src/services/usage";
-import { logError, logRenderError, resetLogForTests } from "../src/app/log";
+import { logEntries, logError, logRenderError, logWindowError, resetLogForTests } from "../src/app/log";
 import { createStore } from "jotai";
 import { activatePlugin, runCommand } from "../src/plugins/host";
 import type { LoaderDeps } from "../src/plugins/loader";
@@ -339,6 +339,34 @@ describe("error counts", () => {
     expect(line.name).toBe("error");
     expect(line.props).toMatchObject({ area: "document", step: "save", type: "TypeError", frame0: "Ab editor/assets/index-B1x2.js:1:48211" });
     expect(JSON.stringify(line.props)).not.toContain("Secret");
+  });
+
+  describe("an error event at the window", () => {
+    const event = (message: string, error: unknown = null) => ({ message, error, filename: "", lineno: 0 });
+    beforeEach(() => {
+      resetLogForTests();
+      vi.spyOn(console, "warn").mockImplementation(() => {});
+      vi.spyOn(console, "error").mockImplementation(() => {});
+    });
+    afterEach(() => { vi.restoreAllMocks(); });
+
+    it("logs the browser's ResizeObserver notice as a warning and does not count it", () => {
+      logWindowError(event("ResizeObserver loop completed with undelivered notifications."));
+      expect(logEntries().map((e) => e.level)).toEqual(["warn"]);
+      expect(waitingCounts().filter((l) => l.name === "error")).toEqual([]);
+    });
+
+    it("still logs and counts a cross-origin script error and a real throw", () => {
+      logWindowError(event("Script error."));
+      logWindowError(event("boom", new TypeError("boom")));
+      expect(logEntries().map((e) => e.level)).toEqual(["error", "error"]);
+      expect(waitingCounts().filter((l) => l.name === "error").map((l) => l.props?.type).sort()).toEqual(["TypeError", "cross-origin"]);
+    });
+
+    it("treats a thrown error whose text mentions ResizeObserver as a real error", () => {
+      logWindowError(event("ResizeObserver loop", new Error("ResizeObserver loop")));
+      expect(logEntries().map((e) => e.level)).toEqual(["error"]);
+    });
   });
 
   // React's commit removing a node it no longer holds, from inside two of the editor's components.

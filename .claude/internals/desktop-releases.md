@@ -227,8 +227,9 @@ host's plugin sites `plugin` = `pluginName(spec)` and `step` = `load` (fetch, AP
 check, import, `resolveActivate`) / `activate` (the plugin's own `activate`) / `deactivate` /
 `command` (owner found through the runtimes by `pluginId`) / `button` (map button) / `applies`
 (a build step's `applies()`); `useErrorCapture` sends `step` `uncaught` / `rejection`, and for an
-`ErrorEvent` whose `error` is null `type` = `messageKind(message)`: `ResizeObserver`,
-`cross-origin` ("Script error."), else `string` — and
+`ErrorEvent` whose `error` is null `type` = `messageKind(message)`: `cross-origin`
+("Script error."), else `string` (the ResizeObserver notice is a log warning and not counted
+from the release after 0.18.0, so a `ResizeObserver` row is from 0.18.0 or earlier) — and
 `frame0`…`frame5` from `stackProps` (and, for a render error, the catching boundary's
 `surface`; `type` is `ChunkLoadError` for one of the editor's chunks that did not download,
 `app/chunks.ts`, rather than the browser's bare `TypeError`): an identifier-only function name and the file:line:col for the

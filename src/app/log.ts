@@ -29,7 +29,7 @@
  */
 
 import type { CountProps } from "../services/usage";
-import { countError, errorKind } from "../services/usage";
+import { countError, errorKind, messageKind } from "../services/usage";
 
 export type LogLevel = "info" | "warn" | "error";
 
@@ -193,6 +193,21 @@ export const logWarn = (source: string, message: string, data?: LogData) => log(
  */
 export function logError(source: string, message: string, err?: unknown, data?: LogData, counted?: CountProps): void {
   log("error", source, withDetail(message, err), data, err instanceof Error ? err.stack : undefined, err === undefined ? counted : { type: errorKind(err), ...counted });
+}
+
+/**
+ * An `error` event at the window. The browser's ResizeObserver notice is one of these with
+ * nothing thrown: it only says some resize updates wait for the next frame, so it is a
+ * warning in the log and not an error in the log or the counts.
+ */
+export function logWindowError(e: Pick<ErrorEvent, "message" | "error" | "filename" | "lineno">): void {
+  // A failed <img>/<script> load fires an Event, not an ErrorEvent, at the element;
+  // it has no `message` and is not what this is for.
+  if (!e.message && !e.error) return;
+  const kind = e.error == null ? messageKind(e.message) : undefined;
+  if (kind === "ResizeObserver") { log("warn", "app", e.message); return; }
+  const where = e.filename ? `${e.filename.split("/").pop()}:${e.lineno}` : undefined;
+  logError("app", "Uncaught error", e.error ?? e.message, { at: where }, { step: "uncaught", ...(kind ? { type: kind } : {}) });
 }
 
 function withDetail(message: string, err: unknown): string {

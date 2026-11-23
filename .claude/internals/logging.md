@@ -93,6 +93,14 @@ the map path and the user agent: a desktop frame is `file:///C:/Users/<name>/…
 mirror keeps the clickable path a developer needs. A run with one separator and no scheme or
 drive letter in front is left alone, or `bad ratio 3/4` becomes `bad ratio 4`.
 
+**The ResizeObserver notice is a warning, not an error.** `logWindowError` takes the window's
+`error` events. "ResizeObserver loop…" arrives there with a null `error` and nothing thrown: the
+browser only says the remaining resize updates wait a frame. It is logged at `warn`, so it stays
+readable when someone is hunting a flicker, and never reaches the error counts. A plain React
+`setState` in an observer does not raise it (the commit lands after the callback); changing
+layout inside the callback, `flushSync` included, raises one per frame (measured in Chromium,
+2026-11-22). A real `Error` whose text says ResizeObserver is still an error.
+
 **Render errors come from React's root, not from `window.onerror`**
 (`components/ui/ErrorBoundary.tsx`). Without boundaries a render that throws is "uncaught",
 React re-throws it at the window and `useErrorCapture` logs it — into a console that has

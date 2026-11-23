@@ -17,21 +17,14 @@
  * before the first plugin runs.
  */
 import { useEffect } from "react";
-import { log, logError } from "../app/log";
-import { messageKind } from "../services/usage";
+import { log, logError, logWindowError } from "../app/log";
 
 // React's development double-mount runs the effect twice; the line belongs to the session.
 let announced = false;
 
 export function useErrorCapture() {
   useEffect(() => {
-    const onError = (e: ErrorEvent) => {
-      // A failed <img>/<script> load fires an Event, not an ErrorEvent, at the element;
-      // it has no `message` and is not what this is for.
-      if (!e.message && !e.error) return;
-      const where = e.filename ? `${e.filename.split("/").pop()}:${e.lineno}` : undefined;
-      logError("app", "Uncaught error", e.error ?? e.message, { at: where }, { step: "uncaught", ...(e.error == null ? { type: messageKind(e.message) } : {}) });
-    };
+    const onError = (e: ErrorEvent) => logWindowError(e);
     const onRejection = (e: PromiseRejectionEvent) => {
       logError("app", "Unhandled promise rejection", e.reason, undefined, { step: "rejection" });
     };

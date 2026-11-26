@@ -1797,8 +1797,11 @@ In the editor at scmjs.dev, every replay you open is also analysed: the game is 
 through in the background to see what really happened rather than what was ordered. Once
 it is done, Aftermath shows the units where they stood, what each player really built and
 lost, the fights and the key moments, and a camera (*Spectate*) that follows the action.
-**View ▸ Replay Analysis** opens a larger window with each player's economy and tech over
-the game.
+The build order is then written the way players write one, with the supply each step was
+begun at (`9 Spawning Pool`), under a card that names the opening. **View ▸ Replay
+Analysis** opens a larger window with each player's economy, tech, scouting and production
+over the game. Its Macro tab shows when each production building stood idle while there
+was money to spend, and when workers stopped.
 
 ![The Replay Analysis window on its Economy tab: each player's income a minute, what they left unspent and how long they were supply blocked, over a chart of income through the game](images/replay-analysis.webp)
 

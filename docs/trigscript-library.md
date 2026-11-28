@@ -696,10 +696,20 @@ looks at the rally point of the building that made it:
 - On a mineral field, it mines that field.
 - On a finished Refinery, Extractor or Assimilator of its own player, it gathers gas from
   it.
-- Anywhere else (the ground, a bare geyser, a gas building still being built, another
-  player's gas building, a field mined out), it walks to the rally point as it always has.
+- On a Refinery, Extractor or Assimilator of its own player that is still being built, it
+  walks there and waits, and gathers gas when the building is finished.
+- Anywhere else (the ground, a bare geyser, another player's gas building, a field mined
+  out), it walks to the rally point as it always has.
 
-It acts once, as the worker comes out, so an order the player gives afterwards stands.
+On a mineral field or a finished gas building it acts once, as the worker comes out, so an
+order the player gives afterwards stands.
+
+**A gas building still being built.** A worker the player right-clicks onto their own gas
+building while it is going up waits the same way a rallied one does, so workers can be
+sent to the gas before it is ready. A waiting worker that is given another order, or
+stopped before it gets near the building, is left alone. An Assimilator is finished once
+it has warped in, not when its build time runs out.
+
 Computer players' workers and units made by Create Unit are left alone. A field or a gas
 building that is already busy is the game's to sort out, as it is when the player
 right-clicks it.

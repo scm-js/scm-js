@@ -909,9 +909,14 @@ true the first time only.
 
 ## Owners and per-player programs
 
-**A program runs for its owner**, Player 1 unless `{ owner: … }` says otherwise, as a
-trigger would: as that player, and only while that player is in the game. `CurrentPlayer`
-means that player.
+**A program runs for its owner**, as a trigger would: as that player, and only while that
+player is in the game. `CurrentPlayer` means that player.
+
+**A program with no `{ owner: … }` is the map's own.** It runs as Player 1 for as long as
+anyone is in the game, whether or not Player 1 is, so a map played from another slot still
+runs it. Text it shows goes to Player 1 unless `to` says otherwise: on a map where Player
+1 may be absent, name who sees it, as `print("Go", { to: AllPlayers })`. `{ owner: P1 }`
+is not the same thing: that program stops when Player 1 is not in the game.
 
 An owner of `AllPlayers`, a force (`players.Force1`) or a list of players (`[P1, P2, P3]`)
 makes a **per-player program**. It runs every frame for each human or computer player

@@ -342,8 +342,9 @@ again until it has been false in between. `once(…)` is true the first time onl
 
 ### Owners and per-player programs
 
-**A program runs for its owner**, as that player, while that player is in the game. The
-owner is Player 1 unless `{ owner: … }` says otherwise.
+**A program runs for its owner**, as that player, while that player is in the game. A
+program with no `{ owner: … }` is the map's own: it runs as Player 1 for as long as anyone
+is in the game, whether or not Player 1 is.
 
 An owner of `AllPlayers`, a force or a list of players makes a **per-player program**. The
 same code runs for each of those players who is in the game, computers included.
